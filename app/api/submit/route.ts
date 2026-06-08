@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
               Thanks ${fname}.<br/>Brief <span style="color:#0057FF;">received.</span>
             </h1>
             <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
-              We've got your enquiry and someone from our team will be in touch within <strong style="color:#0A0A0A;">48 hours</strong> to talk through what you need produced.
+              We've got your enquiry and someone from our team will be in touch shortly to talk through what you need produced.
             </p>
             <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
               In the meantime, if you'd rather lock in a quick call now — grab a time below and we'll come prepared.
