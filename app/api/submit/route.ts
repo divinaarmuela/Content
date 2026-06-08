@@ -110,5 +110,45 @@ export async function POST(req: NextRequest) {
     console.error('Nodemailer error:', mailError)
   }
 
+  // Confirmation email to the enquirer
+  try {
+    await transporter.sendMail({
+      from: `"MD Media" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: `We've received your brief, ${fname} — MD Media`,
+      html: `
+        <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#F4F0E6;color:#0A0A0A;">
+          <div style="background:#0A0A0A;padding:28px 32px;border-bottom:3px solid #0057FF;">
+            <img src="https://static.wixstatic.com/media/c5a69a_eb5dd45dbca445798fa310acb86c4420~mv2.png" alt="MD Media" style="height:28px;width:auto;filter:invert(1) brightness(2);" />
+          </div>
+          <div style="padding:40px 32px;">
+            <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0 0 24px;">// BRIEF_RECEIVED &middot; CONTENT APPLICATION</p>
+            <h1 style="font-size:32px;font-weight:500;letter-spacing:-0.025em;line-height:1.1;margin:0 0 20px;">
+              Thanks ${fname}.<br/>Brief <span style="color:#0057FF;">received.</span>
+            </h1>
+            <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
+              We've got your enquiry and someone from our team will be in touch within <strong style="color:#0A0A0A;">48 hours</strong> to talk through what you need produced.
+            </p>
+            <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
+              In the meantime, if you'd rather lock in a quick call now — grab a time below and we'll come prepared.
+            </p>
+            <a href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+              style="display:inline-block;background:#0057FF;color:#F4F0E6;font-family:monospace;font-size:12px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;padding:16px 28px;margin-bottom:40px;">
+              Book a 10-min call →
+            </a>
+            <div style="border-top:1px solid #C9C4BA;padding-top:24px;">
+              <p style="font-family:monospace;font-size:11px;color:#8A8A85;letter-spacing:0.08em;margin:0;">
+                MD Media Marketing &middot; Melbourne, AU &middot;
+                <a href="mailto:hello@mdmmarketing.com.au" style="color:#0057FF;text-decoration:none;">hello@mdmmarketing.com.au</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    })
+  } catch (mailError) {
+    console.error('Confirmation email error:', mailError)
+  }
+
   return NextResponse.json({ success: true })
 }
