@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       from: `"MD Media" <${process.env.GMAIL_USER}>`,
       to: process.env.GMAIL_USER,
       cc: 'contact@mdmmarketing.com.au, akmalashwin23@gmail.com',
-      subject: `New Lead — ${fname} ${lname} / ${biz}`,
+      subject: `New Lead ${fname} ${lname} ${biz}`,
       html: `
         <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#F4F0E6;color:#0A0A0A;">
           <div style="background:#0A0A0A;padding:20px 32px;border-bottom:3px solid #0057FF;">
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
               Thanks ${fname}.<br/>Brief <span style="color:#0057FF;">received.</span>
             </h1>
             <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
-              We've got your enquiry and someone from our team will be in touch shortly to talk through what you need produced.
+              We've got your enquiry and someone from our team will be in touch shortly to talk through your requirements.
             </p>
             <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
               In the meantime, if you'd rather lock in a quick call now — grab a time below and we'll come prepared.
