@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           </div>
           <div style="background:#0A0A0A;padding:16px 32px;">
             <p style="font-family:monospace;font-size:10px;letter-spacing:0.15em;color:#5A5A55;margin:0;">
-              // STATUS: QUEUED_FOR_REVIEW &middot; Respond within 48h &middot; content.mdmmarketing.com.au
+              // STATUS: QUEUED_FOR_REVIEW &middot; content.mdmmarketing.com.au
             </p>
           </div>
         </div>

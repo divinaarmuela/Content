@@ -75,7 +75,7 @@ export default function ContactForm() {
           <h3>
             Brief <span className="blue">received.</span>
           </h3>
-          <p>// Status: QUEUED_FOR_REVIEW &middot; We&apos;ll be in touch shortly</p>
+          <p>// Status: QUEUED_FOR_REVIEW</p>
         </div>
       </div>
     )
