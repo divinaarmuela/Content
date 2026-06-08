@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       from: `"MD Media" <${process.env.GMAIL_USER}>`,
       to: process.env.GMAIL_USER,
       cc: 'contact@mdmmarketing.com.au, akmalashwin23@gmail.com',
-      subject: `New Content Brief — ${fname} ${lname} / ${biz}`,
+      subject: `New Lead — ${fname} ${lname} / ${biz}`,
       html: `
         <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#F4F0E6;color:#0A0A0A;">
           <div style="background:#0A0A0A;padding:20px 32px;border-bottom:3px solid #0057FF;">
