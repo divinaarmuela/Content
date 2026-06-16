@@ -139,7 +139,6 @@ export default function SilkTransition() {
     let phaseStart = 0                         // performance.now() at the current phase's start
     let startCoverP = 0                        // cover fraction captured at the trigger
     let revealDir: 'down' | 'up' = 'down'
-    let riseY = 0                              // scroll position frozen during the rise
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
     let rafId = 0
@@ -153,9 +152,11 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      const light = 0.02 + Math.pow(v, 1.35) * 0.80   // deep blue → bright
-      const hue   = 218 - v * 20                       // deep blue → cyan
-      const sat   = 1 - Math.pow(v, 3) * 0.5           // brightest peaks → white-blue
+      // Floor lifted well off black: darkest columns are a clearly-visible blue,
+      // not a near-black navy that reads as "black background". Keeps depth/variation.
+      const light = 0.34 + Math.pow(v, 1.2) * 0.52    // medium blue → bright
+      const hue   = 214 - v * 18                       // blue → cyan
+      const sat   = 0.9 - Math.pow(v, 2.5) * 0.45      // vivid blue → soft cyan-white
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
@@ -212,8 +213,6 @@ export default function SilkTransition() {
       phaseStart = performance.now()
       startCoverP = atCoverP
       revealDir = dir
-      riseY = window.scrollY    // freeze HERE so leftover momentum can't drift the
-                                // section away and slide the black runway into view
       lock()
     }
 
@@ -230,14 +229,21 @@ export default function SilkTransition() {
         // Phase 1 — RISE: cover animates from the trigger fraction up to full while
         // the page stays locked (so it can never be outpaced and nothing peeks).
         if (phaseRise) {
-          // hold the page still so the section behind can't drift (momentum) and
-          // expose the black runway behind the rising band
-          if (window.scrollY !== riseY) window.scrollTo(0, riseY)
+          // Cover = max(timed rise, scroll-tracked cover). The timed rise auto-
+          // completes the curtain; the scroll-tracked part guarantees the band
+          // always still covers the runway even if leftover momentum drifts the
+          // page — WITHOUT pinning via scrollTo (which fought momentum → jitter).
+          const { spacerTop, spacerBottom } = geom()
+          const y = window.scrollY
+          const scrubP = revealDir === 'down'
+            ? clamp01((y + H - spacerTop) / H)
+            : clamp01((spacerBottom - y) / H)
           const riseP  = RISE <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / RISE))
-          const coverP = startCoverP + (1 - startCoverP) * riseP
+          const animP  = startCoverP + (1 - startCoverP) * riseP
+          const coverP = Math.max(scrubP, animP)
           canvas.style.opacity = '1'
           paintCover(coverP, revealDir === 'up', t)
-          if (riseP >= 1) {
+          if (coverP >= 1) {
             // fully covered → teleport behind the curtain to the destination, gate
             // the video (alive going down / paused going up), then start the reveal
             window.scrollTo(0, pinY)
