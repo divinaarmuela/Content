@@ -1909,7 +1909,10 @@ body.video-active .video-vol-ctrl {
 
 /* ── small screens: normal vertical scroll (no horizontal scroll-jacking) ── */
 @media (max-width: 768px) {
-  .hvs-wrap { height: auto; }
+  /* pull the (black) video section up over the Services white bottom and sit
+     above it (z) so when the address bar shows/hides and shifts the viewport, the
+     area above the video shows BLACK, not the white Services bg ("white bar"). */
+  .hvs-wrap { height: auto; margin-top: -50px; position: relative; z-index: 6; }
   .hvs-sticky { position: static; height: auto; overflow: visible; }
   .hvs-track {
     flex-direction: column;

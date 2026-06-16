@@ -95,13 +95,15 @@ export default function SilkTransition() {
     const lock = () => {
       getLenis()?.stop()
       window.addEventListener('wheel', block, { passive: false })
-      window.addEventListener('touchmove', block, { passive: false })
       window.addEventListener('keydown', blockKeys, { passive: false })
+      // NB: we do NOT block touchmove. On iOS, preventing the first touchmove of a
+      // gesture commits it to "no scroll" for its whole life, so releasing the lock
+      // mid-swipe leaves it dead until you re-touch. Instead the onScroll pin holds
+      // the page during touch, and the curtain (opaque) masks any scroll mid-anim.
     }
     const unlock = () => {
       getLenis()?.start()
       window.removeEventListener('wheel', block)
-      window.removeEventListener('touchmove', block)
       window.removeEventListener('keydown', blockKeys)
     }
 
@@ -225,10 +227,12 @@ export default function SilkTransition() {
     const fireUp = () => {
       clearArmedListeners()
       armed = null
-      const s = sentinelRef.current
-      if (!s) return
-      const seamY  = s.getBoundingClientRect().top + window.scrollY
-      const target = seamY - H                         // seam → bottom edge, last item visible
+      // Land so the video section sits exactly off the bottom edge (Services
+      // fills). Use the video element's real top so the mobile overlap (which
+      // pulls the video up over Services) doesn't leave a black band behind.
+      const videoEl = canvas.nextElementSibling as HTMLElement | null
+      const videoTop = videoEl ? videoEl.getBoundingClientRect().top + window.scrollY : (sentinelRef.current?.getBoundingClientRect().top ?? 0) + window.scrollY
+      const target = videoTop - H
       pending = true
       window.dispatchEvent(new Event('diag-hide'))      // header scales back out
       lock()                                            // (already locked) freeze while it exits
@@ -279,11 +283,12 @@ export default function SilkTransition() {
       touchEvaluating = true
     }
     const onArmedTouchMove = (e: TouchEvent) => {
-      if (e.cancelable) e.preventDefault()      // keep the page pinned while touching
+      // No preventDefault — let iOS keep the gesture in scroll-mode (the onScroll
+      // pin holds the page); a release then flows straight into scrolling.
       if (!touchEvaluating) return
       const cy = e.touches[0]?.clientY ?? touchStartY
       const delta = touchStartY - cy            // > 0: finger moved up = scroll-DOWN intent
-      if (Math.abs(delta) < 24) return          // wait for a decisive movement
+      if (Math.abs(delta) < 14) return          // small, responsive threshold
       touchEvaluating = false
       decide(delta > 0 ? 'down' : 'up')
     }
