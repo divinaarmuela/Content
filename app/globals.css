@@ -2429,12 +2429,12 @@ body.video-active .video-vol-ctrl {
 }
 
 /* ── SILK STRIP TRANSITION ──────────────────────────────────── */
-/* dedicated black scroll runway between Services and the video section — the
-   shader cover rises over THIS, never over Services content. Height is set in
-   JS (≈1.2× viewport). Black so any sub-pixel sliver matches the video/curtain. */
+/* dedicated scroll runway between Services and the video section. Coloured to
+   match the blue silk shader (NOT black) so nothing reads as an empty/black
+   background while scrolling into the transition. Height set in JS (≈1.2× vh). */
 .silk-spacer {
   width: 100%;
-  background: #000;
+  background: linear-gradient(180deg, #0e3f8f 0%, #1f6dff 50%, #0e3f8f 100%);
   position: relative;
   z-index: 4;
 }
