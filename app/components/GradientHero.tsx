@@ -42,6 +42,24 @@ export default function GradientHero() {
     }
   }, [])
 
+  // "Get started" jumps to #contact, which sits past the scroll-jacked silk
+  // transition. A plain anchor jump would scroll THROUGH the seam and fire the
+  // curtain mid-flight, so we hand off to the transition (it bypasses itself and
+  // snaps straight to the target), exactly like the nav links do.
+  const handleGetStarted = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const el = document.querySelector('#contact') as HTMLElement | null
+    if (!el) return
+    e.preventDefault()
+    if (document.querySelector('.silk-canvas')) {
+      window.dispatchEvent(new CustomEvent('nav-goto', { detail: '#contact' }))
+      return
+    }
+    const y = el.getBoundingClientRect().top + window.scrollY
+    const lenis = (window as unknown as { __lenis?: { scrollTo: (t: number) => void } }).__lenis
+    if (lenis) lenis.scrollTo(y)
+    else window.scrollTo({ top: y, behavior: 'smooth' })
+  }
+
   return (
     <section className="hero-glow">
       <motion.div
@@ -92,7 +110,7 @@ export default function GradientHero() {
         </p>
 
         <div className="hero-glow-actions">
-          <a href="#contact" className="hero-glow-btn hero-glow-btn-sharp">
+          <a href="#contact" onClick={handleGetStarted} className="hero-glow-btn hero-glow-btn-sharp">
             Get started
           </a>
           <a

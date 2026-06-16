@@ -26,7 +26,10 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+/* clip horizontal overflow at the root too (not just body) — `clip` doesn't
+   create a scroll container, so position: sticky is preserved. Belt-and-braces
+   against any element that tries to push the page wider than the viewport. */
+html { scroll-behavior: smooth; overflow-x: clip; max-width: 100%; }
 
 /* hide the scrollbar everywhere — scrolling still works (Lenis drives it) */
 html { scrollbar-width: none; -ms-overflow-style: none; }
@@ -1171,6 +1174,7 @@ footer {
   margin-bottom: 18px;
   font-weight: 600;
 }
+.footer-col { min-width: 0; }
 .footer-col a, .footer-col p {
   display: block;
   font-size: 14px;
@@ -1179,6 +1183,7 @@ footer {
   padding: 6px 0;
   font-weight: 400;
   font-family: var(--sans);
+  overflow-wrap: anywhere;   /* long unbreakable strings (email) must not widen the column */
 }
 .footer-col a:hover { color: var(--blue); }
 .footer-bottom {
