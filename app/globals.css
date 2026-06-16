@@ -2429,14 +2429,23 @@ body.video-active .video-vol-ctrl {
 }
 
 /* ── SILK STRIP TRANSITION ──────────────────────────────────── */
-/* dedicated scroll runway between Services and the video section. Transparent:
-   the silk "glimpse" band paints over it as you scroll in, masking it — so no
-   solid background (blue/black) ever shows. Height set in JS (≈1.2× vh). */
-.silk-spacer {
+/* scroll runway between Services and the video section. Transparent — the sticky
+   silk panel inside it floats up and covers as you scroll, so no background shows.
+   Height set in JS (≈1.1× viewport). */
+.silk-runway {
   width: 100%;
   background: transparent;
   position: relative;
-  z-index: 4;
+  z-index: 6;
+}
+/* the GLIMPSE: browser-composited (sticky) so it tracks scroll with zero lag */
+.silk-glimpse {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  display: block;
 }
 .silk-canvas {
   position: fixed;
