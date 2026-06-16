@@ -13,6 +13,12 @@ export default function SmoothScroll() {
     // respect users who prefer reduced motion — leave native scrolling
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
+    // disable on macOS and iOS — native inertia scrolling is already smooth
+    const ua = navigator.userAgent
+    const isMac = /Macintosh/.test(ua) && !('ontouchstart' in window)
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    if (isMac || isIOS) return
+
     const lenis = new Lenis({
       duration: 0.65,
       easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
