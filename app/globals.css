@@ -2086,11 +2086,12 @@ body.video-active .video-vol-ctrl {
 .hero-glow-h1 .hl-layer {
   grid-area: 1 / 1;
   white-space: nowrap;
-  /* horizontal breathing room so the blob layer's mask box extends past the
-     text — otherwise the mask clips the edge letters' blue glow into a hard
-     vertical "wall" just before "B" and after the "w". All layers share the
-     same padding so they stay perfectly aligned. */
-  padding: 0 0.55em;
+  /* breathing room so the gradient box is larger than the text — without it,
+     the outer blue zone of the radial-gradient clips right at the glyph edges,
+     producing a hard "wall". Horizontal was already set; vertical is now added
+     to kill the top-of-"Creative" and bottom-of-"Converts" walls. All layers
+     share the same padding so they stay perfectly aligned. */
+  padding: 0.4em 0.55em;
   background: radial-gradient(circle, #ffffff 0%, #ffffff 42%, #5aabff 74%, #2f93ff 100%);
   -webkit-background-clip: text;
   background-clip: text;

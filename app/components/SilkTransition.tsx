@@ -96,11 +96,6 @@ export default function SilkTransition() {
       getLenis()?.stop()
       window.addEventListener('wheel', block, { passive: false })
       window.addEventListener('keydown', blockKeys, { passive: false })
-      // Setting overflowY:hidden on <html> stops the browser from advancing
-      // window.scrollY via momentum/wheel — without this, macOS trackpad inertia
-      // keeps nudging scrollY past lockedScrollY, and the onScroll snap-back
-      // fights it every frame, causing visible jitter/vibration at the seam.
-      document.documentElement.style.overflowY = 'hidden'
       // NB: we do NOT block touchmove. On iOS, preventing the first touchmove of a
       // gesture commits it to "no scroll" for its whole life, so releasing the lock
       // mid-swipe leaves it dead until you re-touch. Instead the onScroll pin holds
@@ -110,6 +105,7 @@ export default function SilkTransition() {
       getLenis()?.start()
       window.removeEventListener('wheel', block)
       window.removeEventListener('keydown', blockKeys)
+      // Always restore CSS scroll lock (set by arm() after the snap).
       document.documentElement.style.overflowY = ''
     }
 
@@ -225,6 +221,9 @@ export default function SilkTransition() {
     const fireDown = () => {
       clearArmedListeners()
       armed = null
+      // Restore scrollability so the animation's window.scrollTo (jump behind the
+      // curtain) can work — overflow:hidden would silently swallow it.
+      document.documentElement.style.overflowY = ''
       const next   = canvas.nextElementSibling as HTMLElement | null
       // +2 so the video covers the very top (no cream sliver when the navbar hides)
       const target = next ? next.getBoundingClientRect().top + window.scrollY + 2 : window.scrollY + H
@@ -233,6 +232,8 @@ export default function SilkTransition() {
     const fireUp = () => {
       clearArmedListeners()
       armed = null
+      // Restore scrollability before the animation's scrollTo runs (same reason).
+      document.documentElement.style.overflowY = ''
       // Land so the video section sits exactly off the bottom edge (Services
       // fills). Use the video element's real top so the mobile overlap (which
       // pulls the video up over Services) doesn't leave a black band behind.
@@ -331,6 +332,10 @@ export default function SilkTransition() {
         lastY = snapY
       }
       lockedScrollY = window.scrollY   // pin point — held against momentum in onScroll
+      // NOW safe to freeze the viewport: the snap already happened so scrollTo
+      // returned the correct position. overflow:hidden stops macOS trackpad momentum
+      // from nudging scrollY past lockedScrollY, eliminating the jitter/vibration.
+      document.documentElement.style.overflowY = 'hidden'
       touchEvaluating = false
       window.addEventListener('wheel', onArmedWheelKey, { passive: false })
       window.addEventListener('keydown', onArmedWheelKey, { passive: false })
