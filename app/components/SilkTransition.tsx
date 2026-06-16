@@ -51,6 +51,7 @@ export default function SilkTransition() {
 
     // ── timeline (ms) ────────────────────────────────────────────────────
     const RISE     = reduceMotion ? 0   : 520   // auto-rise from the trigger to full cover
+    const HOLD     = reduceMotion ? 0   : 420   // stay fully covered while we settle INTO the section
     const DISSOLVE = reduceMotion ? 140 : 900   // centre-out reveal of the next section
     const FADE_W   = 0.18                        // per-strip vanish softness
     // Once the scrubbed cover reaches this fraction (≈ just past the bottom of the
@@ -134,8 +135,8 @@ export default function SilkTransition() {
 
     // ── state ─────────────────────────────────────────────────────────────
     let side: 'before' | 'after' = 'before'   // which section the user is in
-    let playing = false                        // auto-play (rise → dissolve) in progress
-    let phaseRise = false                      // true during the rise, false during dissolve
+    let playing = false                        // auto-play in progress
+    let phase: 'rise' | 'hold' | 'dissolve' = 'rise'
     let phaseStart = 0                         // performance.now() at the current phase's start
     let startCoverP = 0                        // cover fraction captured at the trigger
     let revealDir: 'down' | 'up' = 'down'
@@ -209,7 +210,7 @@ export default function SilkTransition() {
         : Math.max(0, spacerTop - H)         // Services bottom fully in view
 
       playing = true
-      phaseRise = true
+      phase = 'rise'
       phaseStart = performance.now()
       startCoverP = atCoverP
       revealDir = dir
@@ -228,7 +229,7 @@ export default function SilkTransition() {
       if (playing) {
         // Phase 1 — RISE: cover animates from the trigger fraction up to full while
         // the page stays locked (so it can never be outpaced and nothing peeks).
-        if (phaseRise) {
+        if (phase === 'rise') {
           // Cover = max(timed rise, scroll-tracked cover). The timed rise auto-
           // completes the curtain; the scroll-tracked part guarantees the band
           // always still covers the runway even if leftover momentum drifts the
@@ -245,17 +246,27 @@ export default function SilkTransition() {
           paintCover(coverP, revealDir === 'up', t)
           if (coverP >= 1) {
             // fully covered → teleport behind the curtain to the destination, gate
-            // the video (alive going down / paused going up), then start the reveal
+            // the video (alive going down / paused going up), then HOLD fully covered
             window.scrollTo(0, pinY)
             getLenis()?.scrollTo(pinY, { immediate: true })
             void document.documentElement.getBoundingClientRect()
             window.dispatchEvent(new Event(revealDir === 'down' ? 'diag-show' : 'diag-hide'))
-            phaseRise = false
+            phase = 'hold'
             phaseStart = now
           }
           return
         }
-        // Phase 2 — DISSOLVE: centre-out reveal of the destination section.
+        // Phase 2 — HOLD: stay fully covered (we're now teleported INTO the
+        // destination section) so the strips only begin opening once we're fully
+        // settled there, not the instant we arrive.
+        if (phase === 'hold') {
+          if (window.scrollY !== pinY) window.scrollTo(0, pinY)
+          canvas.style.opacity = '1'
+          paintReveal(0, t)                 // dissP = 0 → full opaque cover
+          if (now - phaseStart >= HOLD) { phase = 'dissolve'; phaseStart = now }
+          return
+        }
+        // Phase 3 — DISSOLVE: centre-out reveal of the destination section.
         if (window.scrollY !== pinY) window.scrollTo(0, pinY)   // pin behind the curtain
         const dissP = easeInOut(clamp01((now - phaseStart) / DISSOLVE))
         if (now - phaseStart >= DISSOLVE) {
@@ -322,7 +333,7 @@ export default function SilkTransition() {
       const nextSide: 'before' | 'after' = sel === '#contact' ? 'after' : 'before'
 
       playing = false
-      phaseRise = false
+      phase = 'rise'
       canvas.style.opacity = '0'
       ctx.clearRect(0, 0, W, H)
       side = nextSide
