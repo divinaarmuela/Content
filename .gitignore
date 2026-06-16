@@ -34,3 +34,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# large media — served from Cloudflare R2 (live files) or unused leftovers.
+# kept on local disk for dev, never committed (GitHub rejects >100MB).
+/public/*.mp4
+/public/*.mov
+/public/Cecconi1.jpg
+/public/Cecconi2.jpg
+/public/Cecconi3.jpg
+/public/im3.jpg
+/public/im4.jpg

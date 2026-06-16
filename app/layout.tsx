@@ -1,32 +1,12 @@
 import type { Metadata } from 'next'
+import 'lenis/dist/lenis.css'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Content Production & Creative Assets — MD Media, Melbourne',
+  title: 'MD Media Marketing — Melbourne Growth Agency',
   description:
-    'Content that gets likes is a hobby. Content that converts is a business. MD Media produces photography, video, and copy engineered to sell. Monthly subscription or project-based production.',
-  keywords:
-    'content production Melbourne, video production Australia, photography agency, content subscription, creative assets, UGC production, brand content studio',
+    "Melbourne's end-to-end growth agency. Brand strategy, content production, and ongoing marketing built as one system.",
   robots: 'index, follow, max-image-preview:large',
-  alternates: {
-    canonical: 'https://content.mdmmarketing.com.au/',
-  },
-  openGraph: {
-    type: 'website',
-    url: 'https://content.mdmmarketing.com.au/',
-    title: 'Content that gets likes is a hobby. Content that converts is a business. — MD Media',
-    description:
-      'Photography, video, and copy engineered to sell. Melbourne-based studio, Australia-wide production.',
-    images: 'https://static.wixstatic.com/media/c5a69a_cbe685f642bb4d75b6f9b0759d5482e2~mv2.jpg',
-    siteName: 'MD Media Marketing',
-    locale: 'en_AU',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Content that gets likes is a hobby. Content that converts is a business.',
-    description: 'Photography, video, and copy engineered to sell.',
-    images: 'https://static.wixstatic.com/media/c5a69a_cbe685f642bb4d75b6f9b0759d5482e2~mv2.jpg',
-  },
   icons: {
     icon: 'https://static.wixstatic.com/media/c5a69a_eb5dd45dbca445798fa310acb86c4420~mv2.png',
   },
@@ -75,7 +55,7 @@ const jsonLd = {
     },
     {
       '@type': 'WebPage',
-      url: 'https://content.mdmmarketing.com.au/',
+      url: 'https://www.mdmmarketing.com.au/',
       name: 'Content Production & Creative Assets — MD Media, Melbourne',
       description:
         'Photography, video, and copy engineered to convert. Monthly subscription or project-based production.',
@@ -92,7 +72,7 @@ const jsonLd = {
           '@type': 'ListItem',
           position: 3,
           name: 'Content Production',
-          item: 'https://content.mdmmarketing.com.au/',
+          item: 'https://www.mdmmarketing.com.au/',
         },
       ],
     },
@@ -185,6 +165,9 @@ const jsonLd = {
   ],
 }
 
+import SiteNav from './components/SiteNav'
+import SmoothScroll from './components/SmoothScroll'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -193,7 +176,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@300;400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
           rel="stylesheet"
         />
         <script
@@ -201,7 +184,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <SmoothScroll />
+        <SiteNav />
+        {children}
+      </body>
     </html>
   )
 }

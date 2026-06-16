@@ -1,5 +1,5 @@
-# MD Media Content Production
-# https://content.mdmmarketing.com.au
+# MD Media Marketing
+# https://www.mdmmarketing.com.au
 
 User-agent: *
 Allow: /
@@ -29,4 +29,4 @@ Allow: /
 User-agent: Applebot-Extended
 Allow: /
 
-Sitemap: https://content.mdmmarketing.com.au/sitemap.xml
+Sitemap: https://www.mdmmarketing.com.au/sitemap.xml
