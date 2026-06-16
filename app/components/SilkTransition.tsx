@@ -39,6 +39,7 @@ type Lenis = { stop: () => void; start: () => void; scrollTo: (target: number, o
 
 export default function SilkTransition() {
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const spacerRef   = useRef<HTMLDivElement>(null)
   const canvasRef   = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -70,6 +71,10 @@ export default function SilkTransition() {
       canvas.width  = W * dpr
       canvas.height = H * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // Runway is a bit taller than one viewport: the band needs a full viewport
+      // (H) to scrub the cover, plus headroom so the cover is fully up BEFORE the
+      // video could ever enter the viewport.
+      if (spacerRef.current) spacerRef.current.style.height = Math.round(H * 1.2) + 'px'
       let x = 0
       const cx = W / 2
       for (let i = 0; i < STRIPS; i++) {
@@ -85,16 +90,14 @@ export default function SilkTransition() {
 
     const getLenis = () => (window as unknown as { __lenis?: Lenis }).__lenis
 
-    // The amount of scroll the cover is scrubbed over (and how far past the seam
-    // we land so the landing sits at cover = 0, preventing an immediate re-cover).
-    const RAMP = () => H * 0.55
-
-    // absolute document Y of the video section's top edge
-    const getVideoTop = () => {
-      const el = canvas.nextElementSibling as HTMLElement | null
-      return el
-        ? el.getBoundingClientRect().top + window.scrollY
-        : (sentinelRef.current?.getBoundingClientRect().top ?? 0) + window.scrollY
+    // Live geometry of the black runway. spacerTop = its absolute top (= Services
+    // bottom); spacerBottom = its absolute bottom (= video top). Read per frame so
+    // it stays correct through reflow / resize.
+    const geom = () => {
+      const sp = spacerRef.current!
+      const spacerTop = sp.getBoundingClientRect().top + window.scrollY
+      const spacerH   = sp.offsetHeight
+      return { spacerTop, spacerBottom: spacerTop + spacerH }
     }
 
     // ── HARD scroll lock (only during the brief dissolve reveal) ──────────
@@ -186,12 +189,13 @@ export default function SilkTransition() {
     // Commit the crossing: the screen is already fully covered (coverP === 1),
     // so we teleport behind the curtain to the far side, then play the dissolve.
     const commit = (dir: 'down' | 'up') => {
-      const videoTop = getVideoTop()
-      // Land PAST the cover ramp so the landing sits at coverP === 0 — this is
-      // what stops the just-revealed section from being instantly re-covered.
+      const { spacerTop, spacerBottom } = geom()
+      // Land on a PRISTINE position: down → the true top of the video; up → Services
+      // with its last row resting at the viewport bottom. Both sit at coverP === 0,
+      // so the freshly-revealed section is never instantly re-covered.
       pinY = dir === 'down'
-        ? videoTop + RAMP()
-        : Math.max(0, videoTop - H - RAMP())
+        ? spacerBottom                       // video top, not scrolled at all
+        : Math.max(0, spacerTop - H)         // Services bottom fully in view
 
       playing = true
       revealDir = dir
@@ -237,21 +241,25 @@ export default function SilkTransition() {
       // ── settle guard right after a reveal lands ──
       if (now < cooldownUntil) { canvas.style.opacity = '0'; return }
 
-      // ── scrubbed cover, driven by distance to the seam ──
-      const videoTop = getVideoTop()
+      // ── scrubbed cover, tracking the runway so Services is NEVER overlapped ──
+      // The band height equals exactly how much of the black runway is currently
+      // showing in the viewport, so the band's far edge sits right on the
+      // Services↔runway (or video↔runway) boundary. Services scrolls off the top
+      // untouched; the band only ever rises over the runway.
+      const { spacerTop, spacerBottom } = geom()
       const y = window.scrollY
       let coverP = 0
       let fromTop = false
 
       if (side === 'before') {
-        // approaching the seam from Services (scrolling down): full cover by the
-        // moment the video edge would reach the viewport bottom (y = videoTop−H).
-        coverP = clamp01((y - (videoTop - H - RAMP())) / RAMP())
+        // scrolling down: runway enters from the bottom → band rises from bottom,
+        // its top edge pinned to the Services bottom (= spacerTop).
+        coverP = clamp01((y + H - spacerTop) / H)
         fromTop = false
       } else {
-        // approaching the seam from the video (scrolling up): full cover by the
-        // moment Services would reach the viewport top (y = videoTop).
-        coverP = clamp01(((videoTop + RAMP()) - y) / RAMP())
+        // scrolling up: runway enters from the top → band drops from the top, its
+        // bottom edge pinned to the video top (= spacerBottom).
+        coverP = clamp01((spacerBottom - y) / H)
         fromTop = true
       }
 
@@ -306,8 +314,11 @@ export default function SilkTransition() {
 
   return (
     <>
-      {/* tiny sentinel — no scroll gap; sits at the services / next-section seam */}
+      {/* tiny sentinel — marks the services / spacer seam */}
       <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+      {/* dedicated black scroll runway — the ONLY thing the shader rises over, so
+          Services rows are never overlapped. Height is set in JS (≈1.2× viewport). */}
+      <div ref={spacerRef} className="silk-spacer" aria-hidden="true" />
       <canvas ref={canvasRef} className="silk-canvas" />
     </>
   )
