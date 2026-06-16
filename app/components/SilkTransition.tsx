@@ -50,8 +50,13 @@ export default function SilkTransition() {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     // ── timeline (ms) ────────────────────────────────────────────────────
+    const RISE     = reduceMotion ? 0   : 520   // auto-rise from the trigger to full cover
     const DISSOLVE = reduceMotion ? 140 : 900   // centre-out reveal of the next section
     const FADE_W   = 0.18                        // per-strip vanish softness
+    // Once the scrubbed cover reaches this fraction (≈ just past the bottom of the
+    // outgoing section), lock and auto-play the rest of the curtain — so it fires
+    // off a small deliberate scroll instead of needing a whole viewport.
+    const TRIGGER  = 0.10
 
     // Deterministic start: this section is scroll-jacked and stateful, so never
     // let the browser restore a mid-page scroll position on refresh — it would
@@ -129,8 +134,10 @@ export default function SilkTransition() {
 
     // ── state ─────────────────────────────────────────────────────────────
     let side: 'before' | 'after' = 'before'   // which section the user is in
-    let playing = false                        // dissolve reveal in progress
-    let revealStart = 0                        // performance.now() at dissolve start
+    let playing = false                        // auto-play (rise → dissolve) in progress
+    let phaseRise = false                      // true during the rise, false during dissolve
+    let phaseStart = 0                         // performance.now() at the current phase's start
+    let startCoverP = 0                        // cover fraction captured at the trigger
     let revealDir: 'down' | 'up' = 'down'
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
@@ -145,9 +152,11 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      const light = 0.02 + Math.pow(v, 1.35) * 0.80   // deep black → bright
-      const hue   = 218 - v * 20                       // deep blue → cyan
-      const sat   = 1 - Math.pow(v, 3) * 0.5           // brightest peaks → white-blue
+      // floor lifted off black: the valleys are a solid blue, not near-black, so
+      // the curtain reads as a blue silk (no black background) the whole time.
+      const light = 0.26 + Math.pow(v, 1.25) * 0.56    // solid blue → bright
+      const hue   = 220 - v * 24                        // deep blue → cyan
+      const sat   = 0.92 - Math.pow(v, 2.5) * 0.5       // saturated blue → white-blue
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
@@ -186,9 +195,11 @@ export default function SilkTransition() {
       ctx.globalAlpha = 1
     }
 
-    // Commit the crossing: the screen is already fully covered (coverP === 1),
-    // so we teleport behind the curtain to the far side, then play the dissolve.
-    const commit = (dir: 'down' | 'up') => {
+    // Commit: lock and AUTO-PLAY the rest of the curtain. We capture the cover
+    // fraction reached at the trigger and rise from there to full, then dissolve.
+    // Scroll is locked the whole time, so the rise can't be outpaced and nothing
+    // peeks. The teleport to the far side happens at full cover (in frame()).
+    const commit = (dir: 'down' | 'up', atCoverP: number) => {
       const { spacerTop, spacerBottom } = geom()
       // Land on a PRISTINE position: down → the true top of the video; up → Services
       // with its last row resting at the viewport bottom. Both sit at coverP === 0,
@@ -198,16 +209,11 @@ export default function SilkTransition() {
         : Math.max(0, spacerTop - H)         // Services bottom fully in view
 
       playing = true
+      phaseRise = true
+      phaseStart = performance.now()
+      startCoverP = atCoverP
       revealDir = dir
-      revealStart = performance.now()
       lock()
-      // header follows the video gate: hide as we leave the video (up); it is
-      // shown again only once the video is fully revealed (down, at reveal end).
-      if (dir === 'up') window.dispatchEvent(new Event('diag-hide'))
-
-      window.scrollTo(0, pinY)
-      getLenis()?.scrollTo(pinY, { immediate: true })
-      void document.documentElement.getBoundingClientRect()  // flush sticky recalc
     }
 
     // ── the single source of truth: one rAF loop, runs every frame ─────────
@@ -218,19 +224,37 @@ export default function SilkTransition() {
       rafId = requestAnimationFrame(frame)
       const t = now / 1000
 
-      // ── dissolve reveal in progress ──
+      // ── auto-play in progress ──
       if (playing) {
-        // pin the page behind the curtain so any residual momentum can't drift it
-        if (window.scrollY !== pinY) window.scrollTo(0, pinY)
-        const dissP = easeInOut(clamp01((now - revealStart) / DISSOLVE))
-        if (now - revealStart >= DISSOLVE) {
+        // Phase 1 — RISE: cover animates from the trigger fraction up to full while
+        // the page stays locked (so it can never be outpaced and nothing peeks).
+        if (phaseRise) {
+          const riseP  = RISE <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / RISE))
+          const coverP = startCoverP + (1 - startCoverP) * riseP
+          canvas.style.opacity = '1'
+          paintCover(coverP, revealDir === 'up', t)
+          if (riseP >= 1) {
+            // fully covered → teleport behind the curtain to the destination, gate
+            // the video (alive going down / paused going up), then start the reveal
+            window.scrollTo(0, pinY)
+            getLenis()?.scrollTo(pinY, { immediate: true })
+            void document.documentElement.getBoundingClientRect()
+            window.dispatchEvent(new Event(revealDir === 'down' ? 'diag-show' : 'diag-hide'))
+            phaseRise = false
+            phaseStart = now
+          }
+          return
+        }
+        // Phase 2 — DISSOLVE: centre-out reveal of the destination section.
+        if (window.scrollY !== pinY) window.scrollTo(0, pinY)   // pin behind the curtain
+        const dissP = easeInOut(clamp01((now - phaseStart) / DISSOLVE))
+        if (now - phaseStart >= DISSOLVE) {
           canvas.style.opacity = '0'
           ctx.clearRect(0, 0, W, H)
           playing = false
           side = revealDir === 'down' ? 'after' : 'before'
           unlock()
           cooldownUntil = now + 220
-          if (revealDir === 'down') window.dispatchEvent(new Event('diag-show'))
           return
         }
         canvas.style.opacity = '1'
@@ -264,19 +288,19 @@ export default function SilkTransition() {
       }
 
       // Reduced motion: no scrubbed strips (that is motion); stay clear until the
-      // crossing, then commit — the single covered reveal frame masks the jump.
+      // trigger, then auto-play (RISE = 0 → near-instant cover) and reveal.
       if (reduceMotion) {
-        canvas.style.opacity = coverP >= 1 ? '1' : '0'
-        if (coverP >= 1) commit(side === 'before' ? 'down' : 'up')
+        canvas.style.opacity = '0'
+        if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
         return
       }
 
       canvas.style.opacity = coverP > 0 ? '1' : '0'
       paintCover(coverP, fromTop, t)
 
-      // Fully covered exactly at the seam → cross. Because the cover reached 1
-      // before the seam entered the viewport, nothing peeked on the way in.
-      if (coverP >= 1) commit(side === 'before' ? 'down' : 'up')
+      // Past the trigger fraction → lock and auto-play the rest of the curtain.
+      // Works the same scrolling down or up.
+      if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', coverP)
     }
 
     // Nav links (SiteNav) / hero CTA hand off in-page jumps so the transition
@@ -288,6 +312,7 @@ export default function SilkTransition() {
       const nextSide: 'before' | 'after' = sel === '#contact' ? 'after' : 'before'
 
       playing = false
+      phaseRise = false
       canvas.style.opacity = '0'
       ctx.clearRect(0, 0, W, H)
       side = nextSide
