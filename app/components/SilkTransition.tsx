@@ -58,6 +58,10 @@ export default function SilkTransition() {
     // outgoing section), lock and auto-play the rest of the curtain — so it fires
     // off a small deliberate scroll instead of needing a whole viewport.
     const TRIGGER  = 0.10
+    // After a transition, the trigger stays disarmed until the user scrolls this
+    // far (fraction of a viewport) INTO the landed section — hysteresis deadband
+    // that prevents small-screen address-bar jitter from re-firing the curtain.
+    const REARM    = 0.30
 
     // Deterministic start: this section is scroll-jacked and stateful, so never
     // let the browser restore a mid-page scroll position on refresh — it would
@@ -142,6 +146,7 @@ export default function SilkTransition() {
     let revealDir: 'down' | 'up' = 'down'
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
+    let armed = true                           // hysteresis: must move INTO a section before re-firing
     let rafId = 0
 
     // shared per-strip colour for a given normalized x + time (the flowing field)
@@ -214,6 +219,7 @@ export default function SilkTransition() {
       phaseStart = performance.now()
       startCoverP = atCoverP
       revealDir = dir
+      armed = false            // disarm until the user scrolls into the landed section
       lock()
     }
 
@@ -293,35 +299,45 @@ export default function SilkTransition() {
       // untouched; the band only ever rises over the runway.
       const { spacerTop, spacerBottom } = geom()
       const y = window.scrollY
-      let coverP = 0
+      let raw = 0                 // unclamped cover (negative = INTO the section)
       let fromTop = false
 
       if (side === 'before') {
         // scrolling down: runway enters from the bottom → band rises from bottom,
         // its top edge pinned to the Services bottom (= spacerTop).
-        coverP = clamp01((y + H - spacerTop) / H)
+        raw = (y + H - spacerTop) / H
         fromTop = false
       } else {
         // scrolling up: runway enters from the top → band drops from the top, its
         // bottom edge pinned to the video top (= spacerBottom).
-        coverP = clamp01((spacerBottom - y) / H)
+        raw = (spacerBottom - y) / H
         fromTop = true
       }
+      const coverP = clamp01(raw)
+
+      // Hysteresis: after a transition we land at raw ≈ 0. Don't allow a new
+      // trigger until the user has scrolled clearly INTO the section (raw ≤ −REARM).
+      // This kills the small-screen ping-pong where the address bar resizing the
+      // viewport nudges the cover math just over the trigger and re-fires instantly.
+      if (!armed && raw <= -REARM) armed = true
 
       // Reduced motion: no scrubbed strips (that is motion); stay clear until the
       // trigger, then auto-play (RISE = 0 → near-instant cover) and reveal.
       if (reduceMotion) {
         canvas.style.opacity = '0'
-        if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
+        if (armed && coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
         return
       }
 
       canvas.style.opacity = coverP > 0 ? '1' : '0'
       paintCover(coverP, fromTop, t)
 
-      // Past the trigger fraction → lock and auto-play the rest of the curtain.
-      // Works the same scrolling down or up.
-      if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', coverP)
+      // Fire when armed and past the trigger fraction — OR if the user scrubbed all
+      // the way to full cover even while disarmed (e.g. reversing right after a
+      // landing), so the curtain is never left stuck fully closed.
+      if ((armed && coverP >= TRIGGER) || coverP >= 0.99) {
+        commit(side === 'before' ? 'down' : 'up', coverP)
+      }
     }
 
     // Nav links (SiteNav) / hero CTA hand off in-page jumps so the transition
@@ -334,6 +350,7 @@ export default function SilkTransition() {
 
       playing = false
       phase = 'rise'
+      armed = true
       canvas.style.opacity = '0'
       ctx.clearRect(0, 0, W, H)
       side = nextSide
