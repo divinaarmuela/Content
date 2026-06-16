@@ -132,7 +132,24 @@ export default function SilkTransition() {
     let lastY = window.scrollY
     let lastScrollTime = performance.now()
 
-    const isBusy = () => startTime !== -1 || pending
+    // ── momentum catch ──
+    let caught = false                         // arrested at the seam, absorbing a flick's glide
+    let lastFlickAt = 0                        // last significant input while caught
+    let caughtStart = 0                        // when the catch began (for the hard cap)
+    let caughtPoll = 0                         // interval id: releases the catch once glide goes quiet
+    const CATCH_QUIET = 160                    // ms of no input before releasing
+    const CATCH_MAX   = 550                    // hard cap so an active drag is never frozen
+
+    const isBusy = () => startTime !== -1 || pending || caught
+
+    // A "fast" arrival at the seam = a flick / inertial glide rather than a
+    // deliberate reading-pace scroll. Either of these qualifies:
+    //   • high instantaneous velocity  (smooth trackpad throw)
+    //   • a big single-event jump       (coalesced flick / touch fling)
+    // Mouse-wheel notches and reading-pace scrolling stay BELOW both, so they
+    // flow straight through and fire immediately.
+    const FLICK_VELOCITY = () => H / 280       // ~px per ms — genuinely fast
+    const FLICK_JUMP     = () => H * 0.55      // moved over half a screen in one event
 
     // absolute document Y of the video section's top edge
     const getVideoTop = () => {
@@ -267,10 +284,54 @@ export default function SilkTransition() {
       }, EXIT_BEAT)
     }
 
+    // While caught we keep the scroll input-blocked (no jitter — see lock()) and
+    // simply watch for the glide to fade. The events are already prevented; this
+    // listener only refreshes the "still gliding" timestamp.
+    const onCaughtInput = (e: Event) => {
+      if (e instanceof WheelEvent) { if (Math.abs(e.deltaY) >= 4) lastFlickAt = performance.now() }
+      else lastFlickAt = performance.now()   // touchmove / keydown
+    }
+    const endCatch = () => {
+      window.clearInterval(caughtPoll)
+      window.removeEventListener('wheel', onCaughtInput)
+      window.removeEventListener('touchmove', onCaughtInput)
+      caught = false
+      unlock()
+      lastY = window.scrollY
+      lastScrollTime = performance.now()
+      // We stay parked at the seam-hold; the user's next deliberate scroll (from
+      // rest, so low velocity) fires the curtain through the normal path.
+    }
+    // Arrest a fast/gliding arrival at the seam: snap to the hold position (the
+    // other section stays fully hidden), hard-lock to kill the momentum, then
+    // release once the glide goes quiet (~160ms of no significant input).
+    const catchAtSeam = (dir: 'down' | 'up') => {
+      caught = true
+      const videoTop = getVideoTop()
+      const holdY = dir === 'down' ? videoTop - H : videoTop
+      window.scrollTo(0, holdY)
+      getLenis()?.scrollTo(holdY, { immediate: true })
+      lastY = holdY
+      lock()
+      const t0 = performance.now()
+      lastFlickAt = t0
+      caughtStart = t0
+      window.addEventListener('wheel', onCaughtInput, { passive: true })
+      window.addEventListener('touchmove', onCaughtInput, { passive: true })
+      window.clearInterval(caughtPoll)
+      caughtPoll = window.setInterval(() => {
+        const now = performance.now()
+        // release once the glide goes quiet, OR at the hard cap so an active
+        // (finger-down) drag is never held frozen against the user's will
+        if (now - lastFlickAt < CATCH_QUIET && now - caughtStart < CATCH_MAX) return
+        endCatch()
+      }, 80)
+    }
+
     const onScroll = () => {
-      // Never act while a play / pending beat is running, or during the settle
-      // cooldown right after one lands. (Our own teleport fires a scroll event;
-      // this guard makes it a no-op instead of an immediate re-trigger.)
+      // Never act while a play / pending beat / catch is running, or during the
+      // settle cooldown right after one lands. (Our own teleport fires a scroll
+      // event; this guard makes it a no-op instead of an immediate re-trigger.)
       if (isBusy() || performance.now() < cooldownUntil) {
         lastY = window.scrollY
         lastScrollTime = performance.now()
@@ -281,7 +342,8 @@ export default function SilkTransition() {
       if (!s) return
       const now      = performance.now()
       const y        = window.scrollY
-      const velocity = Math.abs(y - lastY) / Math.max(1, now - lastScrollTime)   // px/ms
+      const jump     = Math.abs(y - lastY)                                        // px this event
+      const velocity = jump / Math.max(1, now - lastScrollTime)                   // px/ms
       const dir      = y > lastY ? 'down' : 'up'
       lastY = y
       lastScrollTime = now
@@ -298,15 +360,19 @@ export default function SilkTransition() {
         return
       }
 
-      // Fire the curtain the instant the seam crosses the trigger line in the
-      // matching direction. Direction-gating prevents ping-pong at the landings:
-      // after an up-play we sit at top≈H (inside the down range) but only a fresh
-      // DOWNward scroll fires down; after a down-play we sit at top≈0 but only a
-      // fresh UPward scroll fires up.
+      // A flick / inertial glide into the seam gets ARRESTED (caught) instead of
+      // firing, so a fast scroll can't fling the user through the transition. A
+      // deliberate, reading-pace arrival fires immediately. Reduced-motion skips
+      // the catch (it has no curtain to protect — it just crosses instantly).
+      const fast = !reduceMotion && (velocity > FLICK_VELOCITY() || jump > FLICK_JUMP())
+
+      // Direction-gating prevents ping-pong at the landings: after an up-play we
+      // sit at top≈H (inside the down range) but only a fresh DOWNward scroll
+      // fires; after a down-play we sit at top≈0 but only a fresh UPward scroll.
       if (side === 'before' && dir === 'down' && top <= H) {
-        fireDown()
+        if (fast) catchAtSeam('down'); else fireDown()
       } else if (side === 'after' && dir === 'up' && top >= 0) {
-        fireUp()
+        if (fast) catchAtSeam('up'); else fireUp()
       }
     }
 
@@ -320,6 +386,10 @@ export default function SilkTransition() {
       const nextSide: 'before' | 'after' = sel === '#contact' ? 'after' : 'before'
 
       cancelAnimationFrame(raf)
+      window.clearInterval(caughtPoll)
+      window.removeEventListener('wheel', onCaughtInput)
+      window.removeEventListener('touchmove', onCaughtInput)
+      caught = false
       startTime = -1
       reverse = false
       pending = false
@@ -343,9 +413,12 @@ export default function SilkTransition() {
     onScroll()
     return () => {
       cancelAnimationFrame(raf)
+      window.clearInterval(caughtPoll)
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('nav-goto', onNavGoto)
       window.removeEventListener('resize', layout)
+      window.removeEventListener('wheel', onCaughtInput)
+      window.removeEventListener('touchmove', onCaughtInput)
       unlock()
     }
   }, [])
