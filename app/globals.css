@@ -1508,6 +1508,11 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   .about-img { animation: none !important; opacity: 1; transform: none; }
 }
+/* on mobile the horizontal slide-in just leaves the image shoved to the right
+   (it's held at the start keyframe until scrolled into range) — show it static */
+@media (max-width: 768px) {
+  .about-img { animation: none !important; opacity: 1; transform: none !important; }
+}
 /* ── HERO — blue gradient glow variant ──────────────────────── */
 
 @keyframes glow-bloom {

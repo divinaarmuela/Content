@@ -41,6 +41,7 @@ const slides = [
     category:'Venue',
     desc:    'A heritage venue, reframed for a new generation.',
     photos:  ['/Pattons.jpg'],
+    startAt: 2,
   },
 ]
 

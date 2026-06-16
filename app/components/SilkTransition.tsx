@@ -113,6 +113,7 @@ export default function SilkTransition() {
     let side: 'before' | 'after' = 'before'   // which side of the transition we're on
     let pendingSide: 'before' | 'after' = 'after'
     let lastY = window.scrollY
+    let lastScrollTime = performance.now()     // for velocity (scroll-to-top detection)
     let cooldownUntil = 0                      // brief guard after an animation lands
     let pending = false                        // in the pre-reverse header-exit beat
     let armed: 'down' | 'up' | null = null     // reached the seam; waiting for a 2nd scroll
@@ -129,7 +130,7 @@ export default function SilkTransition() {
         startTime = -1
         side = pendingSide
         lastY = window.scrollY
-        cooldownUntil = now + 450      // settle before allowing a re-trigger
+        cooldownUntil = now + 180      // brief settle, then the lock can re-engage
         // header appears only after the shades have fully opened on the black side
         if (pendingSide === 'after') window.dispatchEvent(new Event('diag-show'))
         return
@@ -272,18 +273,17 @@ export default function SilkTransition() {
       armed = dir
       lastInputAt = performance.now()
       lock()   // hold at the boundary; the next scroll input decides
-      // On the up-arm, snap the seam to the very top so the video fills the
-      // screen. Without this, a fast up-scroll locks with the seam still below
-      // the viewport top, leaving a strip of the light section visible above the
-      // video (the "white between the navbar and the video").
-      if (dir === 'up') {
-        const s = sentinelRef.current
-        if (s) {
-          const seamY = s.getBoundingClientRect().top + window.scrollY
-          window.scrollTo(0, seamY)
-          getLenis()?.scrollTo(seamY, { immediate: true })
-          lastY = seamY
-        }
+      // Snap the seam so the OTHER section is exactly off-screen, hiding any
+      // sliver: up-arm → seam to the top (video fills, Services hidden above);
+      // down-arm → seam to the bottom (Services fills, video hidden below).
+      // Without this you glimpse the edge of the adjacent section at the boundary.
+      const s = sentinelRef.current
+      if (s) {
+        const seamY = s.getBoundingClientRect().top + window.scrollY
+        const snapY = dir === 'up' ? seamY : seamY - H
+        window.scrollTo(0, snapY)
+        getLenis()?.scrollTo(snapY, { immediate: true })
+        lastY = snapY
       }
       lockedScrollY = window.scrollY   // pin point — held against momentum in onScroll
       window.addEventListener('wheel', onArmedInput, { passive: false })
@@ -300,14 +300,28 @@ export default function SilkTransition() {
         lastY = lockedScrollY
         return
       }
-      if (startTime !== -1 || pending) { lastY = window.scrollY; return }   // busy
-      if (performance.now() < cooldownUntil) { lastY = window.scrollY; return }
+      if (startTime !== -1 || pending) { lastY = window.scrollY; lastScrollTime = performance.now(); return }   // busy
+      if (performance.now() < cooldownUntil) { lastY = window.scrollY; lastScrollTime = performance.now(); return }
       const s = sentinelRef.current
       if (!s) return
-      const y     = window.scrollY
-      const dir   = y > lastY ? 'down' : 'up'
+      const now      = performance.now()
+      const y        = window.scrollY
+      const velocity = Math.abs(y - lastY) / Math.max(1, now - lastScrollTime)   // px per ms
+      const dir      = y > lastY ? 'down' : 'up'
       lastY = y
+      lastScrollTime = now
       const top = s.getBoundingClientRect().top   // seam position relative to viewport
+
+      // "Scroll to top" (iOS status-bar tap) is a programmatic scroll FAR faster
+      // than any manual flick. If we detect that velocity class crossing the seam
+      // upward, let it pass straight through to the top — no lock, no shader.
+      const SCROLL_TO_TOP = velocity > H / 90
+      if (side === 'after' && dir === 'up' && top >= 0 && SCROLL_TO_TOP) {
+        side = 'before'
+        window.dispatchEvent(new Event('diag-hide'))
+        cooldownUntil = now + 400
+        return
+      }
 
       // Reaching the seam ALWAYS sticks the user at the boundary (even on a fast
       // flick). They stay locked between the two sections; the curtain only fires
