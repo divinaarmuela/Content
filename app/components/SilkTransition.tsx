@@ -58,6 +58,14 @@ export default function SilkTransition() {
     // outgoing section), lock and auto-play the rest of the curtain — so it fires
     // off a small deliberate scroll instead of needing a whole viewport.
     const TRIGGER  = 0.10
+    // Anti-loop hysteresis (fractions of a viewport):
+    //  • after a transition, the OPPOSITE trigger is disarmed until the user moves
+    //    REARM into the landed section — a deadband bigger than any mobile
+    //    address-bar scroll jump, so it can't auto-re-fire / ping-pong.
+    //  • DISARMED_FIRE is a safety: even while disarmed, scrolling the cover this
+    //    far still fires, so the curtain can NEVER get stuck fully closed.
+    const REARM         = 0.28
+    const DISARMED_FIRE = 0.85
 
     // Deterministic start: this section is scroll-jacked and stateful, so never
     // let the browser restore a mid-page scroll position on refresh — it would
@@ -148,18 +156,8 @@ export default function SilkTransition() {
     let revealDir: 'down' | 'up' = 'down'
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
-    let lastInputAt = -1e9                     // last REAL user scroll gesture (wheel/touch)
+    let armed = true                           // re-fire only after moving INTO the landed section
     let rafId = 0
-
-    // Track genuine user scroll input. Address-bar show/hide, momentum, and our own
-    // teleports change scrollY WITHOUT firing these — so requiring a recent gesture
-    // to fire the curtain stops the mobile auto-loop while still allowing a
-    // deliberate scroll (including an immediate reversal) to trigger it.
-    const markInput = () => { lastInputAt = performance.now() }
-    window.addEventListener('wheel', markInput, { passive: true })
-    window.addEventListener('touchmove', markInput, { passive: true })
-    window.addEventListener('touchstart', markInput, { passive: true })
-    window.addEventListener('keydown', markInput, { passive: true })
 
     // shared per-strip colour for a given normalized x + time (the flowing field)
     const stripColor = (i: number, t: number): string => {
@@ -296,9 +294,9 @@ export default function SilkTransition() {
           ctx.clearRect(0, 0, W, H)
           playing = false
           side = revealDir === 'down' ? 'after' : 'before'
+          armed = false        // disarm the opposite trigger until the user moves into the section
           unlock()
-          cooldownUntil = now + 350
-          lastInputAt = -1e9   // require a FRESH gesture after landing (kills auto-loop)
+          cooldownUntil = now + 300
           return
         }
         canvas.style.opacity = '1'
@@ -316,38 +314,42 @@ export default function SilkTransition() {
       // untouched; the band only ever rises over the runway.
       const { spacerTop, spacerBottom } = geom()
       const y = window.scrollY
-      let coverP = 0
+      let raw = 0                 // unclamped cover (negative ⇒ INTO the section)
       let fromTop = false
 
       if (side === 'before') {
         // scrolling down: runway enters from the bottom → band rises from bottom,
         // its top edge pinned to the Services bottom (= spacerTop).
-        coverP = clamp01((y + H - spacerTop) / H)
+        raw = (y + H - spacerTop) / H
         fromTop = false
       } else {
         // scrolling up: runway enters from the top → band drops from the top, its
         // bottom edge pinned to the video top (= spacerBottom).
-        coverP = clamp01((spacerBottom - y) / H)
+        raw = (spacerBottom - y) / H
         fromTop = true
       }
+      const coverP = clamp01(raw)
 
-      // Reduced motion: no scrubbed strips (that is motion); stay clear until the
-      // trigger, then auto-play (RISE = 0 → near-instant cover) and reveal.
+      // Re-arm once the user has moved clearly INTO the landed section. Mobile
+      // momentum naturally carries you in, so this re-arms on its own; an
+      // address-bar scroll jump (smaller than REARM) can't.
+      if (!armed && raw <= -REARM) armed = true
+
+      // Fire if: armed & past the small trigger (the normal snappy case, works with
+      // momentum since coverP is scroll-driven), OR cover scrubbed near-full even
+      // while disarmed (safety so it can never stick fully closed / show full-screen).
+      const shouldFire = (armed && coverP >= TRIGGER) || coverP >= DISARMED_FIRE
+
+      // Reduced motion: no scrubbed strips (that is motion); stay clear until fire.
       if (reduceMotion) {
         canvas.style.opacity = '0'
-        if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
+        if (shouldFire) commit(side === 'before' ? 'down' : 'up', 0)
         return
       }
 
       canvas.style.opacity = coverP > 0 ? '1' : '0'
       paintCover(coverP, fromTop, t)
-
-      // Fire only when the cover crossed the trigger DUE TO a recent real gesture.
-      // This is the key mobile-loop guard: address-bar resizes / momentum / our own
-      // teleport move scrollY without a gesture, so they can't auto-fire the curtain
-      // — but a deliberate scroll (incl. an immediate reversal) still does.
-      const recentGesture = (now - lastInputAt) < 160
-      if (coverP >= TRIGGER && recentGesture) commit(side === 'before' ? 'down' : 'up', coverP)
+      if (shouldFire) commit(side === 'before' ? 'down' : 'up', coverP)
     }
 
     // Nav links (SiteNav) / hero CTA hand off in-page jumps so the transition
@@ -360,6 +362,7 @@ export default function SilkTransition() {
 
       playing = false
       phase = 'rise'
+      armed = true
       canvas.style.opacity = '0'
       ctx.clearRect(0, 0, W, H)
       side = nextSide
@@ -380,10 +383,6 @@ export default function SilkTransition() {
       cancelAnimationFrame(rafId)
       window.removeEventListener('nav-goto', onNavGoto)
       window.removeEventListener('resize', layout)
-      window.removeEventListener('wheel', markInput)
-      window.removeEventListener('touchmove', markInput)
-      window.removeEventListener('touchstart', markInput)
-      window.removeEventListener('keydown', markInput)
       unlock()
     }
   }, [])
