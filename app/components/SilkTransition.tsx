@@ -41,17 +41,27 @@ export default function SilkTransition() {
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // Touch devices scroll on the compositor thread; JS reads scrollY a frame
+    // behind, so a scroll-tracked silk band desyncs and shows background slivers.
+    // On touch we therefore DON'T track scroll — cover full-screen + snap + reveal.
+    const isTouch =
+      window.matchMedia('(hover: none), (pointer: coarse)').matches ||
+      'ontouchstart' in window
 
     // ── timeline (ms) ──
-    const COVER_DOWN = reduceMotion ? 0   : 340   // glimpse → full cover (down)
-    const COVER_UP   = reduceMotion ? 0   : 200   // faster up (uncovered area is the dark video)
+    const COVER_DOWN = reduceMotion ? 0   : 340   // desktop glimpse → full cover (down)
+    const COVER_UP   = reduceMotion ? 0   : 200   // desktop, faster up
     const HOLD       = reduceMotion ? 0   : 120
     const DISSOLVE   = reduceMotion ? 160 : 760
     const FADE_W     = 0.18
-    // Commit once the scrubbed glimpse reaches this much of the screen. Big enough
-    // that, with a pristine landing, the opposite trigger sits half a viewport away
-    // → a deadband no address-bar jump / momentum can cross → never loops.
-    const TRIGGER    = 0.5
+
+    // Desktop: commit at a half-screen silk glimpse (scroll-tracked band).
+    // Touch: commit the instant the OUTGOING section has scrolled ~fully off — the
+    // full-screen silk then slams over the (otherwise empty) runway with no
+    // background frame, and isn't covering readable content (it's already gone).
+    // Both land pristine; the trigger sits far enough from the landing to never loop.
+    const TRIGGER       = 0.5      // desktop, on the clamped band coverage
+    const TOUCH_TRIGGER = 0.95     // touch, on the RAW (uncapped) coverage
 
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
@@ -69,7 +79,7 @@ export default function SilkTransition() {
       canvas.width  = W * dpr
       canvas.height = H * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      if (spacerRef.current && W !== lastLayoutW) {     // width-only (ignore mobile address bar)
+      if (spacerRef.current && W !== lastLayoutW) {
         spacerRef.current.style.height = Math.round(H * 1.2) + 'px'
         lastLayoutW = W
       }
@@ -115,7 +125,6 @@ export default function SilkTransition() {
       window.removeEventListener('keydown', blockKeys)
     }
 
-    // ── state ──
     let side: 'before' | 'after' = 'before'
     let phase: 'idle' | 'cover' | 'hold' | 'reveal' = 'idle'
     let phaseStart = 0
@@ -133,15 +142,19 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      const light = 0.30 + Math.pow(v, 1.2) * 0.54     // blue silk, no near-black
+      const light = 0.30 + Math.pow(v, 1.2) * 0.54
       const hue   = 214 - v * 18
       const sat   = 0.88 - Math.pow(v, 2.5) * 0.45
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
-    // band of silk growing from one edge — the glimpse + the cover. fromTop for up
-    // (incoming Services arrives from the top), fromBottom for down (incoming video
-    // from the bottom). The band exactly masks the runway, so no background shows.
+    const paintFull = (t: number) => {
+      ctx.clearRect(0, 0, W, H)
+      for (let i = 0; i < STRIPS; i++) {
+        ctx.fillStyle = stripColor(i, t)
+        ctx.fillRect(xs[i], 0, ws[i], H)
+      }
+    }
     const paintCover = (coverP: number, fromTop: boolean, t: number) => {
       ctx.clearRect(0, 0, W, H)
       if (coverP <= 0) return
@@ -167,12 +180,12 @@ export default function SilkTransition() {
       ctx.globalAlpha = 1
     }
 
-    // current scrubbed glimpse coverage for the side we're on
     const scrubCover = () => {
       const { spacerTop, spacerBottom } = geom()
       const y = window.scrollY
-      if (side === 'before') return { coverP: clamp01((y + H - spacerTop) / H), fromTop: false }
-      return { coverP: clamp01((spacerBottom - y) / H), fromTop: true }
+      // raw = uncapped coverage (>1 once the outgoing section is fully gone)
+      const raw = side === 'before' ? (y + H - spacerTop) / H : (spacerBottom - y) / H
+      return { coverP: clamp01(raw), raw, fromTop: side !== 'before' }
     }
 
     const startTransition = (dir: 'down' | 'up', atCoverP: number) => {
@@ -185,26 +198,33 @@ export default function SilkTransition() {
       lock()
     }
 
+    const doSnap = (now: number) => {
+      window.scrollTo(0, pinY)
+      getLenis()?.scrollTo(pinY, { immediate: true })
+      void document.documentElement.getBoundingClientRect()
+      window.dispatchEvent(new Event(revealDir === 'down' ? 'diag-show' : 'diag-hide'))
+      phase = 'hold'
+      phaseStart = now
+    }
+
     const frame = (now: number) => {
       rafId = requestAnimationFrame(frame)
       const t = now / 1000
 
       if (phase === 'cover') {
-        const dur = revealDir === 'up' ? COVER_UP : COVER_DOWN
-        const p = dur <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / dur))
-        // grow band to full; also honour the live scrub so momentum drift can't
-        // expose anything behind the band
-        const animP = startCoverP + (1 - startCoverP) * p
-        const coverP = Math.max(animP, scrubCover().coverP)
-        canvas.style.opacity = '1'
-        paintCover(coverP, revealDir === 'up', t)
-        if (coverP >= 1) {
-          window.scrollTo(0, pinY)
-          getLenis()?.scrollTo(pinY, { immediate: true })
-          void document.documentElement.getBoundingClientRect()
-          window.dispatchEvent(new Event(revealDir === 'down' ? 'diag-show' : 'diag-hide'))
-          phase = 'hold'
-          phaseStart = now
+        if (isTouch) {
+          // full-screen cover, NOT scroll-tracked → no desync on mobile
+          canvas.style.opacity = '1'
+          paintFull(t)
+          doSnap(now)
+        } else {
+          const dur = revealDir === 'up' ? COVER_UP : COVER_DOWN
+          const p = dur <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / dur))
+          const animP = startCoverP + (1 - startCoverP) * p
+          const coverP = Math.max(animP, scrubCover().coverP)
+          canvas.style.opacity = '1'
+          paintCover(coverP, revealDir === 'up', t)
+          if (coverP >= 1) doSnap(now)
         }
         return
       }
@@ -226,7 +246,7 @@ export default function SilkTransition() {
           phase = 'idle'
           side = revealDir === 'down' ? 'after' : 'before'
           unlock()
-          cooldownUntil = now + 300
+          cooldownUntil = now + 320
           return
         }
         canvas.style.opacity = '1'
@@ -234,14 +254,19 @@ export default function SilkTransition() {
         return
       }
 
-      // ── idle: scrubbed silk GLIMPSE (masks the runway → no background), then
-      // commit at TRIGGER. Pristine landing + TRIGGER=0.5 ⇒ 0.5-viewport deadband
-      // ⇒ no loop, no hysteresis needed. ──
+      // ── idle ──
       if (now < cooldownUntil) { canvas.style.opacity = '0'; return }
-      const { coverP, fromTop } = scrubCover()
-      canvas.style.opacity = coverP > 0 ? '1' : '0'
-      paintCover(coverP, fromTop, t)
-      if (coverP >= TRIGGER) startTransition(side === 'before' ? 'down' : 'up', coverP)
+      const { coverP, raw, fromTop } = scrubCover()
+      if (isTouch) {
+        // No scroll-tracked glimpse (desyncs on mobile). Stay clear while the
+        // outgoing section scrolls off; the instant it's ~gone, fire the cover.
+        canvas.style.opacity = '0'
+        if (raw >= TOUCH_TRIGGER) startTransition(side === 'before' ? 'down' : 'up', 1)
+      } else {
+        canvas.style.opacity = coverP > 0 ? '1' : '0'
+        paintCover(coverP, fromTop, t)
+        if (coverP >= TRIGGER) startTransition(side === 'before' ? 'down' : 'up', coverP)
+      }
     }
 
     const onNavGoto = (e: Event) => {
