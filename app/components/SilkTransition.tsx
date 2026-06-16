@@ -119,6 +119,8 @@ export default function SilkTransition() {
     let armed: 'down' | 'up' | null = null     // reached the seam; waiting for a 2nd scroll
     let lastInputAt = 0                        // last armed-scroll time; resets the 0.5s hold each scroll
     let lockedScrollY = 0                      // where we pin the page while armed (beats mobile momentum)
+    let touchStartY = 0                        // start of an armed touch gesture
+    let touchEvaluating = false                // are we measuring a fresh armed swipe's direction?
 
     const draw = (now: number) => {
       const elapsed = now - startTime
@@ -240,55 +242,79 @@ export default function SilkTransition() {
       unlock()
       lastY = window.scrollY
     }
-    const onArmedInput = (e: Event) => {
-      // Every scroll input RESTARTS the 0.5s hold — so as long as the user keeps
-      // scrolling quickly, the timer never elapses and they stay locked between
-      // the two sections. The curtain only fires when they pause for 0.5s and
-      // then make a deliberate scroll.
+    // Act on a resolved direction: same as the armed direction fires the curtain,
+    // the opposite releases the lock (lets the user go back the way they came).
+    const decide = (intent: 'down' | 'up') => {
+      const wantDir = armed === 'down' ? 'down' : 'up'
+      if (intent === wantDir) (armed === 'down' ? fireDown : fireUp)()
+      else releaseArmed()
+    }
+
+    // Wheel / keyboard: every input RESTARTS the 0.5s hold (swallows trackpad
+    // momentum); a deliberate input after the pause fires (same dir) or releases.
+    const onArmedWheelKey = (e: Event) => {
       const now = performance.now()
       const quiet = now - lastInputAt
       lastInputAt = now
       if (quiet < 500) return
-      // resolve the scroll intent into a direction
-      let intent: 'down' | 'up' | 'either' = 'either'
-      if (e instanceof WheelEvent) {
-        intent = e.deltaY > 0 ? 'down' : e.deltaY < 0 ? 'up' : 'either'
-      } else if (e instanceof KeyboardEvent) {
+      let intent: 'down' | 'up' | null = null
+      if (e instanceof WheelEvent) intent = e.deltaY > 0 ? 'down' : e.deltaY < 0 ? 'up' : null
+      else if (e instanceof KeyboardEvent) {
         if (['ArrowDown', 'PageDown', 'End', ' '].includes(e.key)) intent = 'down'
         else if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) intent = 'up'
-        else return
       }
-      // touchmove → 'either' (any drag = proceed in the armed direction)
-      const fire    = armed === 'down' ? fireDown : fireUp
-      const wantDir  = armed === 'down' ? 'down' : 'up'
-      if (intent === 'either' || intent === wantDir) fire()
-      else releaseArmed()
+      if (intent) decide(intent)
     }
+
+    // Touch: ignore everything for 0.5s after arming / between quick taps (so a
+    // flick's momentum keeps it stuck). After that, a FRESH swipe's net direction
+    // decides — swiping the armed way fires, swiping back releases. We read the
+    // real finger direction (touchmove vs touchstart Y), not a wheel deltaY.
+    const onArmedTouchStart = (e: TouchEvent) => {
+      if (performance.now() - lastInputAt < 500) { lastInputAt = performance.now(); return }
+      touchStartY = e.touches[0]?.clientY ?? 0
+      touchEvaluating = true
+    }
+    const onArmedTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault()      // keep the page pinned while touching
+      if (!touchEvaluating) return
+      const cy = e.touches[0]?.clientY ?? touchStartY
+      const delta = touchStartY - cy            // > 0: finger moved up = scroll-DOWN intent
+      if (Math.abs(delta) < 24) return          // wait for a decisive movement
+      touchEvaluating = false
+      decide(delta > 0 ? 'down' : 'up')
+    }
+
     function clearArmedListeners() {
-      window.removeEventListener('wheel', onArmedInput)
-      window.removeEventListener('touchmove', onArmedInput)
-      window.removeEventListener('keydown', onArmedInput)
+      window.removeEventListener('wheel', onArmedWheelKey)
+      window.removeEventListener('keydown', onArmedWheelKey)
+      window.removeEventListener('touchstart', onArmedTouchStart)
+      window.removeEventListener('touchmove', onArmedTouchMove)
+      touchEvaluating = false
     }
     const arm = (dir: 'down' | 'up') => {
       armed = dir
       lastInputAt = performance.now()
       lock()   // hold at the boundary; the next scroll input decides
-      // Snap the seam so the OTHER section is exactly off-screen, hiding any
-      // sliver: up-arm → seam to the top (video fills, Services hidden above);
-      // down-arm → seam to the bottom (Services fills, video hidden below).
-      // Without this you glimpse the edge of the adjacent section at the boundary.
-      const s = sentinelRef.current
-      if (s) {
-        const seamY = s.getBoundingClientRect().top + window.scrollY
-        const snapY = dir === 'up' ? seamY : seamY - H
+      // Snap to the VIDEO section's real top edge so neither section leaves a
+      // sliver at the boundary. up-arm → video top at the viewport top (video
+      // fills, no cream/white bar above it); down-arm → video top at the viewport
+      // bottom (Services fills, video hidden below). Using the video element's
+      // top (not the 1px sentinel) avoids the thin light bar above the video.
+      const videoEl = canvas.nextElementSibling as HTMLElement | null
+      if (videoEl) {
+        const videoTop = videoEl.getBoundingClientRect().top + window.scrollY
+        const snapY = dir === 'up' ? videoTop : videoTop - H
         window.scrollTo(0, snapY)
         getLenis()?.scrollTo(snapY, { immediate: true })
         lastY = snapY
       }
       lockedScrollY = window.scrollY   // pin point — held against momentum in onScroll
-      window.addEventListener('wheel', onArmedInput, { passive: false })
-      window.addEventListener('touchmove', onArmedInput, { passive: false })
-      window.addEventListener('keydown', onArmedInput, { passive: false })
+      touchEvaluating = false
+      window.addEventListener('wheel', onArmedWheelKey, { passive: false })
+      window.addEventListener('keydown', onArmedWheelKey, { passive: false })
+      window.addEventListener('touchstart', onArmedTouchStart, { passive: false })
+      window.addEventListener('touchmove', onArmedTouchMove, { passive: false })
     }
 
     const onScroll = () => {
