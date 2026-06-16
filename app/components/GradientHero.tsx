@@ -27,17 +27,41 @@ export default function GradientHero() {
     const sharp = sharpRef.current
     if (!h1 || !sharp) return
 
+    // Real mouse pointers only. On touch (iOS) there's no cursor and the CSS
+    // already hides the blob — running this on touch-emulated mousemove just
+    // burns the main thread and janks the marquee, so skip it entirely.
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
+
+    // Cache the headline rect (recompute on scroll/resize) so we DON'T force a
+    // synchronous layout (getBoundingClientRect) on every mousemove.
+    let rect = sharp.getBoundingClientRect()
+    const refreshRect = () => { rect = sharp.getBoundingClientRect() }
+
+    // Coalesce moves to one mask update per animation frame — mousemove can fire
+    // several times per frame; without this the big masked/glowing headline
+    // repaints far more than 60×/s and steals frames from the marquee.
+    let raf = 0
+    let mx = 0, my = 0
+    const apply = () => {
+      raf = 0
+      sharp.style.setProperty('--mx', `${mx - rect.left}px`)
+      sharp.style.setProperty('--my', `${my - rect.top}px`)
+    }
     const onMove = (e: MouseEvent) => {
-      const r = sharp.getBoundingClientRect()
-      sharp.style.setProperty('--mx', `${e.clientX - r.left}px`)
-      sharp.style.setProperty('--my', `${e.clientY - r.top}px`)
+      mx = e.clientX; my = e.clientY
+      if (!raf) raf = requestAnimationFrame(apply)
     }
 
     // no leave handler — the blob just fades out where it is (CSS :hover),
     // so it never snaps back to centre and flashes blue mid-phrase
     h1.addEventListener('mousemove', onMove)
+    window.addEventListener('scroll', refreshRect, { passive: true })
+    window.addEventListener('resize', refreshRect)
     return () => {
       h1.removeEventListener('mousemove', onMove)
+      window.removeEventListener('scroll', refreshRect)
+      window.removeEventListener('resize', refreshRect)
+      if (raf) cancelAnimationFrame(raf)
     }
   }, [])
 

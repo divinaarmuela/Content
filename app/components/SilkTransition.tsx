@@ -153,11 +153,9 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      // High floor so even the darkest strip is a clearly-blue mid-tone — never a
-      // dark navy that reads as black. The whole curtain stays a bright blue silk.
-      const light = 0.48 + Math.pow(v, 1.1) * 0.40     // bright blue → near-white
-      const hue   = 216 - v * 20                        // blue → cyan
-      const sat   = 0.85 - Math.pow(v, 2) * 0.38        // vivid blue → soft cyan
+      const light = 0.02 + Math.pow(v, 1.35) * 0.80   // deep blue → bright
+      const hue   = 218 - v * 20                       // deep blue → cyan
+      const sat   = 1 - Math.pow(v, 3) * 0.5           // brightest peaks → white-blue
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
