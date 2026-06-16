@@ -122,7 +122,9 @@ export default function HorizontalVideoScroll() {
     return () => { io.disconnect(); document.body.classList.remove('video-active') }
   }, [])
 
-  // SilkTransition gate: pause on diag-hide, resume on diag-show
+  // SilkTransition gate: pause on diag-hide, resume on diag-show.
+  // Also auto-enable if the section is already visible on load (e.g. direct
+  // navigation or macOS native-scroll landing mid-page without a transition).
   useEffect(() => {
     const pauseAll = () => {
       liveRef.current   = false
@@ -140,6 +142,17 @@ export default function HorizontalVideoScroll() {
     }
     window.addEventListener('diag-hide', pauseAll)
     window.addEventListener('diag-show', resumeActive)
+
+    // Fallback: if the HVS section is already in the viewport on mount (no
+    // SilkTransition animation played), enable video playback immediately.
+    const el = wrapRef.current
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        liveRef.current = true
+      }
+    }
+
     return () => {
       window.removeEventListener('diag-hide', pauseAll)
       window.removeEventListener('diag-show', resumeActive)

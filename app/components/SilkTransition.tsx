@@ -255,9 +255,12 @@ export default function SilkTransition() {
       else releaseArmed()
     }
 
-    // Wheel / keyboard: every input RESTARTS the 0.5s hold (swallows trackpad
-    // momentum); a deliberate input after the pause fires (same dir) or releases.
+    // Wheel / keyboard: every SIGNIFICANT input restarts the 0.5s hold.
+    // Sub-threshold wheel deltas (< 8px) are macOS trackpad momentum tail —
+    // ignoring them lets the quiet window expire naturally once momentum decays,
+    // so the next deliberate flick fires the curtain without a 1-3s wait.
     const onArmedWheelKey = (e: Event) => {
+      if (e instanceof WheelEvent && Math.abs(e.deltaY) < 8) return
       const now = performance.now()
       const quiet = now - lastInputAt
       lastInputAt = now

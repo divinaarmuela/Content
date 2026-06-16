@@ -2530,6 +2530,23 @@ body.video-active .video-vol-ctrl {
   height: 36px;
 }
 .svc-nav-row:hover .svc-nav-icon { background: #0046d6; }
+/* MacBook 13"–14" range (769px–1300px): tighten font and padding so the
+   services list doesn't feel oversized on medium-width laptop screens. */
+@media (min-width: 769px) and (max-width: 1300px) {
+  .svc-nav-inner {
+    padding: clamp(20px, 3.5vh, 40px) clamp(32px, 5vw, 72px);
+  }
+  .svc-nav-need {
+    font-size: clamp(26px, 3.2vw, 44px);
+  }
+  .svc-nav-header-tag {
+    font-size: clamp(18px, 2vw, 28px);
+  }
+  .svc-nav-row {
+    padding: clamp(20px, 2.8vh, 36px) 0;
+    gap: clamp(16px, 3vw, 44px);
+  }
+}
 @media (max-width: 600px) {
   .svc-nav-row { align-items: flex-start; }
   .svc-nav-icon { width: 56px; height: 56px; margin-top: 6px; }
