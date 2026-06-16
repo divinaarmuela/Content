@@ -447,6 +447,7 @@ nav {
   animation: slide 50s linear infinite;
   gap: 32px;
   padding-right: 32px;
+  will-change: transform;
 }
 .marquee-item { display: inline-flex; align-items: center; gap: 32px; text-transform: uppercase; }
 .marquee-dot { color: var(--blue); }
@@ -1524,6 +1525,11 @@ footer {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes hero-bg-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 .hero-glow {
   position: relative;
   overflow: hidden;
@@ -1533,6 +1539,9 @@ footer {
   justify-content: center;
   padding: 120px 0 100px;
   background: #02040f;
+  /* isolate the hero into its own compositor layer so its internal animations
+     (stars, marquee) don't trigger repaints in adjacent sections during scroll */
+  contain: paint;
 }
 
 /* ── volume control — fixed top-right, below nav ── */
@@ -1942,6 +1951,8 @@ body.video-active .video-vol-ctrl {
   position: absolute;
   inset: 0;
   z-index: 0;
+  will-change: opacity;
+  animation: hero-bg-fade 2.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   background:
     /* big bright aurora bloom, bottom-left corner */
     radial-gradient(85% 95% at 0% 100%, rgba(228,240,255,0.97) 0%, rgba(135,188,255,0.62) 28%, rgba(40,110,255,0.3) 52%, rgba(8,64,191,0) 76%),
@@ -1961,6 +1972,7 @@ body.video-active .video-vol-ctrl {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  will-change: opacity, transform;
   background-image:
     radial-gradient(1.6px 1.6px at 12% 18%, rgba(255,255,255,0.95), transparent),
     radial-gradient(1.2px 1.2px at 26% 9%,  rgba(255,255,255,0.7),  transparent),
@@ -3029,6 +3041,7 @@ body.video-active .video-vol-ctrl {
   animation: slide-logos 40s linear infinite;
   width: max-content;
   padding-right: 48px;
+  will-change: transform;
 }
 .logos-item {
   flex-shrink: 0;

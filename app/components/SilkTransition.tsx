@@ -96,6 +96,11 @@ export default function SilkTransition() {
       getLenis()?.stop()
       window.addEventListener('wheel', block, { passive: false })
       window.addEventListener('keydown', blockKeys, { passive: false })
+      // Setting overflowY:hidden on <html> stops the browser from advancing
+      // window.scrollY via momentum/wheel — without this, macOS trackpad inertia
+      // keeps nudging scrollY past lockedScrollY, and the onScroll snap-back
+      // fights it every frame, causing visible jitter/vibration at the seam.
+      document.documentElement.style.overflowY = 'hidden'
       // NB: we do NOT block touchmove. On iOS, preventing the first touchmove of a
       // gesture commits it to "no scroll" for its whole life, so releasing the lock
       // mid-swipe leaves it dead until you re-touch. Instead the onScroll pin holds
@@ -105,6 +110,7 @@ export default function SilkTransition() {
       getLenis()?.start()
       window.removeEventListener('wheel', block)
       window.removeEventListener('keydown', blockKeys)
+      document.documentElement.style.overflowY = ''
     }
 
     let raf = 0

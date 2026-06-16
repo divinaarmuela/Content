@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
 
 const clientLogos = [
   'c5a69a_a57a94655c1d465581b0d60a633269da~mv2.png',
@@ -62,13 +61,7 @@ export default function GradientHero() {
 
   return (
     <section className="hero-glow">
-      <motion.div
-        className="hero-glow-bg"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
-        aria-hidden="true"
-      />
+      <div className="hero-glow-bg" aria-hidden="true" />
       <div className="filmhero-grain" aria-hidden="true" />
 
       <div className="hero-glow-inner">
