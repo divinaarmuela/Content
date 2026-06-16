@@ -139,6 +139,7 @@ export default function SilkTransition() {
     let phaseStart = 0                         // performance.now() at the current phase's start
     let startCoverP = 0                        // cover fraction captured at the trigger
     let revealDir: 'down' | 'up' = 'down'
+    let riseY = 0                              // scroll position frozen during the rise
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
     let rafId = 0
@@ -152,11 +153,11 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      // floor lifted off black: the valleys are a solid blue, not near-black, so
-      // the curtain reads as a blue silk (no black background) the whole time.
-      const light = 0.26 + Math.pow(v, 1.25) * 0.56    // solid blue → bright
-      const hue   = 220 - v * 24                        // deep blue → cyan
-      const sat   = 0.92 - Math.pow(v, 2.5) * 0.5       // saturated blue → white-blue
+      // High floor so even the darkest strip is a clearly-blue mid-tone — never a
+      // dark navy that reads as black. The whole curtain stays a bright blue silk.
+      const light = 0.48 + Math.pow(v, 1.1) * 0.40     // bright blue → near-white
+      const hue   = 216 - v * 20                        // blue → cyan
+      const sat   = 0.85 - Math.pow(v, 2) * 0.38        // vivid blue → soft cyan
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
@@ -213,6 +214,8 @@ export default function SilkTransition() {
       phaseStart = performance.now()
       startCoverP = atCoverP
       revealDir = dir
+      riseY = window.scrollY    // freeze HERE so leftover momentum can't drift the
+                                // section away and slide the black runway into view
       lock()
     }
 
@@ -229,6 +232,9 @@ export default function SilkTransition() {
         // Phase 1 — RISE: cover animates from the trigger fraction up to full while
         // the page stays locked (so it can never be outpaced and nothing peeks).
         if (phaseRise) {
+          // hold the page still so the section behind can't drift (momentum) and
+          // expose the black runway behind the rising band
+          if (window.scrollY !== riseY) window.scrollTo(0, riseY)
           const riseP  = RISE <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / RISE))
           const coverP = startCoverP + (1 - startCoverP) * riseP
           canvas.style.opacity = '1'
