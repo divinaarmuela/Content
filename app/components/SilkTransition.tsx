@@ -31,52 +31,40 @@ const easeInOut = (p: number) => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 
 
 type Lenis = { stop: () => void; start: () => void; scrollTo: (t: number, o?: { immediate?: boolean }) => void }
 
-/**
- * Three-step silk transition, your spec:
- *   1. GLIMPSE  — a `position: sticky` silk panel floats up between the sections
- *                 as you scroll. Composited by the browser → zero lag on mobile,
- *                 no background (the silk is the only thing there).
- *   2. SNAP     — the moment the silk fully covers, a fixed full-screen silk takes
- *                 over and the page snaps behind it to the target section.
- *   3. REVEAL   — the fixed silk dissolves to uncover the snapped section.
- * Steps 2–3 are time-driven over a full-screen cover (not scroll-tracked), so they
- * don't lag either. Nothing is glued to live scrollY, so mobile can't desync it.
- */
 export default function SilkTransition() {
-  const runwayRef  = useRef<HTMLDivElement>(null)
-  const glimpseRef = useRef<HTMLCanvasElement>(null)
-  const coverRef   = useRef<HTMLCanvasElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const canvasRef   = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const runway  = runwayRef.current
-    const gCanvas = glimpseRef.current
-    const cCanvas = coverRef.current
-    if (!runway || !gCanvas || !cCanvas) return
-    const gctx = gCanvas.getContext('2d')!
-    const cctx = cCanvas.getContext('2d')!
+    const sentinel = sentinelRef.current
+    const canvas = canvasRef.current
+    if (!sentinel || !canvas) return
+    const ctx = canvas.getContext('2d')!
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isTouch =
+      window.matchMedia('(hover: none), (pointer: coarse)').matches || 'ontouchstart' in window
 
-    const HOLD     = reduceMotion ? 0   : 140
-    const DISSOLVE = reduceMotion ? 160 : 740
+    const COVER    = reduceMotion ? 0   : 240   // silk fades in (the cover)
+    const HOLD     = reduceMotion ? 0   : 110
+    const DISSOLVE = reduceMotion ? 160 : 760   // silk dissolves away (the reveal)
+    // land this far into the next section so it can't instantly re-fire. only needs
+    // to beat scroll jitter — desktop has none, mobile's address bar does.
+    const MARGIN   = isTouch ? 0.3 : 0.05
 
-    let W = 0, H = 0, lastW = -1
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    window.scrollTo(0, 0)
+
+    let W = 0, H = 0
     const xs = new Float32Array(STRIPS)
     const ws = new Float32Array(STRIPS)
     const order = new Float32Array(STRIPS)
 
-    const sizeCanvas = (c: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      c.width = W * dpr; c.height = H * dpr
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    }
     const layout = () => {
       W = window.innerWidth
       H = window.innerHeight
-      sizeCanvas(gCanvas, gctx)
-      sizeCanvas(cCanvas, cctx)
-      // runway just over a viewport → the glimpse rises ~one screen, then commits
-      // the instant it fully covers. width-gated so the mobile address bar doesn't churn it.
-      if (W !== lastW) { runway.style.height = Math.round(H * 1.1) + 'px'; lastW = W }
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = W * dpr; canvas.height = H * dpr
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       let x = 0
       const cx = W / 2
       for (let i = 0; i < STRIPS; i++) {
@@ -106,14 +94,14 @@ export default function SilkTransition() {
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
-    const paintFull = (ctx: CanvasRenderingContext2D, t: number) => {
+    const paintFull = (t: number) => {
       ctx.clearRect(0, 0, W, H)
       for (let i = 0; i < STRIPS; i++) {
         ctx.fillStyle = stripColor(i, t)
         ctx.fillRect(xs[i], 0, ws[i], H)
       }
     }
-    const paintReveal = (ctx: CanvasRenderingContext2D, dissP: number, t: number) => {
+    const paintReveal = (dissP: number, t: number) => {
       const cx = W / 2
       const zoom = 1 + dissP * 0.55
       const wipe = dissP * (1 + 0.18)
@@ -150,8 +138,8 @@ export default function SilkTransition() {
 
     // ── state ──
     let side: 'before' | 'after' = 'before'
-    let playing = false
-    let snapStart = 0
+    let phase: 'idle' | 'cover' | 'hold' | 'reveal' = 'idle'
+    let phaseStart = 0
     let dir: 'down' | 'up' = 'down'
     let pinY = 0
     let cooldownUntil = 0
@@ -164,61 +152,62 @@ export default function SilkTransition() {
       window.dispatchEvent(new Event(on ? 'diag-show' : 'diag-hide'))
     }
 
-    // STEP 2: full silk takes over (fixed canvas), page snaps behind it
-    const commit = (d: 'down' | 'up', now: number) => {
-      const rect = runway.getBoundingClientRect()
-      const top = rect.top + window.scrollY
-      const bottom = top + runway.offsetHeight
-      pinY = d === 'down' ? bottom : Math.max(0, top - H)   // pristine landing
+    const start = (d: 'down' | 'up', now: number) => {
+      const seamY = sentinel.getBoundingClientRect().top + window.scrollY
+      pinY = d === 'down' ? seamY + H * MARGIN : Math.max(0, seamY - H - H * MARGIN)
       dir = d
-      playing = true
-      snapStart = now
-      paintFull(cctx, now / 1000)        // fixed cover = full silk (seamless with the glimpse)
-      cCanvas.style.opacity = '1'
+      phase = 'cover'
+      phaseStart = now
       lock()
-      window.scrollTo(0, pinY)           // snap behind the cover
-      getLenis()?.scrollTo(pinY, { immediate: true })
-      void document.documentElement.getBoundingClientRect()
-      setVideo(d === 'down')             // video alive going down, paused going up
     }
 
     const frame = (now: number) => {
       rafId = requestAnimationFrame(frame)
       const t = now / 1000
 
-      // ── STEP 3: reveal (fixed cover dissolves over the snapped section) ──
-      if (playing) {
+      // ── COVER: silk fades in over the current section ──
+      if (phase === 'cover') {
+        const p = COVER <= 0 ? 1 : clamp01((now - phaseStart) / COVER)
+        canvas.style.opacity = String(p)
+        paintFull(t)
+        if (p >= 1) {
+          window.scrollTo(0, pinY)                    // snap to the target behind the silk
+          getLenis()?.scrollTo(pinY, { immediate: true })
+          void document.documentElement.getBoundingClientRect()
+          setVideo(dir === 'down')
+          phase = 'hold'; phaseStart = now
+        }
+        return
+      }
+      if (phase === 'hold') {
         if (window.scrollY !== pinY) window.scrollTo(0, pinY)
-        const e = now - snapStart
-        if (e < HOLD) { paintFull(cctx, t); return }            // hold fully covered
-        const dissP = easeInOut(clamp01((e - HOLD) / DISSOLVE))
-        if (e - HOLD >= DISSOLVE) {
-          cCanvas.style.opacity = '0'
-          cctx.clearRect(0, 0, W, H)
-          playing = false
+        canvas.style.opacity = '1'; paintFull(t)
+        if (now - phaseStart >= HOLD) { phase = 'reveal'; phaseStart = now }
+        return
+      }
+      // ── REVEAL: silk dissolves away to uncover the section ──
+      if (phase === 'reveal') {
+        if (window.scrollY !== pinY) window.scrollTo(0, pinY)
+        const dissP = easeInOut(clamp01((now - phaseStart) / DISSOLVE))
+        if (now - phaseStart >= DISSOLVE) {
+          canvas.style.opacity = '0'; ctx.clearRect(0, 0, W, H)
+          phase = 'idle'
           side = dir === 'down' ? 'after' : 'before'
           unlock()
-          cooldownUntil = now + 340
+          cooldownUntil = now + 320
           return
         }
-        paintReveal(cctx, dissP, t)
+        canvas.style.opacity = '1'; paintReveal(dissP, t)
         return
       }
 
-      // ── STEP 1: glimpse (sticky silk floats up between the sections) ──
-      const rect = runway.getBoundingClientRect()
-      const onScreen = rect.bottom > -40 && rect.top < H + 40
-      if (onScreen) paintFull(gctx, t)
-      else gctx.clearRect(0, 0, W, H)
-
-      // video gate from position (hysteresis at runway midpoint)
-      setVideo(rect.bottom < H * 0.5)
-
-      // commit the instant the silk fully covers the viewport
-      const fullyCovered = rect.top <= 0 && rect.bottom >= H
-      if (fullyCovered && now >= cooldownUntil) {
-        commit(side === 'before' ? 'down' : 'up', now)
-      }
+      // ── idle: fire when the seam reaches the viewport edge (only the current
+      // section showing, before the next appears) ──
+      if (now < cooldownUntil) return
+      const top = sentinel.getBoundingClientRect().top
+      setVideo(top < 0)
+      if (side === 'before' && top <= H) start('down', now)
+      else if (side === 'after' && top >= 0) start('up', now)
     }
     rafId = requestAnimationFrame(frame)
 
@@ -226,6 +215,10 @@ export default function SilkTransition() {
       const sel = (e as CustomEvent<string>).detail
       const el = document.querySelector(sel) as HTMLElement | null
       if (!el) return
+      phase = 'idle'
+      canvas.style.opacity = '0'; ctx.clearRect(0, 0, W, H)
+      side = sel === '#contact' ? 'after' : 'before'
+      unlock()
       const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY)
       const lenis = getLenis()
       if (lenis) lenis.scrollTo(y, { immediate: true })
@@ -244,10 +237,8 @@ export default function SilkTransition() {
 
   return (
     <>
-      <div ref={runwayRef} className="silk-runway" aria-hidden="true">
-        <canvas ref={glimpseRef} className="silk-glimpse" />
-      </div>
-      <canvas ref={coverRef} className="silk-canvas" />
+      <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+      <canvas ref={canvasRef} className="silk-canvas" />
     </>
   )
 }
