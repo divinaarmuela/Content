@@ -58,10 +58,6 @@ export default function SilkTransition() {
     // outgoing section), lock and auto-play the rest of the curtain — so it fires
     // off a small deliberate scroll instead of needing a whole viewport.
     const TRIGGER  = 0.10
-    // After a transition, the trigger stays disarmed until the user scrolls this
-    // far (fraction of a viewport) INTO the landed section — hysteresis deadband
-    // that prevents small-screen address-bar jitter from re-firing the curtain.
-    const REARM    = 0.30
 
     // Deterministic start: this section is scroll-jacked and stateful, so never
     // let the browser restore a mid-page scroll position on refresh — it would
@@ -70,6 +66,7 @@ export default function SilkTransition() {
     window.scrollTo(0, 0)
 
     let W = 0, H = 0
+    let lastLayoutW = -1
     const xs    = new Float32Array(STRIPS)
     const ws    = new Float32Array(STRIPS)
     const order = new Float32Array(STRIPS)  // 0..1 — centre-out disappearance order
@@ -81,10 +78,15 @@ export default function SilkTransition() {
       canvas.width  = W * dpr
       canvas.height = H * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      // Runway is a bit taller than one viewport: the band needs a full viewport
-      // (H) to scrub the cover, plus headroom so the cover is fully up BEFORE the
-      // video could ever enter the viewport.
-      if (spacerRef.current) spacerRef.current.style.height = Math.round(H * 1.2) + 'px'
+      // Runway is a bit taller than one viewport. Set it ONLY when the width
+      // changes (orientation / desktop resize) — NOT on every resize, because on
+      // mobile the address bar showing/hiding fires resize and would otherwise
+      // re-tie the runway height to a fluctuating viewport, shifting the cover
+      // math across the trigger and causing the curtain to ping-pong.
+      if (spacerRef.current && W !== lastLayoutW) {
+        spacerRef.current.style.height = Math.round(H * 1.2) + 'px'
+        lastLayoutW = W
+      }
       let x = 0
       const cx = W / 2
       for (let i = 0; i < STRIPS; i++) {
@@ -146,7 +148,6 @@ export default function SilkTransition() {
     let revealDir: 'down' | 'up' = 'down'
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
-    let armed = true                           // hysteresis: must move INTO a section before re-firing
     let rafId = 0
 
     // shared per-strip colour for a given normalized x + time (the flowing field)
@@ -179,6 +180,21 @@ export default function SilkTransition() {
       for (let i = 0; i < STRIPS; i++) {
         ctx.fillStyle = stripColor(i, t)
         ctx.fillRect(xs[i], y0, ws[i], bandH)
+      }
+    }
+
+    // COVER from BOTH edges — used during the UP rise. Going up, a single top band
+    // leaves the dark OUTGOING video showing at the bottom; a second bottom band
+    // hides it. (Going down the uncovered area is the white Services section, so a
+    // single band is fine and we keep that.)
+    const paintCoverBoth = (topP: number, botP: number, t: number) => {
+      ctx.clearRect(0, 0, W, H)
+      const topH = topP * H
+      const botH = botP * H
+      for (let i = 0; i < STRIPS; i++) {
+        ctx.fillStyle = stripColor(i, t)
+        if (topH > 0) ctx.fillRect(xs[i], 0, ws[i], topH)
+        if (botH > 0) ctx.fillRect(xs[i], H - botH, ws[i], botH)
       }
     }
 
@@ -219,7 +235,6 @@ export default function SilkTransition() {
       phaseStart = performance.now()
       startCoverP = atCoverP
       revealDir = dir
-      armed = false            // disarm until the user scrolls into the landed section
       lock()
     }
 
@@ -249,8 +264,17 @@ export default function SilkTransition() {
           const animP  = startCoverP + (1 - startCoverP) * riseP
           const coverP = Math.max(scrubP, animP)
           canvas.style.opacity = '1'
-          paintCover(coverP, revealDir === 'up', t)
-          if (coverP >= 1) {
+          // Going UP, also grow a bottom band (a bit faster) to hide the dark
+          // outgoing video; the screen is "covered" once the two bands meet.
+          let covered = coverP >= 1
+          if (revealDir === 'up') {
+            const botP = clamp01(riseP * 2)
+            paintCoverBoth(coverP, botP, t)
+            covered = (coverP + botP) >= 1
+          } else {
+            paintCover(coverP, false, t)
+          }
+          if (covered) {
             // fully covered → teleport behind the curtain to the destination, gate
             // the video (alive going down / paused going up), then HOLD fully covered
             window.scrollTo(0, pinY)
@@ -299,45 +323,36 @@ export default function SilkTransition() {
       // untouched; the band only ever rises over the runway.
       const { spacerTop, spacerBottom } = geom()
       const y = window.scrollY
-      let raw = 0                 // unclamped cover (negative = INTO the section)
+      let coverP = 0
       let fromTop = false
 
       if (side === 'before') {
         // scrolling down: runway enters from the bottom → band rises from bottom,
         // its top edge pinned to the Services bottom (= spacerTop).
-        raw = (y + H - spacerTop) / H
+        coverP = clamp01((y + H - spacerTop) / H)
         fromTop = false
       } else {
         // scrolling up: runway enters from the top → band drops from the top, its
         // bottom edge pinned to the video top (= spacerBottom).
-        raw = (spacerBottom - y) / H
+        coverP = clamp01((spacerBottom - y) / H)
         fromTop = true
       }
-      const coverP = clamp01(raw)
-
-      // Hysteresis: after a transition we land at raw ≈ 0. Don't allow a new
-      // trigger until the user has scrolled clearly INTO the section (raw ≤ −REARM).
-      // This kills the small-screen ping-pong where the address bar resizing the
-      // viewport nudges the cover math just over the trigger and re-fires instantly.
-      if (!armed && raw <= -REARM) armed = true
 
       // Reduced motion: no scrubbed strips (that is motion); stay clear until the
       // trigger, then auto-play (RISE = 0 → near-instant cover) and reveal.
       if (reduceMotion) {
         canvas.style.opacity = '0'
-        if (armed && coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
+        if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', 0)
         return
       }
 
       canvas.style.opacity = coverP > 0 ? '1' : '0'
       paintCover(coverP, fromTop, t)
 
-      // Fire when armed and past the trigger fraction — OR if the user scrubbed all
-      // the way to full cover even while disarmed (e.g. reversing right after a
-      // landing), so the curtain is never left stuck fully closed.
-      if ((armed && coverP >= TRIGGER) || coverP >= 0.99) {
-        commit(side === 'before' ? 'down' : 'up', coverP)
-      }
+      // Past the trigger fraction → lock and auto-play. The brief post-landing
+      // cooldown + the now-stable runway geometry prevent re-fire ping-pong, so we
+      // don't need a hysteresis deadband (which blocked immediate reversals).
+      if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', coverP)
     }
 
     // Nav links (SiteNav) / hero CTA hand off in-page jumps so the transition
@@ -350,7 +365,6 @@ export default function SilkTransition() {
 
       playing = false
       phase = 'rise'
-      armed = true
       canvas.style.opacity = '0'
       ctx.clearRect(0, 0, W, H)
       side = nextSide
