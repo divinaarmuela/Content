@@ -148,7 +148,18 @@ export default function SilkTransition() {
     let revealDir: 'down' | 'up' = 'down'
     let pinY = 0                               // where to hold the page during the reveal
     let cooldownUntil = 0                      // brief guard right after a reveal lands
+    let lastInputAt = -1e9                     // last REAL user scroll gesture (wheel/touch)
     let rafId = 0
+
+    // Track genuine user scroll input. Address-bar show/hide, momentum, and our own
+    // teleports change scrollY WITHOUT firing these — so requiring a recent gesture
+    // to fire the curtain stops the mobile auto-loop while still allowing a
+    // deliberate scroll (including an immediate reversal) to trigger it.
+    const markInput = () => { lastInputAt = performance.now() }
+    window.addEventListener('wheel', markInput, { passive: true })
+    window.addEventListener('touchmove', markInput, { passive: true })
+    window.addEventListener('touchstart', markInput, { passive: true })
+    window.addEventListener('keydown', markInput, { passive: true })
 
     // shared per-strip colour for a given normalized x + time (the flowing field)
     const stripColor = (i: number, t: number): string => {
@@ -180,21 +191,6 @@ export default function SilkTransition() {
       for (let i = 0; i < STRIPS; i++) {
         ctx.fillStyle = stripColor(i, t)
         ctx.fillRect(xs[i], y0, ws[i], bandH)
-      }
-    }
-
-    // COVER from BOTH edges — used during the UP rise. Going up, a single top band
-    // leaves the dark OUTGOING video showing at the bottom; a second bottom band
-    // hides it. (Going down the uncovered area is the white Services section, so a
-    // single band is fine and we keep that.)
-    const paintCoverBoth = (topP: number, botP: number, t: number) => {
-      ctx.clearRect(0, 0, W, H)
-      const topH = topP * H
-      const botH = botP * H
-      for (let i = 0; i < STRIPS; i++) {
-        ctx.fillStyle = stripColor(i, t)
-        if (topH > 0) ctx.fillRect(xs[i], 0, ws[i], topH)
-        if (botH > 0) ctx.fillRect(xs[i], H - botH, ws[i], botH)
       }
     }
 
@@ -260,21 +256,17 @@ export default function SilkTransition() {
           const scrubP = revealDir === 'down'
             ? clamp01((y + H - spacerTop) / H)
             : clamp01((spacerBottom - y) / H)
-          const riseP  = RISE <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / RISE))
+          // Up rises faster than down: the uncovered area going up is the dark
+          // video, so we sweep the single curtain over it quickly (reads as the
+          // curtain dropping, not "black showing"). Going down the uncovered area
+          // is the white Services section, so a gentler sweep looks good.
+          const riseDur = revealDir === 'up' ? 260 : RISE
+          const riseP  = riseDur <= 0 ? 1 : easeInOut(clamp01((now - phaseStart) / riseDur))
           const animP  = startCoverP + (1 - startCoverP) * riseP
           const coverP = Math.max(scrubP, animP)
           canvas.style.opacity = '1'
-          // Going UP, also grow a bottom band (a bit faster) to hide the dark
-          // outgoing video; the screen is "covered" once the two bands meet.
-          let covered = coverP >= 1
-          if (revealDir === 'up') {
-            const botP = clamp01(riseP * 2)
-            paintCoverBoth(coverP, botP, t)
-            covered = (coverP + botP) >= 1
-          } else {
-            paintCover(coverP, false, t)
-          }
-          if (covered) {
+          paintCover(coverP, revealDir === 'up', t)   // single band (top for up, bottom for down)
+          if (coverP >= 1) {
             // fully covered → teleport behind the curtain to the destination, gate
             // the video (alive going down / paused going up), then HOLD fully covered
             window.scrollTo(0, pinY)
@@ -305,7 +297,8 @@ export default function SilkTransition() {
           playing = false
           side = revealDir === 'down' ? 'after' : 'before'
           unlock()
-          cooldownUntil = now + 220
+          cooldownUntil = now + 350
+          lastInputAt = -1e9   // require a FRESH gesture after landing (kills auto-loop)
           return
         }
         canvas.style.opacity = '1'
@@ -349,10 +342,12 @@ export default function SilkTransition() {
       canvas.style.opacity = coverP > 0 ? '1' : '0'
       paintCover(coverP, fromTop, t)
 
-      // Past the trigger fraction → lock and auto-play. The brief post-landing
-      // cooldown + the now-stable runway geometry prevent re-fire ping-pong, so we
-      // don't need a hysteresis deadband (which blocked immediate reversals).
-      if (coverP >= TRIGGER) commit(side === 'before' ? 'down' : 'up', coverP)
+      // Fire only when the cover crossed the trigger DUE TO a recent real gesture.
+      // This is the key mobile-loop guard: address-bar resizes / momentum / our own
+      // teleport move scrollY without a gesture, so they can't auto-fire the curtain
+      // — but a deliberate scroll (incl. an immediate reversal) still does.
+      const recentGesture = (now - lastInputAt) < 160
+      if (coverP >= TRIGGER && recentGesture) commit(side === 'before' ? 'down' : 'up', coverP)
     }
 
     // Nav links (SiteNav) / hero CTA hand off in-page jumps so the transition
@@ -385,6 +380,10 @@ export default function SilkTransition() {
       cancelAnimationFrame(rafId)
       window.removeEventListener('nav-goto', onNavGoto)
       window.removeEventListener('resize', layout)
+      window.removeEventListener('wheel', markInput)
+      window.removeEventListener('touchmove', markInput)
+      window.removeEventListener('touchstart', markInput)
+      window.removeEventListener('keydown', markInput)
       unlock()
     }
   }, [])
