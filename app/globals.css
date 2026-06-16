@@ -28,6 +28,12 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 
+/* hide the scrollbar everywhere — scrolling still works (Lenis drives it) */
+html { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
 body {
   font-family: var(--sans);
   font-weight: 400;
@@ -2092,8 +2098,12 @@ body.video-active .video-vol-ctrl {
   filter: blur(0px);
   transition: filter 0.3s ease-out;
 }
-.hero-glow-h1:hover .hl-mid {
-  filter: blur(5px);
+/* only real mouse pointers get the hover-blur — on touch, :hover sticks after a
+   tap and would blur the middle words with no way to undo it */
+@media (hover: hover) and (pointer: fine) {
+  .hero-glow-h1:hover .hl-mid {
+    filter: blur(5px);
+  }
 }
 
 /* blob layer: sharp WHITE text revealed only inside the circular blob at the cursor;
@@ -2114,10 +2124,12 @@ body.video-active .video-vol-ctrl {
     0 0 56px rgba(74, 163, 255, 0.38);
   transition: opacity 0.3s ease-out, --br 0.3s ease-out;
 }
-.hero-glow-h1:hover .hl-blob {
-  opacity: 1;
-  --br: 110px;
-  animation: blob-line-glow 0.7s ease-out;
+@media (hover: hover) and (pointer: fine) {
+  .hero-glow-h1:hover .hl-blob {
+    opacity: 1;
+    --br: 110px;
+    animation: blob-line-glow 0.7s ease-out;
+  }
 }
 
 /* blue glow grows in from nothing to the resting glow */
@@ -2157,9 +2169,9 @@ body.video-active .video-vol-ctrl {
 }
 .hero-glow-actions {
   display: flex;
-  gap: 16px;
+  gap: 0;                /* buttons attach into one connected pair */
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .hero-glow-btn {
   display: inline-flex;
@@ -2185,6 +2197,53 @@ body.video-active .video-vol-ctrl {
   border: 1px solid #fff;
 }
 .hero-glow-btn-light:hover { opacity: 0.9; }
+/* white, square-cornered hero CTAs (Get started + Book a call), attached as a
+   connected pair with a subtle seam between them */
+.hero-glow-btn-sharp {
+  background: #fff;
+  color: #0A0A0A;
+  border: 1px solid #fff;
+  border-radius: 0;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+.hero-glow-btn-sharp:hover { background: rgba(255, 255, 255, 0.88); }
+
+/* "Book a call" — black button with a small blue pulse dot after the text */
+.hero-glow-btn-pulse {
+  background: #0A0A0A;
+  color: #fff;
+  border-color: #0A0A0A;
+  gap: 9px;            /* space between the text and the dot */
+}
+.hero-glow-btn-pulse:hover { background: #0A0A0A; }
+.btn-pulse-dot {
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #298dff;
+  flex-shrink: 0;
+}
+/* expanding, fading ring */
+.btn-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #298dff;
+  animation: btn-dot-pulse 1.6s ease-out infinite;
+}
+@keyframes btn-dot-pulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-pulse-dot::after { animation: none; }
+}
 /* single hero CTA — soft blue→white gradient with a gentle outer glow */
 .hero-glow-btn-aurora {
   background: linear-gradient(120deg, #2f93ff 0%, #8cc1ff 48%, #ffffff 100%);
@@ -2252,11 +2311,27 @@ body.video-active .video-vol-ctrl {
   /* nav — keep brand + links on one line without clipping "Contact" */
   .site-nav-inner { padding: 14px 18px; }
   .site-nav-name { font-size: 15px; }
+  .nav-logo-img { height: 20px; }
   .site-nav-links { gap: 16px; }
   .site-nav-links a { font-size: 11px; letter-spacing: 0.08em; }
 
-  .hero-glow { min-height: 100svh; padding: 92px 0 64px; }
+  /* reserve room at the bottom for the absolutely-positioned marquee (~82px)
+     plus a gap, so the centred content + button never overlaps it */
+  .hero-glow { min-height: 100svh; padding: 92px 0 124px; }
   .hero-glow-inner { padding: 0 22px; }
+
+  /* Sui-style mobile hero: clean vertical gradient, near-black at the top fading
+     to a vivid blue at the bottom, with a soft brightening across the base. */
+  .hero-glow-bg {
+    background:
+      radial-gradient(120% 60% at 50% 122%, rgba(150,200,255,0.5) 0%, transparent 62%),
+      linear-gradient(180deg,
+        #02040f 0%,
+        #050f2c 24%,
+        #0a2f86 54%,
+        #1659e0 78%,
+        #2f86ff 100%);
+  }
   .hero-glow-tag { font-size: 11px; letter-spacing: 0.2em; margin-bottom: 18px; }
 
   /* headline wraps and stays centred; on touch there's no hover blob, so show
@@ -2283,8 +2358,17 @@ body.video-active .video-vol-ctrl {
     -webkit-background-clip: text;
     background-clip: text;
   }
-  .hero-glow-h1 .hl-base { filter: none; }
-  .hero-glow-h1 .hl-mid { filter: none; }
+  /* readable headline with a soft blue glow that follows the LETTER shapes (via
+     text-shadow) instead of a blurred copy — the blurred-copy approach leaks the
+     gradient's rectangular background as a "box" because background-clip:text
+     breaks under blur. text-shadow hugs the glyphs, biased slightly upward. */
+  .hero-glow-h1 .hl-base,
+  .hero-glow-h1 .hl-mid {
+    filter: none;
+    text-shadow:
+      0 -3px 20px rgba(120,180,255,0.55),
+      0 0 42px rgba(40,110,255,0.32);
+  }
   .hero-glow-h1 .hl-blob { display: none; }
 
   .hero-glow-desc {
@@ -2298,12 +2382,15 @@ body.video-active .video-vol-ctrl {
   .hero-glow-desc .reveal-mask { display: inline; overflow: visible; padding: 0; }
   .hero-glow-desc .reveal-inner { display: inline; animation: heroDescFade 0.6s ease both; }
 
-  .hero-glow-btn { padding: 15px 30px; font-size: 16px; }
+  /* smaller buttons on mobile so the headline + desc + buttons + marquee all fit
+     within the first screen on landing */
+  .hero-glow-btn { padding: 12px 22px; font-size: 14px; }
 
-  /* marquee */
-  .hero-glow-marquee { padding: 18px 0; }
-  .hero-glow-marquee .logos-track { gap: 40px; }
-  .hero-glow-marquee .logos-item img { height: 46px; }
+  /* marquee — padding-right MUST equal the gap or the -50% loop desyncs and the
+     logos vanish for a beat before repeating */
+  .hero-glow-marquee { padding: 16px 0; }
+  .hero-glow-marquee .logos-track { gap: 40px; padding-right: 40px; }
+  .hero-glow-marquee .logos-item img { height: 42px; }
 }
 @keyframes heroDescFade {
   from { opacity: 0; }

@@ -22,7 +22,7 @@ const slides = [
   {
     src:     asset('/Senorita.mp4'),
     poster:  '/Senorita.jpg',
-    preload: 'metadata' as const,
+    preload: 'auto' as const,
     title:   'Señorita',
     num:     '02',
     client:  'Señorita Debutante',
@@ -34,7 +34,7 @@ const slides = [
   {
     src:     asset('/Pattons.mp4'),
     poster:  '/pattons-poster.jpg',
-    preload: 'metadata' as const,
+    preload: 'auto' as const,
     title:   'Pattons',
     num:     '03',
     client:  'Pattons',

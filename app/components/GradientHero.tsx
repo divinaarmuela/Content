@@ -92,8 +92,17 @@ export default function GradientHero() {
         </p>
 
         <div className="hero-glow-actions">
-          <a href="#contact" className="hero-glow-btn hero-glow-btn-aurora">
-            Get started <span className="hero-glow-btn-arr">→</span>
+          <a href="#contact" className="hero-glow-btn hero-glow-btn-sharp">
+            Get started
+          </a>
+          <a
+            href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse"
+          >
+            Book a call
+            <span className="btn-pulse-dot" aria-hidden="true"></span>
           </a>
         </div>
       </div>

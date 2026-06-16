@@ -1,6 +1,6 @@
 export default function AboutSection() {
   return (
-    <section className="border-0 bg-[#0c0c0c] px-[clamp(20px,6vw,120px)] py-[clamp(72px,14vh,180px)] text-white">
+    <section className="overflow-hidden border-0 bg-[#0c0c0c] px-[clamp(20px,6vw,120px)] py-[clamp(72px,14vh,180px)] text-white">
       <div className="flex flex-col gap-16 md:flex-row md:items-start md:gap-[clamp(40px,6vw,80px)]">
 
         {/* Left: text */}

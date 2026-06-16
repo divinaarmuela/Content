@@ -115,6 +115,8 @@ export default function SilkTransition() {
     let lastY = window.scrollY
     let cooldownUntil = 0                      // brief guard after an animation lands
     let pending = false                        // in the pre-reverse header-exit beat
+    let armed: 'down' | 'up' | null = null     // reached the seam; waiting for a 2nd scroll
+    let lastInputAt = 0                        // last armed-scroll time; resets the 0.5s hold each scroll
 
     const draw = (now: number) => {
       const elapsed = now - startTime
@@ -203,6 +205,90 @@ export default function SilkTransition() {
       raf = requestAnimationFrame(draw)
     }
 
+    // ── two-stage trigger: arm at the seam, fire on the NEXT scroll ────────
+    // Crossing the seam (either direction) doesn't animate immediately — we lock
+    // at the boundary so nothing peeks, then wait. A further scroll in the same
+    // direction fires the curtain; a scroll the opposite way releases it. Applies
+    // both entering (down → into video) and leaving (up → back to services).
+    const fireDown = () => {
+      clearArmedListeners()
+      armed = null
+      const next   = canvas.nextElementSibling as HTMLElement | null
+      const target = next ? next.getBoundingClientRect().top + window.scrollY : window.scrollY + H
+      startAnim(target, 'after', false)
+    }
+    const fireUp = () => {
+      clearArmedListeners()
+      armed = null
+      const s = sentinelRef.current
+      if (!s) return
+      const seamY  = s.getBoundingClientRect().top + window.scrollY
+      const target = seamY - H                         // seam → bottom edge, last item visible
+      pending = true
+      window.dispatchEvent(new Event('diag-hide'))      // header scales back out
+      lock()                                            // (already locked) freeze while it exits
+      window.setTimeout(() => {
+        pending = false
+        startAnim(target, 'before', true)               // now close the shades
+      }, 480)
+    }
+    const releaseArmed = () => {
+      clearArmedListeners()
+      armed = null
+      unlock()
+      lastY = window.scrollY
+    }
+    const onArmedInput = (e: Event) => {
+      // Every scroll input RESTARTS the 0.5s hold — so as long as the user keeps
+      // scrolling quickly, the timer never elapses and they stay locked between
+      // the two sections. The curtain only fires when they pause for 0.5s and
+      // then make a deliberate scroll.
+      const now = performance.now()
+      const quiet = now - lastInputAt
+      lastInputAt = now
+      if (quiet < 500) return
+      // resolve the scroll intent into a direction
+      let intent: 'down' | 'up' | 'either' = 'either'
+      if (e instanceof WheelEvent) {
+        intent = e.deltaY > 0 ? 'down' : e.deltaY < 0 ? 'up' : 'either'
+      } else if (e instanceof KeyboardEvent) {
+        if (['ArrowDown', 'PageDown', 'End', ' '].includes(e.key)) intent = 'down'
+        else if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) intent = 'up'
+        else return
+      }
+      // touchmove → 'either' (any drag = proceed in the armed direction)
+      const fire    = armed === 'down' ? fireDown : fireUp
+      const wantDir  = armed === 'down' ? 'down' : 'up'
+      if (intent === 'either' || intent === wantDir) fire()
+      else releaseArmed()
+    }
+    function clearArmedListeners() {
+      window.removeEventListener('wheel', onArmedInput)
+      window.removeEventListener('touchmove', onArmedInput)
+      window.removeEventListener('keydown', onArmedInput)
+    }
+    const arm = (dir: 'down' | 'up') => {
+      armed = dir
+      lastInputAt = performance.now()
+      lock()   // hold at the boundary; the next scroll input decides
+      // On the up-arm, snap the seam to the very top so the video fills the
+      // screen. Without this, a fast up-scroll locks with the seam still below
+      // the viewport top, leaving a strip of the light section visible above the
+      // video (the "white between the navbar and the video").
+      if (dir === 'up') {
+        const s = sentinelRef.current
+        if (s) {
+          const seamY = s.getBoundingClientRect().top + window.scrollY
+          window.scrollTo(0, seamY)
+          getLenis()?.scrollTo(seamY, { immediate: true })
+          lastY = seamY
+        }
+      }
+      window.addEventListener('wheel', onArmedInput, { passive: false })
+      window.addEventListener('touchmove', onArmedInput, { passive: false })
+      window.addEventListener('keydown', onArmedInput, { passive: false })
+    }
+
     const onScroll = () => {
       if (startTime !== -1 || pending) { lastY = window.scrollY; return }   // busy
       if (performance.now() < cooldownUntil) { lastY = window.scrollY; return }
@@ -210,33 +296,16 @@ export default function SilkTransition() {
       if (!s) return
       const y     = window.scrollY
       const dir   = y > lastY ? 'down' : 'up'
-      const speed = lastY - y                     // > 0 when scrolling up
       lastY = y
       const top = s.getBoundingClientRect().top   // seam position relative to viewport
 
+      // Reaching the seam ALWAYS sticks the user at the boundary (even on a fast
+      // flick). They stay locked between the two sections; the curtain only fires
+      // on a deliberate scroll made after the 0.5s hold (see onArmedInput).
       if (side === 'before' && dir === 'down' && top <= H * 1.05) {
-        // scrolling down past services — strips cover BEFORE the black section
-        // can peek in from the bottom (seam still just below the fold)
-        const next = canvas.nextElementSibling as HTMLElement | null
-        const target = next ? next.getBoundingClientRect().top + y : y + H
-        startAnim(target, 'after', false)
-      } else if (side === 'after' && dir === 'up') {
-        // scrolling back up — let the user reach the very top of the black
-        // section first (Cecconi fully back on screen, seam at the viewport
-        // top). Only a further up-scroll past that point fires the curtain, so
-        // we never yank the user out mid-section.
-        // Then scale the header back out, THEN close the shades.
-        if (top >= 0) {
-          const seamY  = top + y
-          const target = seamY - H      // seam → bottom edge, last item visible
-          pending = true
-          window.dispatchEvent(new Event('diag-hide'))   // header scales back out
-          lock()                                         // freeze while it exits
-          window.setTimeout(() => {
-            pending = false
-            startAnim(target, 'before', true)            // now close the shades
-          }, 480)
-        }
+        if (!armed) { arm('down'); lastY = y }
+      } else if (side === 'after' && dir === 'up' && top >= 0) {
+        if (!armed) { arm('up'); lastY = y }
       }
     }
 
@@ -253,6 +322,8 @@ export default function SilkTransition() {
       startTime = -1
       reverse = false
       pending = false
+      clearArmedListeners()
+      armed = null
       canvas.style.opacity = '0'
       side = nextSide
       unlock()
@@ -275,6 +346,7 @@ export default function SilkTransition() {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('nav-goto', onNavGoto)
       window.removeEventListener('resize', layout)
+      clearArmedListeners()
       unlock()
     }
   }, [])
