@@ -218,7 +218,8 @@ export default function SilkTransition() {
       clearArmedListeners()
       armed = null
       const next   = canvas.nextElementSibling as HTMLElement | null
-      const target = next ? next.getBoundingClientRect().top + window.scrollY : window.scrollY + H
+      // +2 so the video covers the very top (no cream sliver when the navbar hides)
+      const target = next ? next.getBoundingClientRect().top + window.scrollY + 2 : window.scrollY + H
       startAnim(target, 'after', false)
     }
     const fireUp = () => {
@@ -271,7 +272,9 @@ export default function SilkTransition() {
     // decides — swiping the armed way fires, swiping back releases. We read the
     // real finger direction (touchmove vs touchstart Y), not a wheel deltaY.
     const onArmedTouchStart = (e: TouchEvent) => {
-      if (performance.now() - lastInputAt < 500) { lastInputAt = performance.now(); return }
+      // Any fresh finger-down after arming is deliberate (inertial momentum never
+      // fires a touchstart), so evaluate it right away — no 0.5s wait. The first
+      // touch sticks at the seam; this next touch decides the direction.
       touchStartY = e.touches[0]?.clientY ?? 0
       touchEvaluating = true
     }
@@ -304,7 +307,11 @@ export default function SilkTransition() {
       const videoEl = canvas.nextElementSibling as HTMLElement | null
       if (videoEl) {
         const videoTop = videoEl.getBoundingClientRect().top + window.scrollY
-        const snapY = dir === 'up' ? videoTop : videoTop - H
+        // +2 / -2 buffer so sub-pixel rounding never leaves a sliver of the other
+        // section at the boundary (the cream "white bar" above the video that
+        // showed when the navbar auto-hid). The 2px trimmed off the full-bleed
+        // video is imperceptible.
+        const snapY = dir === 'up' ? videoTop + 2 : videoTop - H - 2
         window.scrollTo(0, snapY)
         getLenis()?.scrollTo(snapY, { immediate: true })
         lastY = snapY
