@@ -117,6 +117,7 @@ export default function SilkTransition() {
     let pending = false                        // in the pre-reverse header-exit beat
     let armed: 'down' | 'up' | null = null     // reached the seam; waiting for a 2nd scroll
     let lastInputAt = 0                        // last armed-scroll time; resets the 0.5s hold each scroll
+    let lockedScrollY = 0                      // where we pin the page while armed (beats mobile momentum)
 
     const draw = (now: number) => {
       const elapsed = now - startTime
@@ -284,12 +285,21 @@ export default function SilkTransition() {
           lastY = seamY
         }
       }
+      lockedScrollY = window.scrollY   // pin point — held against momentum in onScroll
       window.addEventListener('wheel', onArmedInput, { passive: false })
       window.addEventListener('touchmove', onArmedInput, { passive: false })
       window.addEventListener('keydown', onArmedInput, { passive: false })
     }
 
     const onScroll = () => {
+      // While armed, pin the page at the seam. preventDefault can't stop mobile
+      // inertial scrolling (no touchmove fires once the finger lifts), so we snap
+      // back on every scroll event — momentum can't carry the user through.
+      if (armed !== null) {
+        if (window.scrollY !== lockedScrollY) window.scrollTo(0, lockedScrollY)
+        lastY = lockedScrollY
+        return
+      }
       if (startTime !== -1 || pending) { lastY = window.scrollY; return }   // busy
       if (performance.now() < cooldownUntil) { lastY = window.scrollY; return }
       const s = sentinelRef.current
