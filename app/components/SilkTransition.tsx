@@ -2,6 +2,11 @@
 
 import { useRef, useEffect } from 'react'
 
+// Master switch for the scroll transition. While false, the drawer/cover/reveal
+// is skipped, no .silk-canvas is rendered (so SiteNav scrolls normally), and we
+// only emit diag-show/diag-hide so the horizontal-section videos still play.
+const ENABLED = false
+
 const STRIPS = 150
 
 const seededRand = (seed: number) => {
@@ -51,17 +56,11 @@ export default function SilkTransition() {
 
   useEffect(() => {
     const sentinel = sentinelRef.current
-    const canvas = canvasRef.current
-    if (!sentinel || !canvas) return
-    const ctx = canvas.getContext('2d')!
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const isTouch =
-      window.matchMedia('(hover: none), (pointer: coarse)').matches || 'ontouchstart' in window
+    if (!sentinel) return
 
-    // ── DISABLED for now: skip the whole drawer/cover/reveal transition and
-    // scroll normally. Still emit diag-show/diag-hide from the seam position so
-    // the horizontal-section videos keep playing/pausing. Flip to true to re-enable.
-    const ENABLED = false
+    // ── DISABLED: skip the transition and let the page scroll normally. No
+    // .silk-canvas is rendered, so SiteNav handles its own anchor scrolling.
+    // Still emit diag-show/diag-hide from the seam so the videos play/pause.
     if (!ENABLED) {
       let raf = 0
       let vOn: boolean | null = null
@@ -73,6 +72,13 @@ export default function SilkTransition() {
       raf = requestAnimationFrame(tick)
       return () => cancelAnimationFrame(raf)
     }
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isTouch =
+      window.matchMedia('(hover: none), (pointer: coarse)').matches || 'ontouchstart' in window
 
     // px of scroll/swipe to lift the drawer from 0 → fully covered. We snap to
     // full cover once the drawer passes SNAP_AT, so only the first slice is manual.
@@ -412,7 +418,7 @@ export default function SilkTransition() {
   return (
     <>
       <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
-      <canvas ref={canvasRef} className="silk-canvas" />
+      {ENABLED && <canvas ref={canvasRef} className="silk-canvas" />}
     </>
   )
 }
