@@ -264,7 +264,7 @@ export default function ContactForm() {
 
       <div className="form-group">
         <label className="form-label" htmlFor="fbiz">
-          Business name &amp; website<span className="req">*</span>
+          Business name<span className="req">*</span>
         </label>
         <input type="text" id="fbiz" className="form-input" ref={fbiz} />
       </div>
