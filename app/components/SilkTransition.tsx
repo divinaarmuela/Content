@@ -58,6 +58,22 @@ export default function SilkTransition() {
     const isTouch =
       window.matchMedia('(hover: none), (pointer: coarse)').matches || 'ontouchstart' in window
 
+    // ── DISABLED for now: skip the whole drawer/cover/reveal transition and
+    // scroll normally. Still emit diag-show/diag-hide from the seam position so
+    // the horizontal-section videos keep playing/pausing. Flip to true to re-enable.
+    const ENABLED = false
+    if (!ENABLED) {
+      let raf = 0
+      let vOn: boolean | null = null
+      const tick = () => {
+        raf = requestAnimationFrame(tick)
+        const on = sentinel.getBoundingClientRect().top < 0
+        if (on !== vOn) { vOn = on; window.dispatchEvent(new Event(on ? 'diag-show' : 'diag-hide')) }
+      }
+      raf = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(raf)
+    }
+
     // px of scroll/swipe to lift the drawer from 0 → fully covered. We snap to
     // full cover once the drawer passes SNAP_AT, so only the first slice is manual.
     const DRAG_FULL = isTouch ? 800 : 1100
