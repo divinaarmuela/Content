@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const contactHtml = `
     <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#F4F0E6;color:#0A0A0A;">
       <div style="background:#0A0A0A;padding:28px 32px;border-bottom:3px solid #0057FF;">
-        <img src="https://static.wixstatic.com/media/c5a69a_eb5dd45dbca445798fa310acb86c4420~mv2.png" alt="MD Media" style="height:28px;width:auto;filter:invert(1) brightness(2);" />
+        <img src="https://www.mdmmarketing.com.au/MDLogo-trim.png" alt="MD Media Marketing" width="169" height="28" style="height:28px;width:169px;display:block;border:0;" />
       </div>
       <div style="padding:40px 32px;">
         <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0 0 24px;">// BRIEF RECEIVED</p>
