@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const teamHtml = `
     <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#F4F0E6;color:#0A0A0A;">
       <div style="background:#0A0A0A;padding:20px 32px;border-bottom:3px solid #0057FF;">
-        <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0;">// NEW_BRIEF &middot; MD MEDIA MARKETING</p>
+        <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0;">// NEW LEAD &middot; MD MEDIA MARKETING</p>
       </div>
       <div style="padding:32px;">
         <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         </table>
       </div>
       <div style="background:#0A0A0A;padding:16px 32px;">
-        <p style="font-family:monospace;font-size:10px;letter-spacing:0.15em;color:#5A5A55;margin:0;">// STATUS: QUEUED_FOR_REVIEW &middot; mdmmarketing.com.au</p>
+        <p style="font-family:monospace;font-size:10px;letter-spacing:0.15em;color:#5A5A55;margin:0;">// STATUS: QUEUED FOR REVIEW &middot; mdmmarketing.com.au</p>
       </div>
     </div>
   `
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         <img src="https://static.wixstatic.com/media/c5a69a_eb5dd45dbca445798fa310acb86c4420~mv2.png" alt="MD Media" style="height:28px;width:auto;filter:invert(1) brightness(2);" />
       </div>
       <div style="padding:40px 32px;">
-        <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0 0 24px;">// BRIEF_RECEIVED</p>
+        <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#8A8A85;margin:0 0 24px;">// BRIEF RECEIVED</p>
         <h1 style="font-size:32px;font-weight:500;letter-spacing:-0.025em;line-height:1.1;margin:0 0 20px;">
           Thanks ${fname}.<br/>Brief <span style="color:#0057FF;">received.</span>
         </h1>
@@ -92,19 +92,26 @@ export async function POST(req: NextRequest) {
     </div>
   `
 
-  // Team notification
+  // Team notification — this IS the lead. If it fails, surface the error so the
+  // visitor can retry; otherwise the enquiry is lost silently.
   try {
     await transporter.sendMail({
       from:    `"MD Media" <${process.env.GMAIL_USER}>`,
       to:      process.env.GMAIL_USER,
+      cc:      'contact@mdmmarketing.com.au',
       subject: `New Lead — ${fname} ${lname} · ${biz}`,
       html:    teamHtml,
     })
   } catch (err) {
     console.error('Team email error:', err)
+    return NextResponse.json(
+      { error: "Sorry — we couldn't submit your brief right now. Please try again in a moment." },
+      { status: 502 },
+    )
   }
 
-  // Confirmation to the contact
+  // Confirmation to the contact — best-effort. The lead is already captured above,
+  // so a failed auto-reply must NOT fail the submission.
   try {
     await transporter.sendMail({
       from:    `"MD Media" <${process.env.GMAIL_USER}>`,
