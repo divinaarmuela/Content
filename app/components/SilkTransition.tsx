@@ -60,14 +60,18 @@ export default function SilkTransition() {
 
     // px of scroll/swipe to lift the drawer from 0 → fully covered. We snap to
     // full cover once the drawer passes SNAP_AT, so only the first slice is manual.
-    const DRAG_FULL = 1100
+    const DRAG_FULL = isTouch ? 800 : 1100
     const SNAP_AT   = 0.20
     const DRAG_EASE = 0.16   // drawer eases toward the scrolled target (smooths discrete wheel deltas)
+    // fling carry-through cap. Touch flings spike hard, so cap them low → the
+    // eased rise keeps up and the snap fires from ~SNAP_AT (not from a low d),
+    // matching desktop pacing instead of jumping straight to a fast cover.
+    const MOM_CAP   = isTouch ? 55 : 150
     const SNAP_MS   = reduceMotion ? 0   : 260   // auto-complete the cover after snap
     const HOLD      = reduceMotion ? 0   : 110
     const DISSOLVE  = reduceMotion ? 160 : 760   // silk dissolves away (the reveal)
     // land this far into the next section so it can't instantly re-fire.
-    const MARGIN    = isTouch ? 0.3 : 0.05
+    const MARGIN    = isTouch ? 0.12 : 0.05
 
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
@@ -176,6 +180,35 @@ export default function SilkTransition() {
     const lock = () => { if (!locked) { locked = true; getLenis()?.stop() } }
     const unlock = () => { if (locked) { locked = false; getLenis()?.start() } }
 
+    // Hard scroll freeze: pin the page with position:fixed instead of reactively
+    // yanking scrollY back every frame (which fights Lenis / native momentum and
+    // shows up as a 1px vibration on the exposed section during the drawer rise).
+    let frozen = false
+    let frozenAt = -1
+    const freeze = (y: number) => {
+      const b = document.body.style
+      if (!frozen) {
+        frozen = true
+        const sbw = window.innerWidth - document.documentElement.clientWidth
+        b.position = 'fixed'; b.left = '0'; b.right = '0'; b.width = '100%'
+        if (sbw > 0) b.paddingRight = sbw + 'px'   // keep content from shifting when scrollbar vanishes
+      }
+      if (frozenAt !== y) { frozenAt = y; b.top = `-${y}px` }
+    }
+    const unfreeze = (y: number) => {
+      if (!frozen) return
+      frozen = false; frozenAt = -1
+      const b = document.body.style
+      b.position = ''; b.top = ''; b.left = ''; b.right = ''; b.width = ''; b.paddingRight = ''
+      window.scrollTo(0, y)
+    }
+    // restore scroll + Lenis to a settled position once a transition ends
+    const release = (y: number) => {
+      unfreeze(y)
+      unlock()
+      getLenis()?.scrollTo(y, { immediate: true })
+    }
+
     // ── state ──
     let side: 'before' | 'after' = 'before'
     let phase: 'idle' | 'drag' | 'snap' | 'hold' | 'reveal' = 'idle'
@@ -186,6 +219,7 @@ export default function SilkTransition() {
     let snapStart = 0, snapFromD = 0
     let phaseStart = 0
     let dragStart = 0      // when the drag phase began (stall guard)
+    let lastInputAt = 0    // last time scroll/swipe/momentum moved the drawer
     let momentum = 0       // fling velocity carried into the drawer (px/frame, signed by scroll dir)
     let prevY = window.scrollY
     let scrollVel = 0      // px/frame, measured while idle
@@ -200,6 +234,7 @@ export default function SilkTransition() {
     const addDrag = (rawDownDelta: number) => {
       drag = Math.max(0, drag + rawDownDelta * sign())
       if (drag > 0) rose = true
+      lastInputAt = performance.now()
     }
 
     const setVideo = (on: boolean) => {
@@ -218,8 +253,9 @@ export default function SilkTransition() {
       drag = 0; d = 0; rose = false
       // carry the fling: Lenis is about to stop, so its momentum won't arrive as
       // wheel events — seed it here so a fast scroll still lifts the drawer.
-      momentum = Math.max(-150, Math.min(150, scrollVel))
+      momentum = Math.max(-MOM_CAP, Math.min(MOM_CAP, scrollVel))
       dragStart = performance.now()
+      lastInputAt = dragStart
       phase = 'drag'
       lock()
       if (dd === 'down') armedDown = false; else armedUp = false
@@ -232,7 +268,7 @@ export default function SilkTransition() {
     const finishReveal = (now: number) => {
       hideCanvas()
       phase = 'idle'
-      unlock()
+      release(pinTarget)
       cooldownUntil = now + 160
       if (dir === 'down') { side = 'after';  armedUp = false }
       else                { side = 'before'; armedDown = false }
@@ -245,21 +281,28 @@ export default function SilkTransition() {
 
       // ── manual rise: scroll lifts the drawer, section stays pinned ──
       if (phase === 'drag') {
-        if (window.scrollY !== pinDrag) window.scrollTo(0, pinDrag)
+        freeze(pinDrag)
         if (Math.abs(momentum) >= 0.5) {    // fling carries the rise after Lenis stops
           drag = Math.max(0, drag + momentum * sign())
           if (drag > 0) rose = true
           momentum *= 0.92
+          lastInputAt = now
         } else momentum = 0
         // never sit locked & invisible: if nothing lifted it shortly, release
         if (!rose && now - dragStart > 600) {
-          hideCanvas(); phase = 'idle'; unlock(); cooldownUntil = now + 200
+          hideCanvas(); phase = 'idle'; release(pinDrag); cooldownUntil = now + 200
+          return
+        }
+        // lifted but stalled below the snap point (slow drag + release) → don't
+        // leave the page frozen; cancel and let it fall back
+        if (rose && d < SNAP_AT && momentum === 0 && now - lastInputAt > 500) {
+          hideCanvas(); phase = 'idle'; release(pinDrag); cooldownUntil = now + 200
           return
         }
         const target = clamp01(drag / DRAG_FULL)
         d += (target - d) * DRAG_EASE       // inertial follow → smooth, not stepped
         if (rose && target <= 0 && d < 0.004) {   // lifted then fully retracted → cancel
-          hideCanvas(); phase = 'idle'; unlock(); cooldownUntil = now + 200
+          hideCanvas(); phase = 'idle'; release(pinDrag); cooldownUntil = now + 200
           return
         }
         setDrawer(d); paintFull(t, th)
@@ -269,14 +312,12 @@ export default function SilkTransition() {
 
       // ── snap: auto-complete the cover, then jump behind it ──
       if (phase === 'snap') {
-        if (window.scrollY !== pinDrag) window.scrollTo(0, pinDrag)
+        freeze(pinDrag)
         const p = SNAP_MS <= 0 ? 1 : clamp01((now - snapStart) / SNAP_MS)
         d = snapFromD + (1 - snapFromD) * easeInOut(p)
         setDrawer(d); paintFull(t, th)
         if (p >= 1) {
-          window.scrollTo(0, pinTarget)
-          getLenis()?.scrollTo(pinTarget, { immediate: true })
-          void document.documentElement.getBoundingClientRect()
+          freeze(pinTarget)                 // jump behind the full cover to the target
           setVideo(dir === 'down')
           phase = 'hold'; phaseStart = now
         }
@@ -284,7 +325,7 @@ export default function SilkTransition() {
       }
 
       if (phase === 'hold') {
-        if (window.scrollY !== pinTarget) window.scrollTo(0, pinTarget)
+        freeze(pinTarget)
         setDrawer(1); paintFull(t, th)
         if (now - phaseStart >= HOLD) { phase = 'reveal'; phaseStart = now }
         return
@@ -292,7 +333,7 @@ export default function SilkTransition() {
 
       // ── reveal: silk dissolves away to uncover the section ──
       if (phase === 'reveal') {
-        if (window.scrollY !== pinTarget) window.scrollTo(0, pinTarget)
+        freeze(pinTarget)
         const dissP = easeInOut(clamp01((now - phaseStart) / DISSOLVE))
         if (now - phaseStart >= DISSOLVE) { finishReveal(now); return }
         canvas.style.opacity = '1'
@@ -325,8 +366,9 @@ export default function SilkTransition() {
       hideCanvas()
       side = sel === '#contact' ? 'after' : 'before'
       armedDown = true; armedUp = true
+      const y = Math.max(0, el.getBoundingClientRect().top + (frozen ? frozenAt : window.scrollY))
+      unfreeze(y)
       unlock()
-      const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY)
       const lenis = getLenis()
       if (lenis) lenis.scrollTo(y, { immediate: true })
       else window.scrollTo(0, y)
@@ -342,6 +384,7 @@ export default function SilkTransition() {
       window.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('touchstart', onTouchStart)
       window.removeEventListener('keydown', blockKeys)
+      if (frozen) unfreeze(frozenAt)
       unlock()
     }
   }, [])
