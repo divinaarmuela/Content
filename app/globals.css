@@ -2439,6 +2439,8 @@ body.video-active .video-vol-ctrl {
   display: block;
   opacity: 0;
   pointer-events: none;
+  transform: translateY(100%);   /* drawer rests below the viewport */
+  will-change: transform, opacity;
 }
 
 /* ── SERVICES NAV ───────────────────────────────────────────── */

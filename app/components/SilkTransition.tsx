@@ -29,6 +29,20 @@ function hsl(h: number, s: number, l: number): [number, number, number] {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 const easeInOut = (p: number) => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
 
+// Two "shaders", one per direction:
+//  - down → entering the dark HORIZONTAL section: deep blue silk
+//  - up   → returning to the white SERVICES section: light, desaturated silk
+type Theme = {
+  hueBase: number; hueShift: number
+  lightBase: number; lightRange: number
+  satBase: number; satRange: number
+}
+const SILK: Theme = { hueBase: 214, hueShift: 18, lightBase: 0.30, lightRange: 0.54, satBase: 0.88, satRange: 0.45 }
+const THEMES: Record<'down' | 'up', Theme> = {
+  down: SILK,   // entering the horizontal section
+  up:   SILK,   // returning to the services section
+}
+
 type Lenis = { stop: () => void; start: () => void; scrollTo: (t: number, o?: { immediate?: boolean }) => void }
 
 export default function SilkTransition() {
@@ -44,12 +58,16 @@ export default function SilkTransition() {
     const isTouch =
       window.matchMedia('(hover: none), (pointer: coarse)').matches || 'ontouchstart' in window
 
-    const COVER    = reduceMotion ? 0   : 240   // silk fades in (the cover)
-    const HOLD     = reduceMotion ? 0   : 110
-    const DISSOLVE = reduceMotion ? 160 : 760   // silk dissolves away (the reveal)
-    // land this far into the next section so it can't instantly re-fire. only needs
-    // to beat scroll jitter — desktop has none, mobile's address bar does.
-    const MARGIN   = isTouch ? 0.3 : 0.05
+    // px of scroll/swipe to lift the drawer from 0 → fully covered. We snap to
+    // full cover once the drawer passes SNAP_AT, so only the first slice is manual.
+    const DRAG_FULL = 1100
+    const SNAP_AT   = 0.20
+    const DRAG_EASE = 0.16   // drawer eases toward the scrolled target (smooths discrete wheel deltas)
+    const SNAP_MS   = reduceMotion ? 0   : 260   // auto-complete the cover after snap
+    const HOLD      = reduceMotion ? 0   : 110
+    const DISSOLVE  = reduceMotion ? 160 : 760   // silk dissolves away (the reveal)
+    // land this far into the next section so it can't instantly re-fire.
+    const MARGIN    = isTouch ? 0.3 : 0.05
 
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
@@ -80,7 +98,7 @@ export default function SilkTransition() {
 
     const getLenis = () => (window as unknown as { __lenis?: Lenis }).__lenis
 
-    const stripColor = (i: number, t: number): string => {
+    const stripColor = (i: number, t: number, th: Theme): string => {
       const nx = (xs[i] + ws[i] / 2) / W
       const drift = t * 0.16
       const n =
@@ -88,20 +106,20 @@ export default function SilkTransition() {
         Math.sin((nx * 5.7 - drift * 1.3 + 0.7) * 6.2832) * 0.30 +
         Math.sin((nx * 11.0 + drift * 0.8 + 2.1) * 6.2832) * 0.15
       const v = clamp01(0.5 + n * 0.5 + (JITTER[i] - 0.5) * 0.03)
-      const light = 0.30 + Math.pow(v, 1.2) * 0.54
-      const hue   = 214 - v * 18
-      const sat   = 0.88 - Math.pow(v, 2.5) * 0.45
+      const light = th.lightBase + Math.pow(v, 1.2) * th.lightRange
+      const hue   = th.hueBase - v * th.hueShift
+      const sat   = th.satBase - Math.pow(v, 2.5) * th.satRange
       const c = hsl(hue, sat, light)
       return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
     }
-    const paintFull = (t: number) => {
+    const paintFull = (t: number, th: Theme) => {
       ctx.clearRect(0, 0, W, H)
       for (let i = 0; i < STRIPS; i++) {
-        ctx.fillStyle = stripColor(i, t)
+        ctx.fillStyle = stripColor(i, t, th)
         ctx.fillRect(xs[i], 0, ws[i], H)
       }
     }
-    const paintReveal = (dissP: number, t: number) => {
+    const paintReveal = (dissP: number, t: number, th: Theme) => {
       const cx = W / 2
       const zoom = 1 + dissP * 0.55
       const wipe = dissP * (1 + 0.18)
@@ -110,41 +128,79 @@ export default function SilkTransition() {
         const alpha = 1 - clamp01((wipe - order[i]) / 0.18)
         if (alpha <= 0) continue
         ctx.globalAlpha = alpha
-        ctx.fillStyle = stripColor(i, t)
+        ctx.fillStyle = stripColor(i, t, th)
         ctx.fillRect(cx + (xs[i] - cx) * zoom, 0, ws[i] * zoom, H)
       }
       ctx.globalAlpha = 1
     }
 
-    const block = (e: Event) => e.preventDefault()
+    // drawer position: d=0 fully off-screen, d=1 fully covering.
+    // down → slides up from the bottom; up → drops down from the top.
+    const setDrawer = (d: number) => {
+      canvas.style.opacity = d > 0 ? '1' : '0'
+      const off = (1 - d) * 100
+      canvas.style.transform = `translateY(${dir === 'up' ? -off : off}%)`
+    }
+    const hideCanvas = () => {
+      canvas.style.opacity = '0'
+      canvas.style.transform = dir === 'up' ? 'translateY(-100%)' : 'translateY(100%)'
+      ctx.clearRect(0, 0, W, H)
+    }
+
+    // ── scroll input (drives the drawer while locked) ──
     const blockKeys = (e: KeyboardEvent) => {
       if (['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(e.key)) e.preventDefault()
     }
+    let touchY = 0
+    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY }
+    const onWheel = (e: WheelEvent) => {
+      if (!locked) return
+      e.preventDefault()
+      if (phase === 'drag') addDrag(e.deltaY)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (!locked) return
+      e.preventDefault()
+      if (phase === 'drag') {
+        const y = e.touches[0].clientY
+        addDrag(touchY - y)   // finger up = scroll-down intent = positive
+        touchY = y
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('keydown', blockKeys, { passive: false })
+
     let locked = false
-    const lock = () => {
-      if (locked) return; locked = true
-      getLenis()?.stop()
-      window.addEventListener('wheel', block, { passive: false })
-      window.addEventListener('touchmove', block, { passive: false })
-      window.addEventListener('keydown', blockKeys, { passive: false })
-    }
-    const unlock = () => {
-      if (!locked) return; locked = false
-      getLenis()?.start()
-      window.removeEventListener('wheel', block)
-      window.removeEventListener('touchmove', block)
-      window.removeEventListener('keydown', blockKeys)
-    }
+    const lock = () => { if (!locked) { locked = true; getLenis()?.stop() } }
+    const unlock = () => { if (locked) { locked = false; getLenis()?.start() } }
 
     // ── state ──
     let side: 'before' | 'after' = 'before'
-    let phase: 'idle' | 'cover' | 'hold' | 'reveal' = 'idle'
-    let phaseStart = 0
+    let phase: 'idle' | 'drag' | 'snap' | 'hold' | 'reveal' = 'idle'
     let dir: 'down' | 'up' = 'down'
-    let pinY = 0
+    let drag = 0            // px accumulated during the manual rise
+    let d = 0              // drawer progress 0..1
+    let rose = false       // drawer has actually lifted (so 0 = retracted, not initial)
+    let snapStart = 0, snapFromD = 0
+    let phaseStart = 0
+    let dragStart = 0      // when the drag phase began (stall guard)
+    let momentum = 0       // fling velocity carried into the drawer (px/frame, signed by scroll dir)
+    let prevY = window.scrollY
+    let scrollVel = 0      // px/frame, measured while idle
+    let pinDrag = 0        // scroll Y held while the drawer rises (section frozen)
+    let pinTarget = 0      // scroll Y jumped to behind full cover (next section)
     let cooldownUntil = 0
+    let armedDown = true, armedUp = true
     let videoOn: boolean | null = null
     let rafId = 0
+
+    const sign = () => dir === 'down' ? 1 : -1
+    const addDrag = (rawDownDelta: number) => {
+      drag = Math.max(0, drag + rawDownDelta * sign())
+      if (drag > 0) rose = true
+    }
 
     const setVideo = (on: boolean) => {
       if (on === videoOn) return
@@ -152,62 +208,112 @@ export default function SilkTransition() {
       window.dispatchEvent(new Event(on ? 'diag-show' : 'diag-hide'))
     }
 
-    const start = (d: 'down' | 'up', now: number) => {
+    const startDrag = (dd: 'down' | 'up') => {
       const seamY = sentinel.getBoundingClientRect().top + window.scrollY
-      pinY = d === 'down' ? seamY + H * MARGIN : Math.max(0, seamY - H - H * MARGIN)
-      dir = d
-      phase = 'cover'
-      phaseStart = now
+      dir = dd
+      pinDrag = window.scrollY
+      pinTarget = dd === 'down'
+        ? seamY + H * MARGIN
+        : Math.max(0, seamY - H - H * MARGIN)
+      drag = 0; d = 0; rose = false
+      // carry the fling: Lenis is about to stop, so its momentum won't arrive as
+      // wheel events — seed it here so a fast scroll still lifts the drawer.
+      momentum = Math.max(-150, Math.min(150, scrollVel))
+      dragStart = performance.now()
+      phase = 'drag'
       lock()
+      if (dd === 'down') armedDown = false; else armedUp = false
+    }
+
+    const beginSnap = (now: number) => {
+      snapStart = now; snapFromD = d; phase = 'snap'
+    }
+
+    const finishReveal = (now: number) => {
+      hideCanvas()
+      phase = 'idle'
+      unlock()
+      cooldownUntil = now + 160
+      if (dir === 'down') { side = 'after';  armedUp = false }
+      else                { side = 'before'; armedDown = false }
     }
 
     const frame = (now: number) => {
       rafId = requestAnimationFrame(frame)
       const t = now / 1000
+      const th = THEMES[dir]
 
-      // ── COVER: silk fades in over the current section ──
-      if (phase === 'cover') {
-        const p = COVER <= 0 ? 1 : clamp01((now - phaseStart) / COVER)
-        canvas.style.opacity = String(p)
-        paintFull(t)
+      // ── manual rise: scroll lifts the drawer, section stays pinned ──
+      if (phase === 'drag') {
+        if (window.scrollY !== pinDrag) window.scrollTo(0, pinDrag)
+        if (Math.abs(momentum) >= 0.5) {    // fling carries the rise after Lenis stops
+          drag = Math.max(0, drag + momentum * sign())
+          if (drag > 0) rose = true
+          momentum *= 0.92
+        } else momentum = 0
+        // never sit locked & invisible: if nothing lifted it shortly, release
+        if (!rose && now - dragStart > 600) {
+          hideCanvas(); phase = 'idle'; unlock(); cooldownUntil = now + 200
+          return
+        }
+        const target = clamp01(drag / DRAG_FULL)
+        d += (target - d) * DRAG_EASE       // inertial follow → smooth, not stepped
+        if (rose && target <= 0 && d < 0.004) {   // lifted then fully retracted → cancel
+          hideCanvas(); phase = 'idle'; unlock(); cooldownUntil = now + 200
+          return
+        }
+        setDrawer(d); paintFull(t, th)
+        if (d >= SNAP_AT) beginSnap(now)
+        return
+      }
+
+      // ── snap: auto-complete the cover, then jump behind it ──
+      if (phase === 'snap') {
+        if (window.scrollY !== pinDrag) window.scrollTo(0, pinDrag)
+        const p = SNAP_MS <= 0 ? 1 : clamp01((now - snapStart) / SNAP_MS)
+        d = snapFromD + (1 - snapFromD) * easeInOut(p)
+        setDrawer(d); paintFull(t, th)
         if (p >= 1) {
-          window.scrollTo(0, pinY)                    // snap to the target behind the silk
-          getLenis()?.scrollTo(pinY, { immediate: true })
+          window.scrollTo(0, pinTarget)
+          getLenis()?.scrollTo(pinTarget, { immediate: true })
           void document.documentElement.getBoundingClientRect()
           setVideo(dir === 'down')
           phase = 'hold'; phaseStart = now
         }
         return
       }
+
       if (phase === 'hold') {
-        if (window.scrollY !== pinY) window.scrollTo(0, pinY)
-        canvas.style.opacity = '1'; paintFull(t)
+        if (window.scrollY !== pinTarget) window.scrollTo(0, pinTarget)
+        setDrawer(1); paintFull(t, th)
         if (now - phaseStart >= HOLD) { phase = 'reveal'; phaseStart = now }
         return
       }
-      // ── REVEAL: silk dissolves away to uncover the section ──
+
+      // ── reveal: silk dissolves away to uncover the section ──
       if (phase === 'reveal') {
-        if (window.scrollY !== pinY) window.scrollTo(0, pinY)
+        if (window.scrollY !== pinTarget) window.scrollTo(0, pinTarget)
         const dissP = easeInOut(clamp01((now - phaseStart) / DISSOLVE))
-        if (now - phaseStart >= DISSOLVE) {
-          canvas.style.opacity = '0'; ctx.clearRect(0, 0, W, H)
-          phase = 'idle'
-          side = dir === 'down' ? 'after' : 'before'
-          unlock()
-          cooldownUntil = now + 320
-          return
-        }
-        canvas.style.opacity = '1'; paintReveal(dissP, t)
+        if (now - phaseStart >= DISSOLVE) { finishReveal(now); return }
+        canvas.style.opacity = '1'
+        canvas.style.transform = 'translateY(0)'
+        paintReveal(dissP, t, th)
         return
       }
 
-      // ── idle: fire when the seam reaches the viewport edge (only the current
-      // section showing, before the next appears) ──
-      if (now < cooldownUntil) return
+      // ── idle: arm + fire when the seam reaches the viewport edge ──
+      const yNow = window.scrollY
+      scrollVel = yNow - prevY            // px/frame, drives fling carry-through
+      prevY = yNow
+      // arm every frame — even during cooldown — so a fast reversal past the
+      // seam isn't missed while Lenis is still settling.
       const top = sentinel.getBoundingClientRect().top
       setVideo(top < 0)
-      if (side === 'before' && top <= H) start('down', now)
-      else if (side === 'after' && top >= 0) start('up', now)
+      if (top > H + 4) armedDown = true            // scrolled away above → re-arm down
+      if (top < -4)    armedUp = true              // scrolled away below → re-arm up
+      if (now < cooldownUntil) return              // gate firing only, not arming
+      if (side === 'before' && armedDown && top <= H) startDrag('down')
+      else if (side === 'after' && armedUp && top >= 0) startDrag('up')
     }
     rafId = requestAnimationFrame(frame)
 
@@ -216,8 +322,9 @@ export default function SilkTransition() {
       const el = document.querySelector(sel) as HTMLElement | null
       if (!el) return
       phase = 'idle'
-      canvas.style.opacity = '0'; ctx.clearRect(0, 0, W, H)
+      hideCanvas()
       side = sel === '#contact' ? 'after' : 'before'
+      armedDown = true; armedUp = true
       unlock()
       const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY)
       const lenis = getLenis()
@@ -231,6 +338,10 @@ export default function SilkTransition() {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', layout)
       window.removeEventListener('nav-goto', onNavGoto)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('keydown', blockKeys)
       unlock()
     }
   }, [])
