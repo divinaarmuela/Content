@@ -43,7 +43,7 @@ const THEMES: Record<'down' | 'up', Theme> = {
   up:   SILK,   // returning to the services section
 }
 
-type Lenis = { stop: () => void; start: () => void; scrollTo: (t: number, o?: { immediate?: boolean }) => void }
+type Lenis = { stop: () => void; start: () => void; resize?: () => void; scrollTo: (t: number, o?: { immediate?: boolean }) => void }
 
 export default function SilkTransition() {
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -204,9 +204,12 @@ export default function SilkTransition() {
     }
     // restore scroll + Lenis to a settled position once a transition ends
     const release = (y: number) => {
-      unfreeze(y)
-      unlock()
-      getLenis()?.scrollTo(y, { immediate: true })
+      unfreeze(y)                                  // restore body flow + window.scrollTo(y)
+      void document.documentElement.offsetHeight   // flush layout before Lenis re-measures
+      unlock()                                     // lenis.start()
+      const l = getLenis()
+      l?.resize?.()                                // body was position:fixed → Lenis limits went stale; recompute so scrollTo doesn't clamp to top
+      l?.scrollTo(y, { immediate: true })
     }
 
     // ── state ──
@@ -368,9 +371,10 @@ export default function SilkTransition() {
       armedDown = true; armedUp = true
       const y = Math.max(0, el.getBoundingClientRect().top + (frozen ? frozenAt : window.scrollY))
       unfreeze(y)
+      void document.documentElement.offsetHeight
       unlock()
       const lenis = getLenis()
-      if (lenis) lenis.scrollTo(y, { immediate: true })
+      if (lenis) { lenis.resize?.(); lenis.scrollTo(y, { immediate: true }) }
       else window.scrollTo(0, y)
       cooldownUntil = performance.now() + 500
     }
