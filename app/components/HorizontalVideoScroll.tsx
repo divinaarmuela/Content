@@ -218,14 +218,26 @@ export default function HorizontalVideoScroll() {
     // the page scrolls normally; play each clip while it's on screen and reveal
     // the divider text via IntersectionObserver instead of the rAF translate. ──
     if (window.matchMedia('(max-width: 768px)').matches) {
+      // Warm-ahead: start each clip downloading ~1.2 viewports before it scrolls
+      // into view, so it's buffered by the time it's on screen (no black frame).
+      const warmIO = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (!e.isIntersecting) return
+            const idx = vidRefs.current.indexOf(e.target as HTMLVideoElement)
+            warmVideo(idx)
+            warmVideo(idx + 1)
+          })
+        },
+        { rootMargin: '120% 0px 120% 0px' }
+      )
+      vidRefs.current.forEach((v) => v && warmIO.observe(v))
+
       const vidIO = new IntersectionObserver(
         (entries) => {
           entries.forEach((e) => {
             const v = e.target as HTMLVideoElement
             if (e.isIntersecting) {
-              const idx = vidRefs.current.indexOf(v)
-              warmVideo(idx)            // active clip downloads now
-              warmVideo(idx + 1)        // buffer the next one ahead
               v.muted = volumeRef.current === 0
               v.volume = volumeRef.current
               v.play().catch(() => {})
@@ -246,7 +258,7 @@ export default function HorizontalVideoScroll() {
       )
       dividerRefs.current.forEach((d) => d && divIO.observe(d))
 
-      return () => { vidIO.disconnect(); divIO.disconnect() }
+      return () => { warmIO.disconnect(); vidIO.disconnect(); divIO.disconnect() }
     }
 
     let rafId = 0
