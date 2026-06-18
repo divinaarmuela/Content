@@ -3,45 +3,65 @@ import { useEffect, useRef, useState } from 'react'
 import { asset } from '../lib/asset'
 
 // Layout constants (must match globals.css .hvs-wrap / .hvs-track / .hvs-divider)
-// Track: 3 videos (100vw each) + 3 dividers (55vw each) = 465vw total
-// Travel: 465vw - 100vw = 365vw  →  wrapper height = calc(365vw + 100svh)
+// Track: 5 videos (100vw each) + 5 dividers (55vw each) = 775vw total
+// Travel: 775vw - 100vw = 675vw  →  wrapper height = calc(675vw + 100svh)
 const DIVIDER_RATIO = 0.55   // 55vw
 
 const slides = [
   {
     src:     asset('/cecconis.mp4'),
     poster:  '/cecconis-poster.jpg',
-    preload: 'auto'     as const,
+    preload: 'none'     as const,
     title:   'Cecconis',
     num:     '01',
-    client:  'Cecconis Flinders Lane',
-    category:'Brand Film',
-    desc:    "A cinematic brand story for one of Melbourne's most celebrated Italian restaurants.",
+    client:  "Cecconi's Toorak & Flinders",
+    category:'Fine Dining',
+    desc:    "Editorial photography and content for two of Melbourne's most recognised fine dining venues.",
     photos:  [asset('/Cecconi1.jpg'), asset('/Cecconi2.jpg'), asset('/Cecconi3.jpg')],
   },
   {
     src:     asset('/Senorita.mp4'),
     poster:  '/Senorita.jpg',
-    preload: 'auto' as const,
+    preload: 'none' as const,
     title:   'Señorita',
     num:     '02',
     client:  'Señorita Debutante',
-    category:'Debutante',
-    desc:    'Debutante dresses by Señorita. A Melbourne fashion story built for a new generation.',
+    category:'Fashion & Events',
+    desc:    'Zero to fully booked. A fashion debut turned into a sold-out events calendar.',
     photos:  ['/Senorita.jpg'],
     photoPos: 'center 50%',
   },
   {
     src:     asset('/Pattons.mp4'),
     poster:  '/pattons-poster.jpg',
-    preload: 'auto' as const,
+    preload: 'none' as const,
     title:   'Pattons',
     num:     '03',
     client:  'Pattons',
-    category:'Venue',
-    desc:    'A heritage venue, reframed for a new generation.',
+    category:'Hospitality',
+    desc:    'Monthly content and social management for a Melbourne hospitality institution.',
     photos:  ['/Pattons.jpg'],
     startAt: 2,
+  },
+  {
+    src:     asset('/Park%20Noire%20Website.mp4'),
+    preload: 'none' as const,
+    title:   'Park Noire',
+    num:     '04',
+    client:  'Park Noire',
+    category:'Hospitality & Nightlife',
+    desc:    'A boutique Melbourne venue, with an identity built around atmosphere, not just aesthetics.',
+    photos:  [asset('/PARK-NOIR_006%20copy.jpg')],
+  },
+  {
+    src:     asset('/Waterside%20Website%20(1).mp4'),
+    preload: 'none' as const,
+    title:   'Waterside Hotel',
+    num:     '05',
+    client:  'Waterside Hotel',
+    category:'Venue & Events',
+    desc:    'A full marketing retainer for a Melbourne waterfront venue, framed across day and night.',
+    photos:  [asset('/DSC01591.jpg')],
   },
 ]
 
@@ -79,6 +99,20 @@ export default function HorizontalVideoScroll() {
   const dividerRefs = useRef<HTMLDivElement[]>([])
   const activeRef   = useRef(-1)
   const liveRef     = useRef(false)
+  const warmedRef   = useRef<Set<number>>(new Set())
+
+  // Predictive preload: videos ship with preload="none" so they cost nothing on
+  // initial page load. We upgrade a clip to a full download only once it's about
+  // to be needed — the first one as the section approaches, and each subsequent
+  // one while the previous is playing — so each is buffered by the time it's on
+  // screen without ever loading all five at once.
+  const warmVideo = (i: number) => {
+    const vid = vidRefs.current[i]
+    if (!vid || warmedRef.current.has(i)) return
+    warmedRef.current.add(i)
+    vid.preload = 'auto'
+    vid.load()
+  }
 
   const [volume, setVolume] = useState(0)
   const volumeRef  = useRef(0)
@@ -120,6 +154,19 @@ export default function HorizontalVideoScroll() {
     )
     io.observe(el)
     return () => { io.disconnect(); document.body.classList.remove('video-active') }
+  }, [])
+
+  // Warm the first clip while the section is still ~2 viewports away, so it's
+  // buffered before the scroll transition finishes revealing it.
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { warmVideo(0); io.disconnect() } },
+      { rootMargin: '200% 0px 200% 0px' }
+    )
+    io.observe(el)
+    return () => io.disconnect()
   }, [])
 
   // SilkTransition gate: pause on diag-hide, resume on diag-show.
@@ -176,6 +223,9 @@ export default function HorizontalVideoScroll() {
           entries.forEach((e) => {
             const v = e.target as HTMLVideoElement
             if (e.isIntersecting) {
+              const idx = vidRefs.current.indexOf(v)
+              warmVideo(idx)            // active clip downloads now
+              warmVideo(idx + 1)        // buffer the next one ahead
               v.muted = volumeRef.current === 0
               v.volume = volumeRef.current
               v.play().catch(() => {})
@@ -230,6 +280,17 @@ export default function HorizontalVideoScroll() {
           triggered.add(i)
           dividerRefs.current[i]?.classList.add('in-view')
         }
+
+        // Scroll-linked opacity: each divider fades in as its leading edge
+        // travels left into the viewport and fades back out on reverse scroll.
+        // divLeft = on-screen x of the divider's left edge. Fully opaque once
+        // it has scrolled halfway across the viewport.
+        const d = dividerRefs.current[i]
+        if (d) {
+          const divLeft = (i * PERIOD + VW) - progress
+          const op = Math.max(0, Math.min(1, (VW - divLeft) / (VW * 0.5)))
+          d.style.opacity = op.toFixed(3)
+        }
       }
 
       // play whichever video panel the viewport centre is over
@@ -245,6 +306,8 @@ export default function HorizontalVideoScroll() {
         // if center is on a divider, keep the current video playing
         if (newActive !== -1 && newActive !== activeRef.current) {
           activeRef.current = newActive
+          warmVideo(newActive)          // ensure the active clip is downloading
+          warmVideo(newActive + 1)      // and buffer the next one ahead of arrival
           vidRefs.current.forEach((vid, i) => {
             if (!vid) return
             if (i === newActive) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { supabase } from '@/lib/supabase'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -109,6 +110,17 @@ export async function POST(req: NextRequest) {
       { status: 502 },
     )
   }
+
+  // Save lead to Supabase — best-effort, never fails the submission.
+  supabase.from('leads').insert({
+    fname, lname, email, phone, biz,
+    model: model ?? null,
+    need:  need ?? null,
+    budget: budget ?? null,
+    timeline: timeline ?? null,
+  }).then(({ error }) => {
+    if (error) console.error('Supabase insert error:', error)
+  })
 
   // Confirmation to the contact — best-effort. The lead is already captured above,
   // so a failed auto-reply must NOT fail the submission.

@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./app/**/*.{js,ts,jsx,tsx,mdx}'],
+  content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx}'],
   // the site has its own global reset/custom CSS — don't let Tailwind's
   // preflight reset everything site-wide; we only want the utility classes
   corePlugins: { preflight: false },

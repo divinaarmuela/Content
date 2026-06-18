@@ -1700,12 +1700,12 @@ body.video-active .video-vol-ctrl {
 }
 
 /* ── HORIZONTAL VIDEO SCROLL ─────────────────────────────────────────────
-   Track layout: 4 videos (100vw) + 4 dividers (55vw) = 620vw total
-   Horizontal travel: 620vw − 100vw = 520vw
-   Wrapper height   : calc(520vw + 100svh)  ← must match JS DIVIDER_RATIO
+   Track layout: 5 videos (100vw) + 5 dividers (55vw) = 775vw total
+   Horizontal travel: 775vw − 100vw = 675vw
+   Wrapper height   : calc(675vw + 100svh)  ← must match JS DIVIDER_RATIO
    ─────────────────────────────────────────────────────────────────────── */
 .hvs-wrap {
-  height: calc(365vw + 100svh);
+  height: calc(675vw + 100svh);
   position: relative;
   background: #000;
   padding: 0;
@@ -1722,7 +1722,7 @@ body.video-active .video-vol-ctrl {
   display: flex;
   align-items: stretch;
   height: 100%;
-  width: 465vw;
+  width: 775vw;
   will-change: transform;
 }
 
@@ -1849,12 +1849,10 @@ body.video-active .video-vol-ctrl {
   object-fit: cover;             /* fill frame edge-to-edge regardless of source size */
   object-position: center top;
   display: block;
-  opacity: 0;
+  opacity: 1;                    /* visibility is driven by the card's scroll-linked opacity (set in JS) */
   will-change: opacity;
   backface-visibility: hidden;
-  transition: opacity 0.7s ease;
 }
-.hvs-divider.in-view .hvs-d-photo { opacity: 1; }
 
 /* Hero — full-width top row; fills the whole grid when it's the only photo */
 .hvs-d-p1 {
@@ -4268,3 +4266,4 @@ body.video-active .video-vol-ctrl {
   /* legacy */
   .router-grid { grid-template-columns: 1fr 1fr; }
 }
+

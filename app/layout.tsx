@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Melbourne's end-to-end growth agency. Brand strategy, content production, and ongoing marketing built as one system.",
   robots: 'index, follow, max-image-preview:large',
   icons: {
-    icon: 'https://static.wixstatic.com/media/c5a69a_eb5dd45dbca445798fa310acb86c4420~mv2.png',
+    icon: '/favicon.svg',
   },
 }
 
@@ -165,30 +165,35 @@ const jsonLd = {
   ],
 }
 
-import SiteNav from './components/SiteNav'
-import SmoothScroll from './components/SmoothScroll'
+import SiteShell from './components/SiteShell'
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+import { ClerkProvider } from '@clerk/nextjs'
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://static.wixstatic.com" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
-          rel="stylesheet"
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      </head>
-      <body>
-        <SmoothScroll />
-        <SiteNav />
-        {children}
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className={cn("font-sans", geist.variable)}>
+        <head>
+          <link rel="preconnect" href="https://static.wixstatic.com" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
+            rel="stylesheet"
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          />
+        </head>
+        <body>
+          <SiteShell>{children}</SiteShell>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }
