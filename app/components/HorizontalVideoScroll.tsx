@@ -17,7 +17,7 @@ const slides = [
     client:  "Cecconi's Toorak & Flinders",
     category:'Fine Dining',
     desc:    "Editorial photography and content for two of Melbourne's most recognised fine dining venues.",
-    photos:  [asset('/Cecconi1.jpg')],
+    photos:  ['/Cecconi1.jpg'],
   },
   {
     src:     asset('/Senorita.mp4'),
@@ -51,7 +51,7 @@ const slides = [
     client:  'Park Noire',
     category:'Hospitality & Nightlife',
     desc:    'A boutique Melbourne venue, with an identity built around atmosphere, not just aesthetics.',
-    photos:  [asset('/PARK-NOIR_006%20copy.jpg')],
+    photos:  ['/PARK-NOIR_006%20copy.jpg'],
     photoPos: 'center 35%',
   },
   {
@@ -62,7 +62,7 @@ const slides = [
     client:  'Waterside Hotel',
     category:'Venue & Events',
     desc:    'A full marketing retainer for a Melbourne waterfront venue, framed across day and night.',
-    photos:  [asset('/DSC01591.jpg')],
+    photos:  ['/DSC01591.jpg'],
   },
 ]
 

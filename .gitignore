@@ -39,8 +39,11 @@ next-env.d.ts
 # kept on local disk for dev, never committed (GitHub rejects >100MB).
 /public/*.mp4
 /public/*.mov
-/public/Cecconi1.jpg
+# Cecconi1.jpg is now a web-optimised ~180KB version served from /public.
 /public/Cecconi2.jpg
 /public/Cecconi3.jpg
 /public/im3.jpg
 /public/im4.jpg
+
+# local image-optimisation working dir (not for commit)
+/_optimized/
