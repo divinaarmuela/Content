@@ -416,10 +416,13 @@ export default function HorizontalVideoScroll() {
                   <div className="hvs-d-photos" aria-hidden="true" data-count={s.photos.length}>
                     {(() => {
                       const pos = 'photoPos' in s && s.photoPos ? { objectPosition: s.photoPos } : undefined
-                      // Only the first divider's photos load up front; the rest
-                      // lazy-load as the user scrolls toward them, so they don't
-                      // compete with the hero/first clip on initial page load.
-                      const loading = i === 0 ? 'eager' : 'lazy'
+                      // All divider photos are now web-optimised (~200-500KB), so
+                      // they all load eagerly and are ready before the user scrolls
+                      // to them. The first divider is high priority; the rest load
+                      // at low priority so they don't compete with the hero on the
+                      // initial paint. (Lazy-loading fired too late on the
+                      // transform-translated horizontal track.)
+                      const loading = 'eager'
                       const fp      = i === 0 ? 'high' : 'low'
                       return (
                         <>
