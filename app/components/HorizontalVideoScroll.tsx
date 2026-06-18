@@ -17,7 +17,7 @@ const slides = [
     client:  "Cecconi's Toorak & Flinders",
     category:'Fine Dining',
     desc:    "Editorial photography and content for two of Melbourne's most recognised fine dining venues.",
-    photos:  [asset('/Cecconi1.jpg'), asset('/Cecconi2.jpg'), asset('/Cecconi3.jpg')],
+    photos:  [asset('/Cecconi1.jpg')],
   },
   {
     src:     asset('/Senorita.mp4'),
