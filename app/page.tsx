@@ -3,7 +3,6 @@ import ScrollObserver from './components/ScrollObserver'
 import ContactForm from './components/ContactForm'
 import GradientHero from './components/GradientHero'
 import ServicesNav from './components/ServicesNav'
-import SilkTransition from './components/SilkTransition'
 import HorizontalVideoScroll from './components/HorizontalVideoScroll'
 import AboutSection from './components/AboutSection'
 import ThingsWeDo from './components/ThingsWeDo'
@@ -179,10 +178,7 @@ export default function HomePage() {
         {/* ── SERVICES NAV ── */}
         <ServicesNav />
 
-        {/* ── SILK TRANSITION — scroll-jacked bridge to dark section ── */}
-        <SilkTransition />
-
-        {/* ── HORIZONTAL VIDEO SCROLL — revealed by the strip transition ── */}
+        {/* ── HORIZONTAL VIDEO SCROLL ── */}
         <HorizontalVideoScroll />
 
         {/* ── THINGS WE DO — typewriter titles + blue accents (client) ── */}

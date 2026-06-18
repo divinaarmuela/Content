@@ -51,18 +51,8 @@ export default function SiteNav() {
 
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
-    // also re-check on the diag-show event (SilkTransition programmatic scroll)
-    const onShow = () => {
-      const vs = document.querySelector('.video-stack') as HTMLElement | null
-      if (vs) {
-        const rect = vs.getBoundingClientRect()
-        setOverVideo(rect.top < 80 && rect.bottom > 0)
-      }
-    }
-    window.addEventListener('diag-show', onShow)
     return () => {
       window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('diag-show', onShow)
     }
   }, [])
 
