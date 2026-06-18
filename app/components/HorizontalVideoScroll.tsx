@@ -328,13 +328,14 @@ export default function HorizontalVideoScroll() {
     return () => cancelAnimationFrame(rafId)
   }, [])
 
-  // Pre-decode divider photos on mount so they're GPU-ready well before the
-  // user scrolls to the Cecconis card — eliminates the synchronous decode
-  // that otherwise blocks the frame when the reveal fires.
+  // Pre-decode only the FIRST divider's photos on mount so they're GPU-ready
+  // before the user scrolls to the Cecconis card — eliminates the synchronous
+  // decode that would otherwise block the frame when the reveal fires. Later
+  // dividers lazy-load (loading="lazy"), so we don't force their fetch here.
   useEffect(() => {
-    const wrap = wrapRef.current
-    if (!wrap) return
-    const imgs = wrap.querySelectorAll<HTMLImageElement>('.hvs-d-photo')
+    const first = dividerRefs.current[0]
+    if (!first) return
+    const imgs = first.querySelectorAll<HTMLImageElement>('.hvs-d-photo')
     imgs.forEach(img => {
       const run = () => { img.decode?.().catch(() => {}) }
       if (img.complete) run()
@@ -402,11 +403,16 @@ export default function HorizontalVideoScroll() {
                   <div className="hvs-d-photos" aria-hidden="true" data-count={s.photos.length}>
                     {(() => {
                       const pos = 'photoPos' in s && s.photoPos ? { objectPosition: s.photoPos } : undefined
+                      // Only the first divider's photos load up front; the rest
+                      // lazy-load as the user scrolls toward them, so they don't
+                      // compete with the hero/first clip on initial page load.
+                      const loading = i === 0 ? 'eager' : 'lazy'
+                      const fp      = i === 0 ? 'high' : 'low'
                       return (
                         <>
-                          <img src={s.photos[0]} alt="" className="hvs-d-photo hvs-d-p1" decoding="async" loading="eager" style={pos} />
-                          {s.photos[1] && <img src={s.photos[1]} alt="" className="hvs-d-photo hvs-d-p2" decoding="async" loading="eager" style={pos} />}
-                          {s.photos[2] && <img src={s.photos[2]} alt="" className="hvs-d-photo hvs-d-p3" decoding="async" loading="eager" style={pos} />}
+                          <img src={s.photos[0]} alt="" className="hvs-d-photo hvs-d-p1" decoding="async" loading={loading} fetchPriority={fp} style={pos} />
+                          {s.photos[1] && <img src={s.photos[1]} alt="" className="hvs-d-photo hvs-d-p2" decoding="async" loading={loading} fetchPriority={fp} style={pos} />}
+                          {s.photos[2] && <img src={s.photos[2]} alt="" className="hvs-d-photo hvs-d-p3" decoding="async" loading={loading} fetchPriority={fp} style={pos} />}
                         </>
                       )
                     })()}
