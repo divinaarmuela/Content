@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { ClerkProvider, UserButton, useUser } from '@clerk/nextjs'
 import './dashboard.css'
 
 const NAV_MAIN = [
@@ -40,6 +40,16 @@ const PAGE_TITLES: Record<string, string> = {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // ClerkProvider is scoped here (and to the auth/sso routes) rather than the
+  // root layout, so the public marketing pages don't load the Clerk SDK.
+  return (
+    <ClerkProvider>
+      <DashboardInner>{children}</DashboardInner>
+    </ClerkProvider>
+  )
+}
+
+function DashboardInner({ children }: { children: React.ReactNode }) {
   const path      = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const { user }  = useUser()

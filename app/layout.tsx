@@ -168,14 +168,12 @@ const jsonLd = {
 import SiteShell from './components/SiteShell'
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
-import { ClerkProvider } from '@clerk/nextjs'
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
       <html lang="en" className={cn("font-sans", geist.variable)}>
         <head>
           <link rel="preconnect" href="https://static.wixstatic.com" />
@@ -194,6 +192,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SiteShell>{children}</SiteShell>
         </body>
       </html>
-    </ClerkProvider>
   )
 }

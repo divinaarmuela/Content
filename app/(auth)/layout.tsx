@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { ClerkProvider } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
 import SilkBackground from '@/app/components/SilkBackground'
 import { s } from './auth-ui'
@@ -11,6 +12,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const isSignUp = path.startsWith('/sign-up')
 
   return (
+    <ClerkProvider>
     <div className="auth-shell" style={s.shell}>
       {/* ── Left panel — silk lives here so it persists across sign-in/up ── */}
       <div className="auth-left" style={s.left}>
@@ -78,5 +80,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {children}
       </div>
     </div>
+    </ClerkProvider>
   )
 }
