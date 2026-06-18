@@ -52,6 +52,7 @@ const slides = [
     category:'Hospitality & Nightlife',
     desc:    'A boutique Melbourne venue, with an identity built around atmosphere, not just aesthetics.',
     photos:  [asset('/PARK-NOIR_006%20copy.jpg')],
+    photoPos: 'center 35%',
   },
   {
     src:     asset('/Waterside%20Website%20(1).mp4'),
