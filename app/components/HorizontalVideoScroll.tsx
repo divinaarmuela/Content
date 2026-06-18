@@ -99,7 +99,6 @@ export default function HorizontalVideoScroll() {
   const vidRefs     = useRef<HTMLVideoElement[]>([])
   const dividerRefs = useRef<HTMLDivElement[]>([])
   const activeRef   = useRef(-1)
-  const liveRef     = useRef(false)
   const warmedRef   = useRef<Set<number>>(new Set())
 
   // Predictive preload: videos ship with preload="none" so they cost nothing on
@@ -168,43 +167,6 @@ export default function HorizontalVideoScroll() {
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [])
-
-  // SilkTransition gate: pause on diag-hide, resume on diag-show.
-  // Also auto-enable if the section is already visible on load (e.g. direct
-  // navigation or macOS native-scroll landing mid-page without a transition).
-  useEffect(() => {
-    const pauseAll = () => {
-      liveRef.current   = false
-      activeRef.current = -1
-      vidRefs.current.forEach(v => { if (v) v.pause() })
-    }
-    const resumeActive = () => {
-      liveRef.current = true
-      const i   = Math.max(0, activeRef.current)
-      const vid = vidRefs.current[i]
-      if (!vid) return
-      vid.muted  = volumeRef.current === 0
-      vid.volume = volumeRef.current === 0 ? 1 : volumeRef.current
-      vid.play().catch(() => {})
-    }
-    window.addEventListener('diag-hide', pauseAll)
-    window.addEventListener('diag-show', resumeActive)
-
-    // Fallback: if the HVS section is already in the viewport on mount (no
-    // SilkTransition animation played), enable video playback immediately.
-    const el = wrapRef.current
-    if (el) {
-      const rect = el.getBoundingClientRect()
-      if (rect.top < window.innerHeight && rect.bottom > 0) {
-        liveRef.current = true
-      }
-    }
-
-    return () => {
-      window.removeEventListener('diag-hide', pauseAll)
-      window.removeEventListener('diag-show', resumeActive)
-    }
   }, [])
 
   // rAF: drive translateX + play/pause + progress bar
@@ -306,11 +268,10 @@ export default function HorizontalVideoScroll() {
         }
       }
 
-      // Play whichever video panel the viewport centre is over. Gate on the
-      // section actually being on screen (computed here) rather than the
-      // SilkTransition diag events — those could leave liveRef=false when
-      // scrolling back to the first panel, so it wouldn't replay until you
-      // went back up through the services seam.
+      // Play whichever video panel the viewport centre is over, gated purely on
+      // the section being on screen (computed here). We deliberately don't use
+      // the SilkTransition diag events for this — they paused the first panel
+      // when scrolling back near the seam, freezing it until you re-entered.
       const sectionVisible = rect.top < VH && rect.bottom > 0
       if (sectionVisible) {
         const centerX  = progress + VW * 0.5
