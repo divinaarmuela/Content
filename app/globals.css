@@ -1608,6 +1608,11 @@ body.video-active .video-vol-ctrl {
   border: none;
   cursor: pointer;
 }
+/* On mobile (esp. iOS) video.volume is read-only — the slider can't work, so
+   hide it and leave just the mute/unmute toggle, which does work. */
+@media (max-width: 768px) {
+  .video-vol-slider { display: none; }
+}
 
 /* ── VIDEO STACK — each video pins, then the next rises and pushes it off ── */
 .video-stack {
@@ -1751,6 +1756,9 @@ body.video-active .video-vol-ctrl {
   z-index: 2;
   color: #fff;
   pointer-events: none;
+  /* invert against the video behind it (white-on-dark stays white, white-on-light
+     reads dark) — the "masked" look. text-shadows are dropped as they'd muddy it. */
+  mix-blend-mode: difference;
 }
 .hvs-cap-num {
   display: block;
@@ -1758,9 +1766,8 @@ body.video-active .video-vol-ctrl {
   font-size: 12px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.55);
+  color: rgba(255,255,255,0.7);
   margin-bottom: 10px;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.8);
 }
 .hvs-cap-title {
   font-family: var(--sans);
@@ -1768,7 +1775,6 @@ body.video-active .video-vol-ctrl {
   letter-spacing: -0.03em;
   line-height: 0.96;
   font-size: clamp(36px, 6vw, 96px);
-  text-shadow: 0 2px 24px rgba(0,0,0,0.7);
 }
 
 /* ── divider panel ── */

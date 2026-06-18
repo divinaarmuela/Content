@@ -49,8 +49,8 @@ const slides = [
     title:   'Park Noire',
     num:     '04',
     client:  'Park Noire',
-    category:'Hospitality & Nightlife',
-    desc:    'A boutique Melbourne venue, with an identity built around atmosphere, not just aesthetics.',
+    category:'Apparel',
+    desc:    'A Melbourne apparel label, with an identity built around atmosphere, not just aesthetics.',
     photos:  ['/PARK-NOIR_006%20copy.jpg'],
     photoPos: 'center 35%',
   },
@@ -306,8 +306,13 @@ export default function HorizontalVideoScroll() {
         }
       }
 
-      // play whichever video panel the viewport centre is over
-      if (liveRef.current) {
+      // Play whichever video panel the viewport centre is over. Gate on the
+      // section actually being on screen (computed here) rather than the
+      // SilkTransition diag events — those could leave liveRef=false when
+      // scrolling back to the first panel, so it wouldn't replay until you
+      // went back up through the services seam.
+      const sectionVisible = rect.top < VH && rect.bottom > 0
+      if (sectionVisible) {
         const centerX  = progress + VW * 0.5
         let newActive  = -1
         for (let i = 0; i < N; i++) {
@@ -332,6 +337,10 @@ export default function HorizontalVideoScroll() {
             }
           })
         }
+      } else if (activeRef.current !== -1) {
+        // section scrolled out of view — pause everything
+        vidRefs.current.forEach(v => { if (v) v.pause() })
+        activeRef.current = -1
       }
 
       rafId = requestAnimationFrame(tick)
