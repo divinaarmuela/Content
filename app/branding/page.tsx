@@ -427,10 +427,11 @@ export default function BrandingPage() {
             <div className="footer-col">
               <h4>&raquo; Services</h4>
               <a href="/content">Content Production</a>
+              <a href="/podcast-studio">Podcast Studio</a>
               <a href="/marketing">Ongoing Marketing</a>
+              <a href="/website">Website Optimisation</a>
               <a href="/branding">Brand Strategy</a>
-              <a href="https://personalbrand.mdmmarketing.com.au/" target="_blank" rel="noreferrer noopener">Personal Brand</a>
-              <a href="https://scorecard.mdmmarketing.com.au/" target="_blank" rel="noreferrer noopener">Free Diagnostic</a>
+              <a href="/personal-brand">Personal Brand</a>
             </div>
             <div className="footer-col">
               <h4>&raquo; Office</h4>

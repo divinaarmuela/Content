@@ -49,7 +49,7 @@ const services = [
     text: 'I need a brand\nthat stands out',
     desc: "Brand strategy, visual identity, positioning, and messaging that makes people remember you. Whether you're starting fresh or levelling up.",
     cta: 'Branding & Strategy',
-    href: 'https://brand.mdmmarketing.com.au/',
+    href: '/branding',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <path d="M14 3L17.5 10.5H25L19 15.5L21.5 23L14 18.5L6.5 23L9 15.5L3 10.5H10.5L14 3Z" stroke="white" strokeWidth="1.8" strokeLinejoin="round" />
@@ -60,7 +60,7 @@ const services = [
     text: 'I need consistent\nmarketing',
     desc: 'Ongoing content, social media management, and marketing support that keeps your brand visible without you doing everything yourself.',
     cta: 'Ongoing Marketing',
-    href: 'https://marketing.mdmmarketing.com.au/',
+    href: '/marketing',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <path d="M4 20L10 13L15 17L22 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -85,7 +85,7 @@ const services = [
     text: "My website\nisn't performing",
     desc: 'Website design, SEO, conversion optimisation, and copy that turns visitors into customers. WordPress, Shopify, Squarespace, and more.',
     cta: 'Website Optimisation',
-    href: 'https://www.mdmmarketing.com.au/blank-2-1',
+    href: '/website',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <circle cx="14" cy="14" r="11" stroke="white" strokeWidth="1.8" />
@@ -97,7 +97,7 @@ const services = [
     text: 'I need a studio',
     desc: 'Professional podcast and photography studio in Melbourne. Fully equipped, ready to book. Perfect for content days, interviews, and brand shoots.',
     cta: 'Studio Hire',
-    href: 'https://www.mdmmarketing.com.au/podcast-studio',
+    href: '/podcast-studio',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <rect x="10" y="3" width="8" height="14" rx="4" stroke="white" strokeWidth="1.8" />
@@ -160,20 +160,28 @@ export default function ServicesNav() {
           </span>
         </div>
         <div className="svc-nav-sep" />
-        {services.map((s, i) => (
-          <div key={i}>
-            <div className="svc-nav-row">
-              <div className="svc-nav-left">
-                <h2 ref={el => { needRefs.current[i] = el }} className="svc-nav-need">
-                  {s.text}
-                </h2>
-                <p className="svc-nav-desc">{s.desc}</p>
-              </div>
-              <div className="svc-nav-icon">{s.icon}</div>
+        {services.map((s, i) => {
+          const external = s.href.startsWith('http')
+          return (
+            <div key={i}>
+              <a
+                className="svc-nav-row"
+                href={s.href}
+                aria-label={s.cta}
+                {...(external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+              >
+                <div className="svc-nav-left">
+                  <h2 ref={el => { needRefs.current[i] = el }} className="svc-nav-need">
+                    {s.text}
+                  </h2>
+                  <p className="svc-nav-desc">{s.desc}</p>
+                </div>
+                <div className="svc-nav-icon">{s.icon}</div>
+              </a>
+              <div className="svc-nav-sep" />
             </div>
-            <div className="svc-nav-sep" />
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

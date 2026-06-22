@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Content Production & Creative Assets — MD Media, Melbourne',
+  title: 'Content Production & Creative Assets · MD Media, Melbourne',
   description:
     'Content that gets likes is a hobby. Content that converts is a business. MD Media produces photography, video, and copy engineered to sell. Monthly subscription or project-based production.',
   keywords:
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: 'https://www.mdmmarketing.com.au/content',
-    title: 'Content that gets likes is a hobby. Content that converts is a business. — MD Media',
+    title: 'Content that gets likes is a hobby. Content that converts is a business. · MD Media',
     description:
       'Photography, video, and copy engineered to sell. Melbourne-based studio, Australia-wide production.',
     images: 'https://static.wixstatic.com/media/c5a69a_cbe685f642bb4d75b6f9b0759d5482e2~mv2.jpg',

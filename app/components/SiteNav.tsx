@@ -80,7 +80,7 @@ export default function SiteNav() {
       <div className="site-nav-inner">
         <NavLogo />
         <nav className="site-nav-links" aria-label="Primary">
-          <a href="#services" onClick={e => handleAnchor(e, '#services')}>Services</a>
+          <a href="/#services" onClick={e => handleAnchor(e, '#services')}>Services</a>
           <a href="#contact" onClick={e => handleAnchor(e, '#contact')}>Contact</a>
         </nav>
       </div>

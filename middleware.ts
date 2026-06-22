@@ -1,16 +1,17 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/sso-callback(.*)',
-  '/api/submit(.*)',
-  '/api/leads(.*)',
+// The public marketing site (/, /content, /marketing, /podcast-studio, /branding,
+// /personal-brand, /work …) must stay open to everyone. Only the authenticated app
+// shell and admin endpoints are gated, so we protect a small explicit list and treat
+// everything else as public.
+const isProtectedRoute = createRouteMatcher([
+  '/dashboard(.*)',
+  '/client(.*)',
+  '/api/db-tables(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
+  if (isProtectedRoute(req)) {
     await auth.protect()
   }
 })

@@ -174,12 +174,114 @@ nav {
   inset: 0;
   z-index: 0;
 }
-.hero-bg img {
+.hero-bg img,
+.hero-bg video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
   display: block;
+}
+/* video hero — deeper cinematic min-height + slightly stronger vignette so the
+   headline always reads over moving footage */
+.hero-video.hero:has(.hero-bg) { min-height: 100svh; }
+.hero-video .hero-overlay {
+  background:
+    linear-gradient(180deg, rgba(10,10,10,0.55) 0%, rgba(10,10,10,0.2) 30%, rgba(10,10,10,0.45) 70%, rgba(10,10,10,0.85) 100%),
+    linear-gradient(105deg, rgba(10,10,10,0.82) 0%, rgba(10,10,10,0.5) 55%, rgba(10,10,10,0.25) 100%);
+}
+
+/* ─── Service hero — homepage glow theme over a muted, looping video ─────────
+   Mirrors .hero-glow (dark field, centred mono tag, big Inter-Tight headline
+   with reveal-mask line rise, pill CTAs) but swaps the aurora gradient for a
+   video background washed in the same electric-blue scrim + film grain. */
+.svc-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 150px 0 120px;
+  background: #02040f;
+  contain: paint;
+}
+.svc-hero-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.svc-hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(2,4,15,0.78) 0%, rgba(2,4,15,0.32) 30%, rgba(2,4,15,0.5) 64%, rgba(2,4,15,0.94) 100%),
+    radial-gradient(125% 95% at 50% 122%, rgba(31,109,255,0.6) 0%, rgba(13,74,214,0.32) 38%, rgba(10,50,153,0.12) 60%, transparent 78%);
+}
+.svc-hero .filmhero-grain { z-index: 2; }
+.svc-hero-inner {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  text-align: center;
+  padding: 0 clamp(20px, 6vw, 80px);
+  animation: glow-content-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s both;
+}
+.svc-hero-tag {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.72);
+  margin-bottom: 28px;
+}
+.svc-hero-h1 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: clamp(40px, 7vw, 104px);
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+  color: #fff;
+  margin: 0 auto 30px;
+  max-width: 18ch;
+}
+/* each line rises out of its own clipped mask — give the mask descender room
+   (and pull the next line back up by the same amount) so glyphs like g/y/p
+   aren't sliced by the mask's overflow:hidden */
+.svc-hero-h1 .reveal-mask { padding-bottom: 0.16em; margin-bottom: -0.16em; }
+.svc-hero-h1 .blue {
+  background: linear-gradient(118deg, #2f93ff 0%, #8cc1ff 55%, #eaf4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.svc-hero-h1 .reveal-inner { animation: revealUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.svc-hero-desc {
+  font-family: var(--sans);
+  font-size: clamp(17px, 1.7vw, 22px);
+  line-height: 1.55;
+  color: rgba(255,255,255,0.82);
+  max-width: 600px;
+  margin: 0 auto 42px;
+}
+.svc-hero-desc strong { color: #fff; font-weight: 600; }
+.svc-hero-desc .reveal-mask { padding-bottom: 0.12em; }
+.svc-hero-desc .reveal-inner { animation: revealUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.svc-hero-actions {
+  display: flex;
+  gap: 0;                /* buttons attach into one connected pair, like the homepage */
+  justify-content: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 768px) {
+  .svc-hero { padding: 112px 0 92px; }
 }
 .hero-overlay {
   position: absolute;

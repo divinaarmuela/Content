@@ -35,12 +35,15 @@ const faqs = [
   },
 ]
 
-export default function FaqList() {
+type Faq = { num: string; q: string; a: string }
+
+export default function FaqList({ items }: { items?: Faq[] }) {
   const [open, setOpen] = useState<number | null>(null)
+  const list = items ?? faqs
 
   return (
     <div className="faq-list">
-      {faqs.map((faq, i) => (
+      {list.map((faq, i) => (
         <div key={i} className={`faq-item${open === i ? ' open' : ''}`}>
           <button
             className="faq-q"
