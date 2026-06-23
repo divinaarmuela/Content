@@ -16,11 +16,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       appearance={{
         variables: {
           colorPrimary: '#5d5fef',
-          colorText: '#1f1b2e',
-          colorTextSecondary: '#7b7990',
+          colorForeground: '#1f1b2e',
+          colorMutedForeground: '#7b7990',
           colorBackground: '#ffffff',
-          colorInputBackground: '#faf9fd',
-          colorInputText: '#1f1b2e',
+          colorInput: '#faf9fd',
+          colorInputForeground: '#1f1b2e',
           borderRadius: '8px',
           fontFamily: "var(--font-sans, 'Inter', sans-serif)",
         },
