@@ -6,7 +6,7 @@ import SmoothScroll from './SmoothScroll'
 
 export default function SiteShell({ children }: { children: React.ReactNode }) {
   const path = usePathname()
-  const isShell = path.startsWith('/dashboard') || path.startsWith('/sign-in') || path.startsWith('/sign-up') || path.startsWith('/sso-callback') || path.startsWith('/client')
+  const isShell = path.startsWith('/dashboard') || path.startsWith('/sign-in') || path.startsWith('/sign-up') || path.startsWith('/client')
 
   if (isShell) return <>{children}</>
 

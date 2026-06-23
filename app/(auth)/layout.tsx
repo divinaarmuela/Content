@@ -12,7 +12,37 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const isSignUp = path.startsWith('/sign-up')
 
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: '#5d5fef',
+          colorText: '#1f1b2e',
+          colorTextSecondary: '#7b7990',
+          colorBackground: '#ffffff',
+          colorInputBackground: '#faf9fd',
+          colorInputText: '#1f1b2e',
+          borderRadius: '8px',
+          fontFamily: "var(--font-sans, 'Inter', sans-serif)",
+        },
+        elements: {
+          rootBox: { width: '100%', display: 'flex', justifyContent: 'center' },
+          cardBox: {
+            width: '100%', maxWidth: 420,
+            boxShadow: '0 0 0 1px rgba(31,27,46,0.08), 0 8px 32px rgba(31,27,46,0.06)',
+            borderRadius: 16,
+          },
+          card: { padding: '36px 32px' },
+          headerTitle: { fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' },
+          headerSubtitle: { fontSize: 13, color: '#7b7990' },
+          socialButtonsBlockButton: { borderColor: '#e8e7ef' },
+          formButtonPrimary: {
+            fontSize: 13, fontWeight: 600, textTransform: 'none',
+            boxShadow: 'none',
+          },
+          footerActionLink: { color: '#5d5fef', fontWeight: 600 },
+        },
+      }}
+    >
     <div className="auth-shell" style={s.shell}>
       {/* ── Left panel — silk lives here so it persists across sign-in/up ── */}
       <div className="auth-left" style={s.left}>
