@@ -4664,3 +4664,42 @@ body.video-active .video-vol-ctrl {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
+
+/* ─── HomeProblem ───────────────────────────────────────────── */
+.hprob {
+  min-height: 100dvh;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6rem 1.5rem;
+  gap: 1.5rem;
+}
+.hprob-label {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+}
+.hprob-heading {
+  font-family: var(--sans);
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: #fff;
+  max-width: 16ch;
+}
+.hprob-body {
+  font-family: var(--sans);
+  font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+  line-height: 1.7;
+  color: rgba(255,255,255,0.55);
+  max-width: 52ch;
+}
+.hprob-body--em { color: rgba(255,255,255,0.8); }
+.hprob-br { display: none; }
+@media (min-width: 768px) { .hprob-br { display: block; } }
