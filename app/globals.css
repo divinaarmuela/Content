@@ -4803,3 +4803,116 @@ body.video-active .video-vol-ctrl {
   align-self: flex-end;
   margin-top: 1rem;
 }
+
+/* ─── HomeServices ──────────────────────────────────────────── */
+.hsvc {
+  background: #000;
+  padding: 6rem 0 0;
+}
+.hsvc-header {
+  text-align: center;
+  padding: 0 1.5rem 4rem;
+}
+.hsvc-label {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+.hsvc-heading {
+  font-family: var(--sans);
+  font-size: clamp(2rem, 4.5vw, 3.8rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #fff;
+}
+.hsvc-panels {
+  display: flex;
+  height: 70vh;
+  min-height: 480px;
+}
+@media (max-width: 767px) {
+  .hsvc-panels {
+    flex-direction: column;
+    height: auto;
+  }
+}
+.hsvc-panel {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  cursor: pointer;
+  text-decoration: none;
+  transition: flex 0.5s cubic-bezier(0.4,0,0.2,1);
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+.hsvc-panel:last-child { border-right: none; }
+.hsvc-panel--active { flex: 3; }
+@media (max-width: 767px) {
+  .hsvc-panel { flex: none; height: 220px; }
+  .hsvc-panel--active { height: 340px; }
+}
+.hsvc-panel-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.4,0,0.2,1), opacity 0.3s;
+}
+.hsvc-panel--active .hsvc-panel-img { transform: scale(1.04); }
+.hsvc-panel-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0.1) 100%);
+}
+.hsvc-panel-content {
+  position: absolute;
+  inset: 0;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.hsvc-panel-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 0.5rem;
+  align-self: flex-start;
+}
+.hsvc-panel-title {
+  font-family: var(--sans);
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.2;
+}
+.hsvc-panel-body {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.7);
+  max-width: 28ch;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s 0.15s, transform 0.3s 0.15s;
+}
+.hsvc-panel--active .hsvc-panel-body {
+  opacity: 1;
+  transform: translateY(0);
+}
