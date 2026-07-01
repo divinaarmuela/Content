@@ -1646,6 +1646,133 @@ footer {
   contain: paint;
 }
 
+/* ── floating 3-D iPhone canvas ── */
+.iph-canvas-wrap {
+  position: fixed;
+  right: clamp(0px, 2vw, 40px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(280px, 26vw, 440px);
+  height: clamp(420px, 70vh, 760px);
+  z-index: 50;
+  pointer-events: none;
+}
+@media (max-width: 900px) { .iph-canvas-wrap { display: none; } }
+
+/* ── HTML UI rendered onto the phone screen (drei <Html transform>) ── */
+.phone-ui {
+  width: 360px;
+  height: 736px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 18px 16px;
+  font-family: var(--sans, system-ui, sans-serif);
+  color: #fff;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #0a3aa8 0%, transparent 60%),
+    linear-gradient(180deg, #050b1c 0%, #02060f 100%);
+  user-select: none;
+}
+.phone-ui-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.phone-ui-status-icons { display: flex; align-items: center; gap: 6px; }
+.phone-ui-status-icons i { display: block; background: #fff; border-radius: 2px; }
+.pu-sig  { width: 18px; height: 12px; clip-path: polygon(0 100%,25% 100%,25% 60%,50% 60%,50% 35%,75% 35%,75% 12%,100% 12%,100% 100%); }
+.pu-wifi { width: 16px; height: 12px; border-radius: 50% 50% 0 0; }
+.pu-bat  { width: 26px; height: 13px; border-radius: 3px; }
+
+.phone-ui-header { display: flex; align-items: center; gap: 10px; }
+.phone-ui-logo {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: linear-gradient(135deg, #41a0ff, #0040c8);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px; letter-spacing: -0.03em;
+}
+.phone-ui-title { font-size: 20px; font-weight: 700; }
+
+.phone-ui-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.phone-ui-card-img {
+  height: 230px;
+  background:
+    linear-gradient(135deg, #298dff 0%, #0040c8 45%, #021037 100%);
+  position: relative;
+}
+.phone-ui-card-img::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,0.10) 50%, transparent 58%);
+}
+.phone-ui-card-actions { display: flex; gap: 16px; padding: 14px 16px 6px; }
+.phone-ui-card-actions i { width: 24px; height: 24px; border: 2.4px solid #fff; border-radius: 6px; }
+.pu-heart { border-radius: 50% 50% 4px 50% !important; transform: rotate(45deg); }
+.phone-ui-card-cap { font-size: 14px; line-height: 1.45; padding: 4px 16px 16px; color: rgba(255,255,255,0.82); }
+.phone-ui-card-cap b { color: #fff; }
+
+.phone-ui-stat {
+  background: rgba(41,141,255,0.10);
+  border: 1px solid rgba(41,141,255,0.25);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.phone-ui-stat-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; }
+.phone-ui-stat-row span:last-child { color: #5db0ff; }
+.phone-ui-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.phone-ui-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #41a0ff, #0040c8); }
+
+.phone-ui-tabbar { margin-top: auto; display: flex; justify-content: space-around; padding-top: 12px; }
+.pu-tab { width: 26px; height: 26px; border-radius: 8px; background: rgba(255,255,255,0.18); }
+.pu-tab--on { background: #298dff; }
+
+/* ── fixed frame-sequence background canvas ── */
+.frame-seq-fixed-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+/* ── dark overlay used inside sections that float over the fixed bg ── */
+.hero-videobg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(2, 8, 30, 0.55);
+}
+
+/* hero section rendered over the fixed bg: transparent, content above overlay */
+.hero-glow--framebg {
+  background: transparent;
+}
+.hero-glow--framebg .hero-glow-inner  { z-index: 2; }
+.hero-glow--framebg .filmhero-grain   { z-index: 2; }
+.hero-glow--framebg .hero-glow-marquee { z-index: 2; }
+
+/* ServiceList rendered over the fixed bg — semi-transparent white so video shows through */
+.svc-nav.svc-nav--framebg {
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
 /* ── volume control — fixed top-right, below nav ── */
 .video-vol-ctrl {
   position: fixed;
@@ -4375,3 +4502,26 @@ body.video-active .video-vol-ctrl {
   .router-grid { grid-template-columns: 1fr 1fr; }
 }
 
+
+/* ─── SiteNav CTA pill ──────────────────────────────────────── */
+.site-nav-cta {
+  display: none;
+  align-items: center;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-family: var(--sans);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+}
+.site-nav-cta:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.6);
+}
+@media (min-width: 768px) {
+  .site-nav-cta { display: flex; }
+}

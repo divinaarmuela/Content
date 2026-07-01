@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 function NavLogo() {
   const [ok, setOk] = useState(true)
@@ -24,9 +25,9 @@ function NavLogo() {
 type Lenis = { scrollTo: (target: number | string | HTMLElement, opts?: Record<string, unknown>) => void }
 
 export default function SiteNav() {
-  const [scrolled,   setScrolled]   = useState(false)
-  const [hidden,     setHidden]     = useState(false)
-  const [overVideo,  setOverVideo]  = useState(false)
+  const [scrolled,  setScrolled]  = useState(false)
+  const [hidden,    setHidden]    = useState(false)
+  const [overVideo, setOverVideo] = useState(false)
 
   useEffect(() => {
     let lastY = window.scrollY
@@ -41,7 +42,6 @@ export default function SiteNav() {
       }
       lastY = y
 
-      // transparent when scrolled over the video-stack section
       const vs = document.querySelector('.video-stack') as HTMLElement | null
       if (vs) {
         const rect = vs.getBoundingClientRect()
@@ -51,18 +51,12 @@ export default function SiteNav() {
 
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-    }
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // In-page anchor nav. On the home page a scroll-jacked SilkTransition sits
-  // between the top and these sections and would hijack a plain hash jump, so
-  // we hand it off to the transition (it bypasses itself and lands us there).
-  // Elsewhere there's no transition, so we just smooth-scroll to the target.
   const handleAnchor = (e: React.MouseEvent<HTMLAnchorElement>, hash: string) => {
     const el = document.querySelector(hash) as HTMLElement | null
-    if (!el) return // section not on this page — let the default href run
+    if (!el) return
     e.preventDefault()
     if (document.querySelector('.silk-canvas')) {
       window.dispatchEvent(new CustomEvent('nav-goto', { detail: hash }))
@@ -80,9 +74,18 @@ export default function SiteNav() {
       <div className="site-nav-inner">
         <NavLogo />
         <nav className="site-nav-links" aria-label="Primary">
-          <a href="/#services" onClick={e => handleAnchor(e, '#services')}>Services</a>
+          <Link href="/services">Services</Link>
+          <Link href="/about">About</Link>
           <a href="#contact" onClick={e => handleAnchor(e, '#contact')}>Contact</a>
         </nav>
+        <a
+          href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="site-nav-cta"
+        >
+          Book a strategy call
+        </a>
       </div>
     </header>
   )
