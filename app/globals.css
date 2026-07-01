@@ -4703,3 +4703,103 @@ body.video-active .video-vol-ctrl {
 .hprob-body--em { color: rgba(255,255,255,0.8); }
 .hprob-br { display: none; }
 @media (min-width: 768px) { .hprob-br { display: block; } }
+
+/* ─── HomeSolution ──────────────────────────────────────────── */
+.hsol {
+  position: relative;
+  overflow: hidden;
+  padding: 8rem 1.5rem;
+  background: #0a0a0a;
+}
+.hsol-bg {
+  position: absolute;
+  inset: -20%;
+  background-image: url('https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1600&q=60');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.18;
+  will-change: transform;
+}
+.hsol-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  text-align: center;
+}
+.hsol-label {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+.hsol-heading {
+  font-family: var(--sans);
+  font-size: clamp(2rem, 4.5vw, 3.8rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #fff;
+  margin-bottom: 4rem;
+}
+.hsol-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 768px) {
+  .hsol-cards { grid-template-columns: repeat(3, 1fr); }
+}
+.hsol-card {
+  position: relative;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 2rem 1.75rem 2.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.25s, background 0.25s;
+}
+.hsol-card:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+}
+.hsol-card-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.5);
+  align-self: flex-start;
+}
+.hsol-card-title {
+  font-family: var(--sans);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #fff;
+}
+.hsol-card-body {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: rgba(255,255,255,0.55);
+  flex: 1;
+}
+.hsol-card-icon {
+  font-size: 1.5rem;
+  color: rgba(255,255,255,0.2);
+  align-self: flex-end;
+  margin-top: 1rem;
+}
