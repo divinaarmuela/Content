@@ -4632,3 +4632,35 @@ body.video-active .video-vol-ctrl {
   50.01% { transform-origin: bottom; }
   100% { transform: scaleY(0); transform-origin: bottom; }
 }
+
+/* ─── HomeLogoStrip ─────────────────────────────────────────── */
+.hls {
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 1.4rem 0;
+}
+.hls-track {
+  display: flex;
+  gap: 2.5rem;
+  width: max-content;
+  animation: hls-scroll 32s linear infinite;
+}
+.hls:hover .hls-track { animation-play-state: paused; }
+.hls-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  opacity: 0.45;
+  filter: brightness(0) invert(1);
+  transition: opacity 0.2s;
+}
+.hls-item:hover { opacity: 0.75; }
+.hls-item img { height: 100%; width: auto; object-fit: contain; }
+@keyframes hls-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
