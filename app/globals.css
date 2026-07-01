@@ -5060,3 +5060,37 @@ body.video-active .video-vol-ctrl {
   line-height: 1.65;
   color: rgba(255,255,255,0.5);
 }
+
+/* ─── HomeTestimonial ───────────────────────────────────────── */
+.htesti {
+  background: #000;
+  padding: 8rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.htesti-inner {
+  max-width: 720px;
+  text-align: center;
+}
+.htesti-quote {
+  font-family: var(--sans);
+  font-size: clamp(1.15rem, 2.5vw, 1.6rem);
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 2rem;
+}
+.htesti-rule {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  margin-bottom: 1.5rem;
+}
+.htesti-attr {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
