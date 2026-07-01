@@ -4525,3 +4525,110 @@ body.video-active .video-vol-ctrl {
 @media (min-width: 768px) {
   .site-nav-cta { display: flex; }
 }
+
+/* ─── HomeVideoHero ─────────────────────────────────────────── */
+.hvh {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  min-height: 600px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+.hvh-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.hvh-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.35) 0%,
+    rgba(0,0,0,0.2) 50%,
+    rgba(0,0,0,0.65) 100%
+  );
+}
+.hvh-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 0 1.5rem;
+  max-width: 860px;
+}
+.hvh-tag {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+.hvh-headline {
+  font-family: var(--sans);
+  font-size: clamp(2.4rem, 6vw, 5.2rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: 2.5rem;
+}
+.hvh-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hvh-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 1.75rem;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.hvh-btn--fill {
+  background: #fff;
+  color: #0a0a0a;
+  border: 1px solid #fff;
+}
+.hvh-btn--fill:hover { background: rgba(255,255,255,0.88); }
+.hvh-btn--outline {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.4);
+}
+.hvh-btn--outline:hover { border-color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.06); }
+
+.hvh-scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+.hvh-scroll-hint span {
+  display: block;
+  width: 1px;
+  height: 52px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.5));
+  animation: hvh-scroll-line 1.8s ease-in-out infinite;
+}
+@keyframes hvh-scroll-line {
+  0%   { transform: scaleY(0); transform-origin: top; }
+  50%  { transform: scaleY(1); transform-origin: top; }
+  50.01% { transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
