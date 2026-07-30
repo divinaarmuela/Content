@@ -173,7 +173,10 @@ export default function VoidScene() {
       // itself must survive — white has to stay white
       premultipliedAlpha: false,
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // phones: cap the pixel ratio harder — full-res + bloom passes at dpr 2-3
+    // is what makes the sequence stutter on mobile GPUs
+    const isTouch = window.matchMedia('(pointer: coarse)').matches
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.3 : 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.1
 

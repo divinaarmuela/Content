@@ -84,7 +84,7 @@ function LamaSelect({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-4 bg-transparent border-b border-cream/25 py-3 cursor-pointer text-left hover:border-cream/60 transition-colors"
+        className="w-full flex items-center justify-between gap-4 bg-transparent border-b border-cream/25 px-3 py-3 cursor-pointer text-left hover:border-cream/60 transition-colors"
       >
         <span className={`font-lamah ${label ? 'text-cream' : 'text-cream-dim/60'}`}>
           {label ?? placeholder}
