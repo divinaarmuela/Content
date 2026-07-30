@@ -54,8 +54,15 @@ const OFF_WHITE = '#1a1c1c'
 
 // frame height that also fits portrait viewports: the natural vh-based size,
 // clamped so the 1.768-aspect frame never overflows the width
+// lusion's own mobile answer: portrait viewports swap the landscape monitor
+// for a portrait TABLET frame (3:4), which fills the screen instead of
+// letterboxing a wide device into a narrow viewport
+const isPortrait = () => window.innerHeight > window.innerWidth
+const frameAspect = () => (isPortrait() ? 0.75 : 1.768)
+const cardAspect = () => (isPortrait() ? 0.75 : 817 / 571)
+
 const fitFrameH = (vhPx: number) =>
-  Math.min(SCREEN_FRACTION * vhPx, (window.innerWidth * 0.99) / 1.768)
+  Math.min(SCREEN_FRACTION * vhPx, (window.innerWidth * 0.94) / frameAspect())
 
 // single shrink factor for portrait: EVERYTHING (frame, card, world scale)
 // shrinks by this same ratio so the astronaut stays proportioned to both
@@ -568,7 +575,7 @@ void main() {
       const vhPx = Math.max(1, window.innerHeight)
       const diag = Math.sqrt(vw * vw + vhPx * vhPx)
       const frameHpx = fitFrameH(vhPx)
-      const frameWpx = frameHpx * 1.768
+      const frameWpx = frameHpx * frameAspect()
       const domFrameScale = 1 + (diag / Math.min(frameWpx, frameHpx) - 1) * outE
 
       // the CSS card is retired: their frameBgMesh overlay is the card
@@ -974,7 +981,12 @@ void main() {
           // valid because their pane is UNIT HEIGHT (measured 1.750 × 0.990).
           // divide by the pane's HEIGHT — not its width — to normalise.
           const worldH = Math.tan((camera.fov * Math.PI) / 360) * 2 * GLASS_DEPTH
-          glass.mesh.scale.setScalar((worldH * SCREEN_FRACTION * domFrameScale) / glass.paneSize.y)
+          // portrait tablet frame is NARROWER than the landscape pane — fit
+          // the pane by WIDTH there so the shards never spill past the frame
+          const paneScale = isPortrait()
+            ? (worldH * SCREEN_FRACTION * frameAspect() * domFrameScale) / glass.paneSize.x
+            : (worldH * SCREEN_FRACTION * domFrameScale) / glass.paneSize.y
+          glass.mesh.scale.setScalar(paneScale)
           // their ratio = fit(q.ratio, 0, 1, 0, 1, ease.sineOut) where q spans
           // whiteFrameBreak THROUGH astronautDrop — the shatter keeps opening
           // out while he drops. ours completed inside the break alone.
@@ -1053,9 +1065,10 @@ void main() {
         // — height 0.604 of the viewport, aspect 1.432. my 560px width cap
         // squashed it to ~1.02 (nearly square), so the astronaut never fit.
         // card shrinks by the SAME factor as the frame/world, so the
-        // astronaut's flight path stays proportioned to it on portrait
+        // astronaut's flight path stays proportioned to it on portrait —
+        // and goes portrait-aspect there, like the frame
         const cardH = vhPx2 * (571 / 945) * frameShrink(vhPx2)
-        const cardW = cardH * (817 / 571)
+        const cardW = cardH * cardAspect()
         frameOverlay.setRect((vwPx - cardW) / 2, (vhPx2 - cardH) / 2 + K, cardW, cardH)
         frameOverlay.setViewport(vwPx, vhPx2)
         const u = frameOverlay.uniforms
@@ -1081,7 +1094,7 @@ void main() {
         const vhPx2 = Math.max(1, window.innerHeight)
         // device rect: centred, their natural size
         const fH = fitFrameH(vhPx2)
-        const fW = fH * 1.768
+        const fW = fH * frameAspect()
         // measured on lusion.co: xe = -1515, baseY = 7312, so their
         //   u = offsetY + xe            = scrollPixel - 8827
         //   v = -(imgOut.top + K - scrollPixel + imgOut.h/2 - vh/2 + u) = -K
