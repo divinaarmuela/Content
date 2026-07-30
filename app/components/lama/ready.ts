@@ -15,6 +15,26 @@ export function markLamaReady() {
   window.dispatchEvent(new Event('lama:ready'))
 }
 
+// True while the closing experience section is on screen (or about to be) —
+// the nav pill and side panel hide themselves during it
+export function useExperienceActive() {
+  const [active, setActive] = useState(false)
+
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('[data-lama-title="EXPERIENCE"]')
+    if (!el) return
+    const onScroll = () => {
+      const r = el.getBoundingClientRect()
+      setActive(r.top < window.innerHeight * 0.8 && r.bottom > 0)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  return active
+}
+
 export function useLamaReady() {
   const [ready, setReady] = useState(false)
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useScramble } from './Scramble'
+import { useExperienceActive } from './ready'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
@@ -17,6 +18,7 @@ export default function LamaNav() {
   const [title, setTitle] = useState('MD MEDIA MARKETING')
   const [open, setOpen] = useState(false)
   const display = useScramble(title, { duration: 500 })
+  const inExperience = useExperienceActive()
 
   useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>('[data-lama-title]')
@@ -39,7 +41,9 @@ export default function LamaNav() {
 
   return (
     <>
-      <header className="fixed top-4 left-1/2 z-[110] -translate-x-1/2 w-[min(480px,calc(100vw-2rem))]">
+      <header
+        className={`fixed top-4 left-1/2 z-[110] -translate-x-1/2 w-[min(480px,calc(100vw-2rem))] transition-opacity duration-500 ${inExperience ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+      >
         <div className="flex items-center justify-between bg-black px-4 py-3 shadow-lg">
           <Link href="/" aria-label="MD Media home" className="font-lamah font-bold text-cream visited:text-cream no-underline text-sm leading-none">MD</Link>
           <span className="font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream">{display}</span>

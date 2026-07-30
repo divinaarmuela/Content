@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Scramble } from './Scramble'
-import { useLamaReady } from './ready'
+import { useExperienceActive, useLamaReady } from './ready'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
@@ -18,6 +18,7 @@ const ROTATE_MS = 6000
 // tag and a small looping showreel video below it. Desktop only.
 export default function LamaSidePanel() {
   const ready = useLamaReady()
+  const inExperience = useExperienceActive()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [clip, setClip] = useState(0)
 
@@ -33,7 +34,7 @@ export default function LamaSidePanel() {
   return (
     <div
       aria-label="Contact and showreel"
-      className={`fixed right-4 top-4 z-[100] hidden lg:flex w-48 flex-col gap-y-1 transition-opacity duration-700 ${ready ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      className={`fixed right-4 top-4 z-[100] hidden lg:flex w-48 flex-col gap-y-1 transition-opacity duration-700 ${ready && !inExperience ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
     >
       <a
         href={CALENDLY}
