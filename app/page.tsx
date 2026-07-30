@@ -1,15 +1,15 @@
 import type { Metadata } from 'next'
-import SiteNav from './components/SiteNav'
-import HomeVideoHero from './components/home/HomeVideoHero'
-import HomeLogoStrip from './components/home/HomeLogoStrip'
-import HomeProblem from './components/home/HomeProblem'
-import HomeSolution from './components/home/HomeSolution'
-import HomeServices from './components/home/HomeServices'
-import HomeHowItWorks from './components/home/HomeHowItWorks'
-import HomeWhyUs from './components/home/HomeWhyUs'
-import HomeTestimonial from './components/home/HomeTestimonial'
-import HomeCtaBanner from './components/home/HomeCtaBanner'
-import SiteFooter from './components/SiteFooter'
+import { archivo, sometype } from './components/lama/fonts'
+import LamaLoader from './components/lama/LamaLoader'
+import LamaNav from './components/lama/LamaNav'
+import LamaHero from './components/lama/LamaHero'
+import LamaIntro from './components/lama/LamaIntro'
+import LamaWork from './components/lama/LamaWork'
+import LamaServices from './components/lama/LamaServices'
+import LamaLogos from './components/lama/LamaLogos'
+import LamaCulture from './components/lama/LamaCulture'
+import LamaContact from './components/lama/LamaContact'
+import LamaFooterBar from './components/lama/LamaFooterBar'
 
 export const metadata: Metadata = {
   title: 'MD Media | Content-Led Marketing for Founders & Local Businesses',
@@ -36,20 +36,19 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <>
-      <SiteNav />
+    <div className={`${archivo.variable} ${sometype.variable} bg-ink`}>
+      <LamaLoader />
+      <LamaNav />
       <main>
-        <HomeVideoHero />
-        <HomeLogoStrip />
-        <HomeProblem />
-        <HomeSolution />
-        <HomeServices />
-        <HomeHowItWorks />
-        <HomeWhyUs />
-        <HomeTestimonial />
-        <HomeCtaBanner />
+        <LamaHero />
+        <LamaIntro />
+        <LamaWork />
+        <LamaServices />
+        <LamaLogos />
+        <LamaCulture />
+        <LamaContact />
       </main>
-      <SiteFooter vol="Vol. 03 // MD Media" tagline={<>Strategy. Content. Distribution.<br />Built for founders and local businesses ready to stop blending in.</>} />
-    </>
+      <LamaFooterBar />
+    </div>
   )
 }
