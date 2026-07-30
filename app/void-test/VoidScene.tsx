@@ -289,6 +289,13 @@ void main() {
     let lastT = 0
 
     const build = async () => {
+      // materials load CONCURRENTLY with geometry — they used to wait for the
+      // whole first batch, which is why the astronaut appeared late
+      const materialsPromise = Promise.all([
+        createAstronautMaterial(ASSET, 'astronaut_helmet', astroShared),
+        createAstronautMaterial(ASSET, 'astronaut_glove_shoes', astroShared),
+        createAstronautMaterial(ASSET, 'astronaut_wearpack', astroShared),
+      ])
       const [skeleton, helmet, glassBuf, gloves, wearpack, bt, shards, gems, wt, inAnim, outAnim, earthCard] =
         await Promise.all([
           loadSkeleton(`${ASSET}/models/astronaut_animations.buf`),
@@ -335,11 +342,7 @@ void main() {
       gems.uniforms.u_aspect.value = 1.1 // tighter vertical wrap for the finale
       scene.add(gems.mesh)
 
-      const [helmetMat, glovesMat, wearpackMat] = await Promise.all([
-        createAstronautMaterial(ASSET, 'astronaut_helmet', astroShared),
-        createAstronautMaterial(ASSET, 'astronaut_glove_shoes', astroShared),
-        createAstronautMaterial(ASSET, 'astronaut_wearpack', astroShared),
-      ])
+      const [helmetMat, glovesMat, wearpackMat] = await materialsPromise
       if (disposed) return
       // their shader needs the per-vertex ao stream
       for (const b of [helmet, gloves, wearpack]) {
@@ -679,6 +682,12 @@ void main() {
       const dollyZoomFov = wtGate > 0 ? fit(wtRatio, 0, 1, 60, 0) : 0
       let blackFovWobble = 0
       camera.fov = baseFov
+      // portrait: widen the fov EARLY (globe / card fly-in) so side content
+      // stays in frame on narrow viewports; fades out before the framed
+      // phases, whose world-to-frame alignment assumes the base fov
+      const portraitBoost = Math.min(1.35, Math.max(1, (window.innerHeight / Math.max(1, window.innerWidth)) * 0.78))
+      const earlyGate = 1 - clamp01(p * 3)
+      camera.fov = Math.min(85, camera.fov * (1 + (portraitBoost - 1) * earlyGate))
       // their freezeRatio: hold the pointer down to slow tunnel time
       freeze += ((isPointerDown ? 1 : 0) - freeze) * 0.1
       const tdt = dt * (1 - 0.7 * freeze)
