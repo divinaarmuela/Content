@@ -41,13 +41,13 @@ export default function LamaNav() {
     <>
       <header className="fixed top-4 left-1/2 z-[110] -translate-x-1/2 w-[min(480px,calc(100vw-2rem))]">
         <div className="flex items-center justify-between bg-black px-4 py-3 shadow-lg">
-          <Link href="/" aria-label="MD Media home" className="font-lamah font-bold text-cream text-sm leading-none">MD</Link>
-          <span className="font-lamam text-[11px] uppercase tracking-widest text-cream">{display}</span>
+          <Link href="/" aria-label="MD Media home" className="font-lamah font-bold text-cream visited:text-cream no-underline text-sm leading-none">MD</Link>
+          <span className="font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream">{display}</span>
           <button
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="flex flex-col gap-1 p-1"
+            className="flex flex-col gap-1 p-1 appearance-none border-0 bg-transparent cursor-pointer"
           >
             <span className={`block h-0.5 w-5 bg-cream transition-transform ${open ? 'translate-y-1.5 rotate-45' : ''}`} />
             <span className={`block h-0.5 w-5 bg-cream transition-opacity ${open ? 'opacity-0' : ''}`} />
@@ -63,7 +63,7 @@ export default function LamaNav() {
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
-              className="group flex items-baseline gap-6 py-3 border-b border-cream/10"
+              className="group flex items-baseline gap-6 py-3 border-b border-cream/10 no-underline"
             >
               <span className="font-lamam text-xs text-cream-dim">0{i + 1}</span>
               <span className="font-lamah font-bold uppercase text-cream text-[clamp(2rem,7vw,4.5rem)] leading-[0.9] tracking-tight group-hover:text-accent transition-colors">
@@ -75,7 +75,7 @@ export default function LamaNav() {
             href={CALENDLY}
             target="_blank"
             rel="noreferrer noopener"
-            className="mt-10 self-start border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream hover:bg-cream hover:text-ink transition-colors"
+            className="mt-10 self-start border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
           >
             BOOK A STRATEGY CALL ↗
           </a>

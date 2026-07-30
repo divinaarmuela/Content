@@ -3,6 +3,7 @@ import { archivo, sometype } from './components/lama/fonts'
 import LamaLoader from './components/lama/LamaLoader'
 import LamaBackdrop from './components/lama/LamaBackdrop'
 import LamaNav from './components/lama/LamaNav'
+import LamaSidePanel from './components/lama/LamaSidePanel'
 import LamaHero from './components/lama/LamaHero'
 import LamaIntro from './components/lama/LamaIntro'
 import LamaWork from './components/lama/LamaWork'
@@ -37,10 +38,11 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <div className={`${archivo.variable} ${sometype.variable} bg-ink`}>
+    <div className={`${archivo.variable} ${sometype.variable} bg-ink [&_section]:border-b-0`}>
       <LamaLoader />
       <LamaBackdrop />
       <LamaNav />
+      <LamaSidePanel />
       <main className="relative z-10">
         <LamaHero />
         <LamaIntro />

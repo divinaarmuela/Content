@@ -27,13 +27,13 @@ export default function LamaContact() {
             href={CALENDLY}
             target="_blank"
             rel="noreferrer noopener"
-            className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream hover:bg-cream hover:text-ink transition-colors"
+            className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
           >
             BOOK A STRATEGY CALL ↗
           </a>
           <Link
             href="/work"
-            className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream hover:bg-cream hover:text-ink transition-colors"
+            className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
           >
             SEE OUR WORK ↗
           </Link>

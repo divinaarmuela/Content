@@ -1,6 +1,7 @@
 'use client'
 
 import { createElement, useEffect, useRef, useState } from 'react'
+import { useLamaReady } from './ready'
 
 const CHARS = '#(_>@%$*+·<)[]0123456789'
 
@@ -52,6 +53,7 @@ export function Scramble({
 }: { text: string; className?: string; as?: 'span' | 'p' | 'div'; delay?: number }) {
   const ref = useRef<HTMLElement>(null)
   const [play, setPlay] = useState(false)
+  const ready = useLamaReady()
 
   useEffect(() => {
     const el = ref.current
@@ -70,7 +72,7 @@ export function Scramble({
     return () => { io.disconnect(); window.clearTimeout(timeout) }
   }, [delay])
 
-  const display = useScramble(text, { play })
+  const display = useScramble(text, { play: play && ready })
   // reserve width with invisible final text to avoid layout shift
   return createElement(
     as,

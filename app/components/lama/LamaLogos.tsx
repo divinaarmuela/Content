@@ -17,7 +17,7 @@ const logos = [
 export default function LamaLogos() {
   const doubled = [...logos, ...logos]
   return (
-    <div aria-label="Clients and partners" className="bg-ink border-y border-cream/10 py-10 overflow-hidden">
+    <div aria-label="Clients and partners" className="py-10 overflow-hidden">
       <div className="flex w-max animate-lama-marquee motion-reduce:animate-none gap-16 px-8">
         {doubled.map((logo, i) => (
           <img

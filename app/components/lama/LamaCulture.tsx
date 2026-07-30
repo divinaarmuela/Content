@@ -3,7 +3,7 @@ import { Scramble } from './Scramble'
 
 export default function LamaCulture() {
   return (
-    <section data-lama-title="WHY MD MEDIA" className="bg-ink grid grid-cols-1 lg:grid-cols-[55%_45%]">
+    <section data-lama-title="WHY MD MEDIA" className="grid grid-cols-1 lg:grid-cols-[55%_45%]">
       <div className="px-6 sm:px-10 py-32">
         <Scramble text="[ WHY US ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
         <Reveal delay={100}>

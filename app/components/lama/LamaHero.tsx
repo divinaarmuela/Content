@@ -1,26 +1,38 @@
 import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 
+// Reference hero structure: min-h-dvh flex items-end, mix-blend-exclusion,
+// 12-col grid with the headline on cols 1-7 and the body copy bottom-aligned
+// on cols 10-12. The headline reveals per line with a stagger, each line
+// using the clip-path wipe recipe (handled by Reveal).
+const LINES = ['You’re the best-kept', 'secret in your market.', 'Let’s fix that.']
+
 export default function LamaHero() {
   return (
     <section
       data-lama-title="MD MEDIA MARKETING"
-      className="relative min-h-[100dvh] flex flex-col justify-end px-6 sm:px-10 pb-24 pt-40"
+      className="relative min-h-[100dvh] flex items-end px-6 sm:px-10 pb-32 sm:pb-40 pt-40 mix-blend-exclusion"
     >
-      <Scramble text="[ MD MEDIA MARKETING ]" className="absolute top-28 left-6 sm:left-10 font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
-      <div className="flex flex-col lg:flex-row lg:items-end gap-10">
-        <Reveal className="lg:w-2/3">
-          <h1 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(3rem,8vw,7.5rem)]">
-            You&rsquo;re the best-kept secret in your market. Let&rsquo;s fix that.
+      <div className="w-full lg:grid lg:grid-cols-12 lg:gap-6">
+        <div className="lg:col-start-1 lg:col-span-8">
+          <Scramble
+            text="[ MD MEDIA MARKETING ]"
+            className="mb-8 font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream"
+          />
+          <h1 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(2.25rem,5.6vw,5.75rem)]">
+            {LINES.map((line, i) => (
+              <Reveal key={line} delay={i * 120} className="block lg:whitespace-nowrap">
+                {line}
+              </Reveal>
+            ))}
           </h1>
-        </Reveal>
-        <Reveal delay={200} className="lg:w-1/3 lg:max-w-xs lg:ml-auto">
-          <p className="font-lamah text-cream-dim text-base leading-relaxed">
+        </div>
+        <Reveal delay={420} className="mt-10 lg:mt-0 lg:col-start-10 lg:col-span-3 lg:self-end">
+          <p className="font-lamah text-cream text-lg leading-snug max-w-xs">
             Strategy. Content. Distribution. Built for founders and local businesses ready to stop blending in.
           </p>
         </Reveal>
       </div>
-      <div className="mt-16 h-px bg-cream/20" />
     </section>
   )
 }
