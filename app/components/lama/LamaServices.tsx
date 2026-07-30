@@ -1,3 +1,6 @@
+'use client'
+
+import { useRef, useState } from 'react'
 import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 
@@ -9,6 +12,18 @@ const COLUMNS = [
 ]
 
 export default function LamaServices() {
+  const rowRef = useRef<HTMLDivElement>(null)
+  // mobile browsers hide native scrollbars, so the swipe progress renders as
+  // an explicit bar under the row
+  const [progress, setProgress] = useState(0)
+
+  const onScroll = () => {
+    const el = rowRef.current
+    if (!el) return
+    const max = el.scrollWidth - el.clientWidth
+    setProgress(max > 0 ? el.scrollLeft / max : 0)
+  }
+
   return (
     <section data-lama-title="WHAT WE DO" className="px-6 sm:px-10 py-32 sm:py-44">
       <Reveal>
@@ -29,7 +44,11 @@ export default function LamaServices() {
           Start small, scale when it&rsquo;s working.
         </p>
       </Reveal>
-      <div className="mt-20 flex gap-8 overflow-x-auto pb-4 snap-x snap-mandatory [-webkit-overflow-scrolling:touch] md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-12 md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-cream/25 [&::-webkit-scrollbar-track]:bg-cream/5">
+      <div
+        ref={rowRef}
+        onScroll={onScroll}
+        className="mt-20 flex gap-8 overflow-x-auto pb-4 snap-x snap-mandatory [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-12 md:overflow-visible md:pb-0"
+      >
         {COLUMNS.map((col, i) => (
           <Reveal key={col.label} delay={i * 120} className="shrink-0 w-[72vw] sm:w-[46vw] snap-start md:w-auto md:shrink">
             <Scramble text={col.label} className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
@@ -40,6 +59,13 @@ export default function LamaServices() {
             </ul>
           </Reveal>
         ))}
+      </div>
+      {/* swipe progress bar (mobile only) */}
+      <div aria-hidden="true" className="mt-2 h-px bg-cream/15 md:hidden">
+        <div
+          className="h-full bg-cream/70 transition-[width] duration-150"
+          style={{ width: `${Math.round((0.25 + progress * 0.75) * 100)}%` }}
+        />
       </div>
     </section>
   )
