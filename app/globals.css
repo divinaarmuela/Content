@@ -2353,7 +2353,8 @@ body.video-active .video-vol-ctrl {
 .vt-sticky {
   position: sticky;
   top: 0;
-  height: 100svh;
+  /* dvh: tracks the mobile URL bar so no grey gap opens when it hides */
+  height: 100dvh;
   overflow: hidden;
 }
 .vt-canvas {

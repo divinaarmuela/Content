@@ -498,6 +498,9 @@ void main() {
       ;(window as any).__T = JSON.parse(JSON.stringify(T))
     }
     window.addEventListener('resize', resize)
+    // mobile URL-bar show/hide changes the visual viewport without always
+    // firing window resize — track it so the canvas never renders stretched
+    window.visualViewport?.addEventListener('resize', resize)
     resize()
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -829,8 +832,12 @@ void main() {
       // the camera sits where theirs does
       const dropY = 0.4 * backInOut(dropR)
       // their v.position = sampled track point, plus brownian, minus the drop
+      // portrait: the flight path's x offsets were measured against the wide
+      // landscape frame — compress them toward centre so he stays centred
+      // inside the narrow tablet frame and through the vortex
+      const xComp = isPortrait() ? frameAspect() / 1.768 : 1
       astronaut.position.set(
-        rootP.x + Math.sin(t * 0.4) * 0.12 * sway * 0.02,
+        (rootP.x + Math.sin(t * 0.4) * 0.12 * sway * 0.02) * xComp,
         rootP.y + Math.sin(t * 0.7) * 0.1 * sway * 0.02 - dropY,
         rootP.z,
       )
@@ -1362,6 +1369,7 @@ void main() {
       window.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('resize', resize)
+      window.visualViewport?.removeEventListener('resize', resize)
       pmrem.dispose()
       bgTarget.dispose()
       bloom.dispose()
