@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -28,13 +28,13 @@ import {
 } from './skinning'
 
 /**
- * PRIVATE TEST — replication of lusion.co's astronaut sequence using Lusion's
- * own assets (© Lusion — never publish). Staged against a frame-by-frame
+ * PRIVATE TEST â€” replication of lusion.co's astronaut sequence using Lusion's
+ * own assets (Â© Lusion â€” never publish). Staged against a frame-by-frame
  * analysis of their live site:
  *
- *   monitor card (earth) → close-up → scattered title words → black greeble
- *   tunnel graded silver→red→green/yellow → PINK VORTEX warp → royal-blue
- *   sticker corridor → glass-screen break → black finale: diamonds sparkling
+ *   monitor card (earth) â†’ close-up â†’ scattered title words â†’ black greeble
+ *   tunnel graded silverâ†’redâ†’green/yellow â†’ PINK VORTEX warp â†’ royal-blue
+ *   sticker corridor â†’ glass-screen break â†’ black finale: diamonds sparkling
  *   around the astronaut as he waves goodbye.
  */
 
@@ -58,7 +58,7 @@ const OFF_WHITE = '#1a1c1c'
 // for a portrait TABLET frame (3:4), which fills the screen instead of
 // letterboxing a wide device into a narrow viewport
 const isPortrait = () => window.innerHeight > window.innerWidth
-// 0.62 ≈ phone-screen aspect: at ~94% width the frame stands ~75% of the
+// 0.62 â‰ˆ phone-screen aspect: at ~94% width the frame stands ~75% of the
 // viewport height, so the bands above/below shrink to a slim margin
 const frameAspect = () => (isPortrait() ? 0.62 : 1.768)
 const cardAspect = () => (isPortrait() ? 0.62 : 817 / 571)
@@ -79,7 +79,7 @@ const fit = (v: number, a: number, b: number, o0: number, o1: number) =>
   o0 + (o1 - o0) * clamp01((v - a) / (b - a))
 
 /**
- * Phase table. These literals are only a pre-measurement fallback — `syncT()`
+ * Phase table. These literals are only a pre-measurement fallback â€” `syncT()`
  * overwrites every one of them from Lusion's own GoalSectionRanges maths
  * against the real card/laptop DOM on each resize. Their weights (1, 5, 12, 2,
  * 1, 1.5) give the black tunnel over HALF the tunnel span; my hand-set numbers
@@ -97,7 +97,7 @@ const T: Record<string, [number, number]> = {
   wait: [0.925, 1],
   finale: [0.885, 1],
 }
-/** our phase name → their range id */
+/** our phase name â†’ their range id */
 const T_MAP: [string, string][] = [
   ['show', 'blackFrameShow'], ['in', 'blackFrameIn'], ['title', 'blackTitle'],
   ['black', 'blackTunnel'], ['vortex', 'whiteTunnel'], ['corridor', 'whiteFrameOut'],
@@ -111,7 +111,7 @@ const TITLE_RATIO_TO = 1
 const cubicIn = (t: number) => t * t * t
 const sineOut = (t: number) => Math.sin((t * Math.PI) / 2)
 const quartIn = (t: number) => t * t * t * t
-// their ease.backInOut — anticipates UP, overshoots DOWN, settles. this is
+// their ease.backInOut â€” anticipates UP, overshoots DOWN, settles. this is
 // what makes the drop read as a jump rather than a slide.
 const backInOut = (t: number) => {
   const c = 1.70158 * 1.525
@@ -140,7 +140,7 @@ export default function VoidScene() {
   // their domImgIn / domImgOut: real IN-FLOW elements that mark where the
   // sequence starts and ends. our .vt-card and .vt-laptop are absolutely
   // positioned inside .vt-sticky, so they are pinned to the viewport and
-  // useless as scroll anchors — these markers stand in for them.
+  // useless as scroll anchors â€” these markers stand in for them.
   const rangeInRef = useRef<HTMLDivElement>(null)
   const rangeOutRef = useRef<HTMLDivElement>(null)
   const wordsRef = useRef<HTMLDivElement>(null)
@@ -155,7 +155,7 @@ export default function VoidScene() {
     let raf = 0
     const ph = (p: number, k: string) => clamp01((p - T[k][0]) / (T[k][1] - T[k][0]))
     /**
-     * their getRange(a, b).ratio — a ratio measured across a SPAN of ranges.
+     * their getRange(a, b).ratio â€” a ratio measured across a SPAN of ranges.
      * nearly every ratio GoalTunnels exposes is one of these, not a single
      * range, which is what I had wrong:
      *   astronautDropRatio = getRange("whiteFrameBreak", "astronautDrop")
@@ -170,10 +170,10 @@ export default function VoidScene() {
       antialias: true,
       // clearColor must NOT be multiplied by clearAlpha: their clearAlpha is
       // 0 (background contributes no bloom mask) while the background colour
-      // itself must survive — white has to stay white
+      // itself must survive â€” white has to stay white
       premultipliedAlpha: false,
     })
-    // phones: cap the pixel ratio harder — full-res + bloom passes at dpr 2-3
+    // phones: cap the pixel ratio harder â€” full-res + bloom passes at dpr 2-3
     // is what makes the sequence stutter on mobile GPUs
     const isTouch = window.matchMedia('(pointer: coarse)').matches
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.3 : 2))
@@ -189,7 +189,7 @@ export default function VoidScene() {
     // their GoalTunnels/GoalBlackTunnel/GoalWhiteTunnel use NO fog. ours was an
     // invention, and worse, an inconsistent one: the tunnel shaders are raw
     // ShaderMaterials that ignore scene.fog, so only the standard materials
-    // mixed in (helmet glass, diamonds) got hazed — ~79% at the grid's distance.
+    // mixed in (helmet glass, diamonds) got hazed â€” ~79% at the grid's distance.
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600)
     // their _perspectiveCamera: same camera, but the astronaut's projection
@@ -211,11 +211,11 @@ export default function VoidScene() {
     const shaftLight = new THREE.PointLight('#aac4e8', 60, 60, 1.8)
     scene.add(shaftLight)
 
-    // ── their post stack: FFT convolution bloom (star-flare kernel, halo,
-    // alpha mask) + live feedback texture ──
+    // â”€â”€ their post stack: FFT convolution bloom (star-flare kernel, halo,
+    // alpha mask) + live feedback texture â”€â”€
     const bloom = createFftBloom(renderer)
 
-    // ── glass two-pass plumbing ──
+    // â”€â”€ glass two-pass plumbing â”€â”€
     const bgTarget = new THREE.WebGLRenderTarget(1, 1, { samples: 4 })
     const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
     const quadMat = new THREE.MeshBasicMaterial({ map: bgTarget.texture })
@@ -227,9 +227,9 @@ export default function VoidScene() {
 
     const texLoader = new THREE.TextureLoader()
 
-    // ── their GoalTunnelsBackground: earth_card mesh with their shader
+    // â”€â”€ their GoalTunnelsBackground: earth_card mesh with their shader
     // (vert$e flattens z by 0.1; frag$i is a plain texture read, alpha 0 so
-    // it never blooms) ──
+    // it never blooms) â”€â”€
     const globe = new THREE.Group()
     const earthMap = texLoader.load(`${ASSET}/textures/earth_landscape.jpg`)
     earthMap.colorSpace = THREE.SRGBColorSpace
@@ -261,7 +261,7 @@ void main() {
     globe.add(earthMesh)
     scene.add(globe)
 
-    // ── their black tunnel (GoalBlackTunnel port) ──
+    // â”€â”€ their black tunnel (GoalBlackTunnel port) â”€â”€
     let blackTunnel: BlackTunnel | null = null
     let prevP = 0
     let prevBTOffsetZ = 0
@@ -275,21 +275,21 @@ void main() {
     let ledCard: LedCard | null = null
     const clones: THREE.Group[] = []
 
-    // ── the 4D passage: their GoalWhiteTunnel (16 twisted tunnel blocks,
-    // scroll unwinds the spiral into the straight corridor) ──
+    // â”€â”€ the 4D passage: their GoalWhiteTunnel (16 twisted tunnel blocks,
+    // scroll unwinds the spiral into the straight corridor) â”€â”€
     let whiteTunnel: WhiteTunnel | null = null
 
-    // ── their frameBgMesh: fullscreen overlay with a rounded-rect hole
-    // (the device frame). Drawn AFTER the scene, in the over-layer. ──
+    // â”€â”€ their frameBgMesh: fullscreen overlay with a rounded-rect hole
+    // (the device frame). Drawn AFTER the scene, in the over-layer. â”€â”€
     const frameOverlay = createFrameOverlay()
     // the over-layer scene their preUfxContainer provides: once the drop
     // starts the astronaut renders HERE, on top of the frame
     const overScene = new THREE.Scene()
 
-    // ── astronaut ──
+    // â”€â”€ astronaut â”€â”€
     const astronaut = new THREE.Group()
     scene.add(astronaut)
-    // their astronaut material (astronautMaterial.ts — fragment verbatim)
+    // their astronaut material (astronautMaterial.ts â€” fragment verbatim)
     const astroShared = createAstronautShared(ASSET)
 
     let skel: Skeleton | null = null
@@ -299,13 +299,13 @@ void main() {
     let outPath: FlightPath | null = null
     const parts: SkinnedPart[] = []
     // their clip ranges inside the 288-frame bake:
-    // 0–89 floating loop · 90–139 the dive · 140–287 landing + wave
+    // 0â€“89 floating loop Â· 90â€“139 the dive Â· 140â€“287 landing + wave
     let loopTime = 0
     let landTime = 0
     let lastT = 0
 
     const build = async () => {
-      // materials load CONCURRENTLY with geometry — they used to wait for the
+      // materials load CONCURRENTLY with geometry â€” they used to wait for the
       // whole first batch, which is why the astronaut appeared late
       const materialsPromise = Promise.all([
         createAstronautMaterial(ASSET, 'astronaut_helmet', astroShared),
@@ -342,8 +342,8 @@ void main() {
 
       whiteTunnel = wt
       // their camera is at z=25 with the tube at the origin; ours sits at
-      // ≈2.8, so shift the tube by (2.8 − 25) to reproduce their exact
-      // camera-inside-tube placement (mouth ≈ +39, tail ≈ −300 from us)
+      // â‰ˆ2.8, so shift the tube by (2.8 âˆ’ 25) to reproduce their exact
+      // camera-inside-tube placement (mouth â‰ˆ +39, tail â‰ˆ âˆ’300 from us)
       wt.container.position.set(0, 0, 2.8 - 25)
       wt.container.visible = false
       scene.add(wt.container)
@@ -377,7 +377,7 @@ void main() {
           }),
         ),
       )
-      // their meshes sit at the container origin — updateTransforms does ALL
+      // their meshes sit at the container origin â€” updateTransforms does ALL
       // the placing via v.position.copy(trackPoint). the -1 y offset here was
       // a leftover from my old camZ/lead rig and, against their (0,0,25) camera,
       // dropped him a full world unit: body below the frame, only the helmet
@@ -390,7 +390,7 @@ void main() {
         const g = new THREE.Group()
         for (const part of parts) {
           // their IS_CLONE branch is reflection-only and fresnel-weighted
-          // (× (0.5 + fresnel*0.9)) — dim body, brighter rim — not a flat glow
+          // (Ã— (0.5 + fresnel*0.9)) â€” dim body, brighter rim â€” not a flat glow
           const ghost = new THREE.MeshBasicMaterial({
             color: '#43536b',
             transparent: true,
@@ -429,7 +429,7 @@ void main() {
       setStatus('error')
     })
 
-    // ── scroll / pointer / resize ──
+    // â”€â”€ scroll / pointer / resize â”€â”€
     let progress = 0
     let targetProgress = 0
     const readScroll = () => {
@@ -465,7 +465,7 @@ void main() {
     }
 
     /**
-     * their GoalSectionRanges.resize — the phase boundaries are MEASURED, not
+     * their GoalSectionRanges.resize â€” the phase boundaries are MEASURED, not
      * declared. the card and laptop each claim (viewportHeight + ownHeight)/2
      * of scroll; whatever is left is divided by their tunnel weights.
      */
@@ -502,7 +502,7 @@ void main() {
     }
     window.addEventListener('resize', resize)
     // mobile URL-bar show/hide changes the visual viewport without always
-    // firing window resize — track it so the canvas never renders stretched
+    // firing window resize â€” track it so the canvas never renders stretched
     window.visualViewport?.addEventListener('resize', resize)
     resize()
 
@@ -517,7 +517,7 @@ void main() {
     let camLookY = 0
     const camLookEuler = new THREE.Euler()
     const camLookQ = new THREE.Quaternion()
-    // black-tunnel colour grading: silver → red → green/yellow
+    // black-tunnel colour grading: silver â†’ red â†’ green/yellow
     const bgById: Record<string, THREE.Color> = {
       black: new THREE.Color('#000000'),
       white: new THREE.Color('#ffffff'),
@@ -551,7 +551,7 @@ void main() {
       // their astronautDropRatio: begins at the BREAK's start, so his descent
       // overlaps the shatter instead of waiting for it to finish
       const dropR = phSpan(p, 'break', 'drop')
-      // their whiteFrameRatio — the whiteTunnel range ALONE (our vortex)
+      // their whiteFrameRatio â€” the whiteTunnel range ALONE (our vortex)
       const whiteFrameRatio = ph(p, 'vortex')
       const pFade = clamp01((ph(p, 'wait') - 0.85) / 0.15)
       const wtRatio = clamp01((p - T.vortex[0]) / (T.break[0] - T.vortex[0]))
@@ -560,24 +560,24 @@ void main() {
       const bW = T.break[1] - T.break[0]
       const wtGate = easeInOut(clamp01((p - (T.vortex[0] - 0.16 * vW)) / (0.48 * vW))) *
         (dropR > 0.57 ? 0 : 1)
-      // their out-frame approach: tilted −0.3 rad, straightening at the break
+      // their out-frame approach: tilted âˆ’0.3 rad, straightening at the break
       const oaFrom = T.corridor[1] - 0.56 * cW
       const outApproach = clamp01((p - oaFrom) / Math.max(1e-6, T.break[0] + 0.30 * bW - oaFrom))
-      // their f = E × −0.3, E = the same ratio as domFrameScale. E hits 0 as
-      // the frame reaches natural size, so the LAPTOP itself is never tilted —
+      // their f = E Ã— âˆ’0.3, E = the same ratio as domFrameScale. E hits 0 as
+      // the frame reaches natural size, so the LAPTOP itself is never tilted â€”
       // the rotation only exists while the frame is still zoomed past screen.
       const outTilt = 0
       // their domFrameScale: mix(1, viewportDiagonal / min(frameW, frameH), E)
-      // E runs 1→0 through whiteFrameOut, so the frame ZOOMS OUT from
+      // E runs 1â†’0 through whiteFrameOut, so the frame ZOOMS OUT from
       // full-screen to the real laptop size just before the break
       // their E = fit(offsetY, whiteFrameOut.pixelFrom, whiteFrameOut.pixelTo,
-      // 1, 0) — it runs across the WHOLE whiteFrameOut range, so the frame
+      // 1, 0) â€” it runs across the WHOLE whiteFrameOut range, so the frame
       // shrinks from full-screen (pure corridor) down to the real laptop over
       // that entire phase. my ramp only started near the corridor's end, so
       // the reveal never played and the overlay snapped in late.
       const outE = 1 - ph(p, 'corridor')
-      // their `te` = getRange("astronautDrop").ratio — the drop RANGE alone,
-      // distinct from astronautDropRatio (the break→drop span)
+      // their `te` = getRange("astronautDrop").ratio â€” the drop RANGE alone,
+      // distinct from astronautDropRatio (the breakâ†’drop span)
       const te = ph(p, 'drop')
       const vw = window.innerWidth
       const vhPx = Math.max(1, window.innerHeight)
@@ -592,14 +592,14 @@ void main() {
       const cardUi = cardUiRef.current
       if (cardUi) cardUi.style.opacity = `${1 - clamp01(pIn * 1.6)}`
 
-      // ── their HomeGoalSectionTunnelTitle.update(), verbatim ──
+      // â”€â”€ their HomeGoalSectionTunnelTitle.update(), verbatim â”€â”€
       const wordsEl = wordsRef.current
       if (wordsEl) {
         const r = fit(pTitle, TITLE_RATIO_FROM, TITLE_RATIO_TO, 0, 1)
         const show = r > 0 && r < 1
         wordsEl.style.visibility = show ? 'visible' : 'hidden'
         if (show) {
-          let n = fitE(r, 0.5, 1, 1, 12, cubicIn)          // scale rush 1 → 12
+          let n = fitE(r, 0.5, 1, 1, 12, cubicIn)          // scale rush 1 â†’ 12
           let a = fit(r, 0.9, 1, 1, 0)                      // fade at the end
           const l = fitE(r, 0.4, 0.6, 0, 1, cubicInOut)     // word spread
           n *= fitE(r, 0, 0.15, 0.85, 1, cubicOut)
@@ -622,29 +622,29 @@ void main() {
         }
       }
 
-      // rainbow halo — their syncProperties curve, fed into the bloom's
+      // rainbow halo â€” their syncProperties curve, fed into the bloom's
       // high-pass (that's where their halo actually lives)
       let haloStrength = pIn * (0.15 * pTitle + fit(pBlack, 0.2, 0.4, 0, 0.25))
       haloStrength = fit(pBlack, 0.65, 0.75, haloStrength, 0.08)
-      if (wtGate > 0.001) haloStrength = 0   // their isWhiteTunnelActive → 0
+      if (wtGate > 0.001) haloStrength = 0   // their isWhiteTunnelActive â†’ 0
       bloom.haloStrength.value = haloStrength
       const halo = haloRef.current
       if (halo) halo.style.opacity = '0'
 
-      // ── their clip system (GoalTunnelAstronauts.updateAnimation):
-      // frames 0–89 loop while floating, 90–139 scrub through the dive,
-      // 140–287 play the landing + wave in the finale ──
+      // â”€â”€ their clip system (GoalTunnelAstronauts.updateAnimation):
+      // frames 0â€“89 loop while floating, 90â€“139 scrub through the dive,
+      // 140â€“287 play the landing + wave in the finale â”€â”€
       const dt = Math.min(t - lastT, 0.1)
       lastT = t
       if (skel && parts.length) {
         // their updateAnimation, structurally: ONE base clip plus ONE blend
-        // target, mixed by u_loopLinearBlend. the 90–139 dive frames are ONLY
-        // ever reached through that blend — there is no separate scrub of them.
+        // target, mixed by u_loopLinearBlend. the 90â€“139 dive frames are ONLY
+        // ever reached through that blend â€” there is no separate scrub of them.
         const wfOut = ph(p, 'corridor')          // their whiteFrameOutRatio
         // their g = fit(r,0,.1,0,1) * fit(r,.9,1,1,0)
         const blendG = fit(dropR, 0, 0.1, 0, 1) * fit(dropR, 0.9, 1, 1, 0)
         // their v = fit(whiteFrameOutRatio + astronautDropRatio, .9, 2, 90, 139,
-        // quartIn) — flat at 90 until the very end of whiteFrameOut, so he does
+        // quartIn) â€” flat at 90 until the very end of whiteFrameOut, so he does
         // NOT dive during the corridor or the break, only through the drop.
         const diveFrame = fitE(wfOut + dropR, 0.9, 2, 90, 139, quartIn)
         let frame: number
@@ -669,7 +669,7 @@ void main() {
         for (const part of parts) skinPart(part, matrices, matricesB, blendG)
       }
 
-      // ── their camera rig (GoalTunnels + cameraControls), ported ──
+      // â”€â”€ their camera rig (GoalTunnels + cameraControls), ported â”€â”€
       // syncProperties:
       //   r = mix(frameHeight, viewportHeight,
       //           blackFrameInRatio < 1 ? blackFrameInRatio : 1 - whiteFrameRatio)
@@ -678,13 +678,13 @@ void main() {
       const A_DIST = 1                    // |(0,0,25) - (0,0,24)|
       const EXPECTED_FOV = 45
       const vhPxC = Math.max(1, window.innerHeight)
-      // fov mapping uses the DESIGN frame height (their geometry, ~86% vh) —
+      // fov mapping uses the DESIGN frame height (their geometry, ~86% vh) â€”
       // feeding the width-clamped mobile height in here drove the fov past
-      // 110° and blew the astronaut up with wide-angle distortion. The
+      // 110Â° and blew the astronaut up with wide-angle distortion. The
       // portrait shrink is applied as camera.zoom below instead: a uniform
       // projection scale with no perspective change.
       const designFrameH = SCREEN_FRACTION * vhPxC
-      // their blackFrameInRatio is the RAW range ratio — pIn is eased, which
+      // their blackFrameInRatio is the RAW range ratio â€” pIn is eased, which
       // skewed the card-zoom fov ramp
       const blackFrameInRatio = ph(p, 'in')
       const rMix = blackFrameInRatio < 1 ? blackFrameInRatio : 1 - whiteFrameRatio
@@ -700,16 +700,16 @@ void main() {
       // GoalWhiteTunnel.update's dolly zoom:
       //   cameraDollyZoomFovOffset = math.fit(whiteTunnelRatio, 0, 1, 60, 0)
       // I had an invented `+25 * easeInOut(pTitle)` instead, which is far
-      // narrower — so the corridor was framed down the barrel at the bright
+      // narrower â€” so the corridor was framed down the barrel at the bright
       // far end rather than across the blue walls.
       // GoalWhiteTunnel.update: cameraDollyZoomFovOffset = fit(whiteTunnelRatio,0,1,60,0)
       const dollyZoomFov = wtGate > 0 ? fit(wtRatio, 0, 1, 60, 0) : 0
       let blackFovWobble = 0
       camera.fov = baseFov
-      // portrait: shrink the projection to match the width-clamped frame —
+      // portrait: shrink the projection to match the width-clamped frame â€”
       // ONLY while the frame is actually on screen. Entry: eases out as the
       // card fills the view. Exit: re-engages only in the LAST 20% of the
-      // white frame's formation — earlier and the zoom-out exposes the black
+      // white frame's formation â€” earlier and the zoom-out exposes the black
       // beyond the tunnel walls before the frame exists to cover it
       const framePresence =
         blackFrameInRatio < 1
@@ -726,12 +726,12 @@ void main() {
         const scrollDir = p >= prevP ? 1 : -1
         // their GoalBlackTunnel writes the SAME cameraDollyZoomFovOffset
         // property, so it must go through the dolly compensation too
-        // their flags are mutually exclusive — no overlap, no cross-fade:
+        // their flags are mutually exclusive â€” no overlap, no cross-fade:
         //   isBlackTitleActive  = blackTitleRatio < 1
         //   isBlackTunnelActive = blackTunnelRatio < 1 && !isBlackTitleActive
         //   goalBlackTunnel.container.visible = isBlackTunnelActive
         // my 0.32 overlap window kept half-dissolved greebles alive into the
-        // vortex — the broken pink rings.
+        // vortex â€” the broken pink rings.
         const isBlackTitleActive = pTitle < 1
         const isBlackTunnelActive = pBlack < 1 && !isBlackTitleActive
         blackFovWobble = blackTunnel.update(
@@ -775,8 +775,8 @@ void main() {
         astroCam.updateMatrixWorld()
       }
 
-      // ── their GoalTunnelEfx feed: black tunnel scroll delta + white tunnel
-      // scroll-velocity smear/roll, motion blur active only in the tunnels ──
+      // â”€â”€ their GoalTunnelEfx feed: black tunnel scroll delta + white tunnel
+      // scroll-velocity smear/roll, motion blur active only in the tunnels â”€â”€
       {
         const inBlack = pTitle >= 1 && pBlack < 1
         const inWhite = wtGate > 0.5
@@ -801,18 +801,18 @@ void main() {
       }
       prevP = p
 
-      // ── astronaut root: their in/out flight tracks (GoalTunnelAstronauts
+      // â”€â”€ astronaut root: their in/out flight tracks (GoalTunnelAstronauts
       // .updateTransforms), applied relative to my camera rail, with their
-      // brownian tumble ramping through the black tunnel ──
+      // brownian tumble ramping through the black tunnel â”€â”€
       const stand = easeInOut(clamp01(pFinale * 1.6))
       const rootQ = new THREE.Quaternion()
       const rootP = new THREE.Vector3()
       const wtR = clamp01((p - T.vortex[0]) / (T.break[0] - T.vortex[0]))
       if (inPath && outPath && p >= T.vortex[0]) {
-        // white tunnel onward: out-track 0→79, then 79→99 through the drop
+        // white tunnel onward: out-track 0â†’79, then 79â†’99 through the drop
         // their updateTransforms: M = whiteTunnelRatio<1 ? fit(n,0,1,0,79)
         // : fit(astronautDropRatio,0,1,79,99). the second leg is keyed to the
-        // DROP, not the whole finale — he reaches frame 99 and holds there
+        // DROP, not the whole finale â€” he reaches frame 99 and holds there
         // for the wait instead of drifting on.
         const m = wtR < 1
           ? fit(wtR, 0, 1, 0, 79 / 99)
@@ -823,27 +823,27 @@ void main() {
         const m = pTitle * pTitle * pTitle
         samplePath(inPath, m, rootQ, rootP)
       }
-      // track z runs 23→13 (approaching); re-anchor: he drifts nearer through
+      // track z runs 23â†’13 (approaching); re-anchor: he drifts nearer through
       // the title, holds a lead through the run, settles for the wave
       const lead = 25 - rootP.z          // kept only for probes/glass sizing
       // punch-through: he starts BEHIND the screen plane (laptop at 2.06,
-      // glass at 2.0) and crosses to 1.35 — in FRONT — during the break
+      // glass at 2.0) and crosses to 1.35 â€” in FRONT â€” during the break
       // approach: he sits behind the glass plane (2.0) and stays visible
       // through it, then crosses to the front during the shatter
-      // sway dies completely by the finale — he PLANTS in front of the
+      // sway dies completely by the finale â€” he PLANTS in front of the
       // broken laptop (broke through), only the landing/wave clip moves
       // their brownian amplitude through the white phase is fit(whiteFrameRatio,
-      // 0, .75, 5, 0) — it decays on its OWN ratio and owes nothing to the
+      // 0, .75, 5, 0) â€” it decays on its OWN ratio and owes nothing to the
       // break. planting likewise belongs to the drop, not the break.
       const sway = (wtGate > 0 ? fit(whiteFrameRatio, 0, 0.75, 5, 0) : pBlack * 5) *
         (1 - easeInOut(dropR))
       const planted = 0
-      // their drop, verbatim — world units, correct by construction now that
+      // their drop, verbatim â€” world units, correct by construction now that
       // the camera sits where theirs does
       const dropY = 0.4 * backInOut(dropR)
       // their v.position = sampled track point, plus brownian, minus the drop
       // portrait: the flight path's x offsets were measured against the wide
-      // landscape frame — compress them toward centre so he stays centred
+      // landscape frame â€” compress them toward centre so he stays centred
       // inside the narrow tablet frame and through the vortex
       const xComp = isPortrait() ? frameAspect() / 1.768 : 1
       astronaut.position.set(
@@ -852,16 +852,16 @@ void main() {
         rootP.z,
       )
       astronaut.quaternion.copy(rootQ)
-      // brownian-style tumble, amplitude ramping like theirs (up to ~60°)
+      // brownian-style tumble, amplitude ramping like theirs (up to ~60Â°)
       const tumble = (wtGate > 0 ? fit(wtRatio, 0, 0.75, 1, 0) : pBlack) *
         (1 - easeInOut(clamp01(pBreak + pFinale)))
-      // their branch has NO constant roll — only brownian rotation whose
-      // amplitude decays to 0 by 75% of the white phase. My pVortex × 1.1 term
+      // their branch has NO constant roll â€” only brownian rotation whose
+      // amplitude decays to 0 by 75% of the white phase. My pVortex Ã— 1.1 term
       // was a permanent 1.1 rad twist: the rightward spin in the corridor.
       astronaut.rotateZ(Math.sin(t * 0.5) * 0.5 * tumble)
       astronaut.rotateX(Math.sin(t * 0.33 + 2) * 0.6 * tumble)
       astronaut.rotateY(Math.sin(t * 0.41 + 4) * 0.5 * tumble)
-      // their finale: he PLANTS — no float, no spin, facing the viewer
+      // their finale: he PLANTS â€” no float, no spin, facing the viewer
       if (stand > 0.001) astronaut.quaternion.slerp(UPRIGHT, stand)
       // their scroll-velocity roll: scrubbing fast through the warp spins the lens
       rollVel += ((targetProgress - progress) * 30 * clamp01(pVortex * 3) * (1 - easeInOut(pBreak)) - rollVel) * 0.06
@@ -874,7 +874,7 @@ void main() {
       //   cameraLookStrength *= whiteTunnelRatio > 0
       //        ? fit(whiteTunnelAstronautOutRatio, .75, 1, 0, .5) : 1
       //   cameraLookStrength  = fit(whiteTunnelWaitRatio, 0, .1, ..., .05)
-      // whiteTunnelAstronautOutRatio spans whiteFrameBreak → astronautWait.
+      // whiteTunnelAstronautOutRatio spans whiteFrameBreak â†’ astronautWait.
       // (our old `|| 1` also defeated the zero case: 0 || 1 === 1, so the
       // look damping never actually reached zero.)
       const outRatio = phSpan(p, 'break', 'wait')
@@ -887,19 +887,19 @@ void main() {
       camera.quaternion.multiply(camLookQ.setFromEuler(camLookEuler))
       shaftLight.position.set(0, 0, camZ - 8)
 
-      // ── their GoalTunnelsBackground.update(), verbatim ──
+      // â”€â”€ their GoalTunnelsBackground.update(), verbatim â”€â”€
       earthMesh.visible = pIn < 1
       globe.visible = earthMesh.visible
       if (globe.visible) {
-        // their camera sits 25 units from the card's origin — match that
+        // their camera sits 25 units from the card's origin â€” match that
         globe.position.set(0, 0, camera.position.z - 25)
         earthMesh.position.y = -(10 * (1 - pShow) + 2.5 + 30 * pIn)
         earthMesh.scale.setScalar(fit(pIn, 0, 0.5, 40, 70))
         globe.rotation.x = fit(pIn, 0, 0.5, 0, -1)
       }
 
-      // ── the white tunnel: one system from vortex to corridor, scroll
-      // unwinds the twist (their whiteTunnelRatio) ──
+      // â”€â”€ the white tunnel: one system from vortex to corridor, scroll
+      // unwinds the twist (their whiteTunnelRatio) â”€â”€
       // their update(): bg is BLACK through title+black tunnel, pure WHITE the
       // moment the white tunnel takes over, black again after the drop
       {
@@ -920,14 +920,14 @@ void main() {
       const waitRatio = ph(p, 'wait')
       if (wtGate > 0.001) {
         bloom.amount.value = dropR < 1
-          ? fit(whiteFrameRatio, 0, 0.05, 4, 2)  // their whiteFrameRatio 4 → 2
-          : fit(waitRatio, 0, 0.1, 0, 20)        // their wait ramp 0 → 20
+          ? fit(whiteFrameRatio, 0, 0.05, 4, 2)  // their whiteFrameRatio 4 â†’ 2
+          : fit(waitRatio, 0, 0.1, 0, 20)        // their wait ramp 0 â†’ 20
       } else {
         bloom.amount.value = fit(pTitle, 0, 0.25, 30, 6)
       }
       bloom.saturation.value = pBlack < 1 ? fit(pBlack, 0, 0.7, 1, 3) : 1
       if ((window as any).__noBloom) bloom.amount.value = 0
-      // live feedback → the black tunnel's reflections
+      // live feedback â†’ the black tunnel's reflections
       if (blackTunnel) blackTunnel.uniforms.u_feedbackTexture.value = bloom.feedbackTexture
 
       // their astronaut material inputs
@@ -957,7 +957,7 @@ void main() {
           )
         }
       }
-      // their dolly-zoom: +60° fov at full twist, easing to 0 as it unwinds
+      // their dolly-zoom: +60Â° fov at full twist, easing to 0 as it unwinds
       camera.fov += 55 * (1 - wtRatio) * wtGate
       camera.updateProjectionMatrix()
 
@@ -977,7 +977,7 @@ void main() {
         }
       }
 
-      // the glass screen break — their GoalTunnelGlass.update() maths:
+      // the glass screen break â€” their GoalTunnelGlass.update() maths:
       // pane parked EndCameraDepthToFrame=2 units ahead, scaled to the DOM
       // frame's fraction of the viewport, shards shrinking away as he drops
       if (glass) {
@@ -996,18 +996,18 @@ void main() {
           glass.mesh.position.set(0, 0, -GLASS_DEPTH)
           const zoomExcessG = clamp01((domFrameScale - 1) / Math.max(0.001, diag / Math.min(frameWpx, frameHpx) - 1))
           glass.mesh.rotation.z = zoomExcessG * 0.3
-          // their formula: scale = (frameHeight / viewportHeight) × worldH,
-          // valid because their pane is UNIT HEIGHT (measured 1.750 × 0.990).
-          // divide by the pane's HEIGHT — not its width — to normalise.
+          // their formula: scale = (frameHeight / viewportHeight) Ã— worldH,
+          // valid because their pane is UNIT HEIGHT (measured 1.750 Ã— 0.990).
+          // divide by the pane's HEIGHT â€” not its width â€” to normalise.
           const worldH = Math.tan((camera.fov * Math.PI) / 360) * 2 * GLASS_DEPTH
-          // portrait tablet frame is NARROWER than the landscape pane — fit
+          // portrait tablet frame is NARROWER than the landscape pane â€” fit
           // the pane by WIDTH there so the shards never spill past the frame
           const paneScale = isPortrait()
             ? (worldH * SCREEN_FRACTION * frameAspect() * domFrameScale) / glass.paneSize.x
             : (worldH * SCREEN_FRACTION * domFrameScale) / glass.paneSize.y
           glass.mesh.scale.setScalar(paneScale)
           // their ratio = fit(q.ratio, 0, 1, 0, 1, ease.sineOut) where q spans
-          // whiteFrameBreak THROUGH astronautDrop — the shatter keeps opening
+          // whiteFrameBreak THROUGH astronautDrop â€” the shatter keeps opening
           // out while he drops. ours completed inside the break alone.
           // their q = getRange("whiteFrameBreak", "astronautDrop")
           glass.setProgress(sineOut(clamp01((p - T.break[0]) / Math.max(1e-6, T.drop[1] - T.break[0]))))
@@ -1016,13 +1016,13 @@ void main() {
         }
       }
 
-      // girders exist only past the title — the card/title scenes stay clean
+      // girders exist only past the title â€” the card/title scenes stay clean
 
-      // ── their clone transform (updateTransforms, g > 0), verbatim:
+      // â”€â”€ their clone transform (updateTransforms, g > 0), verbatim:
       //   v.position.copy(main.position); v.rotation.copy(main.rotation)
-      //   m = v.matrix × brownianMatrix          (wander RELATIVE to him)
+      //   m = v.matrix Ã— brownianMatrix          (wander RELATIVE to him)
       //   T = fit(clonesShowRatio, i*.3, .7+i*.3, 1, 0, sineInOut)
-      //   pos.lerp(mainPos, T)                   (T=1 → sitting inside him)
+      //   pos.lerp(mainPos, T)                   (T=1 â†’ sitting inside him)
       // amplitudes are theirs: position 12, rotation 10, freq .2 / .6
       const clonesShow = smoothstep01(0.18, 0.62, pBlack) * (wtGate > 0.5 ? 0 : 1)
       for (let i = 0; i < clones.length; i++) {
@@ -1033,7 +1033,7 @@ void main() {
         const T2 = fitE(clonesShow, n * 0.3, 0.7 + n * 0.3, 1, 0, sineInOut)
         // brownian offset in HIS local frame (their motion._matrix)
         const f = 0.2, s = i * 7.3
-        // their amplitude 12 at a 25-unit camera distance ≈ 0.48 × distance;
+        // their amplitude 12 at a 25-unit camera distance â‰ˆ 0.48 Ã— distance;
         // scale to ours so the clones stay in frame as they peel off him
         const amp = camera.position.distanceTo(astronaut.position) * 0.48
         cloneOffset.set(
@@ -1071,9 +1071,9 @@ void main() {
       // the drop: he falls out of the sequence toward the page below
       astronaut.position.y -= easeInOut(pFade) * 7
 
-      // ── their frameBg drive. ONE overlay serves both the opening card
+      // â”€â”€ their frameBg drive. ONE overlay serves both the opening card
       // (blackFrameIn branch) and the closing laptop (whiteFrameOut branch),
-      // exactly as their GoalSection.update() does. ──
+      // exactly as their GoalSection.update() does. â”€â”€
       const inPhase = pIn < 1
       if (inPhase) {
         const vwPx = window.innerWidth
@@ -1081,10 +1081,10 @@ void main() {
         // their K: the rect slides up as blackFrameShow completes
         const K = vhPx2 * 0.2 * (1 - pShow)
         // their #home-goal-image-in measures 817 x 571 at a 1920 x 945 viewport
-        // — height 0.604 of the viewport, aspect 1.432. my 560px width cap
+        // â€” height 0.604 of the viewport, aspect 1.432. my 560px width cap
         // squashed it to ~1.02 (nearly square), so the astronaut never fit.
         // card shrinks by the SAME factor as the frame/world, so the
-        // astronaut's flight path stays proportioned to it on portrait —
+        // astronaut's flight path stays proportioned to it on portrait â€”
         // and goes portrait-aspect there, like the frame
         const cardH = vhPx2 * (571 / 945) * frameShrink(vhPx2)
         const cardW = cardH * cardAspect()
@@ -1096,7 +1096,7 @@ void main() {
         // the screen as you fly into it
         const diagIn = Math.sqrt(vwPx * vwPx + vhPx2 * vhPx2)
         u.u_frameScale.value = 1 + (diagIn / Math.min(cardW, cardH) - 1) * E
-        u.u_frameRotate.value = E * 0.4                    // their f = E × +0.4
+        u.u_frameRotate.value = E * 0.4                    // their f = E Ã— +0.4
         u.u_radiusScale.value = 1                          // their I = 1
         u.u_globalRadius.value = GLOBAL_RADIUS
         u.u_glowRadius.value = fit(E, 0, 1, 0.11, -0.5)    // their F
@@ -1106,7 +1106,7 @@ void main() {
         ;(u.u_glowColor.value as THREE.Color).setStyle(BLACK)
           .lerp(new THREE.Color(OFF_WHITE), E)
         // their bgColor: the PAGE is off-white early, black once you are in
-        ;(u.u_bgColor.value as THREE.Color).setStyle(p < 0.5 ? OFF_WHITE : BLACK)
+        ;(u.u_bgColor.value as THREE.Color).setStyle(OFF_WHITE) // surround always page charcoal; pure black flooded small mobile frames
         frameOverlay.visible = E < 1
       } else {
         const vwPx = window.innerWidth
@@ -1118,24 +1118,24 @@ void main() {
         //   u = offsetY + xe            = scrollPixel - 8827
         //   v = -(imgOut.top + K - scrollPixel + imgOut.h/2 - vh/2 + u) = -K
         // the scroll terms cancel EXACTLY. their frame and camera are both
-        // stationary through the break and the drop — the monitor only looks
+        // stationary through the break and the drop â€” the monitor only looks
         // like it rises because the astronaut falls past it. a moving frame
         // here is what made him read as floating.
         const K = vhPx2 * 0.2 * (1 - ph(p, 'show'))
         // their ce = max(0, offsetY - astronautDrop.pixelFrom). during the drop
         // `u` is clamped, so it can no longer cancel scroll and v becomes +ce:
         // the world and the frame RISE by ce. the astronaut then gets -ce added
-        // on top, which cancels it exactly — he holds still while the monitor
+        // on top, which cancels it exactly â€” he holds still while the monitor
         // climbs. that cancellation is why their raw .4 drop needs no scaling.
         // their ce = max(0, offsetY - astronautDrop.pixelFrom). during the drop
         // `u` hits its clamp and can no longer cancel scroll, so v becomes +ce:
         // the world, glass and frame RISE. the astronaut gets -ce added on top,
-        // cancelling it exactly — he holds while the monitor climbs.
+        // cancelling it exactly â€” he holds while the monitor climbs.
         ceP = RANGES ? ph(p, 'drop') * RANGES.items.astronautDrop.count : 0
         // the frame quad is drawn in screen space (gl_Position = position.xy),
-        // so the camera offset does not move it — it needs ce applied directly
+        // so the camera offset does not move it â€” it needs ce applied directly
         // the frame quad is drawn in screen space, so the camera offset does
-        // not carry it — ce is applied to its rect directly (their
+        // not carry it â€” ce is applied to its rect directly (their
         // frameBgMesh.update(-scrollPixel + u) with u clamped)
         frameOverlay.setRect((vwPx - fW) / 2, (vhPx2 - fH) / 2 + K - ceP, fW, fH)
         // their properties.cameraViewportOffsetY = v * (1 - E)
@@ -1143,14 +1143,14 @@ void main() {
         frameOverlay.setViewport(vwPx, vhPx2)
         const u = frameOverlay.uniforms
         u.u_frameScale.value = domFrameScale
-        u.u_frameRotate.value = outE * -0.3          // their f = E × −0.3
-        // their two branches on `oe` (whiteFrameBreak→astronautDrop ratio):
-        // BEFORE the drop they leave F=k=L=0 and D=0.8 with a black glow —
+        u.u_frameRotate.value = outE * -0.3          // their f = E Ã— âˆ’0.3
+        // their two branches on `oe` (whiteFrameBreakâ†’astronautDrop ratio):
+        // BEFORE the drop they leave F=k=L=0 and D=0.8 with a black glow â€”
         // and L=0 matters, because pow(x, 0) == 1 keeps the glow term OFF.
         // I was always using the post-drop ramps, so glowPow=0.3 with
-        // glowUpperBound=0 made linearStep divide by zero → 0 → the glow
+        // glowUpperBound=0 made linearStep divide by zero â†’ 0 â†’ the glow
         // colour (black) was painted over the whole frame: the black screen.
-        // their oe = q.ratio, the same whiteFrameBreak→astronautDrop span
+        // their oe = q.ratio, the same whiteFrameBreakâ†’astronautDrop span
         const oe = clamp01((p - T.break[0]) / Math.max(1e-6, T.drop[1] - T.break[0]))
         if (oe <= 0) {
           u.u_glowRadius.value = 0
@@ -1173,10 +1173,10 @@ void main() {
             .lerp(new THREE.Color('#000000'), ee)
         }
         // their u_bgColor = C < .5 ? offWhite : black, where C = saturate(
-        // homeGoalSectionRanges.ratio) — the OVERALL sequence ratio. so past
+        // homeGoalSectionRanges.ratio) â€” the OVERALL sequence ratio. so past
         // halfway (the whole laptop phase) the surround is black. we were
         // copying the scene background, which is white in the white tunnel.
-        ;(u.u_bgColor.value as THREE.Color).setStyle(p < 0.5 ? OFF_WHITE : BLACK)
+        ;(u.u_bgColor.value as THREE.Color).setStyle(OFF_WHITE) // surround always page charcoal; pure black flooded small mobile frames
         u.u_radiusScale.value = 0                        // their I = 0 out-phase
         // their rule: frame exists while E < 1, gone once the drop starts
         // their frameBgMesh.visible = E < 1 && te < 1
@@ -1190,12 +1190,12 @@ void main() {
       // their GoalTunnels.update, verbatim:
       //   whiteTunnelRatio == 1 && astronautDropRatio < 1
       //     && preUfxContainer.add(goalTunnelAstronauts.container)
-      // whiteTunnelRatio is the *whiteTunnel range* ratio — our 'vortex' — so
+      // whiteTunnelRatio is the *whiteTunnel range* ratio â€” our 'vortex' â€” so
       // he joins the over-layer at the START of the corridor, not part-way
       // through the break. within that container their order is
-      // frameBgMesh(-1) → astronaut(0) → card(100) → glass(1000), so the pane
+      // frameBgMesh(-1) â†’ astronaut(0) â†’ card(100) â†’ glass(1000), so the pane
       // still draws over him until it shatters.
-      // their condition only ADDS to preUfxContainer — nothing takes him out
+      // their condition only ADDS to preUfxContainer â€” nothing takes him out
       // when it stops being true. resetAstronautLayer() is a separate call made
       // on stage teardown. so once he joins the over-layer he STAYS, keeping the
       // -ce cancellation through the whole wait. recomputing it per-frame (as I
@@ -1271,7 +1271,7 @@ void main() {
         pos: [+astronaut.position.x.toFixed(2), +astronaut.position.y.toFixed(2), +astronaut.position.z.toFixed(2)],
       }
       ;(window as any).__local = (() => {
-        // the SKINNED local positions, straight out of the geometry buffer —
+        // the SKINNED local positions, straight out of the geometry buffer â€”
         // compare against the bind pose (feet -0.015, head 1.845)
         let y0 = 1e9, y1 = -1e9
         for (const part of parts) {
@@ -1282,7 +1282,7 @@ void main() {
         return { skinnedLocalY: [+y0.toFixed(3), +y1.toFixed(3)], bindY: [-0.015, 1.845] }
       })()
       ;(window as any).__screen = (() => {
-        // project the SKINNED mesh bounds — what is actually visible, rather
+        // project the SKINNED mesh bounds â€” what is actually visible, rather
         // than the root transform I have been sampling all along
         const box = new THREE.Box3()
         for (const part of parts) box.expandByObject(part.mesh)
@@ -1404,7 +1404,7 @@ void main() {
         <canvas ref={canvasRef} className="vt-canvas" />
         <div ref={cardRef} className="vt-card">
           <div ref={cardUiRef} className="vt-card-ui">
-            <span className="vt-card-tag">002 · INTO THE VOID</span>
+            <span className="vt-card-tag">002 Â· INTO THE VOID</span>
             <span className="vt-card-hint">scroll</span>
           </div>
         </div>
@@ -1423,7 +1423,7 @@ void main() {
         </div>
         <div ref={fadeRef} className="vt-fade" aria-hidden="true" />
         {status === 'loading' && <div className="vt-status">LOADING ///</div>}
-        {status === 'error' && <div className="vt-status">ASSET LOAD FAILED — check console</div>}
+        {status === 'error' && <div className="vt-status">ASSET LOAD FAILED â€” check console</div>}
       </div>
     </div>
   )
