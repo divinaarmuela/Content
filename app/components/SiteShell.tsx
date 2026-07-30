@@ -10,10 +10,13 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
 
   if (isShell) return <>{children}</>
 
+  // the redesigned homepage brings its own nav (LamaNav) — skip the global one there
+  const isLamaHome = path === '/'
+
   return (
     <>
       <SmoothScroll />
-      <SiteNav />
+      {!isLamaHome && <SiteNav />}
       {children}
     </>
   )

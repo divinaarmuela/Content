@@ -9,7 +9,7 @@ const COLUMNS = [
 
 export default function LamaServices() {
   return (
-    <section data-lama-title="WHAT WE DO" className="bg-ink bg-lama-dots [background-size:4px_4px] px-6 sm:px-10 py-32 sm:py-44">
+    <section data-lama-title="WHAT WE DO" className="px-6 sm:px-10 py-32 sm:py-44">
       <Reveal>
         <h2 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(3rem,8vw,7.5rem)]">
           What we do.

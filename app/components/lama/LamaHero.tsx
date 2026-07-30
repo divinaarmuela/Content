@@ -5,7 +5,7 @@ export default function LamaHero() {
   return (
     <section
       data-lama-title="MD MEDIA MARKETING"
-      className="relative min-h-[100dvh] bg-ink bg-lama-dots [background-size:4px_4px] flex flex-col justify-end px-6 sm:px-10 pb-24 pt-40"
+      className="relative min-h-[100dvh] flex flex-col justify-end px-6 sm:px-10 pb-24 pt-40"
     >
       <Scramble text="[ MD MEDIA MARKETING ]" className="absolute top-28 left-6 sm:left-10 font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
       <div className="flex flex-col lg:flex-row lg:items-end gap-10">

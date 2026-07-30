@@ -2,12 +2,20 @@
 
 import { createElement, useEffect, useRef, useState } from 'react'
 
-const CHARS = '#(_>@%$*+·<)[]'
+const CHARS = '#(_>@%$*+·<)[]0123456789'
 
 const prefersReduced = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+export const glitch = (text: string) =>
+  text
+    .split('')
+    .map((c) => (c === ' ' ? ' ' : CHARS[Math.floor(Math.random() * CHARS.length)]))
+    .join('')
+
+// Decode animation: every unsettled character flickers through random glyphs
+// in chunky ~80ms steps while characters settle left-to-right over `duration`.
 export function useScramble(text: string, opts?: { play?: boolean; duration?: number }) {
   const { play = true, duration = 900 } = opts ?? {}
   const [display, setDisplay] = useState(() => (prefersReduced() ? text : ''))
@@ -17,15 +25,20 @@ export function useScramble(text: string, opts?: { play?: boolean; duration?: nu
     if (!play) return
     if (prefersReduced()) { setDisplay(text); return }
     const start = performance.now()
+    let lastFlicker = 0
+    let noise = glitch(text)
     const tick = (now: number) => {
       const t = Math.min((now - start) / duration, 1)
+      // refresh the random glyphs only every ~80ms → chunky terminal flicker
+      if (now - lastFlicker > 80) { noise = glitch(text); lastFlicker = now }
       const settled = Math.floor(t * text.length)
-      let out = text.slice(0, settled)
-      for (let i = settled; i < text.length; i++) {
-        out += text[i] === ' ' ? ' ' : CHARS[Math.floor(Math.random() * CHARS.length)]
+      let out = ''
+      for (let i = 0; i < text.length; i++) {
+        out += i < settled || text[i] === ' ' ? text[i] : noise[i]
       }
       setDisplay(out)
       if (t < 1) raf.current = requestAnimationFrame(tick)
+      else setDisplay(text)
     }
     raf.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf.current)
@@ -66,5 +79,28 @@ export function Scramble({
       <span aria-hidden="true" className="invisible">{text}</span>
       <span className="absolute inset-0">{display}</span>
     </>,
+  )
+}
+
+// Encode-while-scrolling text (the reference site's sticky-bar behaviour):
+// while `scrambling` is true the text churns as random glyphs; when it flips
+// false it decodes back into the real text.
+export function ScrollGlitch({ text, scrambling, className }: { text: string; scrambling: boolean; className?: string }) {
+  const [noise, setNoise] = useState(text)
+
+  useEffect(() => {
+    if (!scrambling || prefersReduced()) return
+    setNoise(glitch(text))
+    const id = setInterval(() => setNoise(glitch(text)), 80)
+    return () => clearInterval(id)
+  }, [scrambling, text])
+
+  const decoded = useScramble(text, { play: !scrambling, duration: 600 })
+
+  return (
+    <span className={`relative inline-block ${className ?? ''}`}>
+      <span aria-hidden="true" className="invisible">{text}</span>
+      <span className="absolute inset-0">{scrambling && !prefersReduced() ? noise : decoded}</span>
+    </span>
   )
 }
