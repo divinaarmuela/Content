@@ -15,7 +15,7 @@ export default function LamaIntro() {
     <section data-lama-title="THE PROBLEM" className="px-6 sm:px-10 pt-20 sm:pt-28 !pb-8">
       <div className="font-lamah text-cream text-[clamp(1.75rem,3.4vw,2.75rem)] leading-tight max-w-4xl">
         {LINES.map((line, i) => (
-          <Reveal key={line} delay={i * 120} className={`block ${i === 0 ? '[text-indent:3em]' : ''}`}>
+          <Reveal key={line} delay={i * 120} className={`block ${i === 0 ? '[text-indent:1.25em] sm:[text-indent:2em]' : ''}`}>
             {line}
           </Reveal>
         ))}
