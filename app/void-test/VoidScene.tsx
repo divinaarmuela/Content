@@ -58,8 +58,10 @@ const OFF_WHITE = '#1a1c1c'
 // for a portrait TABLET frame (3:4), which fills the screen instead of
 // letterboxing a wide device into a narrow viewport
 const isPortrait = () => window.innerHeight > window.innerWidth
-const frameAspect = () => (isPortrait() ? 0.75 : 1.768)
-const cardAspect = () => (isPortrait() ? 0.75 : 817 / 571)
+// 0.62 ≈ phone-screen aspect: at ~94% width the frame stands ~75% of the
+// viewport height, so the bands above/below shrink to a slim margin
+const frameAspect = () => (isPortrait() ? 0.62 : 1.768)
+const cardAspect = () => (isPortrait() ? 0.62 : 817 / 571)
 
 const fitFrameH = (vhPx: number) =>
   Math.min(SCREEN_FRACTION * vhPx, (window.innerWidth * 0.94) / frameAspect())
