@@ -1,6 +1,6 @@
 import { Target, Clapperboard, Share2, Megaphone, Mail, BarChart3 } from 'lucide-react'
 import ScrollObserver from '../components/ScrollObserver'
-import GlowHero from '../components/GlowHero'
+import GradientHero from '../components/GradientHero'
 import ServiceList from '../components/ServiceList'
 import ServiceShowcase from '../components/ServiceShowcase'
 import ServiceAbout from '../components/ServiceAbout'
@@ -29,12 +29,33 @@ export default function MarketingPage() {
   return (
     <>
       <main>
-        <GlowHero
-          tag="Ongoing Marketing · Melbourne"
-          lead="Consistent"
-          mid={<> marketing,<br />without the full-time </>}
-          trail="hire."
-          desc={<>Agencies deliver posts. We deliver a system. Content, campaigns, and reporting, run by one pod that already works together.</>}
+        <GradientHero
+          asciiHands
+          tag="· Ongoing Marketing · Melbourne"
+          headline={{
+            base: <>Consistent<span className="hl-hide"> marketing,<br />without the full-time<br /></span>hire.</>,
+            mid: <><span className="hl-hide">Consistent </span>marketing,<br />without the full-time<br /><span className="hl-hide">hire.</span></>,
+            blob: <>Consistent marketing,<br />without the full-time<br />hire.</>,
+          }}
+          desc={
+            <>
+              <span className="reveal-mask">
+                <span className="reveal-inner" style={{ animationDelay: '0.6s' }}>
+                  Agencies deliver posts. We deliver a system.
+                </span>
+              </span>{' '}
+              <span className="reveal-mask">
+                <span className="reveal-inner" style={{ animationDelay: '0.68s' }}>
+                  Content, campaigns, and reporting, run by one
+                </span>
+              </span>{' '}
+              <span className="reveal-mask">
+                <span className="reveal-inner" style={{ animationDelay: '0.76s' }}>
+                  pod that already works together.
+                </span>
+              </span>
+            </>
+          }
           actions={
             <>
               <a href="#contact" className="hero-glow-btn hero-glow-btn-sharp">

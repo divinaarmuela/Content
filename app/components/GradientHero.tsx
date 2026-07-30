@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import AsciiHands from './AsciiHands'
 
 const clientLogos = [
   'c5a69a_a57a94655c1d465581b0d60a633269da~mv2.png',
@@ -18,7 +19,63 @@ const clientLogos = [
   'c5a69a_76c36272f9ef485d99928b7faed5cc1a~mv2.png',
 ]
 
-export default function GradientHero() {
+/**
+ * Default homepage headline, split into the three overlaid layers the cursor
+ * blob effect needs: `base` (edge words, blurred until revealed), `mid` (middle
+ * words, always sharp), and `blob` (full phrase, revealed only inside the blob).
+ * The concatenation of every layer — spaces and <br/> included — is the phrase.
+ */
+const HOME_HEADLINE = {
+  base: (
+    <>Creative<span className="hl-hide"> that Captures,<br />Strategy that </span>Converts</>
+  ),
+  mid: (
+    <><span className="hl-hide">Creative </span>that Captures,<br />Strategy that<span className="hl-hide"> Converts</span></>
+  ),
+  blob: <>Creative that Captures,<br />Strategy that Converts</>,
+}
+
+const HOME_DESC = (
+  <>
+    <span className="reveal-mask">
+      <span className="reveal-inner" style={{ animationDelay: '0.6s' }}>
+        Melbourne&apos;s end-to-end growth agency.
+      </span>
+    </span>{' '}
+    <span className="reveal-mask">
+      <span className="reveal-inner" style={{ animationDelay: '0.68s' }}>
+        Strategy, content, and performance built as
+      </span>
+    </span>{' '}
+    <span className="reveal-mask">
+      <span className="reveal-inner" style={{ animationDelay: '0.76s' }}>
+        one system for businesses ready to stop blending in.
+      </span>
+    </span>
+  </>
+)
+
+export default function GradientHero({
+  tag = '· MD Media Marketing',
+  headline = HOME_HEADLINE,
+  desc = HOME_DESC,
+  actions,
+  showMarquee = true,
+  showGradientBg = true,
+  darkOverlay = false,
+  asciiHands = false,
+}: {
+  tag?: string
+  headline?: { base: React.ReactNode; mid: React.ReactNode; blob: React.ReactNode }
+  desc?: React.ReactNode
+  actions?: React.ReactNode
+  showMarquee?: boolean
+  showGradientBg?: boolean
+  /** Render a dark overlay — use when a fixed video bg sits behind this section */
+  darkOverlay?: boolean
+  /** ASCII-art hands that slide in from the left/right edges behind the copy */
+  asciiHands?: boolean
+} = {}) {
   const h1Ref    = useRef<HTMLHeadingElement>(null)
   const sharpRef = useRef<HTMLSpanElement>(null)
 
@@ -84,78 +141,64 @@ export default function GradientHero() {
   }
 
   return (
-    <section className="hero-glow">
-      <div className="hero-glow-bg" aria-hidden="true" />
+    <section className={`hero-glow${darkOverlay ? ' hero-glow--framebg' : ''}`}>
+      {darkOverlay && <div className="hero-videobg-overlay" aria-hidden="true" />}
+      {showGradientBg && <div className="hero-glow-bg" aria-hidden="true" />}
+      {asciiHands && <AsciiHands />}
       <div className="filmhero-grain" aria-hidden="true" />
 
       <div className="hero-glow-inner">
-        <p className="hero-glow-tag">· MD Media Marketing</p>
+        <p className="hero-glow-tag">{tag}</p>
 
         <div className="gh-headline-zone">
           <h1 ref={h1Ref} className="hero-glow-h1">
-            {/* base: edge words "Creative" + "Converts" blurred (middle hidden) */}
-            <span className="hl-layer hl-base">
-              Creative<span className="hl-hide"> that Captures,<br />Strategy that </span>Converts
-            </span>
-            {/* middle "that Captures / Strategy that" — always sharp, blob-independent */}
-            <span className="hl-layer hl-mid" aria-hidden="true">
-              <span className="hl-hide">Creative </span>that Captures,<br />Strategy that<span className="hl-hide"> Converts</span>
-            </span>
+            {/* base: edge words blurred (middle hidden) */}
+            <span className="hl-layer hl-base">{headline.base}</span>
+            {/* middle words — always sharp, blob-independent */}
+            <span className="hl-layer hl-mid" aria-hidden="true">{headline.mid}</span>
             {/* full phrase sharp, revealed only inside the cursor blob */}
-            <span ref={sharpRef} className="hl-layer hl-blob" aria-hidden="true">
-              Creative that Captures,<br />Strategy that Converts
-            </span>
+            <span ref={sharpRef} className="hl-layer hl-blob" aria-hidden="true">{headline.blob}</span>
           </h1>
         </div>
 
-        <p className="hero-glow-desc">
-          <span className="reveal-mask">
-            <span className="reveal-inner" style={{ animationDelay: '0.6s' }}>
-              Melbourne&apos;s end-to-end growth agency.
-            </span>
-          </span>{' '}
-          <span className="reveal-mask">
-            <span className="reveal-inner" style={{ animationDelay: '0.68s' }}>
-              Strategy, content, and performance built as
-            </span>
-          </span>{' '}
-          <span className="reveal-mask">
-            <span className="reveal-inner" style={{ animationDelay: '0.76s' }}>
-              one system for businesses ready to stop blending in.
-            </span>
-          </span>
-        </p>
+        <p className="hero-glow-desc">{desc}</p>
 
         <div className="hero-glow-actions">
-          <a href="#contact" onClick={handleGetStarted} className="hero-glow-btn hero-glow-btn-sharp">
-            Get started
-          </a>
-          <a
-            href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse"
-          >
-            Book a call
-            <span className="btn-pulse-dot" aria-hidden="true"></span>
-          </a>
+          {actions ?? (
+            <>
+              <a href="#contact" onClick={handleGetStarted} className="hero-glow-btn hero-glow-btn-sharp">
+                Get started
+              </a>
+              <a
+                href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse"
+              >
+                Book a call
+                <span className="btn-pulse-dot" aria-hidden="true"></span>
+              </a>
+            </>
+          )}
         </div>
       </div>
 
       {/* client logos marquee — transparent strip across the hero's bottom */}
-      <div className="hero-glow-marquee" aria-label="Clients and partners">
-        <div className="logos-track">
-          {[...clientLogos, ...clientLogos].map((logo, i) => (
-            <div key={i} className="logos-item">
-              <img
-                src={`https://static.wixstatic.com/media/${logo}/v1/fit/w_213,h_90,q_90,enc_avif,quality_auto/${logo}`}
-                alt=""
-                loading="lazy"
-              />
-            </div>
-          ))}
+      {showMarquee && (
+        <div className="hero-glow-marquee" aria-label="Clients and partners">
+          <div className="logos-track">
+            {[...clientLogos, ...clientLogos].map((logo, i) => (
+              <div key={i} className="logos-item">
+                <img
+                  src={`https://static.wixstatic.com/media/${logo}/v1/fit/w_213,h_90,q_90,enc_avif,quality_auto/${logo}`}
+                  alt=""
+                  loading="lazy"
+                />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </section>
   )
 }

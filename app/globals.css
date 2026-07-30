@@ -2283,6 +2283,264 @@ body.video-active .video-vol-ctrl {
 @media (prefers-reduced-motion: reduce) {
   .hero-glow-stars { animation: none; opacity: 0.7; }
 }
+/* ── /void-test — private Lusion replication study ─────────────────────── */
+.vt-page {
+  background: #020409;
+  color: #fff;
+}
+.vt-intro,
+.vt-outro {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 0 24px;
+}
+.vt-intro-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.vt-intro-h1 {
+  font-family: var(--sans);
+  font-size: clamp(40px, 7vw, 96px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.vt-intro-sub,
+.vt-outro-sub {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.vt-outro-h2 {
+  font-family: var(--sans);
+  font-size: clamp(32px, 5vw, 64px);
+  font-weight: 600;
+}
+
+/* tall scroll runway; the sticky viewport inside is the "camera" */
+.vt-wrap {
+  position: relative;
+  /* their #home-goal measures 42414px at a 945px viewport = 4488vh. the tunnel
+     span is whatever is left after the card and laptop take their budgets, so
+     the rail length IS the pacing — a short rail starves the black tunnel. */
+  height: 4488vh;
+}
+/* their domImgIn / domImgOut — in-flow scroll anchors for GoalSectionRanges.
+   invisible, but their document positions and heights define the timeline:
+   each claims (viewportHeight + ownHeight) / 2 of scroll, and the tunnel
+   phases divide whatever is left between them by Lusion's weights. */
+.vt-range-in,
+.vt-range-out {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
+.vt-range-in { top: 101.6vh; height: 60.4vh; }
+/* their domImgOut sits ABOVE the section end — the gap between its bottom and
+   the container's bottom IS the frame's travel, since their clamp works out to
+   clamp(u, 0, container.bottom - outMarker.bottom). pinned at bottom:0 that
+   window is zero-width and the monitor can never rise. one viewport of gap. */
+.vt-range-out { top: 168.8vh; height: 86.2vh; }
+
+.vt-sticky {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+}
+.vt-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* the card: a rounded hole punched in a dark mask. The giant box-shadow is
+   the mask; scaling the div until the hole outgrows the viewport = the zoom. */
+.vt-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(44vw, 560px);
+  height: min(58vh, 620px);
+  transform: translate(-50%, -50%) scale(0.55);
+  /* their frameBg look: tablet bezel + soft glow ring around the device */
+  border-radius: 26px;
+  border: 10px solid #0c0d10;
+  box-shadow:
+    0 0 0 300vmax #020409,
+    0 0 48px 8px rgba(120, 165, 255, 0.22),
+    0 0 120px 30px rgba(80, 120, 255, 0.12),
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+  will-change: transform;
+}
+.vt-card-ui {
+  position: absolute;
+  inset: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.85);
+}
+.vt-card-hint { align-self: center; animation: vt-hint 1.6s ease-in-out infinite; }
+@keyframes vt-hint {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50%      { transform: translateY(6px); opacity: 1; }
+}
+
+/* the laptop mockup he breaks out of (their home-goal-image-out) */
+.vt-laptop {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(52vw, 720px);
+  opacity: 0;
+  pointer-events: none;
+}
+.vt-laptop-screen {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 12px solid #0c0d10;
+  border-radius: 18px 18px 4px 4px;
+  background: transparent; /* the 3D scene shows through — he's inside it */
+  box-shadow:
+    0 0 42px 6px rgba(120, 165, 255, 0.18),
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.16);
+}
+.vt-laptop-base {
+  margin: 0 auto;
+  width: 116%;
+  margin-left: -8%;
+  height: 14px;
+  background: linear-gradient(180deg, #16171b, #0a0b0d);
+  border-radius: 2px 2px 10px 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.vt-fade {
+  position: absolute;
+  inset: 0;
+  background: #020409;
+  opacity: 0;
+  pointer-events: none;
+}
+/* scattered 3D title words that rush past as you enter the tunnel */
+.vt-words {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 82vw;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform, opacity;
+}
+.vt-words-line {
+  display: flex;
+  justify-content: center;
+  font-family: var(--sans);
+  font-size: clamp(30px, 5.4vw, 84px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  color: #fff;
+  white-space: nowrap;
+}
+.vt-words-line span {
+  display: inline-block;
+  padding: 0 0.22em;
+  will-change: transform;
+}
+
+/* their chromatic lens halo — a faint rainbow ring around the frame */
+.vt-halo {
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 62% 58% at 50% 50%,
+    transparent 62%,
+    rgba(255, 60, 60, 0.16) 68%,
+    rgba(255, 200, 40, 0.14) 72%,
+    rgba(60, 255, 140, 0.13) 76%,
+    rgba(60, 140, 255, 0.14) 80%,
+    rgba(180, 60, 255, 0.1) 84%,
+    transparent 92%
+  );
+  filter: blur(10px);
+  mix-blend-mode: screen;
+}
+
+/* soft lens vignette, like their post stack */
+.vt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 90% 80% at 50% 50%, transparent 55%, rgba(0, 4, 2, 0.5) 100%);
+}
+.vt-status {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── ASCII hands reaching in from the hero's left/right edges ── */
+.ascii-hands {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* above .hero-glow-bg (same z, later in DOM), below .hero-glow-inner */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+.ascii-hand-wrap {
+  position: relative;
+  width: 26%;
+  max-width: 460px;
+  min-width: 180px;
+  will-change: transform;
+  /* pre-JS starting pose = off-screen, matches the reveal's first frame */
+  transform: translate(-125%, 0);
+}
+.ascii-hand-wrap:last-child { transform: translate(125%, 0); }
+.ascii-hand-wrap img {
+  display: block;
+  width: 100%;
+  opacity: 0; /* layout/aspect only — the canvas is the visible layer */
+}
+.ascii-hand-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+@media (max-width: 768px) {
+  .ascii-hands { display: none; }
+}
+
 .hero-glow-inner {
   position: relative;
   z-index: 1;
@@ -4536,7 +4794,7 @@ body.video-active .video-vol-ctrl {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #000;
+  background: #02040f; /* matches the gradient's dark navy while it fades in */
 }
 .hvh-video {
   position: absolute;
@@ -4579,6 +4837,7 @@ body.video-active .video-vol-ctrl {
   letter-spacing: -0.02em;
   color: #fff;
   margin-bottom: 2.5rem;
+  text-wrap: balance; /* no orphan words on their own line */
 }
 .hvh-actions {
   display: flex;

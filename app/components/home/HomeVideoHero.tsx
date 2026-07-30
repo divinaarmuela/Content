@@ -1,5 +1,7 @@
 'use client'
 
+import AsciiHands from '../AsciiHands'
+
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
 export default function HomeVideoHero() {
@@ -15,24 +17,15 @@ export default function HomeVideoHero() {
 
   return (
     <section className="hvh">
-      <video
-        className="hvh-video"
-        src="https://stabondar.b-cdn.net/ciridae/hero_web.mp4"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-      />
-      <div className="hvh-overlay" aria-hidden="true" />
+      {/* electric-blue radial field, white aurora blooms in the bottom corners */}
+      <div className="hero-glow-bg" aria-hidden="true" />
+      <AsciiHands />
       <div className="filmhero-grain" aria-hidden="true" />
 
       <div className="hvh-content">
         <p className="hvh-tag">· MD MEDIA MARKETING ·</p>
         <h1 className="hvh-headline">
-          You&rsquo;re the best-kept secret<br />
-          in your market.<br />
-          Let&rsquo;s fix that.
+          You&rsquo;re the best-kept secret in your market. Let&rsquo;s&nbsp;fix&nbsp;that.
         </h1>
         <div className="hvh-actions">
           <a

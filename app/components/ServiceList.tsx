@@ -53,9 +53,11 @@ export type ServiceListItem = { title: string; desc: string; icon: React.ReactNo
 export default function ServiceList({
   headerTag,
   items,
+  className,
 }: {
   headerTag: string
   items: ServiceListItem[]
+  className?: string
 }) {
   const titleRefs = useRef<(HTMLHeadingElement | null)[]>([])
   const triggered = useRef<boolean[]>(Array(items.length).fill(false))
@@ -81,7 +83,7 @@ export default function ServiceList({
   }, [items])
 
   return (
-    <section className="svc-nav">
+    <section className={`svc-nav${className ? ` ${className}` : ''}`}>
       <div className="svc-nav-inner">
         <div className="svc-nav-header">
           <span className="svc-nav-header-tag">

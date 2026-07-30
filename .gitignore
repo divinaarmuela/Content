@@ -47,3 +47,6 @@ next-env.d.ts
 
 # local image-optimisation working dir (not for commit)
 /_optimized/
+.superpowers/
+
+
