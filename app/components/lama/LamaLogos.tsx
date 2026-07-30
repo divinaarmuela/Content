@@ -17,6 +17,7 @@ const logos = [
 export default function LamaLogos() {
   const doubled = [...logos, ...logos]
   return (
+    // transparent over the shared canvas, like the reference's logos section
     <div aria-label="Clients and partners" className="py-10 overflow-hidden">
       <div className="flex w-max animate-lama-marquee motion-reduce:animate-none gap-16 px-8">
         {doubled.map((logo, i) => (
@@ -25,7 +26,7 @@ export default function LamaLogos() {
             src={`https://static.wixstatic.com/media/${logo}/v1/fit/w_213,h_90,q_90,enc_avif,quality_auto/${logo}`}
             alt=""
             loading="lazy"
-            className="h-10 w-auto opacity-40 grayscale"
+            className="h-10 w-auto opacity-70 [filter:brightness(0)_invert(1)]"
           />
         ))}
       </div>

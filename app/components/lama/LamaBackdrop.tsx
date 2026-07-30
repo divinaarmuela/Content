@@ -348,7 +348,10 @@ export default function LamaBackdrop() {
         // band formula's y-warp keeps the wave edge at or below the section's
         // top edge, so it can never wash over the rows above
         top2 = Math.min(Math.max(1 - r.top / vh, 0), 1.2)
-        bottom2 = Math.min(Math.max(1 - r.bottom / vh, 0), 1.2)
+        // their exact exit scrub (bottom bottom → bottom -10%): with the
+        // marquee transparent over the canvas there is no wall to beat — the
+        // wave dissolves gradually beneath it, like the reference
+        bottom2 = Math.min(Math.max((1 - r.bottom / vh) * 1.45, 0), 1.6)
       }
 
       gl.uniform1i(u('u_video'), 0)
