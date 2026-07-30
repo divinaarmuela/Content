@@ -1,14 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const FIELD =
   'w-full bg-transparent border-b border-cream/25 py-3 font-lamah text-cream placeholder:text-cream-dim/60 focus:outline-none focus:border-cream transition-colors'
 const LABEL = 'block mb-3 font-lamam text-[10px] uppercase tracking-widest text-cream-dim'
 
 // Same options and payload shape as the deployed ContactForm — multi-selects
-// join with ', ' and post to /api/submit — restyled in the lama language
-// (toggle pills instead of dropdowns).
+// join with ', ' and post to /api/submit — restyled in the lama language.
 const MODEL_OPTIONS = [
   'Branding & Strategy',
   'Content Production — Subscription',
@@ -30,20 +29,101 @@ const NEED_OPTIONS = [
 const BUDGET_OPTIONS = ['Under $3K', '$3K to $8K', '$8K to $15K', '$15K to $30K', '$30K+', 'Need guidance']
 const TIMELINE_OPTIONS = ['This month', 'Next 1 to 2 months', 'Next 3 months', 'Just exploring']
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+// Lama-styled dropdown: mono trigger on a bottom border, dark panel with
+// checkmark rows; multi keeps the panel open while toggling
+function LamaSelect({
+  options,
+  value,
+  onChange,
+  multi = false,
+  placeholder = 'SELECT',
+}: {
+  options: string[]
+  value: string | string[]
+  onChange: (v: string | string[]) => void
+  multi?: boolean
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const selected = multi ? (value as string[]) : null
+  const isSelected = (opt: string) => (multi ? (selected as string[]).includes(opt) : value === opt)
+
+  const handleSelect = (opt: string) => {
+    if (multi) {
+      const cur = selected as string[]
+      onChange(cur.includes(opt) ? cur.filter((v) => v !== opt) : [...cur, opt])
+    } else {
+      onChange((value as string) === opt ? '' : opt)
+      setOpen(false)
+    }
+  }
+
+  const label = multi
+    ? (selected as string[]).length === 0
+      ? null
+      : (selected as string[]).length === 1
+        ? (selected as string[])[0]
+        : `${(selected as string[]).length} SELECTED`
+    : (value as string) || null
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`border px-3 py-2 font-lamam text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
-        active
-          ? 'border-cream bg-cream text-ink'
-          : 'border-cream/25 bg-transparent text-cream hover:border-cream/60'
-      }`}
-    >
-      {children}
-    </button>
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-4 bg-transparent border-b border-cream/25 py-3 cursor-pointer text-left hover:border-cream/60 transition-colors"
+      >
+        <span className={`font-lamah ${label ? 'text-cream' : 'text-cream-dim/60'}`}>
+          {label ?? placeholder}
+        </span>
+        <span
+          aria-hidden="true"
+          className={`font-lamam text-[10px] text-cream-dim transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          ▼
+        </span>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-multiselectable={multi}
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto border border-cream/25 bg-ink shadow-xl"
+        >
+          {options.map((opt) => (
+            <div
+              key={opt}
+              role="option"
+              aria-selected={isSelected(opt)}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                handleSelect(opt)
+              }}
+              className={`flex items-center gap-3 px-4 py-3 cursor-pointer font-lamah text-sm transition-colors ${
+                isSelected(opt) ? 'bg-cream text-ink' : 'text-cream hover:bg-cream/10'
+              }`}
+            >
+              {multi && (
+                <span className="font-lamam text-[10px] w-3 shrink-0">{isSelected(opt) ? '✓' : ''}</span>
+              )}
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -54,9 +134,6 @@ export default function LamaContactForm() {
   const [need, setNeed] = useState<string[]>([])
   const [budget, setBudget] = useState('')
   const [timeline, setTimeline] = useState('')
-
-  const toggle = (list: string[], set: (v: string[]) => void, opt: string) =>
-    set(list.includes(opt) ? list.filter((v) => v !== opt) : [...list, opt])
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -125,46 +202,22 @@ export default function LamaContactForm() {
 
       <div className="sm:col-span-2">
         <span className={LABEL}>Service interest</span>
-        <div className="flex flex-wrap gap-2">
-          {MODEL_OPTIONS.map((opt) => (
-            <Pill key={opt} active={model.includes(opt)} onClick={() => toggle(model, setModel, opt)}>
-              {opt}
-            </Pill>
-          ))}
-        </div>
+        <LamaSelect multi options={MODEL_OPTIONS} value={model} onChange={(v) => setModel(v as string[])} />
       </div>
 
       <div className="sm:col-span-2">
         <span className={LABEL}>What do you need produced?</span>
-        <div className="flex flex-wrap gap-2">
-          {NEED_OPTIONS.map((opt) => (
-            <Pill key={opt} active={need.includes(opt)} onClick={() => toggle(need, setNeed, opt)}>
-              {opt}
-            </Pill>
-          ))}
-        </div>
+        <LamaSelect multi options={NEED_OPTIONS} value={need} onChange={(v) => setNeed(v as string[])} />
       </div>
 
-      <div className="sm:col-span-2">
+      <div>
         <span className={LABEL}>Budget range</span>
-        <div className="flex flex-wrap gap-2">
-          {BUDGET_OPTIONS.map((opt) => (
-            <Pill key={opt} active={budget === opt} onClick={() => setBudget(budget === opt ? '' : opt)}>
-              {opt}
-            </Pill>
-          ))}
-        </div>
+        <LamaSelect options={BUDGET_OPTIONS} value={budget} onChange={(v) => setBudget(v as string)} />
       </div>
 
-      <div className="sm:col-span-2">
+      <div>
         <span className={LABEL}>Production timing</span>
-        <div className="flex flex-wrap gap-2">
-          {TIMELINE_OPTIONS.map((opt) => (
-            <Pill key={opt} active={timeline === opt} onClick={() => setTimeline(timeline === opt ? '' : opt)}>
-              {opt}
-            </Pill>
-          ))}
-        </div>
+        <LamaSelect options={TIMELINE_OPTIONS} value={timeline} onChange={(v) => setTimeline(v as string)} />
       </div>
 
       <div className="sm:col-span-2 flex items-center gap-6">
