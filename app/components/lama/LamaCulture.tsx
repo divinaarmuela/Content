@@ -9,7 +9,7 @@ export default function LamaCulture() {
         <Reveal delay={100}>
           <p className="mt-10 font-lamah text-cream text-[clamp(1.5rem,2.6vw,2.25rem)] leading-tight [text-indent:3em]">
             We make you visible first, then build the strategy and systems behind it.
-            Content, paid, brand, and strategy under one roof — no juggling vendors.
+            Content, paid, brand, and strategy under one roof, no juggling vendors.
             Your content sounds like you and looks like you, not a template.
             Start small, scale when it&rsquo;s working.
           </p>

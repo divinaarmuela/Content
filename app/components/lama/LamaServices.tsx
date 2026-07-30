@@ -3,7 +3,7 @@ import { Scramble } from './Scramble'
 
 const COLUMNS = [
   { label: '[ CONTENT ]', items: ['Content Production', 'Social Media Management', 'Brand Photography', 'Video Direction'] },
-  { label: '[ ADVERTISING ]', items: ['Paid Ads — Meta & Google', 'Performance Strategy', 'Lead Generation'] },
+  { label: '[ ADVERTISING ]', items: ['Paid Ads (Meta & Google)', 'Performance Strategy', 'Lead Generation'] },
   { label: '[ BRAND & STRATEGY ]', items: ['Brand Strategy', 'Visual Identity', 'Messaging', 'Strategy & Consulting'] },
   { label: '[ DIGITAL ]', items: ['Websites', 'Front-End Development', 'Back-End Development', 'E-Commerce'] },
 ]
@@ -24,7 +24,7 @@ export default function LamaServices() {
       <Reveal delay={250}>
         <p className="mt-6 font-lamah text-cream text-xl leading-snug max-w-2xl">
           We make you visible first, then build the strategy and systems behind it.
-          Content, paid, brand, and strategy under one roof — no juggling vendors.
+          Content, paid, brand, and strategy under one roof, no juggling vendors.
           Your content sounds like you and looks like you, not a template.
           Start small, scale when it&rsquo;s working.
         </p>
