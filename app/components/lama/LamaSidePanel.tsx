@@ -46,7 +46,7 @@ export default function LamaSidePanel() {
         </span>
         <Scramble text="Get in touch" className="font-lamam text-[11px] uppercase tracking-widest text-ink" />
       </a>
-      <Link href="/about" className="block bg-black/80 no-underline backdrop-blur-sm">
+      <div className="block bg-black/80 backdrop-blur-sm">
         <span className="flex items-center justify-between px-3 py-2.5">
           <Scramble text="This is us" delay={200} className="font-lamam text-[11px] uppercase tracking-widest text-cream" />
           <span className="font-lamam text-[11px] tracking-widest text-cream-dim">( + )</span>
@@ -56,7 +56,6 @@ export default function LamaSidePanel() {
             key={PREVIEW_VIDEOS[clip]}
             ref={videoRef}
             src={PREVIEW_VIDEOS[clip]}
-            poster="/hero-poster.jpg"
             autoPlay
             muted
             loop
@@ -64,7 +63,7 @@ export default function LamaSidePanel() {
             className="absolute inset-0 h-full w-full object-cover [filter:contrast(1.05)_brightness(0.9)]"
           />
         </span>
-      </Link>
+      </div>
     </div>
   )
 }

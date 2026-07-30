@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import Reveal from './Reveal'
 import { clients, wixImg } from './workData'
 
@@ -11,9 +10,8 @@ export default function LamaWork() {
     <section data-lama-title="SELECTED WORK" className="!pt-0 !pb-6">
       {clients.map((c, i) => (
         <Reveal key={c.name} delay={Math.min(i * 60, 240)}>
-          <Link
-            href="/work"
-            className="group relative flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6 px-6 sm:px-10 py-5 lg:py-6 no-underline hover:bg-cream/5 transition-colors"
+          <div
+            className="group relative flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6 px-6 sm:px-10 py-5 lg:py-6 hover:bg-cream/5 transition-colors"
           >
             <div aria-hidden="true" className="absolute left-0 right-0 top-0 h-px bg-cream opacity-20" />
             {/* mobile: stacked card — full-width media on top, then the name
@@ -44,7 +42,7 @@ export default function LamaWork() {
                 className="h-[90px] sm:h-[120px] w-auto object-cover bg-ink opacity-75 group-hover:opacity-100 group-hover:scale-[1.02] transition-all duration-300"
               />
             </span>
-          </Link>
+          </div>
         </Reveal>
       ))}
     </section>

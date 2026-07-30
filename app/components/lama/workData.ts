@@ -30,7 +30,7 @@ export const clients: WorkClient[] = [
     industry: 'Venue & Events',
     services: ['Ongoing Marketing', 'Content Production', 'Meta Ads'],
     desc: 'Full marketing retainer for a Melbourne waterfront venue. Strategy, production, and performance advertising working as one system.',
-    img: 'c5a69a_4bc1ab98c0674462a67fea672a7a3d2a~mv2.jpg',
+    img: '/waterside-poster.jpg',
     tag: 'VENUE_03',
   },
   {
@@ -70,4 +70,6 @@ export const clients: WorkClient[] = [
 ]
 
 export const wixImg = (id: string, w: number, h: number) =>
-  `https://static.wixstatic.com/media/${id}/v1/fill/w_${w},h_${h},al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${id}`
+  id.startsWith('/')
+    ? id
+    : `https://static.wixstatic.com/media/${id}/v1/fill/w_${w},h_${h},al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${id}`

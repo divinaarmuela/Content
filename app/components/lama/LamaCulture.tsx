@@ -17,8 +17,8 @@ export default function LamaCulture() {
       </div>
       <div className="relative min-h-[320px] lg:min-h-0">
         <img
-          src="https://static.wixstatic.com/media/c5a69a_cbe685f642bb4d75b6f9b0759d5482e2~mv2.jpg/v1/fill/w_1200,h_1200,al_c,q_85,enc_avif,quality_auto/c5a69a_cbe685f642bb4d75b6f9b0759d5482e2~mv2.jpg"
-          alt="MD Media behind the scenes"
+          src="/martindivina.avif"
+          alt="Martin and Divina, MD Media"
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover"
         />
