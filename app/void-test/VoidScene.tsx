@@ -55,7 +55,11 @@ const OFF_WHITE = '#1a1c1c'
 // frame height that also fits portrait viewports: the natural vh-based size,
 // clamped so the 1.768-aspect frame never overflows the width
 const fitFrameH = (vhPx: number) =>
-  Math.min(SCREEN_FRACTION * vhPx, (window.innerWidth * 0.94) / 1.768)
+  Math.min(SCREEN_FRACTION * vhPx, (window.innerWidth * 0.99) / 1.768)
+
+// single shrink factor for portrait: EVERYTHING (frame, card, world scale)
+// shrinks by this same ratio so the astronaut stays proportioned to both
+const frameShrink = (vhPx: number) => fitFrameH(vhPx) / (SCREEN_FRACTION * vhPx)
 const BLACK = '#000000'
 const BLUE = '#1a2ffb'
 const GLOBAL_RADIUS = 20
@@ -682,12 +686,8 @@ void main() {
       const dollyZoomFov = wtGate > 0 ? fit(wtRatio, 0, 1, 60, 0) : 0
       let blackFovWobble = 0
       camera.fov = baseFov
-      // portrait: widen the fov EARLY (globe / card fly-in) so side content
-      // stays in frame on narrow viewports; fades out before the framed
-      // phases, whose world-to-frame alignment assumes the base fov
-      const portraitBoost = Math.min(1.35, Math.max(1, (window.innerHeight / Math.max(1, window.innerWidth)) * 0.78))
-      const earlyGate = 1 - clamp01(p * 3)
-      camera.fov = Math.min(85, camera.fov * (1 + (portraitBoost - 1) * earlyGate))
+      // (portrait sizing is handled by the unified frameShrink factor — the
+      // world-to-frame mapping shrinks everything consistently, no fov hacks)
       // their freezeRatio: hold the pointer down to slow tunnel time
       freeze += ((isPointerDown ? 1 : 0) - freeze) * 0.1
       const tdt = dt * (1 - 0.7 * freeze)
@@ -1045,13 +1045,10 @@ void main() {
         // their #home-goal-image-in measures 817 x 571 at a 1920 x 945 viewport
         // — height 0.604 of the viewport, aspect 1.432. my 560px width cap
         // squashed it to ~1.02 (nearly square), so the astronaut never fit.
-        let cardH = vhPx2 * (571 / 945)
-        let cardW = cardH * (817 / 571)
-        // portrait clamp: the card must fit the viewport width
-        if (cardW > vwPx * 0.92) {
-          cardW = vwPx * 0.92
-          cardH = cardW * (571 / 817)
-        }
+        // card shrinks by the SAME factor as the frame/world, so the
+        // astronaut's flight path stays proportioned to it on portrait
+        const cardH = vhPx2 * (571 / 945) * frameShrink(vhPx2)
+        const cardW = cardH * (817 / 571)
         frameOverlay.setRect((vwPx - cardW) / 2, (vhPx2 - cardH) / 2 + K, cardW, cardH)
         frameOverlay.setViewport(vwPx, vhPx2)
         const u = frameOverlay.uniforms
