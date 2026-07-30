@@ -41,6 +41,7 @@ uniform float u_top2;
 uniform float u_bottom2;
 uniform float u_videoReveal;
 uniform float u_pixelSize;
+uniform vec2 u_noCursorBand; // GL-y range where the cursor effect is off
 out vec4 fragColor;
 
 float rand(vec2 n) {
@@ -169,6 +170,9 @@ void main() {
   // Suppressed where the crisp hero video is showing (alpha).
   float gOrder = orderThreshold(sub) * 16.0;   // glyph blocks own orders 0-6
   float cursorOn = glyph * step(gOrder / 7.0, trailV) * (1.0 - alpha);
+  // suppressed inside the no-cursor band (contact section)
+  float inBand = step(u_noCursorBand.x, cellUv.y) * step(cellUv.y, u_noCursorBand.y);
+  cursorOn *= 1.0 - inBand;
   col = mix(col, cream, cursorOn);
   fragColor = vec4(col, 1.0);
 }`
@@ -291,6 +295,7 @@ export default function LamaBackdrop() {
     // band2 follows the services section ("What we do") — its video renders
     // as grey dither behind the content, like the reference's section grids
     const band2El = document.querySelector<HTMLElement>('[data-lama-title="WHAT WE DO"]')
+    const noCursorEl = document.querySelector<HTMLElement>('[data-lama-title="BOOK A CALL"]')
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw)
@@ -368,6 +373,17 @@ export default function LamaBackdrop() {
       gl.uniform1f(u('u_top2'), top2)
       gl.uniform1f(u('u_bottom2'), bottom2)
       gl.uniform1f(u('u_videoReveal'), videoReveal)
+      // cursor effect off over the contact section so the form stays clean
+      let ncLo = 2
+      let ncHi = 2
+      if (noCursorEl) {
+        const nr = noCursorEl.getBoundingClientRect()
+        if (nr.bottom > 0 && nr.top < vh) {
+          ncLo = Math.max(0, 1 - nr.bottom / vh)
+          ncHi = Math.min(1, 1 - nr.top / vh)
+        }
+      }
+      gl.uniform2f(u('u_noCursorBand'), ncLo, ncHi)
       // their GRID_SIZE = 8 in PHYSICAL canvas pixels (no dpr multiply) —
       // this is what makes their texture finer and denser than a CSS-px grid
       gl.uniform1f(u('u_pixelSize'), 8)

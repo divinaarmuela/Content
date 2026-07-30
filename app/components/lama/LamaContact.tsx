@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 import LamaContactForm from './LamaContactForm'
@@ -37,12 +36,6 @@ export default function LamaContact() {
           >
             BOOK A STRATEGY CALL ↗
           </a>
-          <Link
-            href="/work"
-            className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
-          >
-            SEE OUR WORK ↗
-          </Link>
         </div>
       </Reveal>
     </section>
