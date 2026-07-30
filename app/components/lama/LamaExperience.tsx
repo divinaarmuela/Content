@@ -8,7 +8,9 @@ import VoidScene from '../../void-test/VoidScene'
 export default function LamaExperience() {
   return (
     <section data-lama-title="EXPERIENCE" className="!p-0">
-      <div className="px-6 sm:px-10 pt-28 sm:pt-36 pb-10">
+      {/* the scene's first viewport is an empty scroll runway — the header
+          overlays it (negative margin) instead of stacking dead space above */}
+      <div className="relative z-10 pointer-events-none px-6 sm:px-10 pt-28 sm:pt-36 pb-10 -mb-[70vh]">
         <Scramble
           text="[ ONE MORE THING ]"
           className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim"
