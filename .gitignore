@@ -39,8 +39,16 @@ next-env.d.ts
 # kept on local disk for dev, never committed (GitHub rejects >100MB).
 /public/*.mp4
 /public/*.mov
-# hero backdrop ships with the site
+# videos the site actually serves ship with it
 !/public/hero_web.mp4
+!/public/website-landscape.mp4
+!/public/cecconis.mp4
+!/public/Automodellista.mp4
+!/public/melbourne-junction.mp4
+!/public/Waterside Website (1).mp4
+!/public/Pattons.mp4
+!/public/Senorita.mp4
+!/public/Park Noire Website.mp4
 # Cecconi1.jpg is now a web-optimised ~180KB version served from /public.
 /public/Cecconi2.jpg
 /public/Cecconi3.jpg
