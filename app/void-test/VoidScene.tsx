@@ -707,11 +707,15 @@ void main() {
       let blackFovWobble = 0
       camera.fov = baseFov
       // portrait: shrink the projection to match the width-clamped frame —
-      // but ONLY while the frame is on screen. rMix already tracks frame→
-      // fullscreen (0 framed, 1 in the tunnels); inside the tunnels the zoom
-      // eases back to 1 so the tube fills the view (zoomed out, the black
-      // beyond the tube walls was glimpsed on mobile)
-      camera.zoom = 1 + (frameShrink(vhPxC) - 1) * (1 - clamp01(rMix))
+      // ONLY while the frame is actually on screen. Entry: eases out as the
+      // card fills the view. Exit: re-engages only in the LAST 20% of the
+      // white frame's formation — earlier and the zoom-out exposes the black
+      // beyond the tunnel walls before the frame exists to cover it
+      const framePresence =
+        blackFrameInRatio < 1
+          ? 1 - clamp01(blackFrameInRatio)
+          : clamp01((whiteFrameRatio - 0.8) / 0.2)
+      camera.zoom = 1 + (frameShrink(vhPxC) - 1) * framePresence
       // their freezeRatio: hold the pointer down to slow tunnel time
       freeze += ((isPointerDown ? 1 : 0) - freeze) * 0.1
       const tdt = dt * (1 - 0.7 * freeze)
