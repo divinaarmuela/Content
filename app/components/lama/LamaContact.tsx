@@ -7,11 +7,13 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 export default function LamaContact() {
   return (
     <section data-lama-title="BOOK A CALL" className="px-6 sm:px-10 pt-32 sm:pt-44 pb-40">
-      <Reveal>
-        <h2 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(2.75rem,7.5vw,7rem)] max-w-5xl">
-          Ready to stop being the best-kept secret?
-        </h2>
-      </Reveal>
+      <h2 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(2.75rem,7.5vw,7rem)] max-w-5xl">
+        {['Ready to stop being', 'the best-kept secret?'].map((line, i) => (
+          <Reveal key={line} delay={i * 120} className="block">
+            {line}
+          </Reveal>
+        ))}
+      </h2>
       <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
         <div className="max-w-lg">
           <Scramble text="[ GET IN TOUCH ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
