@@ -47,7 +47,7 @@ export default function LamaNav() {
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="flex flex-col gap-1 p-1 appearance-none border-0 bg-transparent cursor-pointer"
+            className="hidden flex-col gap-1 p-1 appearance-none border-0 bg-transparent cursor-pointer"
           >
             <span className={`block h-0.5 w-5 bg-cream transition-transform ${open ? 'translate-y-1.5 rotate-45' : ''}`} />
             <span className={`block h-0.5 w-5 bg-cream transition-opacity ${open ? 'opacity-0' : ''}`} />

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Reveal from './Reveal'
 import { Scramble } from './Scramble'
+import LamaContactForm from './LamaContactForm'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
@@ -12,13 +13,22 @@ export default function LamaContact() {
           Ready to stop being the best-kept secret?
         </h2>
       </Reveal>
-      <div className="mt-16 max-w-lg">
-        <Scramble text="[ GET IN TOUCH ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
-        <Reveal delay={100}>
-          <p className="mt-6 font-lamah text-cream-dim text-lg leading-relaxed">
-            Book a free strategy call. We&rsquo;ll look at where you&rsquo;re invisible, where the
-            opportunity is, and exactly what we&rsquo;d do first. No obligation, no hard sell.
-          </p>
+      <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+        <div className="max-w-lg">
+          <div className="flex items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/martindivina.avif" alt="Martin and Divina" className="h-12 w-12 object-cover" />
+            <Scramble text="[ GET IN TOUCH ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
+          </div>
+          <Reveal delay={100}>
+            <p className="mt-6 font-lamah text-cream-dim text-lg leading-relaxed">
+              Book a free strategy call. We&rsquo;ll look at where you&rsquo;re invisible, where the
+              opportunity is, and exactly what we&rsquo;d do first. No obligation, no hard sell.
+            </p>
+          </Reveal>
+        </div>
+        <Reveal delay={150}>
+          <LamaContactForm />
         </Reveal>
       </div>
       <Reveal delay={200}>

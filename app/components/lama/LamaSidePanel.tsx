@@ -10,7 +10,7 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 
 // the preview rotates through real work footage — intentionally not the
 // hero backdrop video
-const PREVIEW_VIDEOS = ['/cecconis.mp4', '/Senorita.mp4', '/website-landscape.mp4']
+const PREVIEW_VIDEOS = ['/cecconis.mp4', '/Waterside%20Website%20(1).mp4', '/Automodellista.mp4', '/melbourne-junction.mp4']
 const ROTATE_MS = 6000
 
 // Reference-site right rail: a fixed column at right-4 top-4 holding a

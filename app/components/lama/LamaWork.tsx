@@ -16,8 +16,14 @@ export default function LamaWork() {
             className="group relative flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6 px-6 sm:px-10 py-5 lg:py-6 no-underline hover:bg-cream/5 transition-colors"
           >
             <div aria-hidden="true" className="absolute left-0 right-0 top-0 h-px bg-cream opacity-20" />
-            {/* mobile: name row with ( + ) pushed right, tags wrapping below,
-                no media — the reference's -lg variant is purely typographic */}
+            {/* mobile: stacked card — full-width media on top, then the name
+                row with ( + ) pushed right, tags wrapping below */}
+            <img
+              src={wixImg(c.img, 760, 480)}
+              alt=""
+              loading="lazy"
+              className="lg:hidden w-full aspect-video object-cover bg-ink"
+            />
             <span className="flex items-baseline justify-between lg:block lg:w-2/12">
               <span className="font-lamah text-cream text-lg sm:text-xl">{c.name}</span>
               <span className="font-lamam text-xs text-cream-dim lg:hidden">( + )</span>
