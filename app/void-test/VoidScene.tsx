@@ -703,9 +703,12 @@ void main() {
       const dollyZoomFov = wtGate > 0 ? fit(wtRatio, 0, 1, 60, 0) : 0
       let blackFovWobble = 0
       camera.fov = baseFov
-      // portrait: shrink the whole projection uniformly to match the
-      // width-clamped frame/card — distortion-free, unlike a fov change
-      camera.zoom = frameShrink(vhPxC)
+      // portrait: shrink the projection to match the width-clamped frame —
+      // but ONLY while the frame is on screen. rMix already tracks frame→
+      // fullscreen (0 framed, 1 in the tunnels); inside the tunnels the zoom
+      // eases back to 1 so the tube fills the view (zoomed out, the black
+      // beyond the tube walls was glimpsed on mobile)
+      camera.zoom = 1 + (frameShrink(vhPxC) - 1) * (1 - clamp01(rMix))
       // their freezeRatio: hold the pointer down to slow tunnel time
       freeze += ((isPointerDown ? 1 : 0) - freeze) * 0.1
       const tdt = dt * (1 - 0.7 * freeze)
