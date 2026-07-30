@@ -11,7 +11,8 @@ import LamaServices from './components/lama/LamaServices'
 import LamaLogos from './components/lama/LamaLogos'
 import LamaCulture from './components/lama/LamaCulture'
 import LamaContact from './components/lama/LamaContact'
-import LamaExperience from './components/lama/LamaExperience'
+// temporarily hidden while the astronaut sequence is polished
+// import LamaExperience from './components/lama/LamaExperience'
 import LamaFooterBar from './components/lama/LamaFooterBar'
 
 export const metadata: Metadata = {
@@ -52,7 +53,7 @@ export default function HomePage() {
         <LamaLogos />
         <LamaCulture />
         <LamaContact />
-        <LamaExperience />
+        {/* <LamaExperience /> */}
       </main>
       <LamaFooterBar />
     </div>
