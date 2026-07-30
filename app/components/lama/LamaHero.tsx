@@ -19,7 +19,7 @@ export default function LamaHero() {
             text="[ MD MEDIA MARKETING ]"
             className="mb-8 font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream"
           />
-          <h1 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(2.25rem,5.6vw,5.75rem)]">
+          <h1 className="font-lamah font-bold uppercase text-cream leading-[1.02] lg:leading-[0.92] tracking-[-0.02em] text-[clamp(2.25rem,5.6vw,5.75rem)]">
             {LINES.map((line, i) => (
               <Reveal key={line} delay={i * 120} className="block lg:whitespace-nowrap">
                 {line}
