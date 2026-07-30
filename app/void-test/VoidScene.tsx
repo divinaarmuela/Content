@@ -663,12 +663,17 @@ void main() {
       const A_DIST = 1                    // |(0,0,25) - (0,0,24)|
       const EXPECTED_FOV = 45
       const vhPxC = Math.max(1, window.innerHeight)
-      const frameHeightPx = fitFrameH(vhPxC)
+      // fov mapping uses the DESIGN frame height (their geometry, ~86% vh) —
+      // feeding the width-clamped mobile height in here drove the fov past
+      // 110° and blew the astronaut up with wide-angle distortion. The
+      // portrait shrink is applied as camera.zoom below instead: a uniform
+      // projection scale with no perspective change.
+      const designFrameH = SCREEN_FRACTION * vhPxC
       // their blackFrameInRatio is the RAW range ratio — pIn is eased, which
       // skewed the card-zoom fov ramp
       const blackFrameInRatio = ph(p, 'in')
       const rMix = blackFrameInRatio < 1 ? blackFrameInRatio : 1 - whiteFrameRatio
-      const rPx = frameHeightPx + (vhPxC - frameHeightPx) * clamp01(rMix)
+      const rPx = designFrameH + (vhPxC - designFrameH) * clamp01(rMix)
       const lC = Math.tan((EXPECTED_FOV / 180) * Math.PI / 2) * A_DIST * 2 * vhPxC / Math.max(1, rPx)
       const baseFov = (Math.atan(lC / 2 / A_DIST) * 2 / Math.PI) * 180
       camera.position.set(0, 0, 25)
@@ -686,8 +691,9 @@ void main() {
       const dollyZoomFov = wtGate > 0 ? fit(wtRatio, 0, 1, 60, 0) : 0
       let blackFovWobble = 0
       camera.fov = baseFov
-      // (portrait sizing is handled by the unified frameShrink factor — the
-      // world-to-frame mapping shrinks everything consistently, no fov hacks)
+      // portrait: shrink the whole projection uniformly to match the
+      // width-clamped frame/card — distortion-free, unlike a fov change
+      camera.zoom = frameShrink(vhPxC)
       // their freezeRatio: hold the pointer down to slow tunnel time
       freeze += ((isPointerDown ? 1 : 0) - freeze) * 0.1
       const tdt = dt * (1 - 0.7 * freeze)
@@ -736,6 +742,7 @@ void main() {
         astroCam.position.copy(camera.position)
         astroCam.quaternion.copy(camera.quaternion)
         astroCam.fov = camera.fov
+        astroCam.zoom = camera.zoom
         astroCam.aspect = camera.aspect
         astroCam.near = camera.near
         astroCam.far = camera.far
