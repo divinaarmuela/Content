@@ -20,8 +20,43 @@ export async function GET(req: Request) {
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
+    // Token health is opt-in: it is one upstream call per account, and the
+    // common case (rendering a list) does not need it. Failures collapse to
+    // null so a slow or unavailable provider never blanks the page.
+    let health: Record<string, { valid: boolean; expiresAt: string | null; needsRefresh: boolean }> = {}
+    if (new URL(req.url).searchParams.get('health') === '1' && (data ?? []).length > 0) {
+      const publisher = getPublisher()
+      const results = await Promise.all(
+        (data ?? []).map(async row => {
+          const h = await publisher.accountHealth(row.provider_account_id as string) as {
+            tokenStatus?: { valid?: boolean; expiresAt?: string; needsRefresh?: boolean }
+          } | null
+          return [row.id as string, h?.tokenStatus
+            ? {
+                valid: Boolean(h.tokenStatus.valid),
+                expiresAt: h.tokenStatus.expiresAt ?? null,
+                needsRefresh: Boolean(h.tokenStatus.needsRefresh),
+              }
+            : null] as const
+        })
+      )
+      health = Object.fromEntries(results.filter(([, v]) => v !== null) as [string, NonNullable<typeof results[number][1]>][])
+    }
+
+    // Whether this client has ever connected. The UI uses it to decide if an
+    // empty channel list is worth reconciling upstream — a client that never
+    // had a profile cannot have accounts waiting for us.
+    let hasProfile: boolean | null = null
+    if (clientId) {
+      const { data: c } = await supabase
+        .from('clients').select('social_profile_id').eq('id', clientId).maybeSingle()
+      hasProfile = Boolean(c?.social_profile_id)
+    }
+
     return NextResponse.json({
       accounts: data ?? [],
+      hasProfile,
+      health,
       platforms: SUPPORTED_PLATFORMS,
       provider: {
         name: getPublisher().name,
@@ -34,7 +69,13 @@ export async function GET(req: Request) {
   }
 }
 
-/** Disconnect locally: stop targeting an account without revoking OAuth. */
+/** Disconnect an account.
+ *
+ *  This revokes it at the provider as well as locally — a local-only flag
+ *  would leave the client's account still authorised, which is not what
+ *  "disconnect" means to anyone reading the button. The provider call comes
+ *  first: if it fails we keep the local row, so the two never disagree in the
+ *  direction that matters (us thinking it is gone when it is not). */
 export async function DELETE(req: Request) {
   try {
     await requireRole('account_manager')
@@ -42,7 +83,14 @@ export async function DELETE(req: Request) {
     if (typeof id !== 'string') {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
-    const { error } = await supabase.from('social_accounts').update({ active: false }).eq('id', id)
+
+    const { data: row } = await supabase
+      .from('social_accounts').select('provider_account_id').eq('id', id).maybeSingle()
+    if (!row) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+    await getPublisher().disconnectAccount(row.provider_account_id as string)
+
+    const { error } = await supabase.from('social_accounts').delete().eq('id', id)
     if (error) throw new Error(error.message)
     return NextResponse.json({ ok: true })
   } catch (e) {

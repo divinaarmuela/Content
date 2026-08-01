@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Calendar as CalendarIcon,
-  Activity, BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon,
+  Activity, BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2,
 } from 'lucide-react'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
@@ -45,6 +45,7 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard',            label: 'Overview',         icon: LayoutGrid },
   { href: '/dashboard/leads',      label: 'Leads',            icon: Inbox },
   { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
+  { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },

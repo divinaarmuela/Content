@@ -187,6 +187,84 @@ async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
   return out
 }
 
+/**
+ * Return abandoned claims to the queue.
+ *
+ * A worker that dies between claiming a job and settling it — a crashed
+ * process, a killed dev server, a serverless timeout — leaves the row in
+ * 'publishing' where nothing will ever look at it again. Without this, such a
+ * job is silently lost: no post, no error, no retry.
+ *
+ * The window must exceed the longest plausible publish (media relay included),
+ * or a slow job would be re-queued while still running. The stored
+ * x-request-id means even that case replays rather than double-posts.
+ */
+export async function reclaimStalePublishing(olderThanMinutes = 15): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString()
+  const { data } = await supabase
+    .from('publish_jobs')
+    .update({
+      status: 'queued',
+      error: 'Publishing was interrupted; the job was returned to the queue',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('status', 'publishing')
+    .lt('updated_at', cutoff)
+    .select('id')
+  return (data ?? []).length
+}
+
+/**
+ * Reconcile jobs we believe published against what the provider says.
+ *
+ * Creating a post can succeed while publishing to the platform fails minutes
+ * later — the provider's post then reads 'failed' or 'partial' while our row
+ * still says 'published'. Trusting only the create response would report
+ * success for posts that never appeared.
+ */
+export async function reconcilePublishedJobs(): Promise<number> {
+  const since = new Date(Date.now() - 24 * 3600_000).toISOString()
+  const { data: jobs } = await supabase
+    .from('publish_jobs')
+    .select('id, provider_post_id')
+    .eq('status', 'published')
+    .gte('published_at', since)
+    .not('provider_post_id', 'is', null)
+    .limit(50)
+
+  if (!jobs?.length) return 0
+
+  const publisher = getPublisher()
+  const all = await publisher.postAnalytics() as {
+    posts?: { _id?: string; status?: string; platforms?: { platformPostUrl?: string }[] }[]
+  } | null
+  if (!all?.posts) return 0
+
+  const byId = new Map(all.posts.map(p => [p._id, p]))
+  let changed = 0
+
+  for (const job of jobs) {
+    const remote = byId.get(job.provider_post_id as string)
+    if (!remote?.status) continue
+
+    if (remote.status === 'failed' || remote.status === 'partial') {
+      await supabase.from('publish_jobs').update({
+        status: 'failed',
+        error: `Provider reported the post as ${remote.status} after creation`,
+        updated_at: new Date().toISOString(),
+      }).eq('id', job.id)
+      changed++
+    } else {
+      // capture the permalink once the platform assigns one
+      const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
+      if (url) {
+        await supabase.from('publish_jobs').update({ permalink: url }).eq('id', job.id)
+      }
+    }
+  }
+  return changed
+}
+
 /** Jobs whose scheduled time has arrived (or that publish immediately). */
 export async function dueJobIds(now = new Date()): Promise<string[]> {
   const { data } = await supabase
@@ -213,6 +291,10 @@ export async function syncSocialAccounts(clientId: string, profileId: string): P
       name: a.name,
       username: a.username,
       avatar_url: a.avatarUrl,
+      // The provider is the source of truth: if it reports the account as
+      // connected, it is live again. Without this, an account that was once
+      // unlinked stays invisible forever after being reconnected.
+      active: true,
       last_synced_at: new Date().toISOString(),
     })),
     { onConflict: 'provider_account_id' }

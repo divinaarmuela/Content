@@ -66,11 +66,14 @@ export async function POST(req: Request) {
       }
     }
 
+    // Return to the social channels page. Redirecting to /dashboard/clients/[id]
+    // lands on a blank 404 — no such route exists — after the user has already
+    // granted access, which reads as a failure when the connection succeeded.
     const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
     const authUrl = await publisher.connectUrl({
       platform,
       profileId,
-      redirectUrl: `${base}/dashboard/clients/${clientId}?connected=${platform}`,
+      redirectUrl: `${base}/dashboard/social?connected=${platform}&clientId=${clientId}`,
     })
 
     return NextResponse.json({ authUrl })

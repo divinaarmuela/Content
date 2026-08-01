@@ -1,7 +1,9 @@
 import { inngest } from './client'
 import { scanSingleMailbox } from '../lib/email-lead'
 import { getScanSettings, enabledMailboxEmails } from '../lib/scan-settings'
-import { dueJobIds, runPublishJob } from '../lib/publish'
+import {
+  dueJobIds, runPublishJob, reclaimStalePublishing, reconcilePublishedJobs,
+} from '../lib/publish'
 import { runLeadsReportTick } from '../lib/report-send'
 
 /**
@@ -128,14 +130,19 @@ export const publishDispatcher = inngest.createFunction(
     concurrency: { limit: 1 },
   },
   async ({ step }) => {
+    // rescue anything a dead worker left claimed, before looking for new work
+    const reclaimed = await step.run('reclaim-stale', async () => reclaimStalePublishing())
+    // and correct anything the provider later reported as failed
+    const corrected = await step.run('reconcile', async () => reconcilePublishedJobs())
+
     const ids = await step.run('find-due', async () => dueJobIds())
-    if (ids.length === 0) return { due: 0 }
+    if (ids.length === 0) return { due: 0, reclaimed, corrected }
 
     await step.sendEvent(
       'dispatch-publish',
       ids.map(id => ({ name: 'app/post.publish.requested', data: { jobId: id } }))
     )
-    return { due: ids.length }
+    return { due: ids.length, reclaimed, corrected }
   }
 )
 
