@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 
 export async function GET() {
+  const denied = await guard('super_admin')
+  if (denied) return denied
+
   const { data, error } = await supabase
     .from('information_schema.tables')
     .select('table_name, table_schema')

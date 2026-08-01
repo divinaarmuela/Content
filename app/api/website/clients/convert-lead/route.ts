@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 
 /** Convert a lead into a client, carrying every field across. Clerk-protected
  *  via middleware. Duplicate-safe: if a client with the same slug or email
  *  already exists, returns 409 with that client instead of creating a twin. */
 export async function POST(req: Request) {
+  const denied = await guard('account_manager')
+  if (denied) return denied
+
   const body = await req.json()
   if (!body.lead_id) return NextResponse.json({ error: 'lead_id is required' }, { status: 400 })
 

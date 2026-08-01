@@ -67,6 +67,8 @@ export function validatePost(input: {
   caption: string
   media: MediaItem[]
   platforms: Platform[]
+  /** intent per platform, when the caller has one */
+  kinds?: Partial<Record<Platform, PostKind>>
 }): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const images = input.media.filter(m => m.type === 'image').length
@@ -107,14 +109,121 @@ export function validatePost(input: {
     if (!r.mixed && images > 0 && videos > 0) {
       issues.push({ platform: p, problem: `${p} cannot mix images and video in one post` })
     }
+
+    // intent-specific rules — a Reel is a single vertical video, a Story is a
+    // single item, and a carousel needs more than one
+    const kind = input.kinds?.[p]
+    if (kind === 'reel') {
+      if (videos !== 1) {
+        issues.push({ platform: p, problem: 'A Reel needs exactly one video' })
+      }
+      if (images > 0) {
+        issues.push({ platform: p, problem: 'A Reel cannot include still images' })
+      }
+    }
+    if (kind === 'story' && input.media.length !== 1) {
+      issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
+    }
+    if (kind === 'carousel' && input.media.length < 2) {
+      issues.push({ platform: p, problem: 'A carousel needs at least two items' })
+    }
   }
   return issues
+}
+
+/**
+ * Per-platform posting options.
+ *
+ * `kind` is ours: the provider infers Reel vs feed post from the media (a
+ * single video becomes a Reel), and only Stories are set explicitly. Carrying
+ * an intent lets us validate it — asking for a Reel with a photo attached is a
+ * mistake worth catching before it is sent, not after.
+ */
+export type PostKind = 'feed' | 'reel' | 'story' | 'carousel'
+
+export type PostOptions = {
+  kind?: PostKind
+  /** Reels: also show in the main feed. */
+  shareToFeed?: boolean
+  /** Posted automatically once the post is live — the usual place for hashtags. */
+  firstComment?: string
+  /** Up to 3 usernames (Business/Creator accounts only). */
+  collaborators?: string[]
+  /** Custom Reel cover image. */
+  thumbnailUrl?: string
+  /** Milliseconds into the video to take the thumbnail from. */
+  thumbOffset?: number
+  isAiGenerated?: boolean
+  /**
+   * Tag accounts in the post.
+   *
+   * Positioning is the only placement the API offers, and it is inconsistent:
+   * feed images REQUIRE x/y (0–1 from top-left), Stories accept them, and
+   * Reels/videos ignore them and tag by username only. Link stickers, polls,
+   * questions and countdowns cannot be placed at all — an Instagram Graph API
+   * limitation, so no provider can offer them.
+   */
+  userTags?: UserTag[]
+}
+
+export type UserTag = { username: string; x?: number; y?: number }
+
+/** Do coordinates make any difference for this kind of post? */
+export function tagsAcceptCoordinates(kind: PostKind | undefined): boolean {
+  return kind !== 'reel'
+}
+
+export type Target = { platform: Platform; accountId: string; options?: PostOptions }
+
+/** Media rules that apply to a particular kind of post, beyond the platform's
+ *  general limits. Duration and aspect ratio cannot be checked here — they
+ *  need the file — so they are documented for the UI to surface. */
+export const REEL_REQUIREMENTS = {
+  maxSeconds: 90,
+  aspect: '9:16 vertical',
+  resolution: '1080 x 1920',
+  maxMB: 300,
+  formats: 'MP4 or MOV, H.264, 30fps',
+} as const
+
+/** Translate our options into the provider's field names. */
+export function toPlatformData(o: PostOptions): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {}
+  if (o.kind === 'story') out.contentType = 'story'
+  if (o.shareToFeed !== undefined) out.shareToFeed = o.shareToFeed
+  if (o.firstComment) out.firstComment = o.firstComment
+  if (o.collaborators?.length) out.collaborators = o.collaborators.slice(0, 3)
+  if (o.thumbnailUrl) out.instagramThumbnail = o.thumbnailUrl
+  if (typeof o.thumbOffset === 'number') out.thumbOffset = o.thumbOffset
+  if (o.isAiGenerated) out.isAiGenerated = true
+
+  if (o.userTags?.length) {
+    const withCoords = tagsAcceptCoordinates(o.kind)
+    out.userTags = o.userTags
+      .filter(t => t.username?.trim())
+      .map(t => {
+        const username = t.username.trim().replace(/^@/, '')
+        // Reels ignore coordinates entirely; sending them is noise at best
+        if (!withCoords || t.x === undefined || t.y === undefined) return { username }
+        return {
+          username,
+          x: Math.min(1, Math.max(0, t.x)),
+          y: Math.min(1, Math.max(0, t.y)),
+        }
+      })
+  }
+
+  return Object.keys(out).length > 0 ? out : null
 }
 
 /** The exact body POST /posts expects. */
 export type ZernioPostBody = {
   content: string
-  platforms: { platform: Platform; accountId: string }[]
+  platforms: {
+    platform: Platform
+    accountId: string
+    platformSpecificData?: Record<string, unknown>
+  }[]
   mediaItems?: MediaItem[]
   scheduledFor?: string
   timezone?: string
@@ -124,13 +233,20 @@ export type ZernioPostBody = {
 export function buildPostBody(input: {
   caption: string
   media: MediaItem[]
-  targets: { platform: Platform; accountId: string }[]
+  targets: Target[]
   scheduledFor?: string | null
   timezone?: string
 }): ZernioPostBody {
   const body: ZernioPostBody = {
     content: input.caption,
-    platforms: input.targets.map(t => ({ platform: t.platform, accountId: t.accountId })),
+    platforms: input.targets.map(t => {
+      const data = t.options ? toPlatformData(t.options) : null
+      return {
+        platform: t.platform,
+        accountId: t.accountId,
+        ...(data ? { platformSpecificData: data } : {}),
+      }
+    }),
   }
   if (input.media.length > 0) body.mediaItems = input.media
   if (input.scheduledFor) {

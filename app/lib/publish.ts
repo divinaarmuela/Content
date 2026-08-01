@@ -1,7 +1,9 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { getPublisher } from './publisher'
-import { validatePost, isPlatform, type MediaItem, type Platform } from './publish-core'
+import {
+  validatePost, isPlatform, type MediaItem, type PostKind, type Platform, type Target,
+} from './publish-core'
 
 /**
  * Publishing a client's post is the least reversible thing this system does —
@@ -23,7 +25,7 @@ export type PublishJob = {
   client_id: string | null
   caption: string
   media: MediaItem[]
-  targets: { platform: Platform; accountId: string }[]
+  targets: Target[]
   scheduled_for: string | null
   timezone: string
   request_id: string
@@ -36,13 +38,18 @@ export async function queuePublishJob(input: {
   scheduleEntryId?: string | null
   caption: string
   media: MediaItem[]
-  targets: { platform: Platform; accountId: string }[]
+  targets: Target[]
   scheduledFor?: string | null
   timezone?: string
   createdBy?: string
 }): Promise<{ id: string } | { error: string; issues?: string[] }> {
   const platforms = input.targets.map(t => t.platform).filter(isPlatform)
-  const issues = validatePost({ caption: input.caption, media: input.media, platforms })
+  // carry each target's intent into validation, so a Reel with a still image
+  // or a Story with a carousel is refused here rather than by the platform
+  const kinds: Partial<Record<Platform, PostKind>> = {}
+  for (const t of input.targets) if (t.options?.kind) kinds[t.platform] = t.options.kind
+
+  const issues = validatePost({ caption: input.caption, media: input.media, platforms, kinds })
   if (issues.length > 0) {
     return {
       error: 'This post is not valid for every selected platform',
@@ -125,6 +132,12 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           attempts: job.attempts + 1,
           error: null,
         })
+        // close the loop back into production: the board and the scheduler
+        // must reflect that this actually went out
+        if (claimed.content_item_id) {
+          const { recordPublishOnItem } = await import('./production-publish')
+          await recordPublishOnItem(claimed.content_item_id as string, null)
+        }
         return 'published'
 
       case 'duplicate':
@@ -226,7 +239,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   const since = new Date(Date.now() - 24 * 3600_000).toISOString()
   const { data: jobs } = await supabase
     .from('publish_jobs')
-    .select('id, provider_post_id')
+    .select('id, provider_post_id, content_item_id')
     .eq('status', 'published')
     .gte('published_at', since)
     .not('provider_post_id', 'is', null)
@@ -259,6 +272,14 @@ export async function reconcilePublishedJobs(): Promise<number> {
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
       if (url) {
         await supabase.from('publish_jobs').update({ permalink: url }).eq('id', job.id)
+        // the platform assigns the permalink after the fact; push it through
+        // to the schedule entry so the client-facing live link is populated
+        const { data: full } = await supabase
+          .from('publish_jobs').select('content_item_id').eq('id', job.id).maybeSingle()
+        if (full?.content_item_id) {
+          const { recordPublishOnItem } = await import('./production-publish')
+          await recordPublishOnItem(full.content_item_id as string, url)
+        }
       }
     }
   }

@@ -1,4 +1,5 @@
 import 'server-only'
+import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
 import { parseAllowlist, isAllowlistedSuperAdmin, roleSatisfies, type Role } from './identity-core'
@@ -133,4 +134,24 @@ export async function requireRole(required: Role): Promise<TeamUser> {
 export function authzErrorResponse(e: unknown): { error: string; status: number } {
   if (e instanceof AuthzError) return { error: e.message, status: e.status }
   return { error: e instanceof Error ? e.message : 'Internal error', status: 500 }
+}
+
+/**
+ * Route guard as a one-liner: returns a Response to send back, or null to
+ * continue.
+ *
+ *     const denied = await guard('account_manager')
+ *     if (denied) return denied
+ *
+ * Middleware only proves someone is signed in, and clients sign in too, so
+ * every route that touches agency data needs a role check of its own.
+ */
+export async function guard(required: Role): Promise<NextResponse | null> {
+  try {
+    await requireRole(required)
+    return null
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
 }

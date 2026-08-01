@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 import { clients as hardcoded, wixImg } from '../../../components/lama/workData'
 
 /** One-time import: copies the hardcoded workData projects into the CMS.
  *  Creates a client row per project and a published project row. Skips any
  *  slug that already exists, so it's safe to run again. */
 export async function POST() {
+  const denied = await guard('super_admin')
+  if (denied) return denied
+
   const { data: existing, error: exErr } = await supabase.from('projects').select('slug')
   if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 })
   const have = new Set((existing ?? []).map(r => r.slug))

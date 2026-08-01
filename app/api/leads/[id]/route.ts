@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { requireRole, authzErrorResponse } from '../../../lib/authz'
 
-/** Update a lead. Clerk-protected via middleware (/api/leads(.*)). */
+/** Editing and deleting leads is an account_manager action. Middleware alone
+ *  would admit any signed-in account, including a client. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireRole('account_manager')
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
   const { id } = await params
   const body = await req.json()
 
@@ -28,6 +36,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 /** Delete a lead. Clerk-protected via middleware (/api/leads(.*)). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireRole('account_manager')
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
   const { id } = await params
   const { data, error } = await supabase
     .from('leads')

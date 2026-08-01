@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform,
+  validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -53,7 +53,113 @@ describe('validatePost', () => {
   })
 })
 
+describe('post kinds — reels, stories, carousels', () => {
+  it('accepts a single vertical video as a Reel', () => {
+    expect(validatePost({
+      caption: 'a', media: vid(1), platforms: ['instagram'], kinds: { instagram: 'reel' },
+    })).toEqual([])
+  })
+
+  it('rejects a Reel with a still image attached', () => {
+    const issues = validatePost({
+      caption: 'a', media: img(1), platforms: ['instagram'], kinds: { instagram: 'reel' },
+    })
+    expect(issues.some(i => /Reel needs exactly one video/.test(i.problem))).toBe(true)
+  })
+
+  it('rejects a Story with more than one item', () => {
+    const issues = validatePost({
+      caption: 'a', media: img(2), platforms: ['instagram'], kinds: { instagram: 'story' },
+    })
+    expect(issues.some(i => /Story takes exactly one/.test(i.problem))).toBe(true)
+  })
+
+  it('rejects a carousel of one', () => {
+    const issues = validatePost({
+      caption: 'a', media: img(1), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+    })
+    expect(issues.some(i => /at least two items/.test(i.problem))).toBe(true)
+  })
+
+  it('leaves ordinary feed posts unaffected', () => {
+    expect(validatePost({
+      caption: 'a', media: img(1), platforms: ['instagram'], kinds: { instagram: 'feed' },
+    })).toEqual([])
+  })
+})
+
+describe('toPlatformData', () => {
+  it('marks a Story explicitly, since the provider cannot infer it', () => {
+    expect(toPlatformData({ kind: 'story' })).toEqual({ contentType: 'story' })
+  })
+
+  it('does not mark a Reel — a lone video already becomes one', () => {
+    expect(toPlatformData({ kind: 'reel' })).toBeNull()
+    expect(toPlatformData({ kind: 'reel', shareToFeed: false })).toEqual({ shareToFeed: false })
+  })
+
+  it('maps the optional extras to their provider field names', () => {
+    expect(toPlatformData({
+      firstComment: '#hashtags', thumbnailUrl: 'https://x/c.jpg', thumbOffset: 1500, isAiGenerated: true,
+    })).toEqual({
+      firstComment: '#hashtags',
+      instagramThumbnail: 'https://x/c.jpg',
+      thumbOffset: 1500,
+      isAiGenerated: true,
+    })
+  })
+
+  it('caps collaborators at the documented three', () => {
+    const out = toPlatformData({ collaborators: ['a', 'b', 'c', 'd'] })
+    expect(out?.collaborators).toEqual(['a', 'b', 'c'])
+  })
+
+  it('returns null when there is nothing to send', () => {
+    expect(toPlatformData({})).toBeNull()
+    expect(toPlatformData({ kind: 'feed' })).toBeNull()
+  })
+
+  describe('user tags — the only positioned element the API offers', () => {
+    it('keeps coordinates on feed posts and strips the leading @', () => {
+      const out = toPlatformData({ kind: 'feed', userTags: [{ username: '@acme', x: 0.4, y: 0.6 }] })
+      expect(out?.userTags).toEqual([{ username: 'acme', x: 0.4, y: 0.6 }])
+    })
+
+    it('drops coordinates on Reels, which ignore them', () => {
+      const out = toPlatformData({ kind: 'reel', userTags: [{ username: 'acme', x: 0.4, y: 0.6 }] })
+      expect(out?.userTags).toEqual([{ username: 'acme' }])
+    })
+
+    it('keeps coordinates on Stories, which accept them', () => {
+      const out = toPlatformData({ kind: 'story', userTags: [{ username: 'acme', x: 0.1, y: 0.2 }] })
+      expect(out?.userTags).toEqual([{ username: 'acme', x: 0.1, y: 0.2 }])
+    })
+
+    it('clamps coordinates into the 0–1 range', () => {
+      const out = toPlatformData({ kind: 'feed', userTags: [{ username: 'a', x: 5, y: -2 }] })
+      expect(out?.userTags).toEqual([{ username: 'a', x: 1, y: 0 }])
+    })
+
+    it('ignores blank usernames', () => {
+      const out = toPlatformData({ userTags: [{ username: '  ' }, { username: 'ok' }] })
+      expect(out?.userTags).toEqual([{ username: 'ok' }])
+    })
+  })
+})
+
 describe('buildPostBody', () => {
+  it('attaches platformSpecificData only where there is something to attach', () => {
+    const body = buildPostBody({
+      caption: 'hi', media: vid(1),
+      targets: [
+        { platform: 'instagram', accountId: 'a1', options: { kind: 'story' } },
+        { platform: 'tiktok', accountId: 'a2' },
+      ],
+    })
+    expect(body.platforms[0].platformSpecificData).toEqual({ contentType: 'story' })
+    expect(body.platforms[1].platformSpecificData).toBeUndefined()
+  })
+
   const targets = [{ platform: 'instagram' as const, accountId: 'acc_1' }]
 
   it('schedules with an explicit timezone', () => {

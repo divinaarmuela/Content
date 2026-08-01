@@ -1,7 +1,7 @@
 import 'server-only'
 import {
   buildPostBody, classifyResponse, mediaTypeFor,
-  type MediaItem, type Platform, type PublishOutcome,
+  type MediaItem, type Platform, type PublishOutcome, type Target,
 } from './publish-core'
 
 /**
@@ -54,7 +54,7 @@ export type ProviderAccount = {
 export type CreatePostInput = {
   caption: string
   media: MediaItem[]
-  targets: { platform: Platform; accountId: string }[]
+  targets: Target[]
   scheduledFor?: string | null
   timezone?: string
   /** UUID, stored before the call and reused on every retry of this job. */

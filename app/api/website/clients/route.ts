@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 
 /** Master client registry — dashboard only (Clerk-gated in middleware). */
 export async function GET() {
+  const denied = await guard('scheduler')
+  if (denied) return denied
+
   const { data, error } = await supabase
     .from('clients')
     .select('*')
@@ -12,6 +16,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guard('account_manager')
+  if (denied) return denied
+
   const body = await req.json()
   if (!body.name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
   const slug = (body.slug || body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')

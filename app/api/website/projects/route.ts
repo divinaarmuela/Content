@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 
 /** Admin list — includes unpublished, dashboard-only (Clerk-gated in middleware). */
 export async function GET() {
+  const denied = await guard('scheduler')
+  if (denied) return denied
+
   const { data, error } = await supabase
     .from('projects')
     .select('*')
@@ -14,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guard('editor')
+  if (denied) return denied
+
   const body = await req.json()
   if (!body.slug || !body.name) {
     return NextResponse.json({ error: 'slug and name are required' }, { status: 400 })

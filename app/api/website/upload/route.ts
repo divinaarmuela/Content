@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { guard } from '@/app/lib/authz'
 
 const BUCKET = 'website-assets'
 const MAX_BYTES = 200 * 1024 * 1024 // 200MB — hero videos are large
@@ -7,6 +8,9 @@ const MAX_BYTES = 200 * 1024 * 1024 // 200MB — hero videos are large
 /** Upload a file to Supabase Storage and register it in the assets table.
  *  multipart/form-data: file (required), purpose, orientation, project_id. */
 export async function POST(req: Request) {
+  const denied = await guard('editor')
+  if (denied) return denied
+
   const form = await req.formData()
   const file = form.get('file')
   if (!(file instanceof File)) {
