@@ -210,17 +210,21 @@ export default function SocialPage() {
                         ? 'not connected'
                         : `${countFor(c.id)} channel${countFor(c.id) === 1 ? '' : 's'}`}
                     </span>
+                    {/* contextual compose: skips choosing the client again.
+                        Kept small and in the header row so it does not compete
+                        with the primary action above. */}
+                    {countFor(c.id) > 0 && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => setComposeFor(c.id)}
+                        title={`New post for ${c.name}`}
+                      >
+                        <PenLine className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <SocialChannels clientId={c.id} onChanged={load} />
-                {countFor(c.id) > 0 && (
-                  <Button
-                    variant="outline" size="sm" className="w-fit"
-                    onClick={() => setComposeFor(c.id)}
-                  >
-                    <PenLine className="h-3.5 w-3.5" /> Post for {c.name}
-                  </Button>
-                )}
               </CardContent>
             </Card>
           ))}

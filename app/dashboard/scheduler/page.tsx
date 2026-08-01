@@ -7,11 +7,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import ScheduleCalendar from './ScheduleCalendar'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
+import { ExternalLink, ArrowRight, CalendarClock, CalendarDays, ListChecks } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
@@ -41,6 +42,7 @@ export default function SchedulerPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
+  const [view, setView] = useState<'queue' | 'calendar'>('queue')
 
   const load = useCallback(async () => {
     try {
@@ -75,12 +77,33 @@ export default function SchedulerPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Scheduler queue</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Scheduler</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Only client-approved content appears here. Open an item to set platforms, dates, and live links.
+            {view === 'queue'
+              ? 'Only client-approved content appears here. Open an item to set platforms, dates, and live links.'
+              : 'Everything with a date, and whether it actually went out.'}
           </p>
         </div>
-        <Tabs value={lane} onValueChange={v => v && setLane(v)} className="ml-auto">
+
+        {/* Queue and Calendar are the same data at two zoom levels — a list of
+            what needs a time, and a grid of what has one. Two separate pages
+            invited the question of which was authoritative. */}
+        <Tabs value={view} onValueChange={v => v && setView(v as 'queue' | 'calendar')} className="ml-auto">
+          <TabsList>
+            <TabsTrigger value="queue" className="gap-1.5">
+              <ListChecks className="h-3.5 w-3.5" /> Queue
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-1.5">
+              <CalendarDays className="h-3.5 w-3.5" /> Calendar
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {view === 'calendar' ? <ScheduleCalendar /> : (
+      <>
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={lane} onValueChange={v => v && setLane(v)}>
           <TabsList>
             {LANES.map(l => (
               <TabsTrigger key={l.key} value={l.key} className="gap-1.5">
@@ -178,6 +201,8 @@ export default function SchedulerPage() {
             </TableBody>
           </Table>
         </Card>
+      )}
+      </>
       )}
     </div>
   )

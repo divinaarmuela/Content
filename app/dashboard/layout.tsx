@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Calendar as CalendarIcon,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Clock,
   Activity, BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2,
 } from 'lucide-react'
 
@@ -49,7 +49,6 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
-  { href: '/dashboard/calendar',   label: 'Calendar',         icon: CalendarIcon },
   { href: '/dashboard/activity',   label: 'Activity',         icon: Activity },
   { href: '/dashboard/reports',    label: 'Reports',          icon: BarChart3 },
 ]
