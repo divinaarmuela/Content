@@ -186,6 +186,61 @@ export const REEL_REQUIREMENTS = {
   formats: 'MP4 or MOV, H.264, 30fps',
 } as const
 
+export const STORY_REQUIREMENTS = {
+  maxSeconds: 60,
+  aspect: '9:16 vertical',
+  resolution: '1080 x 1920',
+  maxImageMB: 8,
+  maxVideoMB: 100,
+  formats: 'JPEG/PNG images, MP4/MOV video',
+} as const
+
+/**
+ * Advisories: true things the operator should know that are not reasons to
+ * block publishing.
+ *
+ * The important one is the caption. Instagram does not display text on a
+ * Story, so a caption written here is silently discarded — the post succeeds
+ * and the words simply never appear. Surfacing that before it is sent is the
+ * difference between a mistake and a puzzle.
+ */
+export function postWarnings(input: {
+  caption: string
+  media: MediaItem[]
+  kinds?: Partial<Record<Platform, PostKind>>
+}): string[] {
+  const warnings: string[] = []
+  const kinds = Object.values(input.kinds ?? {})
+
+  if (kinds.includes('story')) {
+    if (input.caption.trim()) {
+      warnings.push(
+        'Instagram does not show captions on Stories — this text will not appear. ' +
+        'Put any wording into the image or video itself.'
+      )
+    }
+    warnings.push(
+      `Stories should be ${STORY_REQUIREMENTS.aspect} (${STORY_REQUIREMENTS.resolution}), ` +
+      `video up to ${STORY_REQUIREMENTS.maxSeconds}s.`
+    )
+    warnings.push('Link stickers, polls and countdowns cannot be added by any API — those need a manual post.')
+  }
+
+  if (kinds.includes('reel')) {
+    warnings.push(
+      `Reels should be ${REEL_REQUIREMENTS.aspect} (${REEL_REQUIREMENTS.resolution}), ` +
+      `up to ${REEL_REQUIREMENTS.maxSeconds}s, ${REEL_REQUIREMENTS.formats}.`
+    )
+  }
+
+  const videos = input.media.filter(m => m.type === 'video').length
+  if (videos > 0 && kinds.includes('story')) {
+    warnings.push('Only the first 60 seconds of a video will be used for a Story.')
+  }
+
+  return warnings
+}
+
 /** Translate our options into the provider's field names. */
 export function toPlatformData(o: PostOptions): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}

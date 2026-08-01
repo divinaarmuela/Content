@@ -37,11 +37,29 @@ export interface Publisher {
   postAnalytics(postId?: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
   listComments(): Promise<unknown>
+  /** Comments on one post. */
+  postComments(postId: string): Promise<unknown>
+  /** Public reply, visible under the comment. */
+  replyToComment(postId: string, commentId: string, message: string): Promise<unknown>
+  /** Private DM to the comment's author (Instagram/Facebook). */
+  privateReply(postId: string, commentId: string, message: string, buttons?: ReplyButton[]): Promise<unknown>
+  /** Hide or unhide a comment. */
+  setCommentHidden(postId: string, commentId: string, hidden: boolean): Promise<unknown>
+  /** Delete a comment outright. */
+  deleteComment(postId: string, commentId: string): Promise<unknown>
+  /** Edit the caption of an existing post. */
+  editPost(postId: string, content: string): Promise<unknown>
+  /** Delete a published post from the platform. */
+  deletePost(postId: string): Promise<unknown>
+  /** Bulk messaging campaigns. */
+  listBroadcasts(): Promise<unknown>
   /** Push bytes to the provider and return a URL usable in a post. */
   uploadMedia(input: { bytes: ArrayBuffer; filename: string; contentType: string }): Promise<MediaItem>
   /** Create (or schedule) a post. Idempotent on requestId. */
   createPost(input: CreatePostInput): Promise<PublishOutcome>
 }
+
+export type ReplyButton = { type?: string; title: string; url?: string; payload?: string }
 
 export type ProviderAccount = {
   providerAccountId: string
@@ -182,6 +200,74 @@ class ZernioPublisher implements Publisher {
     return this.getJson('/inbox/comments')
   }
 
+  /** POST returning parsed JSON, throwing with the provider's own message so
+   *  the operator sees why an action was refused rather than a status code. */
+  private async post(path: string, body?: unknown): Promise<unknown> {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const j = json as Record<string, unknown>
+      throw new Error(String(j.error ?? j.message ?? `Request failed (${res.status})`))
+    }
+    return json
+  }
+
+  postComments(postId: string) {
+    return this.getJson(`/inbox/comments/${encodeURIComponent(postId)}`)
+  }
+
+  replyToComment(postId: string, commentId: string, message: string) {
+    return this.post(
+      `/inbox/comments/${encodeURIComponent(postId)}/${encodeURIComponent(commentId)}/reply`,
+      { message }
+    )
+  }
+
+  /** Meta allows one private reply per comment, within a limited window after
+   *  it is posted. A refusal here is usually that window having closed, so the
+   *  provider's message is passed through untouched. */
+  privateReply(postId: string, commentId: string, message: string, buttons?: ReplyButton[]) {
+    return this.post(
+      `/inbox/comments/${encodeURIComponent(postId)}/${encodeURIComponent(commentId)}/private-reply`,
+      { message, ...(buttons?.length ? { buttons } : {}) }
+    )
+  }
+
+  setCommentHidden(postId: string, commentId: string, hidden: boolean) {
+    const action = hidden ? 'hide' : 'unhide'
+    return this.post(
+      `/inbox/comments/${encodeURIComponent(postId)}/${encodeURIComponent(commentId)}/${action}`
+    )
+  }
+
+  async deleteComment(postId: string, commentId: string) {
+    const res = await fetch(
+      `${BASE}/inbox/comments/${encodeURIComponent(postId)}/${encodeURIComponent(commentId)}`,
+      { method: 'DELETE', headers: this.headers() }
+    )
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok && res.status !== 404) {
+      throw new Error(String((json as Record<string, unknown>).error ?? `Could not delete comment (${res.status})`))
+    }
+    return json
+  }
+
+  editPost(postId: string, content: string) {
+    return this.post(`/posts/${encodeURIComponent(postId)}/edit`, { content })
+  }
+
+  deletePost(postId: string) {
+    return this.post(`/posts/${encodeURIComponent(postId)}/delete`)
+  }
+
+  listBroadcasts() {
+    return this.getJson('/broadcasts')
+  }
+
   /** Unlike /posts, this covers everything the platform knows about — posts
    *  published directly on Instagram appear here too, with their metrics. */
   postAnalytics(postId?: string) {
@@ -271,6 +357,14 @@ class UnconfiguredPublisher implements Publisher {
   async listPosts() { return null }
   async postAnalytics() { return null }
   async listComments() { return null }
+  async postComments() { return null }
+  async replyToComment() { return this.fail() }
+  async privateReply() { return this.fail() }
+  async setCommentHidden() { return this.fail() }
+  async deleteComment() { return this.fail() }
+  async editPost() { return this.fail() }
+  async deletePost() { return this.fail() }
+  async listBroadcasts() { return null }
   async uploadMedia() { return this.fail() }
   async createPost(): Promise<PublishOutcome> {
     return { kind: 'permanent', message: 'No publishing provider is configured' }
