@@ -52,8 +52,6 @@ next-env.d.ts
 # Cecconi1.jpg is now a web-optimised ~180KB version served from /public.
 /public/Cecconi2.jpg
 /public/Cecconi3.jpg
-/public/im3.jpg
-/public/im4.jpg
 
 # local image-optimisation working dir (not for commit)
 /_optimized/
