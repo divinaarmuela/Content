@@ -10,13 +10,13 @@ const LINES = ['You’re the best-kept', 'secret in your market.', 'Let’s fix 
 export default function LamaHero() {
   return (
     <section
-      data-lama-title="MD MEDIA MARKETING"
+      data-lama-title="INDEX"
       className="relative min-h-[100dvh] flex items-end px-6 sm:px-10 pb-32 sm:pb-40 pt-40 mix-blend-exclusion"
     >
       <div className="w-full lg:grid lg:grid-cols-12 lg:gap-6">
         <div className="lg:col-start-1 lg:col-span-8">
           <Scramble
-            text="[ MD MEDIA MARKETING ]"
+            text="[ CONTENT-LED MARKETING — MELBOURNE ]"
             className="mb-8 font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream"
           />
           <h1 className="font-lamah font-bold uppercase text-cream leading-[1.02] lg:leading-[0.92] tracking-[-0.02em] text-[clamp(2.25rem,5.6vw,5.75rem)]">

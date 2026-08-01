@@ -47,10 +47,10 @@ export default function LamaServices() {
       <div
         ref={rowRef}
         onScroll={onScroll}
-        className="mt-20 flex gap-8 overflow-x-auto pb-4 snap-x snap-mandatory [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-12 md:overflow-visible md:pb-0"
+        className="mt-20 -mx-6 flex gap-5 overflow-x-auto px-6 pb-4 snap-x snap-proximity scroll-px-6 [-webkit-overflow-scrolling:touch] [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-10 sm:px-10 sm:scroll-px-10 md:mx-0 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-12 md:overflow-visible md:px-0 md:pb-0"
       >
         {COLUMNS.map((col, i) => (
-          <Reveal key={col.label} delay={i * 120} className="shrink-0 w-[72vw] sm:w-[46vw] snap-start md:w-auto md:shrink">
+          <Reveal key={col.label} delay={i * 120} className="shrink-0 w-[68vw] sm:w-[44vw] snap-start md:w-auto md:shrink">
             <Scramble text={col.label} className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
             <ul className="mt-6 space-y-3">
               {col.items.map((item) => (
