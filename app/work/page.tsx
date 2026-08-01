@@ -1,4 +1,5 @@
 import ScrollObserver from '../components/ScrollObserver'
+import SiteNav from '../components/SiteNav'
 import SiteMedia from '../components/SiteMedia'
 import { getSiteProjects, type SiteProject } from '../lib/websiteData'
 
@@ -52,6 +53,9 @@ export default async function WorkPage() {
 
   return (
     <>
+      {/* the case-study pages under /work/[slug] bring their own nav,
+          so it is added here on the index rather than in work/layout */}
+      <SiteNav />
       <main>
 
         {/* HERO */}
