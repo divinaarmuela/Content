@@ -61,5 +61,19 @@ create unique index if not exists publish_jobs_one_live_per_item
   on publish_jobs (content_item_id)
   where content_item_id is not null and status in ('queued','publishing');
 
+-- 'scheduled' = handed to the provider, which is holding it until its time.
+-- Distinct from 'queued' (not yet handed over) and 'published' (actually live);
+-- collapsing them would tell an operator a post is out when it is not.
+alter table publish_jobs drop constraint if exists publish_jobs_status_check;
+alter table publish_jobs add constraint publish_jobs_status_check
+  check (status in ('queued','publishing','scheduled','published','duplicate','failed','cancelled'));
+
+-- A scheduled job is settled, so it must not hold the "one live job per item"
+-- slot open forever.
+drop index if exists publish_jobs_one_live_per_item;
+create unique index if not exists publish_jobs_one_live_per_item
+  on publish_jobs (content_item_id)
+  where content_item_id is not null and status in ('queued','publishing','scheduled');
+
 alter table social_accounts enable row level security;
 alter table publish_jobs    enable row level security;

@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { AlertTriangle, ImagePlus, Loader2, Send, X } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { AlertTriangle, ImagePlus, Info, Loader2, Send, X } from 'lucide-react'
 import PlatformIcon, { brandFor } from './PlatformIcon'
 import {
-  validatePost, PLATFORM_RULES, isPlatform,
-  type MediaItem, type Platform,
+  validatePost, postWarnings, PLATFORM_RULES, isPlatform,
+  REEL_REQUIREMENTS, STORY_REQUIREMENTS,
+  type MediaItem, type Platform, type PostKind,
 } from '../../lib/publish-core'
 
 type Account = {
@@ -40,6 +42,11 @@ export default function ComposeDialog({
   const [caption, setCaption] = useState('')
   const [media, setMedia] = useState<MediaItem[]>([])
   const [when, setWhen] = useState('')
+  const [kind, setKind] = useState<PostKind | 'auto'>('auto')
+  const [shareToFeed, setShareToFeed] = useState(true)
+  const [firstComment, setFirstComment] = useState('')
+  const [collaborators, setCollaborators] = useState('')
+  const [thumbSeconds, setThumbSeconds] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -56,12 +63,27 @@ export default function ComposeDialog({
     [chosen]
   )
 
+  // 'auto' leaves it to the provider: a lone video becomes a Reel, several
+  // images become a carousel. Only override when the operator says so.
+  const effectiveKind: PostKind | undefined = kind === 'auto' ? undefined : kind
+  const kinds = useMemo(() => {
+    if (!effectiveKind) return undefined
+    return Object.fromEntries(platforms.map(p => [p, effectiveKind])) as Partial<Record<Platform, PostKind>>
+  }, [platforms, effectiveKind])
+
   const issues = useMemo(
     () => (platforms.length === 0 && !caption && media.length === 0
       ? []
-      : validatePost({ caption, media, platforms })),
-    [caption, media, platforms]
+      : validatePost({ caption, media, platforms, kinds })),
+    [caption, media, platforms, kinds]
   )
+
+  const warnings = useMemo(
+    () => (platforms.length === 0 ? [] : postWarnings({ caption, media, kinds })),
+    [caption, media, kinds, platforms]
+  )
+
+  const isReel = effectiveKind === 'reel' || (kind === 'auto' && media.length === 1 && media[0]?.type === 'video')
 
   // the tightest caption limit among the chosen platforms is what actually binds
   const limit = platforms.length
@@ -106,7 +128,21 @@ export default function ComposeDialog({
           clientId,
           caption,
           media,
-          targets: chosen.map(a => ({ platform: a.platform, accountId: a.provider_account_id })),
+          targets: chosen.map(a => ({
+            platform: a.platform,
+            accountId: a.provider_account_id,
+            options: {
+              ...(effectiveKind ? { kind: effectiveKind } : {}),
+              ...(isReel ? { shareToFeed } : {}),
+              ...(firstComment.trim() ? { firstComment: firstComment.trim() } : {}),
+              ...(collaborators.trim()
+                ? { collaborators: collaborators.split(/[\s,]+/).filter(Boolean).slice(0, 3) }
+                : {}),
+              ...(thumbSeconds && Number(thumbSeconds) >= 0
+                ? { thumbOffset: Math.round(Number(thumbSeconds) * 1000) }
+                : {}),
+            },
+          })),
           scheduledFor: publishNow ? null : new Date(when).toISOString(),
           publishNow,
         }),
@@ -117,12 +153,16 @@ export default function ComposeDialog({
         throw new Error(json.error ?? 'Could not queue the post')
       }
 
-      toast.success(
-        json.status === 'published' ? 'Published'
-          : json.status === 'duplicate' ? 'An identical post already exists — nothing sent'
-          : json.status === 'failed' ? 'The provider rejected the post'
-          : publishNow ? 'Publishing…' : 'Scheduled'
-      )
+      if (json.status === 'failed') {
+        toast.error('The provider rejected the post — check the job for details')
+      } else {
+        toast.success(
+          json.status === 'published' ? 'Published'
+            : json.status === 'scheduled' ? `Scheduled for ${new Date(when).toLocaleString()}`
+            : json.status === 'duplicate' ? 'An identical post already exists — nothing sent'
+            : 'Sent to the platform'
+        )
+      }
       reset(); onOpenChange(false); onPublished?.()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not queue the post')
@@ -240,6 +280,72 @@ export default function ComposeDialog({
             </div>
           </div>
 
+          {/* post type ── */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="kind">Post type</Label>
+            <Select value={kind} onValueChange={v => setKind(v as PostKind | 'auto')}>
+              <SelectTrigger id="kind" className="w-fit min-w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automatic</SelectItem>
+                <SelectItem value="feed">Feed post</SelectItem>
+                <SelectItem value="reel">Reel</SelectItem>
+                <SelectItem value="story">Story</SelectItem>
+                <SelectItem value="carousel">Carousel</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {kind === 'auto'
+                ? 'One video becomes a Reel, several images become a carousel.'
+                : kind === 'reel'
+                ? `${REEL_REQUIREMENTS.aspect}, up to ${REEL_REQUIREMENTS.maxSeconds}s, ${REEL_REQUIREMENTS.formats}.`
+                : kind === 'story'
+                ? `${STORY_REQUIREMENTS.aspect}, up to ${STORY_REQUIREMENTS.maxSeconds}s. Captions are not shown.`
+                : kind === 'carousel'
+                ? 'Two or more items, shown as a swipeable set.'
+                : 'A standard post in the main feed.'}
+            </p>
+          </div>
+
+          {/* reel-only controls ── */}
+          {isReel && (
+            <div className="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+              <div className="flex items-start gap-3">
+                <Switch id="stf" checked={shareToFeed} onCheckedChange={setShareToFeed} />
+                <div>
+                  <Label htmlFor="stf">Also show in the main feed</Label>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Off puts it in the Reels tab only.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="thumb">Cover frame (seconds into the video)</Label>
+                <Input id="thumb" type="number" min={0} step="0.5" className="w-32"
+                  value={thumbSeconds} onChange={e => setThumbSeconds(e.target.value)}
+                  placeholder="0" />
+              </div>
+            </div>
+          )}
+
+          {/* extras ── */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="fc">First comment</Label>
+              <Textarea id="fc" rows={2} value={firstComment}
+                onChange={e => setFirstComment(e.target.value)}
+                placeholder="Hashtags, or the link — posted automatically once live" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="collab">Collaborators</Label>
+              <Input id="collab" value={collaborators}
+                onChange={e => setCollaborators(e.target.value)}
+                placeholder="username, username" />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Up to 3, Business or Creator accounts only.
+              </p>
+            </div>
+          </div>
+
           {/* when ── */}
           <div className="grid gap-1.5">
             <Label htmlFor="when">Schedule for (leave blank to publish now)</Label>
@@ -249,6 +355,16 @@ export default function ComposeDialog({
               className="w-fit"
             />
           </div>
+
+          {/* advisories — true, but not reasons to block ── */}
+          {warnings.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <ul className="flex flex-col gap-0.5">
+                {warnings.map((w, n) => <li key={n}>{w}</li>)}
+              </ul>
+            </div>
+          )}
 
           {/* problems, before they become failed posts ── */}
           {issues.length > 0 && (

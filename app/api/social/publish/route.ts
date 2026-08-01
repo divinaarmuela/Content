@@ -39,14 +39,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: queued.error, issues: queued.issues }, { status: 400 })
     }
 
-    // "publish now" runs inline so the operator sees the result immediately;
-    // scheduled posts are left for the dispatcher
-    if (body.publishNow === true) {
-      const status = await runPublishJob(queued.id)
-      return NextResponse.json({ id: queued.id, status: status ?? 'publishing' })
-    }
-
-    return NextResponse.json({ id: queued.id, status: 'queued' })
+    // Hand the job to the provider straight away, whether it publishes now or
+    // later. The provider holds the schedule, so a scheduled post does not
+    // depend on our cron running at the right minute — and the operator finds
+    // out immediately if it was refused, rather than at the scheduled time.
+    const status = await runPublishJob(queued.id)
+    return NextResponse.json({ id: queued.id, status: status ?? 'publishing' })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

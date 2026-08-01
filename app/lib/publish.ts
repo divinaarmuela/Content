@@ -124,14 +124,21 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     })
 
     switch (outcome.kind) {
-      case 'published':
+      case 'published': {
+        // A future-dated post is accepted by the provider and held by their
+        // scheduler — it is handed over, not live yet. Saying "published"
+        // would be a lie the operator acts on.
+        const isFuture = Boolean(
+          job.scheduled_for && new Date(job.scheduled_for).getTime() > Date.now()
+        )
         await settle({
-          status: 'published',
+          status: isFuture ? 'scheduled' : 'published',
           provider_post_id: outcome.postId,
-          published_at: new Date().toISOString(),
+          published_at: isFuture ? null : new Date().toISOString(),
           attempts: job.attempts + 1,
           error: null,
         })
+        if (isFuture) return 'scheduled'
         // close the loop back into production: the board and the scheduler
         // must reflect that this actually went out
         if (claimed.content_item_id) {
@@ -139,6 +146,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           await recordPublishOnItem(claimed.content_item_id as string, null)
         }
         return 'published'
+      }
 
       case 'duplicate':
         // layer 3 — the post is already live. Recording this as failure would
@@ -286,15 +294,25 @@ export async function reconcilePublishedJobs(): Promise<number> {
   return changed
 }
 
-/** Jobs whose scheduled time has arrived (or that publish immediately). */
-export async function dueJobIds(now = new Date()): Promise<string[]> {
+/**
+ * Jobs to hand to the provider now.
+ *
+ * Scheduled posts are dispatched IMMEDIATELY rather than held until their
+ * time: the provider accepts `scheduledFor` and runs its own scheduler, which
+ * is infrastructure that exists and stays awake. Holding them here would make
+ * a client's post depend on our cron running at the right minute — and if that
+ * cron is not wired up, the post never goes out and nothing says so.
+ *
+ * The job row still tracks the post, so it can be cancelled or edited, and the
+ * claim still guarantees it is handed over exactly once.
+ */
+export async function dueJobIds(): Promise<string[]> {
   const { data } = await supabase
     .from('publish_jobs')
     .select('id')
     .eq('status', 'queued')
-    .or(`scheduled_for.is.null,scheduled_for.lte.${now.toISOString()}`)
     .lt('attempts', 5)               // stop hammering a job that keeps failing
-    .order('scheduled_for', { ascending: true })
+    .order('created_at', { ascending: true })
     .limit(50)
   return (data ?? []).map(r => r.id as string)
 }
