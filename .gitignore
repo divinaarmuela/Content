@@ -60,3 +60,9 @@ next-env.d.ts
 .superpowers/
 
 
+
+# local dev logs
+inngest-dev.log
+tunnel.log
+vercel-login.log
+.next-dev.log

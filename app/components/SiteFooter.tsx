@@ -27,6 +27,13 @@ export default function SiteFooter({ vol, tagline }: { vol: string; tagline?: Re
             <a href="/personal-brand">Personal Brand</a>
           </div>
           <div className="footer-col">
+            <h4>&raquo; Studio</h4>
+            <a href="/work">Our Work</a>
+            <a href="/about">About</a>
+            <a href="/journal">Journal</a>
+            <a href="/events">The Room</a>
+          </div>
+          <div className="footer-col">
             <h4>&raquo; Contact</h4>
             <a href="mailto:hello@mdmmarketing.com.au">hello@mdmmarketing.com.au</a>
             <a href="tel:+61447764477">0447 764 477</a>

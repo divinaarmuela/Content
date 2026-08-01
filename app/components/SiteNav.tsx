@@ -75,6 +75,8 @@ export default function SiteNav() {
         <NavLogo />
         <nav className="site-nav-links" aria-label="Primary">
           <Link href="/services">Services</Link>
+          <Link href="/work">Work</Link>
+          <Link href="/journal">Journal</Link>
           <Link href="/about">About</Link>
           <a href="#contact" onClick={e => handleAnchor(e, '#contact')}>Contact</a>
         </nav>

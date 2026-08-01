@@ -11,8 +11,6 @@ import LamaServices from './components/lama/LamaServices'
 import LamaLogos from './components/lama/LamaLogos'
 import LamaCulture from './components/lama/LamaCulture'
 import LamaContact from './components/lama/LamaContact'
-// temporarily hidden while the astronaut sequence is polished
-// import LamaExperience from './components/lama/LamaExperience'
 import LamaFooterBar from './components/lama/LamaFooterBar'
 
 export const metadata: Metadata = {
@@ -38,6 +36,9 @@ export const metadata: Metadata = {
   },
 }
 
+// homepage work rows come from the CMS — refresh at most every 5 minutes
+export const revalidate = 300
+
 export default function HomePage() {
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink [&_section]:border-b-0`}>
@@ -53,7 +54,6 @@ export default function HomePage() {
         <LamaLogos />
         <LamaCulture />
         <LamaContact />
-        {/* <LamaExperience /> */}
       </main>
       <LamaFooterBar />
     </div>

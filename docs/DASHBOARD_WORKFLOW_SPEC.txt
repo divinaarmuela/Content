@@ -1,0 +1,602 @@
+﻿
+MD Media Client + Team Dashboard
+Developer Documentation, Workflow Logic, Feature Requirements + Trigger Map
+Prepared for Akmal / MD Media development workflow
+Prepared: 08 June 2026
+
+Figure 1. High-level dashboard architecture: one backend powering two different views.
+Core Objective
+Build a single dashboard where MD Media can manage production internally and clients can clearly see what has been created, what needs review, what is scheduled, and what has been published. The system should reduce WhatsApp chasing, centralise links, and create a reusable foundation for a future product module.
+
+
+Document Map
+Purpose and context
+Current workflow pain points
+Roles and permission model
+Recommended production status funnel
+End-to-end content workflow from editor upload to publishing
+Client dashboard requirements
+Team dashboard requirements
+Commenting, approval and notification logic
+Data model and backend fields
+Automation trigger map
+MVP scope, phase 2 and product-ready phase 3 logic
+Testing checklist and acceptance criteria
+1. Purpose and Context
+What is being built: A client-facing and team-facing dashboard for MD Media that brings asset links, review stages, comments, approvals, scheduling status and published links into one place.
+Why it matters: The current process uses multiple disconnected tools such as Dropbox, Google Drive, Asana, WhatsApp/manual follow-up and scheduling tools. This causes gaps in visibility for clients and creates extra back-and-forth for the internal team.
+Design Principle
+The Account Manager is the central gatekeeper. Editors should not directly manage client communication, and schedulers should only be involved once content has been approved for scheduling.
+
+2. Current Pain Points to Solve
+Too many disconnected tools: Assets and updates are split across Dropbox, Google Drive, Asana, WhatsApp and scheduling tools.
+No live client visibility: Clients often need to ask what has been created, reviewed, scheduled or posted.
+Manual link forwarding: The team manually passes Drive links between editor, account manager and scheduler.
+No clear review trail: Changes can happen verbally or in scattered comments, making accountability difficult.
+Scheduler receives content too early: Schedulers should only receive items after client/AM approval, not during internal revision loops.
+Client comments need routing: Client feedback should come to the Account Manager first, then be translated into internal editor tasks.
+Future product potential: This MVP should be structured in a reusable way so the same workflow can later be productised for other agencies/teams.
+3. User Roles and Permission Model
+Role
+Primary responsibility
+Can see
+Can do
+Should not see/do
+Admin / LeadershipDivina / Martin
+Full oversight across clients, team workflow and reporting.
+All clients, all projects, all comments, all storage links, all analytics.
+Create clients, assign team members, override statuses, view audit trail, configure monthly commitments.
+N/A. Full access.
+Account Manager
+Own assigned client delivery and act as gatekeeper between internal team and client.
+Assigned client projects, all internal comments for assigned work, client comments, Drive links, scheduling status.
+Review assets, request revisions, send items to client, approve for scheduling, assign scheduler, respond to client comments.
+Should not bypass internal quality control or send unapproved work to scheduler.
+Editor
+Prepare edited assets and action revision requests.
+Assigned projects, internal comments/tasks, Dropbox and Drive upload fields relevant to their work.
+Upload links/assets, mark first draft ready, respond to internal comments, mark revisions complete.
+Should not see private client comments by default; should not contact client directly.
+Scheduler / Social Media Publisher
+Schedule approved content and update calendar/live links.
+Only items marked Approved for Scheduling, final Drive links, captions/platform instructions, scheduled dates.
+Mark scheduled, add platform/channel/date, add live published links, mark completed.
+Should not be pulled into internal/client revision loops.
+Client
+Review and approve client-facing deliverables and monitor monthly output.
+Their own dashboard only: monthly deliverables, review links, calendar, posted links, high-level status.
+Approve, request changes, leave comments, see scheduled/published items, request an update.
+Should not see internal editor/AM comments, Dropbox archive links, or other clients.
+
+Permission Rule
+Client-side visibility should always be a filtered view of the internal backend, not a separate duplicated system. This avoids mismatched information while protecting internal comments and production details.
+
+4. Recommended Production Status Funnel
+
+Figure 2. Recommended status progression for each content item or batch.
+Status
+Meaning
+Primary owner
+Client visible label
+Next action
+Draft Uploaded
+Editor has completed the first draft and added Dropbox/Drive links.
+Editor
+In production
+Notify Account Manager for internal review.
+Internal Review
+Account Manager is checking the assets before the client sees them.
+Account Manager
+In production
+Approve internally or request revisions.
+Revision Required
+Account Manager has left internal change comments.
+Editor
+In production
+Editor revises and marks Revision Complete.
+Revision Complete
+Editor has actioned requested changes and reuploaded assets.
+Account Manager
+In production
+AM reviews again.
+Client Review
+Asset has passed internal review and is ready for client feedback.
+Client / Account Manager
+Needs your review
+Client approves or requests changes.
+Client Changes Requested
+Client has left comments. AM needs to process and assign internal changes.
+Account Manager
+Changes in progress
+AM assigns editor task; editor revises.
+Approved for Scheduling
+Client/AM approval is complete; scheduler can now act.
+Scheduler
+Approved
+Notify scheduler.
+Scheduled
+Post has a scheduled date, platform and content slot.
+Scheduler
+Scheduled
+Publish and add live link.
+Published / Completed
+Content has gone live and platform link is added.
+Scheduler / AM
+Published
+Update monthly deliverable count and calendar.
+
+5. End-to-End Workflow: From Editor Upload to Scheduling
+
+Figure 3. Production workflow with internal and client revision loops.
+Step
+Trigger/Event
+System Action
+Notification Target
+Status Change
+1
+Editor finishes an edited batch or item.
+Editor creates item/batch record and fills required fields.
+None until submitted.
+Draft Uploaded.
+2
+Editor adds Dropbox and Google Drive links.
+System validates required link fields are present before submission.
+None or warning if missing.
+Still Draft Uploaded.
+3
+Editor clicks Submit for Internal Review.
+System locks the submitted version and creates review task.
+Account Manager.
+Internal Review.
+4
+AM reviews item/batch.
+AM can approve internally or leave item-level comments.
+Editor if revisions are required.
+Revision Required or Client Review.
+5
+Editor completes requested edits.
+Editor uploads revised file/version and resolves/addresses comments.
+Account Manager.
+Revision Complete then Internal Review.
+6
+AM sends approved assets to client.
+Client-facing review page/link becomes visible.
+Client.
+Client Review.
+7A
+Client requests changes.
+Comment is visible to AM only; system creates AM action item.
+Account Manager.
+Client Changes Requested.
+7B
+Client approves.
+System records client approval and timestamp.
+Account Manager.
+Ready for AM confirmation or Approved for Scheduling.
+8
+AM confirms content is ready for scheduler.
+System exposes final links and instructions to scheduler.
+Scheduler.
+Approved for Scheduling.
+9
+Scheduler schedules posts.
+Scheduler adds platform, schedule date/time, caption notes and scheduling link if applicable.
+AM optional; client dashboard updates silently.
+Scheduled.
+10
+Post goes live.
+Scheduler adds live URL and marks completed.
+Client optional digest; AM notified.
+Published / Completed.
+
+6. Team Dashboard Requirements
+Kanban or funnel board: Columns should mirror the production statuses: Draft Uploaded, Internal Review, Revision Required, Client Review, Approved for Scheduling, Scheduled, Published.
+Client/month filters: Filter by client, month, campaign/shoot, asset type, owner, due date and status.
+Batch + item view: A shoot may produce 16-20 videos. The dashboard should allow one batch record plus item-level records for individual videos/carousels.
+Version history: Every revised upload should be saved as a new version rather than replacing the original without trace.
+Link centre: Each content item should store internal Dropbox link, Drive review link and final published link separately.
+Comment threads: Comments must be anchored to an asset/item, optionally timestamped for video edits, and resolvable.
+Quick handoff buttons: Submit for internal review, Request revision, Send to client, Approve for scheduling, Mark scheduled, Mark published.
+Activity log: Every status change, comment, upload and approval must be timestamped with the user who performed it.
+Team screen/module
+Purpose
+Key fields/components
+Client Workspace
+Single internal workspace per client.
+Client name, account manager, package/monthly commitment, channels, assigned team.
+Monthly Production Board
+Manage the month’s content pipeline.
+Batch, items, statuses, due dates, owners, type, platform, priority.
+Asset Detail Page
+Review and update individual content item.
+Preview, Dropbox link, Drive link, versions, comments, status, approvals.
+Comments + Change Requests
+Keep all feedback in one place.
+Internal/client visibility flag, assignee, due date, resolved/unresolved, timestamp.
+Scheduler Queue
+Only approved content appears here.
+Final asset link, caption, platform, date/time, scheduling status, live link.
+Audit + Activity Log
+Prevent confusion and lost context.
+User, action, old status, new status, date/time, comment/link/reference.
+
+7. Client Dashboard Requirements
+Simple monthly view: Client sees each month, committed deliverables and actual progress. Example: 10 reels + 4 carousels committed; 4 reels completed; 6 reels pending; 1 carousel completed; 3 pending.
+Calendar view: Client can see which post was/will be published on which date and platform.
+Review section: Client can see items that need their review and leave comments or approval.
+Published links: Client can click live Instagram, Facebook, TikTok, LinkedIn or other platform links once published.
+Request update/comment: If dashboard looks empty or delayed, client can leave a comment asking for an update rather than chasing on WhatsApp.
+No internal noise: Client should not see internal editor notes, revision arguments, Dropbox archive links or other client data.
+Client view area
+What client sees
+What client can do
+Overview cards
+This month’s content commitment, completed count, pending count, awaiting approval count.
+Open the relevant section.
+Monthly calendar
+Scheduled/published content by date with platform badges.
+Click an item to view details.
+Needs Review
+Only client-facing review items with Drive/preview links.
+Approve, request change, add comment.
+Scheduled Content
+Upcoming approved posts with dates and platforms.
+View schedule; optional comment/request change only if still editable.
+Published Content
+Live links to posted content by channel.
+Open links and track output.
+Messages/Requests
+Thread with Account Manager only.
+Ask where content is at, request clarifications, approve batches.
+
+7.1 Example Client Monthly View
+Month
+Committed
+Completed
+Pending
+Needs client review
+Status
+January 2026
+10 reels + 4 carousels
+10 reels + 4 carousels
+0
+0
+Complete
+February 2026
+10 reels + 4 carousels
+10 reels + 4 carousels
+0
+0
+Complete
+March 2026
+10 reels + 4 carousels
+10 reels + 4 carousels
+0
+0
+Complete
+April 2026
+10 reels + 4 carousels
+10 reels + 4 carousels
+0
+0
+Complete
+May 2026
+10 reels + 4 carousels
+4 reels + 1 carousel
+6 reels + 3 carousels
+2 items
+In progress
+
+Mon
+Tue
+Wed
+Thu
+Fri
+Sat
+Sun
+1Reel: BTS editIG/TikTok
+2
+3Carousel scheduled
+4
+5Reel postedLive link
+6
+7
+8
+9Client review due
+10
+11Reel scheduled
+12
+13
+14
+15Carousel posted
+16
+17
+18Reel scheduled
+19
+20
+21
+22Reel posted
+23
+24Approval pending
+25
+26Reel scheduled
+27
+28
+
+8. Commenting, Approval and Visibility Logic
+
+Figure 4. Comment routing must keep the Account Manager as the client gatekeeper.
+Comment type
+Created by
+Visible to
+Notification goes to
+Purpose
+Internal editor note
+Editor
+Editor, AM, Admin
+AM
+Let AM know a batch/item is ready or explain an edit.
+Internal revision request
+AM
+Editor, AM, Admin
+Editor
+Request changes before content reaches client.
+Client review comment
+Client
+Client, AM, Admin
+AM only
+Client requests change or asks a question. Not sent directly to editor.
+AM-to-editor client change task
+AM
+Editor, AM, Admin
+Editor
+AM converts client feedback into actionable internal edit task.
+Scheduler handoff comment
+AM
+Scheduler, AM, Admin
+Scheduler
+Let scheduler know approved content is ready to schedule.
+Publishing update
+Scheduler
+Scheduler, AM, Admin; client sees published status/link
+AM optional; client optional digest
+Update the live link and complete the content item.
+
+Important Visibility Rule
+A client comment should not automatically notify the editor. It should notify the Account Manager, who then decides what needs to be sent to the editor as an internal change task.
+
+9. Recommended Backend Data Model
+Entity/table
+Purpose
+Suggested fields
+Client
+Represents a brand/account.
+client_id, name, logo, active_status, account_manager_id, package_type, channels, timezone, client_users.
+Team User
+Internal user with role permissions.
+user_id, name, email, role, assigned_clients, notification_preferences, active_status.
+Monthly Commitment
+Tracks promised deliverables per month.
+commitment_id, client_id, month, year, reel_quota, carousel_quota, story_quota, other_quota, notes.
+Shoot / Batch
+Groups content from one shoot or production batch.
+batch_id, client_id, shoot_date, month, title, description, total_items, status, owner_id.
+Content Item
+Individual reel/carousel/static/story.
+item_id, batch_id, client_id, title, content_type, platform_targets, status, owner_id, due_date, priority, current_version_id.
+Asset Version
+Versioned file/link record.
+version_id, item_id, version_number, dropbox_url, drive_url, preview_url, uploaded_by, uploaded_at, notes.
+Comment / Change Request
+Feedback threads for internal or client changes.
+comment_id, item_id, parent_comment_id, author_id, visibility_type, body, timestamp_ref, assigned_to, resolved_status, due_date.
+Approval
+Records approvals and decision history.
+approval_id, item_id/batch_id, requested_by, approved_by, approval_type, approved_at, status, notes.
+Schedule Entry
+Scheduling and publishing information.
+schedule_id, item_id, platform, scheduled_date_time, scheduler_id, scheduling_tool_url, live_url, published_at, publish_status.
+Notification Log
+Track what was sent and prevent duplicate spam.
+notification_id, event_type, recipient_id, item_id/batch_id, sent_at, channel, status, retry_count.
+Activity Log
+Audit trail for debugging and accountability.
+activity_id, user_id, entity_type, entity_id, action, old_value, new_value, created_at.
+
+10. Automation Trigger Map
+Trigger
+Condition
+Action
+Notify
+Notes / guardrails
+Item/batch submitted for internal review
+Editor clicks Submit and required fields exist.
+Change status to Internal Review; create AM task.
+Assigned AM.
+Block submission if Drive/Dropbox links are missing.
+AM requests internal revisions
+AM adds unresolved internal comments and selects Request Revision.
+Change status to Revision Required; assign comments/tasks to editor.
+Editor.
+Client view remains In Production.
+Editor marks revision complete
+All assigned editor comments marked addressed or editor submits new version.
+Change status to Revision Complete/Internal Review.
+AM.
+Keep previous versions in history.
+AM sends to client
+Internal review passed.
+Change status to Client Review; expose client-safe review link.
+Client users + AM copy.
+Only Drive/preview links visible, not Dropbox archive links.
+Client comments
+Client adds comment/change request.
+Create client change record; change status to Client Changes Requested.
+AM only.
+Do not notify editor directly.
+AM assigns client change to editor
+AM reviews client feedback and creates internal task.
+Create internal revision task; change status to Revision Required.
+Editor.
+AM can rewrite vague client feedback into clear edit instruction.
+Client approves
+Client clicks Approve or AM records approval.
+Record approval timestamp and user.
+AM.
+AM may still need final confirmation before scheduler.
+AM approves for scheduling
+Client approval exists or client approval is bypassed for trusted/seasoned client.
+Change status to Approved for Scheduling; unlock scheduler queue.
+Scheduler.
+Scheduler should only see items after this point.
+Scheduler schedules item
+Scheduler adds date/time/platform.
+Change status to Scheduled; add calendar entry.
+AM optional; client dashboard updates.
+Optionally notify client in daily/weekly digest rather than instant.
+Post published
+Scheduler adds live URL or marks published.
+Change status to Published/Completed; update monthly progress.
+AM; client optional digest.
+Dashboard counts update automatically.
+Overdue internal review
+Item sits in Internal Review beyond SLA.
+Send reminder.
+AM and Admin if overdue too long.
+Suggested SLA: 24-48 hours.
+Overdue client review
+Client Review pending beyond SLA.
+Send reminder.
+Client + AM.
+Suggested SLA: 48 hours; AM can follow up manually.
+Dashboard empty/current month delayed
+No content created/scheduled for active client by configured date.
+Flag at-risk client/month.
+AM/Admin.
+Useful to prevent clients chasing on WhatsApp.
+
+11. Storage and Link Handling Rules
+Dropbox link: Internal archive/master file location. Visible to Admin, Account Manager and Editor as required. Not client-facing by default.
+Google Drive link: Universal team/client review link. Used for AM review, client review and scheduler handoff.
+Published link: Final live platform URL added after publishing. Visible on client dashboard.
+Version control: A revised video should create a new Asset Version record. The latest approved version becomes the scheduler-facing version.
+Missing link validation: Editor cannot submit for internal review unless the minimum required links are present.
+Client-safe view: Client view should show only approved/review-ready Drive/preview links and live published links.
+12. MVP Scope vs Phase 2 vs Product-Ready Phase 3
+
+Figure 5. Build the MVP on reusable objects so it can later become a product module.
+Phase
+Build focus
+Features
+Phase 1 / MVP
+Core dashboard replacing scattered updates.
+Client workspace, team dashboard, manual link fields, statuses, role permissions, comments, client review, scheduler queue, monthly client view.
+Phase 2
+Reduce manual work and improve notifications.
+Drive/Dropbox API syncing, email/in-app notifications, overdue reminders, weekly client digest, better calendar, bulk batch actions.
+Phase 3 / Product
+Make it reusable beyond MD Media.
+Multi-workspace architecture, configurable roles, custom pipelines, templates for agencies, white-label client portals, analytics/reporting, scheduling tool integrations.
+
+Implementation Advice for Developer
+Avoid hard-coding MD Media-specific role names or fixed quotas. Use configurable workspaces, role permissions, content types and status pipelines wherever practical. This will make the dashboard easier to evolve into the future product.
+
+13. Suggested Dashboard Screens
+Screen
+User type
+Core purpose
+Must-have actions
+Login / Workspace Select
+All
+Authenticate and route users to correct workspace/view.
+Login, choose client/workspace if multi-client.
+Admin Overview
+Admin
+View all clients and delivery risk.
+Filter clients, add users, configure commitments.
+Team Production Board
+Internal team
+Manage all content items by status.
+Drag/drop or buttons to move status, filter, assign.
+Batch Detail
+Editor/AM/Admin
+Manage 16-20 items from one shoot together.
+Bulk upload links, bulk submit, bulk send to client.
+Content Item Detail
+Internal team/client filtered view
+Preview, links, comments, history and approvals.
+Comment, approve, request change, resolve, upload version.
+Client Monthly Dashboard
+Client
+Show output and progress for each month.
+View calendar, review pending items, click published links.
+Scheduler Queue
+Scheduler
+List only approved items ready to schedule.
+Add date/time/platform, mark scheduled, add live URL.
+Notifications Inbox
+All
+Centralise task/action notifications.
+Open task, mark read, filter by priority/status.
+
+14. Acceptance Criteria
+An editor can create a batch, add 20 edited videos, attach Dropbox and Drive links, and submit them for internal review.
+The assigned Account Manager receives a notification when a batch/item enters Internal Review.
+The Account Manager can comment on individual assets and request changes from the editor.
+The editor receives only internal revision comments and can mark revisions complete with a new upload/link version.
+The Account Manager can send internally approved content to the client for review.
+The client can approve or request changes from their dashboard without seeing internal comments.
+Client comments notify the Account Manager, not the editor directly.
+The Account Manager can turn client comments into internal editor tasks.
+The scheduler only receives a notification once content is marked Approved for Scheduling.
+The scheduler can add scheduled dates/platforms and final live links after publishing.
+The client dashboard updates monthly progress counts and calendar entries automatically when items are scheduled or published.
+Admins can audit status changes, comments, approvals and versions.
+15. Developer Testing Checklist
+Test scenario
+Steps
+Expected result
+Missing upload link validation
+Editor creates item without Drive or Dropbox link and tries to submit.
+System blocks submission and shows which required field is missing.
+Internal revision loop
+Editor submits item → AM requests changes → Editor marks revision complete.
+Status returns to AM review and activity log records each step.
+Client comment routing
+Client leaves a change request on a review item.
+Only AM is notified; editor does not receive client comment directly.
+AM-to-editor assignment
+AM assigns client request to editor.
+Editor receives internal task/comment with client-facing text converted into actionable edit request.
+Scheduler gating
+Item is still in Client Review or Revision Required.
+Scheduler cannot see or schedule it.
+Approved scheduling
+AM marks item Approved for Scheduling.
+Scheduler receives item in queue with final Drive link and instructions.
+Published link update
+Scheduler adds live URL and marks Published.
+Client dashboard shows published status and live link; monthly count updates.
+Monthly progress view
+Client has commitment of 10 reels + 4 carousels and only 4 reels + 1 carousel published.
+Dashboard shows completed and pending counts accurately.
+Calendar display
+Scheduler adds dates to multiple items.
+Client calendar shows posts on correct dates and platforms.
+Permission isolation
+Client logs in.
+Client sees only their workspace and no internal comments/Dropbox links/other clients.
+
+16. Open Questions for Developer / Team
+Should the dashboard upload actual files directly, or should Phase 1 only capture Dropbox/Google Drive links?
+Should client approvals happen item-by-item, batch-by-batch, or both?
+Should the client receive instant notifications for every review item, or a bundled daily/weekly review digest?
+Should AM approval be required after the client approves, or should client approval directly move content to Approved for Scheduling?
+How should seasoned clients be handled if client approval is sometimes skipped? Suggested answer: add a Client Approval Required toggle per client/batch.
+Should published links be manually pasted by scheduler in MVP or pulled from scheduling/social APIs later?
+What is the expected SLA for internal review, client review and scheduling handoff reminders?
+17. Final Build Summary
+Build the dashboard around one core content lifecycle: Editor upload → Account Manager internal review → revision loop → client review → approval → scheduler handoff → scheduled → published.
+The Account Manager must remain the central controller of communication. This protects the client experience, avoids editors being pulled into client conversations, and ensures schedulers only receive work that is genuinely ready to publish.
+The client view should be simple and confidence-building: monthly commitments, current progress, calendar, review items, scheduled posts and published links. The client should never need to chase the team just to know where things are at.
+

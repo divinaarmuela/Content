@@ -1,0 +1,25 @@
+import { NextResponse } from 'next/server'
+import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { loadItemForUser } from '../../../../../lib/production-access'
+import { performTransition } from '../../../../../lib/workflow'
+import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core'
+
+/** Execute a status transition. Role legality, requirement evidence, and the
+ *  optimistic-concurrency guard all live in performTransition. */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await requireRole('client') // clients approve/request from client_review
+    const { id } = await params
+    const item = await loadItemForUser(user, id)
+    const body = await req.json()
+    const to = body.to as ItemStatus
+    if (!(ITEM_STATUSES as readonly string[]).includes(to)) {
+      return NextResponse.json({ error: 'Invalid target status' }, { status: 400 })
+    }
+    const updated = await performTransition(user, item, to)
+    return NextResponse.json(updated)
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
+}

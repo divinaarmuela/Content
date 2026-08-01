@@ -6,7 +6,7 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 
 export default function LamaContact() {
   return (
-    <section data-lama-title="BOOK A CALL" className="px-6 sm:px-10 pt-32 sm:pt-44 pb-40">
+    <section id="contact" data-lama-title="BOOK A CALL" className="px-6 sm:px-10 pt-32 sm:pt-44 pb-40">
       <h2 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(2.75rem,7.5vw,7rem)] max-w-5xl">
         {['Ready to stop being', 'the best-kept secret?'].map((line, i) => (
           <Reveal key={line} delay={i * 120} className="block">

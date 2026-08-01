@@ -1,7 +1,55 @@
 import ScrollObserver from '../components/ScrollObserver'
-import { clients } from '../components/lama/workData'
+import SiteMedia from '../components/SiteMedia'
+import { getSiteProjects, type SiteProject } from '../lib/websiteData'
 
-export default function WorkPage() {
+// grid refreshes from the CMS at most every 5 minutes
+export const revalidate = 300
+
+function WorkCard({ p, feature, delay }: { p: SiteProject; feature?: boolean; delay?: number }) {
+  return (
+    <a
+      href={`/work/${p.slug}`}
+      className={`work-card${feature ? ' work-card-feature' : ''} fade-up${delay ? ` d${delay}` : ''}`}
+    >
+      <div className="work-card-img">
+        <SiteMedia src={p.cardMedia} alt={p.name} className="" />
+        {p.result && <span className="work-result">{p.result}</span>}
+      </div>
+      <div className="work-card-info">
+        <div className="work-card-head">
+          <span className="work-tag">{p.tag}</span>
+          <span className="work-industry">{p.industry}</span>
+        </div>
+        <h2 className="work-name">{p.name}</h2>
+        <p className="work-desc">{p.desc}</p>
+        <div className="work-services">
+          {p.services.map(s => <span key={s}>{s}</span>)}
+        </div>
+      </div>
+    </a>
+  )
+}
+
+/** Layout pattern that scales to any project count:
+ *  2-up · full-width feature · repeating [3-up · feature] until done. */
+function rows(projects: SiteProject[]) {
+  const out: { kind: 'pair' | 'feature' | 'triple'; items: SiteProject[] }[] = []
+  let i = 0
+  if (projects.length >= 2) { out.push({ kind: 'pair', items: projects.slice(0, 2) }); i = 2 }
+  if (i < projects.length) { out.push({ kind: 'feature', items: [projects[i]] }); i += 1 }
+  while (i < projects.length) {
+    const chunk = projects.slice(i, i + 3)
+    if (chunk.length === 1) out.push({ kind: 'feature', items: chunk })
+    else out.push({ kind: 'triple', items: chunk })
+    i += chunk.length
+    if (i < projects.length) { out.push({ kind: 'feature', items: [projects[i]] }); i += 1 }
+  }
+  return out
+}
+
+export default async function WorkPage() {
+  const projects = await getSiteProjects()
+
   return (
     <>
       <main>
@@ -42,111 +90,16 @@ export default function WorkPage() {
         {/* WORK GRID */}
         <section className="work-section">
           <div className="container">
-
-            {/* Top row — 2 cards */}
-            <div className="work-row work-row-2">
-              {clients.slice(0, 2).map((c, i) => (
-                <article key={c.name} className={`work-card fade-up${i > 0 ? ' d1' : ''}`}>
-                  <div className="work-card-img">
-                    <img
-                      src={`https://static.wixstatic.com/media/${c.img}/v1/fill/w_900,h_700,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${c.img}`}
-                      alt={c.name}
-                      loading="lazy"
-                    />
-                    {c.result && <span className="work-result">{c.result}</span>}
-                  </div>
-                  <div className="work-card-info">
-                    <div className="work-card-head">
-                      <span className="work-tag">{c.tag}</span>
-                      <span className="work-industry">{c.industry}</span>
-                    </div>
-                    <h2 className="work-name">{c.name}</h2>
-                    <p className="work-desc">{c.desc}</p>
-                    <div className="work-services">
-                      {c.services.map(s => <span key={s}>{s}</span>)}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Full-width feature card */}
-            <div className="work-row work-row-feature">
-              <article className="work-card work-card-feature fade-up">
-                <div className="work-card-img">
-                  <img
-                    src={`https://static.wixstatic.com/media/${clients[2].img}/v1/fill/w_1400,h_700,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${clients[2].img}`}
-                    alt={clients[2].name}
-                    loading="lazy"
-                  />
-                  {clients[2].result && <span className="work-result">{clients[2].result}</span>}
-                </div>
-                <div className="work-card-info">
-                  <div className="work-card-head">
-                    <span className="work-tag">{clients[2].tag}</span>
-                    <span className="work-industry">{clients[2].industry}</span>
-                  </div>
-                  <h2 className="work-name">{clients[2].name}</h2>
-                  <p className="work-desc">{clients[2].desc}</p>
-                  <div className="work-services">
-                    {clients[2].services.map(s => <span key={s}>{s}</span>)}
-                  </div>
-                </div>
-              </article>
-            </div>
-
-            {/* 3-column row */}
-            <div className="work-row work-row-3">
-              {clients.slice(3, 6).map((c, i) => (
-                <article key={c.name} className={`work-card fade-up${i > 0 ? ` d${i}` : ''}`}>
-                  <div className="work-card-img">
-                    <img
-                      src={`https://static.wixstatic.com/media/${c.img}/v1/fill/w_700,h_600,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${c.img}`}
-                      alt={c.name}
-                      loading="lazy"
-                    />
-                    {c.result && <span className="work-result">{c.result}</span>}
-                  </div>
-                  <div className="work-card-info">
-                    <div className="work-card-head">
-                      <span className="work-tag">{c.tag}</span>
-                      <span className="work-industry">{c.industry}</span>
-                    </div>
-                    <h2 className="work-name">{c.name}</h2>
-                    <p className="work-desc">{c.desc}</p>
-                    <div className="work-services">
-                      {c.services.map(s => <span key={s}>{s}</span>)}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Last full-width */}
-            <div className="work-row work-row-feature">
-              <article className="work-card work-card-feature fade-up">
-                <div className="work-card-img">
-                  <img
-                    src={`https://static.wixstatic.com/media/${clients[6].img}/v1/fill/w_1400,h_700,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/${clients[6].img}`}
-                    alt={clients[6].name}
-                    loading="lazy"
-                  />
-                  {clients[6].result && <span className="work-result">{clients[6].result}</span>}
-                </div>
-                <div className="work-card-info">
-                  <div className="work-card-head">
-                    <span className="work-tag">{clients[6].tag}</span>
-                    <span className="work-industry">{clients[6].industry}</span>
-                  </div>
-                  <h2 className="work-name">{clients[6].name}</h2>
-                  <p className="work-desc">{clients[6].desc}</p>
-                  <div className="work-services">
-                    {clients[6].services.map(s => <span key={s}>{s}</span>)}
-                  </div>
-                </div>
-              </article>
-            </div>
-
+            {rows(projects).map((row, ri) => (
+              <div
+                key={ri}
+                className={`work-row ${row.kind === 'pair' ? 'work-row-2' : row.kind === 'triple' ? 'work-row-3' : 'work-row-feature'}`}
+              >
+                {row.items.map((p, i) => (
+                  <WorkCard key={p.slug} p={p} feature={row.kind === 'feature'} delay={i} />
+                ))}
+              </div>
+            ))}
           </div>
         </section>
 
@@ -215,17 +168,16 @@ export default function WorkPage() {
               <a href="https://scorecard.mdmmarketing.com.au/" target="_blank" rel="noreferrer noopener">Free Diagnostic</a>
             </div>
             <div className="footer-col">
+              <h4>&raquo; Studio</h4>
+              <a href="/about">About</a>
+              <a href="/journal">Journal</a>
+              <a href="/events">The Room</a>
+            </div>
+            <div className="footer-col">
               <h4>&raquo; Contact</h4>
               <a href="mailto:hello@mdmmarketing.com.au">hello@mdmmarketing.com.au</a>
               <a href="tel:+61447764477">0447 764 477</a>
               <p>56/21-25 Chambers Rd, Altona North VIC 3025</p>
-            </div>
-            <div className="footer-col">
-              <h4>&raquo; Connect</h4>
-              <a href="https://www.instagram.com/mdmedia._" target="_blank" rel="noreferrer noopener">Instagram</a>
-              <a href="https://www.linkedin.com/company/mdmedia-marketing/" target="_blank" rel="noreferrer noopener">LinkedIn</a>
-              <a href="https://www.tiktok.com/@mdmedia._" target="_blank" rel="noreferrer noopener">TikTok</a>
-              <a href="https://youtube.com/@mdmediapodcast" target="_blank" rel="noreferrer noopener">YouTube</a>
             </div>
           </div>
           <div className="footer-bottom">

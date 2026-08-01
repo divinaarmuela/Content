@@ -10,16 +10,22 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 const LINKS = [
   { href: '/work', label: 'Work' },
   { href: '/services', label: 'Services' },
+  { href: '/journal', label: 'Journal' },
+  { href: '/events', label: 'Events' },
   { href: '/about', label: 'About' },
-  { href: '/contact', label: 'Contact' },
+  { href: '/#contact', label: 'Contact' },
 ]
 
-export default function LamaNav() {
+export default function LamaNav({ gate = true }: {
+  /** wait for the homepage preloader before fading in — disable on pages without it */
+  gate?: boolean
+} = {}) {
   const [title, setTitle] = useState('MD MEDIA MARKETING')
   const [open, setOpen] = useState(false)
   const display = useScramble(title, { duration: 500 })
   const inExperience = useExperienceActive()
-  const ready = useLamaReady()
+  const lamaReady = useLamaReady()
+  const ready = gate ? lamaReady : true
 
   useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>('[data-lama-title]')
@@ -45,7 +51,7 @@ export default function LamaNav() {
       <header
         className={`fixed top-4 left-1/2 z-[110] -translate-x-1/2 w-[min(480px,calc(100vw-2rem))] transition-opacity duration-500 ${ready && !inExperience ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
-        <div className="flex items-center justify-between bg-black px-4 py-3 shadow-lg">
+        <div className="flex items-center justify-between rounded-full border border-cream/15 bg-black/55 backdrop-blur-md px-5 py-3 shadow-lg">
           <Link href="/" aria-label="MD Media home" className="no-underline">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
@@ -55,7 +61,7 @@ export default function LamaNav() {
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="hidden flex-col gap-1 p-1 appearance-none border-0 bg-transparent cursor-pointer"
+            className="flex flex-col gap-1 p-1 appearance-none border-0 bg-transparent cursor-pointer"
           >
             <span className={`block h-0.5 w-5 bg-cream transition-transform ${open ? 'translate-y-1.5 rotate-45' : ''}`} />
             <span className={`block h-0.5 w-5 bg-cream transition-opacity ${open ? 'opacity-0' : ''}`} />

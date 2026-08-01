@@ -1,147 +1,134 @@
 'use client'
 
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { Info, SendHorizontal, Sparkles } from 'lucide-react'
 
-type Message = { role: 'ai' | 'user'; text: string; time: string }
+type Message = {
+  id: number
+  role: 'assistant' | 'user'
+  text: string
+  time: string
+}
 
-const QUICK_PROMPTS = [
-  'Draft a shoot brief',
-  'Summarise May performance',
-  'Flag overdue approvals',
-  'Plan June content',
-  'Write a status update',
-  'Report commentary',
-]
-
-const CAPABILITIES = [
-  'Draft shoot briefs & creative direction',
-  'Summarise client performance data',
-  'Flag overdue approvals & blockers',
-  'Generate report commentary',
-  'Write client status updates',
-  'Suggest content ideas by platform',
-]
-
-const INITIAL: Message[] = [
+const DEMO_MESSAGES: Message[] = [
   {
-    role: 'ai',
-    text: "Hi! I'm your MD Media AI assistant. I can help you draft briefs, summarise performance, flag approvals, and more. What do you need?",
-    time: '9:00 AM',
+    id: 1,
+    role: 'assistant',
+    text: "Hi! I'm the MD Media assistant. I can draft shoot briefs, summarise client performance, flag overdue approvals, and write status updates.",
+    time: '09:00',
+  },
+  {
+    id: 2,
+    role: 'user',
+    text: 'Summarise May performance for Harbourline Cafe.',
+    time: '09:02',
+  },
+  {
+    id: 3,
+    role: 'assistant',
+    text: 'Harbourline Cafe reached 48.2k accounts in May, up 12% month on month. Reels drove most of the growth; two approvals are still pending for the June calendar.',
+    time: '09:02',
+  },
+  {
+    id: 4,
+    role: 'user',
+    text: 'Draft a shoot brief for the June menu launch.',
+    time: '09:05',
+  },
+  {
+    id: 5,
+    role: 'assistant',
+    text: 'Here is a starting point: a 2-hour on-location shoot covering 6 hero dishes, 3 behind-the-scenes clips for Reels, and a set of vertical stills for Stories. Want me to expand any section?',
+    time: '09:05',
   },
 ]
 
 export default function AIPage() {
-  const [messages, setMessages] = useState<Message[]>(INITIAL)
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-
-  const send = async (text: string) => {
-    if (!text.trim() || loading) return
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    setMessages(m => [...m, { role: 'user', text: text.trim(), time: t }])
-    setInput('')
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setMessages(m => [...m, {
-      role: 'ai',
-      text: `Got it — working on "${text.trim()}". This will be connected to the Claude API. The integration point is in /dashboard/ai/page.tsx.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }])
-    setLoading(false)
-  }
+  const [input, setInput] = useState('')
 
   return (
-    <div className="db-page" style={{ maxWidth: '100%' }}>
-      <div className="db-page-header">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="db-page-title">
-            AI Assistant{' '}
-            <span style={{ fontSize: 11, fontWeight: 500, color: '#5d5fef', background: '#eeeefd', padding: '2px 8px', borderRadius: 99, verticalAlign: 'middle' }}>
-              Beta
-            </span>
-          </h1>
-          <p className="db-page-sub">Powered by Claude · mdmmarketing.com.au</p>
+          <h2 className="text-lg font-semibold tracking-tight">AI Assistant</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Draft briefs, summarise performance, and flag blockers.
+          </p>
         </div>
+        <Badge
+          variant="outline"
+          className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+        >
+          Demo data
+        </Badge>
       </div>
 
-      <div className="db-ai-layout">
-        {/* Left panel */}
-        <div className="db-ai-prompts">
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#a8a5bb', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-            Quick Prompts
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 24 }}>
-            {QUICK_PROMPTS.map(p => (
-              <button
-                key={p}
-                onClick={() => send(p)}
-                style={{
-                  background: '#f4f3f9',
-                  border: '1px solid #e8e7ef',
-                  borderRadius: 7,
-                  padding: '8px 12px',
-                  color: '#4a4560',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  transition: 'all 0.12s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#eeeefd'; (e.currentTarget as HTMLButtonElement).style.color = '#5d5fef' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f4f3f9'; (e.currentTarget as HTMLButtonElement).style.color = '#4a4560' }}
-              >
-                {p} →
-              </button>
-            ))}
-          </div>
+      <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+        <Info className="h-4 w-4 shrink-0" />
+        Assistant not yet connected — UI preview
+      </div>
 
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#a8a5bb', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-            Capabilities
-          </p>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {CAPABILITIES.map(c => (
-              <li key={c} style={{ fontSize: 12, color: '#7b7990', marginBottom: 6, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
-                <span style={{ position: 'absolute', left: 0, color: '#5d5fef', fontWeight: 700 }}>·</span>
-                {c}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Chat */}
-        <div className="db-ai-chat">
-          <div className="db-ai-messages">
-            {messages.map((m, i) => (
-              <div key={i}>
-                <div className={`db-ai-msg ${m.role}`}>{m.text}</div>
-                <p style={{ fontSize: 10, color: '#a8a5bb', marginTop: 3, textAlign: m.role === 'user' ? 'right' : 'left' }}>
-                  {m.time}
-                </p>
-              </div>
-            ))}
-            {loading && (
-              <div className="db-ai-msg ai" style={{ opacity: 0.5 }}>Thinking...</div>
-            )}
-          </div>
-          <div className="db-ai-input-row">
-            <input
-              className="db-ai-input"
+      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-3">
+          <Sparkles className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+          <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            Conversation
+          </CardTitle>
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+            Preview
+          </span>
+        </CardHeader>
+        <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+        <CardContent className="p-0">
+          <ScrollArea className="h-[420px]">
+            <div className="flex flex-col gap-4 p-4">
+              {DEMO_MESSAGES.map((message) => (
+                <div
+                  key={message.id}
+                  className={
+                    message.role === 'user'
+                      ? 'flex flex-col items-end gap-1'
+                      : 'flex flex-col items-start gap-1'
+                  }
+                >
+                  <div
+                    className={
+                      message.role === 'user'
+                        ? 'max-w-[80%] rounded-lg bg-zinc-900 dark:bg-zinc-100 p-3 text-sm text-white dark:text-zinc-900'
+                        : 'max-w-[80%] rounded-lg bg-zinc-100 dark:bg-zinc-800 p-3 text-sm text-zinc-900 dark:text-zinc-100'
+                    }
+                  >
+                    {message.text}
+                  </div>
+                  <span className="font-mono text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                    {message.time}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+          <div className="flex items-end gap-2 p-4">
+            <Textarea
               value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && send(input)}
+              onChange={(event) => setInput(event.target.value)}
               placeholder="Ask about clients, content, approvals, reports..."
+              className="min-h-[44px] flex-1 resize-none border-zinc-200 dark:border-zinc-800 text-sm"
+              rows={2}
             />
-            <button
-              onClick={() => send(input)}
-              disabled={loading || !input.trim()}
-              className="db-btn db-btn-primary"
-              style={{ opacity: loading || !input.trim() ? 0.4 : 1 }}
-            >
+            <Button disabled className="shrink-0">
+              <SendHorizontal className="h-4 w-4" />
               Send
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

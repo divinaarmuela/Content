@@ -1,220 +1,272 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { Plus, Pencil, Trash2, Link2 } from 'lucide-react'
 
-interface Commitment {
-  type: string
-  committed: number
-  completed: number
-  inProgress: number
-}
-
-interface Client {
+type Client = {
+  id: string
+  created_at: string
   name: string
-  contact: string
-  retainer: string
-  services: string[]
-  status: 'active' | 'onboarding' | 'paused'
-  color: string
-  initials: string
-  am: string
-  commitments: Commitment[]
+  slug: string
+  industry: string | null
+  contact_name: string | null
+  email: string | null
+  phone: string | null
+  website?: string | null
+  source?: string
+  share_token?: string
+  status: 'prospect' | 'active' | 'paused' | 'archived'
+  notes: string | null
 }
 
-const CLIENTS: Client[] = [
-  {
-    name: 'Apex Fitness', contact: 'Ryan Mercer', retainer: '$4,200', am: 'AK',
-    services: ['Social Media', 'Content', 'Ads'], status: 'active', color: '#f97316', initials: 'AF',
-    commitments: [
-      { type: 'Reels',     committed: 10, completed: 7, inProgress: 2 },
-      { type: 'Carousels', committed: 4,  completed: 2, inProgress: 1 },
-      { type: 'Stories',   committed: 8,  completed: 8, inProgress: 0 },
-    ],
-  },
-  {
-    name: 'Bloom Skincare', contact: 'Priya Nair', retainer: '$3,800', am: 'DV',
-    services: ['Content', 'Ads'], status: 'active', color: '#ec4899', initials: 'BS',
-    commitments: [
-      { type: 'Reels',     committed: 8,  completed: 5, inProgress: 2 },
-      { type: 'Carousels', committed: 4,  completed: 4, inProgress: 0 },
-    ],
-  },
-  {
-    name: 'Vertex Legal', contact: 'Tom Brennan', retainer: '$6,500', am: 'AK',
-    services: ['Social Media', 'LinkedIn', 'Content'], status: 'active', color: '#8b5cf6', initials: 'VL',
-    commitments: [
-      { type: 'Carousels', committed: 6,  completed: 6, inProgress: 0 },
-      { type: 'Reels',     committed: 4,  completed: 4, inProgress: 0 },
-      { type: 'Statics',   committed: 8,  completed: 7, inProgress: 1 },
-    ],
-  },
-  {
-    name: 'NovaBuild Co.', contact: 'Sarah Lim', retainer: '$5,100', am: 'MW',
-    services: ['Branding', 'Website', 'Content'], status: 'onboarding', color: '#2563eb', initials: 'NB',
-    commitments: [
-      { type: 'Reels',     committed: 10, completed: 0, inProgress: 4 },
-      { type: 'Carousels', committed: 4,  completed: 0, inProgress: 2 },
-    ],
-  },
-  {
-    name: 'Surge Coffee', contact: 'Marcus Webb', retainer: '$2,900', am: 'JR',
-    services: ['Social Media', 'Content'], status: 'active', color: '#d97706', initials: 'SC',
-    commitments: [
-      { type: 'Reels',     committed: 8,  completed: 7, inProgress: 1 },
-      { type: 'Stories',   committed: 6,  completed: 5, inProgress: 0 },
-    ],
-  },
-  {
-    name: 'Align Wellness', contact: 'Dana Okafor', retainer: '$3,200', am: 'SL',
-    services: ['Content', 'Ads'], status: 'active', color: '#16a34a', initials: 'AW',
-    commitments: [
-      { type: 'Reels',     committed: 10, completed: 6, inProgress: 3 },
-      { type: 'Carousels', committed: 4,  completed: 2, inProgress: 1 },
-    ],
-  },
-]
+const EMPTY: Partial<Client> = { name: '', industry: '', contact_name: '', email: '', phone: '', website: '', status: 'active', notes: '' }
 
-const ASSIGNEE_COLORS: Record<string, string> = { AK: '#5d5fef', DV: '#ec4899', MW: '#16a34a', JR: '#f97316', SL: '#8b5cf6' }
-type Filter = 'all' | 'active' | 'onboarding' | 'paused'
+const STATUS_STYLE: Record<string, string> = {
+  prospect: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
+  active:   'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+  paused:   'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
+  archived: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800',
+}
 
 export default function ClientsPage() {
-  const [filter, setFilter] = useState<Filter>('all')
-  const [search, setSearch] = useState('')
+  const [clients, setClients] = useState<Client[] | null>(null)
+  const [editing, setEditing] = useState<Partial<Client> | null>(null)
+  const [deleting, setDeleting] = useState<Client | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const visible = CLIENTS.filter(c => {
-    if (filter !== 'all' && c.status !== filter) return false
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/website/clients')
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load')
+      setClients(await res.json())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load clients — has website_cms.sql been run in Supabase?')
+      setClients([])
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const save = async () => {
+    if (!editing?.name) return toast.error('Name is required')
+    setSaving(true)
+    try {
+      const isNew = !editing.id
+      const res = await fetch(isNew ? '/api/website/clients' : `/api/website/clients/${editing.id}`, {
+        method: isNew ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editing),
+      })
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
+      toast.success(isNew ? 'Client added' : 'Client updated')
+      setEditing(null)
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleting) return
+    const res = await fetch(`/api/website/clients/${deleting.id}`, { method: 'DELETE' })
+    if (!res.ok) return toast.error('Delete failed')
+    toast.success(`${deleting.name} deleted`)
+    setDeleting(null)
+    load()
+  }
+
+  const set = (patch: Partial<Client>) => setEditing(e => ({ ...e, ...patch }))
 
   return (
-    <div className="db-page">
-      <div className="db-page-header">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="db-page-title">Client Workspaces</h1>
-          <p className="db-page-sub">{CLIENTS.length} clients · {CLIENTS.filter(c => c.status === 'active').length} active · June 2026</p>
+          <h2 className="text-lg font-semibold tracking-tight">Clients</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Master registry — website case studies and (soon) client portal access key off this list.
+          </p>
         </div>
-        <div className="db-page-actions">
-          <button className="db-btn db-btn-primary" onClick={() => toast.success('New client', { description: 'Client workspace creation coming soon.' })}>+ New client</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search clients..."
-          style={{
-            background: '#fff', border: '1px solid #e8e7ef', borderRadius: 8,
-            padding: '7px 12px', color: '#1f1b2e', fontSize: 13, outline: 'none', width: 200,
-          }}
-        />
-        {(['all', 'active', 'onboarding', 'paused'] as Filter[]).map(f => (
-          <button key={f} onClick={() => setFilter(f)} className={`db-cal-filter${filter === f ? ' active' : ''}`} style={{ textTransform: 'capitalize' }}>{f}</button>
-        ))}
-      </div>
-
-      <div className="db-client-grid">
-        {visible.map(c => {
-          const totalCommitted  = c.commitments.reduce((a, b) => a + b.committed,  0)
-          const totalCompleted  = c.commitments.reduce((a, b) => a + b.completed,  0)
-          const totalInProgress = c.commitments.reduce((a, b) => a + b.inProgress, 0)
-          const pct = Math.round((totalCompleted / totalCommitted) * 100)
-
-          return (
-            <div key={c.name} className="db-client-card">
-              {/* Header */}
-              <div className="db-client-card-top">
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div className="db-avatar" style={{ background: c.color, width: 38, height: 38, borderRadius: 10, fontSize: 12 }}>
-                    {c.initials}
-                  </div>
-                  <div>
-                    <p className="db-client-name">{c.name}</p>
-                    <p className="db-client-contact">{c.contact}</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <span className={`db-status-pill ${c.status}`}>{c.status}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontSize: 10, color: '#a8a5bb' }}>AM:</span>
-                    <div className="db-mini-av" style={{ background: ASSIGNEE_COLORS[c.am] ?? '#7b7990' }}>{c.am}</div>
-                  </div>
-                </div>
+        <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="ml-auto" onClick={() => setEditing({ ...EMPTY })}>
+              <Plus className="h-4 w-4" /> Add client
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editing?.id ? `Edit · ${editing.name}` : 'New client'}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Name *</Label>
+                <Input value={editing?.name ?? ''} onChange={e => set({ name: e.target.value })} />
               </div>
-
-              {/* Retainer */}
-              <div>
-                <p className="db-client-retainer">{c.retainer}</p>
-                <p className="db-client-retainer-label">per month · retainer</p>
+              <div className="grid gap-1.5">
+                <Label>Industry</Label>
+                <Input value={editing?.industry ?? ''} onChange={e => set({ industry: e.target.value })} />
               </div>
-
-              {/* Monthly commitment progress */}
-              <div style={{ background: '#f9f8fc', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#7b7990', letterSpacing: '0.04em', textTransform: 'uppercase' }}>June commitments</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }}>{pct}%</span>
-                </div>
-                <div className="db-health-bar" style={{ marginBottom: 10 }}>
-                  <div className="db-health-fill" style={{ width: `${pct}%`, background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f97316' : '#dc2626' }} />
-                </div>
-                {c.commitments.map(cm => {
-                  const cmPct = Math.round((cm.completed / cm.committed) * 100)
-                  const pending = cm.committed - cm.completed - cm.inProgress
-                  return (
-                    <div key={cm.type} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                      <span style={{ fontSize: 11, color: '#7b7990', width: 72, flexShrink: 0 }}>{cm.type}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', gap: 2, height: 6, borderRadius: 3, overflow: 'hidden', background: '#e8e7ef' }}>
-                          <div style={{ width: `${cmPct}%`, background: c.color, transition: 'width 0.3s' }} />
-                          {cm.inProgress > 0 && (
-                            <div style={{ width: `${Math.round((cm.inProgress / cm.committed) * 100)}%`, background: `${c.color}55` }} />
-                          )}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 10, color: '#a8a5bb', fontFamily: 'monospace', width: 60, textAlign: 'right', flexShrink: 0 }}>
-                        {cm.completed}/{cm.committed}
-                        {pending > 0 && <span style={{ color: '#e8e7ef' }}> +{pending}</span>}
-                      </span>
-                    </div>
-                  )
-                })}
-                <div style={{ display: 'flex', gap: 12, marginTop: 8, paddingTop: 8, borderTop: '1px solid #e8e7ef' }}>
-                  <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>{totalCompleted} done</span>
-                  <span style={{ fontSize: 10, color: '#f97316', fontWeight: 600 }}>{totalInProgress} in progress</span>
-                  <span style={{ fontSize: 10, color: '#a8a5bb', fontWeight: 500 }}>
-                    {totalCommitted - totalCompleted - totalInProgress} pending
-                  </span>
-                </div>
+              <div className="grid gap-1.5">
+                <Label>Status</Label>
+                <Select value={editing?.status ?? 'active'} onValueChange={v => set({ status: v as Client['status'] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="prospect">Prospect</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              {/* Services */}
-              <div className="db-service-tags">
-                {c.services.map(s => <span key={s} className="db-service-tag">{s}</span>)}
+              <div className="grid gap-1.5">
+                <Label>Contact name</Label>
+                <Input value={editing?.contact_name ?? ''} onChange={e => set({ contact_name: e.target.value })} />
               </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  className="db-btn db-btn-outline"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}
-                  onClick={() => toast(`Opening ${c.name} workspace`)}
-                >
-                  View workspace
-                </button>
-                <button
-                  className="db-btn db-btn-primary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}
-                  onClick={() => toast.success('Report sent', { description: `Monthly report sent to ${c.contact}` })}
-                >
-                  Send report
-                </button>
+              <div className="grid gap-1.5">
+                <Label>Phone</Label>
+                <Input value={editing?.phone ?? ''} onChange={e => set({ phone: e.target.value })} />
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Email</Label>
+                <Input type="email" value={editing?.email ?? ''} onChange={e => set({ email: e.target.value })} />
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Website</Label>
+                <Input value={editing?.website ?? ''} placeholder="https://…" onChange={e => set({ website: e.target.value })} />
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Notes</Label>
+                <Textarea rows={3} value={editing?.notes ?? ''} onChange={e => set({ notes: e.target.value })} />
               </div>
             </div>
-          )
-        })}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save client'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
+
+      {clients === null ? (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-6">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+          </CardContent>
+        </Card>
+      ) : clients.length === 0 ? (
+        <Card className="border-dashed shadow-none">
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/40">
+              <Plus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">No clients yet</p>
+              <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+                Add one manually, or import the current site projects from the Website page — it creates a client per project automatically.
+              </p>
+            </div>
+            <div className="mt-1 flex gap-2">
+              <Button size="sm" onClick={() => setEditing({ ...EMPTY })}>
+                <Plus className="h-4 w-4" /> Add client
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <a href="/dashboard/website">Go to Website</a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden py-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                <TableHead>Client</TableHead>
+                <TableHead>Industry</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-24" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {clients.map(c => (
+                <TableRow key={c.id}>
+                  <TableCell>
+                    <div className="text-sm font-medium">{c.name}</div>
+                    <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{c.slug}</div>
+                  </TableCell>
+                  <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{c.industry || '—'}</TableCell>
+                  <TableCell>
+                    <div className="text-sm">{c.contact_name || '—'}</div>
+                    {c.email && <a href={`mailto:${c.email}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{c.email}</a>}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`capitalize ${STATUS_STYLE[c.status] ?? ''}`}>{c.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      {c.share_token && (
+                        <Button
+                          variant="ghost" size="icon" className="h-8 w-8"
+                          aria-label={`Copy read-only portal link for ${c.name}`}
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/portal/${c.share_token}`)
+                            toast.success(`Read-only portal link for ${c.name} copied`)
+                          }}
+                        >
+                          <Link2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)} aria-label="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300" onClick={() => setDeleting(c)} aria-label="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <AlertDialog open={!!deleting} onOpenChange={open => !open && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleting?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the client from the master registry. Website projects linked to it stay but lose the link. This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

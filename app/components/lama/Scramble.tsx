@@ -49,11 +49,14 @@ export function useScramble(text: string, opts?: { play?: boolean; duration?: nu
 }
 
 export function Scramble({
-  text, className, as = 'span', delay = 0,
-}: { text: string; className?: string; as?: 'span' | 'p' | 'div'; delay?: number }) {
+  text, className, as = 'span', delay = 0, gate = true,
+}: { text: string; className?: string; as?: 'span' | 'p' | 'div'; delay?: number
+  /** wait for the homepage preloader before playing — disable on pages without it */
+  gate?: boolean }) {
   const ref = useRef<HTMLElement>(null)
   const [play, setPlay] = useState(false)
-  const ready = useLamaReady()
+  const lamaReady = useLamaReady()
+  const ready = gate ? lamaReady : true
 
   useEffect(() => {
     const el = ref.current

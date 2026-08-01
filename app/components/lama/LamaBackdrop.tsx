@@ -8,8 +8,7 @@ import { useLamaReady } from './ready'
 // (plus drifting noise) decides how many dots light up per cell through an
 // ordered threshold matrix. The video is never a DOM layer — after the
 // preloader, a reveal progress sweeps through the same threshold matrix and
-// the dots dissolve into the actual video pixels. A cursor trail texture
-// lights dots along the pointer's wake. Swap VIDEO_SRC only.
+// the dots dissolve into the actual video pixels. Swap VIDEO_SRC only.
 const VIDEO_SRC = '/hero_web.mp4'
 // band2 ("What we do") renders its own video as grey dither — a different
 // clip from the hero
@@ -28,7 +27,6 @@ precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_video;
 uniform sampler2D u_video2;
-uniform sampler2D u_trail;
 uniform float u_hasVideo;
 uniform float u_hasVideo2;
 uniform vec2 u_resolution;
@@ -41,7 +39,6 @@ uniform float u_top2;
 uniform float u_bottom2;
 uniform float u_videoReveal;
 uniform float u_pixelSize;
-uniform vec2 u_noCursorBand; // GL-y range where the cursor effect is off
 out vec4 fragColor;
 
 float rand(vec2 n) {
@@ -103,8 +100,6 @@ void main() {
   vec2 sub = floor(mod(frag, u_pixelSize) / subSize);
   vec2 cellUv = (cell + 0.5) * u_pixelSize / u_resolution;
 
-  // cursor wake: local fluid speed — recolors glyph blocks, adds no density
-  float trailV = texture(u_trail, vec2(cellUv.x, 1.0 - cellUv.y)).r;
   float lum = 0.0;
 
   vec3 videoCol = vec3(0.0);
@@ -125,20 +120,19 @@ void main() {
 
   // idle surface: the reference draws a 7-block glyph in EVERY cell at full
   // constant grey — a dense uniform carpet of square blocks that reads as a
-  // grey fabric. The cursor trail / video luminance light up the remaining
-  // blocks of the 16-block full pattern.
+  // grey fabric. The video luminance lights up the remaining blocks of the
+  // 16-block full pattern.
   float glyph = glyphBlock(sub);
   float extra = step(threshold, lum);
 
-  // reference palette: charcoal base, grey dots, cream cursor
+  // reference palette: charcoal base, grey dots
   vec3 ink = vec3(0.102, 0.110, 0.110);   // #1a1c1c bgPrimary
   vec3 grey = vec3(0.275, 0.275, 0.275);  // #464646 content dots
-  vec3 cream = vec3(0.976, 0.957, 0.922); // #f9f4eb cursor
 
   // reference mechanism: the canvas belongs to the hero SECTION — a vertical
-  // band between two progress values with a noise-warped edge. The grid, the
-  // cursor effect, and the video all live inside the band and wipe away
-  // together at its wavy edge; outside it the page is clean flat ink.
+  // band between two progress values with a noise-warped edge. The grid and
+  // the video live inside the band and wipe away together at its wavy edge;
+  // outside it the page is clean flat ink.
   // taller gap + wider noise warp = a high, slow dither edge like theirs
   float gap = 0.32;
   float noiseVal = 0.5 * noise(cellUv * 8.0);
@@ -163,17 +157,6 @@ void main() {
   // hero band only: the crisp video dissolves per-block through the wave
   float alpha = u_hasVideo > 0.5 ? step(threshold * 0.999, band * u_videoReveal) : 0.0;
   vec3 col = mix(dithered, videoCol * 0.72, alpha);
-
-  // cursor pass — the reference's exact model: block reveal driven by local
-  // fluid SPEED, progressive like drawLLLogo (each of the 7 glyph blocks
-  // turns on at a higher speed threshold), coloured cursorRGB cream.
-  // Suppressed where the crisp hero video is showing (alpha).
-  float gOrder = orderThreshold(sub) * 16.0;   // glyph blocks own orders 0-6
-  float cursorOn = glyph * step(gOrder / 7.0, trailV) * (1.0 - alpha);
-  // suppressed inside the no-cursor band (contact section)
-  float inBand = step(u_noCursorBand.x, cellUv.y) * step(cellUv.y, u_noCursorBand.y);
-  cursorOn *= 1.0 - inBand;
-  col = mix(col, cream, cursorOn);
   fragColor = vec4(col, 1.0);
 }`
 
@@ -237,40 +220,6 @@ export default function LamaBackdrop() {
     }
     const videoTex = makeTex()
     const video2Tex = makeTex()
-    const trailTex = makeTex()
-
-    // cursor velocity field — the reference's model: mousemove splats speed
-    // into a small field with a tight gaussian radius; the field decays by
-    // (1 - min(0.5, dt/250)) per frame like their advection pass. Intensity
-    // is SPEED, so the effect flares under fast movement and dies fast.
-    const FW = 96
-    const FH = 54
-    const field = new Float32Array(FW * FH)
-    const fieldBytes = new Uint8Array(FW * FH)
-    const SPLAT_R = 3.2
-    const mouse = { x: -1, y: -1 }
-    const onMove = (e: MouseEvent) => {
-      const nx = (e.clientX / window.innerWidth) * FW
-      const ny = (e.clientY / window.innerHeight) * FH
-      if (mouse.x >= 0) {
-        const speed = Math.min(1.2, Math.hypot(nx - mouse.x, ny - mouse.y) / 3)
-        const x0 = Math.max(0, Math.floor(nx - SPLAT_R * 2))
-        const x1 = Math.min(FW - 1, Math.ceil(nx + SPLAT_R * 2))
-        const y0 = Math.max(0, Math.floor(ny - SPLAT_R * 2))
-        const y1 = Math.min(FH - 1, Math.ceil(ny + SPLAT_R * 2))
-        for (let y = y0; y <= y1; y++) {
-          for (let x = x0; x <= x1; x++) {
-            const d2 = (x - nx) * (x - nx) + (y - ny) * (y - ny)
-            const infl = Math.exp(-d2 / (SPLAT_R * SPLAT_R))
-            const i = y * FW + x
-            field[i] = Math.min(1.3, field[i] + infl * speed * 0.8)
-          }
-        }
-      }
-      mouse.x = nx
-      mouse.y = ny
-    }
-    window.addEventListener('mousemove', onMove, { passive: true })
 
     const u = (name: string) => gl.getUniformLocation(program, name)
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -285,7 +234,6 @@ export default function LamaBackdrop() {
 
     let raf = 0
     let lastUpload = 0
-    let lastFrame = performance.now()
     let hasFrame = false
     let hasFrame2 = false
     let top = 0
@@ -295,7 +243,6 @@ export default function LamaBackdrop() {
     // band2 follows the services section ("What we do") — its video renders
     // as grey dither behind the content, like the reference's section grids
     const band2El = document.querySelector<HTMLElement>('[data-lama-title="WHAT WE DO"]')
-    const noCursorEl = document.querySelector<HTMLElement>('[data-lama-title="BOOK A CALL"]')
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw)
@@ -316,20 +263,6 @@ export default function LamaBackdrop() {
           hasFrame2 = true
         }
       }
-
-      // decay the velocity field exactly like their advection pass, then
-      // upload it as an R8 texture
-      const dt = Math.min(50, now - lastFrame)
-      lastFrame = now
-      const keep = reduced ? 0 : 1 - Math.min(0.5, dt / 250)
-      for (let i = 0; i < field.length; i++) {
-        field[i] *= keep
-        fieldBytes[i] = Math.min(255, field[i] * 255)
-      }
-      gl.activeTexture(gl.TEXTURE1)
-      gl.bindTexture(gl.TEXTURE_2D, trailTex)
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, FW, FH, 0, gl.RED, gl.UNSIGNED_BYTE, fieldBytes)
 
       // entrance: the top-progress wave eases in after the preloader (their
       // reveal timeline); exit: bottom-progress is SCRUBBED — tied linearly
@@ -360,7 +293,6 @@ export default function LamaBackdrop() {
       }
 
       gl.uniform1i(u('u_video'), 0)
-      gl.uniform1i(u('u_trail'), 1)
       gl.uniform1i(u('u_video2'), 2)
       gl.uniform1f(u('u_hasVideo'), hasFrame ? 1 : 0)
       gl.uniform1f(u('u_hasVideo2'), hasFrame2 ? 1 : 0)
@@ -373,17 +305,6 @@ export default function LamaBackdrop() {
       gl.uniform1f(u('u_top2'), top2)
       gl.uniform1f(u('u_bottom2'), bottom2)
       gl.uniform1f(u('u_videoReveal'), videoReveal)
-      // cursor effect off over the contact section so the form stays clean
-      let ncLo = 2
-      let ncHi = 2
-      if (noCursorEl) {
-        const nr = noCursorEl.getBoundingClientRect()
-        if (nr.bottom > 0 && nr.top < vh) {
-          ncLo = Math.max(0, 1 - nr.bottom / vh)
-          ncHi = Math.min(1, 1 - nr.top / vh)
-        }
-      }
-      gl.uniform2f(u('u_noCursorBand'), ncLo, ncHi)
       // their GRID_SIZE = 8 in PHYSICAL canvas pixels (no dpr multiply) —
       // this is what makes their texture finer and denser than a CSS-px grid
       gl.uniform1f(u('u_pixelSize'), 8)
@@ -394,7 +315,6 @@ export default function LamaBackdrop() {
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
-      window.removeEventListener('mousemove', onMove)
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
   }, [])

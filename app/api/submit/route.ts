@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { supabase } from '@/lib/supabase'
+import { autoIngestLead } from '../../lib/lead-enrichment'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -93,8 +94,24 @@ export async function POST(req: NextRequest) {
     </div>
   `
 
-  // Team notification — this IS the lead. If it fails, surface the error so the
-  // visitor can retry; otherwise the enquiry is lost silently.
+  // The database is the source of truth for leads — persist FIRST, so an email
+  // outage can never lose an enquiry. Email is the notification layer.
+  const { data: savedLead, error: dbError } = await supabase.from('leads').insert({
+    fname, lname, email, phone, biz,
+    model: model ?? null,
+    need:  need ?? null,
+    budget: budget ?? null,
+    timeline: timeline ?? null,
+  }).select().single()
+  if (dbError) console.error('Supabase insert error:', dbError)
+
+  // Auto-ingest: verified companies become prospect clients automatically.
+  // Fire-and-forget — never delays or fails the visitor's submission.
+  if (savedLead) {
+    void autoIngestLead(savedLead).catch(e => console.error('auto-ingest error:', e))
+  }
+
+  let emailOk = true
   try {
     await transporter.sendMail({
       from:    `"MD Media" <${process.env.GMAIL_USER}>`,
@@ -104,23 +121,17 @@ export async function POST(req: NextRequest) {
       html:    teamHtml,
     })
   } catch (err) {
+    emailOk = false
     console.error('Team email error:', err)
+  }
+
+  // Only fail the visitor if the lead was captured NOWHERE.
+  if (dbError && !emailOk) {
     return NextResponse.json(
       { error: "Sorry — we couldn't submit your brief right now. Please try again in a moment." },
       { status: 502 },
     )
   }
-
-  // Save lead to Supabase — best-effort, never fails the submission.
-  supabase.from('leads').insert({
-    fname, lname, email, phone, biz,
-    model: model ?? null,
-    need:  need ?? null,
-    budget: budget ?? null,
-    timeline: timeline ?? null,
-  }).then(({ error }) => {
-    if (error) console.error('Supabase insert error:', error)
-  })
 
   // Confirmation to the contact — best-effort. The lead is already captured above,
   // so a failed auto-reply must NOT fail the submission.

@@ -1,0 +1,102 @@
+import { NextResponse } from 'next/server'
+import { clerkClient } from '@clerk/nextjs/server'
+import { supabase } from '@/lib/supabase'
+import { requireRole, authzErrorResponse, type Role } from '../../lib/authz'
+
+const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
+
+/** List members + pending invites. super_admin only. */
+export async function GET() {
+  try {
+    await requireRole('super_admin')
+
+    const [membersRes, invitesRes, assignmentsRes] = await Promise.all([
+      supabase.from('team_users').select('*').order('created_at', { ascending: true }),
+      supabase.from('team_invites').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+      supabase.from('team_user_clients').select('team_user_id, client_id, clients(name)'),
+    ])
+    if (membersRes.error) throw new Error(membersRes.error.message)
+    if (invitesRes.error) throw new Error(invitesRes.error.message)
+
+    return NextResponse.json({
+      members: membersRes.data,
+      invites: invitesRes.data,
+      assignments: assignmentsRes.data ?? [],
+    })
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
+}
+
+/** Invite a person. super_admin only.
+ *  Race-safe: the partial unique index on team_invites (one pending invite per
+ *  email) makes concurrent duplicate invites collide at the database. */
+export async function POST(req: Request) {
+  try {
+    const inviter = await requireRole('super_admin')
+    const body = await req.json()
+
+    const email = String(body.email ?? '').trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return NextResponse.json({ error: 'Valid email is required' }, { status: 400 })
+    }
+    const role = body.role as Role
+    if (!INVITABLE_ROLES.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+    if (role === 'client' && !body.client_id) {
+      return NextResponse.json({ error: 'Client users must be linked to a client' }, { status: 400 })
+    }
+
+    const { data: existingUser } = await supabase
+      .from('team_users').select('id').ilike('email', email).maybeSingle()
+    if (existingUser) {
+      return NextResponse.json({ error: 'This email already has an account' }, { status: 409 })
+    }
+
+    // claim the pending-invite slot FIRST (unique index = race guard),
+    // then send through Clerk; roll the row back if Clerk refuses.
+    const { data: invite, error: invErr } = await supabase
+      .from('team_invites')
+      .insert({
+        email,
+        role,
+        employment_type: body.employment_type === 'contractor' ? 'contractor' : 'employee',
+        timezone: body.timezone || 'Australia/Melbourne',
+        client_id: body.client_id ?? null,
+        assigned_client_ids: Array.isArray(body.assigned_client_ids) ? body.assigned_client_ids : [],
+        invited_by: inviter.id,
+      })
+      .select()
+      .single()
+    if (invErr) {
+      const dup = invErr.message.includes('team_invites_pending_email_uidx')
+      return NextResponse.json(
+        { error: dup ? 'A pending invite already exists for this email' : invErr.message },
+        { status: dup ? 409 : 500 }
+      )
+    }
+
+    try {
+      const clerk = await clerkClient()
+      const clerkInvite = await clerk.invitations.createInvitation({
+        emailAddress: email,
+        publicMetadata: { role },
+        notify: true,
+      })
+      await supabase.from('team_invites')
+        .update({ clerk_invitation_id: clerkInvite.id })
+        .eq('id', invite.id)
+    } catch (e) {
+      await supabase.from('team_invites').delete().eq('id', invite.id)
+      const msg = e instanceof Error ? e.message : 'Clerk invitation failed'
+      return NextResponse.json({ error: `Invitation email failed: ${msg}` }, { status: 502 })
+    }
+
+    return NextResponse.json(invite, { status: 201 })
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
+}
