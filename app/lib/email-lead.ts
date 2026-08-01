@@ -10,6 +10,12 @@ import {
   type InboxMessage, type Mailbox,
 } from './gmail'
 import { listConnectedMailboxes } from './clerk-gmail'
+import {
+  FatalScanError, fatalApiReason, gmailQuery, blockedReason, type ScanSettings,
+} from './scan-core'
+import { getScanSettings, enabledMailboxEmails } from './scan-settings'
+
+export { FatalScanError, fatalApiReason }
 
 /**
  * Inbox → leads pipeline.
@@ -71,38 +77,139 @@ export type ScanResult = {
   mailboxes: string[]
 }
 
+/** What happened to one message. Mirrors email_ingest_log.status, plus
+ *  'already_processed' for messages claimed by an earlier scan — those never
+ *  reach the log again, but the operator still needs to see they were counted. */
+export type MessageOutcome =
+  | 'already_processed'
+  | 'prefiltered'
+  | 'not_a_lead'
+  | 'duplicate_sender'
+  | 'lead_created'
+  | 'needs_review'
+  | 'error'
+
+/** Progress events, emitted as the scan runs so the dashboard can show what is
+ *  actually happening instead of an opaque spinner. Purely observational —
+ *  nothing in the pipeline branches on whether a listener is attached. */
+export type ScanEvent =
+  | { type: 'start'; mailboxes: string[] }
+  | { type: 'mailbox_start'; email: string; index: number; total: number }
+  | { type: 'listed'; email: string; count: number }
+  | { type: 'message'; email: string; outcome: MessageOutcome; subject?: string; from?: string; reason?: string; confidence?: number }
+  | { type: 'mailbox_done'; email: string }
+  | { type: 'mailbox_error'; email: string; message: string }
+  | { type: 'done'; result: ScanResult }
+
+type Emit = (e: ScanEvent) => void
+
 /** Scan every available mailbox: the shared ones configured in env, plus
  *  every team member who has connected their Google account through Clerk.
  *  Each is independent — a failure in one (revoked token, API hiccup) never
  *  stops the others. De-duplicated by address. */
-export async function scanInbox(): Promise<ScanResult> {
+export async function scanInbox(onEvent?: Emit): Promise<ScanResult> {
+  const emit: Emit = onEvent ?? (() => {})
+  const settings = await getScanSettings()
   const result: ScanResult = {
     scanned: 0, claimed: 0, leads_created: 0, skipped: 0, errors: 0, mailboxes: [],
   }
-  const configured = getMailboxes()
-  const connected = await listConnectedMailboxes()
-  const seen = new Set(configured.map(m => m.email))
-  const mailboxes = [...configured, ...connected.filter(m => !seen.has(m.email))]
-  if (mailboxes.length === 0) throw new Error('No mailbox available to scan')
 
-  for (const box of mailboxes) {
+  const enabled = new Set(await enabledMailboxEmails())
+  const mailboxes = (await availableMailboxes()).filter(m => enabled.has(m.email.toLowerCase()))
+  if (mailboxes.length === 0) {
+    throw new Error('No mailbox is enabled for scanning — check Settings → Inbox scanner')
+  }
+
+  emit({ type: 'start', mailboxes: mailboxes.map(m => m.email) })
+
+  for (const [i, box] of mailboxes.entries()) {
     result.mailboxes.push(box.email)
+    emit({ type: 'mailbox_start', email: box.email, index: i + 1, total: mailboxes.length })
     try {
-      await scanOneMailbox(box, result)
+      await scanOneMailbox(box, result, emit, settings)
+      emit({ type: 'mailbox_done', email: box.email })
     } catch (e) {
+      // an account-level failure affects every mailbox equally — surface it
+      // once rather than repeating it per mailbox
+      if (e instanceof FatalScanError) throw e
       result.errors++
+      const message = e instanceof Error ? e.message : String(e)
       console.error(`mailbox scan failed for ${box.email}:`, e)
+      emit({ type: 'mailbox_error', email: box.email, message })
     }
   }
+  emit({ type: 'done', result })
   return result
 }
 
-async function scanOneMailbox(box: Mailbox, result: ScanResult): Promise<void> {
+/** Every mailbox the scanner has credentials for, de-duplicated by address. */
+async function availableMailboxes(): Promise<Mailbox[]> {
+  const configured = getMailboxes()
+  const connected = await listConnectedMailboxes().catch(() => [] as Mailbox[])
+  const seen = new Set(configured.map(m => m.email.toLowerCase()))
+  return [...configured, ...connected.filter(m => !seen.has(m.email.toLowerCase()))]
+}
+
+/**
+ * Scan exactly one mailbox and record the outcome in scan_runs.
+ *
+ * This is the unit the scheduler fans out over: each mailbox gets its own
+ * invocation, its own timeout and its own retries, so a revoked token on one
+ * address cannot starve the others or push the whole pass past the function
+ * time limit.
+ */
+export async function scanSingleMailbox(
+  email: string,
+  trigger: 'manual' | 'scheduled' | 'event' = 'scheduled',
+  onEvent?: Emit
+): Promise<ScanResult> {
+  const emit: Emit = onEvent ?? (() => {})
+  const settings = await getScanSettings()
+  const box = (await availableMailboxes()).find(m => m.email.toLowerCase() === email.toLowerCase())
+  if (!box) throw new Error(`No credentials available for ${email}`)
+
+  const result: ScanResult = {
+    scanned: 0, claimed: 0, leads_created: 0, skipped: 0, errors: 0, mailboxes: [box.email],
+  }
+
+  const { data: run } = await supabase
+    .from('scan_runs')
+    .insert({ mailbox: box.email, trigger, status: 'running' })
+    .select('id')
+    .maybeSingle()
+
+  const finish = async (status: 'success' | 'error', error?: string) => {
+    if (!run) return
+    await supabase.from('scan_runs').update({
+      status,
+      finished_at: new Date().toISOString(),
+      scanned: result.scanned, claimed: result.claimed,
+      leads_created: result.leads_created, skipped: result.skipped,
+      errors: result.errors, error: error?.slice(0, 1000) ?? null,
+    }).eq('id', run.id)
+  }
+
+  try {
+    await scanOneMailbox(box, result, emit, settings)
+    await finish('success')
+    emit({ type: 'done', result })
+    return result
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await finish('error', message)
+    throw e
+  }
+}
+
+async function scanOneMailbox(
+  box: Mailbox, result: ScanResult, emit: Emit, settings: ScanSettings
+): Promise<void> {
   const mailbox = box.email
   const ownDomain = mailbox.split('@')[1] ?? 'mdmmarketing.com.au'
 
-  const ids = await listRecentMessageIds(box)
+  const ids = await listRecentMessageIds(box, gmailQuery(settings), settings.max_messages)
   result.scanned += ids.length
+  emit({ type: 'listed', email: mailbox, count: ids.length })
 
   for (const id of ids) {
     // 1. claim — the exactly-once gate
@@ -114,7 +221,12 @@ async function scanOneMailbox(box: Mailbox, result: ScanResult): Promise<void> {
       )
       .select()
       .maybeSingle()
-    if (!claimed) continue // already processed by an earlier/concurrent scan
+    if (!claimed) {
+      // already processed by an earlier/concurrent scan — surface it so a scan
+      // that finds nothing new reads as "checked, seen before", not "did nothing"
+      emit({ type: 'message', email: mailbox, outcome: 'already_processed' })
+      continue
+    }
     result.claimed++
 
     try {
@@ -133,36 +245,84 @@ async function scanOneMailbox(box: Mailbox, result: ScanResult): Promise<void> {
         listUnsubscribe: msg.listUnsubscribe,
         autoSubmitted: msg.autoSubmitted,
       })
-      if (skip) {
+      // an admin block list overrides everything, including the model
+      const blocked = blockedReason(msg.fromEmail, settings)
+      const stop = skip ?? blocked
+      if (stop) {
         await supabase.from('email_ingest_log')
-          .update({ status: 'skipped', reasoning: skip }).eq('id', claimed.id)
+          .update({ status: 'skipped', reasoning: stop }).eq('id', claimed.id)
         result.skipped++
+        emit({
+          type: 'message', email: mailbox, outcome: 'prefiltered',
+          subject: msg.subject, from: msg.fromEmail, reason: stop,
+        })
+        continue
+      }
+
+      // rules-only: the model is deliberately out of the loop, so anything
+      // surviving the prefilter is parked for a human rather than dropped
+      if (settings.rules_only) {
+        await supabase.from('email_ingest_log').update({
+          status: 'needs_review',
+          reasoning: 'Rules-only mode is on — flagged for manual review, not classified',
+        }).eq('id', claimed.id)
+        result.skipped++
+        emit({
+          type: 'message', email: mailbox, outcome: 'needs_review',
+          subject: msg.subject, from: msg.fromEmail,
+          reason: 'Rules-only mode — needs a human decision',
+        })
         continue
       }
 
       // 3. classify with Haiku
-      const c = await classify(msg)
+      let c: ClassificationT | null
+      try {
+        c = await classify(msg)
+      } catch (e) {
+        const fatal = fatalApiReason(e)
+        if (fatal) {
+          // leave the claim as 'pending' so this message is picked up again
+          // once the account issue is resolved — it was never really assessed
+          await supabase.from('email_ingest_log').delete().eq('id', claimed.id)
+          throw new FatalScanError(fatal)
+        }
+        throw e
+      }
       if (!c) throw new Error('Classification returned no parseable output')
 
-      if (!c.is_lead || c.confidence < 0.6) {
+      if (!c.is_lead || c.confidence < settings.min_confidence) {
         await supabase.from('email_ingest_log').update({
           status: 'not_a_lead', is_lead: c.is_lead, confidence: c.confidence, reasoning: c.reasoning,
         }).eq('id', claimed.id)
         result.skipped++
+        emit({
+          type: 'message', email: mailbox, outcome: 'not_a_lead',
+          subject: msg.subject, from: msg.fromEmail,
+          reason: c.reasoning, confidence: c.confidence,
+        })
         continue
       }
 
       // 4. duplicate guard — same sender already a recent lead?
-      const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
-      const { data: existing } = await supabase
-        .from('leads').select('id').ilike('email', msg.fromEmail).gte('created_at', monthAgo)
-        .limit(1).maybeSingle()
+      const since = new Date(Date.now() - settings.duplicate_window_days * 24 * 3600 * 1000).toISOString()
+      const { data: existing } = settings.duplicate_window_days === 0
+        ? { data: null }
+        : await supabase
+            .from('leads').select('id').ilike('email', msg.fromEmail).gte('created_at', since)
+            .limit(1).maybeSingle()
       if (existing) {
         await supabase.from('email_ingest_log').update({
           status: 'skipped', is_lead: true, confidence: c.confidence,
           reasoning: 'sender already has a recent lead', lead_id: existing.id,
         }).eq('id', claimed.id)
         result.skipped++
+        emit({
+          type: 'message', email: mailbox, outcome: 'duplicate_sender',
+          subject: msg.subject, from: msg.fromEmail,
+          reason: `This sender already has a lead from the last ${settings.duplicate_window_days} days`,
+          confidence: c.confidence,
+        })
         continue
       }
 
@@ -190,14 +350,22 @@ async function scanOneMailbox(box: Mailbox, result: ScanResult): Promise<void> {
         reasoning: c.reasoning, lead_id: lead.id,
       }).eq('id', claimed.id)
       result.leads_created++
+      emit({
+        type: 'message', email: mailbox, outcome: 'lead_created',
+        subject: msg.subject, from: msg.fromEmail,
+        reason: c.reasoning, confidence: c.confidence,
+      })
 
       // 6. feed the existing prospect pipeline (verified-company → client)
       void autoIngestLead(lead).catch(e => console.error('auto-ingest from email error:', e))
     } catch (e) {
+      if (e instanceof FatalScanError) throw e // account-level: stop the run
       result.errors++
+      const message = e instanceof Error ? e.message : String(e)
       await supabase.from('email_ingest_log').update({
-        status: 'error', error: e instanceof Error ? e.message.slice(0, 1000) : String(e),
+        status: 'error', error: message.slice(0, 1000),
       }).eq('id', claimed.id)
+      emit({ type: 'message', email: mailbox, outcome: 'error', reason: message })
     }
   }
 }

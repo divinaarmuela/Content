@@ -23,6 +23,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, Link2 } from 'lucide-react'
+import SocialChannels from './SocialChannels'
 
 type Client = {
   id: string
@@ -161,6 +162,19 @@ export default function ClientsPage() {
                 <Textarea rows={3} value={editing?.notes ?? ''} onChange={e => set({ notes: e.target.value })} />
               </div>
             </div>
+
+            {/* Channels need a saved client to attach to — a provider profile
+                is created against the client id on first connect. */}
+            {editing?.id ? (
+              <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <SocialChannels clientId={editing.id} />
+              </div>
+            ) : (
+              <p className="border-t border-zinc-200 pt-4 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                Save the client first, then reopen to connect their social channels.
+              </p>
+            )}
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
               <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save client'}</Button>

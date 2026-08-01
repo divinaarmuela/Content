@@ -36,6 +36,7 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
+import ScannerSettings from './ScannerSettings'
 
 const TEAM = [
   { name: 'Marcus Doyle', email: 'marcus@mdmmarketing.com.au', role: 'Owner', initials: 'MD' },
@@ -86,9 +87,14 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="scanner">Inbox scanner</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="danger">Danger zone</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="scanner">
+          <ScannerSettings />
+        </TabsContent>
 
         <TabsContent value="profile">
           <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">

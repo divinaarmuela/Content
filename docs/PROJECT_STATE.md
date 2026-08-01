@@ -56,6 +56,12 @@ remove a badge until the page actually reads from the database.
 
 ### Database
 
+**`supabase/scan_settings.sql` is NOT yet applied anywhere** (added 1 Aug 2026).
+Until it is run, the scanner settings API returns defaults and mailbox toggles
+do not persist. Run it in the Supabase SQL editor before relying on the Inbox
+scanner tab. It creates `scan_settings`, `scan_mailboxes` and `scan_runs`, and
+widens the `email_ingest_log` status check to allow `needs_review`.
+
 Migrations in `supabase/*.sql`, idempotent, applied by hand in the Supabase SQL
 editor. Confirmed live: `clients`, `projects`, `assets`, `leads`, `team_users`,
 `team_user_clients`, `team_invites`, `notification_log`, `email_ingest_log`,
@@ -156,11 +162,17 @@ ANTHROPIC_API_KEY   SUPER_ADMIN_EMAILS   CRON_SECRET
 NEXT_PUBLIC_APP_URL   (production only — https://www.mdmmarketing.com.au)
 ```
 
-The six Clerk vars were already there before this build was deployed. **Whether
-they are `pk_test_` or `pk_live_` could not be determined** — every var is stored
-with Vercel's `sensitive` type, so the value is not readable back, even through
-the API. Check the Clerk dashboard, or look for the Clerk dev banner on the
-deployed site. If they are test keys, section 2 still applies.
+The six Clerk vars were already there before this build was deployed. **They are
+development keys** — confirmed 1 Aug 2026 by reading the deployed `/sign-in`
+page, which inlines `pk_test_Z3JhbmQtZWZ0…` and points at the Clerk instance
+`grand-eft-83.clerk.accounts.dev`.
+
+**This is why signing in does not reach the dashboard.** A Clerk development
+instance hosts its session on `*.accounts.dev`; that cookie cannot be shared
+with `www.mdmmarketing.com.au`, so the redirect back from sign-in arrives
+unauthenticated and bounces to sign-in again. It is not a bug in the app — it is
+the expected behaviour of dev keys on a custom domain. Section 2 is the fix, and
+it is now blocking, not optional.
 
 `NEXT_PUBLIC_APP_URL` is production-only on purpose: it builds the links in portal
 shares and report emails, and a preview deploy should not mint links pointing at

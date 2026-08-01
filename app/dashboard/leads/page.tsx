@@ -24,8 +24,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  ArrowUpDown, Copy, Download, Inbox, Mail, MoreHorizontal, Pencil, RefreshCw, Trash2, UserPlus,
+  ArrowUpDown, Copy, Download, Mail, MoreHorizontal, Pencil, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
+import ScanPanel from './ScanPanel'
 
 interface Lead {
   id: string
@@ -62,39 +63,6 @@ export default function LeadsPage() {
   const [sort, setSort]       = useState<{ key: keyof Lead; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
   const [deleting, setDeleting] = useState<Lead | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
-  const [scanBusy, setScanBusy] = useState(false)
-  const [conn, setConn] = useState<{
-    mine: { connected: boolean; email: string | null; reason?: string }
-    shared: string[]
-    connected: string[]
-  } | null>(null)
-
-  useEffect(() => {
-    fetch('/api/ingest/connection')
-      .then(r => (r.ok ? r.json() : null))
-      .then(setConn)
-      .catch(() => setConn(null))
-  }, [])
-
-  const scanInbox = async () => {
-    setScanBusy(true)
-    try {
-      const res = await fetch('/api/ingest/email', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Scan failed')
-      toast.success(
-        json.leads_created > 0
-          ? `Inbox scanned — ${json.leads_created} new lead${json.leads_created !== 1 ? 's' : ''} found`
-          : 'Inbox scanned — no new leads this time',
-        { description: `${json.scanned} recent messages · ${json.claimed} newly checked · ${json.skipped} not leads` }
-      )
-      if (json.leads_created > 0) fetchLeads()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Scan failed')
-    } finally {
-      setScanBusy(false)
-    }
-  }
   const [detail, setDetail] = useState<Lead | null>(null)
   const [draft, setDraft] = useState<Partial<Lead>>({})
   const [saveBusy, setSaveBusy] = useState(false)
@@ -222,9 +190,6 @@ export default function LeadsPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Contact form submissions from mdmmarketing.com.au</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={scanInbox} disabled={scanBusy}>
-            <Inbox className="h-4 w-4" /> {scanBusy ? 'Scanning…' : 'Scan inbox'}
-          </Button>
           <Button variant="outline" size="sm" onClick={fetchLeads}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
@@ -234,28 +199,7 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Which mailboxes the scanner currently covers */}
-      {conn && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <Inbox className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
-          <span className="text-zinc-500 dark:text-zinc-400">Scanning:</span>
-          {[...conn.shared, ...conn.connected].map(e => (
-            <span key={e} className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-              {e}
-            </span>
-          ))}
-          {conn.shared.length + conn.connected.length === 0 && (
-            <span className="text-zinc-400">no mailboxes connected yet</span>
-          )}
-          {!conn.mine.connected && conn.mine.reason !== 'wrong_domain' && (
-            <span className="ml-auto text-zinc-500 dark:text-zinc-400">
-              {conn.mine.reason === 'no_google_account'
-                ? 'Your inbox isn’t connected — sign in with Google to include it.'
-                : 'Your inbox isn’t connected — sign in with Google and allow mail access to include it.'}
-            </span>
-          )}
-        </div>
-      )}
+      <ScanPanel onLeadsCreated={fetchLeads} />
 
       <div className="flex items-center gap-3">
         <Input

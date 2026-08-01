@@ -27,6 +27,12 @@ export async function POST(req: Request) {
     )
   }
 
+  // The dashboard asks for a stream so it can show progress as it happens.
+  // Cron and any other caller get the single JSON object they expect.
+  if (req.headers.get('accept')?.includes('application/x-ndjson')) {
+    return streamScan()
+  }
+
   try {
     const result = await scanInbox()
     // piggyback the monthly report tick on the same schedule — one cron
@@ -43,6 +49,50 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
+
+/** Newline-delimited JSON: one event per line, flushed as the scan progresses.
+ *  Each line is a ScanEvent; the final line is either `done` or `fatal`. */
+function streamScan(): Response {
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const write = (obj: unknown) => {
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'))
+        } catch {
+          // client navigated away mid-scan; the scan itself continues and its
+          // results are already durable in email_ingest_log
+        }
+      }
+
+      try {
+        await scanInbox(write)
+        const report = await runLeadsReportTick().catch(() => ({ skipped: 'tick error' }))
+        write({ type: 'report', report })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Scan failed'
+        write({
+          type: 'fatal',
+          message: /relation .*email_ingest_log/i.test(msg)
+            ? 'Run supabase/email_ingest.sql in the Supabase SQL editor first'
+            : msg,
+        })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-store, no-transform',
+      // stop proxies buffering the stream into one lump at the end
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }
 
 /** Vercel Cron sends GET — same auth, same scan. */
