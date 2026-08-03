@@ -55,8 +55,8 @@ export default function HomePage() {
         <LamaSteps />
         <LamaCulture />
         <LamaClient />
-        <LamaWork />
         <LamaServices />
+        <LamaWork />
         <LamaContact />
       </main>
       <LamaFooterBar />
