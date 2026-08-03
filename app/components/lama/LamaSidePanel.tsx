@@ -2,7 +2,6 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import { Scramble } from './Scramble'
 import { useExperienceActive, useLamaReady } from './ready'
 

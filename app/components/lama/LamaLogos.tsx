@@ -19,6 +19,9 @@ export default function LamaLogos() {
   return (
     // transparent over the shared canvas, like the reference's logos section
     <div aria-label="Clients and partners" className="py-10 overflow-hidden">
+      <p className="mb-8 text-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim">
+        Trusted by founders &amp; local businesses
+      </p>
       <div className="flex w-max animate-lama-marquee motion-reduce:animate-none gap-16 px-8">
         {doubled.map((logo, i) => (
           <img

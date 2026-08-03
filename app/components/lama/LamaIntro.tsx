@@ -6,15 +6,15 @@ import { Scramble } from './Scramble'
 // The hard line splits assume desktop width — below sm the text reveals as
 // two naturally-wrapping sentences instead, so no ragged mid-phrase breaks.
 const LINES = [
-  'You’re brilliant at what you do. Your',
-  'clients love you. But online? You’re quiet.',
-  'The result is the same: the people who',
-  'should be hiring you don’t know you exist.',
+  'Great businesses go unseen every day.',
+  'You’re brilliant at what you do and your clients',
+  'love you, but online, you’re quiet. So the people',
+  'who should buy from you don’t know you exist.',
 ]
 
 const SENTENCES = [
-  'You’re brilliant at what you do. Your clients love you. But online? You’re quiet.',
-  'The result is the same: the people who should be hiring you don’t know you exist.',
+  'Great businesses go unseen every day. You’re brilliant at what you do and your clients love you, but online, you’re quiet.',
+  'So the people who should buy from you don’t know you exist.',
 ]
 
 export default function LamaIntro() {
@@ -35,7 +35,7 @@ export default function LamaIntro() {
         ))}
       </div>
       <div className="mt-8 flex justify-end">
-        <Scramble text="[ FEATURED WORK ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
+        <Scramble text="[ FROM INVISIBLE TO IN-DEMAND ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
       </div>
     </section>
   )
