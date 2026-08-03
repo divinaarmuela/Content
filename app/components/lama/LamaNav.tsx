@@ -9,10 +9,10 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 
 const LINKS = [
   { href: '/work', label: 'Work' },
-  { href: '/services', label: 'Services' },
+  { href: '/#services', label: 'What we do' },
+  { href: '/about', label: 'About us' },
   { href: '/journal', label: 'Journal' },
   { href: '/events', label: 'Events' },
-  { href: '/about', label: 'About' },
   { href: '/#contact', label: 'Contact' },
 ]
 
@@ -71,28 +71,79 @@ export default function LamaNav({ gate = true }: {
       </header>
 
       {open && (
-        <nav className="fixed inset-0 z-[105] bg-black flex flex-col justify-center px-8 sm:px-20">
-          {LINKS.map((l, i) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="group flex items-baseline gap-6 py-3 border-b border-cream/10 no-underline"
-            >
-              <span className="font-lamam text-xs text-cream-dim">0{i + 1}</span>
-              <span className="font-lamah font-bold uppercase text-cream text-[clamp(2rem,7vw,4.5rem)] leading-[0.9] tracking-tight group-hover:text-accent transition-colors">
-                {l.label}
-              </span>
-            </Link>
-          ))}
-          <a
-            href={CALENDLY}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="mt-10 self-start border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
+        /* design-pack menu: fixed blurred overlay + compact pop-in panel */
+        <nav
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-[105] flex items-start justify-center overflow-y-auto bg-[rgba(11,11,11,0.72)] p-3.5 pb-7 backdrop-blur-[14px] [animation:lama-menu-fade_0.35s_ease_both]"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="mt-16 w-[min(92vw,clamp(340px,31vw,560px))] overflow-hidden rounded-[14px] border border-cream/[0.14] bg-ink shadow-[0_40px_110px_rgba(0,0,0,0.7)] [animation:lama-menu-panel_0.5s_cubic-bezier(0.16,1,0.3,1)_both]"
           >
-            BOOK A STRATEGY CALL ↗
-          </a>
+            <div className="flex items-center justify-between gap-4 border-b border-cream/[0.14] px-4 py-3">
+              <span className="font-lamah font-bold text-[13px] tracking-[-0.01em] text-cream">MD&nbsp;MEDIA</span>
+              <span className="whitespace-nowrap font-lamam text-[9px] uppercase tracking-[0.1em] text-cream/45">
+                get seen · get known · get booked
+              </span>
+              <button
+                aria-label="Close menu"
+                onClick={() => setOpen(false)}
+                className="flex h-6 w-6 cursor-pointer appearance-none items-center justify-center border-0 bg-transparent p-0"
+              >
+                <span className="block h-[1.5px] w-[18px] bg-cream" />
+              </button>
+            </div>
+            {LINKS.map((l, i) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="group flex items-center justify-between gap-4 border-b border-cream/[0.12] px-4 py-3 text-cream no-underline transition-colors [animation:lama-menu-rowin_0.5s_cubic-bezier(0.16,1,0.3,1)_both] hover:bg-gradient-to-r hover:from-cream/[0.13] hover:via-cream/[0.04] hover:to-transparent"
+                style={{ animationDelay: `${0.06 * (i + 1)}s` }}
+              >
+                <span className="flex items-center gap-3">
+                  <span className="font-lamam text-[10px] text-cream opacity-30 transition-opacity duration-300 group-hover:opacity-100">
+                    {`0${i + 1}`}
+                  </span>
+                  <span className="font-lamah font-medium tracking-[-0.02em] text-[clamp(0.95rem,1.4vw,1.1rem)]">
+                    {l.label}
+                  </span>
+                </span>
+                <span className="font-lamam text-[13px] opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-[3px] group-hover:-translate-y-[3px] group-hover:opacity-100">
+                  ↗
+                </span>
+              </Link>
+            ))}
+            <div
+              className="flex flex-col gap-2 p-3.5 [animation:lama-menu-rowin_0.5s_cubic-bezier(0.16,1,0.3,1)_both]"
+              style={{ animationDelay: '0.42s' }}
+            >
+              <Link
+                href="/events"
+                onClick={() => setOpen(false)}
+                className="rounded-lg border border-cream/[0.28] p-3.5 text-center font-lamam text-[10px] uppercase tracking-[0.06em] text-cream no-underline transition-colors hover:bg-cream/[0.08]"
+              >
+                request an invite
+              </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={CALENDLY}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="rounded-lg bg-cream p-3.5 text-center font-lamam font-bold text-[10px] uppercase tracking-[0.06em] text-ink no-underline transition-colors hover:bg-cream/[0.86]"
+                >
+                  book a call
+                </a>
+                <Link
+                  href="/work"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg bg-cream p-3.5 text-center font-lamam font-bold text-[10px] uppercase tracking-[0.06em] text-ink no-underline transition-colors hover:bg-cream/[0.86]"
+                >
+                  see our work
+                </Link>
+              </div>
+            </div>
+          </div>
         </nav>
       )}
     </>

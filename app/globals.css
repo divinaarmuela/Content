@@ -5777,3 +5777,15 @@ a.ed-row:hover .ed-row-arw { opacity: 1; transform: translate(3px, -3px); color:
   border-top: 0;
   padding: 0;
 }
+
+/* ── lama menu panel (design-pack overlay) — keyframes only, no element
+      selectors, safe alongside the .dbx scoping ── */
+@keyframes lama-menu-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lama-menu-panel {
+  from { opacity: 0; transform: translateY(-14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes lama-menu-rowin {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
