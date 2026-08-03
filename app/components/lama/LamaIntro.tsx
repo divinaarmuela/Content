@@ -34,9 +34,6 @@ export default function LamaIntro() {
           <span className={hl}>people who should buy from you don&rsquo;t know you exist.</span>
         </Reveal>
       </h2>
-      <div className="mt-8 flex justify-end">
-        <Scramble text="[ FROM INVISIBLE TO IN-DEMAND ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
-      </div>
     </section>
   )
 }

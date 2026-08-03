@@ -6,6 +6,7 @@ import LamaNav from './components/lama/LamaNav'
 import LamaSidePanel from './components/lama/LamaSidePanel'
 import LamaHero from './components/lama/LamaHero'
 import LamaIntro from './components/lama/LamaIntro'
+import LamaSteps from './components/lama/LamaSteps'
 import LamaWork from './components/lama/LamaWork'
 import LamaServices from './components/lama/LamaServices'
 import LamaLogos from './components/lama/LamaLogos'
@@ -50,6 +51,7 @@ export default function HomePage() {
         <LamaHero />
         <LamaLogos />
         <LamaIntro />
+        <LamaSteps />
         <LamaWork />
         <LamaServices />
         <LamaCulture />
