@@ -10,9 +10,9 @@ import { useLamaReady } from './ready'
 // preloader, a reveal progress sweeps through the same threshold matrix and
 // the dots dissolve into the actual video pixels. Swap VIDEO_SRC only.
 const VIDEO_SRC = '/hero-divina.mp4'
-// band2 ("What we do") renders its own video as grey dither — a different
-// clip from the hero
-const VIDEO2_SRC = '/website-landscape.mp4'
+// band2 (the second video-as-dither band behind the services section) is
+// retired — per the static-pack design the page is plain black after the
+// client section. The shader plumbing stays; it just never gets fed.
 
 const VERT = `#version 300 es
 in vec2 a_pos;
@@ -241,9 +241,6 @@ export default function LamaBackdrop() {
     let bottom = 0
     let videoReveal = 0
     const start = performance.now()
-    // band2 follows the services section ("What we do") — its video renders
-    // as grey dither behind the content, like the reference's section grids
-    const band2El = document.querySelector<HTMLElement>('[data-lama-title="SERVICES, NOT PACKAGES"]')
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw)
@@ -278,20 +275,9 @@ export default function LamaBackdrop() {
       // crisp-video dissolve inside the hero band, once footage is ready
       const revealTarget = readyRef.current && hasFrame ? 1 : 0
       videoReveal += (revealTarget - videoReveal) * (reduced ? 1 : 0.035)
-      // band2 scrubs with the services section's actual screen position
-      let top2 = 0
-      let bottom2 = 0
-      if (band2El) {
-        const r = band2El.getBoundingClientRect()
-        // their exact ScrollTrigger mapping (scrub, end: 'top top') — and the
-        // band formula's y-warp keeps the wave edge at or below the section's
-        // top edge, so it can never wash over the rows above
-        top2 = Math.min(Math.max(1 - r.top / vh, 0), 1.2)
-        // their exact exit scrub (bottom bottom → bottom -10%): with the
-        // marquee transparent over the canvas there is no wall to beat — the
-        // wave dissolves gradually beneath it, like the reference
-        bottom2 = Math.min(Math.max((1 - r.bottom / vh) * 1.45, 0), 1.6)
-      }
+      // band2 retired — flat black after the hero band ends
+      const top2 = 0
+      const bottom2 = 0
 
       gl.uniform1i(u('u_video'), 0)
       gl.uniform1i(u('u_video2'), 2)
@@ -363,16 +349,8 @@ export default function LamaBackdrop() {
         onError={() => setFallback(true)}
         className="fixed h-px w-px opacity-0 pointer-events-none"
       />
-      <video
-        ref={video2Ref}
-        src={VIDEO2_SRC}
-        autoPlay
-        muted
-        loop
-        playsInline
-        crossOrigin="anonymous"
-        className="fixed h-px w-px opacity-0 pointer-events-none"
-      />
+      {/* kept srcless so the effect's ref checks hold; band2 is retired */}
+      <video ref={video2Ref} muted playsInline className="fixed h-px w-px opacity-0 pointer-events-none" />
       <div className="fixed inset-0 z-0 pointer-events-none bg-ink">
         {fallback ? (
           <div className="absolute inset-0 bg-lama-dots [background-size:4px_4px] opacity-60" />
