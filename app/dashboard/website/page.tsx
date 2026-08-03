@@ -17,7 +17,8 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, Download, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { moveItem } from '@/app/lib/website-gallery-core'
 
 type Project = {
   id: string
@@ -29,6 +30,8 @@ type Project = {
   description: string
   card_media_url: string
   hero_media_url: string
+  gallery_urls: string[]
+  website_url: string | null
   result: string | null
   challenge: string[]
   approach: string[]
@@ -39,7 +42,7 @@ type Project = {
 
 const EMPTY: Omit<Project, 'id'> = {
   slug: '', name: '', industry: '', tag: '', services: [], description: '',
-  card_media_url: '', hero_media_url: '', result: null,
+  card_media_url: '', hero_media_url: '', gallery_urls: [], website_url: null, result: null,
   challenge: [], approach: [], outcome: [], sort_order: 100, published: false,
 }
 
@@ -90,6 +93,88 @@ function UploadField({ label, hint, value, onChange, purpose }: {
           className="flex-1"
         />
         <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()} type="button">
+          <Upload className="h-4 w-4" /> {busy ? 'Uploading…' : 'Upload'}
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,video/*"
+          hidden
+          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: string[]) => void }) {
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const append = (url: string) => {
+    const clean = url.trim()
+    if (clean) onChange([...urls, clean])
+  }
+
+  const upload = async (file: File) => {
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('purpose', 'gallery')
+      const res = await fetch('/api/website/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
+      append(json.url)
+      toast.success('Gallery media uploaded')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <Label>Gallery</Label>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Media strip shown when the homepage row is expanded, in this order. Images or videos.
+      </p>
+      {urls.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {urls.map((url, i) => (
+            <div key={`${url}-${i}`} className="flex items-center gap-3">
+              <MediaThumb url={url} />
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{url}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" type="button" disabled={i === 0}
+                onClick={() => onChange(moveItem(urls, i, -1))} aria-label="Move up">
+                <ChevronUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" type="button" disabled={i === urls.length - 1}
+                onClick={() => onChange(moveItem(urls, i, 1))} aria-label="Move down">
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                type="button" onClick={() => onChange(urls.filter((_, j) => j !== i))} aria-label="Remove">
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-3">
+        <Input
+          value={draft}
+          placeholder="Paste a URL and press Add, or upload →"
+          onChange={e => setDraft(e.target.value)}
+          className="flex-1"
+        />
+        <Button variant="outline" type="button" disabled={!draft.trim()}
+          onClick={() => { append(draft); setDraft('') }}>
+          Add
+        </Button>
+        <Button variant="outline" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
           <Upload className="h-4 w-4" /> {busy ? 'Uploading…' : 'Upload'}
         </Button>
         <input
@@ -239,6 +324,20 @@ export default function WebsiteAdminPage() {
                 value={editing.hero_media_url ?? ''}
                 onChange={url => set({ hero_media_url: url })}
                 purpose="hero"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <GalleryField
+                urls={editing.gallery_urls ?? []}
+                onChange={gallery_urls => set({ gallery_urls })}
+              />
+            </div>
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>Website URL <span className="text-xs text-zinc-400 dark:text-zinc-500">(optional — adds a &ldquo;Visit website&rdquo; button to the homepage row)</span></Label>
+              <Input
+                value={editing.website_url ?? ''}
+                placeholder="https://client-site.com"
+                onChange={e => set({ website_url: e.target.value || null })}
               />
             </div>
             <div className="grid gap-1.5">
