@@ -14,7 +14,7 @@ const SERVICES = [
     title: 'Strategy & Consulting',
     desc: 'Sometimes you don’t need more content, you need a clearer direction. We sharpen your positioning, fix your offers, and map the path from where you are to where you want to be. Then we build it, or hand you the playbook.',
     items: ['Positioning', 'Offer & pricing review', 'Marketing roadmap', 'Ongoing advisory'],
-    media: '/martindivina.avif',
+    media: '/strategy-waterside.mp4',
   },
   {
     n: '02',

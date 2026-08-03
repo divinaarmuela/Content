@@ -42,6 +42,7 @@ next-env.d.ts
 # videos the site actually serves ship with it
 !/public/hero_web.mp4
 !/public/hero-divina.mp4
+!/public/strategy-waterside.mp4
 !/public/website-landscape.mp4
 !/public/cecconis.mp4
 !/public/Automodellista.mp4
