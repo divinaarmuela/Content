@@ -1,72 +1,122 @@
-'use client'
-
-import { useRef, useState } from 'react'
 import Reveal from './Reveal'
+import Rule from './Rule'
+import SiteMedia from '../SiteMedia'
 import { Scramble } from './Scramble'
 
-const COLUMNS = [
-  { label: '[ 01 STRATEGY & CONSULTING ]', items: ['Positioning', 'Offer & pricing review', 'Marketing roadmap', 'Ongoing advisory'] },
-  { label: '[ 02 BRANDING SUITE ]', items: ['Logo & identity', 'Messaging & voice', 'Colour & type system', 'Templates & assets'] },
-  { label: '[ 03 CUSTOM WEBSITES ]', items: ['Design & build', 'Copy & structure', 'Mobile & speed', 'Hosting & care'] },
-  { label: '[ 04 CONTENT & VISIBILITY ]', items: ['Content strategy', 'Photo, video & campaign shoots', 'Social & captions', 'Ongoing posting'] },
-  { label: '[ 05 PAID ADVERTISING ]', items: ['Campaign strategy', 'Ad creative & copy', 'Setup & management', 'Clear reporting'] },
+// The static-pack SERVICES section: kicker + two-line heading + intro,
+// then five alternating rows (text | media, media side flipping each row)
+// separated by scroll-scrubbed rules. Text block: numbered title, dim
+// description, two-column mono "+" bullet list. Media: rounded 4:3 slot
+// with a tiny mono caption, image or muted looping video via SiteMedia.
+const SERVICES = [
+  {
+    n: '01',
+    title: 'Strategy & Consulting',
+    desc: 'Sometimes you don’t need more content, you need a clearer direction. We sharpen your positioning, fix your offers, and map the path from where you are to where you want to be. Then we build it, or hand you the playbook.',
+    items: ['Positioning', 'Offer & pricing review', 'Marketing roadmap', 'Ongoing advisory'],
+    media: '/martindivina.avif',
+  },
+  {
+    n: '02',
+    title: 'Branding Suite',
+    desc: 'A strong brand makes everything else work harder, your content earns more trust, your ads convert better, your prices hold. We build the full identity: how you look, how you sound, and how you’re remembered.',
+    items: ['Logo & identity', 'Messaging & voice', 'Colour & type system', 'Templates & assets'],
+    media: '/Senorita.mp4',
+  },
+  {
+    n: '03',
+    title: 'Custom Websites',
+    desc: 'A website is where interest turns into enquiries. We design and build fast, custom sites that look like your brand and are built to convert, not template drag-and-drop. Then we keep them running so they never go stale.',
+    items: ['Design & build', 'Copy & structure', 'Mobile & speed', 'Hosting & care'],
+    media: '/website-landscape.mp4',
+  },
+  {
+    n: '04',
+    title: 'Content & Visibility',
+    desc: 'If people can’t see you, nothing else matters. We create the photo, video, and social content that makes you look established and keeps you consistently in front of the right audience, without you becoming a full-time creator. We also run full campaign shoots for brands, taking a vision from ideation and concepting through to production and final execution.',
+    items: ['Content strategy', 'Photo, video & campaign shoots', 'Social & captions', 'Ongoing posting'],
+    media: '/cecconis.mp4',
+  },
+  {
+    n: '05',
+    title: 'Paid Advertising',
+    desc: 'Content gets you seen. Paid gets you seen by the exact people most likely to buy. We plan, build, and manage campaigns across Meta, Google, and more, then optimise against what matters: enquiries, bookings, and revenue.',
+    items: ['Campaign strategy', 'Ad creative & copy', 'Setup & management', 'Clear reporting'],
+    media: '/Automodellista.mp4',
+  },
 ]
 
+const isVideo = (src: string) => /\.(mp4|webm|mov)(\?|$)/i.test(src)
+
 export default function LamaServices() {
-  const rowRef = useRef<HTMLDivElement>(null)
-  // mobile browsers hide native scrollbars, so the swipe progress renders as
-  // an explicit bar under the row
-  const [progress, setProgress] = useState(0)
-
-  const onScroll = () => {
-    const el = rowRef.current
-    if (!el) return
-    const max = el.scrollWidth - el.clientWidth
-    setProgress(max > 0 ? el.scrollLeft / max : 0)
-  }
-
   return (
-    <section data-lama-title="SERVICES, NOT PACKAGES" className="px-6 sm:px-10 py-32 sm:py-44">
-      <Reveal>
-        <h2 className="font-lamah font-bold uppercase text-cream leading-[0.8] tracking-[-0.02em] text-[clamp(3rem,8vw,7.5rem)]">
-          We meet you where you&rsquo;re at.
-        </h2>
-      </Reveal>
-      <Reveal delay={150}>
-        <p className="mt-10 font-lamah text-cream-dim text-lg max-w-xl">
-          Services, not packages.
-        </p>
-      </Reveal>
-      <Reveal delay={250}>
-        <p className="mt-6 font-lamah text-cream text-xl leading-snug max-w-2xl">
-          There&rsquo;s no fixed starting point. Some businesses need a clear strategy first;
-          others need a brand, a campaign shoot, content, or paid, or all of it.
-          We start wherever you are and build out from there.
-        </p>
-      </Reveal>
-      <div
-        ref={rowRef}
-        onScroll={onScroll}
-        className="mt-20 -mx-6 flex gap-5 overflow-x-auto px-6 pb-4 snap-x snap-mandatory scroll-px-6 [-webkit-overflow-scrolling:touch] [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-10 sm:px-10 sm:scroll-px-10 md:mx-0 md:grid md:grid-cols-2 lg:grid-cols-5 md:gap-12 lg:gap-8 md:overflow-visible md:px-0 md:pb-0"
-      >
-        {COLUMNS.map((col, i) => (
-          <Reveal key={col.label} delay={i * 120} className="shrink-0 w-[68vw] sm:w-[44vw] snap-start snap-always md:w-auto md:shrink">
-            <Scramble text={col.label} className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
-            <ul className="mt-6 space-y-3">
-              {col.items.map((item) => (
-                <li key={item} className="font-lamah text-cream text-lg">{item}</li>
-              ))}
-            </ul>
-          </Reveal>
-        ))}
-      </div>
-      {/* swipe progress bar (mobile only) */}
-      <div aria-hidden="true" className="mt-2 h-px bg-cream/15 md:hidden">
-        <div
-          className="h-full bg-cream/70 transition-[width] duration-150"
-          style={{ width: `${Math.round((0.25 + progress * 0.75) * 100)}%` }}
+    <section
+      id="services"
+      data-lama-title="SERVICES, NOT PACKAGES"
+      className="scroll-mt-[70px] border-t border-cream/10 px-6 sm:px-10 py-24 sm:py-36"
+    >
+      <div className="mb-[clamp(48px,7vh,80px)] max-w-[760px]">
+        <Scramble
+          text="SERVICES, NOT PACKAGES"
+          className="font-lamam text-xs uppercase tracking-[0.14em] text-cream/40"
         />
+        <h2 className="mt-6 mb-6 font-lamah font-normal text-cream leading-[1.05] tracking-[-0.03em] text-[clamp(2rem,4.6vw,3.6rem)]">
+          {['We meet you', 'where you’re at.'].map((line, i) => (
+            <Reveal key={line} delay={i * 120} className="block pb-[0.1em]">
+              {line}
+            </Reveal>
+          ))}
+        </h2>
+        <Reveal delay={240}>
+          <p className="font-lamah text-cream/55 text-[clamp(1rem,1.3vw,1.18rem)] leading-relaxed">
+            There&rsquo;s no fixed starting point. Some businesses need a clear strategy first;
+            others need a brand, a campaign shoot, content, or paid, or all of it.
+            We start wherever you are and build out from there.
+          </p>
+        </Reveal>
       </div>
+
+      {SERVICES.map((s, i) => (
+        <div key={s.n}>
+          <Rule />
+          <div className="grid grid-cols-1 items-center gap-[clamp(28px,5vw,80px)] py-[clamp(40px,6vh,70px)] lg:grid-cols-[1fr_0.95fr]">
+            <Reveal delay={100} className={i % 2 === 1 ? 'lg:order-2' : undefined}>
+              <div>
+                <div className="mb-5 flex items-baseline gap-4">
+                  <span className="font-lamam text-[13px] text-cream">{s.n}</span>
+                  <h3 className="font-lamah font-medium text-cream tracking-[-0.02em] text-[clamp(1.6rem,3vw,2.4rem)]">
+                    {s.title}
+                  </h3>
+                </div>
+                <p className="mb-6 font-lamah text-cream/65 text-[clamp(1rem,1.2vw,1.12rem)] leading-relaxed">
+                  {s.desc}
+                </p>
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {s.items.map(item => (
+                    <li key={item} className="flex gap-2 font-lamam text-xs text-cream/55">
+                      <span className="text-cream">+</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+            <Reveal delay={200} className={i % 2 === 1 ? 'lg:order-1' : undefined}>
+              <div className="relative">
+                <SiteMedia
+                  src={s.media}
+                  alt={s.title}
+                  className="block aspect-[4/3] w-full rounded-[14px] object-cover bg-ink"
+                />
+                <span className="absolute bottom-3 left-3.5 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
+                  {isVideo(s.media) ? 'video' : 'image'}
+                </span>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      ))}
+      <Rule />
     </section>
   )
 }

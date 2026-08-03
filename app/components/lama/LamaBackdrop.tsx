@@ -156,7 +156,8 @@ void main() {
 
   // hero band only: the crisp video dissolves per-block through the wave
   float alpha = u_hasVideo > 0.5 ? step(threshold * 0.999, band * u_videoReveal) : 0.0;
-  vec3 col = mix(dithered, videoCol * 0.72, alpha);
+  // darkened so the hero copy stays legible over bright footage
+  vec3 col = mix(dithered, videoCol * 0.45, alpha);
   fragColor = vec4(col, 1.0);
 }`
 
