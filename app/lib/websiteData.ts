@@ -13,6 +13,8 @@ export type SiteProject = {
   desc: string
   cardMedia: string
   heroMedia: string
+  galleryUrls: string[]
+  websiteUrl: string | null
   result?: string | null
   study: { challenge: string[]; approach: string[]; outcome: string[] }
 }
@@ -29,6 +31,8 @@ const fromFallback = (c: WorkClient): SiteProject => ({
   desc: c.desc,
   cardMedia: wixImg(c.img, 1000, 800),
   heroMedia: wixImg(c.img, 1600, 800),
+  galleryUrls: [],
+  websiteUrl: null,
   result: c.result ?? null,
   study: c.study,
 })
@@ -43,6 +47,10 @@ type ProjectRow = {
   description: string
   card_media_url: string
   hero_media_url: string
+  // `| null` because rows created before project_gallery.sql ran may
+  // predate the defaults — the mapper must not trust them.
+  gallery_urls: string[] | null
+  website_url: string | null
   result: string | null
   challenge: string[]
   approach: string[]
@@ -59,6 +67,8 @@ const fromRow = (r: ProjectRow): SiteProject => ({
   desc: r.description,
   cardMedia: r.card_media_url,
   heroMedia: r.hero_media_url || r.card_media_url,
+  galleryUrls: r.gallery_urls ?? [],
+  websiteUrl: r.website_url || null,
   result: r.result,
   study: {
     challenge: r.challenge ?? [],
