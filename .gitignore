@@ -41,6 +41,7 @@ next-env.d.ts
 /public/*.mov
 # videos the site actually serves ship with it
 !/public/hero_web.mp4
+!/public/hero-divina.mp4
 !/public/website-landscape.mp4
 !/public/cecconis.mp4
 !/public/Automodellista.mp4

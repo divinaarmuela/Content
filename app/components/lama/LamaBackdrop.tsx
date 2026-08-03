@@ -9,7 +9,7 @@ import { useLamaReady } from './ready'
 // ordered threshold matrix. The video is never a DOM layer — after the
 // preloader, a reveal progress sweeps through the same threshold matrix and
 // the dots dissolve into the actual video pixels. Swap VIDEO_SRC only.
-const VIDEO_SRC = '/hero_web.mp4'
+const VIDEO_SRC = '/hero-divina.mp4'
 // band2 ("What we do") renders its own video as grey dither — a different
 // clip from the hero
 const VIDEO2_SRC = '/website-landscape.mp4'
@@ -242,7 +242,7 @@ export default function LamaBackdrop() {
     const start = performance.now()
     // band2 follows the services section ("What we do") — its video renders
     // as grey dither behind the content, like the reference's section grids
-    const band2El = document.querySelector<HTMLElement>('[data-lama-title="WHAT WE DO"]')
+    const band2El = document.querySelector<HTMLElement>('[data-lama-title="SERVICES, NOT PACKAGES"]')
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw)
