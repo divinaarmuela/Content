@@ -1,5 +1,5 @@
+import RecedeCard from './RecedeCard'
 import Reveal from './Reveal'
-import Rule from './Rule'
 import SiteMedia from '../SiteMedia'
 import { Scramble } from './Scramble'
 
@@ -14,8 +14,9 @@ const SERVICES = [
     title: 'Strategy & Consulting',
     desc: 'Sometimes you don’t need more content, you need a clearer direction. We sharpen your positioning, fix your offers, and map the path from where you are to where you want to be. Then we build it, or hand you the playbook.',
     items: ['Positioning', 'Offer & pricing review', 'Marketing roadmap', 'Ongoing advisory'],
-    media: '/martindivina.avif',
+    media: '/martindivina.avif', 
   },
+
   {
     n: '02',
     title: 'Branding Suite',
@@ -76,10 +77,13 @@ export default function LamaServices() {
         </Reveal>
       </div>
 
+      {/* the perspective container — the receding cards' translateZ projects
+          against this, lusion-style. Each card pins; the next slides over it
+          while the pinned one sinks back. */}
+      <div className="relative [perspective:1400px]">
       {SERVICES.map((s, i) => (
-        <div key={s.n}>
-          <Rule />
-          <div className="grid grid-cols-1 items-center gap-[clamp(28px,5vw,80px)] py-[clamp(40px,6vh,70px)] lg:grid-cols-[1fr_0.95fr]">
+        <RecedeCard key={s.n} isLast={i === SERVICES.length - 1}>
+          <div className="grid grid-cols-1 items-center gap-[clamp(28px,5vw,80px)] rounded-2xl border border-cream/10 bg-ink px-6 py-10 sm:px-10 lg:grid-cols-[1fr_0.95fr] lg:py-12">
             <Reveal delay={100} className={i % 2 === 1 ? 'lg:order-2' : undefined}>
               <div>
                 <div className="mb-5 flex items-baseline gap-4">
@@ -114,9 +118,9 @@ export default function LamaServices() {
               </div>
             </Reveal>
           </div>
-        </div>
+        </RecedeCard>
       ))}
-      <Rule />
+      </div>
     </section>
   )
 }

@@ -19,6 +19,7 @@ export default function Reveal({
   // in the first viewport actually animate instead of finishing behind it
   const shown = seen && ready
 
+  
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setSeen(true); return }
     const el = ref.current
