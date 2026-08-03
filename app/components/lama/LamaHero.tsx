@@ -13,9 +13,7 @@ export default function LamaHero() {
       data-lama-title="INDEX"
       className="relative min-h-[100dvh] flex items-center justify-center px-6 sm:px-10 pb-24 pt-40 mix-blend-exclusion"
     >
-      {/* hero copy parked while the spec-ad video carries the hero alone —
-          remove `hidden` to bring it back */}
-      <div className="hidden w-full flex-col items-center text-center">
+      <div className="flex w-full flex-col items-center text-center">
         <Scramble
           text="[ GET SEEN · GET KNOWN · GET BOOKED ]"
           className="mb-8 font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream"
