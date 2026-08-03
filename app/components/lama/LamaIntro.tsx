@@ -22,7 +22,10 @@ export default function LamaIntro() {
       <div className="mt-5 mb-12">
         <Rule />
       </div>
-      <h2 className="font-lamah font-normal text-cream text-[clamp(1.7rem,4.4vw,3.6rem)] leading-[1.12] tracking-[-0.03em] max-w-[1050px]">
+      {/* desktop: the reference's five composed lines. Mobile: the same
+          treatment as one naturally-wrapping paragraph — fixed breaks
+          double-wrap unevenly on narrow screens. */}
+      <h2 className="hidden sm:block font-lamah font-normal text-cream text-[clamp(1.7rem,4.4vw,3.6rem)] leading-[1.12] tracking-[-0.03em] max-w-[1050px]">
         <Reveal className="block pb-[0.1em]">Great businesses go unseen</Reveal>
         <Reveal delay={120} className="block pb-[0.1em]">
           every day. <span className={dim}>You&rsquo;re brilliant at</span>
@@ -35,6 +38,20 @@ export default function LamaIntro() {
         </Reveal>
         <Reveal delay={480} className="block pb-[0.1em]">
           <span className={hl}>people who should buy from you don&rsquo;t know you exist.</span>
+        </Reveal>
+      </h2>
+      <h2 className="sm:hidden font-lamah font-normal text-cream text-[1.6rem] leading-[1.2] tracking-[-0.03em]">
+        <Reveal>
+          <span>
+            Great businesses go unseen every day.{' '}
+            <span className={dim}>
+              You&rsquo;re brilliant at what you do and your clients love you, but online,
+              you&rsquo;re quiet.
+            </span>{' '}
+            <span className={hl}>
+              So the people who should buy from you don&rsquo;t know you exist.
+            </span>
+          </span>
         </Reveal>
       </h2>
     </section>
