@@ -5789,3 +5789,9 @@ a.ed-row:hover .ed-row-arw { opacity: 1; transform: translate(3px, -3px); color:
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
+
+/* work-grid video play badge pulse (design-pack mdm-play) */
+@keyframes lama-play {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
