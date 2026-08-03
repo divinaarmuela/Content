@@ -58,7 +58,7 @@ export default function HomePage() {
         <LamaCulture />
         <LamaClient />
         <LamaServices />
-        <LamaWork />
+        {/* <LamaWork /> — projects rows parked for now */}
         <LamaTeam />
         <LamaExpect />
         <LamaContact />

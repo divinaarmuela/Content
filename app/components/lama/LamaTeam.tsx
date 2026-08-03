@@ -11,7 +11,6 @@ const TEAM = [
   { name: 'Martin', role: 'Co-Founder & Chief Production Officer', quip: 'knows what makes you stop' },
   { name: 'Abby', role: 'Head of Operations', quip: 'keeps the machine running' },
   { name: 'Yusuf', role: 'Head of Paid Media', quip: 'spends it like it is his' },
-  { name: 'Lulu', role: 'Senior Account Manager', quip: 'never drops a ball' },
   { name: 'Manal', role: 'Senior Account Manager', quip: 'turns chaos into calm' },
   { name: 'Karly', role: 'Social Media Strategist', quip: 'fluent in three feeds' },
   { name: 'Renee', role: 'Social Media Strategist', quip: 'writes like she talks' },
@@ -26,29 +25,30 @@ const TEAM = [
 export default function LamaTeam() {
   return (
     <section data-lama-title="THE PEOPLE" className="border-t border-cream/10 px-6 sm:px-10 py-24 sm:py-36">
-      <h2 className="mb-[clamp(32px,5vh,60px)] max-w-[14ch] font-lamah font-bold uppercase text-cream leading-[0.9] tracking-[-0.045em] text-[clamp(2.6rem,9.2vw,8.5rem)]">
-        {['The people', 'you’ll work', 'with'].map((line, i) => (
-          <Reveal key={line} delay={i * 120} className="block pb-[0.06em]">
-            {line}
+      {/* side by side: heading + intro on the left, member list on the right */}
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-[clamp(28px,4vw,72px)]">
+        <div>
+          <h2 className="mb-[clamp(28px,4vh,48px)] max-w-[14ch] font-lamah font-bold uppercase text-cream leading-[0.9] tracking-[-0.045em] text-[clamp(2.4rem,5.6vw,5.25rem)]">
+            {['The people', 'you’ll work', 'with'].map((line, i) => (
+              <Reveal key={line} delay={i * 120} className="block pb-[0.06em]">
+                {line}
+              </Reveal>
+            ))}
+          </h2>
+          <Reveal delay={300}>
+            <p className="max-w-[46ch] font-lamah text-cream/70 text-[clamp(1.05rem,1.5vw,1.4rem)] leading-normal">
+              We are a hands-on team that works close and moves quick. No overhead, just
+              people who enjoy building side by side. Everyone adds their own spark.
+              Different minds and shared drive, that is what makes the work better and
+              the days more fun.{' '}
+              <Link href="/about" className="border-b border-cream/40 text-cream no-underline">
+                Read our story →
+              </Link>
+            </p>
           </Reveal>
-        ))}
-      </h2>
-      <Reveal delay={300}>
-        <p className="max-w-[46ch] font-lamah text-cream/70 text-[clamp(1.05rem,1.5vw,1.4rem)] leading-normal">
-          We are a hands-on team that works close and moves quick. No overhead, just
-          people who enjoy building side by side. Everyone adds their own spark.
-          Different minds and shared drive, that is what makes the work better and
-          the days more fun.{' '}
-          <Link href="/about" className="border-b border-cream/40 text-cream no-underline">
-            Read our story →
-          </Link>
-        </p>
-      </Reveal>
+        </div>
 
-      {/* reference layout: the member list is a half-width column pushed to
-          the RIGHT of the page, each row closed by a growing line */}
-      <div className="flex flex-col items-end pt-[clamp(40px,14vh,160px)]">
-        <div className="w-full lg:w-6/12">
+        <div className="w-full">
           {TEAM.map(m => (
             <div key={m.name} className="group">
               <div className="relative flex min-h-14 items-center gap-[clamp(14px,2vw,28px)] py-2.5">
