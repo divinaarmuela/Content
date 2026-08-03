@@ -48,10 +48,10 @@ export default function HomePage() {
       <LamaSidePanel />
       <main className="relative z-10">
         <LamaHero />
+        <LamaLogos />
         <LamaIntro />
         <LamaWork />
         <LamaServices />
-        <LamaLogos />
         <LamaCulture />
         <LamaContact />
       </main>
