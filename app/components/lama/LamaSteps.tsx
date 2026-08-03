@@ -1,24 +1,32 @@
 import Reveal from './Reveal'
+import Rule from './Rule'
 import { Scramble } from './Scramble'
 
-// The static-pack "THREE STEPS" section: header row (heading left, mono
-// "how it works" right), then three hairline-ruled rows on a
-// [number | title | description] grid.
+// The "From invisible to in-demand" steps as reference-style stacking
+// cards (lamalama.com/about-us core values): on lg each card is sticky
+// with a top offset 60px below the previous and a stepped container
+// height, so the next card slides over the pinned one leaving a 60px
+// sliver of each earlier card. Card faces are opaque ink so they actually
+// cover what they stack on. Every card opens with a growing hairline.
+// Below lg the cards are plain flowed rows.
 const STEPS = [
   {
     n: '01',
     title: 'Strategy call',
     desc: 'We get clear on your business, your goals, and where the gaps are. No pitch deck, no jargon, just a plan.',
+    sticky: 'lg:sticky lg:top-[88px] lg:h-[340px]',
   },
   {
     n: '02',
     title: 'We build your visibility',
     desc: 'We create the content and assets that get you seen, and handle the moving parts so you can stay in your zone.',
+    sticky: 'lg:sticky lg:top-[148px] lg:h-[280px]',
   },
   {
     n: '03',
     title: 'We scale what works',
     desc: 'Once you’re showing up, we add paid, brand, and strategy to turn attention into a steady flow of customers.',
+    sticky: 'lg:sticky lg:top-[208px] lg:h-[220px]',
   },
 ]
 
@@ -34,21 +42,31 @@ export default function LamaSteps() {
           className="font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40"
         />
       </div>
-      {STEPS.map((s, i) => (
-        <Reveal key={s.n} delay={i * 120}>
-          <div className="h-px bg-cream/[0.22]" aria-hidden="true" />
-          <div className="grid items-start gap-[clamp(18px,3vw,52px)] py-11 sm:grid-cols-[90px_1fr_1.1fr]">
-            <span className="font-lamam text-[13px] text-cream">{s.n}</span>
-            <h4 className="font-lamah font-medium text-cream tracking-[-0.02em] text-[clamp(1.3rem,2.2vw,1.9rem)]">
-              {s.title}
-            </h4>
-            <p className="font-lamah text-cream/60 text-[clamp(1rem,1.2vw,1.12rem)] leading-relaxed">
-              {s.desc}
-            </p>
+      <div className="relative">
+        {STEPS.map((s, i) => (
+          <div key={s.n} className={s.sticky}>
+            <div className="bg-ink">
+              <Rule delay={i * 200} />
+              <Reveal delay={i * 100}>
+                <div className="flex flex-col gap-6 py-6 lg:h-[200px] lg:flex-row lg:justify-between lg:gap-12 lg:py-7">
+                  <div>
+                    <Scramble
+                      text={`[ STEP ${s.n} ]`}
+                      className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim"
+                    />
+                    <h4 className="mt-6 max-w-xl font-lamah font-medium text-cream tracking-[-0.02em] leading-[0.98] text-[clamp(1.9rem,4.2vw,3.6rem)]">
+                      {s.title}
+                    </h4>
+                  </div>
+                  <p className="font-lamah text-cream/60 text-lg leading-relaxed lg:w-4/12 lg:self-end">
+                    {s.desc}
+                  </p>
+                </div>
+              </Reveal>
+            </div>
           </div>
-        </Reveal>
-      ))}
-      <div className="h-px bg-cream/[0.22]" aria-hidden="true" />
+        ))}
+      </div>
     </section>
   )
 }

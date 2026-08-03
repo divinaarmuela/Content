@@ -1,4 +1,5 @@
 import Reveal from './Reveal'
+import Rule from './Rule'
 import { Scramble } from './Scramble'
 
 // The static-pack "BIG STATEMENT / PROBLEM" section, in our motion system:
@@ -18,7 +19,9 @@ export default function LamaIntro() {
         text="THE PROBLEM"
         className="font-lamam text-xs uppercase tracking-[0.14em] text-cream"
       />
-      <div aria-hidden="true" className="mt-5 mb-12 h-px bg-cream/25" />
+      <div className="mt-5 mb-12">
+        <Rule className="bg-cream/25" />
+      </div>
       <h2 className="font-lamah font-normal text-cream text-[clamp(1.7rem,4.4vw,3.6rem)] leading-[1.12] tracking-[-0.03em] max-w-[1050px]">
         <Reveal className="block pb-[0.1em]">Great businesses go unseen</Reveal>
         <Reveal delay={120} className="block pb-[0.1em]">
