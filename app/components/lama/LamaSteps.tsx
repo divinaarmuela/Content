@@ -46,7 +46,7 @@ export default function LamaSteps() {
         {STEPS.map((s, i) => (
           <div key={s.n} className={s.sticky}>
             <div className="bg-ink">
-              <Rule delay={i * 200} />
+              <Rule />
               <Reveal delay={i * 100}>
                 <div className="flex flex-col gap-6 py-6 lg:h-[200px] lg:flex-row lg:justify-between lg:gap-12 lg:py-7">
                   <div>

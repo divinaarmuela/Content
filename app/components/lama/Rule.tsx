@@ -1,40 +1,39 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { useLamaReady } from './ready'
+import { useEffect, useRef } from 'react'
 
-// Reference-site growing hairline (lamalama.com/about-us core values): a
-// 1px rule that scales from 0 to full width, origin left, the first time
-// it scrolls into view after the preloader. Structure note: the OUTER div
-// is observed while the INNER div carries the scale — a scaleX(0) element
-// paints nothing, so observing the animated node itself would never fire
-// (same recipe as Reveal).
-export default function Rule({ className = 'bg-cream/[0.22]', delay = 0 }: { className?: string; delay?: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [seen, setSeen] = useState(false)
-  const ready = useLamaReady()
-  const shown = seen && ready
+// Scroll-scrubbed rule (lamalama about-us core values): scaleX tracks the
+// line's position in the viewport — 0 as it enters at the bottom, fully
+// drawn by the time it has risen to ~65% of the screen, reversing when
+// you scroll back up. Updated per frame from getBoundingClientRect, so it
+// stays correct inside sticky stacking cards. No one-shot animation.
+export default function Rule({ className = 'bg-cream' }: { className?: string }) {
+  const outerRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setSeen(true); return }
-    const el = ref.current
-    if (!el) return
-    // fire only once the line is 15% up from the bottom edge, so the growth
-    // actually plays on screen instead of finishing below the fold
-    const io = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setSeen(true); io.disconnect() } },
-      { rootMargin: '0px 0px -15% 0px' },
-    )
-    io.observe(el)
-    return () => io.disconnect()
+    const el = outerRef.current
+    const bar = barRef.current
+    if (!el || !bar) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      bar.style.transform = 'scaleX(1)'
+      return
+    }
+    let raf = 0
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      const top = el.getBoundingClientRect().top
+      const vh = window.innerHeight
+      const p = Math.min(1, Math.max(0, (vh - top) / (vh * 0.65)))
+      bar.style.transform = `scaleX(${p})`
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [])
 
   return (
-    <div ref={ref} aria-hidden="true" className="h-px w-full">
-      <div
-        className={`h-px origin-left transition-transform duration-[1600ms] ease-[cubic-bezier(0.33,1,0.68,1)] motion-reduce:transition-none ${shown ? 'scale-x-100' : 'scale-x-0'} ${className}`}
-        style={delay ? { transitionDelay: `${delay}ms` } : undefined}
-      />
+    <div ref={outerRef} aria-hidden="true" className="w-full">
+      <div ref={barRef} className={`h-0.5 origin-left ${className}`} style={{ transform: 'scaleX(0)' }} />
     </div>
   )
 }
