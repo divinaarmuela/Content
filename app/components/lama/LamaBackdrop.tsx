@@ -345,6 +345,7 @@ export default function LamaBackdrop() {
         muted
         loop
         playsInline
+        preload="auto"
         crossOrigin="anonymous"
         onError={() => setFallback(true)}
         className="fixed h-px w-px opacity-0 pointer-events-none"

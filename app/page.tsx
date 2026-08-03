@@ -47,6 +47,8 @@ export const revalidate = 300
 export default function HomePage() {
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink [&_section]:border-b-0`}>
+      {/* start the hero footage download at HTML time, not after hydration */}
+      <link rel="preload" href="/hero-divina.mp4" as="video" type="video/mp4" />
       <LamaLoader />
       <LamaBackdrop />
       <LamaNav />
