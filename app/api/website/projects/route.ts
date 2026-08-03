@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { normalizeUrls } from '@/app/lib/website-gallery-core'
 
 /** Admin list — includes unpublished, dashboard-only (Clerk-gated in middleware). */
 export async function GET() {
@@ -36,6 +37,8 @@ export async function POST(req: Request) {
       description: body.description ?? '',
       card_media_url: body.card_media_url ?? '',
       hero_media_url: body.hero_media_url ?? '',
+      gallery_urls: normalizeUrls(body.gallery_urls),
+      website_url: body.website_url || null,
       result: body.result || null,
       challenge: body.challenge ?? [],
       approach: body.approach ?? [],

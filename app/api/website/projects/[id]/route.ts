@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { normalizeUrls } from '@/app/lib/website-gallery-core'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guard('editor')
@@ -11,11 +12,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const allowed = [
     'slug', 'name', 'industry', 'tag', 'services', 'description',
-    'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach',
+    'card_media_url', 'hero_media_url', 'gallery_urls', 'website_url',
+    'result', 'challenge', 'approach',
     'outcome', 'sort_order', 'published', 'client_id',
   ] as const
   const patch: Record<string, unknown> = {}
   for (const key of allowed) if (key in body) patch[key] = body[key]
+  if ('gallery_urls' in patch) patch.gallery_urls = normalizeUrls(patch.gallery_urls)
+  if ('website_url' in patch) patch.website_url = patch.website_url || null
 
   const { data, error } = await supabase
     .from('projects')
