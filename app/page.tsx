@@ -52,9 +52,9 @@ export default function HomePage() {
         <LamaLogos />
         <LamaIntro />
         <LamaSteps />
+        <LamaCulture />
         <LamaWork />
         <LamaServices />
-        <LamaCulture />
         <LamaContact />
       </main>
       <LamaFooterBar />
