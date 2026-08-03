@@ -37,8 +37,11 @@ export default function LamaFooterBar() {
       window.clearTimeout(idleTimer.current)
       idleTimer.current = window.setTimeout(() => setScrolling(false), 150)
       // reference behaviour: the bar glitches away the moment the visitor
-      // leaves the very top, and only returns once fully back at the top
-      setHidden(window.scrollY > 40)
+      // leaves the very top, and returns — line re-growing, labels
+      // unscrambling — once they reach the end of the page
+      const nearBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80
+      setHidden(window.scrollY > 40 && !nearBottom)
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })

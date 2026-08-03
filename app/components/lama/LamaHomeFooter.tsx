@@ -1,14 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import Rule from './Rule'
-import { Scramble } from './Scramble'
-import { Clock } from './LamaFooterBar'
 
-// The static-pack footer for the homepage: the hero's mono metadata bar
-// reprised at the top (its rule grows again on arrival — a fresh
-// once-Rule), then the four-column grid (brand blurb / explore / contact
-// / social) and the hairline bottom row.
+// The static-pack footer for the homepage: four-column grid (brand blurb
+// / explore / contact / social) and the hairline bottom row. The hero's
+// fixed metadata bar (LamaFooterBar) re-appears over the page end — its
+// line re-growing — so the footer keeps enough bottom padding to clear it.
 const EXPLORE = [
   { label: 'Home', href: '/' },
   { label: 'Work', href: '/work' },
@@ -20,26 +17,7 @@ const EXPLORE = [
 
 export default function LamaHomeFooter() {
   return (
-    <footer className="border-t border-cream/10 px-6 sm:px-10 pt-[clamp(48px,7vh,80px)] pb-9">
-      {/* the hero bar, re-grown at the bottom */}
-      <div className="mb-[clamp(48px,7vh,72px)]">
-        <Rule once />
-        <div className="flex w-full items-center gap-6 pt-3 font-lamam text-[11px] uppercase tracking-wider text-cream">
-          <span className="lg:w-2/12"><Scramble text="EST. 2024" /></span>
-          <span className="hidden sm:block lg:w-2/12"><Scramble text="MELBOURNE BASED" delay={120} /></span>
-          <span className="hidden lg:block lg:w-4/12"><Clock /></span>
-          <span className="ml-auto flex items-center gap-10">
-            <Scramble text="FOLLOW US" delay={240} className="text-cream-dim" />
-            <a href="https://www.instagram.com/mdmedia._" target="_blank" rel="noreferrer noopener" className="text-cream visited:text-cream no-underline hover:text-accent transition-colors">
-              <Scramble text="INSTAGRAM +" delay={320} />
-            </a>
-            <a href="https://www.linkedin.com/company/mdmedia-marketing/" target="_blank" rel="noreferrer noopener" className="text-cream visited:text-cream no-underline hover:text-accent transition-colors">
-              <Scramble text="LINKEDIN +" delay={400} />
-            </a>
-          </span>
-        </div>
-      </div>
-
+    <footer className="border-t border-cream/10 px-6 sm:px-10 pt-[clamp(48px,7vh,80px)] pb-24">
       <div className="grid grid-cols-1 gap-10 pb-14 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <span className="font-lamah font-bold text-cream text-[17px] tracking-[-0.01em]">MD&nbsp;MEDIA</span>
