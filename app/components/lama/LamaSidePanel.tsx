@@ -51,7 +51,7 @@ export default function LamaSidePanel() {
           <Scramble text="This is us" delay={200} className="font-lamam text-[11px] uppercase tracking-widest text-cream" />
           <span className="font-lamam text-[11px] tracking-widest text-cream-dim">( + )</span>
         </span>
-        <span className="relative block h-40 w-full overflow-hidden">
+        <span className="relative block h-64 w-full overflow-hidden">
           <video
             key={PREVIEW_VIDEOS[clip]}
             ref={videoRef}

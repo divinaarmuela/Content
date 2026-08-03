@@ -20,7 +20,10 @@ export default function LamaHomeFooter() {
     <footer className="border-t border-cream/10 px-6 sm:px-10 pt-[clamp(48px,7vh,80px)] pb-24">
       <div className="grid grid-cols-1 gap-10 pb-14 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
-          <span className="font-lamah font-bold text-cream text-[17px] tracking-[-0.01em]">MD&nbsp;MEDIA</span>
+          <Link href="/" className="no-underline" aria-label="MD Media home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/MDLogo-trim.png" alt="MD Media" className="h-6 w-auto" />
+          </Link>
           <p className="mt-4 max-w-[280px] font-lamah text-cream/50 text-[0.98rem] leading-normal">
             Content-led marketing for founders and local businesses ready to be seen,
             known, and booked.
