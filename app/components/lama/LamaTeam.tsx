@@ -58,10 +58,10 @@ export default function LamaTeam() {
                 >
                   ◆
                 </span>
-                <span className="w-1/2 min-w-0 pl-6 font-lamah font-medium text-cream leading-[1.1] tracking-[-0.025em] text-[clamp(1.05rem,1.5vw,1.5rem)] transition-opacity duration-300 group-hover:opacity-60">
+                <span className="min-w-0 flex-none whitespace-nowrap pl-6 font-lamah font-medium text-cream leading-[1.1] tracking-[-0.025em] text-[clamp(1.05rem,1.5vw,1.5rem)] transition-opacity duration-300 group-hover:opacity-60 lg:w-1/2 lg:flex-initial">
                   {m.name}
                 </span>
-                <span className="w-1/2 font-lamam uppercase tracking-[0.08em] text-cream/45 text-[clamp(9px,0.85vw,11px)] transition-colors duration-300 group-hover:text-cream">
+                <span className="ml-auto whitespace-nowrap text-right font-lamam uppercase tracking-[0.08em] text-cream/45 text-[clamp(9px,0.85vw,11px)] transition-colors duration-300 group-hover:text-cream lg:ml-0 lg:w-1/2 lg:text-left">
                   [ {m.role} ]
                 </span>
                 <span

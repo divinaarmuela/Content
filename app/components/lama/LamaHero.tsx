@@ -2,7 +2,9 @@ import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 
 // Hero mirroring the static-pack homepage: everything centered — mono
-// kicker, big two-line headline, one-sentence subline. min-h-dvh with the
+// kicker, big two-line headline, one-sentence subline. min-h-svh (NOT dvh —
+// dvh resizes when the mobile URL bar collapses mid-scroll, yanking the
+// whole page under the reader) with the
 // content vertically centered, mix-blend-exclusion over the backdrop.
 // Headline reveals per line with a stagger (clip-path wipe via Reveal).
 const LINES = ['Where great brands', 'are born.']
@@ -11,7 +13,7 @@ export default function LamaHero() {
   return (
     <section
       data-lama-title="INDEX"
-      className="relative min-h-[100dvh] flex items-center justify-center px-6 sm:px-10 pb-24 pt-40 mix-blend-exclusion"
+      className="relative min-h-[100svh] flex items-center justify-center px-6 sm:px-10 pb-24 pt-40 mix-blend-exclusion"
     >
       <div className="flex w-full flex-col items-center text-center">
         <Scramble
