@@ -1,39 +1,39 @@
 import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 
-// Paragraph reveals per line with a stagger, same recipe as the hero
-// headline. Sits transparent over the shared canvas like every dark section.
-// The hard line splits assume desktop width — below sm the text reveals as
-// two naturally-wrapping sentences instead, so no ragged mid-phrase breaks.
-const LINES = [
-  'Great businesses go unseen every day.',
-  'You’re brilliant at what you do and your clients',
-  'love you, but online, you’re quiet. So the people',
-  'who should buy from you don’t know you exist.',
-]
-
-const SENTENCES = [
-  'Great businesses go unseen every day. You’re brilliant at what you do and your clients love you, but online, you’re quiet.',
-  'So the people who should buy from you don’t know you exist.',
-]
+// The static-pack "BIG STATEMENT / PROBLEM" section, in our motion system:
+// mono kicker over a hairline rule, then five fixed lines — the opening
+// bright, the middle dimmed to 45%, and the closing phrase highlighted
+// marker-style (cream background, ink text). Lines are blocks that wrap
+// naturally below desktop; box-decoration-break keeps the highlight clean
+// across wraps.
+const dim = 'text-cream/45'
+const hl =
+  'bg-cream text-ink px-[0.12em] py-[0.04em] [box-decoration-break:clone] [-webkit-box-decoration-break:clone]'
 
 export default function LamaIntro() {
   return (
     <section data-lama-title="THE PROBLEM" className="px-6 sm:px-10 pt-20 sm:pt-28 !pb-8">
-      <div className="hidden sm:block font-lamah text-cream text-[clamp(1.75rem,3.4vw,2.75rem)] leading-tight max-w-4xl">
-        {LINES.map((line, i) => (
-          <Reveal key={line} delay={i * 120} className={`block ${i === 0 ? '[text-indent:2em]' : ''}`}>
-            {line}
-          </Reveal>
-        ))}
-      </div>
-      <div className="sm:hidden font-lamah text-cream text-[1.5rem] leading-tight">
-        {SENTENCES.map((sentence, i) => (
-          <Reveal key={sentence} delay={i * 160} className={`block ${i > 0 ? 'mt-4' : ''}`}>
-            {sentence}
-          </Reveal>
-        ))}
-      </div>
+      <Scramble
+        text="THE PROBLEM"
+        className="font-lamam text-xs uppercase tracking-[0.14em] text-cream"
+      />
+      <div aria-hidden="true" className="mt-5 mb-12 h-px bg-cream/25" />
+      <h2 className="font-lamah font-normal text-cream text-[clamp(1.7rem,4.4vw,3.6rem)] leading-[1.12] tracking-[-0.03em] max-w-[1050px]">
+        <Reveal className="block pb-[0.1em]">Great businesses go unseen</Reveal>
+        <Reveal delay={120} className="block pb-[0.1em]">
+          every day. <span className={dim}>You&rsquo;re brilliant at</span>
+        </Reveal>
+        <Reveal delay={240} className={`block pb-[0.1em] ${dim}`}>
+          what you do and your clients love
+        </Reveal>
+        <Reveal delay={360} className={`block pb-[0.1em] ${dim}`}>
+          you, but online, you&rsquo;re quiet. <span className={hl}>So the</span>
+        </Reveal>
+        <Reveal delay={480} className="block pb-[0.1em]">
+          <span className={hl}>people who should buy from you don&rsquo;t know you exist.</span>
+        </Reveal>
+      </h2>
       <div className="mt-8 flex justify-end">
         <Scramble text="[ FROM INVISIBLE TO IN-DEMAND ]" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
       </div>

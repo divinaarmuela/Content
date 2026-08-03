@@ -126,7 +126,7 @@ void main() {
   float extra = step(threshold, lum);
 
   // reference palette: charcoal base, grey dots
-  vec3 ink = vec3(0.102, 0.110, 0.110);   // #1a1c1c bgPrimary
+  vec3 ink = vec3(0.043, 0.043, 0.043);   // #0B0B0B bgPrimary (static-pack black)
   vec3 grey = vec3(0.275, 0.275, 0.275);  // #464646 content dots
 
   // reference mechanism: the canvas belongs to the hero SECTION — a vertical

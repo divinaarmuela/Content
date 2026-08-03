@@ -14,7 +14,7 @@ module.exports = {
         lamam: ['var(--font-sometype)', '"Courier New"', 'monospace'],
       },
       colors: {
-        ink: '#1a1c1c',
+        ink: '#0B0B0B',
         cream: { DEFAULT: '#f9f4eb', dim: 'rgba(249,244,235,0.65)', faint: 'rgba(249,244,235,0.25)' },
         // site accent — now var-driven so the dashboard (.dbx) can rescope it;
         // :root sets it to the same lama blue, so text-accent etc. is unchanged
