@@ -40,17 +40,21 @@ export default function LamaIntro() {
           <span className={hl}>people who should buy from you don&rsquo;t know you exist.</span>
         </Reveal>
       </h2>
+      {/* same staggered reveal as desktop, chunked at sentence boundaries so
+          each piece wraps evenly inside itself */}
       <h2 className="sm:hidden font-lamah font-normal text-cream text-[1.6rem] leading-[1.2] tracking-[-0.03em]">
-        <Reveal>
-          <span>
-            Great businesses go unseen every day.{' '}
-            <span className={dim}>
-              You&rsquo;re brilliant at what you do and your clients love you, but online,
-              you&rsquo;re quiet.
-            </span>{' '}
-            <span className={hl}>
-              So the people who should buy from you don&rsquo;t know you exist.
-            </span>
+        <Reveal className="inline-block">
+          <span>Great businesses go unseen every day.</span>
+        </Reveal>{' '}
+        <Reveal delay={160} className="inline-block">
+          <span className={dim}>
+            You&rsquo;re brilliant at what you do and your clients love you, but online,
+            you&rsquo;re quiet.
+          </span>
+        </Reveal>{' '}
+        <Reveal delay={320} className="inline-block">
+          <span className={hl}>
+            So the people who should buy from you don&rsquo;t know you exist.
           </span>
         </Reveal>
       </h2>
