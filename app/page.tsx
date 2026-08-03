@@ -11,6 +11,7 @@ import LamaWork from './components/lama/LamaWork'
 import LamaServices from './components/lama/LamaServices'
 import LamaLogos from './components/lama/LamaLogos'
 import LamaCulture from './components/lama/LamaCulture'
+import LamaClient from './components/lama/LamaClient'
 import LamaContact from './components/lama/LamaContact'
 import LamaFooterBar from './components/lama/LamaFooterBar'
 
@@ -53,6 +54,7 @@ export default function HomePage() {
         <LamaIntro />
         <LamaSteps />
         <LamaCulture />
+        <LamaClient />
         <LamaWork />
         <LamaServices />
         <LamaContact />
