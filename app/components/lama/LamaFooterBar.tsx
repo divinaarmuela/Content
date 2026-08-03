@@ -51,7 +51,7 @@ export default function LamaFooterBar() {
   const visible = ready && !hidden
 
   return (
-    <div className="fixed inset-0 z-[90] hidden sm:flex items-end pointer-events-none px-6 sm:px-10">
+    <div className="fixed inset-0 z-[90] flex items-end pointer-events-none px-6 sm:px-10">
       <div className="relative mb-4 flex w-full items-center pt-3">
         <div
           className={`absolute left-0 right-0 top-0 h-px bg-cream origin-left transition-transform duration-700 ease-out ${visible ? 'scale-x-100' : 'scale-x-0'}`}
@@ -60,10 +60,10 @@ export default function LamaFooterBar() {
           className={`flex w-full items-center font-lamam text-[11px] uppercase tracking-wider text-cream transition-opacity duration-500 ${visible ? 'opacity-100 delay-150 [&_a]:pointer-events-auto' : 'opacity-0'}`}
         >
           <span className="lg:w-2/12"><ScrollGlitch text="EST. 2024" scrambling={scrolling || !visible} /></span>
-          <span className="lg:w-2/12"><ScrollGlitch text="MELBOURNE BASED" scrambling={scrolling || !visible} /></span>
+          <span className="hidden sm:block lg:w-2/12"><ScrollGlitch text="MELBOURNE BASED" scrambling={scrolling || !visible} /></span>
           <span className="hidden lg:block lg:w-4/12"><Clock /></span>
-          <span className="ml-auto flex items-center gap-10">
-            <ScrollGlitch text="FOLLOW US" scrambling={scrolling || !visible} className="text-cream-dim" />
+          <span className="ml-auto flex items-center gap-5 sm:gap-10">
+            <ScrollGlitch text="FOLLOW US" scrambling={scrolling || !visible} className="hidden sm:block text-cream-dim" />
             <a href="https://www.instagram.com/mdmedia._" target="_blank" rel="noreferrer noopener" className="text-cream visited:text-cream no-underline hover:text-accent transition-colors">
               <ScrollGlitch text="INSTAGRAM +" scrambling={scrolling || !visible} />
             </a>
