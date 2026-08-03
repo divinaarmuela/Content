@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ScrollGlitch } from './Scramble'
 import { useLamaReady } from './ready'
 
-function Clock() {
+export function Clock() {
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     setNow(new Date())

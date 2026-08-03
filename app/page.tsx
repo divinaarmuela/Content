@@ -16,6 +16,7 @@ import LamaTeam from './components/lama/LamaTeam'
 import LamaExpect from './components/lama/LamaExpect'
 import LamaContact from './components/lama/LamaContact'
 import LamaFooterBar from './components/lama/LamaFooterBar'
+import LamaHomeFooter from './components/lama/LamaHomeFooter'
 
 export const metadata: Metadata = {
   title: 'MD Media | Content-Led Marketing for Founders & Local Businesses',
@@ -62,6 +63,7 @@ export default function HomePage() {
         <LamaTeam />
         <LamaExpect />
         <LamaContact />
+        <LamaHomeFooter />
       </main>
       <LamaFooterBar />
     </div>
