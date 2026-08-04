@@ -65,6 +65,8 @@ type Hand = {
   rows: number
   baselineOffset: number
   nextSparkleAt: number
+  /** degrees this hand is rotated by, needed to hit-test the pointer */
+  rotate: number
 }
 
 const buildCells = (image: HTMLImageElement) => {
@@ -233,6 +235,7 @@ export default function AsciiHands({
         rows,
         baselineOffset,
         nextSparkleAt: performance.now() + REVEAL_DELAY + Math.random() * 800,
+        rotate: Number(image.parentElement?.dataset.rotate ?? 0) || 0,
       })
     }
 
@@ -281,14 +284,33 @@ export default function AsciiHands({
       pointer.y = ((event.clientY - rect.top) / rect.height - 0.5) * PARALLAX_STRENGTH * 2
 
       for (const hand of hands) {
+        // getBoundingClientRect returns the AXIS-ALIGNED box of a rotated
+        // element, so mapping the pointer through it linearly lands on the
+        // wrong cell as soon as there is an angle — the box is both larger
+        // than the canvas and not aligned to it. Rotation is about the centre
+        // (default transform-origin), so the centre is the one point both
+        // spaces agree on: measure from there and undo the rotation.
         const handRect = hand.canvas.getBoundingClientRect()
-        if (
-          event.clientX < handRect.left - 40 || event.clientX > handRect.right + 40 ||
-          event.clientY < handRect.top - 40 || event.clientY > handRect.bottom + 40
-        ) continue
+        const cx = handRect.left + handRect.width / 2
+        const cy = handRect.top + handRect.height / 2
 
-        const mouseCol = ((event.clientX - handRect.left) / handRect.width) * ASCII_COLUMNS
-        const mouseRow = ((event.clientY - handRect.top) / handRect.height) * hand.rows
+        const theta = (-hand.rotate * Math.PI) / 180
+        const cos = Math.cos(theta)
+        const sin = Math.sin(theta)
+        const px = event.clientX - cx
+        const py = event.clientY - cy
+        const lx = px * cos - py * sin
+        const ly = px * sin + py * cos
+
+        // unrotated on-screen size: layout size ignores transforms, so the
+        // scale has to be reapplied by hand
+        const w = hand.canvas.offsetWidth * parallaxScale
+        const h = hand.canvas.offsetHeight * parallaxScale
+        if (!w || !h) continue
+        if (Math.abs(lx) > w / 2 + 40 || Math.abs(ly) > h / 2 + 40) continue
+
+        const mouseCol = ((lx + w / 2) / w) * ASCII_COLUMNS
+        const mouseRow = ((ly + h / 2) / h) * hand.rows
 
         let closest: Cell | null = null
         let closestDist = Infinity
@@ -419,7 +441,7 @@ export default function AsciiHands({
           data-side={diagonal ? 'right' : 'left'}
           data-rotate={diagonal ? '55' : undefined}
           data-reveal={diagonal ? 'down' : undefined}
-          style={diagonal ? { position: 'absolute', right: '22%', top: '-22%', width: '27%', maxWidth: 'none' } : undefined}
+          style={diagonal ? { position: 'absolute', right: '20%', top: '-6%', width: '23%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-left.jpg" alt="" />
           <canvas />
@@ -431,7 +453,7 @@ export default function AsciiHands({
           data-side="right"
           data-rotate={diagonal ? '55' : undefined}
           data-reveal={diagonal ? 'up' : undefined}
-          style={diagonal ? { position: 'absolute', right: '-4%', bottom: '-22%', width: '27%', maxWidth: 'none' } : undefined}
+          style={diagonal ? { position: 'absolute', right: '0%', bottom: '-6%', width: '23%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-right.jpg" alt="" />
           <canvas />
