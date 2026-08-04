@@ -13,6 +13,36 @@ import { reconcileAll, linkUsersByEmail } from '@/app/lib/asana-sync'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Resolve the URL Asana should actually call.
+ *
+ * NEXT_PUBLIC_APP_URL is configuration, and configuration drifts: the bare
+ * apex domain 308-redirects to www on this deployment, and Asana's handshake
+ * POST would land on the redirect rather than the receiver. Registration would
+ * then fail with a timeout that says nothing about the cause.
+ *
+ * So we follow redirects ourselves first and register the final URL. The probe
+ * carries no X-Hook-Secret, so it takes the delivery branch and is rejected as
+ * an unknown webhook — it writes nothing and cannot clobber a stored secret.
+ */
+async function resolveTarget(base: string, projectGid: string): Promise<string> {
+  let url = `${base.replace(/\/$/, '')}/api/asana/webhook?project=${projectGid}`
+
+  for (let hop = 0; hop < 3; hop++) {
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'POST', redirect: 'manual', body: '{}' })
+    } catch {
+      return url // unreachable from here; let Asana report the real failure
+    }
+    if (res.status < 300 || res.status >= 400) return url
+    const location = res.headers.get('location')
+    if (!location) return url
+    url = new URL(location, url).toString()
+  }
+  return url
+}
+
 /** Connection state for the setup panel. */
 export async function GET() {
   try {
@@ -104,7 +134,7 @@ export async function POST(req: Request) {
             { status: 400 }
           )
         }
-        const target = `${base.replace(/\/$/, '')}/api/asana/webhook?project=${body.projectGid}`
+        const target = await resolveTarget(base, body.projectGid)
         try {
           const hook = await asana.createWebhook(body.projectGid, target)
           await supabase
