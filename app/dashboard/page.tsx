@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Inbox, Users, Globe, ExternalLink, TrendingUp } from 'lucide-react'
+import Greeting from './Greeting'
 
 type Lead = { id: string; created_at: string; fname: string; lname: string; biz: string; model: string }
 type Project = { id: string; name: string; slug: string; published: boolean }
