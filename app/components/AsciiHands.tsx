@@ -386,17 +386,19 @@ export default function AsciiHands({
           : { justifyContent: side === 'right' ? 'flex-end' : 'flex-start' }
       }
     >
-      {/* Diagonal: the Creation-of-Adam arrangement. hand-left points right, so
-          rotating it ~62° aims it down-and-right as it drops in from the top
-          edge. hand-right points left, so ~-58° aims it up-and-left, rising
-          from the bottom corner to meet the first. They overlap around the
-          middle-right of the section, fingertips nearly touching. */}
+      {/* Diagonal: two hands reaching for each other on the right.
+          Angles are measured from where each photo already points —
+          hand-left points RIGHT at 0°, hand-right points LEFT at 0°.
+          Top hand: +125° turns "right" into down-and-left, so it descends
+          from the top edge aiming into the page.
+          Lower hand: -55° turns "left" into up-and-left, rising from the
+          bottom-right to meet it. Fingertips meet around the middle right. */}
       {side !== 'right' && (
         <div
           className="ascii-hand-wrap"
           data-side={diagonal ? 'right' : 'left'}
-          data-rotate={diagonal ? '62' : undefined}
-          style={diagonal ? { position: 'absolute', right: '8%', top: '-30%', width: '30%', maxWidth: 'none' } : undefined}
+          data-rotate={diagonal ? '125' : undefined}
+          style={diagonal ? { position: 'absolute', right: '4%', top: '-16%', width: '26%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-left.jpg" alt="" />
           <canvas />
@@ -406,8 +408,8 @@ export default function AsciiHands({
         <div
           className="ascii-hand-wrap"
           data-side="right"
-          data-rotate={diagonal ? '-58' : undefined}
-          style={diagonal ? { position: 'absolute', right: '-2%', bottom: '-34%', width: '30%', maxWidth: 'none' } : undefined}
+          data-rotate={diagonal ? '-55' : undefined}
+          style={diagonal ? { position: 'absolute', right: '16%', bottom: '-10%', width: '26%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-right.jpg" alt="" />
           <canvas />
