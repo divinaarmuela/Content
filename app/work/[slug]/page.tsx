@@ -131,10 +131,15 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
         {/* ── HERO MEDIA ── */}
         <section className="px-6 pb-[clamp(60px,9vh,100px)] sm:px-10">
           <div className="relative overflow-hidden rounded-2xl">
+            {/* The hero keeps the shape it was shot in — there is no row to
+                line up with here, and a vertical film forced into 16:9 loses
+                everything above and below the middle. Capped at 85vh so a
+                portrait piece still fits on screen. */}
             <SiteMedia
               src={project.heroMedia}
               alt={project.name}
-              className="block aspect-[16/9] w-full bg-ink object-cover"
+              adapt
+              className="mx-auto block max-h-[85vh] w-auto max-w-full rounded-2xl bg-ink object-contain"
             />
           </div>
         </section>
@@ -211,7 +216,9 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                           key={url}
                           src={url}
                           alt={`${project.name} — still`}
-                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-cover"
+                          adapt
+                          fallbackRatio={4 / 5}
+                          className="block w-full rounded-[14px] bg-ink object-contain"
                         />
                       ))}
                     </div>
@@ -220,7 +227,9 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                     <SiteMedia
                       src={row.wide}
                       alt={`${project.name} — still`}
-                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-cover"
+                      adapt
+                      fallbackRatio={21 / 9}
+                      className="mx-auto block max-h-[85vh] w-auto max-w-full rounded-[14px] bg-ink object-contain"
                     />
                   )}
                 </div>
