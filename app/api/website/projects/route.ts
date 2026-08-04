@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { revalidateSiteProjects } from '@/app/lib/revalidate-site'
 import { normalizeUrls } from '@/app/lib/website-gallery-core'
 
 /** Admin list — includes unpublished, dashboard-only (Clerk-gated in middleware). */
@@ -51,5 +52,7 @@ export async function POST(req: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  revalidateSiteProjects()
   return NextResponse.json(data, { status: 201 })
 }
