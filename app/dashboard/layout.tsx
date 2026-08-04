@@ -140,7 +140,6 @@ function SidebarHeader() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="h-3.5 w-auto" />
       </div>
-      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-400">Agency OS</p>
     </div>
   )
 }

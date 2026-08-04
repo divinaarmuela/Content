@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -33,52 +35,35 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
 import ScannerSettings from './ScannerSettings'
+import ProfileSettings from './ProfileSettings'
+import IntegrationsSettings from './IntegrationsSettings'
 import CredentialsPanel from '../CredentialsPanel'
 import { useRole } from '../useRole'
-
-const TEAM = [
-  { name: 'Marcus Doyle', email: 'marcus@mdmmarketing.com.au', role: 'Owner', initials: 'MD' },
-  { name: 'Sasha Nguyen', email: 'sasha@mdmmarketing.com.au', role: 'Admin', initials: 'SN' },
-  { name: 'Priya Sharma', email: 'priya@mdmmarketing.com.au', role: 'Editor', initials: 'PS' },
-]
-
-const INTEGRATIONS = [
-  {
-    name: 'Instagram',
-    description: 'Publish and pull performance data from client accounts.',
-    connected: true,
-  },
-  {
-    name: 'Google Drive',
-    description: 'Sync shoot assets and client deliverables.',
-    connected: true,
-  },
-  {
-    name: 'Slack',
-    description: 'Approval and shoot reminders in your team channels.',
-    connected: false,
-  },
-  {
-    name: 'Stripe',
-    description: 'Client billing and invoice status.',
-    connected: false,
-  },
-]
-
-function saveDemo() {
-  toast.success('Saved (demo)')
-}
 
 export default function SettingsPage() {
   // Scanner settings and team management are super_admin work — their APIs
   // already reject anyone else, so offering the tabs only produced controls
   // that error on use.
-  const { can } = useRole()
+  const { can, loading } = useRole()
   const isSuper = can('super_admin')
+
+  // The tab list depends on the role, which arrives a moment after mount.
+  // Rendering the reduced set first made the bar visibly change shape as the
+  // super-admin tabs appeared — hold the shape until we know.
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-9 w-96" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -125,190 +110,29 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="profile">
-          <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <CardHeader>
-              <CardTitle className="text-base">Profile</CardTitle>
-              <CardDescription>
-                Your personal details and workspace preferences.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="profile-name">Full name</Label>
-                  <Input id="profile-name" defaultValue="Marcus Doyle" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="profile-email">Email</Label>
-                  <Input
-                    id="profile-email"
-                    type="email"
-                    defaultValue="marcus@mdmmarketing.com.au"
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="profile-workspace">Workspace name</Label>
-                  <Input id="profile-workspace" defaultValue="MD Media" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="profile-timezone">Timezone</Label>
-                  <Select defaultValue="sydney">
-                    <SelectTrigger id="profile-timezone">
-                      <SelectValue placeholder="Select timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sydney">Australia/Sydney</SelectItem>
-                      <SelectItem value="melbourne">Australia/Melbourne</SelectItem>
-                      <SelectItem value="brisbane">Australia/Brisbane</SelectItem>
-                      <SelectItem value="perth">Australia/Perth</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex flex-col gap-3">
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-                  Email notifications
-                </span>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      Approval updates
-                    </p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      When a client approves or requests changes.
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      Weekly digest
-                    </p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      A Monday summary of performance across clients.
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      Product updates
-                    </p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Occasional news about new features.
-                    </p>
-                  </div>
-                  <Switch />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-end border-t border-zinc-200 dark:border-zinc-800">
-              <Button onClick={saveDemo}>Save changes</Button>
-            </CardFooter>
-          </Card>
+          <ProfileSettings />
         </TabsContent>
 
+        {/* Team management is a real page. Duplicating a half version here
+            meant two places to look and one of them was fiction. */}
         <TabsContent value="team">
           <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
             <CardHeader>
               <CardTitle className="text-base">Team</CardTitle>
               <CardDescription>
-                People with access to this workspace.
+                People, roles, invites and access live on the Team page.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="flex flex-1 flex-col gap-2">
-                  <Label htmlFor="invite-email">Invite by email</Label>
-                  <Input
-                    id="invite-email"
-                    type="email"
-                    placeholder="name@company.com"
-                  />
-                </div>
-                <Button variant="outline" onClick={saveDemo}>
-                  Send invite
-                </Button>
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex flex-col">
-                {TEAM.map((member, index) => (
-                  <div key={member.email}>
-                    {index > 0 && <Separator className="bg-zinc-200 dark:bg-zinc-800" />}
-                    <div className="flex items-center gap-3 py-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
-                          {member.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                          {member.name}
-                        </p>
-                        <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
-                          {member.email}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
-                      >
-                        {member.role}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <CardContent>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/dashboard/team">Open Team</Link>
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="integrations">
-          <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <CardHeader>
-              <CardTitle className="text-base">Integrations</CardTitle>
-              <CardDescription>
-                Connect the tools your agency already uses.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col">
-              {INTEGRATIONS.map((integration, index) => (
-                <div key={integration.name}>
-                  {index > 0 && <Separator className="bg-zinc-200 dark:bg-zinc-800" />}
-                  <div className="flex items-center gap-4 py-3.5">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                          {integration.name}
-                        </p>
-                        {integration.connected ? (
-                          <Badge className="border-transparent bg-emerald-50 dark:bg-emerald-950/40 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                            Connected
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
-                          >
-                            Not connected
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-                        {integration.description}
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={saveDemo}>
-                      {integration.connected ? 'Manage' : 'Connect'}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <IntegrationsSettings />
         </TabsContent>
 
       </Tabs>
