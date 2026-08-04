@@ -17,8 +17,24 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 // the dashboard render on demand (dynamicParams defaults to true)
 export const revalidate = 300
 
-export function generateStaticParams() {
-  return clients.map(c => ({ slug: c.slug }))
+/**
+ * Prerender the slugs the CMS actually publishes.
+ *
+ * This used to return the hardcoded `clients` list, which meant a path was
+ * built for every project whether or not it was published. Unpublishing one
+ * then left a prerendered entry behind: the body correctly became Next's 404,
+ * but it was served with HTTP 200 — a soft 404 that Google keeps indexed.
+ *
+ * Driving it from the published list means a hidden project has no prerendered
+ * path at all, so it falls through to `notFound()` and answers a real 404.
+ * dynamicParams defaults to true, so a project published later still renders
+ * on demand.
+ */
+export async function generateStaticParams() {
+  const projects = await getSiteProjects()
+  return projects.length > 0
+    ? projects.map(p => ({ slug: p.slug }))
+    : clients.map(c => ({ slug: c.slug }))
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
