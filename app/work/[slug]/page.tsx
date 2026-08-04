@@ -172,7 +172,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                   rel="noreferrer noopener"
                   className="mt-8 inline-flex items-center gap-2 border border-cream/25 px-5 py-3 font-lamam text-[11px] uppercase tracking-[0.1em] text-cream no-underline transition-colors hover:bg-cream hover:text-ink"
                 >
-                  visit website ↗
+                  visit website ↗︎
                 </a>
               )}
             </div>
@@ -295,7 +295,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
               rel="noreferrer noopener"
               className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream no-underline transition-colors visited:text-cream hover:bg-cream hover:text-ink"
             >
-              BOOK A STRATEGY CALL ↗
+              BOOK A STRATEGY CALL ↗︎
             </a>
             <a
               href="/work"

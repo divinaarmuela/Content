@@ -226,7 +226,7 @@ export default function LamaContactForm() {
           disabled={status === 'sending'}
           className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream bg-transparent cursor-pointer hover:bg-cream hover:text-ink transition-colors disabled:opacity-50"
         >
-          {status === 'sending' ? 'SENDING…' : 'SUBMIT BRIEF ↗'}
+          {status === 'sending' ? 'SENDING…' : 'SUBMIT BRIEF ↗︎'}
         </button>
         {status === 'error' && (
           <span className="font-lamam text-[10px] uppercase tracking-widest text-red-400">{errorMsg}</span>

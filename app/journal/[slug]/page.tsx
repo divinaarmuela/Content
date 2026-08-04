@@ -158,7 +158,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
               rel="noreferrer noopener"
               className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream no-underline transition-colors visited:text-cream hover:bg-cream hover:text-ink"
             >
-              BOOK A STRATEGY CALL ↗
+              BOOK A STRATEGY CALL ↗︎
             </a>
             <a
               href="/journal"

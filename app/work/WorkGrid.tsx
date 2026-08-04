@@ -10,7 +10,7 @@ import { collectServices, hasService } from '../lib/services-core'
 
 // The static-pack Work page grid: kicker, big two-line headline, intro,
 // mono FILTER chip row with a live project count, then an auto-fit card
-// grid — rounded 4:3 media showing its first frame, name + ↗
+// grid — rounded 4:3 media showing its first frame, name + ↗︎
 // that nudges on hover, "Service · Industry" mono line, description.
 //
 // The chips ARE the services set in the CMS. They used to be a fixed list of
@@ -114,7 +114,7 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
                   </p>
                 </div>
                 <span className="text-[1.3rem] transition-transform duration-[400ms] group-hover:translate-x-[3px] group-hover:-translate-y-[3px]">
-                  ↗
+                  ↗︎
                 </span>
               </div>
               {/* clamped so a long description cannot make one card taller

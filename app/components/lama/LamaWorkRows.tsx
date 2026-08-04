@@ -80,7 +80,7 @@ export default function LamaWorkRows({ projects }: { projects: SiteProject[] }) 
                             href={`/work/${c.slug}`}
                             className="border border-cream/25 px-5 py-3 font-lamam text-[11px] uppercase tracking-wider text-cream no-underline transition-colors hover:bg-cream/10"
                           >
-                            View case ↗
+                            View case ↗︎
                           </Link>
                           {c.websiteUrl && (
                             <a
@@ -89,7 +89,7 @@ export default function LamaWorkRows({ projects }: { projects: SiteProject[] }) 
                               rel="noopener noreferrer"
                               className="border border-cream/25 px-5 py-3 font-lamam text-[11px] uppercase tracking-wider text-cream no-underline transition-colors hover:bg-cream/10"
                             >
-                              Visit website ↗
+                              Visit website ↗︎
                             </a>
                           )}
                         </div>

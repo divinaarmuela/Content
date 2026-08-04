@@ -36,7 +36,7 @@ export default function LamaContact() {
             rel="noreferrer noopener"
             className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
           >
-            START NOW ↗
+            START NOW ↗︎
           </a>
         </div>
       </Reveal>

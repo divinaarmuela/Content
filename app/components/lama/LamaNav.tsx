@@ -110,7 +110,7 @@ export default function LamaNav({ gate = true }: {
                   </span>
                 </span>
                 <span className="font-lamam text-[13px] opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-[3px] group-hover:-translate-y-[3px] group-hover:opacity-100">
-                  ↗
+                  ↗︎
                 </span>
               </Link>
             ))}

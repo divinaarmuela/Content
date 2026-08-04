@@ -102,7 +102,7 @@ export default function ServicesPage() {
                     <span className="ed-row-sub">{s.sub}</span>
                   </span>
                   <span className="ed-row-desc">{s.desc}</span>
-                  <span className="ed-row-arw">↗</span>
+                  <span className="ed-row-arw">↗︎</span>
                 </a>
               ))}
             </div>
