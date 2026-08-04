@@ -1,4 +1,4 @@
-import { isVideoUrl } from '../lib/websiteData'
+import { isVideoUrl } from '../lib/media-core'
 
 /** Renders a CMS media URL as a muted looping video or a plain image.
  *  Portrait and landscape both work — parents control the frame and this

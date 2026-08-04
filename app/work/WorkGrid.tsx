@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { Scramble } from '../components/lama/Scramble'
 import Reveal from '../components/lama/Reveal'
 import SiteMedia from '../components/SiteMedia'
-import { isVideoUrl, type SiteProject } from '../lib/websiteData'
+import { isVideoUrl } from '../lib/media-core'
+import type { SiteProject } from '../lib/websiteData'
 
 // The static-pack Work page grid: kicker, big two-line headline, intro,
 // mono FILTER chip row with a live project count, then an auto-fit card

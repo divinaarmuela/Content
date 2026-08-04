@@ -19,7 +19,10 @@ export type SiteProject = {
   study: { challenge: string[]; approach: string[]; outcome: string[] }
 }
 
-export const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
+// Re-exported so existing server callers keep working. Client components must
+// import it from './media-core' directly — importing it from here pulls in the
+// Supabase client above, which cannot exist in the browser.
+export { isVideoUrl } from './media-core'
 
 const fromFallback = (c: WorkClient): SiteProject => ({
   id: null,
