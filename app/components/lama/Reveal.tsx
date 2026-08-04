@@ -54,6 +54,12 @@ export default function Reveal({
           clipPath: shown ? 'inset(-10% -10% -10%)' : 'inset(-10% -10% 110%)',
           transform: shown ? 'none' : 'translate(0, 80%) scale(0.96)',
           opacity: shown ? 1 : 0,
+          // Invisible is not intangible. Hit-testing uses the TRANSFORMED box,
+          // so a hidden block sits 80% of its height lower than it looks and
+          // covers whatever is beneath it — the nav, a button, a card that has
+          // already revealed. Clicks land on nothing until the entrance
+          // finishes. Nothing here is meant to be clickable while it is hidden.
+          pointerEvents: shown ? undefined : 'none',
           transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         className="transition-all duration-[1200ms]"

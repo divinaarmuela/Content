@@ -25,8 +25,13 @@ export default function LamaLoader() {
       coverCtx.fillRect(0, 0, cover.width, cover.height)
     }
     const start = performance.now()
-    const DUR = 1500
-    const DISSOLVE = 700
+    // The counter is an easing curve, not real progress — nothing is waiting on
+    // it. It was 1500 + 700, so every visit paid 2.2s during which the page is
+    // held at opacity 0 and displaced by Reveal: content is not where it looks
+    // like it is, so clicks land on nothing. Long enough to read as deliberate,
+    // short enough not to be a toll gate.
+    const DUR = 800
+    const DISSOLVE = 400
     let raf = 0
 
     const dissolve = (from: number) => {
@@ -62,7 +67,23 @@ export default function LamaLoader() {
       else dissolve(now)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+
+    // Someone who scrolls, clicks or presses a key has decided they are done
+    // waiting. Honour that rather than making them watch the rest.
+    const skip = () => { cancelAnimationFrame(raf); setGone(true); markLamaReady() }
+    const opts = { once: true, passive: true } as const
+    window.addEventListener('pointerdown', skip, opts)
+    window.addEventListener('wheel', skip, opts)
+    window.addEventListener('touchstart', skip, opts)
+    window.addEventListener('keydown', skip, opts)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('pointerdown', skip)
+      window.removeEventListener('wheel', skip)
+      window.removeEventListener('touchstart', skip)
+      window.removeEventListener('keydown', skip)
+    }
   }, [])
 
   if (gone) return null
