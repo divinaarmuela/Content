@@ -4,22 +4,38 @@ import { guard } from '@/app/lib/authz'
 import { signUpload, storageBackend } from '@/app/lib/storage'
 
 const BUCKET = 'website-assets'
-const MAX_BYTES = 200 * 1024 * 1024 // 200MB — hero videos are large
+/**
+ * R2's ceiling for a single PUT, which is how the browser uploads: 4.995 GiB.
+ * (An R2 *object* can reach 4.995 TiB, but past this a file has to be split
+ * into multipart chunks, which is a different upload flow.)
+ *
+ * This used to be 200MB, chosen when Supabase was the store and its project
+ * limit made anything larger impossible anyway. It stopped being a real
+ * constraint the moment R2 was wired up and was just an arbitrary wall.
+ */
+const MAX_BYTES = Math.floor(4.995 * 1024 * 1024 * 1024)
+
+/** Supabase's project limit is the binding one when R2 is not configured. */
+const SUPABASE_MAX_BYTES = 45 * 1024 * 1024
 
 /**
  * Media upload.
  *
- * Large files do NOT pass through this function. A serverless request body is
- * capped at roughly 4.5MB on Vercel, and the platform rejects anything bigger
- * before the handler runs — answering with an HTML error page, which is why
- * the dashboard reported a JSON parse error instead of anything useful. The
- * 200MB limit below could never actually be reached for a video.
+ * The FILE goes to Cloudflare R2. The URL goes to Supabase. That is the whole
+ * division of labour: R2 stores bytes cheaply with no egress charge, Postgres
+ * stores the row that says which project or post the file belongs to. Nothing
+ * about a video needs to live in a database.
  *
- * So the browser asks for a short-lived signed URL (a few hundred bytes of
- * JSON), PUTs the file straight to Supabase Storage, then calls back to
- * register it. Nothing large crosses Vercel in either direction.
+ * The file never passes through this function either way. A serverless request
+ * body caps at roughly 4.5MB on Vercel, and the platform rejects anything
+ * bigger before the handler runs — with an HTML error page, which is why the
+ * dashboard once reported a JSON parse error instead of anything useful. So
+ * the browser asks for a short-lived signed URL (a few hundred bytes of JSON),
+ * PUTs the file straight to R2, then calls back to register the URL.
  *
- * The multipart branch below still works for small files and older callers.
+ * Supabase Storage remains only as a fallback for when R2 is not configured,
+ * so a fresh install still works before any credentials exist. With R2 set up
+ * it is never used.
  */
 export async function POST(req: Request) {
   const denied = await guard('editor')
@@ -36,12 +52,15 @@ export async function POST(req: Request) {
     if (body.action === 'sign') {
       if (!body.name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
       if ((body.size ?? 0) > MAX_BYTES) {
-        return NextResponse.json({ error: 'File exceeds the 200MB limit' }, { status: 413 })
+        return NextResponse.json(
+          { error: 'That file is over 5GB, which is the largest a single upload can be.' },
+          { status: 413 },
+        )
       }
       // Supabase caps a file at the project limit (50MB free), so a large
       // master needs R2. Say so plainly rather than letting the PUT fail with
       // a storage error nobody can act on.
-      if (storageBackend() === 'supabase' && (body.size ?? 0) > 45 * 1024 * 1024) {
+      if (storageBackend() === 'supabase' && (body.size ?? 0) > SUPABASE_MAX_BYTES) {
         return NextResponse.json(
           { error: 'Files above ~45MB need Cloudflare R2, which is not configured yet.' },
           { status: 413 },
@@ -87,7 +106,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'file is required' }, { status: 400 })
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: 'File exceeds 200MB limit' }, { status: 413 })
+    return NextResponse.json({ error: 'File is too large for this route' }, { status: 413 })
   }
 
   const kind = file.type.startsWith('video/') ? 'video' : 'image'
