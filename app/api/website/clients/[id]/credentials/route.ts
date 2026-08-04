@@ -51,9 +51,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json()
 
     // ── reveal one secret ──
+    // Same role as the rest of the panel: whoever manages the client is the
+    // person who has to log into these accounts, and making them ask a super
+    // admin every time just moves passwords into chat messages.
     if (body.action === 'reveal') {
-      // deliberately stricter than reading the list
-      await requireRole('super_admin')
       if (!body.credentialId) {
         return NextResponse.json({ error: 'credentialId is required' }, { status: 400 })
       }
@@ -77,7 +78,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // ── create ──
+    // ── create ── a change, so super_admin only
+    await requireRole('super_admin')
     if (!String(body.platform ?? '').trim()) {
       return NextResponse.json({ error: 'A platform is required' }, { status: 400 })
     }
@@ -114,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function PATCH(req: Request) {
   try {
-    const me = await requireRole('account_manager')
+    const me = await requireRole('super_admin')
     const body = await req.json()
     if (!body.id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
@@ -149,7 +151,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    await requireRole('account_manager')
+    await requireRole('super_admin')
     const credentialId = new URL(req.url).searchParams.get('credentialId')
     if (!credentialId) return NextResponse.json({ error: 'credentialId is required' }, { status: 400 })
 

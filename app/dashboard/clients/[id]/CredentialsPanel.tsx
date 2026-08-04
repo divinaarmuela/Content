@@ -6,12 +6,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Copy, Eye, EyeOff, KeyRound, Lock, Pencil, Plus, ShieldAlert, Trash2, ExternalLink } from 'lucide-react'
+import { Copy, Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, ExternalLink } from 'lucide-react'
 import { useRole } from '../../useRole'
 
 type Credential = {
@@ -28,6 +31,9 @@ type Credential = {
 
 const BLANK = { platform: '', label: '', username: '', secret: '', url: '', notes: '' }
 
+/** Sentinel for the free-text escape in the platform Select. */
+const OTHER = '__other'
+
 const SUGGESTED = [
   'Instagram', 'Facebook', 'Meta Business', 'Meta Ads', 'TikTok', 'LinkedIn',
   'Google Business', 'Google Ads', 'Google Analytics', 'Shopify', 'Squarespace',
@@ -35,13 +41,20 @@ const SUGGESTED = [
 ]
 
 export default function CredentialsPanel({ clientId }: { clientId: string }) {
+  // Everyone who can open this panel can read and copy a credential — they
+  // are the people who have to log into these accounts, and making them ask
+  // every time just moves passwords into chat messages. Changing one is
+  // super_admin, enforced in the API as well as here.
   const { can } = useRole()
-  const canReveal = can('super_admin')
+  const canEdit = can('super_admin')
 
   const [items, setItems] = useState<Credential[] | null>(null)
   const [draft, setDraft] = useState<(Partial<Credential> & { secret?: string }) | null>(null)
   const [saving, setSaving] = useState(false)
   const [revealed, setRevealed] = useState<Record<string, string>>({})
+  // a saved credential whose platform is not on the list opens in free-text mode
+  const [custom, setCustom] = useState(false)
+  const [maskDraft, setMaskDraft] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -102,8 +115,8 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           {items.length} credential{items.length === 1 ? '' : 's'}
         </p>
-        {!draft && (
-          <Button size="sm" className="ml-auto" onClick={() => setDraft({ ...BLANK })}>
+        {!draft && canEdit && (
+          <Button size="sm" className="ml-auto" onClick={() => { setCustom(false); setDraft({ ...BLANK }) }}>
             <Plus className="h-4 w-4" /> Add credential
           </Button>
         )}
@@ -112,9 +125,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
       <p className="flex items-start gap-2 rounded-md bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
         Passwords are encrypted before they are stored and are never included when this list
-        loads. {canReveal
-          ? 'Revealing one is a separate request, recorded against your account.'
-          : 'Only a super admin can reveal one.'}
+        loads — click the eye to reveal one.{canEdit ? '' : ' Only a super admin can change them.'}
       </p>
 
       {draft && (
@@ -122,12 +133,32 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
           <CardContent className="grid gap-4 py-5 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>Platform</Label>
-              <Input list="credential-platforms" value={draft.platform ?? ''} autoFocus
-                placeholder="Instagram, Shopify…"
-                onChange={e => setDraft(d => ({ ...d, platform: e.target.value }))} />
-              <datalist id="credential-platforms">
-                {SUGGESTED.map(p => <option key={p} value={p} />)}
-              </datalist>
+              {/* A Select, not a datalist — the rest of the dashboard is shadcn
+                  and a bare <input list> looks and behaves like neither.
+                  "Something else" keeps the free-text escape the list needs:
+                  a fixed list would be wrong the first time a client turns up
+                  on a platform nobody anticipated. */}
+              <Select
+                value={custom ? OTHER : (draft.platform || '')}
+                onValueChange={v => {
+                  if (v === OTHER) { setCustom(true); setDraft(d => ({ ...d, platform: '' })) }
+                  else { setCustom(false); setDraft(d => ({ ...d, platform: v })) }
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Choose a platform" /></SelectTrigger>
+                <SelectContent>
+                  {SUGGESTED.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  <SelectItem value={OTHER}>Something else…</SelectItem>
+                </SelectContent>
+              </Select>
+              {custom && (
+                <Input
+                  autoFocus
+                  value={draft.platform ?? ''}
+                  placeholder="Name the platform"
+                  onChange={e => setDraft(d => ({ ...d, platform: e.target.value }))}
+                />
+              )}
             </div>
             <div className="grid gap-1.5">
               <Label>Label <span className="text-xs text-zinc-400">(which account)</span></Label>
@@ -144,8 +175,28 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
                 Password
                 {draft.id && <span className="ml-1 text-xs text-zinc-400">(blank = leave unchanged)</span>}
               </Label>
-              <Input type="password" value={draft.secret ?? ''} autoComplete="new-password"
-                onChange={e => setDraft(d => ({ ...d, secret: e.target.value }))} />
+              {/* Visible while typing, with a toggle to mask it. Masking by
+                  default only guards against someone reading your screen —
+                  which is not the threat here — while guaranteeing typos in
+                  the one field where a typo is invisible until it fails. */}
+              <div className="relative">
+                <Input
+                  type={maskDraft ? 'password' : 'text'}
+                  value={draft.secret ?? ''}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="pr-9 font-mono text-sm"
+                  onChange={e => setDraft(d => ({ ...d, secret: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMaskDraft(m => !m)}
+                  aria-label={maskDraft ? 'Show password' : 'Hide password'}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  {maskDraft ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                </button>
+              </div>
             </div>
             <div className="grid gap-1.5">
               <Label>Login URL</Label>
@@ -225,10 +276,6 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
                   <TableCell>
                     {!c.has_secret ? (
                       <span className="text-xs text-zinc-400">none stored</span>
-                    ) : !canReveal ? (
-                      <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-                        <ShieldAlert className="h-3.5 w-3.5" /> super admin only
-                      </span>
                     ) : (
                       <div className="flex items-center gap-1.5">
                         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-700 dark:text-zinc-200">
@@ -261,10 +308,13 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
 
                   <TableCell>
                     <div className="flex gap-0.5">
+                      {!canEdit ? null : (
                       <Button variant="ghost" size="icon" className="h-7 w-7"
-                        onClick={() => setDraft({ ...c, secret: '' })} aria-label="Edit">
+                        onClick={() => { setCustom(!SUGGESTED.includes(c.platform)); setDraft({ ...c, secret: '' }) }} aria-label="Edit">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
+                      )}
+                      {canEdit && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
                         onClick={async () => {
                           const res = await fetch(`/api/website/clients/${clientId}/credentials?credentialId=${c.id}`, { method: 'DELETE' })
@@ -274,6 +324,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
                         }} aria-label="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
