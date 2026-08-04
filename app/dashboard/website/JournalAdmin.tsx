@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeft, ChevronDown, ChevronUp, Pencil, Plus, Star, Trash2, Upload, X } from 'lucide-react'
 import { moveItem } from '@/app/lib/website-gallery-core'
-import { uploadMedia } from './uploadMedia'
+import { uploadMedia } from '../uploadMedia'
 
 type Section = { heading?: string; paragraphs: string[]; callout?: string }
 

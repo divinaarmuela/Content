@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { uploadMedia } from '../uploadMedia'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -106,13 +107,9 @@ export default function ComposeDialog({
     setUploading(true)
     try {
       for (const file of Array.from(files)) {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('purpose', 'social')
-        const res = await fetch('/api/website/upload', { method: 'POST', body: fd })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-        setMedia(m => [...m, { url: json.url, type: json.kind === 'video' ? 'video' : 'image' }])
+        // direct to R2 — a reel is comfortably past Vercel's ~4.5MB body cap
+        const { url, kind } = await uploadMedia(file, { purpose: 'social' })
+        setMedia(m => [...m, { url, type: kind === 'video' ? 'video' : 'image' }])
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')

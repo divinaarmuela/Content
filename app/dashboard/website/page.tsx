@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import ServicePicker from './ServicePicker'
 import { collectServices } from '@/app/lib/services-core'
-import { uploadMedia } from './uploadMedia'
+import { uploadMedia } from '../uploadMedia'
 import JournalAdmin from './JournalAdmin'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {

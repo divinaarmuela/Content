@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { uploadMedia } from '../../uploadMedia'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -131,13 +132,11 @@ export default function ItemDetailPage() {
   const uploadFile = async (file: File) => {
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('purpose', 'production')
-      const res = await fetch('/api/website/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-      setVerDraft(d => ({ ...d, file_url: json.url }))
+      // Straight to R2 rather than through our API: this is where shoot
+      // deliverables land, and a serverless request body caps at ~4.5MB on
+      // Vercel — every real cut would have been rejected.
+      const { url } = await uploadMedia(file, { purpose: 'production' })
+      setVerDraft(d => ({ ...d, file_url: url }))
       toast.success('File uploaded — add links, then save the version')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
