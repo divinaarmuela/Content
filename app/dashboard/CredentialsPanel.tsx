@@ -15,7 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Copy, Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, ExternalLink } from 'lucide-react'
-import { useRole } from '../../useRole'
+import { useRole } from './useRole'
 
 type Credential = {
   id: string
@@ -40,7 +40,7 @@ const SUGGESTED = [
   'WordPress', 'Mailchimp', 'Klaviyo', 'Canva',
 ]
 
-export default function CredentialsPanel({ clientId }: { clientId: string }) {
+export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
   // Everyone who can open this panel can read and copy a credential — they
   // are the people who have to log into these accounts, and making them ask
   // every time just moves passwords into chat messages. Changing one is
@@ -58,7 +58,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/website/clients/${clientId}/credentials`)
+      const res = await fetch(endpoint)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load credentials')
       setItems(json)
@@ -66,7 +66,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
       toast.error(e instanceof Error ? e.message : 'Could not load credentials')
       setItems([])
     }
-  }, [clientId])
+  }, [endpoint])
 
   useEffect(() => { load() }, [load])
 
@@ -74,7 +74,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
     if (!draft?.platform?.trim()) return toast.error('A platform is required')
     setSaving(true)
     try {
-      const res = await fetch(`/api/website/clients/${clientId}/credentials`, {
+      const res = await fetch(endpoint, {
         method: draft.id ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
@@ -97,7 +97,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
       setRevealed(r => { const { [c.id]: _drop, ...rest } = r; return rest })
       return
     }
-    const res = await fetch(`/api/website/clients/${clientId}/credentials`, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'reveal', credentialId: c.id }),
@@ -317,7 +317,7 @@ export default function CredentialsPanel({ clientId }: { clientId: string }) {
                       {canEdit && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
                         onClick={async () => {
-                          const res = await fetch(`/api/website/clients/${clientId}/credentials?credentialId=${c.id}`, { method: 'DELETE' })
+                          const res = await fetch(`${endpoint}?credentialId=${c.id}`, { method: 'DELETE' })
                           if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
                           toast.success('Credential removed')
                           load()

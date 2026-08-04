@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
 import ScannerSettings from './ScannerSettings'
+import CredentialsPanel from '../CredentialsPanel'
 import { useRole } from '../useRole'
 
 const TEAM = [
@@ -73,9 +74,9 @@ function saveDemo() {
 }
 
 export default function SettingsPage() {
-  // Scanner settings, team management and the danger zone are super_admin
-  // work — their APIs already reject anyone else, so offering the tabs only
-  // produced controls that error on use.
+  // Scanner settings and team management are super_admin work — their APIs
+  // already reject anyone else, so offering the tabs only produced controls
+  // that error on use.
   const { can } = useRole()
   const isSuper = can('super_admin')
 
@@ -95,8 +96,8 @@ export default function SettingsPage() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           {isSuper && <TabsTrigger value="team">Team</TabsTrigger>}
           {isSuper && <TabsTrigger value="scanner">Inbox scanner</TabsTrigger>}
+          <TabsTrigger value="credentials">Credentials</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          {isSuper && <TabsTrigger value="danger">Danger zone</TabsTrigger>}
         </TabsList>
 
         {isSuper && (
@@ -104,6 +105,24 @@ export default function SettingsPage() {
             <ScannerSettings />
           </TabsContent>
         )}
+
+        {/* MD Media's own logins — the agency has accounts of its own, and
+            hanging them off a placeholder client would bury them in that
+            client's panel. Same encryption and the same view/change split as
+            client credentials. */}
+        <TabsContent value="credentials">
+          <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+            <CardHeader>
+              <CardTitle className="text-base">MD Media credentials</CardTitle>
+              <CardDescription>
+                Our own platform logins. Client logins live on each client&rsquo;s page.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CredentialsPanel endpoint="/api/team/credentials" />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="profile">
           <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -292,61 +311,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="danger">
-          <Card className="border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30">
-            <CardHeader>
-              <CardTitle className="text-base text-red-700 dark:text-red-400">
-                Danger zone
-              </CardTitle>
-              <CardDescription>
-                Irreversible actions for this workspace.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-4 rounded-lg border border-red-200 dark:border-red-900 bg-white dark:bg-zinc-900 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    Delete workspace
-                  </p>
-                  <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-                    Permanently remove MD Media and all client data. This
-                    cannot be undone.
-                  </p>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
-                      <Trash2 className="h-4 w-4" />
-                      Delete workspace
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        Delete this workspace?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete MD Media, including all
-                        clients, content, and reports. This action cannot be
-                        undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() =>
-                          toast.error('Workspace deletion is disabled (demo)')
-                        }
-                      >
-                        Delete workspace
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   )

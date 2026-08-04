@@ -93,3 +93,43 @@ create trigger client_credentials_updated_at
 alter table client_contacts    enable row level security;
 alter table client_notes       enable row level security;
 alter table client_credentials enable row level security;
+
+-- ─── MD Media's own credentials ───
+-- Same shape as client_credentials, without a client. The agency has logins of
+-- its own (its Meta Business, its Google Workspace, its Canva) and hanging
+-- them off a fake client row would put them in that client's panel.
+create table if not exists agency_credentials (
+  id              uuid        default gen_random_uuid() primary key,
+  created_at      timestamptz default now() not null,
+  updated_at      timestamptz default now() not null,
+  platform        text        not null,
+  label           text        not null default '',
+  username        text        not null default '',
+  secret_cipher   text,                              -- AES-256-GCM, base64. NEVER plaintext.
+  url             text        not null default '',
+  notes           text        not null default '',
+  updated_by      uuid        references team_users(id) on delete set null,
+  updated_by_name text        not null default ''
+);
+
+drop trigger if exists agency_credentials_updated_at on agency_credentials;
+create trigger agency_credentials_updated_at
+  before update on agency_credentials
+  for each row execute function set_updated_at();
+
+alter table agency_credentials enable row level security;
+
+-- ─── Note visibility ───
+-- Not every note belongs in front of every team member: commercial terms, a
+-- difficult conversation, a rate change. 'team' is the default because the
+-- point of these notes is that the next person can pick the client up;
+-- 'admins' is for commercially sensitive notes, and 'private' is visible only
+-- to its author. All three are filtered server-side rather than hidden in the UI.
+alter table client_notes
+  add column if not exists visibility text not null default 'team';
+
+do $$ begin
+  alter table client_notes
+    add constraint client_notes_visibility_check check (visibility in ('team','admins','private'));
+exception when duplicate_object then null;
+end $$;

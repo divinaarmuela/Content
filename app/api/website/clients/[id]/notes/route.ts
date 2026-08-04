@@ -12,7 +12,7 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole('account_manager')
+    const me = await requireRole('account_manager')
     const { id } = await params
     const { data, error } = await supabase
       .from('client_notes')
@@ -20,7 +20,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .eq('client_id', id)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
-    return NextResponse.json(data)
+
+    // Filtered HERE, not in the UI. A note marked private or admins-only that
+    // still travels to the browser is visible to anyone who opens devtools —
+    // which is the whole thing the toggle is supposed to prevent.
+    const visible = (data ?? []).filter(n => {
+      if (n.visibility === 'private') return n.author_id === me.id
+      if (n.visibility === 'admins') return me.role === 'super_admin'
+      return true
+    })
+    return NextResponse.json(visible)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
@@ -35,11 +44,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const text = String(body.body ?? '').trim()
     if (!text) return NextResponse.json({ error: 'A note cannot be empty' }, { status: 400 })
 
+    const visibility = ['team', 'admins', 'private'].includes(body.visibility)
+      ? body.visibility
+      : 'team'
+
     const { data, error } = await supabase
       .from('client_notes')
       .insert({
         client_id: id,
         body: text,
+        visibility,
         author_id: me.id,
         author_name: me.name || me.email,
       })

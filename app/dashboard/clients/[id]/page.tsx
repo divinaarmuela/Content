@@ -17,7 +17,7 @@ import {
 import { ArrowLeft, Copy, ExternalLink, KeyRound, MessageSquare, Share2, Users } from 'lucide-react'
 import ContactsPanel from './ContactsPanel'
 import NotesPanel from './NotesPanel'
-import CredentialsPanel from './CredentialsPanel'
+import CredentialsPanel from '../../CredentialsPanel'
 import SocialChannels from '../SocialChannels'
 
 type Client = {
@@ -227,7 +227,7 @@ export default function ClientDetailPage() {
 
       {tab === 'contacts' && <ContactsPanel clientId={clientId} />}
       {tab === 'notes' && <NotesPanel clientId={clientId} />}
-      {tab === 'credentials' && <CredentialsPanel clientId={clientId} />}
+      {tab === 'credentials' && <CredentialsPanel endpoint={`/api/website/clients/${clientId}/credentials`} />}
       {tab === 'social' && (
         <SocialChannels clientId={clientId} />
       )}
