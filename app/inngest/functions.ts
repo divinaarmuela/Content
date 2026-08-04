@@ -22,13 +22,17 @@ import { reconcileAll } from '../lib/asana-sync'
  * wall-clock than the first.
  */
 
-/** Every 15 minutes during the day, decide which mailboxes are due and
- *  dispatch one scan event each. Times are Melbourne local. */
+/** Every 5 minutes during the day, decide which mailboxes are due and
+ *  dispatch one scan event each. Times are Melbourne local.
+ *
+ *  Frequency does not multiply Anthropic spend: scanSingleMailbox claims each
+ *  Gmail message id via a unique constraint *before* classifying, so a message
+ *  is sent to the model exactly once no matter how often we look. */
 export const scanInboxScheduled = inngest.createFunction(
   {
     id: 'scan-inbox-scheduled',
     name: 'Dispatch inbox scans',
-    triggers: [{ cron: 'TZ=Australia/Melbourne */15 6-22 * * *' }],
+    triggers: [{ cron: 'TZ=Australia/Melbourne */5 6-22 * * *' }],
     retries: 2,
     // the dispatcher is cheap; one at a time is plenty and avoids double-sends
     concurrency: { limit: 1 },
@@ -42,11 +46,25 @@ export const scanInboxScheduled = inngest.createFunction(
     const mailboxes = await step.run('list-mailboxes', async () => enabledMailboxEmails())
     if (mailboxes.length === 0) return { skipped: 'no mailboxes enabled' }
 
+    // The dedupe key must change every tick. Inngest's function-level
+    // idempotency window is 24 HOURS, so keying on the mailbox alone would
+    // have collapsed every scan after the first into a no-op — the schedule
+    // would have run once a day regardless of the cron. Bucketing by the
+    // 5-minute tick keeps the intended protection (a manual scan landing on
+    // top of a scheduled one is still collapsed) without disabling the
+    // schedule itself.
+    //
+    // Computed inside a step so a retry reuses the same bucket instead of
+    // minting a new one and re-dispatching.
+    const bucket = await step.run('tick-bucket', async () =>
+      Math.floor(Date.now() / (5 * 60 * 1000))
+    )
+
     await step.sendEvent(
       'dispatch-mailbox-scans',
       mailboxes.map(email => ({
         name: 'app/inbox.mailbox.scan.requested',
-        data: { email, trigger: 'scheduled' as const },
+        data: { email, trigger: 'scheduled' as const, dedupe: `${email}:${bucket}` },
       }))
     )
     return { dispatched: mailboxes.length, mailboxes }
@@ -57,8 +75,13 @@ export const scanInboxScheduled = inngest.createFunction(
  *
  *  `concurrency` caps how many mailboxes are in flight at once so a large team
  *  cannot stampede the Anthropic API; `idempotency` collapses duplicate events
- *  for the same mailbox inside a short window, which matters when a manual
- *  scan lands on top of a scheduled one. */
+ *  for the same mailbox inside one tick, which matters when a manual scan
+ *  lands on top of a scheduled one.
+ *
+ *  The key is `event.data.dedupe`, which senders build as mailbox + tick (or
+ *  mailbox + event id for on-demand). It must NOT be `event.data.email`:
+ *  Inngest's idempotency window is 24 hours, so that would allow one scan per
+ *  mailbox per day and silently defeat the schedule. */
 export const scanMailbox = inngest.createFunction(
   {
     id: 'scan-mailbox',
@@ -66,7 +89,7 @@ export const scanMailbox = inngest.createFunction(
     triggers: [{ event: 'app/inbox.mailbox.scan.requested' }],
     retries: 2,
     concurrency: { limit: 3, key: 'event.data.email' },
-    idempotency: 'event.data.email',
+    idempotency: 'event.data.dedupe',
   },
   async ({ event, step }) => {
     const email = String(event.data?.email ?? '')
@@ -102,15 +125,17 @@ export const scanInboxOnDemand = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => {
+  async ({ event, step }) => {
     const mailboxes = await step.run('list-mailboxes', async () => enabledMailboxEmails())
     if (mailboxes.length === 0) return { skipped: 'no mailboxes enabled' }
 
+    // Keyed on the triggering event id: an explicit request is never collapsed
+    // into an earlier one, but its own retries still are.
     await step.sendEvent(
       'dispatch-mailbox-scans',
       mailboxes.map(email => ({
         name: 'app/inbox.mailbox.scan.requested',
-        data: { email, trigger: 'event' as const },
+        data: { email, trigger: 'event' as const, dedupe: `${email}:${event.id}` },
       }))
     )
     return { dispatched: mailboxes.length, mailboxes }
@@ -180,8 +205,11 @@ export const asanaReconcile = inngest.createFunction(
   {
     id: 'asana-reconcile',
     name: 'Reconcile Asana activity',
-    triggers: [{ cron: 'TZ=Australia/Melbourne */15 * * * *' }],
+    triggers: [{ cron: 'TZ=Australia/Melbourne */5 * * * *' }],
     retries: 2,
+    // No LLM calls here — this is Asana REST plus upserts, and the paid Asana
+    // plan allows 1,500 req/min, so a 5-minute cadence over a dozen projects
+    // is a rounding error against that budget.
     concurrency: { limit: 1 },
   },
   async ({ step }) => step.run('reconcile', () => reconcileAll())
