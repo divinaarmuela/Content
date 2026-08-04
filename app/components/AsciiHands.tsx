@@ -329,14 +329,26 @@ export default function AsciiHands({
         // hand alone would otherwise be index 0 and slide in from the left.
         const isLeft = wrapper.dataset.side !== 'right'
         const direction = isLeft ? 1 : -1
-        const revealX = isLeft ? reveal.left : reveal.right
         const x = drift.x * direction
         const y = -drift.y
+
+        // Hands that reach vertically enter vertically: the top one drops in
+        // from above, the lower one rises from below. Sliding those in from
+        // the sides fights the direction they point. translate is applied
+        // before rotate, so this stays true screen-vertical whatever the
+        // angle.
+        const entry = wrapper.dataset.reveal
+        const offset = isLeft ? reveal.left : reveal.right
+        const revealX = entry ? 0 : offset
+        const revealY = entry === 'down' ? -Math.abs(offset)
+          : entry === 'up' ? Math.abs(offset)
+          : 0
+
         // The rotation has to live in this string: the loop rewrites transform
         // every frame, so a rotate set in CSS would be overwritten instantly.
         const rot = wrapper.dataset.rotate ? ` rotate(${wrapper.dataset.rotate}deg)` : ''
         wrapper.style.transform =
-          `translate(calc(${x}px + ${revealX}%), ${y}px) scale(${parallaxScale})${rot}`
+          `translate(calc(${x}px + ${revealX}%), calc(${y}px + ${revealY}%)) scale(${parallaxScale})${rot}`
       })
 
       // ambient sparkles keep the hands alive without the cursor
@@ -386,19 +398,28 @@ export default function AsciiHands({
           : { justifyContent: side === 'right' ? 'flex-end' : 'flex-start' }
       }
     >
-      {/* Diagonal: two hands reaching for each other on the right.
-          Angles are measured from where each photo already points —
-          hand-left points RIGHT at 0°, hand-right points LEFT at 0°.
-          Top hand: +125° turns "right" into down-and-left, so it descends
-          from the top edge aiming into the page.
-          Lower hand: -55° turns "left" into up-and-left, rising from the
-          bottom-right to meet it. Fingertips meet around the middle right. */}
+      {/* Diagonal: two hands reaching along ONE diagonal in OPPOSITE
+          directions, so they close on each other around the middle right.
+
+          The photos: hand-left.jpg has its arm at the left and fingers
+          pointing RIGHT; hand-right.jpg has its arm at the right and fingers
+          pointing LEFT. CSS rotate() is clockwise.
+
+          Rotating both by the same 55° sends them opposite ways, because they
+          start as opposite vectors:
+            right (1,0)  → ( 0.57,  0.82) = down-right  ← top hand, descending
+            left (-1,0)  → (-0.57, -0.82) = up-left     ← lower hand, rising
+
+          So the top hand starts inboard and high, reaching down-right; the
+          lower hand starts at the far right edge and low, reaching up-left.
+          Their fingertips converge in between, on the right of the section. */}
       {side !== 'right' && (
         <div
           className="ascii-hand-wrap"
           data-side={diagonal ? 'right' : 'left'}
-          data-rotate={diagonal ? '125' : undefined}
-          style={diagonal ? { position: 'absolute', right: '4%', top: '-16%', width: '26%', maxWidth: 'none' } : undefined}
+          data-rotate={diagonal ? '55' : undefined}
+          data-reveal={diagonal ? 'down' : undefined}
+          style={diagonal ? { position: 'absolute', right: '22%', top: '-22%', width: '27%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-left.jpg" alt="" />
           <canvas />
@@ -408,8 +429,9 @@ export default function AsciiHands({
         <div
           className="ascii-hand-wrap"
           data-side="right"
-          data-rotate={diagonal ? '-55' : undefined}
-          style={diagonal ? { position: 'absolute', right: '16%', bottom: '-10%', width: '26%', maxWidth: 'none' } : undefined}
+          data-rotate={diagonal ? '55' : undefined}
+          data-reveal={diagonal ? 'up' : undefined}
+          style={diagonal ? { position: 'absolute', right: '-4%', bottom: '-22%', width: '27%', maxWidth: 'none' } : undefined}
         >
           <img className="ascii-hand" src="/hands/hand-right.jpg" alt="" />
           <canvas />
