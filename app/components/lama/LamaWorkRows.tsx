@@ -43,6 +43,7 @@ export default function LamaWorkRows({ projects }: { projects: SiteProject[] }) 
                 <SiteMedia
                   src={c.cardMedia}
                   alt=""
+                  autoPlay
                   className="lg:hidden w-full aspect-video object-cover bg-ink"
                 />
                 <span className="flex items-baseline justify-between lg:block lg:w-2/12">
@@ -61,6 +62,7 @@ export default function LamaWorkRows({ projects }: { projects: SiteProject[] }) 
                   <SiteMedia
                     src={c.cardMedia}
                     alt={c.name}
+                    autoPlay
                     className="h-[90px] sm:h-[120px] w-auto object-cover bg-ink opacity-75 group-hover:opacity-100 group-hover:scale-[1.02] transition-all duration-300"
                   />
                 </span>

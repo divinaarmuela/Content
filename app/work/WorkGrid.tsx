@@ -11,7 +11,7 @@ import { collectServices, hasService } from '../lib/services-core'
 
 // The static-pack Work page grid: kicker, big two-line headline, intro,
 // mono FILTER chip row with a live project count, then an auto-fit card
-// grid — rounded 4:3 media (pulsing play badge on video cards), name + ↗
+// grid — rounded 4:3 media showing its first frame, name + ↗
 // that nudges on hover, "Service · Industry" mono line, description.
 //
 // The chips ARE the services set in the CMS. They used to be a fixed list of
@@ -95,13 +95,10 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
                   alt={p.name}
                   className="block aspect-[4/3] w-full bg-ink object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
                 />
-                {isVideoUrl(p.cardMedia) && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full border border-cream/70 bg-ink/35 backdrop-blur-[3px] [animation:lama-play_2.6s_ease-in-out_infinite]">
-                      <span className="ml-1 block h-0 w-0 border-y-[9px] border-l-[14px] border-y-transparent border-l-cream" />
-                    </div>
-                  </div>
-                )}
+                {/* No play circle here. A card links to the case study — the
+                    badge promised playback that clicking never delivered, and
+                    it hovered over black while a large file buffered. The
+                    corner label still says what the media is. */}
                 <span className="absolute bottom-2.5 left-3 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
                   {isVideoUrl(p.cardMedia) ? 'video' : 'image'}
                 </span>

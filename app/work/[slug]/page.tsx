@@ -137,16 +137,11 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
               alt={project.name}
               className="block aspect-[16/9] w-full bg-ink object-cover"
             />
-            {isVideoUrl(project.heroMedia) && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full border border-cream/70 bg-ink/35 backdrop-blur-[3px] [animation:lama-play_2.6s_ease-in-out_infinite]">
-                  <span className="ml-[5px] block h-0 w-0 border-y-[10px] border-l-[17px] border-y-transparent border-l-cream" />
-                </div>
-              </div>
+            {!isVideoUrl(project.heroMedia) && (
+              <span className="absolute bottom-3.5 left-4 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
+                image
+              </span>
             )}
-            <span className="absolute bottom-3.5 left-4 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
-              {isVideoUrl(project.heroMedia) ? 'video' : 'image'}
-            </span>
           </div>
         </section>
 

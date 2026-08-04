@@ -106,6 +106,7 @@ export default function LamaServices() {
                 <SiteMedia
                   src={s.media}
                   alt={s.title}
+                  autoPlay
                   className="block aspect-[4/3] w-full rounded-[14px] object-cover bg-ink"
                 />
                 <span className="absolute bottom-3 left-3.5 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
