@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { explainDbError } from '@/app/lib/db-errors'
 
 /** Contacts for one client. A client is an organisation, and organisations
  *  have an owner, a marketing lead, a bookkeeper — not one email address. */
@@ -16,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .order('is_primary', { ascending: false })
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: explainDbError(error.message, 'client_records.sql') }, { status: 500 })
   return NextResponse.json(data)
 }
 
@@ -53,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 409 },
       )
     }
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: explainDbError(error.message, 'client_records.sql') }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })
 }
@@ -80,7 +81,7 @@ export async function PATCH(req: Request) {
         { status: 409 },
       )
     }
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: explainDbError(error.message, 'client_records.sql') }, { status: 500 })
   }
   return NextResponse.json(data)
 }
@@ -94,6 +95,6 @@ export async function DELETE(req: Request) {
   if (!contactId) return NextResponse.json({ error: 'contactId is required' }, { status: 400 })
 
   const { error } = await supabase.from('client_contacts').delete().eq('id', contactId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: explainDbError(error.message, 'client_records.sql') }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

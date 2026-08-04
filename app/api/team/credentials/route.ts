@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
+import { explainDbError } from '@/app/lib/db-errors'
 import { encryptSecret, decryptSecret, credentialsKeyConfigured } from '@/app/lib/secret-box'
 
 /**
@@ -28,7 +29,7 @@ export async function GET() {
       .from('agency_credentials')
       .select(listSelect)
       .order('platform', { ascending: true })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json((data ?? []).map(redact))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
         .select('secret_cipher')
         .eq('id', body.credentialId)
         .single()
-      if (error) throw new Error(error.message)
+      if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
       if (!data?.secret_cipher) return NextResponse.json({ secret: '' })
       try {
         return NextResponse.json({ secret: decryptSecret(data.secret_cipher) })
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
       .select(listSelect)
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json(redact(data), { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -122,7 +123,7 @@ export async function PATCH(req: Request) {
 
     const { data, error } = await supabase
       .from('agency_credentials').update(patch).eq('id', body.id).select(listSelect).single()
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json(redact(data))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -137,7 +138,7 @@ export async function DELETE(req: Request) {
     if (!credentialId) return NextResponse.json({ error: 'credentialId is required' }, { status: 400 })
 
     const { error } = await supabase.from('agency_credentials').delete().eq('id', credentialId)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

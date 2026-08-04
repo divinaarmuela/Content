@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
+import { explainDbError } from '@/app/lib/db-errors'
 
 /**
  * Notes on a client, each stamped with who wrote it and when.
@@ -19,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .select('*')
       .eq('client_id', id)
       .order('created_at', { ascending: false })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
 
     // Filtered HERE, not in the UI. A note marked private or admins-only that
     // still travels to the browser is visible to anyone who opens devtools —
@@ -60,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -75,7 +76,7 @@ export async function DELETE(req: Request) {
     if (!noteId) return NextResponse.json({ error: 'noteId is required' }, { status: 400 })
 
     const { error } = await supabase.from('client_notes').delete().eq('id', noteId)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
