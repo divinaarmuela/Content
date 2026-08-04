@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -22,7 +24,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Link2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Link2, Search, ArrowRight } from 'lucide-react'
 import SocialChannels from './SocialChannels'
 
 type Client = {
@@ -55,6 +57,13 @@ export default function ClientsPage() {
   const [editing, setEditing] = useState<Partial<Client> | null>(null)
   const [deleting, setDeleting] = useState<Client | null>(null)
   const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const q = search.trim().toLowerCase()
+  const visible = (clients ?? []).filter(c =>
+    !q || [c.name, c.slug, c.industry, c.contact_name, c.email]
+      .some(field => (field ?? '').toLowerCase().includes(q)),
+  )
 
   const load = useCallback(async () => {
     try {
@@ -183,6 +192,27 @@ export default function ClientsPage() {
         </Dialog>
       </div>
 
+      {/* Search across the things someone actually remembers about a client —
+          the name, the slug, the industry, or whoever they deal with. */}
+      {clients !== null && clients.length > 0 && (
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-xs flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search clients…"
+              className="bg-white pl-8 dark:bg-zinc-900"
+            />
+          </div>
+          {search && (
+            <span className="font-mono text-xs text-zinc-400">
+              {visible.length} of {clients.length}
+            </span>
+          )}
+        </div>
+      )}
+
       {clients === null ? (
         <Card>
           <CardContent className="flex flex-col gap-3 p-6">
@@ -224,11 +254,13 @@ export default function ClientsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clients.map(c => (
+              {visible.map(c => (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <div className="text-sm font-medium">{c.name}</div>
-                    <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{c.slug}</div>
+                    <Link href={`/dashboard/clients/${c.id}`} className="group block">
+                      <div className="text-sm font-medium group-hover:underline">{c.name}</div>
+                      <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{c.slug}</div>
+                    </Link>
                   </TableCell>
                   <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{c.industry || '—'}</TableCell>
                   <TableCell>
