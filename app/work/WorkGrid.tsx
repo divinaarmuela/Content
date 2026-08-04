@@ -56,7 +56,11 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
             Hospitality, property, fashion, fragrance, engineering and health. A look at
             the content, campaigns and brands we&rsquo;ve built.
           </p>
-        <div className="mt-12 flex flex-wrap items-center gap-2.5">
+        {/* Capped to the left of the hands. The chips are CMS-driven, so the
+            row grows as services are added — unconstrained it ran under the
+            ASCII hands on wide screens. Wrapping earlier costs a line; running
+            under the artwork costs legibility. */}
+        <div className="mt-12 flex flex-wrap items-center gap-2.5 lg:max-w-[58%]">
           <span className="mr-2 font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">
             Filter
           </span>

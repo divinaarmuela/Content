@@ -13,6 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import ServicePicker from './ServicePicker'
 import { collectServices } from '@/app/lib/services-core'
 import { uploadMedia } from './uploadMedia'
+import JournalAdmin from './JournalAdmin'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -187,6 +189,7 @@ export default function WebsiteAdminPage() {
   const [editing, setEditing] = useState<Partial<Project> | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'projects' | 'journal'>('projects')
 
   // every tag used anywhere, so a service typed on one project is offered on
   // the next — no separate list to maintain and nothing to keep in sync
@@ -362,13 +365,37 @@ export default function WebsiteAdminPage() {
   }
 
   /* ── List view ── */
+  // The Journal lives here rather than on its own dashboard page: both edit
+  // the public website, and separating them would mean remembering which page
+  // owns which part of the same site.
+  if (tab === 'journal') {
+    return (
+      <div className="flex flex-col gap-4">
+        <Tabs value={tab} onValueChange={v => v && setTab(v as 'projects' | 'journal')}>
+          <TabsList>
+            <TabsTrigger value="projects">Projects</TabsTrigger>
+            <TabsTrigger value="journal">Journal</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <JournalAdmin />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <Tabs value={tab} onValueChange={v => v && setTab(v as 'projects' | 'journal')}>
+        <TabsList>
+          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="journal">Journal</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Website projects</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Drives the homepage rows, /work grid, and case study pages. Changes go live within 5 minutes.
+            Drives the homepage rows, /work grid, and case study pages. Published changes appear immediately.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
