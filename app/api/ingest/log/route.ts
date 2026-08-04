@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { guard } from '../../../lib/authz'
 import { supabase } from '@/lib/supabase'
 
 /** The decision trail for the inbox scanner.
@@ -13,8 +13,11 @@ import { supabase } from '@/lib/supabase'
  *  ingest routes — /api/ingest/* stays outside the protected matcher so the
  *  cron can reach the scan endpoint with a bearer secret. */
 export async function GET(req: Request) {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // This returns sender addresses, subject lines and the classifier's
+  // reasoning for every scanned message — inbound business correspondence.
+  // A signed-in check alone exposed it to clients.
+  const denied = await guard('account_manager')
+  if (denied) return denied
 
   const limit = Math.min(Number(new URL(req.url).searchParams.get('limit') ?? 40), 200)
 

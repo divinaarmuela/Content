@@ -27,6 +27,7 @@ import {
   ArrowUpDown, Copy, Download, Mail, MoreHorizontal, Pencil, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
 import ScanPanel from './ScanPanel'
+import { useRole } from '../useRole'
 
 interface Lead {
   id: string
@@ -56,6 +57,8 @@ const COLS: { key: keyof Lead; label: string; mono?: boolean }[] = [
 ]
 
 export default function LeadsPage() {
+  const { can } = useRole()
+  const canScan = can('account_manager')
   const [leads, setLeads]     = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -199,7 +202,10 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      <ScanPanel onLeadsCreated={fetchLeads} />
+      {/* Scanning reads the agency mailbox and creates leads — account_manager
+          and above. The API enforces the same rule; this only stops the
+          control being offered to people it would reject. */}
+      {canScan && <ScanPanel onLeadsCreated={fetchLeads} />}
 
       <div className="flex items-center gap-3">
         <Input

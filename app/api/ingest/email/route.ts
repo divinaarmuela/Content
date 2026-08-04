@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { guard } from '../../../lib/authz'
 import { scanInbox } from '../../../lib/email-lead'
 import { runLeadsReportTick } from '../../../lib/report-send'
 
@@ -16,8 +16,10 @@ export async function POST(req: Request) {
   const isCron = Boolean(cronSecret && bearer && bearer === cronSecret)
 
   if (!isCron) {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Signed-in was never enough: clients sign in too, and this reads the
+    // agency mailbox and writes leads. Scanning is account-manager work.
+    const denied = await guard('account_manager')
+    if (denied) return denied
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {

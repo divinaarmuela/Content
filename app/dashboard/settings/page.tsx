@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
 import ScannerSettings from './ScannerSettings'
+import { useRole } from '../useRole'
 
 const TEAM = [
   { name: 'Marcus Doyle', email: 'marcus@mdmmarketing.com.au', role: 'Owner', initials: 'MD' },
@@ -72,6 +73,12 @@ function saveDemo() {
 }
 
 export default function SettingsPage() {
+  // Scanner settings, team management and the danger zone are super_admin
+  // work — their APIs already reject anyone else, so offering the tabs only
+  // produced controls that error on use.
+  const { can } = useRole()
+  const isSuper = can('super_admin')
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -86,15 +93,17 @@ export default function SettingsPage() {
       <Tabs defaultValue="profile" className="flex flex-col gap-4">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="scanner">Inbox scanner</TabsTrigger>
+          {isSuper && <TabsTrigger value="team">Team</TabsTrigger>}
+          {isSuper && <TabsTrigger value="scanner">Inbox scanner</TabsTrigger>}
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="danger">Danger zone</TabsTrigger>
+          {isSuper && <TabsTrigger value="danger">Danger zone</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="scanner">
-          <ScannerSettings />
-        </TabsContent>
+        {isSuper && (
+          <TabsContent value="scanner">
+            <ScannerSettings />
+          </TabsContent>
+        )}
 
         <TabsContent value="profile">
           <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">

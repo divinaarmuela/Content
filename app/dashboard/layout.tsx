@@ -13,6 +13,7 @@ import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock,
   Activity, BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2,
 } from 'lucide-react'
+import { useRole } from './useRole'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
  *  the dark tokens too, persists to localStorage, and cleans up on unmount so
@@ -88,16 +89,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-function visibleFor(role: string, items: NavItem[]) {
+function visibleFor(role: string | null, items: NavItem[]) {
+  if (role === null)        return []   // unknown identity — show nothing yet
   if (role === 'editor')    return items.filter(i => i.href === '/dashboard/production')
   if (role === 'scheduler') return items.filter(i => ['/dashboard/scheduler', '/dashboard/calendar'].includes(i.href))
   if (role === 'client')    return []
   return items
 }
 
-function NavLinks({ role, path, onNavigate }: { role: string; path: string; onNavigate?: () => void }) {
+function NavLinks({ role, path, onNavigate }: { role: string | null; path: string; onNavigate?: () => void }) {
   const main = visibleFor(role, NAV_MAIN)
-  const tools = ['editor', 'scheduler', 'client'].includes(role) ? [] : NAV_TOOLS
+  const tools = role === null || ['editor', 'scheduler', 'client'].includes(role) ? [] : NAV_TOOLS
   const link = (item: NavItem) => {
     const active = path === item.href
     const Icon = item.icon
@@ -147,7 +149,12 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   const path = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user } = useUser()
-  const role = (user?.publicMetadata?.role as string) ?? 'admin'
+  // The role comes from the server (team_users), not Clerk publicMetadata.
+  // The old fallback here was `?? 'admin'`, so an identity whose metadata was
+  // never stamped rendered the *full* admin navigation — a client included.
+  // useRole starts as null and `visibleFor` shows nothing until it resolves,
+  // so the failure now runs in the safe direction.
+  const { role } = useRole()
   const { dark, toggle } = useDashTheme()
 
   return (
@@ -198,7 +205,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <Button variant="ghost" size="icon" onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            {role !== 'admin' && (
+            {role && role !== 'super_admin' && (
               <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
                 {role.replace('_', ' ')}
               </span>
