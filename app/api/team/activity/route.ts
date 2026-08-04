@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { asanaConfigured } from '@/app/lib/asana'
-import { rollupByPerson, rangeFromDays, type RollupPerson } from '@/app/lib/asana-core'
+import { rollupByPerson, rangeFromDays, dayKeyInTz, type RollupPerson } from '@/app/lib/asana-core'
 
 /**
  * Team activity rollup.
@@ -45,14 +45,19 @@ export async function GET(req: Request) {
 
     // No linked Asana identities yet → nothing to aggregate, but the page
     // still needs the people list so it can say so honestly.
-    let tasks: never[] | { gid: string; assignee_gid: string | null; completed: boolean; completed_at: string | null; due_on: string | null }[] = []
+    type TaskRow = {
+      gid: string; name: string; assignee_gid: string | null; completed: boolean
+      completed_at: string | null; due_on: string | null; permalink_url: string | null
+      project_gid: string | null
+    }
+    let tasks: TaskRow[] = []
     let events: { user_gid: string | null; created_at: string }[] = []
 
     if (gids.length > 0) {
       const [taskRes, eventRes] = await Promise.all([
         supabase
           .from('asana_tasks')
-          .select('gid,assignee_gid,completed,completed_at,due_on')
+          .select('gid,name,assignee_gid,completed,completed_at,due_on,permalink_url,project_gid')
           .in('assignee_gid', gids),
         supabase
           .from('asana_events')
@@ -67,7 +72,43 @@ export async function GET(req: Request) {
       events = eventRes.data ?? []
     }
 
-    const rows = rollupByPerson({ people, tasks, events, from, to, now })
+    const rollup = rollupByPerson({ people, tasks, events, from, to, now })
+
+    // Project names so a task reads as "Website build — ALIA Fragrances"
+    // rather than a bare gid.
+    const { data: projectRows } = await supabase
+      .from('asana_project_map')
+      .select('project_gid,project_name')
+    const projectName = new Map((projectRows ?? []).map(p => [p.project_gid, p.project_name]))
+
+    // The counts alone answer "how much"; the list answers "what". Open tasks
+    // sort by due date with undated last, so what is late reads first.
+    const rows = rollup.map(p => {
+      const mine = tasks.filter(t => t.assignee_gid === p.asana_user_gid)
+      const shape = (t: TaskRow) => ({
+        gid: t.gid,
+        name: t.name,
+        due_on: t.due_on,
+        url: t.permalink_url,
+        project: t.project_gid ? projectName.get(t.project_gid) ?? null : null,
+        overdue: !t.completed && !!t.due_on && t.due_on < dayKeyInTz(now, p.timezone),
+      })
+      return {
+        ...p,
+        tasks: {
+          open: mine
+            .filter(t => !t.completed)
+            .sort((a, b) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999'))
+            .slice(0, 50)
+            .map(shape),
+          done: mine
+            .filter(t => t.completed && t.completed_at && t.completed_at >= from && t.completed_at <= to)
+            .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+            .slice(0, 50)
+            .map(shape),
+        },
+      }
+    })
 
     // Connection health, so the page can explain itself rather than just
     // rendering zeroes. Admin-only: it names infrastructure.

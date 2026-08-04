@@ -129,6 +129,186 @@ export async function reconcileAll(): Promise<SyncResult> {
 }
 
 /**
+ * Pull tasks by assignee rather than by project.
+ *
+ * Walking projects misses two whole categories: tasks in no project at all,
+ * and tasks in projects nobody thought to track. On this workspace that was
+ * most of a person's real workload — 7 of 8 tasks invisible. Since the rollup
+ * is per person, asking Asana per person is the query that actually matches
+ * the question.
+ *
+ * `completed_since` returns everything still open plus anything completed
+ * after that instant, which is exactly the window the rollup reports on.
+ */
+export async function syncTasksForAssignees(
+  workspaceGid: string,
+  days = 30
+): Promise<{ people: number; tasks: number }> {
+  const { data: people } = await supabase
+    .from('team_users')
+    .select('asana_user_gid')
+    .not('asana_user_gid', 'is', null)
+    .eq('active_status', true)
+
+  const gids = [...new Set((people ?? []).map(p => p.asana_user_gid as string))]
+  if (gids.length === 0) return { people: 0, tasks: 0 }
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  let total = 0
+
+  for (const gid of gids) {
+    const tasks = await asana.tasksForAssignee(gid, workspaceGid, since)
+    if (tasks.length === 0) continue
+
+    const { error } = await supabase.from('asana_tasks').upsert(
+      tasks.map(t => ({
+        gid: t.gid,
+        name: t.name ?? '',
+        assignee_gid: gid,
+        // a task can belong to several projects, or none — keep the first for
+        // grouping and never drop the task for lacking one
+        project_gid: t.projects?.[0]?.gid ?? null,
+        completed: !!t.completed,
+        completed_at: t.completed_at,
+        due_on: t.due_on,
+        modified_at: t.modified_at,
+        permalink_url: t.permalink_url ?? null,
+        synced_at: new Date().toISOString(),
+      })),
+      { onConflict: 'gid' }
+    )
+    if (error) throw new Error(error.message)
+    total += tasks.length
+  }
+
+  return { people: gids.length, tasks: total }
+}
+
+/**
+ * Create a team_users row for every Asana person, so the rollup has someone
+ * to attribute work to without onboarding the whole team by hand first.
+ *
+ * Importantly this does NOT grant anyone access: sign-in still resolves by
+ * clerk_user_id and still requires an invite (app/lib/authz), so these rows
+ * are tracking records until a real invitation is accepted. Existing rows keep
+ * their role and employment type — only the Asana link is filled in.
+ *
+ * Employment type defaults by email domain, which is a guess an admin can
+ * correct in Settings → Team; it is never inferred again after the first
+ * import.
+ */
+export async function importAsanaPeople(
+  workspaceGid: string,
+  agencyDomain = 'mdmmarketing.com.au'
+): Promise<{ created: number; linked: number; skipped: number }> {
+  const asanaUsers = (await asana.listUsers(workspaceGid)).filter(u => u.email)
+
+  const { data: existingRows } = await supabase
+    .from('team_users')
+    .select('id,email,asana_user_gid')
+  const existing = new Map((existingRows ?? []).map(r => [r.email.toLowerCase(), r]))
+
+  let created = 0, linked = 0, skipped = 0
+
+  for (const u of asanaUsers) {
+    const email = u.email!.toLowerCase()
+    const row = existing.get(email)
+
+    if (row) {
+      if (row.asana_user_gid !== u.gid) {
+        const { error } = await supabase
+          .from('team_users')
+          .update({ asana_user_gid: u.gid })
+          .eq('id', row.id)
+        if (!error) linked++
+        else skipped++
+      } else skipped++
+      continue
+    }
+
+    const { error } = await supabase.from('team_users').insert({
+      email,
+      name: u.name ?? email,
+      role: 'editor',
+      employment_type: email.endsWith('@' + agencyDomain) ? 'employee' : 'contractor',
+      asana_user_gid: u.gid,
+    })
+    if (error) skipped++
+    else created++
+  }
+
+  return { created, linked, skipped }
+}
+
+/**
+ * One-shot connect: everything the old Track / Go live / Sync now sequence did,
+ * in the order that makes it work first time.
+ *
+ * The old flow made three separate clicks mandatory and gave no hint that
+ * "Go live" only subscribes to *future* changes — so webhooks registered fine
+ * while the page stayed empty, which read as a broken integration.
+ */
+export async function connectAsana(workspaceGid: string, appUrl: string | null): Promise<{
+  people: { created: number; linked: number }
+  projects: number
+  webhooks: { registered: number; failed: number }
+  tasks: number
+  errors: { project: string; message: string }[]
+}> {
+  const errors: { project: string; message: string }[] = []
+
+  // 1. people first — tasks are attributed to them
+  const people = await importAsanaPeople(workspaceGid)
+
+  // 2. track every visible project
+  const projects = await asana.listProjects(workspaceGid)
+  if (projects.length > 0) {
+    await supabase.from('asana_project_map').upsert(
+      projects.map(p => ({ project_gid: p.gid, project_name: p.name ?? '', tracked: true })),
+      { onConflict: 'project_gid' }
+    )
+  }
+
+  // 3. webhooks for live updates, best-effort — a failure here costs freshness,
+  //    not data, because the poll still covers every tracked project
+  let registered = 0, failed = 0
+  if (appUrl) {
+    const { data: hooks } = await supabase.from('asana_webhooks').select('project_gid,webhook_gid')
+    const live = new Set((hooks ?? []).filter(h => h.webhook_gid).map(h => h.project_gid))
+
+    for (const p of projects) {
+      if (live.has(p.gid)) continue
+      try {
+        const target = `${appUrl.replace(/\/$/, '')}/api/asana/webhook?project=${p.gid}`
+        const hook = await asana.createWebhook(p.gid, target)
+        await supabase
+          .from('asana_webhooks')
+          .upsert({ project_gid: p.gid, webhook_gid: hook.gid }, { onConflict: 'project_gid' })
+        registered++
+      } catch (e) {
+        failed++
+        errors.push({ project: p.name ?? p.gid, message: e instanceof Error ? e.message : 'failed' })
+      }
+    }
+  }
+
+  // 4. pull the tasks — by assignee, so nothing is missed for lacking a project
+  const byAssignee = await syncTasksForAssignees(workspaceGid)
+
+  // 5. and baseline the event streams
+  const recon = await reconcileAll()
+  errors.push(...recon.errors)
+
+  return {
+    people: { created: people.created, linked: people.linked },
+    projects: projects.length,
+    webhooks: { registered, failed },
+    tasks: byAssignee.tasks,
+    errors,
+  }
+}
+
+/**
  * Match Asana users to team_users by email and stamp `asana_user_gid`.
  *
  * Email is the only identifier the two systems share. Anyone who does not

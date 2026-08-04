@@ -32,10 +32,26 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // last_scan_at is the newest row: the scanner writes a row the moment it
-  // claims a message, so this is when the scanner last actually did work.
+  // last_scan_at must come from scan_runs, NOT from the newest log row.
+  //
+  // A row is only written when a message is *claimed*, so on a quiet inbox the
+  // newest row stops moving while the scanner keeps running every 5 minutes.
+  // The page then read "50 minutes ago" and looked broken when it was working
+  // perfectly — it was showing when we last *found* something, labelled as
+  // when we last *looked*. scan_runs gets a row on every run, found or not.
+  const { data: lastRun } = await supabase
+    .from('scan_runs')
+    .select('started_at, status, scanned, claimed, leads_created')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   return NextResponse.json({
     entries: data ?? [],
-    last_scan_at: data?.[0]?.created_at ?? null,
+    last_scan_at: lastRun?.started_at ?? data?.[0]?.created_at ?? null,
+    last_run: lastRun ?? null,
+    // when the scanner last actually recorded a decision, which is a different
+    // question and worth showing as its own line
+    last_decision_at: data?.[0]?.created_at ?? null,
   })
 }

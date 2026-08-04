@@ -97,6 +97,7 @@ export type AsanaTask = {
   modified_at: string | null
   permalink_url?: string
   assignee?: { gid: string } | null
+  projects?: { gid: string; name?: string }[]
 }
 
 // An explicit opt_fields allowlist, not a deep expansion — Asana also applies
@@ -110,6 +111,28 @@ export async function tasksForProject(projectGid: string, modifiedSince?: string
 
 export async function getTask(taskGid: string): Promise<AsanaTask> {
   return request(`/tasks/${taskGid}?opt_fields=${TASK_FIELDS}`)
+}
+
+/**
+ * One person's tasks across the whole workspace.
+ *
+ * `completed_since` is the useful filter here: Asana returns everything still
+ * incomplete plus anything completed after that instant. Without it the call
+ * returns the person's entire history.
+ *
+ * This is the only way to see tasks that belong to no project — the
+ * project-walk cannot reach them by definition.
+ */
+export async function tasksForAssignee(
+  assigneeGid: string,
+  workspaceGid: string,
+  completedSince: string
+): Promise<AsanaTask[]> {
+  return request(
+    `/tasks?assignee=${assigneeGid}&workspace=${workspaceGid}` +
+    `&completed_since=${encodeURIComponent(completedSince)}` +
+    `&opt_fields=${TASK_FIELDS},projects.gid,projects.name&limit=100`
+  )
 }
 
 // ─── Webhooks ───

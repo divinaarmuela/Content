@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import * as asana from '@/app/lib/asana'
-import { reconcileAll, linkUsersByEmail } from '@/app/lib/asana-sync'
+import { reconcileAll, linkUsersByEmail, connectAsana, syncTasksForAssignees } from '@/app/lib/asana-sync'
 
 /**
  * Asana connection admin — super_admin only.
@@ -25,6 +25,12 @@ export const dynamic = 'force-dynamic'
  * carries no X-Hook-Secret, so it takes the delivery branch and is rejected as
  * an unknown webhook — it writes nothing and cannot clobber a stored secret.
  */
+/** The canonical origin, once, so bulk registration does not re-probe per project. */
+async function resolveBase(base: string): Promise<string> {
+  const probe = await resolveTarget(base, 'probe')
+  return probe.replace(/\/api\/asana\/webhook\?project=probe$/, '')
+}
+
 async function resolveTarget(base: string, projectGid: string): Promise<string> {
   let url = `${base.replace(/\/$/, '')}/api/asana/webhook?project=${projectGid}`
 
@@ -160,7 +166,24 @@ export async function POST(req: Request) {
 
       // ── Poll now (works with or without Inngest) ──
       case 'sync': {
-        return NextResponse.json(await reconcileAll())
+        if (!workspaceGid) return NextResponse.json({ error: 'ASANA_WORKSPACE_GID is not set' }, { status: 400 })
+        const [recon, byAssignee] = await Promise.all([
+          reconcileAll(),
+          syncTasksForAssignees(workspaceGid),
+        ])
+        return NextResponse.json({ ...recon, tasksMirrored: recon.tasksMirrored + byAssignee.tasks })
+      }
+
+      // ── One-shot connect ──
+      // Import people, track every project, register webhooks, pull tasks and
+      // baseline the event streams. The previous Track / Go live / Sync now
+      // sequence required three clicks in an order nothing communicated, and
+      // stopping after the second left webhooks live but the page empty.
+      case 'connect': {
+        if (!workspaceGid) return NextResponse.json({ error: 'ASANA_WORKSPACE_GID is not set' }, { status: 400 })
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? null
+        const base = appUrl ? await resolveBase(appUrl) : null
+        return NextResponse.json(await connectAsana(workspaceGid, base))
       }
 
       // ── Discover the workspace gid during first-time setup ──
