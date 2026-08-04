@@ -10,14 +10,28 @@ import { useLamaReady } from './ready'
 // element fully clipped by its own clip-path, so observing the animated node
 // itself would never fire.
 export default function Reveal({
-  children, className = '', delay = 0,
-}: { children: React.ReactNode; className?: string; delay?: number }) {
+  children, className = '', delay = 0, gate = true,
+}: {
+  children: React.ReactNode
+  className?: string
+  delay?: number
+  /**
+   * Wait for the preloader before revealing. True on the homepage, where the
+   * loader would otherwise hide the entrance.
+   *
+   * Pages without a preloader MUST pass false. `lama:ready` never fires there,
+   * so the gate falls through to its 3-second safety timeout and the content
+   * sits invisible for three seconds — which reads as a page that will not
+   * load. Same reason Scramble takes gate={false} on those pages.
+   */
+  gate?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [seen, setSeen] = useState(false)
   const ready = useLamaReady()
   // the reveal plays only once the preloader is gone, so entrances that are
   // in the first viewport actually animate instead of finishing behind it
-  const shown = seen && ready
+  const shown = seen && (ready || !gate)
 
   
   useEffect(() => {

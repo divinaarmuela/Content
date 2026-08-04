@@ -104,7 +104,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
 
           <h1 className="mt-6 max-w-[18ch] font-lamah font-medium text-cream leading-[0.98] tracking-[-0.04em] text-[clamp(2.4rem,7vw,5.6rem)]">
             <span className="block overflow-hidden">
-              <Reveal><span className="block pb-[0.08em]">{project.name}</span></Reveal>
+              <Reveal gate={false}><span className="block pb-[0.08em]">{project.name}</span></Reveal>
             </span>
           </h1>
 
@@ -170,10 +170,10 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
             <div className="flex flex-col gap-[26px]">
               <h2 className="m-0 font-lamah font-medium text-cream leading-[1.18] tracking-[-0.025em] text-[clamp(1.5rem,3vw,2.4rem)] [text-wrap:balance]">
                 <span className="block overflow-hidden">
-                  <Reveal><span className="block pb-[0.08em]">What the client needed,</span></Reveal>
+                  <Reveal gate={false}><span className="block pb-[0.08em]">What the client needed,</span></Reveal>
                 </span>
                 <span className="block overflow-hidden">
-                  <Reveal delay={0.08}>
+                  <Reveal gate={false} delay={0.08}>
                     <span className="block pb-[0.08em] text-cream/50">and what we built.</span>
                   </Reveal>
                 </span>

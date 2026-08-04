@@ -150,10 +150,10 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
         <div className="mx-auto max-w-[1100px]">
           <h2 className="font-lamah font-medium text-cream leading-[1.0] tracking-[-0.04em] text-[clamp(2rem,5.5vw,4.6rem)]">
             <span className="block overflow-hidden">
-              <Reveal><span className="block pb-[0.1em]">Your business could be</span></Reveal>
+              <Reveal gate={false}><span className="block pb-[0.1em]">Your business could be</span></Reveal>
             </span>
             <span className="block overflow-hidden">
-              <Reveal delay={0.08}><span className="block pb-[0.1em]">the next one up here.</span></Reveal>
+              <Reveal gate={false} delay={0.08}><span className="block pb-[0.1em]">the next one up here.</span></Reveal>
             </span>
           </h2>
 
