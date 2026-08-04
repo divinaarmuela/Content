@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Scramble } from '../components/lama/Scramble'
+import Reveal from '../components/lama/Reveal'
 import SiteMedia from '../components/SiteMedia'
 import { isVideoUrl, type SiteProject } from '../lib/websiteData'
 
@@ -122,6 +123,35 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
               <p className="mt-3.5 font-lamah text-cream/55 text-[0.98rem] leading-normal">{p.desc}</p>
             </a>
           ))}
+        </div>
+
+        {visible.length === 0 && (
+          <p className="py-20 text-center font-lamah text-cream/50">
+            Nothing under that filter yet.
+          </p>
+        )}
+      </section>
+
+      {/* Closing band from the design pack: the grid is the argument, this is
+          the ask. Sits above the footer so the last thing read is an action,
+          not a sitemap. */}
+      <section className="border-t border-cream/[0.12] px-6 py-[clamp(100px,16vh,200px)] text-center sm:px-10">
+        <div className="mx-auto max-w-[1100px]">
+          <h2 className="font-lamah font-medium text-cream leading-[1.0] tracking-[-0.04em] text-[clamp(2rem,5.5vw,4.6rem)]">
+            <span className="block overflow-hidden">
+              <Reveal><span className="block pb-[0.1em]">Your business could be</span></Reveal>
+            </span>
+            <span className="block overflow-hidden">
+              <Reveal delay={0.08}><span className="block pb-[0.1em]">the next one up here.</span></Reveal>
+            </span>
+          </h2>
+
+          <a
+            href="mailto:hello@mdmmarketing.com.au"
+            className="mt-9 inline-flex items-center gap-2.5 rounded-full bg-cream px-9 py-[17px] font-lamam text-sm font-bold tracking-[0.04em] text-ink no-underline transition-opacity duration-300 hover:opacity-85"
+          >
+            start now <span className="text-base">&rarr;</span>
+          </a>
         </div>
       </section>
     </main>
