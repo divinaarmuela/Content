@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import ServicePicker from './ServicePicker'
+import { collectServices } from '@/app/lib/services-core'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -195,6 +197,10 @@ export default function WebsiteAdminPage() {
   const [deleting, setDeleting] = useState<Project | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // every tag used anywhere, so a service typed on one project is offered on
+  // the next — no separate list to maintain and nothing to keep in sync
+  const knownServices = useMemo(() => collectServices(projects ?? []), [projects])
+
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/website/projects')
@@ -301,8 +307,12 @@ export default function WebsiteAdminPage() {
               <Input value={editing.tag ?? ''} onChange={e => set({ tag: e.target.value })} className="font-mono text-sm" />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Services <span className="text-xs text-zinc-400 dark:text-zinc-500">(comma separated)</span></Label>
-              <Input value={(editing.services ?? []).join(', ')} onChange={e => set({ services: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
+              <Label>Services <span className="text-xs text-zinc-400 dark:text-zinc-500">(these become the Work page filters)</span></Label>
+              <ServicePicker
+                value={editing.services ?? []}
+                known={knownServices}
+                onChange={next => set({ services: next })}
+              />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
               <Label>Description <span className="text-xs text-zinc-400 dark:text-zinc-500">(card + case page intro)</span></Label>

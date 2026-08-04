@@ -7,46 +7,30 @@ import AsciiHands from '../components/AsciiHands'
 import SiteMedia from '../components/SiteMedia'
 import { isVideoUrl } from '../lib/media-core'
 import type { SiteProject } from '../lib/websiteData'
+import { collectServices, hasService } from '../lib/services-core'
 
 // The static-pack Work page grid: kicker, big two-line headline, intro,
 // mono FILTER chip row with a live project count, then an auto-fit card
 // grid — rounded 4:3 media (pulsing play badge on video cards), name + ↗
 // that nudges on hover, "Service · Industry" mono line, description.
-// Categories are derived from each project's CMS services list.
-const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'content', label: 'Content' },
-  { key: 'paid', label: 'Paid' },
-  { key: 'branding', label: 'Branding' },
-  { key: 'websites', label: 'Websites' },
-  { key: 'strategy', label: 'Strategy' },
-] as const
-
-type FilterKey = (typeof FILTERS)[number]['key']
-
-const CAT_MATCHERS: Record<Exclude<FilterKey, 'all'>, RegExp> = {
-  content: /content|photo|video|social|production|distribution|media/i,
-  paid: /paid|ads\b|performance|lead gen|advertising/i,
-  branding: /brand|identity|messaging|launch/i,
-  websites: /web|site\b|e-?commerce|development/i,
-  strategy: /strategy|consult|marketing/i,
-}
-
-function categoriesOf(p: SiteProject): FilterKey[] {
-  const haystack = [...p.services, p.industry].join(' ')
-  return (Object.keys(CAT_MATCHERS) as Exclude<FilterKey, 'all'>[]).filter(k =>
-    CAT_MATCHERS[k].test(haystack),
-  )
-}
-
+//
+// The chips ARE the services set in the CMS. They used to be a fixed list of
+// six matched by regex against the services text, which meant the filters
+// silently disagreed with the data: a service nobody had a pattern for was
+// unfilterable, and renaming one could empty a chip without anything failing.
+// Adding a service in the dashboard now adds a chip here, and nothing else has
+// to be edited to keep them in step.
 export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
-  const [filter, setFilter] = useState<FilterKey>('all')
+  const [filter, setFilter] = useState<string>('all')
 
-  const withCats = useMemo(
-    () => projects.map(p => ({ p, cats: categoriesOf(p) })),
-    [projects],
-  )
-  const visible = withCats.filter(({ cats }) => filter === 'all' || cats.includes(filter))
+  const services = useMemo(() => collectServices(projects), [projects])
+
+  // a filter for a service that has since been renamed or removed would show
+  // an empty grid with no way back, so fall back to all
+  const active = filter !== 'all' && services.includes(filter) ? filter : 'all'
+  const visible = projects
+    .filter(p => active === 'all' || hasService(p.services, active))
+    .map(p => ({ p }))
 
   return (
     <main className="relative z-10">
@@ -76,18 +60,18 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
           <span className="mr-2 font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">
             Filter
           </span>
-          {FILTERS.map(f => (
+          {['all', ...services].map(key => (
             <button
-              key={f.key}
+              key={key}
               type="button"
-              onClick={() => setFilter(f.key)}
+              onClick={() => setFilter(key)}
               className={`cursor-pointer appearance-none rounded-full border-0 px-[15px] py-[7px] font-lamam text-xs transition-colors duration-300 ${
-                filter === f.key
+                active === key
                   ? 'bg-cream text-ink'
                   : 'bg-transparent text-cream/70 shadow-[inset_0_0_0_1px_rgba(249,244,235,0.25)] hover:text-cream'
               }`}
             >
-              {f.label}
+              {key === 'all' ? 'All' : key}
             </button>
           ))}
           <span className="ml-auto font-lamam text-[11px] text-cream/35">
