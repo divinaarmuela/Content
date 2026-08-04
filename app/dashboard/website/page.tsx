@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import ServicePicker from './ServicePicker'
 import { collectServices } from '@/app/lib/services-core'
+import { uploadMedia } from './uploadMedia'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -67,13 +68,8 @@ function UploadField({ label, hint, value, onChange, purpose }: {
   const upload = async (file: File) => {
     setBusy(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('purpose', purpose)
-      const res = await fetch('/api/website/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-      onChange(json.url)
+      const { url } = await uploadMedia(file, { purpose })
+      onChange(url)
       toast.success(`${label} uploaded`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
@@ -122,13 +118,8 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
   const upload = async (file: File) => {
     setBusy(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('purpose', 'gallery')
-      const res = await fetch('/api/website/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-      append(json.url)
+      const { url } = await uploadMedia(file, { purpose: 'gallery' })
+      append(url)
       toast.success('Gallery media uploaded')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
