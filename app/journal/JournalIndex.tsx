@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Scramble } from '../components/lama/Scramble'
 import Reveal from '../components/lama/Reveal'
+import Rule from '../components/lama/Rule'
 import SiteMedia from '../components/SiteMedia'
 import type { JournalPost } from '../lib/journalPosts'
 
@@ -131,30 +132,49 @@ export default function JournalIndex({ posts }: { posts: JournalPost[] }) {
       )}
 
       {/* ── INDEX ROWS ── */}
+      {/* Same row treatment as the homepage team list: a ◆ appears at the left
+          on hover, the title dims while the meta brightens, and the rule
+          underneath is two layers — a grey one that grows once on arrival,
+          with a white one growing over it from the left on hover. */}
       <section className="px-6 pb-[clamp(70px,10vh,120px)] pt-[clamp(24px,4vh,48px)] sm:px-10">
         {visible.length === 0 ? (
           <p className="py-16 text-center font-lamah text-cream/50">Nothing under that topic yet.</p>
         ) : (
           <ul className="flex flex-col">
             {visible.map((post, i) => (
-              <li key={post.slug}>
+              <li key={post.slug} className="group">
                 <a
                   href={`/journal/${post.slug}`}
-                  className="group grid grid-cols-[auto_1fr] items-baseline gap-x-5 gap-y-2 border-b border-cream/12 py-6 text-cream no-underline transition-colors hover:border-cream/40 md:grid-cols-[auto_1fr_auto_auto] md:gap-x-8"
+                  className="relative grid grid-cols-[auto_1fr] items-baseline gap-x-5 gap-y-2 py-6 text-cream no-underline md:grid-cols-[auto_1fr_auto_auto] md:gap-x-8"
                 >
-                  <span className="font-lamam text-[11px] text-cream/35 tabular-nums">{pad(i + 1)}</span>
-                  <h3 className="font-lamah font-medium leading-[1.2] tracking-[-0.02em] text-[clamp(1.1rem,2vw,1.6rem)] transition-colors group-hover:text-accent">
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0 font-lamam text-[11px] text-cream opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                  >
+                    ◆
+                  </span>
+                  <span className="pl-6 font-lamam text-[11px] text-cream/35 tabular-nums">
+                    {pad(i + 1)}
+                  </span>
+                  <h3 className="font-lamah font-medium leading-[1.2] tracking-[-0.02em] text-[clamp(1.1rem,2vw,1.6rem)] transition-opacity duration-300 group-hover:opacity-60">
                     {post.title}
                   </h3>
                   {post.category && (
-                    <span className="col-start-2 font-lamam text-[11px] uppercase tracking-[0.1em] text-cream/45 md:col-start-auto">
+                    <span className="col-start-2 font-lamam text-[11px] uppercase tracking-[0.1em] text-cream/45 transition-colors duration-300 group-hover:text-cream md:col-start-auto">
                       {post.category}
                     </span>
                   )}
-                  <span className="col-start-2 font-lamam text-[11px] text-cream/35 md:col-start-auto md:text-right">
+                  <span className="col-start-2 font-lamam text-[11px] text-cream/35 transition-colors duration-300 group-hover:text-cream md:col-start-auto md:text-right">
                     {[post.dateLabel, `${post.readMins} min`].filter(Boolean).join(' · ')}
                   </span>
                 </a>
+                <div className="relative">
+                  <Rule once className="bg-cream/25" />
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 h-0.5 origin-left scale-x-0 bg-cream transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-100"
+                  />
+                </div>
               </li>
             ))}
           </ul>

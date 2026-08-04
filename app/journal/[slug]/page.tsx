@@ -61,7 +61,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
       <LamaNav gate={false} />
       <main>
         {/* ── HEADER ── */}
-        <header className="px-6 pb-10 pt-28 sm:px-10 sm:pt-36">
+        <header className="mx-auto max-w-[820px] px-6 pb-10 pt-28 sm:px-10 sm:pt-36">
           <a
             href="/journal"
             className="inline-flex items-center gap-2 font-lamam text-xs tracking-[0.04em] text-cream/50 no-underline transition-colors hover:text-cream"
@@ -97,7 +97,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
         {/* ── COVER ── */}
         {post.coverUrl && (
-          <section className="px-6 pb-[clamp(40px,7vh,80px)] sm:px-10">
+          <section className="mx-auto max-w-[1080px] px-6 pb-[clamp(40px,7vh,80px)] sm:px-10">
             <SiteMedia
               src={post.coverUrl}
               alt={post.title}
@@ -107,11 +107,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         )}
 
         {/* ── BODY ──
-            Measure is capped near 68 characters: the whole point of this column
-            is that it stays readable, and a full-width paragraph on a wide
-            screen is not. */}
-        <section className="px-6 pb-[clamp(60px,9vh,110px)] sm:px-10">
-          <div className="max-w-[68ch]">
+            Centred at the pack's measures: 820px for the header, 1080px for
+            the cover, 720px for the prose. Left-aligning these stranded the
+            text against one edge on a wide screen with the artwork floating
+            away from it. */}
+        <section className="mx-auto max-w-[720px] px-6 pb-[clamp(60px,9vh,110px)] sm:px-10">
+          <div>
             {post.sections.map((section, i) => (
               <div key={i} className="mt-10 first:mt-0">
                 {section.heading && (
@@ -136,6 +137,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
         {/* ── NEXT + CTA ── */}
         <section className="border-t border-cream/15 px-6 py-16 sm:px-10 sm:py-24">
+          <div className="mx-auto max-w-[820px]">
           {next && next.slug !== post.slug && (
             <>
               <p className="m-0 mb-4 font-lamam text-[11px] uppercase tracking-widest text-cream/40">
@@ -164,6 +166,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             >
               ALL ENTRIES
             </a>
+          </div>
           </div>
         </section>
       </main>
