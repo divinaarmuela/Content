@@ -1,7 +1,7 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import * as asana from './asana'
-import { normalizeBatch, webhookLooksDead, type RawAsanaEvent } from './asana-core'
+import { normalizeBatch, webhookLooksDead, matchClient, type RawAsanaEvent } from './asana-core'
 
 /**
  * Reconciliation: the second of the two ingestion paths.
@@ -193,13 +193,14 @@ export async function syncTasksForAssignees(
  * are tracking records until a real invitation is accepted. Existing rows keep
  * their role and employment type — only the Asana link is filled in.
  *
- * Employment type defaults by email domain, which is a guess an admin can
- * correct in Settings → Team; it is never inferred again after the first
- * import.
+ * Employment type is deliberately NOT inferred. Asana does not know it and
+ * neither do we, and guessing it from the email domain would label everyone on
+ * a personal address a contractor — then show that guess in a filter as if it
+ * were a fact. The column already defaults to 'employee'; an admin sets the
+ * real value.
  */
 export async function importAsanaPeople(
-  workspaceGid: string,
-  agencyDomain = 'mdmmarketing.com.au'
+  workspaceGid: string
 ): Promise<{ created: number; linked: number; skipped: number }> {
   const asanaUsers = (await asana.listUsers(workspaceGid)).filter(u => u.email)
 
@@ -230,8 +231,7 @@ export async function importAsanaPeople(
       email,
       name: u.name ?? email,
       role: 'editor',
-      employment_type: email.endsWith('@' + agencyDomain) ? 'employee' : 'contractor',
-      asana_user_gid: u.gid,
+            asana_user_gid: u.gid,
     })
     if (error) skipped++
     else created++
@@ -260,11 +260,27 @@ export async function connectAsana(workspaceGid: string, appUrl: string | null):
   // 1. people first — tasks are attributed to them
   const people = await importAsanaPeople(workspaceGid)
 
-  // 2. track every visible project
+  // 2. track every visible project, and guess which client each belongs to
   const projects = await asana.listProjects(workspaceGid)
   if (projects.length > 0) {
+    const [{ data: clients }, { data: existingMap }] = await Promise.all([
+      supabase.from('clients').select('id,name'),
+      supabase.from('asana_project_map').select('project_gid,client_id'),
+    ])
+    // Only ever fill a blank: a mapping an admin set by hand outranks a guess,
+    // and a wrong one silently misattributes a client's work.
+    const already = new Map((existingMap ?? []).map(m => [m.project_gid, m.client_id]))
+
     await supabase.from('asana_project_map').upsert(
-      projects.map(p => ({ project_gid: p.gid, project_name: p.name ?? '', tracked: true })),
+      projects.map(p => {
+        const existing = already.get(p.gid)
+        return {
+          project_gid: p.gid,
+          project_name: p.name ?? '',
+          tracked: true,
+          client_id: existing ?? matchClient(p.name ?? '', clients ?? [])?.id ?? null,
+        }
+      }),
       { onConflict: 'project_gid' }
     )
   }

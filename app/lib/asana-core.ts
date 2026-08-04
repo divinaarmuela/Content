@@ -180,6 +180,50 @@ export function isOverdue(
   return task.due_on < dayKeyInTz(now, timeZone)
 }
 
+// ─── Client mapping ───
+
+/** Comparable form: case, punctuation and spacing carry no meaning here. */
+function normaliseName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Guess which client an Asana project belongs to.
+ *
+ * The two lists are maintained by different people in different tools, so they
+ * agree in substance and disagree in spelling: "ALIA Fragrances" vs "Alia
+ * Fragrance", "Park-Noire" vs "Park Noire", "Cecconis" vs "Cecconi's Toorak &
+ * Flinders". Exact matching finds almost none of them.
+ *
+ * Containment either way handles both the shortened and the extended form.
+ * The 4-character floor is what stops junk pairing: without it "test" matches
+ * a dozen names. A wrong mapping silently misattributes a client's work, so
+ * this only ever fills a blank — it never overwrites a mapping someone set by
+ * hand — and returns null when unsure rather than guessing.
+ */
+export function matchClient<T extends { id: string; name: string }>(
+  projectName: string,
+  clients: T[]
+): T | null {
+  const p = normaliseName(projectName)
+  if (p.length < 4) return null
+
+  const candidates = clients
+    .map(c => ({ c, n: normaliseName(c.name) }))
+    .filter(x => x.n.length >= 4)
+
+  const exact = candidates.find(x => x.n === p)
+  if (exact) return exact.c
+
+  // Longest overlap wins, so "Real Deal Property" prefers "Real Deal" over a
+  // shorter incidental match.
+  const contained = candidates
+    .filter(x => x.n.includes(p) || p.includes(x.n))
+    .sort((a, b) => Math.min(b.n.length, p.length) - Math.min(a.n.length, p.length))
+
+  return contained[0]?.c ?? null
+}
+
 // ─── Rollup ───
 
 export type RollupPerson = {

@@ -23,7 +23,12 @@ export async function GET(req: Request) {
     const isAdmin = me.role === 'super_admin'
 
     const url = new URL(req.url)
-    const days = Math.min(Math.max(Number(url.searchParams.get('days') ?? 7) || 7, 1), 90)
+    // Open work does not depend on a window — only "completed" does — so the
+    // range is a fixed sensible default rather than a control that mostly
+    // changes nothing.
+    const days = Math.min(Math.max(Number(url.searchParams.get('days') ?? 30) || 30, 1), 90)
+    const type = url.searchParams.get('type')      // employee | contractor
+    const clientId = url.searchParams.get('client')
     const now = new Date()
     const { from, to } = rangeFromDays(days, now)
 
@@ -36,6 +41,9 @@ export async function GET(req: Request) {
       .order('name')
 
     if (!isAdmin) peopleQuery = peopleQuery.eq('id', me.id)
+    if (type === 'employee' || type === 'contractor') {
+      peopleQuery = peopleQuery.eq('employment_type', type)
+    }
 
     const { data: peopleRows, error: peopleError } = await peopleQuery
     if (peopleError) throw new Error(peopleError.message)
@@ -72,14 +80,31 @@ export async function GET(req: Request) {
       events = eventRes.data ?? []
     }
 
-    const rollup = rollupByPerson({ people, tasks, events, from, to, now })
-
     // Project names so a task reads as "Website build — ALIA Fragrances"
-    // rather than a bare gid.
+    // rather than a bare gid, plus the client each project belongs to.
     const { data: projectRows } = await supabase
       .from('asana_project_map')
-      .select('project_gid,project_name')
+      .select('project_gid,project_name,client_id')
     const projectName = new Map((projectRows ?? []).map(p => [p.project_gid, p.project_name]))
+
+    // The client cut. Filtering the tasks *before* the rollup means the counts
+    // recompute for that client rather than showing whole-workload figures
+    // beside a filtered task list.
+    if (clientId) {
+      const inClient = new Set(
+        (projectRows ?? []).filter(p => p.client_id === clientId).map(p => p.project_gid)
+      )
+      tasks = tasks.filter(t => t.project_gid && inClient.has(t.project_gid))
+    }
+
+    const rollup = rollupByPerson({ people, tasks, events, from, to, now })
+
+    // Clients that actually have tracked work — offering an empty filter is
+    // worse than not offering it.
+    const clientIds = [...new Set((projectRows ?? []).map(p => p.client_id).filter(Boolean))]
+    const { data: clientRows } = clientIds.length
+      ? await supabase.from('clients').select('id,name').in('id', clientIds).order('name')
+      : { data: [] as { id: string; name: string }[] }
 
     // The counts alone answer "how much"; the list answers "what". Open tasks
     // sort by due date with undated last, so what is late reads first.
@@ -141,6 +166,7 @@ export async function GET(req: Request) {
       rows,
       range: { from, to, days },
       viewer: { id: me.id, isAdmin, timezone: me.timezone },
+      clients: clientRows ?? [],
       connection,
     })
   } catch (e) {

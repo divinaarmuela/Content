@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronRight, ExternalLink, Inbox, Settings2, CircleAlert, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ExternalLink, Inbox, Settings2, CircleAlert, CheckCircle2, Users, CalendarDays } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import TransparencyNotice from './TransparencyNotice'
 import AsanaSetup from './AsanaSetup'
 
@@ -39,10 +40,9 @@ type Payload = {
   rows: Row[]
   range: { from: string; to: string; days: number }
   viewer: { id: string; isAdmin: boolean; timezone: string }
+  clients: { id: string; name: string }[]
   connection: { configured: boolean; trackedProjects: number; liveWebhooks: number; lastEventAt: string | null } | null
 }
-
-const RANGES = [{ days: 7, label: '7 days' }, { days: 30, label: '30 days' }, { days: 90, label: '90 days' }]
 
 function sinceLabel(iso: string | null): string {
   if (!iso) return '—'
@@ -67,13 +67,18 @@ function initials(name: string, email: string): string {
 
 export default function ActivityPage() {
   const [data, setData] = useState<Payload | null>(null)
-  const [days, setDays] = useState(7)
+  const [type, setType] = useState<'all' | 'employee' | 'contractor'>('all')
+  const [client, setClient] = useState<string>('all')
+  const [view, setView] = useState<'people' | 'calendar'>('people')
   const [showSetup, setShowSetup] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
 
-  const load = useCallback(async (d: number) => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/team/activity?days=${d}`)
+      const qs = new URLSearchParams()
+      if (type !== 'all') qs.set('type', type)
+      if (client !== 'all') qs.set('client', client)
+      const res = await fetch(`/api/team/activity?${qs}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load activity')
       setData(json)
@@ -81,9 +86,9 @@ export default function ActivityPage() {
       toast.error(e instanceof Error ? e.message : 'Could not load activity')
       setData(null)
     }
-  }, [])
+  }, [type, client])
 
-  useEffect(() => { load(days) }, [load, days])
+  useEffect(() => { load() }, [load])
 
   const isAdmin = data?.viewer.isAdmin ?? false
   const rows = data?.rows ?? []
@@ -102,8 +107,11 @@ export default function ActivityPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Tabs value={String(days)} onValueChange={v => v && setDays(Number(v))}>
-            <TabsList>{RANGES.map(r => <TabsTrigger key={r.days} value={String(r.days)}>{r.label}</TabsTrigger>)}</TabsList>
+          <Tabs value={view} onValueChange={v => v && setView(v as 'people' | 'calendar')}>
+            <TabsList>
+              <TabsTrigger value="people" className="gap-1.5"><Users className="h-3.5 w-3.5" /> People</TabsTrigger>
+              <TabsTrigger value="calendar" className="gap-1.5"><CalendarDays className="h-3.5 w-3.5" /> Calendar</TabsTrigger>
+            </TabsList>
           </Tabs>
           {isAdmin && (
             <Button variant={showSetup ? 'secondary' : 'outline'} size="sm" onClick={() => setShowSetup(s => !s)}>
@@ -113,9 +121,41 @@ export default function ActivityPage() {
         </div>
       </div>
 
+      {/* Filters sit in one row above the content, and only appear when there
+          is something to filter by. */}
+      {isAdmin && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs value={type} onValueChange={v => v && setType(v as typeof type)}>
+            <TabsList>
+              <TabsTrigger value="all">Everyone</TabsTrigger>
+              <TabsTrigger value="employee">Employees</TabsTrigger>
+              <TabsTrigger value="contractor">Contractors</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {(data?.clients.length ?? 0) > 0 && (
+            <Select value={client} onValueChange={setClient}>
+              <SelectTrigger className="h-9 w-56 bg-white dark:bg-zinc-900">
+                <SelectValue placeholder="All clients" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {data?.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+
+          {(type !== 'all' || client !== 'all') && (
+            <Button variant="ghost" size="sm" onClick={() => { setType('all'); setClient('all') }}>
+              Clear
+            </Button>
+          )}
+        </div>
+      )}
+
       <TransparencyNotice />
 
-      {isAdmin && showSetup && <AsanaSetup onChanged={() => load(days)} />}
+      {isAdmin && showSetup && <AsanaSetup onChanged={() => load()} />}
 
       {data === null ? (
         <Card><CardContent className="flex flex-col gap-3 p-6">
@@ -139,6 +179,8 @@ export default function ActivityPage() {
             )}
           </CardContent>
         </Card>
+      ) : view === 'calendar' ? (
+        <TaskCalendar rows={visible} />
       ) : (
         <div className="flex flex-col gap-2">
           {visible
@@ -149,7 +191,7 @@ export default function ActivityPage() {
                 person={person}
                 expanded={open === person.id || visible.length === 1}
                 onToggle={() => setOpen(o => (o === person.id ? null : person.id))}
-                days={days}
+                days={data?.range.days ?? 30}
               />
             ))}
         </div>
@@ -235,6 +277,123 @@ function PersonCard({ person, expanded, onToggle, days }: {
         </CardContent>
       )}
     </Card>
+  )
+}
+
+/**
+ * The same tasks, arranged by when they are due rather than by who owns them.
+ *
+ * Deadlines are the thing a week is actually shaped by, and a per-person list
+ * hides them — three people each with one task on Friday reads as nothing
+ * until you see them stacked on the same day.
+ */
+function TaskCalendar({ rows }: { rows: Row[] }) {
+  const [anchor, setAnchor] = useState(() => new Date())
+
+  const byDay = new Map<string, { task: Task; who: string }[]>()
+  for (const person of rows) {
+    for (const task of person.tasks.open) {
+      if (!task.due_on) continue
+      const list = byDay.get(task.due_on) ?? []
+      list.push({ task, who: person.name || person.email })
+      byDay.set(task.due_on, list)
+    }
+  }
+
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+  const start = new Date(first)
+  start.setDate(first.getDate() - ((first.getDay() + 6) % 7))   // Monday-first
+  const cells = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
+    return d
+  })
+  const trimmed = cells.slice(35).every(d => d.getMonth() !== anchor.getMonth()) ? cells.slice(0, 35) : cells
+
+  const key = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const todayKey = key(new Date())
+  const undated = rows.flatMap(p => p.tasks.open.filter(t => !t.due_on)).length
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm"
+          onClick={() => setAnchor(a => new Date(a.getFullYear(), a.getMonth() - 1, 1))}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="min-w-40 text-sm font-medium">
+          {anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </span>
+        <Button variant="outline" size="sm"
+          onClick={() => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + 1, 1))}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setAnchor(new Date())}>Today</Button>
+        {undated > 0 && (
+          <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
+            {undated} open task{undated === 1 ? '' : 's'} with no due date
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[720px]">
+          <div className="grid grid-cols-7 gap-px rounded-t-lg bg-zinc-200 dark:bg-zinc-800">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+              <div key={d} className="bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-px rounded-b-lg bg-zinc-200 dark:bg-zinc-800">
+            {trimmed.map(d => {
+              const k = key(d)
+              const items = byDay.get(k) ?? []
+              const otherMonth = d.getMonth() !== anchor.getMonth()
+              const past = k < todayKey
+              return (
+                <div key={k} className={`min-h-[104px] bg-white p-1.5 dark:bg-zinc-900 ${otherMonth ? 'opacity-40' : ''}`}>
+                  <span className={`text-[11px] tabular-nums ${
+                    k === todayKey
+                      ? 'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'text-zinc-400 dark:text-zinc-500'
+                  }`}>
+                    {d.getDate()}
+                  </span>
+                  <ul className="mt-1 flex flex-col gap-1">
+                    {items.slice(0, 3).map(({ task, who }) => (
+                      <li key={task.gid}>
+                        <a
+                          href={task.url ?? undefined}
+                          target="_blank" rel="noreferrer noopener"
+                          title={`${task.name} — ${who}${task.project ? ` · ${task.project}` : ''}`}
+                          className={`block truncate rounded px-1 py-0.5 text-[10px] transition-colors ${
+                            past
+                              ? 'bg-red-50 text-red-800 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300'
+                              : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300'
+                          }`}
+                        >
+                          {task.name}
+                          <span className="text-zinc-400"> · {who.split(' ')[0]}</span>
+                        </a>
+                      </li>
+                    ))}
+                    {items.length > 3 && (
+                      <li className="px-1 text-[10px] text-zinc-400">+{items.length - 3} more</li>
+                    )}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        Open tasks by due date. Red is past due. Completed work isn’t shown here — use the People view for that.
+      </p>
+    </div>
   )
 }
 

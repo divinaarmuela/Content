@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import {
   verifySignature, dedupKey, normalizeEvent, normalizeBatch, isHeartbeat,
   webhookLooksDead, retryAfterMs, dayKeyInTz, isOverdue, rollupByPerson,
-  rangeFromDays, type RawAsanaEvent,
+  rangeFromDays, matchClient, type RawAsanaEvent,
 } from '../app/lib/asana-core'
 
 const sign = (body: string, secret: string) =>
@@ -202,6 +202,43 @@ describe('rollupByPerson', () => {
 
   it('keeps employment type, for the employee/contractor distinction', () => {
     expect(run().map(p => p.employment_type)).toEqual(['employee', 'contractor'])
+  })
+})
+
+describe('matchClient', () => {
+  // the real lists from this workspace — they agree in substance, not spelling
+  const clients = [
+    { id: 'c1', name: 'Alia Fragrance' },
+    { id: 'c2', name: "Cecconi's Toorak & Flinders" },
+    { id: 'c3', name: 'Park Noire' },
+    { id: 'c4', name: 'Stretchworks' },
+    { id: 'c5', name: 'Real Deal' },
+    { id: 'c6', name: 'Pattons' },
+    { id: 'c7', name: 'test' },
+  ]
+
+  it('matches across punctuation, case and pluralisation', () => {
+    expect(matchClient('ALIA Fragrances', clients)?.id).toBe('c1')
+    expect(matchClient('Park-Noire', clients)?.id).toBe('c3')
+    expect(matchClient('StretchWorks', clients)?.id).toBe('c4')
+    expect(matchClient('Pattons', clients)?.id).toBe('c6')
+  })
+
+  it('matches when either side is the longer form', () => {
+    expect(matchClient('Cecconis', clients)?.id).toBe('c2')          // client is longer
+    expect(matchClient('Real Deal Property', clients)?.id).toBe('c5') // project is longer
+  })
+
+  it('returns null rather than guessing', () => {
+    expect(matchClient('- Tech Team', clients)).toBeNull()
+    expect(matchClient('Project Template', clients)).toBeNull()
+    expect(matchClient('MGMT', clients)).toBeNull()
+  })
+
+  it('ignores names too short to be evidence', () => {
+    // 'test' would otherwise match half the list on containment
+    expect(matchClient('- Ads', clients)).toBeNull()
+    expect(matchClient('Automodellista', clients)).toBeNull()
   })
 })
 
