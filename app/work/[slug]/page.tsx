@@ -9,7 +9,6 @@ import ScrollObserver from '../../components/ScrollObserver'
 import SiteMedia from '../../components/SiteMedia'
 import { clients } from '../../components/lama/workData'
 import { getSiteProject, getSiteProjects } from '../../lib/websiteData'
-import { isVideoUrl } from '../../lib/media-core'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
@@ -135,13 +134,8 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
             <SiteMedia
               src={project.heroMedia}
               alt={project.name}
-              className="block aspect-[16/9] w-full bg-ink object-cover"
+              className="block aspect-[16/9] w-full bg-ink object-contain"
             />
-            {!isVideoUrl(project.heroMedia) && (
-              <span className="absolute bottom-3.5 left-4 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
-                image
-              </span>
-            )}
           </div>
         </section>
 
@@ -217,7 +211,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                           key={url}
                           src={url}
                           alt={`${project.name} — still`}
-                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-cover"
+                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-contain"
                         />
                       ))}
                     </div>
@@ -226,7 +220,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                     <SiteMedia
                       src={row.wide}
                       alt={`${project.name} — still`}
-                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-cover"
+                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-contain"
                     />
                   )}
                 </div>

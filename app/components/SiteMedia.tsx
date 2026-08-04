@@ -6,8 +6,11 @@ import { isVideoUrl } from '../lib/media-core'
  * Videos autoplay silently everywhere — no controls, no play badge. The motion
  * is the design.
  *
- * Portrait and landscape both work; parents control the frame and this fills
- * it via object-fit in the passed className.
+ * On shape: callers give the frame a fixed aspect ratio so every card in a row
+ * is the same height, and use object-contain so a portrait clip is fitted
+ * inside that frame rather than cropped to a band through its middle. Letting
+ * each item take its own ratio avoids the crop but makes one 9:16 reel tower
+ * over its neighbours, which is worse in a grid.
  *
  * Worth knowing: autoplay means the browser downloads the file to play it, so
  * a large master is paid for by every visitor. Compress anything public-facing
