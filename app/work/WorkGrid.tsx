@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Scramble } from '../components/lama/Scramble'
 import Reveal from '../components/lama/Reveal'
+import AsciiHands from '../components/AsciiHands'
 import SiteMedia from '../components/SiteMedia'
 import { isVideoUrl } from '../lib/media-core'
 import type { SiteProject } from '../lib/websiteData'
@@ -49,20 +50,28 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
 
   return (
     <main className="relative z-10">
-      <section className="px-6 pt-40 sm:px-10 sm:pt-48">
-        <Scramble
-          text="WORK / SELECTED PROJECTS"
-          gate={false}
-          className="font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/50"
-        />
-        <h1 className="mt-6 max-w-[16ch] font-lamah font-normal text-cream leading-[1.02] tracking-[-0.035em] text-[clamp(2.4rem,6vw,5.5rem)]">
-          The businesses we made impossible to ignore.
-        </h1>
-        <p className="mt-8 max-w-[46ch] font-lamah text-cream/60 text-[clamp(1rem,1.3vw,1.15rem)] leading-normal">
-          Hospitality, property, fashion, fragrance, engineering and health. A look at
-          the content, campaigns and brands we&rsquo;ve built.
-        </p>
+      <section className="relative overflow-hidden px-6 pt-40 sm:px-10 sm:pt-48">
+        {/* The ASCII hand reaches in from the right edge, behind the copy.
+            Hidden below lg — at narrow widths it would sit on the headline
+            rather than beside it. The headline is capped at 16ch, so on wide
+            screens the right half is empty and the hand fills it. */}
+        <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+          <AsciiHands layout="diagonal-right" charRgb="249, 244, 235" hoverCharColor="#0B0B0B" />
+        </div>
 
+        <div className="relative z-10">
+          <Scramble
+            text="WORK / SELECTED PROJECTS"
+            gate={false}
+            className="font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/50"
+          />
+          <h1 className="mt-6 max-w-[16ch] font-lamah font-normal text-cream leading-[1.02] tracking-[-0.035em] text-[clamp(2.4rem,6vw,5.5rem)]">
+            The businesses we made impossible to ignore.
+          </h1>
+          <p className="mt-8 max-w-[46ch] font-lamah text-cream/60 text-[clamp(1rem,1.3vw,1.15rem)] leading-normal">
+            Hospitality, property, fashion, fragrance, engineering and health. A look at
+            the content, campaigns and brands we&rsquo;ve built.
+          </p>
         <div className="mt-12 flex flex-wrap items-center gap-2.5">
           <span className="mr-2 font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">
             Filter
@@ -84,6 +93,7 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
           <span className="ml-auto font-lamam text-[11px] text-cream/35">
             {visible.length} project{visible.length === 1 ? '' : 's'}
           </span>
+          </div>
         </div>
       </section>
 

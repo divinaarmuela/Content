@@ -148,7 +148,29 @@ const igniteCluster = (
   }
 }
 
-export default function AsciiHands() {
+/**
+ * `side` picks which hands render — the blue hero uses both, the dark work
+ * page wants only the right one reaching in.
+ *
+ * The colours are props because the defaults are tuned for the blue hero: an
+ * icy-white character on a `#0a3299` hover plate reads as a hole punched in
+ * the blue, and on a near-black page that same blue plate looks like a bug.
+ */
+export default function AsciiHands({
+  side = 'both',
+  layout = 'edges',
+  charRgb = CHAR_RGB,
+  hoverCharColor = HOVER_CHAR_COLOR,
+}: {
+  side?: 'both' | 'left' | 'right'
+  /** 'edges' = one per side (the hero). 'diagonal-right' = both stacked on
+   *  the right, angled — one reaching in at mid height, one rising from the
+   *  bottom corner. */
+  layout?: 'edges' | 'diagonal-right'
+  charRgb?: string
+  hoverCharColor?: string
+} = {}) {
+  const diagonal = layout === 'diagonal-right'
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -191,7 +213,7 @@ export default function AsciiHands() {
       const cellList: Cell[] = []
       for (const cell of cells.values()) {
         if (cell.isBg) continue
-        sctx.fillStyle = `rgba(${CHAR_RGB}, ${cellAlpha(cell.char)})`
+        sctx.fillStyle = `rgba(${charRgb}, ${cellAlpha(cell.char)})`
         sctx.fillText(
           cell.char,
           cell.col * CELL_SIZE + CELL_SIZE / 2,
@@ -235,7 +257,7 @@ export default function AsciiHands() {
         if (cell.highlightEndTime > now) {
           ctx.fillStyle = HOVER_COLOR
           ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE)
-          ctx.fillStyle = HOVER_CHAR_COLOR
+          ctx.fillStyle = hoverCharColor
         } else {
           ctx.fillStyle = SPARKLE_COLOR
         }
@@ -302,13 +324,19 @@ export default function AsciiHands() {
         reveal.right = 0
       }
 
-      wrappers.forEach((wrapper, i) => {
-        const direction = i === 0 ? 1 : -1
-        const revealX = i === 0 ? reveal.left : reveal.right
+      wrappers.forEach((wrapper) => {
+        // Keyed on the wrapper's own side, not its index: rendering the right
+        // hand alone would otherwise be index 0 and slide in from the left.
+        const isLeft = wrapper.dataset.side !== 'right'
+        const direction = isLeft ? 1 : -1
+        const revealX = isLeft ? reveal.left : reveal.right
         const x = drift.x * direction
         const y = -drift.y
+        // The rotation has to live in this string: the loop rewrites transform
+        // every frame, so a rotate set in CSS would be overwritten instantly.
+        const rot = wrapper.dataset.rotate ? ` rotate(${wrapper.dataset.rotate}deg)` : ''
         wrapper.style.transform =
-          `translate(calc(${x}px + ${revealX}%), ${y}px) scale(${parallaxScale})`
+          `translate(calc(${x}px + ${revealX}%), ${y}px) scale(${parallaxScale})${rot}`
       })
 
       // ambient sparkles keep the hands alive without the cursor
@@ -342,18 +370,49 @@ export default function AsciiHands() {
       cancelAnimationFrame(raf)
       if (finePointer) window.removeEventListener('mousemove', onMove)
     }
-  }, [])
+  }, [side, layout, charRgb, hoverCharColor])
 
   return (
-    <div ref={rootRef} className="ascii-hands" aria-hidden="true">
-      <div className="ascii-hand-wrap">
-        <img className="ascii-hand" src="/hands/hand-left.jpg" alt="" />
-        <canvas />
-      </div>
-      <div className="ascii-hand-wrap">
-        <img className="ascii-hand" src="/hands/hand-right.jpg" alt="" />
-        <canvas />
-      </div>
+    // .ascii-hands is space-between, which puts a lone child on the left —
+    // so a single hand has to be aligned to its own side explicitly.
+    <div
+      ref={rootRef}
+      className="ascii-hands"
+      aria-hidden="true"
+      style={
+        // diagonal positions each wrap absolutely, so flex alignment is moot
+        diagonal || side === 'both'
+          ? undefined
+          : { justifyContent: side === 'right' ? 'flex-end' : 'flex-start' }
+      }
+    >
+      {/* Diagonal: the Creation-of-Adam arrangement. hand-left points right, so
+          rotating it ~62° aims it down-and-right as it drops in from the top
+          edge. hand-right points left, so ~-58° aims it up-and-left, rising
+          from the bottom corner to meet the first. They overlap around the
+          middle-right of the section, fingertips nearly touching. */}
+      {side !== 'right' && (
+        <div
+          className="ascii-hand-wrap"
+          data-side={diagonal ? 'right' : 'left'}
+          data-rotate={diagonal ? '62' : undefined}
+          style={diagonal ? { position: 'absolute', right: '8%', top: '-30%', width: '30%', maxWidth: 'none' } : undefined}
+        >
+          <img className="ascii-hand" src="/hands/hand-left.jpg" alt="" />
+          <canvas />
+        </div>
+      )}
+      {side !== 'left' && (
+        <div
+          className="ascii-hand-wrap"
+          data-side="right"
+          data-rotate={diagonal ? '-58' : undefined}
+          style={diagonal ? { position: 'absolute', right: '-2%', bottom: '-34%', width: '30%', maxWidth: 'none' } : undefined}
+        >
+          <img className="ascii-hand" src="/hands/hand-right.jpg" alt="" />
+          <canvas />
+        </div>
+      )}
     </div>
   )
 }
