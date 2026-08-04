@@ -1,4 +1,3 @@
-import SiteNav from '../components/SiteNav'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -17,6 +16,9 @@ export const metadata: Metadata = {
   },
 }
 
+// No nav here. The journal pages moved to the dark lama system and bring their
+// own LamaNav; leaving SiteNav in this layout rendered two navigations at once
+// — the same bug that took the marketing homepage down earlier.
 export default function JournalLayout({ children }: { children: React.ReactNode }) {
-  return <><SiteNav />{children}</>
+  return <>{children}</>
 }

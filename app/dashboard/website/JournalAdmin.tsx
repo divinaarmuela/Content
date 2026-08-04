@@ -328,7 +328,7 @@ export default function JournalAdmin() {
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No posts yet. The site is still showing the eleven articles written into the code —
+              No posts yet. The site is still showing the articles written into the code —
               import them to make them editable.
             </p>
           </CardContent>
