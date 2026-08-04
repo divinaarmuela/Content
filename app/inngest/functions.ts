@@ -38,12 +38,22 @@ export const scanInboxScheduled = inngest.createFunction(
     concurrency: { limit: 1 },
   },
   async ({ step }) => {
-    const settings = await step.run('load-settings', async () => getScanSettings())
-    if (!settings.schedule_enabled) {
-      return { skipped: 'scheduled scanning is switched off in settings' }
-    }
+    // One step, not three. Inngest bills the run plus every step inside it, and
+    // at a 5-minute cadence three cheap lookups cost as much as the work. They
+    // are all reads with no side effects, so collapsing them loses nothing on
+    // retry.
+    const prep = await step.run('prepare-tick', async () => {
+      const settings = await getScanSettings()
+      if (!settings.schedule_enabled) return { enabled: false, mailboxes: [] as string[], bucket: 0 }
+      return {
+        enabled: true,
+        mailboxes: await enabledMailboxEmails(),
+        bucket: Math.floor(Date.now() / (5 * 60 * 1000)),
+      }
+    })
 
-    const mailboxes = await step.run('list-mailboxes', async () => enabledMailboxEmails())
+    if (!prep.enabled) return { skipped: 'scheduled scanning is switched off in settings' }
+    const { mailboxes, bucket } = prep
     if (mailboxes.length === 0) return { skipped: 'no mailboxes enabled' }
 
     // The dedupe key must change every tick. Inngest's function-level
@@ -54,12 +64,8 @@ export const scanInboxScheduled = inngest.createFunction(
     // top of a scheduled one is still collapsed) without disabling the
     // schedule itself.
     //
-    // Computed inside a step so a retry reuses the same bucket instead of
-    // minting a new one and re-dispatching.
-    const bucket = await step.run('tick-bucket', async () =>
-      Math.floor(Date.now() / (5 * 60 * 1000))
-    )
-
+    // The bucket is computed inside the step above so a retry reuses it
+    // instead of minting a new one and re-dispatching.
     await step.sendEvent(
       'dispatch-mailbox-scans',
       mailboxes.map(email => ({
@@ -151,17 +157,26 @@ export const publishDispatcher = inngest.createFunction(
   {
     id: 'publish-dispatcher',
     name: 'Dispatch due posts',
-    triggers: [{ cron: '* * * * *' }],
+    // Every 10 minutes, not every minute. Publish *timing* is Zernio's — jobs
+    // are handed over immediately with `scheduledFor` and their scheduler
+    // fires them — so this loop only needs to pass new jobs along and do
+    // housekeeping. At one run a minute it consumed roughly three quarters of
+    // the Inngest execution budget and would have starved the inbox scanner.
+    triggers: [{ cron: '*/10 * * * *' }],
     retries: 1,
     concurrency: { limit: 1 },
   },
   async ({ step }) => {
-    // rescue anything a dead worker left claimed, before looking for new work
-    const reclaimed = await step.run('reclaim-stale', async () => reclaimStalePublishing())
-    // and correct anything the provider later reported as failed
-    const corrected = await step.run('reconcile', async () => reconcilePublishedJobs())
-
-    const ids = await step.run('find-due', async () => dueJobIds())
+    // Three reads collapsed into one step for the same billing reason as the
+    // scan dispatcher. Each is independently idempotent, so a retry replaying
+    // all three is safe.
+    const { reclaimed, corrected, ids } = await step.run('sweep', async () => ({
+      // rescue anything a dead worker left claimed, before looking for new work
+      reclaimed: await reclaimStalePublishing(),
+      // and correct anything the provider later reported as failed
+      corrected: await reconcilePublishedJobs(),
+      ids: await dueJobIds(),
+    }))
     if (ids.length === 0) return { due: 0, reclaimed, corrected }
 
     await step.sendEvent(
@@ -205,7 +220,10 @@ export const asanaReconcile = inngest.createFunction(
   {
     id: 'asana-reconcile',
     name: 'Reconcile Asana activity',
-    triggers: [{ cron: 'TZ=Australia/Melbourne */5 * * * *' }],
+    // Every 15 minutes: the webhook carries the live path, so this poll is
+    // only the gap-filler for Asana's at-most-once delivery. Spending budget
+    // here would come straight out of the inbox scanner's.
+    triggers: [{ cron: 'TZ=Australia/Melbourne */15 * * * *' }],
     retries: 2,
     // No LLM calls here — this is Asana REST plus upserts, and the paid Asana
     // plan allows 1,500 req/min, so a 5-minute cadence over a dozen projects
