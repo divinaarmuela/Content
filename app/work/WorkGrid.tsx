@@ -89,13 +89,19 @@ export default function WorkGrid({ projects }: { projects: SiteProject[] }) {
           {visible.map(({ p }) => (
             <a key={p.slug} href={`/work/${p.slug}`} className="group flex h-full flex-col text-cream no-underline">
               <div className="relative overflow-hidden rounded-[14px]">
-                {/* Fixed frame so every card in a row is the same height, with
-                    object-contain so a 9:16 reel is fitted inside it instead of
-                    cropped to a band through the middle. */}
+                {/* A 4:5 frame, filled.
+
+                    This is the one real trade on this page: every card must be
+                    the same height, and the work is shot in both 9:16 and 16:9.
+                    A landscape frame turned a reel into a band through its
+                    middle. A portrait frame costs a landscape clip its edges
+                    instead, which is far less damage — the subject of a reel is
+                    vertical and centred, the subject of a landscape shot rarely
+                    lives in the outer thirds. */}
                 <SiteMedia
                   src={p.cardMedia}
                   alt={p.name}
-                  className="block aspect-[4/3] w-full bg-ink object-contain transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
+                  className="block aspect-[4/5] w-full bg-ink object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
                 />
               </div>
               <div className="mt-5 flex items-start justify-between gap-4">

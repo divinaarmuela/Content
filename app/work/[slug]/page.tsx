@@ -134,7 +134,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
             <SiteMedia
               src={project.heroMedia}
               alt={project.name}
-              className="block aspect-[16/9] w-full bg-ink object-contain"
+              className="block aspect-[16/9] w-full bg-ink object-cover"
             />
           </div>
         </section>
@@ -211,7 +211,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                           key={url}
                           src={url}
                           alt={`${project.name} — still`}
-                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-contain"
+                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-cover"
                         />
                       ))}
                     </div>
@@ -220,7 +220,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
                     <SiteMedia
                       src={row.wide}
                       alt={`${project.name} — still`}
-                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-contain"
+                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-cover"
                     />
                   )}
                 </div>
