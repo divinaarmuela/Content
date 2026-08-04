@@ -22,7 +22,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, ChevronDown, ChevronUp, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, Download, GripVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { moveItem } from '@/app/lib/website-gallery-core'
 
 type Project = {
@@ -134,7 +134,8 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
     <div className="grid gap-1.5">
       <Label>Gallery</Label>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Media strip shown when the homepage row is expanded, in this order. Images or videos.
+        Feeds two places: the strip when this project&rsquo;s homepage row is expanded, and the
+        gallery on its case study page. In this order. Images or videos.
       </p>
       {urls.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -190,6 +191,50 @@ export default function WebsiteAdminPage() {
   const [deleting, setDeleting] = useState<Project | null>(null)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<'projects' | 'journal'>('projects')
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+
+  /**
+   * Reorder by dragging a row.
+   *
+   * Replaces a sort_order number field, which asked the author to reason about
+   * an invisible scale — "is 40 before or after 100?" — to answer a question
+   * they could only see the result of after saving and reloading the site.
+   *
+   * The list is renumbered in tens so a later insert has room between two
+   * neighbours without renumbering everything again. Only rows whose number
+   * actually changed are written back.
+   */
+  const reorder = async (to: number) => {
+    const from = dragFrom
+    setDragFrom(null)
+    if (from === null || from === to || !projects) return
+
+    const next = [...projects]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+
+    const renumbered = next.map((p, i) => ({ ...p, sort_order: (i + 1) * 10 }))
+    setProjects(renumbered)   // move now; the write follows
+
+    const changed = renumbered.filter(p => {
+      const before = projects.find(o => o.id === p.id)
+      return before && before.sort_order !== p.sort_order
+    })
+
+    try {
+      await Promise.all(changed.map(p =>
+        fetch(`/api/website/projects/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: p.sort_order }),
+        })
+      ))
+      toast.success('Order saved')
+    } catch {
+      toast.error('Could not save the new order')
+      load()   // put it back the way the database has it
+    }
+  }
 
   // every tag used anywhere, so a service typed on one project is offered on
   // the next — no separate list to maintain and nothing to keep in sync
@@ -348,10 +393,6 @@ export default function WebsiteAdminPage() {
               <Label>Result <span className="text-xs text-zinc-400 dark:text-zinc-500">(optional, e.g. 0 → 30 bookings / day)</span></Label>
               <Input value={editing.result ?? ''} onChange={e => set({ result: e.target.value || null })} />
             </div>
-            <div className="grid gap-1.5">
-              <Label>Sort order <span className="text-xs text-zinc-400 dark:text-zinc-500">(lower = first)</span></Label>
-              <Input type="number" value={editing.sort_order ?? 100} onChange={e => set({ sort_order: Number(e.target.value) })} className="font-mono" />
-            </div>
             {(['challenge', 'approach', 'outcome'] as const).map(key => (
               <div key={key} className="grid gap-1.5 sm:col-span-2">
                 <Label className="capitalize">The {key} <span className="text-xs text-zinc-400 dark:text-zinc-500">(blank line between paragraphs)</span></Label>
@@ -428,6 +469,7 @@ export default function WebsiteAdminPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                <TableHead className="w-8" />
                 <TableHead className="w-20">Media</TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Industry</TableHead>
@@ -437,8 +479,18 @@ export default function WebsiteAdminPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {projects.map(p => (
-                <TableRow key={p.id}>
+              {projects.map((p, i) => (
+                <TableRow
+                  key={p.id}
+                  draggable
+                  onDragStart={() => setDragFrom(i)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => reorder(i)}
+                  className={dragFrom === i ? 'opacity-40' : undefined}
+                >
+                  <TableCell className="cursor-grab text-zinc-300 active:cursor-grabbing dark:text-zinc-600">
+                    <GripVertical className="h-4 w-4" />
+                  </TableCell>
                   <TableCell><MediaThumb url={p.card_media_url} /></TableCell>
                   <TableCell>
                     <div className="text-sm font-medium">{p.name}</div>
