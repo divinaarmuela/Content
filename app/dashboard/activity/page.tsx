@@ -1,152 +1,259 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  ArrowUpRight,
-  CalendarClock,
-  CheckCircle2,
-  Globe,
-  RotateCcw,
-  Send,
-  Upload,
-  UserPlus,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { Activity, Settings2, CircleAlert, Inbox } from 'lucide-react'
+import TransparencyNotice from './TransparencyNotice'
+import AsanaSetup from './AsanaSetup'
 
-type EventType =
-  | 'submit'
-  | 'client'
-  | 'approve'
-  | 'schedule'
-  | 'publish'
-  | 'upload'
-  | 'revision'
-  | 'assign'
-
-type ActivityEvent = {
-  user: string
+type Row = {
+  id: string
   name: string
-  action: string
-  entity: string
-  client: string
-  time: string
-  type: EventType
+  email: string
+  employment_type: 'employee' | 'contractor'
+  timezone: string
+  linked: boolean
+  completed: number
+  open: number
+  overdue: number
+  eventCount: number
+  lastActivityAt: string | null
 }
 
-const EVENTS: ActivityEvent[] = [
-  { user: 'AK', name: 'Akmal K.',  action: 'submitted for internal review',      entity: 'BTS gym session — 60s cut',       client: 'Apex Fitness',   time: '2 min ago',  type: 'submit'   },
-  { user: 'DV', name: 'Divina A.', action: 'sent to client for review',          entity: 'May results carousel',            client: 'Align Wellness', time: '14 min ago', type: 'client'   },
-  { user: 'CL', name: 'Client',    action: 'approved',                           entity: 'Skincare routine — 30s reel',     client: 'Bloom Skincare', time: '32 min ago', type: 'approve'  },
-  { user: 'DV', name: 'Divina A.', action: 'approved for scheduling',            entity: 'Skincare routine — 30s reel',     client: 'Bloom Skincare', time: '35 min ago', type: 'schedule' },
-  { user: 'MW', name: 'Marcus W.', action: 'marked published · added live URL',  entity: 'Cold brew launch campaign',       client: 'Surge Coffee',   time: '1 hr ago',   type: 'publish'  },
-  { user: 'JR', name: 'Jake R.',   action: 'uploaded v2 after revision',         entity: 'Barista morning routine',         client: 'Surge Coffee',   time: '2 hr ago',   type: 'upload'   },
-  { user: 'DV', name: 'Divina A.', action: 'requested revision',                 entity: 'Barista morning routine',         client: 'Surge Coffee',   time: '3 hr ago',   type: 'revision' },
-  { user: 'SL', name: 'Sarah L.',  action: 'submitted for internal review',      entity: 'Brand story carousel — 5 slides', client: 'NovaBuild Co.',  time: '4 hr ago',   type: 'submit'   },
-  { user: 'CL', name: 'Client',    action: 'requested changes',                  entity: 'PT promo — 3 variant reels',      client: 'Apex Fitness',   time: '5 hr ago',   type: 'revision' },
-  { user: 'DV', name: 'Divina A.', action: 'assigned client change to editor',   entity: 'PT promo — 3 variant reels',      client: 'Apex Fitness',   time: '5 hr ago',   type: 'assign'   },
-  { user: 'AK', name: 'Akmal K.',  action: 'scheduled · Jun 22 9:00 AM',         entity: 'Cold brew launch campaign',       client: 'Surge Coffee',   time: 'Yesterday',  type: 'schedule' },
-  { user: 'MW', name: 'Marcus W.', action: 'uploaded v1 draft',                  entity: 'Mindfulness ep. 3',               client: 'Align Wellness', time: 'Yesterday',  type: 'upload'   },
-  { user: 'JR', name: 'Jake R.',   action: 'submitted for internal review',      entity: 'Thought leadership talking head', client: 'Vertex Legal',   time: 'Jun 15',     type: 'submit'   },
-  { user: 'CL', name: 'Client',    action: 'approved',                           entity: 'Case study — TechCorp',           client: 'Vertex Legal',   time: 'Jun 14',     type: 'approve'  },
-]
-
-const TYPE_META: Record<EventType, { icon: LucideIcon; className: string }> = {
-  submit:   { icon: ArrowUpRight,  className: 'bg-zinc-50 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' },
-  client:   { icon: Send,          className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
-  approve:  { icon: CheckCircle2,  className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
-  schedule: { icon: CalendarClock, className: 'bg-zinc-50 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' },
-  publish:  { icon: Globe,         className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
-  upload:   { icon: Upload,        className: 'bg-zinc-50 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' },
-  revision: { icon: RotateCcw,     className: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' },
-  assign:   { icon: UserPlus,      className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
+type Payload = {
+  rows: Row[]
+  range: { from: string; to: string; days: number }
+  viewer: { id: string; isAdmin: boolean; timezone: string }
+  connection: {
+    configured: boolean
+    trackedProjects: number
+    liveWebhooks: number
+    lastEventAt: string | null
+  } | null
 }
 
-const DAY_GROUPS: { label: string; events: ActivityEvent[] }[] = [
-  { label: 'Today',     events: EVENTS.slice(0, 10) },
-  { label: 'Yesterday', events: EVENTS.slice(10, 12) },
-  { label: 'Jun 15',    events: EVENTS.slice(12, 13) },
-  { label: 'Jun 14',    events: EVENTS.slice(13, 14) },
+const RANGES = [
+  { days: 7,  label: '7 days' },
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
 ]
+
+/** Relative time, coarse — an exact clock reading implies a precision that
+ *  event ingestion (webhook or 15-minute poll) does not actually have. */
+function sinceLabel(iso: string | null): string {
+  if (!iso) return '—'
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return days < 30 ? `${days}d ago` : new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+function initials(name: string, email: string): string {
+  const source = name.trim() || email
+  return source.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('')
+}
 
 export default function ActivityPage() {
+  const [data, setData] = useState<Payload | null>(null)
+  const [days, setDays] = useState(7)
+  const [showSetup, setShowSetup] = useState(false)
+
+  const load = useCallback(async (d: number) => {
+    try {
+      const res = await fetch(`/api/team/activity?days=${d}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load activity')
+      setData(json)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load activity')
+      setData(null)
+    }
+  }, [])
+
+  useEffect(() => { load(days) }, [load, days])
+
+  const isAdmin = data?.viewer.isAdmin ?? false
+  const rows = data?.rows ?? []
+  const hasAnyData = rows.some(r => r.eventCount > 0 || r.open > 0 || r.completed > 0)
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Activity Log</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Team Activity</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Every status change, upload, comment and approval — timestamped.
+            {isAdmin
+              ? 'Task activity across tracked Asana projects.'
+              : 'Your task activity across tracked Asana projects.'}
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
-        >
-          Demo data
-        </Badge>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Tabs value={String(days)} onValueChange={v => v && setDays(Number(v))}>
+            <TabsList>
+              {RANGES.map(r => (
+                <TabsTrigger key={r.days} value={String(r.days)}>{r.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {isAdmin && (
+            <Button
+              variant={showSetup ? 'secondary' : 'outline'} size="sm"
+              onClick={() => setShowSetup(s => !s)}
+            >
+              <Settings2 className="h-3.5 w-3.5" /> Connection
+            </Button>
+          )}
+        </div>
       </div>
 
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Recent activity
-          </CardTitle>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500 tabular-nums">
-            {EVENTS.length} events
-          </span>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          {DAY_GROUPS.map(group => (
-            <div key={group.label}>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-                {group.label}
-              </p>
-              <div className="flex flex-col">
-                {group.events.map((e, i) => {
-                  const meta = TYPE_META[e.type]
-                  const Icon = meta.icon
-                  return (
-                    <div
-                      key={`${group.label}-${i}`}
-                      className="flex items-start gap-3 border-b border-zinc-200 dark:border-zinc-800 py-3 last:border-b-0 last:pb-0 first:pt-0"
-                    >
-                      <span className="mt-0.5 w-20 shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                        {e.time}
-                      </span>
-                      <div
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${meta.className}`}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm">
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100">{e.name}</span>{' '}
-                          <span className="text-zinc-500">{e.action}</span>
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                            {e.entity}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className="border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-[10px] font-normal text-zinc-500 dark:text-zinc-400"
-                          >
-                            {e.client}
-                          </Badge>
-                        </div>
-                      </div>
-                      <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 sm:block">
-                        {e.user}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+      {/* Ships inside phase 1 by requirement, not as a later addition. */}
+      <TransparencyNotice />
+
+      {isAdmin && showSetup && <AsanaSetup />}
+
+      {data === null ? (
+        <Card><CardContent className="flex flex-col gap-3 p-6">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+        </CardContent></Card>
+      ) : !hasAnyData ? (
+        <Card className="border-dashed shadow-none">
+          <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
+            <Inbox className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              {data.connection && !data.connection.configured
+                ? 'Asana isn’t connected yet.'
+                : data.connection && data.connection.trackedProjects === 0
+                  ? 'No Asana projects are being tracked yet.'
+                  : rows.every(r => !r.linked)
+                    ? 'No Asana account is matched to you yet.'
+                    : 'Nothing recorded in this period.'}
+            </p>
+            {isAdmin && !showSetup && (
+              <Button variant="outline" size="sm" onClick={() => setShowSetup(true)}>
+                Open connection settings
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : isAdmin ? (
+        <TeamTable rows={rows} />
+      ) : (
+        <PersonalView row={rows[0]} days={days} />
+      )}
+
+      {isAdmin && data?.connection?.configured && (
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          {data.connection.trackedProjects} project{data.connection.trackedProjects === 1 ? '' : 's'} tracked ·{' '}
+          {data.connection.liveWebhooks} with live updates · last event {sinceLabel(data.connection.lastEventAt)}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Admin view: one row per person, sorted by who needs attention first. */
+function TeamTable({ rows }: { rows: Row[] }) {
+  const sorted = [...rows].sort((a, b) => b.overdue - a.overdue || b.open - a.open)
+
+  return (
+    <Card className="overflow-hidden py-0">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+            <TableHead>Person</TableHead>
+            <TableHead className="w-24 text-right">Completed</TableHead>
+            <TableHead className="w-24 text-right">Open</TableHead>
+            <TableHead className="w-24 text-right">Overdue</TableHead>
+            <TableHead className="w-24 text-right">Events</TableHead>
+            <TableHead className="w-28">Last activity</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map(r => (
+            <TableRow key={r.id}>
+              <TableCell>
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 font-mono text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                    {initials(r.name, r.email)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{r.name || r.email}</p>
+                    <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+                      {r.employment_type}
+                      {!r.linked && (
+                        <span className="inline-flex items-center gap-1 normal-case tracking-normal text-amber-600 dark:text-amber-500">
+                          <CircleAlert className="h-3 w-3" /> not matched
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm tabular-nums">{r.completed}</TableCell>
+              <TableCell className="text-right font-mono text-sm tabular-nums">{r.open}</TableCell>
+              <TableCell className="text-right">
+                {/* severity reads at a glance, and is never colour alone */}
+                {r.overdue > 0 ? (
+                  <Badge variant="outline" className="border-red-200 bg-red-50 font-mono tabular-nums text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+                    {r.overdue} overdue
+                  </Badge>
+                ) : (
+                  <span className="font-mono text-sm tabular-nums text-zinc-300 dark:text-zinc-600">0</span>
+                )}
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm tabular-nums text-zinc-500">{r.eventCount}</TableCell>
+              <TableCell className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                {sinceLabel(r.lastActivityAt)}
+              </TableCell>
+            </TableRow>
           ))}
-        </CardContent>
-      </Card>
+        </TableBody>
+      </Table>
+    </Card>
+  )
+}
+
+/** Member view: their own numbers. A one-row table would be a worse way to
+ *  read four figures about yourself. */
+function PersonalView({ row, days }: { row: Row | undefined; days: number }) {
+  if (!row) return null
+  const tiles = [
+    { label: 'Completed', value: row.completed, hint: `in the last ${days} days` },
+    { label: 'Open', value: row.open, hint: 'assigned to you now' },
+    { label: 'Overdue', value: row.overdue, hint: `past due in ${row.timezone.split('/').pop()?.replace('_', ' ')}`, alert: row.overdue > 0 },
+    { label: 'Events', value: row.eventCount, hint: `last ${sinceLabel(row.lastActivityAt)}` },
+  ]
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {tiles.map(t => (
+        <Card key={t.label} className={t.alert ? 'border-red-200 dark:border-red-900' : undefined}>
+          <CardContent className="flex flex-col gap-1 py-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">{t.label}</p>
+            <p className={`font-mono text-3xl tabular-nums ${
+              t.alert ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-zinc-100'
+            }`}>
+              {t.value}
+            </p>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{t.hint}</p>
+          </CardContent>
+        </Card>
+      ))}
+      <p className="col-span-full flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <Activity className="h-3 w-3" /> Only your own activity is shown here — and only you and a super admin can see it.
+      </p>
     </div>
   )
 }

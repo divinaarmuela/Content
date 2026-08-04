@@ -49,7 +49,7 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
-  { href: '/dashboard/activity',   label: 'Activity',         icon: Activity },
+  { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
   { href: '/dashboard/reports',    label: 'Reports',          icon: BarChart3 },
 ]
 
@@ -68,7 +68,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/production':    'Production',
   '/dashboard/scheduler':     'Scheduler',
   '/dashboard/calendar':      'Calendar',
-  '/dashboard/activity':      'Activity',
+  '/dashboard/activity':      'Team Activity',
   '/dashboard/reports':       'Reports',
   '/dashboard/team':          'Team',
   '/dashboard/ai':            'AI Assistant',

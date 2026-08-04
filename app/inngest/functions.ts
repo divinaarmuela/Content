@@ -5,6 +5,7 @@ import {
   dueJobIds, runPublishJob, reclaimStalePublishing, reconcilePublishedJobs,
 } from '../lib/publish'
 import { runLeadsReportTick } from '../lib/report-send'
+import { reconcileAll } from '../lib/asana-sync'
 
 /**
  * Background jobs. Each is a thin wrapper around a plain function that the
@@ -164,6 +165,28 @@ export const publishPost = inngest.createFunction(
   }
 )
 
+/**
+ * Backfill anything the Asana webhooks missed.
+ *
+ * Asana delivery is at-most-once and its /events history is only 24 hours, so
+ * this is not an optimisation — without it, gaps are permanent. It also
+ * detects webhooks Asana has self-deleted (24h of failed delivery) so they can
+ * be re-registered.
+ *
+ * The same `reconcileAll` runs behind the dashboard's "Sync now" button — one
+ * code path, two triggers, as above.
+ */
+export const asanaReconcile = inngest.createFunction(
+  {
+    id: 'asana-reconcile',
+    name: 'Reconcile Asana activity',
+    triggers: [{ cron: 'TZ=Australia/Melbourne */15 * * * *' }],
+    retries: 2,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run('reconcile', () => reconcileAll())
+)
+
 export const functions = [
   scanInboxScheduled,
   scanMailbox,
@@ -171,4 +194,5 @@ export const functions = [
   scanInboxOnDemand,
   publishDispatcher,
   publishPost,
+  asanaReconcile,
 ]
