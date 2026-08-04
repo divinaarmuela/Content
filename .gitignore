@@ -66,3 +66,7 @@ inngest-dev.log
 tunnel.log
 vercel-login.log
 .next-dev.log
+
+# Agent skills installed via `npx skills add` — third-party, re-installable
+.agents/
+.claude/skills/inngest-*
