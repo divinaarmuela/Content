@@ -26,3 +26,14 @@ export function revalidateSiteProjects(): void {
     // best effort by design — see above
   }
 }
+
+/** Same for the journal: index plus every article, since the index count, the
+ *  topic rail and each article's "next" link all shift when one post changes. */
+export function revalidateJournal(): void {
+  try {
+    revalidatePath('/journal')
+    revalidatePath('/journal/[slug]', 'page')
+  } catch {
+    // best effort by design — see above
+  }
+}

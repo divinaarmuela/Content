@@ -31,11 +31,16 @@ export async function uploadMedia(
 ): Promise<{ url: string; kind: 'image' | 'video' }> {
   const kind: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image'
 
+  // R2 signs the Content-Type into the signature, so the value sent on the PUT
+  // must be byte-identical to the one used to sign — otherwise Cloudflare
+  // rejects it as a mismatch. Resolve it once and use the same string twice.
+  const contentType = file.type || 'application/octet-stream'
+
   // 1. sign
   const signRes = await fetch('/api/website/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'sign', name: file.name, size: file.size }),
+    body: JSON.stringify({ action: 'sign', name: file.name, size: file.size, type: contentType }),
   })
   if (!signRes.ok) throw new Error(await errorFrom(signRes, 'Could not start the upload'))
   const { signedUrl, publicUrl } = await signRes.json() as { signedUrl: string; publicUrl: string }
@@ -43,7 +48,7 @@ export async function uploadMedia(
   // 2. straight to storage — this is the only request carrying the file
   const putRes = await fetch(signedUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    headers: { 'Content-Type': contentType },
     body: file,
   })
   if (!putRes.ok) throw new Error(await errorFrom(putRes, 'Upload to storage failed'))

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { signUpload, storageBackend } from '@/app/lib/storage'
 
 const BUCKET = 'website-assets'
 const MAX_BYTES = 200 * 1024 * 1024 // 200MB — hero videos are large
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
 
   if ((req.headers.get('content-type') ?? '').includes('application/json')) {
     const body = await req.json().catch(() => ({})) as {
-      action?: string; name?: string; size?: number
+      action?: string; name?: string; size?: number; type?: string
       url?: string; kind?: string; purpose?: string
       project_id?: string | null; alt?: string | null
     }
@@ -37,13 +38,29 @@ export async function POST(req: Request) {
       if ((body.size ?? 0) > MAX_BYTES) {
         return NextResponse.json({ error: 'File exceeds the 200MB limit' }, { status: 413 })
       }
-      const path = `${Date.now()}-${body.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-      const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
-      if (error || !data) {
-        return NextResponse.json({ error: error?.message ?? 'Could not sign upload' }, { status: 500 })
+      // Supabase caps a file at the project limit (50MB free), so a large
+      // master needs R2. Say so plainly rather than letting the PUT fail with
+      // a storage error nobody can act on.
+      if (storageBackend() === 'supabase' && (body.size ?? 0) > 45 * 1024 * 1024) {
+        return NextResponse.json(
+          { error: 'Files above ~45MB need Cloudflare R2, which is not configured yet.' },
+          { status: 413 },
+        )
       }
-      const { data: signedPub } = supabase.storage.from(BUCKET).getPublicUrl(path)
-      return NextResponse.json({ signedUrl: data.signedUrl, path, publicUrl: signedPub.publicUrl })
+      try {
+        const signed = await signUpload(body.name, body.type ?? 'application/octet-stream')
+        return NextResponse.json({
+          signedUrl: signed.signedUrl,
+          publicUrl: signed.publicUrl,
+          path: signed.key,
+          backend: signed.backend,
+        })
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : 'Could not sign upload' },
+          { status: 500 },
+        )
+      }
     }
 
     // ── register: index a file that is already stored ──
