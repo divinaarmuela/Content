@@ -2,12 +2,14 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { Scramble } from '../../components/lama/Scramble'
+import Reveal from '../../components/lama/Reveal'
 import LamaNav from '../../components/lama/LamaNav'
 import LamaFooter from '../../components/lama/LamaFooter'
 import ScrollObserver from '../../components/ScrollObserver'
 import SiteMedia from '../../components/SiteMedia'
 import { clients } from '../../components/lama/workData'
 import { getSiteProject, getSiteProjects } from '../../lib/websiteData'
+import { isVideoUrl } from '../../lib/media-core'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
@@ -39,24 +41,32 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-function Block({ label, paragraphs }: { label: string; paragraphs: string[] }) {
-  if (!paragraphs.length) return null
-  return (
-    <section className="border-t border-cream/15 px-6 sm:px-10 py-14 sm:py-20">
-      <div className="mx-auto max-w-5xl grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <Scramble text={`[ ${label} ]`} gate={false} className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim self-start" />
-        <div className="flex flex-col gap-5">
-          {paragraphs.map((p, i) => (
-            <p key={i} className="font-lamah text-cream/85 text-[clamp(1rem,1.5vw,1.2rem)] leading-[1.7] m-0 max-w-[62ch]">
-              {p}
-            </p>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
+/**
+ * Gallery rhythm from the design pack: a pair of 4:5 portraits, then one 21:9
+ * wide, repeating. Grouping in threes keeps that cadence for any number of
+ * images — a lone trailing image renders wide rather than leaving a half-empty
+ * row.
+ */
+function galleryRows(urls: string[]): { pair: string[]; wide?: string }[] {
+  const rows: { pair: string[]; wide?: string }[] = []
+  for (let i = 0; i < urls.length; i += 3) {
+    const pair = urls.slice(i, i + 2)
+    const wide = urls[i + 2]
+    if (pair.length === 1 && !wide) rows.push({ pair: [], wide: pair[0] })
+    else rows.push({ pair, wide })
+  }
+  return rows
 }
 
+/**
+ * Case study in the static-pack design: hero, 16:9 cover, brief sidebar beside
+ * the narrative, CMS gallery, numbered outcomes, next project.
+ *
+ * The pack also carries a client quote block. There is no quote field on
+ * SiteProject and inventing one would put words in a client's mouth, so that
+ * section is left out until the data exists rather than shipped with the
+ * pack's "replace before publishing" placeholder.
+ */
 export default async function CaseStudyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const [project, all] = await Promise.all([getSiteProject(slug), getSiteProjects()])
@@ -65,96 +75,220 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
   const index = all.findIndex(p => p.slug === project.slug)
   const next = all[(index + 1) % all.length]
 
+  const outcomes = project.study.outcome
+  const rows = galleryRows(project.galleryUrls)
+
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink min-h-screen`}>
       <LamaNav gate={false} />
       <main>
-        {/* HERO */}
-        <header className="px-6 sm:px-10 pt-28 sm:pt-36 pb-10">
-          <div className="mx-auto max-w-5xl">
-            <a href="/work" className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim no-underline hover:text-cream transition-colors">
-              ← All work
-            </a>
-            <div className="mt-10">
-              <Scramble
-                text={`· ${project.tag} · ${project.industry}`}
-                gate={false}
-                className="font-lamam text-[11px] uppercase tracking-widest text-cream-faint"
-              />
-            </div>
-            <h1 className="font-lamah font-medium text-cream text-[clamp(2.4rem,6vw,4.5rem)] leading-[0.98] tracking-[-0.03em] mt-4 mb-5">
-              {project.name}
-            </h1>
-            <p className="font-lamah text-cream-dim text-[clamp(1.05rem,1.6vw,1.3rem)] leading-[1.6] max-w-[58ch] m-0">
-              {project.desc}
-            </p>
+        {/* ── HERO ── */}
+        <header className="px-6 pb-10 pt-28 sm:px-10 sm:pt-36">
+          <a
+            href="/work"
+            className="inline-flex items-center gap-2 font-lamam text-xs tracking-[0.04em] text-cream/50 no-underline transition-colors hover:text-cream"
+          >
+            ← all work
+          </a>
 
-            <div className="mt-10 overflow-hidden">
-              <SiteMedia
-                src={project.heroMedia}
-                alt={project.name}
-                className="w-full aspect-[16/8] object-cover"
-              />
-            </div>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <span className="rounded-full border border-cream/25 px-[15px] py-[7px] font-lamam text-[11px] uppercase tracking-[0.1em] text-cream">
+              {project.tag}
+            </span>
+            <Scramble
+              text={project.industry}
+              gate={false}
+              className="font-lamam text-[11px] uppercase tracking-[0.1em] text-cream/50"
+            />
+          </div>
 
-            {/* FACTS */}
-            <div className="mt-px grid sm:grid-cols-3 gap-px bg-cream/15 border border-cream/15">
-              {[
-                ['Client', project.name],
-                ['Industry', project.industry],
-                ['Services', project.services.join(' · ')],
-              ].map(([label, val]) => (
-                <div key={label} className="bg-ink px-5 py-4">
-                  <p className="font-lamam text-[10px] uppercase tracking-widest text-cream-faint m-0 mb-2">{label}</p>
-                  <p className="font-lamah text-cream text-sm leading-relaxed m-0">{val}</p>
+          <h1 className="mt-6 max-w-[18ch] font-lamah font-medium text-cream leading-[0.98] tracking-[-0.04em] text-[clamp(2.4rem,7vw,5.6rem)]">
+            <span className="block overflow-hidden">
+              <Reveal><span className="block pb-[0.08em]">{project.name}</span></Reveal>
+            </span>
+          </h1>
+
+          <p className="mt-6 max-w-[52ch] font-lamah text-cream/65 text-[clamp(1.05rem,1.5vw,1.25rem)] leading-[1.55]">
+            {project.desc}
+          </p>
+        </header>
+
+        {/* ── HERO MEDIA ── */}
+        <section className="px-6 pb-[clamp(60px,9vh,100px)] sm:px-10">
+          <div className="relative overflow-hidden rounded-2xl">
+            <SiteMedia
+              src={project.heroMedia}
+              alt={project.name}
+              className="block aspect-[16/9] w-full bg-ink object-cover"
+            />
+            {isVideoUrl(project.heroMedia) && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full border border-cream/70 bg-ink/35 backdrop-blur-[3px] [animation:lama-play_2.6s_ease-in-out_infinite]">
+                  <span className="ml-[5px] block h-0 w-0 border-y-[10px] border-l-[17px] border-y-transparent border-l-cream" />
                 </div>
+              </div>
+            )}
+            <span className="absolute bottom-3.5 left-4 font-lamam text-[10px] uppercase tracking-[0.12em] text-cream/75">
+              {isVideoUrl(project.heroMedia) ? 'video' : 'image'}
+            </span>
+          </div>
+        </section>
+
+        {/* ── BRIEF / DETAILS ── */}
+        <section className="px-6 pb-[clamp(70px,11vh,140px)] sm:px-10">
+          <div className="grid items-start gap-[clamp(32px,5vw,90px)] lg:grid-cols-[0.65fr_1.35fr]">
+            <div>
+              <p className="font-lamam text-xs uppercase tracking-[0.14em] text-cream/40">the brief</p>
+              <div className="mb-8 mt-5 h-px bg-cream/30" />
+              <dl className="flex flex-col gap-[18px]">
+                {[
+                  ['client', project.name],
+                  ['services', project.services.join(' · ')],
+                  ['industry', project.industry],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="mb-1.5 font-lamam text-[11px] uppercase tracking-[0.1em] text-cream/40">
+                      {label}
+                    </dt>
+                    <dd className="m-0 font-lamah text-base text-cream/80">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              {project.websiteUrl && (
+                <a
+                  href={project.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-8 inline-flex items-center gap-2 border border-cream/25 px-5 py-3 font-lamam text-[11px] uppercase tracking-[0.1em] text-cream no-underline transition-colors hover:bg-cream hover:text-ink"
+                >
+                  visit website ↗
+                </a>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-[26px]">
+              <h2 className="m-0 font-lamah font-medium text-cream leading-[1.18] tracking-[-0.025em] text-[clamp(1.5rem,3vw,2.4rem)] [text-wrap:balance]">
+                <span className="block overflow-hidden">
+                  <Reveal><span className="block pb-[0.08em]">What the client needed,</span></Reveal>
+                </span>
+                <span className="block overflow-hidden">
+                  <Reveal delay={0.08}>
+                    <span className="block pb-[0.08em] text-cream/50">and what we built.</span>
+                  </Reveal>
+                </span>
+              </h2>
+
+              {project.study.challenge.map((p, i) => (
+                <p key={`c${i}`} className="m-0 font-lamah text-cream/70 text-[clamp(1.05rem,1.3vw,1.2rem)] leading-[1.6]">
+                  {p}
+                </p>
+              ))}
+              {project.study.approach.map((p, i) => (
+                <p key={`a${i}`} className="m-0 font-lamah text-cream/55 text-[clamp(1.05rem,1.3vw,1.2rem)] leading-[1.6]">
+                  {p}
+                </p>
               ))}
             </div>
           </div>
-        </header>
+        </section>
 
-        <Block label="The challenge" paragraphs={project.study.challenge} />
-        <Block label="The approach" paragraphs={project.study.approach} />
-        <Block label="The outcome" paragraphs={project.study.outcome} />
-
-        {/* RESULT */}
-        {project.result && (
-          <section className="border-t border-cream/15 px-6 sm:px-10 py-14">
-            <div className="mx-auto max-w-5xl flex flex-wrap items-baseline gap-x-8 gap-y-2">
-              <span className="font-lamah font-medium text-accent text-[clamp(2rem,4.5vw,3.4rem)] tracking-[-0.02em]">
-                {project.result}
-              </span>
-              <Scramble text="[ HEADLINE RESULT ]" gate={false} className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim" />
+        {/* ── GALLERY ── */}
+        {rows.length > 0 && (
+          <section className="px-6 pb-[clamp(70px,11vh,140px)] sm:px-10">
+            <div className="flex flex-col gap-[18px]">
+              {rows.map((row, i) => (
+                <div key={i} className="flex flex-col gap-[18px]">
+                  {row.pair.length > 0 && (
+                    <div className="grid gap-[18px] sm:grid-cols-2">
+                      {row.pair.map(url => (
+                        <SiteMedia
+                          key={url}
+                          src={url}
+                          alt={`${project.name} — still`}
+                          className="block aspect-[4/5] w-full rounded-[14px] bg-ink object-cover"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {row.wide && (
+                    <SiteMedia
+                      src={row.wide}
+                      alt={`${project.name} — still`}
+                      className="block aspect-[21/9] w-full rounded-[14px] bg-ink object-cover"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         )}
 
-        {/* NEXT + CTA */}
-        <section className="border-t border-cream/15 px-6 sm:px-10 py-16 sm:py-24">
-          <div className="mx-auto max-w-5xl">
-            <p className="font-lamam text-[11px] uppercase tracking-widest text-cream-faint m-0 mb-4">Next case study</p>
-            <a href={`/work/${next.slug}`} className="group inline-block no-underline">
-              <span className="font-lamah font-medium uppercase text-cream text-[clamp(1.8rem,5vw,3.2rem)] leading-[1] tracking-tight group-hover:text-accent transition-colors">
-                {next.name} →
-              </span>
-            </a>
+        {/* ── OUTCOME ── */}
+        {(outcomes.length > 0 || project.result) && (
+          <section className="border-t border-cream/[0.16] bg-[#0E0E0E] px-6 py-[clamp(70px,11vh,140px)] sm:px-10">
+            <div className="grid items-center gap-[clamp(36px,6vw,100px)] lg:grid-cols-[1.1fr_1fr]">
+              <div>
+                <p className="m-0 mb-6 font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">
+                  the result
+                </p>
+                {project.result && (
+                  <p className="m-0 font-lamah font-medium text-accent leading-[1.1] tracking-[-0.02em] text-[clamp(2.2rem,5vw,3.6rem)]">
+                    {project.result}
+                  </p>
+                )}
+              </div>
 
-            <div className="mt-16 flex flex-wrap gap-4">
-              <a
-                href={CALENDLY}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
-              >
-                BOOK A STRATEGY CALL ↗
-              </a>
-              <a
-                href="/work"
-                className="border border-cream/10 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream-dim visited:text-cream-dim no-underline hover:border-cream/25 hover:text-cream transition-colors"
-              >
-                ALL WORK
-              </a>
+              {outcomes.length > 0 && (
+                <div className="flex flex-col">
+                  <p className="m-0 mb-[18px] font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">
+                    what changed
+                  </p>
+                  {outcomes.map((line, i) => (
+                    <div
+                      key={i}
+                      className="flex items-baseline gap-[18px] border-t border-cream/[0.14] py-6"
+                    >
+                      <span className="font-lamam text-xs text-accent">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="font-lamah text-cream leading-[1.35] text-[clamp(1.05rem,1.5vw,1.3rem)]">
+                        {line}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+          </section>
+        )}
+
+        {/* ── NEXT + CTA ── */}
+        <section className="border-t border-cream/15 px-6 py-16 sm:px-10 sm:py-24">
+          <p className="m-0 mb-4 font-lamam text-[11px] uppercase tracking-widest text-cream/40">
+            Next case study
+          </p>
+          <a href={`/work/${next.slug}`} className="group inline-block no-underline">
+            <span className="font-lamah font-medium uppercase text-cream leading-[1] tracking-tight text-[clamp(1.8rem,5vw,3.2rem)] transition-colors group-hover:text-accent">
+              {next.name} →
+            </span>
+          </a>
+
+          <div className="mt-16 flex flex-wrap gap-4">
+            <a
+              href={CALENDLY}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream no-underline transition-colors visited:text-cream hover:bg-cream hover:text-ink"
+            >
+              BOOK A STRATEGY CALL ↗
+            </a>
+            <a
+              href="/work"
+              className="border border-cream/10 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream/60 no-underline transition-colors visited:text-cream/60 hover:border-cream/25 hover:text-cream"
+            >
+              ALL WORK
+            </a>
           </div>
         </section>
       </main>
