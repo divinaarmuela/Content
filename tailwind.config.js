@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
+  // Touch devices fire :hover on tap and keep it until you tap something else,
+  // so hover effects looked like they animated at random on mobile — a card's
+  // arrow would sit nudged after being scrolled past. This restricts every
+  // hover: variant to devices that actually have a pointer.
+  future: { hoverOnlyWhenSupported: true },
   content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx}'],
   // the site has its own global reset/custom CSS — don't let Tailwind's
   // preflight reset everything site-wide; we only want the utility classes

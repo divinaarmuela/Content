@@ -6,23 +6,40 @@ import { isVideoUrl } from '../lib/media-core'
 /**
  * Renders a CMS media URL as a muted looping video or a plain image.
  *
- * Videos play silently with no controls — the motion is the design — but only
- * once on screen. `autoPlay` with `preload="auto"` makes the browser download
- * every video on the page at once, so a grid holding one 219MB master stalled
- * before anything rendered. Metadata only until an IntersectionObserver says
- * it is visible.
+ * Playback is deliberately conservative, because the files here are large and
+ * the cost of moving them lands on the visitor:
  *
- * On shape, there are two situations and they want opposite things:
+ * - `preload="metadata"` — one frame, never the body, until we decide otherwise.
+ * - An IntersectionObserver starts playback only when the element is on screen
+ *   and pauses it again on the way out, so a grid of ten videos fetches ten
+ *   frames rather than a gigabyte.
+ * - Data Saver and genuinely slow connections (2G/3G) get the first frame
+ *   instead of the body. Phones on a normal connection still play: the video
+ *   IS the work here, and a portfolio that shows stills on mobile is not
+ *   showing the work.
+ * - `prefers-reduced-motion` is honoured the same way.
  *
- * - In a GRID, every card must be the same height, so the caller fixes the
- *   frame and the media fills it. Something gets cropped; a 4:5 frame makes
- *   that the edges of a landscape clip rather than the middle of a reel.
- * - On a PAGE, there is no row to line up with, so `adapt` lets the media keep
- *   its own proportions. A vertical film renders vertical.
- *
- * Until the real ratio is known the fallback holds the space, so nothing jumps
- * when metadata lands.
+ * On shape, grids and pages want opposite things. In a grid every card must
+ * line up, so the caller fixes the frame and the media fills it. On a page
+ * there is no row to match, so `adapt` lets the media keep the proportions it
+ * was shot in — a vertical film renders vertical.
  */
+
+/** Should this device spend bandwidth on decorative video? */
+function shouldPlayVideo(): boolean {
+  if (typeof window === 'undefined') return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+
+  // Data Saver, or a connection the browser considers slow.
+  const conn = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string }
+  }).connection
+  if (conn?.saveData) return false
+  if (conn?.effectiveType && /^(slow-)?2g$|^3g$/.test(conn.effectiveType)) return false
+
+  return true
+}
+
 export default function SiteMedia({
   src, alt, className, poster, autoPlay = true, adapt = false, fallbackRatio = 16 / 9,
 }: {
@@ -44,8 +61,7 @@ export default function SiteMedia({
 
   useEffect(() => {
     const el = ref.current
-    if (!el || !autoPlay) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!el || !autoPlay || !shouldPlayVideo()) return
 
     const io = new IntersectionObserver(
       ([entry]) => {
@@ -89,6 +105,7 @@ export default function SiteMedia({
       src={src}
       alt={alt}
       loading="lazy"
+      decoding="async"
       className={className}
       style={style}
       onLoad={adapt ? e => {
