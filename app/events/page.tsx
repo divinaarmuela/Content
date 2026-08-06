@@ -147,7 +147,7 @@ export default function EventsPage() {
               <span className={styles.roomCity} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>{room.city}</span>
               <div className={styles.roomEnd}>
                 <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>{room.seats}</span>
-                <span className={styles.roomArrow} style={{ fontSize: '1.2rem' }}>↗</span>
+                <span className={styles.roomArrow} style={{ fontSize: '1.2rem' }}>↗︎</span>
               </div>
             </a>
           </Reveal>
