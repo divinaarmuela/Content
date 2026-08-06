@@ -25,7 +25,7 @@ const DEPTS: Dept[] = [
     members: [
       { name: 'Divina', role: 'Co-Founder & Managing Director', img: '/team/divina.jpg', objectPosition: '50% 80%' },
       { name: 'Martin', role: 'Co-Founder & Chief Production Officer', img: '/team/martin.jpg' },
-      { name: 'Abby', role: 'Head of Operations' },
+      { name: 'Abby', role: 'Head of Operations', img: '/team/abby.jpg' },
       { name: 'Yusuf', role: 'Head of Paid Media', img: '/team/yusuf.jpg' },
     ],
   },
@@ -40,7 +40,7 @@ const DEPTS: Dept[] = [
     members: [
       { name: 'Karly', role: 'Social Media Strategist', img: '/team/karly.jpg' },
       { name: 'Renee', role: 'Social Media Strategist', img: '/team/renee.jpg' },
-      { name: 'Raven', role: 'Social Media Strategist' },
+      { name: 'Raven', role: 'Social Media Strategist', img: '/team/raven.jpg' },
     ],
   },
   {
