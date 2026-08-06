@@ -1,13 +1,6 @@
 /* Page-scoped styles for /events — keyframes, hover states, and the grids
    that need media queries. Everything else is inline, mirroring the comp. */
 
-@keyframes drift {
-  0% { transform: translate(0, 0) scale(1.06); }
-  50% { transform: translate(-2%, -1.5%) scale(1.12); }
-  100% { transform: translate(0, 0) scale(1.06); }
-}
-.drift { animation: drift 28s ease-in-out infinite; }
-
 /* why-we-do-this two-column */
 .whyGrid {
   display: grid;

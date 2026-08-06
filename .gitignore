@@ -51,6 +51,7 @@ next-env.d.ts
 !/public/Pattons.mp4
 !/public/Senorita.mp4
 !/public/Park Noire Website.mp4
+!/public/jason-hero.mp4
 # Cecconi1.jpg is now a web-optimised ~180KB version served from /public.
 /public/Cecconi2.jpg
 /public/Cecconi3.jpg

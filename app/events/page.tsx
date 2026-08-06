@@ -13,7 +13,7 @@ const MONO = 'var(--font-space-mono), monospace'
 const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
 const EMAIL = 'mailto:hello@mdmmarketing.com.au'
 const INVITE = `${EMAIL}?subject=Request%20an%20invite%20%E2%80%94%20The%20Room`
-const HERO_IMG = '/MDM01011.jpg' // stand-in until a film still from a past room is supplied
+const HERO_VIDEO = '/jason-hero.mp4'
 
 // Future CMS seam: this array becomes a Supabase fetch in the CMS pass.
 const upcoming = [
@@ -45,9 +45,8 @@ export default function EventsPage() {
 
       {/* HERO */}
       <header style={{ position: 'relative', minHeight: '92vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '140px clamp(20px, 4vw, 52px) clamp(44px, 6vh, 72px)', overflow: 'hidden' }}>
-        <div className={styles.drift} style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.4 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={HERO_IMG} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.4 }}>
+          <video src={HERO_VIDEO} autoPlay muted loop playsInline preload="auto" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         </div>
         <div style={{ position: 'absolute', inset: 0, zIndex: 1, background: 'linear-gradient(180deg, rgba(11,11,11,0.55) 0%, rgba(11,11,11,0.5) 45%, #0B0B0B 100%)' }} />
         <div style={{ position: 'relative', zIndex: 3, width: '100%' }}>
