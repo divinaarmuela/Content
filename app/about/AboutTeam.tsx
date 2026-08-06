@@ -23,39 +23,39 @@ const DEPTS: Dept[] = [
   {
     name: 'Leadership',
     members: [
-      { name: 'Divina', role: 'Co-Founder & Managing Director', objectPosition: '50% 80%' },
-      { name: 'Martin', role: 'Co-Founder & Chief Production Officer' },
+      { name: 'Divina', role: 'Co-Founder & Managing Director', img: '/team/divina.jpg', objectPosition: '50% 80%' },
+      { name: 'Martin', role: 'Co-Founder & Chief Production Officer', img: '/team/martin.jpg' },
       { name: 'Abby', role: 'Head of Operations' },
-      { name: 'Yusuf', role: 'Head of Paid Media' },
+      { name: 'Yusuf', role: 'Head of Paid Media', img: '/team/yusuf.jpg' },
     ],
   },
   {
     name: 'Client Accounts',
     members: [
-      { name: 'Manal', role: 'Senior Account Manager' },
+      { name: 'Manal', role: 'Senior Account Manager', img: '/team/manal.jpg' },
     ],
   },
   {
     name: 'Social & Content',
     members: [
-      { name: 'Karly', role: 'Social Media Strategist' },
-      { name: 'Renee', role: 'Social Media Strategist' },
+      { name: 'Karly', role: 'Social Media Strategist', img: '/team/karly.jpg' },
+      { name: 'Renee', role: 'Social Media Strategist', img: '/team/renee.jpg' },
       { name: 'Raven', role: 'Social Media Strategist' },
     ],
   },
   {
     name: 'Brand & Technology',
     members: [
-      { name: 'Daniela', role: 'Brand & Graphic Designer' },
-      { name: 'Akmal', role: 'Technology & Systems Lead' },
+      { name: 'Daniela', role: 'Brand & Graphic Designer', img: '/team/daniela.jpg' },
+      { name: 'Akmal', role: 'Technology & Systems Lead', img: '/team/akmal.jpg' },
     ],
   },
   {
     name: 'Production',
     members: [
-      { name: 'Ryan', role: 'Video Editor & Cinematographer' },
-      { name: 'Sebastian', role: 'Photographer & Cinematographer' },
-      { name: 'Sarina', role: 'Photographer & Cinematographer' },
+      { name: 'Ryan', role: 'Video Editor & Cinematographer', img: '/team/ryan.jpg' },
+      { name: 'Sebastian', role: 'Photographer & Cinematographer', img: '/team/sebastian.jpg' },
+      { name: 'Sarina', role: 'Photographer & Cinematographer', img: '/team/sarina.jpg' },
     ],
   },
 ]
