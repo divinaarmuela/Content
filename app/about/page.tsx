@@ -1,168 +1,134 @@
-import ScrollObserver from '../components/ScrollObserver'
-import GradientHero from '../components/GradientHero'
-import SiteFooter from '../components/SiteFooter'
-import ScrambleEyebrow from '../components/ScrambleEyebrow'
+import { Space_Mono } from 'next/font/google'
+import LamaNav from '../components/lama/LamaNav'
+import LamaFooter from '../components/lama/LamaFooter'
+import Reveal from '../components/lama/Reveal'
+import Rule from '../components/lama/Rule'
+import { archivo, sometype } from '../components/lama/fonts'
+import AboutTeam from './AboutTeam'
+import styles from './about.module.css'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
+
+const ACCENT = '#FFFFFF'
+const MONO = 'var(--font-space-mono), monospace'
+const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
+const EMAIL = 'mailto:hello@mdmmarketing.com.au'
+const HERO_IMG = '/MDmediateam.jpg'
 
 const beliefs = [
-  {
-    num: '01',
-    title: 'Psychology before production',
-    body: 'Content works when it understands why people follow, trust, and buy. The camera comes second.',
-  },
-  {
-    num: '02',
-    title: 'Everything in-house',
-    body: 'Same crew every time. No rotating freelancers, no outsourced editing, no quality drift between months.',
-  },
-  {
-    num: '03',
-    title: 'Systems over one-offs',
-    body: 'A viral post is luck. A content system that compounds month after month is a business asset.',
-  },
-  {
-    num: '04',
-    title: 'Numbers you can check',
-    body: 'Every engagement is measured and reported. You see the data and the decisions, not just the deliverables.',
-  },
+  { title: 'Visibility comes first', body: 'The best business in the room still loses to the one people have heard of.' },
+  { title: 'It has to sound like you', body: 'Content that doesn’t feel authentic doesn’t build trust.' },
+  { title: 'One partner beats five freelancers', body: 'Joined-up marketing compounds; scattered marketing leaks.' },
+  { title: 'Grow at the right pace', body: 'We earn the next step, we don’t upsell you into it.' },
 ]
+
+const NOISE = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
 
 export default function AboutPage() {
   return (
-    <>
-      <main className="ed-main">
-        <GradientHero
-          asciiHands
-          showMarquee={false}
-          tag="· Behind MD Media · Est. 2024"
-          headline={{
-            base: <>Built<span className="hl-hide"> by people from<br />both sides of the</span> camera.</>,
-            mid: <><span className="hl-hide">Built </span>by people from<br />both sides of the<span className="hl-hide"> camera.</span></>,
-            blob: <>Built by people from<br />both sides of the camera.</>,
-          }}
-          desc={
-            <>
-              <span className="reveal-mask">
-                <span className="reveal-inner" style={{ animationDelay: '0.6s' }}>
-                  Most agencies are built by marketers.
-                </span>
-              </span>{' '}
-              <span className="reveal-mask">
-                <span className="reveal-inner" style={{ animationDelay: '0.68s' }}>
-                  We&apos;re built by people who&apos;ve lived in front of the
-                </span>
-              </span>{' '}
-              <span className="reveal-mask">
-                <span className="reveal-inner" style={{ animationDelay: '0.76s' }}>
-                  lens and behind it.
-                </span>
-              </span>
-            </>
-          }
-          actions={
-            <a href={CALENDLY} target="_blank" rel="noreferrer noopener" className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse">
-              Book a strategy call
-              <span className="btn-pulse-dot" aria-hidden="true"></span>
-            </a>
-          }
-        />
+    <div className={`${spaceMono.variable} ${archivo.variable} ${sometype.variable}`} style={{ background: '#0B0B0B', color: '#ffffff', fontFamily: SANS, fontWeight: 400, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', position: 'relative' }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none', mixBlendMode: 'overlay', opacity: 0.05, backgroundImage: NOISE }} />
 
-        {/* FOUNDING STORY */}
-        <section className="ed-section">
-          <div className="container">
-            <div className="abt-story">
-              <div className="abt-story-text fade-up">
-                <ScrambleEyebrow text="· The story ·" />
-                <h2 className="ed-heading">Building brands that actually grow.</h2>
-                <p>
-                  <strong>Divina</strong> spent years understanding what makes people follow, trust, and buy.
-                  Not from a textbook — from being in the world of influence and watching human behaviour up close.
-                </p>
-                <p>
-                  <strong>Martin</strong> built his eye through media and production, learning what makes someone
-                  stop, stay, and feel something.
-                </p>
-                <p>
-                  When they came together in late 2024, MD Media was the only logical outcome: a studio that
-                  doesn&apos;t just produce content — it understands the psychology behind why content works.
-                </p>
-                <p>
-                  Today, MD Media runs content ecosystems with a team of 15 for businesses across finance,
-                  hospitality, real estate, health, automotive, and personal brands. From strategy to the final
-                  frame, everything stays in-house.
-                </p>
-              </div>
-              <div className="fade-up d1">
-                <div className="abt-photo">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/martindivina.avif" alt="Divina Armuela and Martin Kormushoski, co-founders of MD Media" />
-                </div>
-                <p className="abt-photo-cap">Divina Armuela &amp; Martin Kormushoski · Co-founders</p>
-              </div>
-            </div>
+      <LamaNav gate={false} />
+
+      {/* HERO */}
+      <header style={{ position: 'relative', minHeight: '78vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '140px clamp(20px, 4vw, 52px) clamp(48px, 7vh, 90px)', overflow: 'hidden' }}>
+        <div className={styles.drift} style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.4 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={HERO_IMG} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </div>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1, background: 'linear-gradient(180deg, rgba(11,11,11,0.6) 0%, rgba(11,11,11,0.5) 50%, #0B0B0B 100%)' }} />
+        <div style={{ position: 'relative', zIndex: 3, width: '100%' }}>
+          <Reveal gate={false}>
+            <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', margin: '0 0 28px' }}>about / the studio</p>
+          </Reveal>
+          <h1 style={{ fontFamily: SANS, fontWeight: 500, fontSize: 'clamp(2.2rem, 6vw, 5rem)', lineHeight: 1.0, letterSpacing: '-0.04em', margin: '0 0 30px', maxWidth: 1000 }}>
+            <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>We make good businesses</span></Reveal>
+            <Reveal gate={false} delay={240} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>impossible to ignore.</span></Reveal>
+          </h1>
+          <Reveal gate={false} delay={360}>
+            <p style={{ maxWidth: 620, fontSize: 'clamp(1.05rem, 1.5vw, 1.25rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.7)', margin: 0 }}>MD Media is an Australian content-led marketing studio for founders and local businesses who are great at what they do, and ready for the world to know it.</p>
+          </Reveal>
+        </div>
+      </header>
+
+      {/* OUR STORY */}
+      <section style={{ padding: 'clamp(80px, 13vh, 170px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className={styles.storyGrid}>
+          <div>
+            <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: ACCENT, margin: '0 0 22px' }}>why we exist</p>
+            <Rule className="bg-white/25" />
           </div>
-        </section>
-
-        {/* STATS */}
-        <div className="stats-strip">
-          <div className="container stats-inner">
-            <div className="stat-item"><span className="stat-val">15</span><span className="stat-label">In-house team</span></div>
-            <div className="stat-div" />
-            <div className="stat-item"><span className="stat-val">17</span><span className="stat-label">Active retainers</span></div>
-            <div className="stat-div" />
-            <div className="stat-item"><span className="stat-val">6</span><span className="stat-label">Industries</span></div>
-            <div className="stat-div" />
-            <div className="stat-item"><span className="stat-val blue">2024</span><span className="stat-label">Est. Melbourne</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+            <h2 style={{ fontFamily: SANS, fontWeight: 400, fontSize: 'clamp(1.5rem, 3vw, 2.4rem)', lineHeight: 1.2, letterSpacing: '-0.025em', margin: 0 }}>
+              <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>Most agencies are built by marketers.</span></Reveal>
+              <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>We{'’'}re built by people who{'’'}ve lived on</span></Reveal>
+              <Reveal gate={false} delay={240} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>both sides of the camera.</span></Reveal>
+            </h2>
+            <Reveal gate={false}>
+              <p style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', margin: 0 }}>Divina spent years understanding what makes people follow, trust, and buy. Not from a textbook, but from living in the world of influence and watching human behaviour up close. Martin built his eye through media and production, learning what makes someone stop, stay, and feel something.</p>
+            </Reveal>
+            <Reveal gate={false}>
+              <p style={{ fontFamily: SANS, fontSize: 'clamp(1.25rem, 2vw, 1.7rem)', lineHeight: 1.35, letterSpacing: '-0.02em', color: '#ffffff', margin: 0 }}>When they came together in late 2024, MD Media was the only logical outcome. A studio that doesn{'’'}t just produce content, it understands the psychology behind why content works.</p>
+            </Reveal>
+            <Reveal gate={false}>
+              <p style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', margin: 0 }}>Today MD Media runs content ecosystems with a team of 13, for businesses across finance, hospitality, real estate, health, automotive, and personal brands. Alongside always-on content, the studio takes on campaign shoots for brands, owning the vision from ideation through to execution. From strategy to the final frame, everything stays in-house.</p>
+            </Reveal>
           </div>
         </div>
+      </section>
 
-        {/* BELIEFS */}
-        <section className="ed-section">
-          <div className="container">
-            <ScrambleEyebrow text="· What we believe ·" />
-            <h2 className="ed-heading">The rules the studio runs on.</h2>
-            <div className="abt-beliefs">
-              {beliefs.map((b, i) => (
-                <div key={b.num} className={`abt-belief fade-up${i > 0 ? ` d${Math.min(i, 3)}` : ''}`}>
-                  <span className="abt-belief-num">{b.num}</span>
-                  <h3>{b.title}</h3>
-                  <p>{b.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+      {/* WHAT WE BELIEVE */}
+      <section style={{ padding: 'clamp(70px, 11vh, 150px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.12)', background: '#0E0E0E' }}>
+        <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 clamp(40px, 6vh, 64px)' }}>what we believe</p>
 
-        {/* CTA */}
-        <section className="cta-section" id="contact">
-          <div className="container">
-            <div className="cta-split">
-              <div className="cta-left">
-                <p className="cta-ready">Sound like your kind of team?</p>
-                <h2 className="cta-heading">
-                  Come see how<br />
-                  we <span className="blue">work.</span>
-                </h2>
-                <p className="cta-sub">
-                  Ten minutes on a call, or start with the free diagnostic and we&apos;ll review where you stand.
-                </p>
-                <div className="cta-btns">
-                  <a href={CALENDLY} className="btn" target="_blank" rel="noreferrer noopener">
-                    Book a call <span className="arr">→</span>
-                  </a>
-                  <a href="/work" className="btn btn-outline">
-                    See the work <span className="arr">→</span>
-                  </a>
-                </div>
+        <Rule className="bg-white/20" />
+        {beliefs.map((belief, i) => (
+          <div key={belief.title}>
+            <Reveal gate={false}>
+              <div className={styles.beliefRow}>
+                <span style={{ fontFamily: MONO, fontSize: 13, color: ACCENT }}>{String(i + 1).padStart(2, '0')}</span>
+                <h3 style={{ fontFamily: SANS, fontWeight: 500, fontSize: 'clamp(1.25rem, 2vw, 1.7rem)', letterSpacing: '-0.02em', margin: 0 }}>{belief.title}</h3>
+                <p style={{ fontSize: 'clamp(1rem, 1.2vw, 1.12rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.6)', margin: 0 }}>{belief.body}</p>
               </div>
-            </div>
+            </Reveal>
+            <Rule className="bg-white/20" />
           </div>
-        </section>
-      </main>
+        ))}
+      </section>
 
-      <SiteFooter vol="Behind MD Media" tagline={<>Built by people from<br />both sides of the camera.</>} />
-      <ScrollObserver />
-    </>
+      {/* THE TEAM */}
+      <section style={{ padding: 'clamp(80px, 13vh, 170px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className={styles.teamHead}>
+          <div>
+            <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 24px' }}>the team</p>
+            <h2 style={{ fontFamily: SANS, fontWeight: 400, fontSize: 'clamp(1.9rem, 4vw, 3.2rem)', lineHeight: 1.06, letterSpacing: '-0.03em', margin: 0 }}>
+              <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>The people behind</span></Reveal>
+              <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>your visibility.</span></Reveal>
+            </h2>
+          </div>
+          <Reveal gate={false} delay={240}>
+            <p style={{ fontSize: 'clamp(1rem, 1.25vw, 1.15rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.6)', margin: 0 }}>Account leads, social media managers, creatives, ads, tech and operations, one team under one roof, so nothing about your marketing falls between the cracks.</p>
+          </Reveal>
+        </div>
+
+        <AboutTeam />
+      </section>
+
+      {/* CTA */}
+      <section style={{ position: 'relative', padding: 'clamp(110px, 18vh, 220px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.12)', textAlign: 'center' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <h2 style={{ fontFamily: SANS, fontWeight: 500, fontSize: 'clamp(2rem, 5.5vw, 4.6rem)', lineHeight: 1.0, letterSpacing: '-0.04em', margin: '0 0 36px' }}>
+            <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>Let{'’'}s make your business</span></Reveal>
+            <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.1em' }}>the one people have heard of.</span></Reveal>
+          </h2>
+          <Reveal gate={false} delay={240}>
+            <a href={EMAIL} style={{ textDecoration: 'none', background: '#ffffff', color: '#0B0B0B', fontFamily: MONO, fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', padding: '17px 36px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 10 }}>start now <span style={{ fontSize: 16 }}>→</span></a>
+          </Reveal>
+        </div>
+      </section>
+
+      <LamaFooter vol="About · team of 13" />
+    </div>
   )
 }

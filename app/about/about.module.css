@@ -1,0 +1,94 @@
+/* Page-scoped styles for /about — reveal animation, drift, accordion, and the
+   grids that need media queries. Everything else is inline, mirroring the comp. */
+
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1.06); }
+  50% { transform: translate(-2%, -1.5%) scale(1.12); }
+  100% { transform: translate(0, 0) scale(1.06); }
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes grainOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.drift { animation: drift 26s ease-in-out infinite; }
+
+/* story + team header two-column grids */
+.storyGrid {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: clamp(32px, 5vw, 90px);
+  align-items: start;
+}
+.teamHead {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(32px, 5vw, 90px);
+  align-items: end;
+  margin-bottom: clamp(44px, 6vh, 72px);
+}
+
+/* what-we-believe rows */
+.beliefRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 1.3fr;
+  gap: clamp(18px, 3vw, 52px);
+  align-items: start;
+  padding: 40px 0;
+}
+
+/* team department accordion */
+.deptBtn {
+  all: unset;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 60px 1fr auto 34px;
+  gap: clamp(14px, 2.5vw, 36px);
+  align-items: center;
+  padding: clamp(24px, 3.2vh, 34px) 0;
+}
+.deptName {
+  font-weight: 500;
+  font-size: clamp(1.4rem, 3.2vw, 2.5rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-align: left;
+  transition: color 0.45s ease, opacity 0.35s ease;
+}
+.deptPlus {
+  font-size: 1.5rem;
+  line-height: 1;
+  text-align: right;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 20px;
+  padding: 0 0 clamp(34px, 5vh, 54px);
+}
+.card { animation: cardIn 0.85s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.cardGrain {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  animation: grainOut 1.15s steps(7) both;
+}
+
+@media (max-width: 760px) {
+  .storyGrid { grid-template-columns: 1fr; }
+  .teamHead { grid-template-columns: 1fr; align-items: start; }
+  .beliefRow { grid-template-columns: 44px 1fr; }
+  .beliefRow p { grid-column: 2; }
+  .deptBtn { grid-template-columns: 34px 1fr auto 24px; }
+  .deptMembers { display: none; }
+}
