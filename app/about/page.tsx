@@ -62,7 +62,7 @@ export default function AboutPage() {
             </h2>
             <p className={styles.reveal} style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', margin: 0 }}>Divina spent years understanding what makes people follow, trust, and buy. Not from a textbook, but from living in the world of influence and watching human behaviour up close. Martin built his eye through media and production, learning what makes someone stop, stay, and feel something.</p>
             <p className={styles.reveal} style={{ fontFamily: SANS, fontSize: 'clamp(1.25rem, 2vw, 1.7rem)', lineHeight: 1.35, letterSpacing: '-0.02em', color: '#ffffff', margin: 0 }}>When they came together in late 2024, MD Media was the only logical outcome. A studio that doesn{'’'}t just produce content, it understands the psychology behind why content works.</p>
-            <p className={styles.reveal} style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', margin: 0 }}>Today MD Media runs content ecosystems with a team of 14, for businesses across finance, hospitality, real estate, health, automotive, and personal brands. Alongside always-on content, the studio takes on campaign shoots for brands, owning the vision from ideation through to execution. From strategy to the final frame, everything stays in-house.</p>
+            <p className={styles.reveal} style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', margin: 0 }}>Today MD Media runs content ecosystems with a team of 13, for businesses across finance, hospitality, real estate, health, automotive, and personal brands. Alongside always-on content, the studio takes on campaign shoots for brands, owning the vision from ideation through to execution. From strategy to the final frame, everything stays in-house.</p>
           </div>
         </div>
       </section>
@@ -111,7 +111,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <LamaFooter vol="About · team of 14" />
+      <LamaFooter vol="About · team of 13" />
       <AboutReveal />
     </div>
   )

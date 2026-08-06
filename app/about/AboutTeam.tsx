@@ -32,7 +32,6 @@ const DEPTS: Dept[] = [
   {
     name: 'Client Accounts',
     members: [
-      { name: 'Lulu', role: 'Senior Account Manager' },
       { name: 'Manal', role: 'Senior Account Manager' },
     ],
   },
