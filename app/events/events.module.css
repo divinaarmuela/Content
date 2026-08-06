@@ -14,19 +14,6 @@
   50% { transform: translate(-2%, -1.5%) scale(1.12); }
   100% { transform: translate(0, 0) scale(1.06); }
 }
-@keyframes fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes panelIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes rowIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-
 .anim { animation: in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 .line {
@@ -36,21 +23,6 @@
 }
 
 .drift { animation: drift 28s ease-in-out infinite; }
-
-/* menu overlay + panel */
-.overlay { animation: fade 0.35s ease both; }
-.panel { animation: panelIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
-.menuRow { animation: rowIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.menuIdx { opacity: 0.3; transition: opacity 0.3s ease; }
-.menuArrow { opacity: 0; transition: opacity 0.35s ease, transform 0.35s ease; }
-.menuRow:hover .menuIdx { opacity: 1; }
-.menuRow:hover .menuArrow { opacity: 1; transform: translate(3px, -3px); }
-
-.menuBtn { transition: background 0.3s ease; }
-.menuBtn:hover { background: rgba(255, 255, 255, 0.08); }
-.menuFill { transition: background 0.3s ease; }
-.menuFill:hover { background: rgba(255, 255, 255, 0.85); }
 
 /* why-we-do-this two-column */
 .whyGrid {
@@ -80,14 +52,6 @@
 .roomRow:hover .roomTitle { opacity: 0.55; }
 .roomRow:hover .roomArrow { transform: translate(5px, -5px); opacity: 1; }
 
-/* footer columns */
-.footGrid {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 1fr;
-  gap: 40px;
-  padding-bottom: 60px;
-}
-
 @media (max-width: 760px) {
   .whyGrid { grid-template-columns: 1fr; }
   .roomRow {
@@ -99,5 +63,4 @@
     row-gap: 10px;
   }
   .roomCity { justify-self: start; }
-  .footGrid { grid-template-columns: 1fr; gap: 32px; }
 }

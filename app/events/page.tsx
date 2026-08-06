@@ -1,5 +1,7 @@
 import { Space_Mono } from 'next/font/google'
-import EventsNav from './EventsNav'
+import LamaNav from '../components/lama/LamaNav'
+import LamaFooter from '../components/lama/LamaFooter'
+import { archivo, sometype } from '../components/lama/fonts'
 import styles from './events.module.css'
 
 const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
@@ -34,10 +36,10 @@ const NOISE = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
 
 export default function EventsPage() {
   return (
-    <div className={spaceMono.variable} style={{ background: '#0B0B0B', color: '#ffffff', fontFamily: SANS, fontWeight: 400, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', position: 'relative' }}>
+    <div className={`${spaceMono.variable} ${archivo.variable} ${sometype.variable}`} style={{ background: '#0B0B0B', color: '#ffffff', fontFamily: SANS, fontWeight: 400, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', position: 'relative' }}>
       <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none', mixBlendMode: 'overlay', opacity: 0.05, backgroundImage: NOISE }} />
 
-      <EventsNav />
+      <LamaNav gate={false} />
 
       {/* HERO */}
       <header style={{ position: 'relative', minHeight: '92vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '140px clamp(20px, 4vw, 52px) clamp(44px, 6vh, 72px)', overflow: 'hidden' }}>
@@ -143,44 +145,7 @@ export default function EventsPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer style={{ borderTop: '1px solid rgba(255,255,255,0.16)', padding: 'clamp(48px, 7vh, 80px) clamp(20px, 4vw, 52px) 36px' }}>
-        <div className={styles.footGrid}>
-          <div>
-            <span style={{ fontFamily: SANS, fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em' }}>MD&nbsp;MEDIA</span>
-            <p style={{ maxWidth: 280, fontSize: '0.98rem', lineHeight: 1.5, color: 'rgba(255,255,255,0.5)', margin: '18px 0 0' }}>Content-led marketing for founders and local businesses ready to be seen, known, and booked.</p>
-          </div>
-          <div>
-            <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>explore</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
-              <a href="/" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>Home</a>
-              <a href="/work" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>Work</a>
-              <a href="/about" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>About</a>
-              <a href="/journal" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>Journal</a>
-              <a href="/events" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>Events</a>
-            </div>
-          </div>
-          <div>
-            <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>contact</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
-              <a href={EMAIL} style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>hello@mdmmarketing.com.au</a>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.96rem' }}>Australia · remote &amp; on location</span>
-            </div>
-          </div>
-          <div>
-            <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>social</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
-              <a href="#" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>Instagram</a>
-              <a href="#" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>LinkedIn</a>
-              <a href="#" style={{ textDecoration: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.96rem' }}>TikTok</a>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 16, paddingTop: 26, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
-          <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>AUSTRALIA · EST. 2024</span>
-          <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>© MD MEDIA, all rights reserved</span>
-        </div>
-      </footer>
+      <LamaFooter vol="The Room · by invitation" />
     </div>
   )
 }
