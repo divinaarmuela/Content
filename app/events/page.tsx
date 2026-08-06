@@ -1,6 +1,8 @@
 import { Space_Mono } from 'next/font/google'
 import LamaNav from '../components/lama/LamaNav'
 import LamaFooter from '../components/lama/LamaFooter'
+import Reveal from '../components/lama/Reveal'
+import Rule from '../components/lama/Rule'
 import { archivo, sometype } from '../components/lama/fonts'
 import styles from './events.module.css'
 
@@ -49,12 +51,16 @@ export default function EventsPage() {
         </div>
         <div style={{ position: 'absolute', inset: 0, zIndex: 1, background: 'linear-gradient(180deg, rgba(11,11,11,0.55) 0%, rgba(11,11,11,0.5) 45%, #0B0B0B 100%)' }} />
         <div style={{ position: 'relative', zIndex: 3, width: '100%' }}>
-          <p className={styles.anim} style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', margin: '0 0 30px' }}>events / the room</p>
+          <Reveal gate={false}>
+            <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', margin: '0 0 30px' }}>events / the room</p>
+          </Reveal>
           <h1 style={{ fontWeight: 500, fontSize: 'clamp(2.6rem, 8.5vw, 7.5rem)', lineHeight: 0.92, letterSpacing: '-0.045em', margin: '0 0 28px', maxWidth: 1100 }}>
-            <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em' }}>A room for the people</span></span>
-            <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em', color: 'rgba(255,255,255,0.55)' }}>who are loud for a living.</span></span>
+            <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>A room for the people</span></Reveal>
+            <Reveal gate={false} delay={240} className="block"><span style={{ display: 'block', paddingBottom: '0.08em', color: 'rgba(255,255,255,0.55)' }}>who are loud for a living.</span></Reveal>
           </h1>
-          <p className={styles.anim} style={{ maxWidth: 600, fontSize: 'clamp(1.05rem, 1.5vw, 1.25rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.7)', margin: 0 }}>Small, intentional gatherings for founders, marketers, and builders who{'’'}d rather ask a good question than deliver a good pitch.</p>
+          <Reveal gate={false} delay={360}>
+            <p style={{ maxWidth: 600, fontSize: 'clamp(1.05rem, 1.5vw, 1.25rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.7)', margin: 0 }}>Small, intentional gatherings for founders, marketers, and builders who{'’'}d rather ask a good question than deliver a good pitch.</p>
+          </Reveal>
         </div>
       </header>
 
@@ -63,15 +69,19 @@ export default function EventsPage() {
         <div className={styles.whyGrid}>
           <div>
             <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: ACCENT, margin: '0 0 22px' }}>why we do this</p>
-            <div className={styles.line} style={{ background: 'rgba(255,255,255,0.3)' }} />
+            <Rule className="bg-white/30" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
             <h2 style={{ fontWeight: 500, fontSize: 'clamp(1.5rem, 3vw, 2.4rem)', lineHeight: 1.18, letterSpacing: '-0.025em', margin: 0, textWrap: 'balance' }}>
-              <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em' }}>We build visibility for a living, so we</span></span>
-              <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em' }}>know how lonely the work can be.</span></span>
+              <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>We build visibility for a living, so we</span></Reveal>
+              <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>know how lonely the work can be.</span></Reveal>
             </h2>
-            <p className={styles.anim} style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', margin: 0 }}>The people who put themselves out there every day, posting, pitching, building in public, rarely have a room that gets it. Most {'“'}networking{'”'} is transactional: everyone selling, no one listening.</p>
-            <p className={styles.anim} style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', margin: 0 }}>So we started hosting the kind of gathering we always wanted to be in. No name-tag small talk, no leverage. Just genuinely interesting people, curious about each other{'’'}s work, in a space designed for real conversation. Content-led marketing is about connection, our events are simply that idea, offline.</p>
+            <Reveal gate={false}>
+              <p style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', margin: 0 }}>The people who put themselves out there every day, posting, pitching, building in public, rarely have a room that gets it. Most {'“'}networking{'”'} is transactional: everyone selling, no one listening.</p>
+            </Reveal>
+            <Reveal gate={false}>
+              <p style={{ fontSize: 'clamp(1.05rem, 1.3vw, 1.2rem)', lineHeight: 1.6, color: 'rgba(255,255,255,0.55)', margin: 0 }}>So we started hosting the kind of gathering we always wanted to be in. No name-tag small talk, no leverage. Just genuinely interesting people, curious about each other{'’'}s work, in a space designed for real conversation. Content-led marketing is about connection, our events are simply that idea, offline.</p>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -79,32 +89,43 @@ export default function EventsPage() {
       {/* WHO THIS ROOM IS FOR */}
       <section style={{ padding: 'clamp(80px, 13vh, 180px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.16)', background: '#0E0E0E' }}>
         <h2 style={{ fontWeight: 500, fontSize: 'clamp(2rem, 5.5vw, 4.4rem)', lineHeight: 1.0, letterSpacing: '-0.04em', margin: '0 0 clamp(48px, 7vh, 80px)', maxWidth: 1000, textWrap: 'balance' }}>
-          <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em' }}>This room isn{'’'}t for everyone.</span></span>
-          <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em', color: 'rgba(255,255,255,0.5)' }}>And that{'’'}s the point.</span></span>
+          <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>This room isn{'’'}t for everyone.</span></Reveal>
+          <Reveal gate={false} delay={120} className="block"><span style={{ display: 'block', paddingBottom: '0.08em', color: 'rgba(255,255,255,0.5)' }}>And that{'’'}s the point.</span></Reveal>
         </h2>
 
         <div style={{ maxWidth: 1180 }}>
-          <div className={styles.line} style={{ background: 'rgba(255,255,255,0.2)' }} />
+          <Rule className="bg-white/20" />
           {manifesto.map((text, i) => (
-            <div key={i} className={styles.anim} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 'clamp(18px, 3vw, 44px)', alignItems: 'start', padding: 'clamp(26px, 3.4vh, 38px) 0', borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
-              <span style={{ fontFamily: MONO, fontSize: 13, color: ACCENT }}>{String(i + 1).padStart(2, '0')}</span>
-              <p style={{ fontSize: 'clamp(1.15rem, 2vw, 1.7rem)', lineHeight: 1.35, letterSpacing: '-0.015em', margin: 0, color: 'rgba(255,255,255,0.92)', textWrap: 'balance' }}>{text}</p>
+            <div key={i}>
+              <Reveal gate={false}>
+                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 'clamp(18px, 3vw, 44px)', alignItems: 'start', padding: 'clamp(26px, 3.4vh, 38px) 0' }}>
+                  <span style={{ fontFamily: MONO, fontSize: 13, color: ACCENT }}>{String(i + 1).padStart(2, '0')}</span>
+                  <p style={{ fontSize: 'clamp(1.15rem, 2vw, 1.7rem)', lineHeight: 1.35, letterSpacing: '-0.015em', margin: 0, color: 'rgba(255,255,255,0.92)', textWrap: 'balance' }}>{text}</p>
+                </div>
+              </Reveal>
+              <Rule className="bg-white/20" />
             </div>
           ))}
         </div>
 
-        <p className={styles.anim} style={{ fontSize: 'clamp(1.3rem, 2.6vw, 2.2rem)', lineHeight: 1.3, letterSpacing: '-0.02em', margin: 'clamp(48px, 7vh, 80px) 0 0', maxWidth: 900, textWrap: 'balance' }}>If you{'’'}re loud for a living, content, marketing, social, building something, but you{'’'}ve never had a room that actually gets it{'…'} <span style={{ color: ACCENT }}>this is the one.</span></p>
+        <Reveal gate={false}>
+          <p style={{ fontSize: 'clamp(1.3rem, 2.6vw, 2.2rem)', lineHeight: 1.3, letterSpacing: '-0.02em', margin: 'clamp(48px, 7vh, 80px) 0 0', maxWidth: 900, textWrap: 'balance' }}>If you{'’'}re loud for a living, content, marketing, social, building something, but you{'’'}ve never had a room that actually gets it{'…'} <span style={{ color: ACCENT }}>this is the one.</span></p>
+        </Reveal>
       </section>
 
       {/* WHAT TO EXPECT */}
       <section style={{ padding: 'clamp(80px, 12vh, 160px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.16)' }}>
         <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 clamp(40px, 6vh, 64px)' }}>what to expect</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'clamp(28px, 4vw, 60px)' }}>
-          {expect.map(item => (
-            <div key={item.title} className={styles.anim}>
-              <div className={styles.line} style={{ background: 'rgba(255,255,255,0.3)', marginBottom: 24 }} />
-              <h3 style={{ fontWeight: 500, fontSize: 'clamp(1.3rem, 2vw, 1.7rem)', letterSpacing: '-0.02em', margin: '0 0 12px' }}>{item.title}</h3>
-              <p style={{ fontSize: '1rem', lineHeight: 1.55, color: 'rgba(255,255,255,0.58)', margin: 0 }}>{item.body}</p>
+          {expect.map((item, i) => (
+            <div key={item.title}>
+              <Rule className="bg-white/30" />
+              <Reveal gate={false} delay={i * 120}>
+                <div style={{ marginTop: 24 }}>
+                  <h3 style={{ fontWeight: 500, fontSize: 'clamp(1.3rem, 2vw, 1.7rem)', letterSpacing: '-0.02em', margin: '0 0 12px' }}>{item.title}</h3>
+                  <p style={{ fontSize: '1rem', lineHeight: 1.55, color: 'rgba(255,255,255,0.58)', margin: 0 }}>{item.body}</p>
+                </div>
+              </Reveal>
             </div>
           ))}
         </div>
@@ -117,18 +138,20 @@ export default function EventsPage() {
           <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>by invitation</span>
         </div>
 
-        <div className={styles.line} style={{ background: 'rgba(255,255,255,0.25)' }} />
+        <Rule className="bg-white/25" />
 
-        {upcoming.map(room => (
-          <a key={room.title} href="#join" className={`${styles.roomRow} ${styles.anim}`}>
-            <span className={styles.roomDate} style={{ fontFamily: MONO, fontSize: 12, color: ACCENT }}>{room.date}</span>
-            <h3 className={styles.roomTitle} style={{ fontWeight: 500, fontSize: 'clamp(1.3rem, 2.4vw, 2rem)', letterSpacing: '-0.02em', margin: 0 }}>{room.title}</h3>
-            <span className={styles.roomCity} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>{room.city}</span>
-            <div className={styles.roomEnd}>
-              <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>{room.seats}</span>
-              <span className={styles.roomArrow} style={{ fontSize: '1.2rem' }}>↗</span>
-            </div>
-          </a>
+        {upcoming.map((room, i) => (
+          <Reveal key={room.title} gate={false} delay={i * 120}>
+            <a href="#join" className={styles.roomRow}>
+              <span className={styles.roomDate} style={{ fontFamily: MONO, fontSize: 12, color: ACCENT }}>{room.date}</span>
+              <h3 className={styles.roomTitle} style={{ fontWeight: 500, fontSize: 'clamp(1.3rem, 2.4vw, 2rem)', letterSpacing: '-0.02em', margin: 0 }}>{room.title}</h3>
+              <span className={styles.roomCity} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>{room.city}</span>
+              <div className={styles.roomEnd}>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>{room.seats}</span>
+                <span className={styles.roomArrow} style={{ fontSize: '1.2rem' }}>↗</span>
+              </div>
+            </a>
+          </Reveal>
         ))}
 
         <p style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '28px 0 0' }}>Dates, venues &amp; capacity announced to the invite list first</p>
@@ -138,10 +161,14 @@ export default function EventsPage() {
       <section id="join" style={{ scrollMarginTop: 70, position: 'relative', padding: 'clamp(100px, 16vh, 210px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.16)', textAlign: 'center' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <h2 style={{ fontWeight: 500, fontSize: 'clamp(2rem, 5.5vw, 4.6rem)', lineHeight: 1.0, letterSpacing: '-0.04em', margin: '0 0 28px' }}>
-            <span style={{ display: 'block', overflow: 'hidden' }}><span className={styles.anim} style={{ display: 'block', paddingBottom: '0.08em' }}>Sound like your kind of room?</span></span>
+            <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>Sound like your kind of room?</span></Reveal>
           </h2>
-          <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small and curated, so entry is by request. Tell us a little about what you do and we{'’'}ll be in touch.</p>
-          <a href={INVITE} style={{ textDecoration: 'none', background: '#ffffff', color: '#0B0B0B', fontFamily: MONO, fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', padding: '17px 36px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 10 }}>request an invite <span style={{ fontSize: 16 }}>→</span></a>
+          <Reveal gate={false} delay={120}>
+            <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small and curated, so entry is by request. Tell us a little about what you do and we{'’'}ll be in touch.</p>
+          </Reveal>
+          <Reveal gate={false} delay={240}>
+            <a href={INVITE} style={{ textDecoration: 'none', background: '#ffffff', color: '#0B0B0B', fontFamily: MONO, fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', padding: '17px 36px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 10 }}>request an invite <span style={{ fontSize: 16 }}>→</span></a>
+          </Reveal>
         </div>
       </section>
 

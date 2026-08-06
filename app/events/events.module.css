@@ -1,27 +1,11 @@
 /* Page-scoped styles for /events — keyframes, hover states, and the grids
    that need media queries. Everything else is inline, mirroring the comp. */
 
-@keyframes in {
-  from { transform: translateY(16px); }
-  to { transform: none; }
-}
-@keyframes draw {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
 @keyframes drift {
   0% { transform: translate(0, 0) scale(1.06); }
   50% { transform: translate(-2%, -1.5%) scale(1.12); }
   100% { transform: translate(0, 0) scale(1.06); }
 }
-.anim { animation: in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
-.line {
-  height: 1px;
-  transform-origin: left;
-  animation: draw 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 .drift { animation: drift 28s ease-in-out infinite; }
 
 /* why-we-do-this two-column */
