@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { archivo, sometype } from '../components/lama/fonts'
 import LamaNav from '../components/lama/LamaNav'
 import LamaFooter from '../components/lama/LamaFooter'
+import LamaContact from '../components/lama/LamaContact'
 import WorkGrid from './WorkGrid'
 import { getSiteProjects } from '../lib/websiteData'
 
@@ -25,6 +26,7 @@ export default async function WorkPage() {
     <div className={`${archivo.variable} ${sometype.variable} bg-ink min-h-screen [&_section]:border-b-0`}>
       <LamaNav gate={false} />
       <WorkGrid projects={projects} />
+      <LamaContact gate={false} />
       <LamaFooter vol={`Selected work · ${projects.length} projects`} />
     </div>
   )

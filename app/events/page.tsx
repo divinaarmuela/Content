@@ -1,6 +1,7 @@
 import { Space_Mono } from 'next/font/google'
 import LamaNav from '../components/lama/LamaNav'
 import LamaFooter from '../components/lama/LamaFooter'
+import LamaContact from '../components/lama/LamaContact'
 import Reveal from '../components/lama/Reveal'
 import Rule from '../components/lama/Rule'
 import { archivo, sometype } from '../components/lama/fonts'
@@ -171,6 +172,7 @@ export default function EventsPage() {
         </div>
       </section>
 
+      <LamaContact gate={false} />
       <LamaFooter vol="The Room · by invitation" />
     </div>
   )

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 const FIELD =
-  'w-full bg-transparent border-b border-cream/25 py-3 font-lamah text-cream placeholder:text-cream-dim/60 focus:outline-none focus:border-cream transition-colors'
+  // text-base (16px) matters: anything smaller makes iOS Safari auto-zoom the
+  // page when the field is focused
+  'w-full bg-transparent border-b border-cream/25 py-3 font-lamah text-base text-cream placeholder:text-cream-dim/60 focus:outline-none focus:border-cream transition-colors'
 const LABEL = 'block mb-3 font-lamam text-[10px] uppercase tracking-widest text-cream-dim'
 
 // Same options and payload shape as the deployed ContactForm — multi-selects
