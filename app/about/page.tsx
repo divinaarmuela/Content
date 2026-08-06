@@ -12,7 +12,7 @@ const ACCENT = '#FFFFFF'
 const MONO = 'var(--font-space-mono), monospace'
 const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
 const EMAIL = 'mailto:hello@mdmmarketing.com.au'
-const HERO_IMG = '/martindivina.avif' // stand-in until a studio/team film still is supplied
+const HERO_IMG = '/MDmediateam.jpg'
 
 const beliefs = [
   { title: 'Visibility comes first', body: 'The best business in the room still loses to the one people have heard of.' },
