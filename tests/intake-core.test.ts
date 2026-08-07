@@ -3,6 +3,7 @@ import {
   answerableBlocks, mergeAnswers, completion, isWritable, nextStatus,
   type TemplateDefinition,
 } from '../app/lib/intake-core'
+import { TEMPLATES, templateFor } from '../app/lib/intake-templates'
 
 const DEF: TemplateDefinition = {
   key: 'rebrand',
@@ -127,5 +128,56 @@ describe('nextStatus', () => {
 
   it('a save against a submitted form changes nothing', () => {
     expect(nextStatus('submitted', 'save')).toBe('submitted')
+  })
+})
+
+describe('templates', () => {
+  it('defines all three engagement types', () => {
+    expect(Object.keys(TEMPLATES).sort()).toEqual(['launch', 'one_off', 'rebrand'])
+  })
+
+  it('gives every block a unique id within its template', () => {
+    for (const def of Object.values(TEMPLATES)) {
+      const ids = def.sections.flatMap(s => s.blocks).map(b => b.id)
+      expect(new Set(ids).size, `duplicate block id in ${def.key}`).toBe(ids.length)
+    }
+  })
+
+  it('gives every section a unique id within its template', () => {
+    for (const def of Object.values(TEMPLATES)) {
+      const ids = def.sections.map(s => s.id)
+      expect(new Set(ids).size, `duplicate section id in ${def.key}`).toBe(ids.length)
+    }
+  })
+
+  it('gives every select and multi_select at least two options', () => {
+    for (const def of Object.values(TEMPLATES)) {
+      for (const b of answerableBlocks(def)) {
+        if (b.type === 'select' || b.type === 'multi_select') {
+          expect((b.options ?? []).length, `${def.key}/${b.id}`).toBeGreaterThan(1)
+        }
+      }
+    }
+  })
+
+  it('asks the rebrand client about heritage, and the one-off client not at all', () => {
+    expect(answerableBlocks(TEMPLATES.rebrand).map(b => b.id)).toContain('history')
+    expect(answerableBlocks(TEMPLATES.one_off).map(b => b.id)).not.toContain('history')
+  })
+
+  it('captures the approval contact in every template — production needs it', () => {
+    for (const def of Object.values(TEMPLATES)) {
+      expect(answerableBlocks(def).map(b => b.id), def.key).toContain('approval_contact')
+    }
+  })
+
+  it('opens every template with guidance rather than a bare question', () => {
+    for (const def of Object.values(TEMPLATES)) {
+      expect(def.sections[0].blocks[0].type, def.key).toBe('guidance')
+    }
+  })
+
+  it('falls back to one_off for an unknown key rather than throwing', () => {
+    expect(templateFor('nonsense' as never).key).toBe('one_off')
   })
 })
