@@ -39,6 +39,7 @@ export const config = {
     '/client/:path*',
     '/sign-in/:path*',
     '/sign-up/:path*',
+    '/api/clients/:path*',
     '/api/db-tables/:path*',
     '/api/ingest/:path*',
     '/api/leads/:path*',
