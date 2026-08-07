@@ -7,6 +7,7 @@ import { inngest } from '../inngest/client'
 import { leadsChannel } from '../inngest/channels'
 import { autoIngestLead } from './lead-enrichment'
 import { prefilterSkipReason } from './gmail-core'
+import { matchExistingCompany } from './lead-enrichment-core'
 import {
   listRecentMessageIds, fetchMessage, getMailboxes,
   type InboxMessage, type Mailbox,
@@ -84,6 +85,7 @@ export type ScanResult = {
  *  reach the log again, but the operator still needs to see they were counted. */
 export type MessageOutcome =
   | 'already_processed'
+  | 'existing_client'
   | 'prefiltered'
   | 'not_a_lead'
   | 'duplicate_sender'
@@ -222,6 +224,12 @@ async function scanOneMailbox(
   const mailbox = box.email
   const ownDomain = mailbox.split('@')[1] ?? 'mdmmarketing.com.au'
 
+  // Loaded once per scan rather than per message: the list is small and
+  // static for the duration, and a query per message would be a hundred
+  // round-trips to answer the same question.
+  const { data: clientRows } = await supabase.from('clients').select('name')
+  const clientNames = (clientRows ?? []).map(c => c.name as string).filter(Boolean)
+
   const ids = await listRecentMessageIds(box, gmailQuery(settings), settings.max_messages)
   result.scanned += ids.length
   emit({ type: 'listed', email: mailbox, count: ids.length })
@@ -319,7 +327,29 @@ async function scanOneMailbox(
         continue
       }
 
-      // 4. duplicate guard — same sender already a recent lead?
+      // 4. an existing client is not a new lead. Real Deal emailing in about
+      //    their own campaign was landing in the leads list as though they
+      //    were a stranger. Checked on the business name the model extracted,
+      //    and on the sender's domain, because a name is often absent.
+      const existingClient =
+        matchExistingCompany(c.business, clientNames)
+        ?? matchExistingCompany(msg.fromEmail.split('@')[1] ?? '', clientNames)
+      if (existingClient) {
+        await supabase.from('email_ingest_log').update({
+          status: 'skipped', is_lead: true, confidence: c.confidence,
+          reasoning: `already a client: ${existingClient}`,
+        }).eq('id', claimed.id)
+        result.skipped++
+        emit({
+          type: 'message', email: mailbox, outcome: 'existing_client',
+          subject: msg.subject, from: msg.fromEmail,
+          reason: `${existingClient} is already a client, so this is not a new lead`,
+          confidence: c.confidence,
+        })
+        continue
+      }
+
+      // 5. duplicate guard — same sender already a recent lead?
       const since = new Date(Date.now() - settings.duplicate_window_days * 24 * 3600 * 1000).toISOString()
       const { data: existing } = settings.duplicate_window_days === 0
         ? { data: null }
@@ -341,7 +371,7 @@ async function scanOneMailbox(
         continue
       }
 
-      // 5. create the lead
+      // 6. create the lead
       const { data: lead, error: leadErr } = await supabase
         .from('leads')
         .insert({

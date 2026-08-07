@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   emailDomain, isBusinessDomain, slugify, FREE_MAIL_DOMAINS,
+  companyKey, isSameCompany, matchExistingCompany,
 } from '../app/lib/lead-enrichment-core'
 
 describe('emailDomain', () => {
@@ -39,5 +40,60 @@ describe('slugify', () => {
   it('returns empty for junk', () => {
     expect(slugify('!!!')).toBe('')
     expect(slugify('')).toBe('')
+  })
+})
+
+describe('companyKey', () => {
+  it('strips legal suffixes, a leading "the", and punctuation', () => {
+    expect(companyKey('The Emerald Reception Pty Ltd')).toBe('emerald reception')
+    expect(companyKey('Turnkey Building Group')).toBe('turnkey building')
+    expect(companyKey('Smith & Sons, Inc.')).toBe('smith and sons')
+  })
+
+  it('treats a plural and a singular as the same business', () => {
+    expect(companyKey('Emerald Receptions')).toBe(companyKey('Emerald Reception'))
+  })
+
+  it('returns empty for nothing usable', () => {
+    expect(companyKey('  ')).toBe('')
+    expect(companyKey('Pty Ltd')).toBe('')
+  })
+})
+
+describe('isSameCompany', () => {
+  it('matches the same business written differently', () => {
+    expect(isSameCompany('The Emerald Reception Pty Ltd', 'Emerald Receptions')).toBe(true)
+    expect(isSameCompany('TURNKEY BUILDING GROUP', 'Turnkey Building')).toBe(true)
+  })
+
+  it('matches a name written without spaces, as domains give it', () => {
+    expect(isSameCompany('RealDeal', 'Real Deal')).toBe(true)
+    expect(isSameCompany('turnkeybuilding', 'Turnkey Building Group')).toBe(true)
+  })
+
+  it('does not let one word swallow a longer name', () => {
+    // a lead from "Emerald" should not be discarded because "Emerald Reception"
+    // is a client — that is a different business until proven otherwise
+    expect(isSameCompany('Emerald', 'Emerald Reception')).toBe(false)
+  })
+
+  it('requires a whole-prefix match, not a shared first word', () => {
+    expect(isSameCompany('Turnkey Plumbing', 'Turnkey Building')).toBe(false)
+  })
+
+  it('is false when either side is empty', () => {
+    expect(isSameCompany('', 'Emerald')).toBe(false)
+    expect(isSameCompany('Pty Ltd', 'Emerald')).toBe(false)
+  })
+})
+
+describe('matchExistingCompany', () => {
+  it('returns the stored name it matched, so the log can say which', () => {
+    expect(matchExistingCompany('emerald receptions pty ltd', ['Pattons', 'The Emerald Reception']))
+      .toBe('The Emerald Reception')
+  })
+
+  it('returns null when nothing matches', () => {
+    expect(matchExistingCompany('Brand New Co', ['Pattons', 'Cecconis'])).toBe(null)
   })
 })
