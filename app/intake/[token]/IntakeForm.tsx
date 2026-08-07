@@ -124,6 +124,13 @@ export default function IntakeForm({
       })
       if (!put.ok) throw new Error(`upload ${put.status}`)
       setFiles(prev => [...prev, { block_id: blockId, filename: file.name, url: publicUrl }])
+      // mirror what the server just wrote into `answers`, so the progress
+      // counter moves now rather than on the next page load
+      setAnswers(prev => {
+        const current = prev[blockId]
+        const list = Array.isArray(current) ? current : []
+        return list.includes(file.name) ? prev : { ...prev, [blockId]: [...list, file.name] }
+      })
       setSave('saved')
     } catch {
       setSave('error')

@@ -474,7 +474,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <div className="mt-3 flex flex-col gap-5">
                     {form.definition.sections.map(section => {
                       const rows = section.blocks
-                        .filter(b => b.type !== 'guidance')
+                        // file blocks render below as download links; their
+                        // answer value is the filenames, which would otherwise
+                        // print the same thing twice
+                        .filter(b => b.type !== 'guidance' && b.type !== 'file')
                         .map(b => {
                           const v = form.answers[b.id]
                           const text = Array.isArray(v) ? v.join(', ') : (v ?? '')

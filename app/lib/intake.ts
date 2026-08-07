@@ -187,12 +187,32 @@ export async function updateIntakeDefinition(
   return Boolean(data)
 }
 
+/**
+ * Record an uploaded file, and mark its block as answered.
+ *
+ * The row in intake_files is what the dashboard links to; the filename in
+ * `answers` is what makes the block count as answered. Without the second
+ * write, completion() — which only ever reads `answers` — reports a section
+ * as 6/7 no matter how many files the client uploads, because it cannot see
+ * a table it does not read.
+ */
 export async function addIntakeFile(
   formId: string, blockId: string, filename: string, url: string, size: number,
 ): Promise<void> {
   const { error } = await supabase.from('intake_files')
     .insert({ form_id: formId, block_id: blockId, filename, url, size_bytes: size })
   if (error) throw new Error(error.message)
+
+  const { data } = await supabase
+    .from('intake_forms').select('answers').eq('id', formId).maybeSingle()
+  const answers = ((data?.answers ?? {}) as Answers)
+  const current = answers[blockId]
+  const list = Array.isArray(current) ? current : []
+  if (list.includes(filename)) return
+
+  await supabase.from('intake_forms')
+    .update({ answers: { ...answers, [blockId]: [...list, filename] } })
+    .eq('id', formId)
 }
 
 export async function listIntakeFiles(formId: string): Promise<IntakeFile[]> {
