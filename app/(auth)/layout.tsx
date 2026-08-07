@@ -40,6 +40,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             boxShadow: 'none',
           },
           footerActionLink: { color: '#5d5fef', fontWeight: 600 },
+          // "Secured by Clerk". Removing it through the dashboard is a paid
+          // plan feature (the API returns 402 app:remove_branding), so it is
+          // hidden here instead. Note that hiding it is against Clerk's terms
+          // for the free tier — the badge is the consideration for it — so
+          // this stays a deliberate choice rather than an accident.
+          logoBox: { display: 'none' },
+          footer: { display: 'none' },
         },
       }}
     >
