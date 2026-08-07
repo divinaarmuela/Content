@@ -162,106 +162,23 @@ export default function IntakeForm({
     : save === 'saved' ? 'Saved'
     : `${progress.answered} / ${progress.total}`
 
-  // ── already submitted ─────────────────────────────────────────────────────
-  // Not a bare thank-you: this is the only record the client has of what they
-  // sent. They wrote several hundred words and uploaded their brand files, and
-  // "thanks, that's with us" leaves them no way to check what actually went.
+  // ── already submitted ──────────────────────────────────────────────────────
   if (locked) {
     return (
-      <div className="intake min-h-screen bg-ink text-cream antialiased">
-        <header className="border-b border-cream/15">
-          <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-6">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
-            <p className="ml-auto font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
-              Submitted
-            </p>
-          </div>
-        </header>
-
-        <main className="mx-auto flex max-w-3xl flex-col gap-14 px-6 py-16">
-          <div>
-            <h1 className="font-lamah text-[34px] font-medium leading-[1.05] tracking-[-0.03em] sm:text-[44px]">
-              Thank you. This is with us now.
-            </h1>
-            <p className="mt-5 max-w-[54ch] font-lamah text-[16px] leading-relaxed text-cream-dim">
-              We will read every word before the call, and come back with a shot
-              list and a content plan built around it. If something needs
-              changing, tell your account manager and we will reopen it.
-            </p>
-            <p className="mt-6 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
-              {progress.answered} of {progress.total} answered
-              {files.length > 0 ? ` · ${files.length} file${files.length === 1 ? '' : 's'}` : ''}
-            </p>
-          </div>
-
-          {files.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <h2 className="font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
-                Files you sent
-              </h2>
-              <ul className="flex flex-col gap-1">
-                {files.map(f => (
-                  <li key={f.url}>
-                    <a
-                      href={f.url} target="_blank" rel="noreferrer noopener"
-                      className="font-lamah text-[15px] text-cream underline-offset-4 hover:underline"
-                    >
-                      {f.filename}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-12 border-t border-cream/15 pt-12">
-            <h2 className="font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
-              What you sent
-            </h2>
-            {definition.sections.map((section, i) => {
-              const rows = section.blocks
-                .filter(b => b.type !== 'guidance')
-                .map(b => {
-                  const v = answers[b.id]
-                  const text = Array.isArray(v) ? v.join(', ') : (v ?? '')
-                  return { id: b.id, label: b.label, text: String(text) }
-                })
-              return (
-                <div key={section.id} className="flex flex-col gap-5">
-                  <div className="flex items-baseline gap-4 border-b border-cream/10 pb-2">
-                    <span className="font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <h3 className="font-lamah text-[18px] font-medium tracking-[-0.02em]">
-                      {section.title}
-                    </h3>
-                    <span className="ml-auto font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
-                      {progress.sections[i]?.answered}/{progress.sections[i]?.total}
-                    </span>
-                  </div>
-                  <dl className="flex flex-col gap-5">
-                    {rows.map(r => (
-                      <div key={r.id}>
-                        <dt className="font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
-                          {r.label}
-                        </dt>
-                        <dd
-                          className={
-                            'mt-1.5 whitespace-pre-wrap font-lamah text-[15px] leading-relaxed ' +
-                            (r.text ? 'text-cream' : 'text-cream-faint italic')
-                          }
-                        >
-                          {r.text || 'Not answered'}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              )
-            })}
-          </div>
-        </main>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
+        <h1 className="max-w-[18ch] text-center font-lamah text-[34px] font-medium leading-[1.1] tracking-[-0.03em] sm:text-[44px]">
+          Thank you. This is with us now.
+        </h1>
+        <p className="mt-6 max-w-[46ch] text-center font-lamah text-[16px] leading-relaxed text-cream-dim">
+          We will read every word before the call, and come back with a shot list
+          and a content plan built around it. If something needs changing, tell
+          your account manager and we will reopen it for you.
+        </p>
+        <p className="mt-10 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
+          {progress.answered} of {progress.total} answered
+        </p>
       </div>
     )
   }
