@@ -50,6 +50,8 @@ type LogEntry = {
 type Conn = {
   mine: { connected: boolean; email: string | null; reason?: string }
   shared: string[]
+  /** connected by their owner through "Connect my inbox" */
+  self?: string[]
   connected: string[]
 }
 
@@ -185,7 +187,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
     }
   }
 
-  const mailboxes = conn ? [...conn.shared, ...conn.connected] : []
+  const mailboxes = conn ? [...conn.shared, ...(conn.self ?? []), ...conn.connected] : []
   const newLeads  = result?.leads_created ?? 0
 
   return (

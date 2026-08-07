@@ -28,7 +28,7 @@ type Settings = {
 
 type MailboxEntry = {
   email: string
-  source: 'shared' | 'connected'
+  source: 'shared' | 'connected' | 'self'
   enabled: boolean
   last_run_at: string | null
   last_status: 'running' | 'success' | 'error' | null
@@ -165,7 +165,9 @@ export default function ScannerSettings() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm">{m.email}</span>
                     <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                      {m.source === 'shared' ? 'shared' : 'connected'}
+                      {m.source === 'shared' ? 'shared'
+                        : m.source === 'self' ? 'you connected this'
+                        : 'connected'}
                     </span>
                     {m.last_status === 'error' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
@@ -279,14 +281,24 @@ export default function ScannerSettings() {
                 Switching this off hides the button; inboxes already connected
                 keep scanning until someone disconnects them.
               </p>
-              {settings.allow_self_connect && (
-                <a
-                  href="/api/inbox/connect"
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
-                >
-                  Connect my inbox
-                </a>
-              )}
+              {settings.allow_self_connect && (() => {
+                const mine = mailboxes.filter(m => m.source === 'self')
+                return (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {mine.length > 0 && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        Connected: {mine.map(m => m.email).join(', ')}
+                      </p>
+                    )}
+                    <a
+                      href="/api/inbox/connect"
+                      className="inline-flex w-fit items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
+                    >
+                      {mine.length > 0 ? 'Connect another mailbox' : 'Connect my inbox'}
+                    </a>
+                  </div>
+                )
+              })()}
             </div>
           </div>
 
