@@ -88,6 +88,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   const [creating, setCreating] = useState(false)
   const [newType, setNewType] = useState('ongoing')
   const [newTitle, setNewTitle] = useState('')
+  const [copyFrom, setCopyFrom] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -259,8 +260,11 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               <div className="flex gap-2">
                 <Button size="sm" disabled={busy}
                   onClick={async () => {
-                    await post({ template_key: newType, title: newTitle }, 'Form created')
-                    setCreating(false); setNewTitle('')
+                    await post(
+                      { template_key: newType, title: newTitle, copy_from_form_id: copyFrom || undefined },
+                      'Form created',
+                    )
+                    setCreating(false); setNewTitle(''); setCopyFrom('')
                   }}>
                   Create
                 </Button>
@@ -377,16 +381,12 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             {isEditing && (
               <IntakeEditor
                 definition={form.definition}
-                templateLabel={TYPES.find(t => t.key === form.template_key)?.label ?? form.template_key}
                 saving={busy}
                 onCancel={() => setEditing(null)}
-                onSave={async (next, applyToTemplate) => {
+                onSave={async next => {
                   const ok = await patch(
-                    {
-                      form_id: form.id, action: 'update_definition',
-                      definition: next, apply_to_template: applyToTemplate,
-                    },
-                    applyToTemplate ? 'Questions saved, and set as the template' : 'Questions saved',
+                    { form_id: form.id, action: 'update_definition', definition: next },
+                    'Questions saved',
                   )
                   if (ok) setEditing(null)
                 }}

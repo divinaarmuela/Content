@@ -67,8 +67,12 @@ export async function saveTemplateDefinition(
 
 export async function createIntakeForm(
   clientId: string, key: TemplateKey, createdBy: string, title = '',
+  /** copy these questions instead of the category template — used when
+   *  duplicating another client's form, which is usually closer to what you
+   *  want than starting from the generic template again */
+  copyFrom?: TemplateDefinition,
 ): Promise<IntakeForm> {
-  const def = await resolveTemplate(key)
+  const def = copyFrom ?? await resolveTemplate(key)
   const { data, error } = await supabase
     .from('intake_forms')
     .insert({

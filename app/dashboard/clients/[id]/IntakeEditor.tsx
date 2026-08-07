@@ -46,12 +46,10 @@ const TYPE_LABEL = (t: BlockType) => TYPES.find(x => x.value === t)?.label ?? t
 type Drag = { kind: 'section'; si: number } | { kind: 'block'; si: number; bi: number } | null
 
 export default function IntakeEditor({
-  definition, templateLabel, onSave, onCancel, saving,
+  definition, onSave, onCancel, saving,
 }: {
   definition: TemplateDefinition
-  /** e.g. "Rebrand / rebuild" — named so the checkbox says what it will change */
-  templateLabel: string
-  onSave: (next: TemplateDefinition, applyToTemplate: boolean) => void
+  onSave: (next: TemplateDefinition) => void
   onCancel: () => void
   saving: boolean
 }) {
@@ -59,7 +57,6 @@ export default function IntakeEditor({
   const [drag, setDrag] = useState<Drag>(null)
   const [over, setOver] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
-  const [applyToTemplate, setApplyToTemplate] = useState(false)
   /**
    * Raw text of the options field while it is being typed, keyed by block.
    *
@@ -115,29 +112,11 @@ export default function IntakeEditor({
               : <><Eye className="mr-1.5 h-3.5 w-3.5" /> Preview</>}
           </Button>
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}>Discard</Button>
-          <Button size="sm" onClick={() => onSave(draft, applyToTemplate)} disabled={saving}>
+          <Button size="sm" onClick={() => onSave(draft)} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>
-
-      {!preview && (
-        <label className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs">
-          <input
-            type="checkbox" className="mt-0.5"
-            checked={applyToTemplate}
-            onChange={e => setApplyToTemplate(e.target.checked)}
-          />
-          <span>
-            <span className="font-medium">Also save as the {templateLabel} template</span>
-            <span className="block text-muted-foreground">
-              Every {templateLabel.toLowerCase()} form created after this starts
-              from these questions. Forms already sent are untouched — each keeps
-              its own copy, so nobody has questions change mid-answer.
-            </span>
-          </span>
-        </label>
-      )}
 
       {preview ? <Preview definition={draft} /> : (
         <>

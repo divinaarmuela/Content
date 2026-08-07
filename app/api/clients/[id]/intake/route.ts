@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import {
   createIntakeForm, listIntakeFormsForClient, getIntakeFormForClient,
   reopenIntake, rotateIntakeToken, markIntakeSent, listIntakeFiles,
   deleteIntakeForm, updateIntakeDefinition, renameIntakeForm,
-  getIntakeDefaultRecipients, saveIntakeDefaultRecipients, saveTemplateDefinition,
+  getIntakeDefaultRecipients, saveIntakeDefaultRecipients,
   setFormRecipients, listTeamRecipients,
 } from '../../../../lib/intake'
-import { completion, normaliseDefinition, type TemplateKey } from '../../../../lib/intake-core'
+import {
+  completion, normaliseDefinition,
+  type TemplateKey, type TemplateDefinition,
+} from '../../../../lib/intake-core'
 
 /**
  * Intake forms for one client.
@@ -62,7 +66,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json().catch(() => ({}))
     const key = (body?.template_key ?? 'one_off') as TemplateKey
 
-    const form = await createIntakeForm(id, key, admin.id, String(body?.title ?? ''))
+    // Copying an existing form beats starting from the template when a client
+    // resembles one you have already tailored for. The source is resolved
+    // through the DB rather than trusted from the body, and its questions are
+    // repaired the same way any stored definition is.
+    let copyFrom: TemplateDefinition | undefined
+    const sourceId = String(body?.copy_from_form_id ?? '')
+    if (sourceId) {
+      const { data: src } = await supabase
+        .from('intake_forms').select('definition, template_key').eq('id', sourceId).maybeSingle()
+      if (src?.definition) {
+        copyFrom = normaliseDefinition(src.definition, (src.template_key ?? key) as TemplateKey)
+      }
+    }
+
+    const form = await createIntakeForm(id, key, admin.id, String(body?.title ?? ''), copyFrom)
     return NextResponse.json(
       { id: form.id, token: form.token, status: form.status, title: form.title },
       { status: 201 },
@@ -117,12 +135,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const definition = normaliseDefinition(body?.definition, form.template_key)
         if (definition.sections.length === 0) {
           return NextResponse.json({ error: 'A form needs at least one section' }, { status: 400 })
-        }
-        // one control, two scopes — the same shape as the recipients list:
-        // this form always, and optionally every future form of its category
-        if (body?.apply_to_template) {
-          const admin = await requireRole('super_admin')
-          await saveTemplateDefinition(form.template_key, definition, admin.email)
         }
         const ok = await updateIntakeDefinition(form.id, definition)
         if (!ok) {
