@@ -1,10 +1,11 @@
 -- ═══ Client intake form ═══
 -- Idempotent. Run in the Supabase SQL editor.
 --
--- One form per client, sent once after the kickoff call. `definition` is a
--- FROZEN copy of the template taken at creation: editing a master template in
--- app/lib/intake-templates.ts must never change a form under a client who is
--- halfway through writing six hundred words into it.
+-- `definition` is a FROZEN copy of the template taken at creation: editing a
+-- master template in app/lib/intake-templates.ts must never change a form under
+-- a client who is halfway through writing six hundred words into it. A super
+-- admin may still edit one form's own questions, but only before the client
+-- has started — see updateIntakeDefinition.
 
 create table if not exists intake_forms (
   id              uuid        primary key default gen_random_uuid(),
@@ -36,9 +37,17 @@ alter table intake_forms drop constraint if exists intake_forms_template_key_che
 alter table intake_forms add constraint intake_forms_template_key_check
   check (template_key in ('one_off','launch','rebrand','ongoing'));
 
--- one form per client, enforced here rather than by the UI hiding a button
-create unique index if not exists intake_forms_client_uidx on intake_forms (client_id);
-create unique index if not exists intake_forms_token_uidx  on intake_forms (token);
+-- A client may hold several forms — an onboarding intake, then a separate brief
+-- for a second piece of work. An earlier version of this file enforced one per
+-- client with a unique index; drop it if that version already ran.
+drop index if exists intake_forms_client_uidx;
+create index if not exists intake_forms_client_idx on intake_forms (client_id, created_at desc);
+
+-- the token is the credential, so it must be unguessable AND unique
+create unique index if not exists intake_forms_token_uidx on intake_forms (token);
+
+-- a human-readable name, so three forms on one client are tellable apart
+alter table intake_forms add column if not exists title text not null default '';
 
 -- A file block accepts several files and needs its own lifecycle, so uploads
 -- are rows rather than entries inside `answers`.

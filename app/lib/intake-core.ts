@@ -73,6 +73,95 @@ export function mergeAnswers(
   return out
 }
 
+export const BLOCK_TYPES: BlockType[] = [
+  'guidance', 'short_text', 'long_text', 'link',
+  'select', 'multi_select', 'checkbox', 'file',
+]
+
+const TEMPLATE_KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing']
+
+/** Turn a label into a stable id. Answers key off block ids, so this only ever
+ *  runs for NEW blocks — an existing id is carried through untouched. */
+export function slugify(input: string, fallback: string): string {
+  const s = input.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48)
+  return s || fallback
+}
+
+/**
+ * Validate and repair a definition arriving from a browser.
+ *
+ * A super admin edits their own client's form, so this is not a trust boundary
+ * in the security sense — but it is a correctness one. Duplicate ids silently
+ * merge two questions' answers into one, an unknown type renders as nothing,
+ * and an empty label produces a question nobody can answer. All three are
+ * repaired here rather than left to surface as a confused client on a Sunday.
+ */
+export function normaliseDefinition(raw: unknown, key: TemplateKey): TemplateDefinition {
+  const src = (raw ?? {}) as Partial<TemplateDefinition>
+  const seen = new Set<string>()
+  let n = 0
+
+  const uniqueId = (candidate: string, fallback: string): string => {
+    let id = slugify(candidate, fallback)
+    while (seen.has(id)) id = `${id}_${++n}`
+    seen.add(id)
+    return id
+  }
+
+  const sections: Section[] = (Array.isArray(src.sections) ? src.sections : [])
+    .map((rawSection, si) => {
+      const s = (rawSection ?? {}) as Partial<Section>
+      const title = String(s.title ?? '').trim() || `Section ${si + 1}`
+      const blocks: Block[] = (Array.isArray(s.blocks) ? s.blocks : [])
+        .map((rawBlock, bi) => {
+          const b = (rawBlock ?? {}) as Partial<Block>
+          const type: BlockType = BLOCK_TYPES.includes(b.type as BlockType)
+            ? (b.type as BlockType) : 'short_text'
+          const label = String(b.label ?? '').trim() || `Question ${bi + 1}`
+          const options = (Array.isArray(b.options) ? b.options : [])
+            .map(o => String(o).trim()).filter(Boolean)
+
+          // an existing id is carried through untouched so answers survive a
+          // relabel; a NEW block has none, so its id comes from its label
+          const existing = String(b.id ?? '').trim()
+          const block: Block = {
+            id: uniqueId(existing || label, `q_${si}_${bi}`),
+            type, label,
+          }
+          const help = String(b.help ?? '').trim()
+          if (help) block.help = help
+          const placeholder = String(b.placeholder ?? '').trim()
+          if (placeholder) block.placeholder = placeholder
+          // options only mean anything on the two choice types; carrying them
+          // elsewhere makes a later type change behave unpredictably
+          if ((type === 'select' || type === 'multi_select') && options.length > 0) {
+            block.options = options
+          }
+          return block
+        })
+      const section: Section = { id: uniqueId(String(s.id ?? ''), `s_${si}`), title, blocks }
+      const intro = String(s.intro ?? '').trim()
+      if (intro) section.intro = intro
+      return section
+    })
+
+  return {
+    key: TEMPLATE_KEYS.includes(key) ? key : 'one_off',
+    name: String(src.name ?? '').trim() || 'Intake form',
+    sections,
+  }
+}
+
+/** Move an item within a list. Out-of-range moves are a no-op rather than an
+ *  error — the caller is a pair of arrow buttons, and the ends are reachable. */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) return list
+  const out = [...list]
+  const [item] = out.splice(from, 1)
+  out.splice(to, 0, item)
+  return out
+}
+
 export type SectionProgress = { id: string; title: string; answered: number; total: number }
 export type Completion = { answered: number; total: number; sections: SectionProgress[] }
 

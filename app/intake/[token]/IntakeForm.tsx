@@ -12,7 +12,7 @@ type FileRow = { block_id: string; filename: string; url: string }
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 /**
- * The form the client fills in.
+ * The form the client fills in. Dark lama system, matching /work and /events.
  *
  * "Fill it in over a coffee, not in a rush" is in the instructions we send, so
  * it is a requirement rather than a pleasantry: every field autosaves and the
@@ -20,9 +20,11 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
  * about their family's history to a closed tab.
  */
 export default function IntakeForm({
-  token, definition, initialAnswers, initialStatus, files: initialFiles,
+  token, clientName, title, definition, initialAnswers, initialStatus, files: initialFiles,
 }: {
   token: string
+  clientName: string
+  title: string
   definition: TemplateDefinition
   initialAnswers: Answers
   initialStatus: IntakeStatus
@@ -41,6 +43,7 @@ export default function IntakeForm({
 
   const locked = status === 'submitted'
   const progress = useMemo(() => completion(definition, answers), [definition, answers])
+  const pct = progress.total === 0 ? 0 : Math.round((progress.answered / progress.total) * 100)
 
   const flush = useCallback(async () => {
     const patch = pending.current
@@ -115,122 +118,150 @@ export default function IntakeForm({
   }, [flush, token])
 
   const savedLabel =
-    save === 'saving' ? 'Saving…'
-    : save === 'error' ? 'Not saved — check your connection'
+    save === 'saving' ? 'Saving'
+    : save === 'error' ? 'Not saved'
     : save === 'saved' ? 'Saved'
-    : `${progress.answered} of ${progress.total}`
+    : `${progress.answered} / ${progress.total}`
 
   return (
-    <div className="min-h-screen bg-[#F4F0E6] text-[#0A0A0A] antialiased">
-      <header className="sticky top-0 z-20 border-b border-[#C9C4BA] bg-[#F4F0E6]/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-5">
+    <div className="min-h-screen bg-ink text-cream antialiased">
+      {/* ── docked bar: identity left, save state right, progress hairline under ── */}
+      <header className="sticky top-0 z-30 border-b border-cream/15 bg-ink/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/MDLogo-trim.png" alt="MD Media" className="h-3.5 w-auto" />
+          <img src="/MDLogo-trim.png" alt="MD Media" className="h-3 w-auto invert-0 brightness-0 invert" />
+          <p className="hidden font-lamam text-[10px] uppercase tracking-widest text-cream-dim sm:block">
+            {clientName}
+          </p>
           <p
             className={
-              'ml-auto font-mono text-[10px] uppercase tracking-[0.15em] ' +
-              (save === 'error' ? 'text-[#B42318]' : 'text-[#8A8A85]')
+              'ml-auto font-lamam text-[10px] uppercase tracking-widest tabular-nums ' +
+              (save === 'error' ? 'text-[#E2725B]' : 'text-cream-dim')
             }
           >
             {savedLabel}
           </p>
         </div>
+        <div className="h-px w-full bg-cream/10">
+          <div
+            className="h-px bg-cream transition-[width] duration-500 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </header>
 
-      <main className="mx-auto flex max-w-3xl flex-col gap-12 px-5 py-12">
+      <main className="mx-auto flex max-w-3xl flex-col gap-16 px-6 py-16 sm:py-24">
         <div>
-          <h1 className="text-[34px] font-medium leading-[1.1] tracking-[-0.025em] sm:text-[42px]">
-            Welcome to <span className="text-[#0057FF]">MD Media</span>.
+          <p className="font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
+            {title}
+          </p>
+          <h1 className="mt-5 font-lamah text-[38px] font-medium leading-[1.05] tracking-[-0.03em] sm:text-[54px]">
+            Welcome to<br />MD Media.
           </h1>
-          <p className="mt-4 max-w-[58ch] text-[16px] leading-relaxed text-[#5A5A55]">
-            This form is the foundation we build everything on. Take your time —
-            there are no wrong answers, only honest ones. Your work saves as you
-            go, so you can close this and come back whenever suits.
+          <p className="mt-6 max-w-[54ch] font-lamah text-[16px] leading-relaxed text-cream-dim">
+            This is the foundation we build everything on — the brand, the shoot,
+            the content, the strategy. Take your time. There are no wrong
+            answers, only honest ones. Everything saves as you type, so you can
+            close this and come back whenever suits.
           </p>
         </div>
 
         {locked && (
-          <p className="rounded-lg border border-[#0057FF] bg-white/60 px-5 py-4 text-[15px] leading-relaxed">
+          <p className="max-w-[54ch] border-l border-cream pl-5 font-lamah text-[15px] leading-relaxed text-cream">
             Thank you — this is with us now. If you need to change something,
-            just tell your account manager and we will reopen it for you.
+            tell your account manager and we will reopen it for you.
           </p>
         )}
 
-        {definition.sections.map((section, i) => (
-          <section key={section.id} className="flex flex-col gap-6">
-            <div className="border-b border-[#C9C4BA] pb-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#8A8A85]">
-                {String(i + 1).padStart(2, '0')}
-              </p>
-              <h2 className="mt-1 text-[20px] font-medium tracking-tight">{section.title}</h2>
-              {section.intro && (
-                <p className="mt-2 max-w-[62ch] text-[14px] italic leading-relaxed text-[#5A5A55]">
-                  {section.intro}
-                </p>
-              )}
-            </div>
+        {definition.sections.map((section, i) => {
+          const done = progress.sections[i]
+          return (
+            <section key={section.id} className="flex flex-col gap-8">
+              <div className="flex flex-col gap-3 border-b border-cream/15 pb-5">
+                <div className="flex items-baseline gap-4">
+                  <span className="font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <h2 className="font-lamah text-[22px] font-medium tracking-[-0.02em] sm:text-[26px]">
+                    {section.title}
+                  </h2>
+                  {done && done.total > 0 && (
+                    <span className="ml-auto font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
+                      {done.answered}/{done.total}
+                    </span>
+                  )}
+                </div>
+                {section.intro && (
+                  <p className="max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">
+                    {section.intro}
+                  </p>
+                )}
+              </div>
 
-            <fieldset disabled={locked} className="m-0 flex flex-col gap-7 border-0 p-0">
-              {section.blocks.map(block => {
-                const value = answers[block.id]
+              <fieldset disabled={locked} className="m-0 flex flex-col gap-10 border-0 p-0">
+                {section.blocks.map(block => {
+                  const value = answers[block.id]
 
-                if (block.type === 'guidance') {
-                  return <GuidanceBlock key={block.id} block={block} />
-                }
-                if (block.type === 'file') {
+                  if (block.type === 'guidance') {
+                    return <GuidanceBlock key={block.id} block={block} />
+                  }
+                  if (block.type === 'file') {
+                    return (
+                      <FileBlock
+                        key={block.id} block={block} disabled={locked}
+                        uploading={uploading === block.id}
+                        files={files.filter(f => f.block_id === block.id)}
+                        onUpload={f => void upload(block.id, f)}
+                      />
+                    )
+                  }
+                  if (block.type === 'select') {
+                    return (
+                      <SelectBlock
+                        key={block.id} block={block}
+                        value={typeof value === 'string' ? value : ''}
+                        onChange={v => set(block.id, v)}
+                      />
+                    )
+                  }
+                  if (block.type === 'multi_select' || block.type === 'checkbox') {
+                    return (
+                      <MultiSelectBlock
+                        key={block.id} block={block}
+                        value={Array.isArray(value) ? value : []}
+                        onChange={v => set(block.id, v)}
+                      />
+                    )
+                  }
                   return (
-                    <FileBlock
-                      key={block.id} block={block} disabled={locked}
-                      uploading={uploading === block.id}
-                      files={files.filter(f => f.block_id === block.id)}
-                      onUpload={f => void upload(block.id, f)}
-                    />
-                  )
-                }
-                if (block.type === 'select') {
-                  return (
-                    <SelectBlock
-                      key={block.id} block={block}
+                    <TextBlock
+                      key={block.id} block={block} long={block.type === 'long_text'}
                       value={typeof value === 'string' ? value : ''}
                       onChange={v => set(block.id, v)}
                     />
                   )
-                }
-                if (block.type === 'multi_select' || block.type === 'checkbox') {
-                  return (
-                    <MultiSelectBlock
-                      key={block.id} block={block}
-                      value={Array.isArray(value) ? value : []}
-                      onChange={v => set(block.id, v)}
-                    />
-                  )
-                }
-                return (
-                  <TextBlock
-                    key={block.id} block={block} long={block.type === 'long_text'}
-                    value={typeof value === 'string' ? value : ''}
-                    onChange={v => set(block.id, v)}
-                  />
-                )
-              })}
-            </fieldset>
-          </section>
-        ))}
+                })}
+              </fieldset>
+            </section>
+          )
+        })}
 
         {!locked && (
-          <div className="border-t border-[#C9C4BA] pt-8">
-            <p className="mb-5 max-w-[58ch] text-[15px] leading-relaxed text-[#5A5A55]">
-              Incomplete is fine — send us what you have and we will work the rest
-              out together on the call.
+          <div className="border-t border-cream/15 pt-10">
+            <p className="mb-7 max-w-[54ch] font-lamah text-[15px] leading-relaxed text-cream-dim">
+              Incomplete is fine — send us what you have and we will work the
+              rest out together on the call.
             </p>
             <button
               type="button" onClick={() => void submit()} disabled={submitting}
               className={
-                'bg-[#0057FF] px-7 py-4 font-mono text-[12px] font-semibold uppercase ' +
-                'tracking-[0.15em] text-[#F4F0E6] transition hover:opacity-90 disabled:opacity-60'
+                'group inline-flex items-center gap-3 border border-cream px-8 py-4 ' +
+                'font-lamam text-[11px] uppercase tracking-widest text-cream ' +
+                'transition-colors hover:bg-cream hover:text-ink disabled:opacity-50'
               }
             >
-              {submitting ? 'Sending…' : 'Send to MD Media →'}
+              {submitting ? 'Sending' : 'Send to MD Media'}
+              <span className="transition-transform group-hover:translate-x-1">↗</span>
             </button>
           </div>
         )}

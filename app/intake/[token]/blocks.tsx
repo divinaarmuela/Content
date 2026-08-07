@@ -6,27 +6,34 @@ import type { Block } from '../../lib/intake-core'
  * One renderer per block type, kept apart from IntakeForm so that file stays
  * about state and this one stays about markup.
  *
- * Inputs are 16px throughout. Anything smaller makes iOS Safari zoom on focus,
- * and on a form this long that reads as the page lurching away from you.
+ * Dark lama system, matching /work and /events: ink ground, cream type,
+ * Archivo for prose and Sometype for labels. Fields are underlines rather than
+ * boxes, as on LamaContactForm.
+ *
+ * `text-base` on every input is load-bearing: anything under 16px makes iOS
+ * Safari auto-zoom the page on focus, and on a form this long that reads as
+ * the page lurching away from you.
  */
 
 const FIELD =
-  'w-full rounded-lg border border-[#C9C4BA] bg-white/70 px-4 py-3 text-[16px] ' +
-  'text-[#0A0A0A] outline-none transition placeholder:text-[#8A8A85] ' +
-  'focus:border-[#0057FF] focus:ring-2 focus:ring-[#0057FF]/20'
+  'w-full bg-transparent border-b border-cream/25 py-3 font-lamah text-base text-cream ' +
+  'placeholder:text-cream-dim/50 focus:outline-none focus:border-cream transition-colors ' +
+  'disabled:opacity-50'
 
-const CHIP_ON = 'border-[#0057FF] bg-[#0057FF] text-[#F4F0E6]'
-const CHIP_OFF = 'border-[#C9C4BA] bg-white/70 text-[#5A5A55] hover:border-[#0A0A0A]'
-const CHIP = 'rounded-full border px-4 py-2 text-[14px] transition disabled:opacity-60'
+const LABEL = 'block font-lamam text-[10px] uppercase tracking-widest text-cream-dim'
+
+const CHIP = 'rounded-full border px-4 py-2 font-lamah text-base transition disabled:opacity-50'
+const CHIP_ON = 'border-cream bg-cream text-ink'
+const CHIP_OFF = 'border-cream/25 text-cream-dim hover:border-cream hover:text-cream'
 
 export function BlockLabel({ block }: { block: Block }) {
   return (
-    <div className="mb-2">
-      <label htmlFor={block.id} className="block text-[15px] font-medium leading-snug text-[#0A0A0A]">
-        {block.label}
-      </label>
+    <div className="mb-3">
+      <label htmlFor={block.id} className={LABEL}>{block.label}</label>
       {block.help && (
-        <p className="mt-1 text-[13px] leading-relaxed text-[#5A5A55]">{block.help}</p>
+        <p className="mt-2 max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">
+          {block.help}
+        </p>
       )}
     </div>
   )
@@ -34,7 +41,7 @@ export function BlockLabel({ block }: { block: Block }) {
 
 export function GuidanceBlock({ block }: { block: Block }) {
   return (
-    <p className="border-l-2 border-[#0057FF] pl-4 text-[15px] leading-relaxed text-[#5A5A55]">
+    <p className="max-w-[62ch] border-l border-cream/25 pl-5 font-lamah text-[15px] leading-relaxed text-cream-dim">
       {block.label}
     </p>
   )
@@ -53,7 +60,7 @@ export function TextBlock({
       <BlockLabel block={block} />
       {long ? (
         <textarea
-          id={block.id} value={value} rows={6} placeholder={block.placeholder}
+          id={block.id} value={value} rows={5} placeholder={block.placeholder}
           onChange={e => onChange(e.target.value)}
           className={`${FIELD} resize-y leading-relaxed`}
         />
@@ -78,8 +85,8 @@ export function SelectBlock({
         {(block.options ?? []).map(opt => (
           <button
             key={opt} type="button"
-            // clicking the chosen option again clears it — a select with no
-            // way back is a trap when someone mis-taps on a phone
+            // clicking the chosen option again clears it — a select with no way
+            // back is a trap when someone mis-taps on a phone
             onClick={() => onChange(value === opt ? '' : opt)}
             className={`${CHIP} ${value === opt ? CHIP_ON : CHIP_OFF}`}
           >
@@ -127,9 +134,11 @@ export function FileBlock({
     <div>
       <BlockLabel block={block} />
       {files.length > 0 && (
-        <ul className="mb-3 flex flex-col gap-1">
+        <ul className="mb-4 flex flex-col gap-1">
           {files.map(f => (
-            <li key={f.url} className="font-mono text-[12px] text-[#5A5A55]">✓ {f.filename}</li>
+            <li key={f.url} className="font-lamam text-[12px] text-cream-dim">
+              <span className="text-cream">✓</span> {f.filename}
+            </li>
           ))}
         </ul>
       )}
@@ -141,11 +150,13 @@ export function FileBlock({
           e.target.value = '' // so the same file can be re-picked after a failure
         }}
         className={
-          'text-[14px] text-[#5A5A55] file:mr-3 file:cursor-pointer file:rounded-full ' +
-          'file:border file:border-[#C9C4BA] file:bg-white file:px-4 file:py-2 file:text-[13px]'
+          'font-lamam text-[12px] text-cream-dim file:mr-4 file:cursor-pointer ' +
+          'file:rounded-full file:border file:border-cream/25 file:bg-transparent ' +
+          'file:px-4 file:py-2 file:font-lamam file:text-[11px] file:uppercase ' +
+          'file:tracking-widest file:text-cream hover:file:border-cream'
         }
       />
-      {uploading && <p className="mt-2 text-[13px] text-[#5A5A55]">Uploading…</p>}
+      {uploading && <p className="mt-3 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Uploading…</p>}
     </div>
   )
 }

@@ -15,6 +15,7 @@ import {
 export type IntakeForm = {
   id: string
   client_id: string
+  title: string
   template_key: TemplateKey
   definition: TemplateDefinition
   token: string
@@ -30,19 +31,22 @@ export type IntakeForm = {
 export type IntakeFile = { block_id: string; filename: string; url: string }
 
 const COLS =
-  'id, client_id, template_key, definition, token, status, answers, ' +
+  'id, client_id, title, template_key, definition, token, status, answers, ' +
   'send_copy_to_client, sent_at, first_opened_at, submitted_at, reopened_at'
 
-/** Create the one form this client gets. The template definition is COPIED in,
- *  not referenced — editing intake-templates.ts later must not alter a form a
+/** Create a form for this client. The template definition is COPIED in, not
+ *  referenced — editing intake-templates.ts later must not alter a form a
  *  client is halfway through. */
 export async function createIntakeForm(
-  clientId: string, key: TemplateKey, createdBy: string,
+  clientId: string, key: TemplateKey, createdBy: string, title = '',
 ): Promise<IntakeForm> {
   const def = templateFor(key)
   const { data, error } = await supabase
     .from('intake_forms')
-    .insert({ client_id: clientId, template_key: def.key, definition: def, created_by: createdBy })
+    .insert({
+      client_id: clientId, template_key: def.key, definition: def,
+      created_by: createdBy, title: title.trim() || def.name,
+    })
     .select(COLS)
     .single()
   if (error) throw new Error(error.message)
@@ -62,10 +66,29 @@ export async function getIntakeByToken(token: string): Promise<IntakeForm | null
   return form
 }
 
-export async function getIntakeForClient(clientId: string): Promise<IntakeForm | null> {
+/** Every form on this client, newest first. */
+export async function listIntakeFormsForClient(clientId: string): Promise<IntakeForm[]> {
   const { data } = await supabase
-    .from('intake_forms').select(COLS).eq('client_id', clientId).maybeSingle()
+    .from('intake_forms').select(COLS)
+    .eq('client_id', clientId).order('created_at', { ascending: false })
+  return (data ?? []) as unknown as IntakeForm[]
+}
+
+/** One form, but only if it belongs to this client — so a form id from another
+ *  client cannot be operated on by anyone who knows it. */
+export async function getIntakeFormForClient(
+  clientId: string, formId: string,
+): Promise<IntakeForm | null> {
+  const { data } = await supabase
+    .from('intake_forms').select(COLS)
+    .eq('client_id', clientId).eq('id', formId).maybeSingle()
   return (data as unknown as IntakeForm) ?? null
+}
+
+export async function renameIntakeForm(formId: string, title: string): Promise<void> {
+  const { error } = await supabase.from('intake_forms')
+    .update({ title: title.trim().slice(0, 120) || 'Intake form' }).eq('id', formId)
+  if (error) throw new Error(error.message)
 }
 
 /**
@@ -135,6 +158,32 @@ export async function markIntakeSent(formId: string): Promise<void> {
   await supabase.from('intake_forms')
     .update({ status: 'sent', sent_at: new Date().toISOString() })
     .eq('id', formId).eq('status', 'draft')
+}
+
+/** Remove the form entirely so a different template can be chosen. One form per
+ *  client is a unique index, so without this a wrong choice is permanent.
+ *  intake_files cascades. */
+export async function deleteIntakeForm(formId: string): Promise<void> {
+  const { error } = await supabase.from('intake_forms').delete().eq('id', formId)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Replace the questions on one form.
+ *
+ * Only while the client has not started — `.in('status', ...)` is the guard, so
+ * a client typing at the same moment cannot have the form rearranged underneath
+ * them. Zero rows updated means they began first, and the caller is told.
+ */
+export async function updateIntakeDefinition(
+  formId: string, definition: TemplateDefinition,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('intake_forms')
+    .update({ definition })
+    .eq('id', formId).in('status', ['draft', 'sent'])
+    .select('id').maybeSingle()
+  return Boolean(data)
 }
 
 export async function addIntakeFile(

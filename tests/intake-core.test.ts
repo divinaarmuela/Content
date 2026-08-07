@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   answerableBlocks, mergeAnswers, completion, isWritable, nextStatus,
+  normaliseDefinition, moveItem, slugify,
   type TemplateDefinition,
 } from '../app/lib/intake-core'
 import { TEMPLATES, templateFor } from '../app/lib/intake-templates'
@@ -128,6 +129,109 @@ describe('nextStatus', () => {
 
   it('a save against a submitted form changes nothing', () => {
     expect(nextStatus('submitted', 'save')).toBe('submitted')
+  })
+})
+
+describe('slugify', () => {
+  it('turns a label into a stable id', () => {
+    expect(slugify('Venue name, as it appears publicly', 'x')).toBe('venue_name_as_it_appears_publicly')
+  })
+
+  it('falls back when a label has nothing usable in it', () => {
+    expect(slugify('—  ??', 'q_1_2')).toBe('q_1_2')
+    expect(slugify('', 'q_0_0')).toBe('q_0_0')
+  })
+})
+
+describe('moveItem', () => {
+  it('moves an item and closes the gap', () => {
+    expect(moveItem(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a'])
+    expect(moveItem(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('is a no-op at the ends rather than an error', () => {
+    const list = ['a', 'b', 'c']
+    expect(moveItem(list, 0, -1)).toBe(list)
+    expect(moveItem(list, 2, 3)).toBe(list)
+    expect(moveItem(list, 1, 1)).toBe(list)
+  })
+
+  it('does not mutate the original', () => {
+    const list = ['a', 'b', 'c']
+    moveItem(list, 0, 2)
+    expect(list).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('normaliseDefinition', () => {
+  it('keeps existing block ids so answers are never orphaned', () => {
+    const def = normaliseDefinition({
+      name: 'Custom', sections: [{ id: 'brand', title: 'Brand', blocks: [
+        { id: 'venue_name', type: 'short_text', label: 'Venue name (renamed)' },
+      ] }],
+    }, 'rebrand')
+    expect(def.sections[0].blocks[0].id).toBe('venue_name')
+    expect(def.sections[0].blocks[0].label).toBe('Venue name (renamed)')
+  })
+
+  it('derives an id from the label for a new block', () => {
+    const def = normaliseDefinition({
+      sections: [{ title: 'S', blocks: [{ type: 'long_text', label: 'What is your story?' }] }],
+    }, 'rebrand')
+    expect(def.sections[0].blocks[0].id).toBe('what_is_your_story')
+  })
+
+  it('de-duplicates ids — two questions sharing one would merge their answers', () => {
+    const def = normaliseDefinition({
+      sections: [{ title: 'S', blocks: [
+        { id: 'tone', type: 'short_text', label: 'Tone' },
+        { id: 'tone', type: 'short_text', label: 'Tone again' },
+      ] }],
+    }, 'rebrand')
+    const [a, b] = def.sections[0].blocks
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it('repairs an unknown block type rather than rendering nothing', () => {
+    const def = normaliseDefinition({
+      sections: [{ title: 'S', blocks: [{ id: 'x', type: 'wysiwyg', label: 'X' }] }],
+    }, 'rebrand')
+    expect(def.sections[0].blocks[0].type).toBe('short_text')
+  })
+
+  it('gives an empty label something answerable', () => {
+    const def = normaliseDefinition({
+      sections: [{ title: '', blocks: [{ id: 'x', type: 'short_text', label: '   ' }] }],
+    }, 'rebrand')
+    expect(def.sections[0].title).toBe('Section 1')
+    expect(def.sections[0].blocks[0].label).toBe('Question 1')
+  })
+
+  it('drops options from types that cannot use them', () => {
+    const def = normaliseDefinition({
+      sections: [{ title: 'S', blocks: [
+        { id: 'a', type: 'short_text', label: 'A', options: ['x', 'y'] },
+        { id: 'b', type: 'select', label: 'B', options: ['x', '', ' y '] },
+      ] }],
+    }, 'rebrand')
+    expect(def.sections[0].blocks[0].options).toBeUndefined()
+    expect(def.sections[0].blocks[1].options).toEqual(['x', 'y'])
+  })
+
+  it('survives junk entirely', () => {
+    expect(normaliseDefinition(null, 'rebrand').sections).toEqual([])
+    expect(normaliseDefinition({ sections: 'nope' }, 'rebrand').sections).toEqual([])
+    expect(normaliseDefinition({ sections: [null] }, 'rebrand').sections[0].blocks).toEqual([])
+  })
+
+  it('falls back to a known template key', () => {
+    expect(normaliseDefinition({}, 'made_up' as never).key).toBe('one_off')
+  })
+
+  it('round-trips a real template unchanged', () => {
+    const before = TEMPLATES.rebrand
+    const after = normaliseDefinition(JSON.parse(JSON.stringify(before)), 'rebrand')
+    expect(after).toEqual(before)
   })
 })
 
