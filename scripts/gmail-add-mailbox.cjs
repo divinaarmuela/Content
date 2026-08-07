@@ -2,11 +2,20 @@
 /**
  * Add another Gmail mailbox to the lead scanner.
  *
- *   node scripts/gmail-add-mailbox.cjs
+ *   node scripts/gmail-add-mailbox.cjs           read-only  (contact@, info@, …)
+ *   node scripts/gmail-add-mailbox.cjs --send    read + send (hello@ ONLY)
  *
  * Opens Google's consent screen, you sign in AS THE MAILBOX you want to add
  * (e.g. contact@mdmmarketing.com.au), and it prints the GMAIL_MAILBOXES value
  * to paste into .env.local (and later into Vercel's env settings).
+ *
+ * --send is for the sending mailbox alone. A refresh token is bound to the
+ * client that issued it, so re-minting hello@ against a new OAuth client
+ * replaces GMAIL_REFRESH_TOKEN — the token app/api/submit/route.ts uses to
+ * email the team and auto-reply to the enquirer. Read scope alone would leave
+ * the form saving leads while silently emailing nobody. Every other mailbox is
+ * scanned and never sent from, so it gets read-only: the scanner has no
+ * business holding send rights on thirteen inboxes.
  *
  * One-time prerequisite: in Google Cloud Console → Credentials → your OAuth
  * client, add this redirect URI:  http://localhost:5599/callback
@@ -27,7 +36,12 @@ for (const line of fs.readFileSync(ENV, 'utf-8').split(/\r?\n/)) {
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID
 const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
 const REDIRECT = 'http://localhost:5599/callback'
-const SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+// https://mail.google.com/ is what nodemailer's SMTP OAuth2 requires; it is a
+// superset of gmail.readonly, so the sending mailbox needs this one alone.
+const WITH_SEND = process.argv.includes('--send')
+const SCOPE = WITH_SEND
+  ? 'https://mail.google.com/'
+  : 'https://www.googleapis.com/auth/gmail.readonly'
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.error('GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET missing from .env.local')
@@ -92,9 +106,16 @@ const server = http.createServer(async (req, res) => {
     res.end(`<h2 style="font-family:system-ui">Connected ${email}</h2>
       <p style="font-family:system-ui">Return to your terminal for the config line.</p>`)
 
-    console.log(`\n✅ Connected: ${email} (${prof.messagesTotal} messages)\n`)
+    console.log(`\n✅ Connected: ${email} (${prof.messagesTotal} messages)`)
+    console.log(`   scope: ${SCOPE}\n`)
     console.log('Replace/add this single line in .env.local:\n')
     console.log(`GMAIL_MAILBOXES=${JSON.stringify(boxes)}\n`)
+    if (WITH_SEND) {
+      // the sending path reads these two directly, not GMAIL_MAILBOXES
+      console.log('AND replace these two, or the contact form stops emailing:\n')
+      console.log(`GMAIL_USER=${email}`)
+      console.log(`GMAIL_REFRESH_TOKEN=${tok.refresh_token}\n`)
+    }
     console.log(`Mailboxes now scanned: ${boxes.map(b => b.email).join(', ')}\n`)
     server.close()
     process.exit(0)
