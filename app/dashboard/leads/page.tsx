@@ -1,6 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRealtime } from 'inngest/react'
+import { leadsChannel } from '@/app/inngest/channels'
+import { fetchLeadsSubscriptionToken } from './actions'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -159,22 +162,49 @@ export default function LeadsPage() {
   useEffect(() => { fetchLeads() }, [fetchLeads])
 
   /**
-   * Keep the table current without a manual refresh.
-   *
-   * The inbox scanner runs on a 5-minute cron, so a lead can land minutes
-   * after the page was opened and the list would never know. Polls every 30s,
-   * but only while the tab is visible — an unwatched tab polling all afternoon
-   * is pure waste — and refreshes immediately on returning to the tab, which
-   * is the moment someone actually wants to see what arrived.
+   * Live: a lead announces itself the moment it is created, from the contact
+   * form or the inbox scanner. The message is treated as a hint, not data —
+   * we refetch through the authenticated /api/leads rather than splicing the
+   * payload in, so there is one definition of what a lead looks like.
+   */
+  const { messages } = useRealtime({
+    channel: leadsChannel,
+    topics: ['created'] as const,
+    token: () => fetchLeadsSubscriptionToken(),
+    // fan-out channel: it never "completes", so do not auto-close
+    autoCloseOnTerminal: false,
+    historyLimit: 20,
+  })
+
+  const seen = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const latest = messages.last
+    if (!latest) return
+    const d = latest.data as { id: string; label: string; source: string }
+    // the publish path outside a function is not retry-safe, so a duplicate
+    // announcement is expected rather than exceptional
+    if (!d?.id || seen.current.has(d.id)) return
+    seen.current.add(d.id)
+    toast.success(`New lead — ${d.label}`, {
+      description: d.source === 'web_form' ? 'From the website form' : 'Found in the inbox',
+    })
+    void fetchLeads(true)
+  }, [messages.last, fetchLeads])
+
+  /**
+   * Belt to realtime's braces. Realtime covers the instant case; this covers
+   * a dropped socket, a sleeping laptop, and a lead created while the tab was
+   * in the background. Only while visible — an unwatched tab polling all
+   * afternoon is pure waste — and immediately on returning to the tab, which
+   * is the moment someone actually wants to know what arrived.
    */
   useEffect(() => {
     const tick = () => { if (!document.hidden) void fetchLeads(true) }
-    const id = window.setInterval(tick, 30_000)
-    const onVisible = () => { if (!document.hidden) void fetchLeads(true) }
-    document.addEventListener('visibilitychange', onVisible)
+    const id = window.setInterval(tick, 60_000)
+    document.addEventListener('visibilitychange', tick)
     return () => {
       window.clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('visibilitychange', tick)
     }
   }, [fetchLeads])
 

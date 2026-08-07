@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { supabase } from '@/lib/supabase'
 import { autoIngestLead } from '../../lib/lead-enrichment'
+import { inngest } from '../../inngest/client'
+import { leadsChannel } from '../../inngest/channels'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -109,6 +111,17 @@ export async function POST(req: NextRequest) {
   // Fire-and-forget — never delays or fails the visitor's submission.
   if (savedLead) {
     void autoIngestLead(savedLead).catch(e => console.error('auto-ingest error:', e))
+
+    // A form lead is the one kind that is genuinely instant — it exists the
+    // moment they press submit, with no scanner cron in between. Announce it.
+    // Publishing outside a function is not retry-safe, so the receiver treats
+    // messages as hints and refetches rather than trusting them.
+    void inngest.realtime.publish(leadsChannel.created, {
+      id: savedLead.id as string,
+      label: biz || `${fname} ${lname}`.trim() || email,
+      source: 'web_form',
+      ts: Date.now(),
+    }).catch(e => console.error('realtime publish failed:', e))
   }
 
   let emailOk = true

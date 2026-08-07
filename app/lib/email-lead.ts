@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { supabase } from '@/lib/supabase'
+import { inngest } from '../inngest/client'
+import { leadsChannel } from '../inngest/channels'
 import { autoIngestLead } from './lead-enrichment'
 import { prefilterSkipReason } from './gmail-core'
 import {
@@ -355,6 +357,19 @@ async function scanOneMailbox(
         subject: msg.subject, from: msg.fromEmail,
         reason: c.reasoning, confidence: c.confidence,
       })
+
+      // Tell any open leads page immediately. `inngest.realtime.publish`, not
+      // `step.realtime.publish`: this runs inside the step.run that wraps the
+      // whole mailbox scan, and the step form would nest a step in a step.
+      // Best-effort — a lead that is saved but unannounced is a refresh away,
+      // whereas a publish failure that threw here would lose the scan.
+      void inngest.realtime.publish(leadsChannel.created, {
+        id: lead.id as string,
+        label: [c.business, [c.fname, c.lname].filter(Boolean).join(' ')]
+          .filter(Boolean)[0] || msg.fromEmail,
+        source: 'email_ingest',
+        ts: Date.now(),
+      }).catch(e => console.error('realtime publish failed:', e))
 
       // 6. feed the existing prospect pipeline (verified-company → client)
       void autoIngestLead(lead).catch(e => console.error('auto-ingest from email error:', e))
