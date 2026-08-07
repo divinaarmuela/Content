@@ -89,7 +89,6 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   const [newType, setNewType] = useState('ongoing')
   const [newTitle, setNewTitle] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Form | null>(null)
@@ -283,7 +282,6 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
         const url = publicUrl(`/intake/${form.token}`)
         const editable = form.status === 'draft' || form.status === 'sent'
         const isEditing = editing === form.id
-        const isOpen = expanded === form.id
 
         return (
           <div key={form.id} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
@@ -463,61 +461,18 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               )
             )}
 
-            {/* ── answers ── */}
+            {/* ── answers live on their own page ── */}
             {form.completion.answered > 0 && !isEditing && (
               <div className="border-t border-border pt-3">
-                <Button size="sm" variant="ghost" className="-ml-2"
-                  onClick={() => setExpanded(isOpen ? null : form.id)}>
-                  {isOpen ? 'Hide answers' : `Read the ${form.completion.answered} answers`}
+                <Button size="sm" variant="secondary" asChild>
+                  <a href={`/dashboard/clients/${clientId}/intake/${form.id}`}>
+                    Read the {form.completion.answered} answers
+                    {form.files.length > 0 && ` · ${form.files.length} file${form.files.length === 1 ? '' : 's'}`}
+                  </a>
                 </Button>
-                {isOpen && (
-                  <div className="mt-3 flex flex-col gap-5">
-                    {form.definition.sections.map(section => {
-                      const rows = section.blocks
-                        // file blocks render below as download links; their
-                        // answer value is the filenames, which would otherwise
-                        // print the same thing twice
-                        .filter(b => b.type !== 'guidance' && b.type !== 'file')
-                        .map(b => {
-                          const v = form.answers[b.id]
-                          const text = Array.isArray(v) ? v.join(', ') : (v ?? '')
-                          return text ? { id: b.id, label: b.label, text } : null
-                        })
-                        .filter((r): r is { id: string; label: string; text: string } => r !== null)
-                      const files = form.files.filter(f =>
-                        section.blocks.some(b => b.id === f.block_id))
-                      if (rows.length === 0 && files.length === 0) return null
-
-                      return (
-                        <div key={section.id}>
-                          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            {section.title}
-                          </h4>
-                          <dl className="flex flex-col gap-3">
-                            {rows.map(r => (
-                              <div key={r.id}>
-                                <dt className="text-xs text-muted-foreground">{r.label}</dt>
-                                <dd className="whitespace-pre-wrap text-sm leading-relaxed">{r.text}</dd>
-                              </div>
-                            ))}
-                            {files.map(f => (
-                              <div key={f.url}>
-                                <dt className="text-xs text-muted-foreground">Attachment</dt>
-                                <dd className="text-sm">
-                                  <a href={f.url} target="_blank" rel="noreferrer noopener" className="underline">
-                                    {f.filename}
-                                  </a>
-                                </dd>
-                              </div>
-                            ))}
-                          </dl>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
               </div>
             )}
+
           </div>
         )
       })}
