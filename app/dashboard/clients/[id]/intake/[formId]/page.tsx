@@ -18,6 +18,8 @@ type Form = {
   sent_at: string | null
   first_opened_at: string | null
   submitted_at: string | null
+  /** null = inherits the agency default */
+  notify_emails: string[] | null
   definition: TemplateDefinition
   answers: Answers
   completion: Completion
@@ -34,12 +36,14 @@ type Form = {
 export default function IntakeSubmissionPage() {
   const params = useParams<{ id: string; formId: string }>()
   const [form, setForm] = useState<Form | null>(null)
+  const [defaults, setDefaults] = useState<string[]>([])
   const [missing, setMissing] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/clients/${params.id}/intake`)
     if (!res.ok) { setMissing(true); return }
     const json = await res.json()
+    setDefaults(json.default_recipients ?? [])
     const found = (json.forms ?? []).find((f: Form) => f.id === params.formId)
     if (!found) setMissing(true)
     else setForm(found)
@@ -85,6 +89,22 @@ export default function IntakeSubmissionPage() {
             {form.completion.answered}/{form.completion.total} answered
           </span>
         </div>
+
+        {/* who heard about this, resolved the same way the submit route does:
+            the form's own list, else the agency default, else nobody named */}
+        {(() => {
+          const list = form.notify_emails ?? defaults
+          return (
+            <p className="text-xs text-muted-foreground">
+              {list.length > 0
+                ? <>Notified on submission: <span className="text-foreground">{list.join(', ')}</span>
+                    {form.notify_emails ? '' : ' (agency default)'}</>
+                : 'Nobody is set to be notified when this is submitted.'}
+              {form.sent_at && ` · sent ${form.sent_at.slice(0, 10)}`}
+              {form.submitted_at && ` · submitted ${form.submitted_at.slice(0, 10)}`}
+            </p>
+          )
+        })()}
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" asChild>
