@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   answerableBlocks, mergeAnswers, completion, isWritable, nextStatus,
-  normaliseDefinition, moveItem, slugify,
+  normaliseDefinition, moveItem, slugify, normaliseRecipients, resolveRecipients,
   type TemplateDefinition,
 } from '../app/lib/intake-core'
 import { TEMPLATES, templateFor } from '../app/lib/intake-templates'
@@ -291,5 +291,40 @@ describe('templates', () => {
 
   it('falls back to one_off for an unknown key rather than throwing', () => {
     expect(templateFor('nonsense' as never).key).toBe('one_off')
+  })
+})
+
+describe('normaliseRecipients', () => {
+  it('lowercases, trims and de-duplicates', () => {
+    expect(normaliseRecipients([' Akmal@MDM.com ', 'akmal@mdm.com']))
+      .toEqual(['akmal@mdm.com'])
+  })
+
+  it('drops anything that is not a plausible address', () => {
+    expect(normaliseRecipients(['nope', '', null, 'a@b.co'])).toEqual(['a@b.co'])
+  })
+
+  it('survives junk in place of a list', () => {
+    expect(normaliseRecipients(null)).toEqual([])
+    expect(normaliseRecipients('a@b.co')).toEqual([])
+  })
+})
+
+describe('resolveRecipients', () => {
+  it("uses the form's own list when it has one", () => {
+    expect(resolveRecipients(['a@b.co'], ['x@y.co'], 'hello@z.co')).toEqual(['a@b.co'])
+  })
+
+  it('falls back to the agency default when the form has none', () => {
+    expect(resolveRecipients(null, ['x@y.co'], 'hello@z.co')).toEqual(['x@y.co'])
+  })
+
+  it('falls back to the sending mailbox when nothing is configured', () => {
+    expect(resolveRecipients(null, [], 'hello@z.co')).toEqual(['hello@z.co'])
+    expect(resolveRecipients(undefined, null, 'hello@z.co')).toEqual(['hello@z.co'])
+  })
+
+  it('respects an empty list on the form as "notify nobody"', () => {
+    expect(resolveRecipients([], ['x@y.co'], 'hello@z.co')).toEqual([])
   })
 })

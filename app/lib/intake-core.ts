@@ -205,3 +205,42 @@ export function nextStatus(current: IntakeStatus, event: IntakeEvent): IntakeSta
   if (event === 'save') return 'in_progress'
   return current
 }
+
+/**
+ * Clean a list of notification recipients arriving from a form control.
+ *
+ * Lowercased, trimmed and de-duplicated so "Akmal@… " and "akmal@…" cannot
+ * both be stored and both be emailed. Anything without a plausible address
+ * shape is dropped rather than stored — a typo'd recipient is a notification
+ * that silently never arrives, which is worse than one that was never
+ * configured.
+ */
+export function normaliseRecipients(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : []
+  const out: string[] = []
+  for (const item of list) {
+    const email = String(item ?? '').trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) continue
+    if (!out.includes(email)) out.push(email)
+  }
+  return out
+}
+
+/**
+ * Who to notify when a form is submitted.
+ *
+ * A form's own list wins when it has one; otherwise the agency-wide default;
+ * otherwise the sending mailbox, so a submission is never silently unannounced
+ * because nobody configured anything. An EMPTY list on the form is a real
+ * choice — "notify nobody for this one" — and is respected, which is why this
+ * checks for null rather than for emptiness.
+ */
+export function resolveRecipients(
+  formEmails: string[] | null | undefined,
+  defaultEmails: string[] | null | undefined,
+  fallback: string,
+): string[] {
+  if (formEmails !== null && formEmails !== undefined) return formEmails
+  if (defaultEmails && defaultEmails.length > 0) return defaultEmails
+  return fallback ? [fallback] : []
+}

@@ -132,6 +132,28 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     console.log('[intake realtime] status', connectionStatus, rtError ?? '')
   }, [connectionStatus, rtError])
 
+  /**
+   * Fallback poll, active only while the socket is NOT open.
+   *
+   * Realtime is the mechanism; this exists so that a subscription which fails
+   * to connect degrades to "a few seconds behind" rather than to "nothing
+   * updates until you switch tabs" — which is what shipping realtime and
+   * deleting the poll in the same change actually produced.
+   *
+   * Costs nothing when realtime is healthy: `connectionStatus === 'open'`
+   * tears the interval down.
+   */
+  useEffect(() => {
+    if (editing || connectionStatus === 'open') return
+    const tick = () => { if (!document.hidden) void load(true) }
+    const id = window.setInterval(tick, 8_000)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [load, editing, connectionStatus])
+
   const post = async (body: unknown, ok: string) => {
     setBusy(true)
     const res = await fetch(`/api/clients/${clientId}/intake`, {
