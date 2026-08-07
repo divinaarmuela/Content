@@ -132,8 +132,16 @@ describe('nextStatus', () => {
 })
 
 describe('templates', () => {
-  it('defines all three engagement types', () => {
-    expect(Object.keys(TEMPLATES).sort()).toEqual(['launch', 'one_off', 'rebrand'])
+  it('defines every engagement type', () => {
+    expect(Object.keys(TEMPLATES).sort()).toEqual(['launch', 'one_off', 'ongoing', 'rebrand'])
+  })
+
+  it('asks the ongoing client about the founders and paid ads, the one-off client neither', () => {
+    const ongoing = answerableBlocks(TEMPLATES.ongoing).map(b => b.id)
+    expect(ongoing).toContain('founder_stories')
+    expect(ongoing).toContain('quality_lead')
+    const oneOff = answerableBlocks(TEMPLATES.one_off).map(b => b.id)
+    expect(oneOff).not.toContain('founder_stories')
   })
 
   it('gives every block a unique id within its template', () => {

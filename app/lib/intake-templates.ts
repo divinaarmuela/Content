@@ -200,6 +200,85 @@ const BRIEF: Section = {
   ],
 }
 
+// ─── Sections specific to an ongoing retainer ───
+// Derived from the Turnkey Building Group form: a founder-led services business
+// where the people are the brand, ads are already running, and the question is
+// what to make every month rather than how to tell one story.
+
+const FOUNDERS: Section = {
+  id: 'founders', title: 'The founders',
+  intro: 'For a founder-led business the people are the brand. The more specific you are here, the more the content sounds like you rather than like an agency.',
+  blocks: [
+    { id: 'founder_stories', type: 'long_text', label: 'Each founder, in their own words — where you came from and why you started this', help: 'One paragraph each is plenty. Write it the way you would say it.' },
+    { id: 'founder_superpowers', type: 'long_text', label: "What is each founder's superpower?" },
+    { id: 'founder_known_for', type: 'long_text', label: 'What does each of you personally want to be known for in your industry?' },
+    { id: 'founder_comms_style', type: 'long_text', label: "Each founder's communication style", help: 'Direct and no-nonsense, warm and relationship-driven, educational, storytelling — this shapes how we write captions and scripts.' },
+    { id: 'founder_on_camera', type: 'long_text', label: 'Who is comfortable on camera, and how comfortable?', help: 'Talking-head and educational video included. "Sometimes" is a perfectly good answer.' },
+    { id: 'brand_or_personal', type: 'select', label: 'Should the content lead with the founders, or with the company?', options: ['Founders front and centre', 'Company as the hero', 'A mix — both'] },
+  ],
+}
+
+const PLATFORMS: Section = {
+  id: 'platforms', title: 'Content and platforms',
+  blocks: [
+    {
+      id: 'platforms_managed', type: 'multi_select', label: 'Which platforms do you want us to manage?',
+      options: ['Instagram', 'TikTok', 'Facebook', 'LinkedIn', 'YouTube Shorts'],
+    },
+    { id: 'past_content', type: 'long_text', label: 'What have you posted before — and what worked?', help: 'Just as useful: what fell flat.' },
+    { id: 'repurposable', type: 'long_text', label: 'Existing content we can repurpose', help: 'Footage, photography, testimonials, walkthroughs. A link is fine.' },
+    { id: 'current_cadence', type: 'short_text', label: 'How often do you post now?' },
+    { id: 'social_goal_rank', type: 'long_text', label: 'The primary goal of your social, in priority order', help: 'Lead generation, brand awareness, trust building, recruitment, community.' },
+    { id: 'success_3_months', type: 'long_text', label: 'What does success look like in three months?' },
+    { id: 'success_12_months', type: 'long_text', label: 'And in twelve?' },
+  ],
+}
+
+const PAID_ADS: Section = {
+  id: 'paid_ads', title: 'Paid advertising',
+  blocks: [
+    { id: 'ads_running', type: 'long_text', label: 'Are you running paid ads now?', help: 'If so — which platforms, and roughly what monthly spend.' },
+    { id: 'ads_goal', type: 'long_text', label: 'What are the ads meant to achieve?' },
+    { id: 'crm', type: 'short_text', label: 'What CRM or lead management system do you use?' },
+    { id: 'quality_lead', type: 'long_text', label: 'What does a quality lead look like to you?', help: 'Be specific — budget range, timeframe, location, what they are after.' },
+  ],
+}
+
+const POSITIONING: Section = {
+  id: 'positioning', title: 'Deeper brand and positioning',
+  intro: 'These are the questions that produce the content nobody else in your market is making.',
+  blocks: [
+    { id: 'brand_as_person', type: 'long_text', label: 'If the business were a person, how would you describe them?' },
+    { id: 'one_thing_remembered', type: 'long_text', label: 'The one thing you want people to remember after seeing your content' },
+    { id: 'misconception', type: 'long_text', label: 'A common misconception about your industry that you actively challenge', help: 'This is usually the single most useful answer on the form.' },
+    { id: 'underrepresented', type: 'long_text', label: 'What are you proudest of that your current marketing undersells?' },
+    { id: 'proud_client_story', type: 'long_text', label: 'A client story or result that captures what you are about' },
+    { id: 'testimonial_permission', type: 'select', label: 'Are you comfortable sharing client wins and testimonials?', options: ['Yes', 'With client permission only', 'No'] },
+    { id: 'five_years', type: 'long_text', label: 'Where do you see the business in five years?' },
+  ],
+}
+
+const CAMPAIGNS: Section = {
+  id: 'campaigns', title: 'Upcoming campaigns and key dates',
+  blocks: [
+    { id: 'upcoming_launches', type: 'long_text', label: 'Any launches in the next three months?' },
+    { id: 'seasonal', type: 'long_text', label: 'Seasonal moments that matter to your business' },
+    { id: 'trends', type: 'long_text', label: 'Market trends or news you want to build content around' },
+    { id: 'events_press', type: 'long_text', label: 'Speaking engagements, events or press coming up' },
+  ],
+}
+
+const TOOLS: Section = {
+  id: 'tools', title: 'Tools and coordination',
+  blocks: [
+    { id: 'day_to_day_contact', type: 'long_text', label: 'Primary contact for day-to-day communication', help: 'Name, email, and the best way to reach them.' },
+    { id: 'tools_in_use', type: 'long_text', label: 'Tools currently in use', help: 'CRM, scheduling, project management, comms.' },
+    { id: 'gbp_reviews', type: 'select', label: 'Do you have a Google Business Profile with reviews actively managed?', options: ['Yes, actively managed', 'Yes, but neglected', 'No'] },
+    { id: 'other_agencies', type: 'short_text', label: 'Any PR or comms agency we should coordinate with?' },
+    { id: 'past_marketing', type: 'long_text', label: 'Past marketing experiences, good or bad, that shaped what you want', help: 'Knowing what went wrong last time saves us both a round.' },
+  ],
+}
+
 const REBRAND: TemplateDefinition = {
   key: 'rebrand',
   name: 'Rebrand and rebuild intake',
@@ -226,10 +305,21 @@ const ONE_OFF: TemplateDefinition = {
   ],
 }
 
+const ONGOING: TemplateDefinition = {
+  key: 'ongoing',
+  name: 'Ongoing retainer intake',
+  sections: [
+    WELCOME, BRAND, FOUNDERS, CUSTOMER, VOICE, PLATFORMS, PAID_ADS,
+    COMPETITORS, VISUAL, POSITIONING, CAMPAIGNS, LOGISTICS, TOOLS,
+    APPROVALS, GOALS, ANYTHING_ELSE,
+  ],
+}
+
 export const TEMPLATES: Record<TemplateKey, TemplateDefinition> = {
   rebrand: REBRAND,
   launch: LAUNCH,
   one_off: ONE_OFF,
+  ongoing: ONGOING,
 }
 
 /** Never throws — an unrecognised key from a database row must not break the

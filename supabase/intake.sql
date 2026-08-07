@@ -10,7 +10,7 @@ create table if not exists intake_forms (
   id              uuid        primary key default gen_random_uuid(),
   created_at      timestamptz not null default now(),
   client_id       uuid        not null references clients(id) on delete cascade,
-  template_key    text        not null check (template_key in ('one_off','launch','rebrand')),
+  template_key    text        not null check (template_key in ('one_off','launch','rebrand','ongoing')),
   -- frozen at creation; never rewritten from the template source
   definition      jsonb       not null,
   token           uuid        not null default gen_random_uuid(),
@@ -28,6 +28,13 @@ create table if not exists intake_forms (
   reopened_at     timestamptz,
   created_by      uuid        references team_users(id) on delete set null
 );
+
+-- 'ongoing' was added after the first draft of this file. Re-stating the
+-- constraint keeps a database where the earlier version already ran in step
+-- with one where it never did.
+alter table intake_forms drop constraint if exists intake_forms_template_key_check;
+alter table intake_forms add constraint intake_forms_template_key_check
+  check (template_key in ('one_off','launch','rebrand','ongoing'));
 
 -- one form per client, enforced here rather than by the UI hiding a button
 create unique index if not exists intake_forms_client_uidx on intake_forms (client_id);

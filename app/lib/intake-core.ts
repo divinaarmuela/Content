@@ -5,7 +5,7 @@
  * decides what a valid answer set looks like.
  */
 
-export type TemplateKey = 'one_off' | 'launch' | 'rebrand'
+export type TemplateKey = 'one_off' | 'launch' | 'rebrand' | 'ongoing'
 
 /** `guidance` is copy, not a question — the italic "why we're asking" text that
  *  produces a considered answer instead of a one-liner. It never holds a value. */
