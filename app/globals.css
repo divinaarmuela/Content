@@ -89,6 +89,20 @@ body:has(.dbx) {
     color: inherit;
   }
   :where(body:has(.dbx) button) { background: transparent; cursor: pointer; }
+  /* The client intake form is a standalone dark page that shares this
+     stylesheet with the marketing site, so the marketing element rules land on
+     it: `nav` gains a cream sticky bar, `section` gains 100px padding and a
+     dark border, and both fight the page. Neutralised here rather than by
+     avoiding the elements, so the markup can stay semantic.
+     :where() keeps specificity at zero, so utility classes still win. */
+  :where(.intake nav) {
+    position: static; background: transparent; border: 0; padding: 0;
+    font-family: inherit;
+  }
+  :where(.intake section) { padding: 0; border-bottom: 0; }
+  :where(.intake button) { background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  :where(.intake a) { color: inherit; }
+
   :where(body:has(.dbx) img, body:has(.dbx) video, body:has(.dbx) svg) { display: block; max-width: 100%; }
   :where(body:has(.dbx) table) { border-collapse: collapse; }
   /* the marketing grid + noise overlays don't belong over the app shell */
