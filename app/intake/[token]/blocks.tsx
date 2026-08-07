@@ -15,16 +15,27 @@ import type { Block } from '../../lib/intake-core'
  * the page lurching away from you.
  */
 
+// Filled boxes rather than bare underlines. An underline field with no padding
+// puts the caret hard against the edge and gives the eye nothing to aim at on a
+// phone; it also fails to read as a field at all next to the chips. Same fill
+// and border as an unselected chip, so the whole form is one system.
 const FIELD =
-  'w-full bg-transparent border-b border-cream/25 py-3 font-lamah text-base text-cream ' +
-  'placeholder:text-cream-dim/50 focus:outline-none focus:border-cream transition-colors ' +
+  'w-full rounded-lg border border-cream/20 bg-cream/[0.06] px-4 py-3.5 ' +
+  'font-lamah text-base leading-relaxed text-cream placeholder:text-cream-dim/50 ' +
+  'transition-colors focus:border-cream/60 focus:bg-cream/[0.09] focus:outline-none ' +
   'disabled:opacity-50'
 
 const LABEL = 'block font-lamam text-[10px] uppercase tracking-widest text-cream-dim'
 
-const CHIP = 'rounded-full border px-4 py-2 font-lamah text-base transition disabled:opacity-50'
-const CHIP_ON = 'border-cream bg-cream text-ink'
-const CHIP_OFF = 'border-cream/25 text-cream-dim hover:border-cream hover:text-cream'
+// An unselected chip needs a fill of its own. Border-only on a dark ground
+// reads as a row of plain white words, so nothing says "tappable" and nothing
+// distinguishes chosen from not until you already know.
+const CHIP =
+  'inline-flex items-center gap-2 rounded-full border px-4 py-2 font-lamah text-base ' +
+  'transition-colors disabled:opacity-50'
+const CHIP_ON = 'border-cream bg-cream text-ink font-medium'
+const CHIP_OFF =
+  'border-cream/20 bg-cream/[0.06] text-cream-dim hover:border-cream/50 hover:bg-cream/10 hover:text-cream'
 
 export function BlockLabel({ block }: { block: Block }) {
   return (
@@ -84,12 +95,13 @@ export function SelectBlock({
       <div className="flex flex-wrap gap-2">
         {(block.options ?? []).map(opt => (
           <button
-            key={opt} type="button"
+            key={opt} type="button" aria-pressed={value === opt}
             // clicking the chosen option again clears it — a select with no way
             // back is a trap when someone mis-taps on a phone
             onClick={() => onChange(value === opt ? '' : opt)}
             className={`${CHIP} ${value === opt ? CHIP_ON : CHIP_OFF}`}
           >
+            {value === opt && <span>✓</span>}
             {opt}
           </button>
         ))}
@@ -108,14 +120,21 @@ export function MultiSelectBlock({
     <div>
       <BlockLabel block={block} />
       <div className="flex flex-wrap gap-2">
-        {(block.options ?? []).map(opt => (
-          <button
-            key={opt} type="button" onClick={() => toggle(opt)}
-            className={`${CHIP} ${value.includes(opt) ? CHIP_ON : CHIP_OFF}`}
-          >
-            {opt}
-          </button>
-        ))}
+        {(block.options ?? []).map(opt => {
+          const on = value.includes(opt)
+          return (
+            <button
+              key={opt} type="button" onClick={() => toggle(opt)}
+              aria-pressed={on}
+              className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+            >
+              {/* a tick, so "chosen" survives being read on a bad screen or by
+                  someone who cannot separate the two fills by colour alone */}
+              <span className={on ? 'opacity-100' : 'opacity-30'}>{on ? '✓' : '+'}</span>
+              {opt}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

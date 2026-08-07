@@ -37,12 +37,27 @@ const TYPES = [
   { key: 'one_off', label: 'One-off project' },
 ]
 
+/** Each pill sets its own text colour AND border. Without an explicit colour a
+ *  pill inherits the card foreground, which in dark mode is near-white — so
+ *  every status read as the same white text on a faint tint, which is exactly
+ *  the thing a status pill exists to prevent. */
 const STATUS_STYLE: Record<Status, string> = {
-  draft: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-  sent: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
-  in_progress: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-  submitted: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+  draft:
+    'border-zinc-300 bg-zinc-100 text-zinc-700 ' +
+    'dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+  sent:
+    'border-blue-300 bg-blue-50 text-blue-700 ' +
+    'dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300',
+  in_progress:
+    'border-amber-300 bg-amber-50 text-amber-800 ' +
+    'dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
+  submitted:
+    'border-emerald-300 bg-emerald-50 text-emerald-700 ' +
+    'dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300',
 }
+
+const TYPE_STYLE =
+  'border-border bg-muted text-muted-foreground'
 
 /** "sent 6 days ago · never opened" is the signal a client has gone quiet.
  *  An absolute date buries it; a relative one makes it obvious at a glance. */
@@ -164,7 +179,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                 ))}
               </div>
               <Input
-                value={newTitle} placeholder="Name it (optional) — e.g. Rebuild campaign brief"
+                value={newTitle} placeholder="Name it (optional), e.g. Rebuild campaign brief"
                 onChange={e => setNewTitle(e.target.value)}
               />
               <div className="flex gap-2">
@@ -216,10 +231,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <Pencil className="h-3 w-3" />
                 </Button>
               )}
-              <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
+              <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
                 {form.status.replace('_', ' ')}
               </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider">
+              <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${TYPE_STYLE}`}>
                 {form.template_key.replace('_', ' ')}
               </span>
               <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -227,7 +242,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               </span>
             </div>
 
-            {/* progress hairline — the same signal the client sees */}
+            {/* progress hairline, the same signal the client sees */}
             <div className="h-0.5 w-full rounded bg-muted">
               <div
                 className="h-0.5 rounded bg-primary transition-[width] duration-500"
@@ -266,7 +281,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   </Button>
                 ) : (
                   <span className="self-center text-xs text-muted-foreground">
-                    Questions are locked — the client has started answering.
+                    Questions are locked, the client has started answering.
                   </span>
                 )}
                 {form.status === 'submitted' && (
@@ -276,7 +291,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" disabled={busy}
-                  onClick={() => void patch({ form_id: form.id, action: 'rotate' }, 'Link rotated — the old one is dead')}>
+                  onClick={() => void patch({ form_id: form.id, action: 'rotate' }, 'Link rotated, the old one is dead')}>
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Rotate link
                 </Button>
                 <Button size="sm" variant="ghost" className="text-destructive" disabled={busy}
@@ -364,7 +379,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             <AlertDialogDescription>
               {confirmDelete?.completion.answered} answer
               {confirmDelete?.completion.answered === 1 ? '' : 's'} were written by the client.
-              Deleting removes them permanently — there is no undo, and no copy elsewhere.
+              Deleting removes them permanently, there is no undo, and no copy elsewhere.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

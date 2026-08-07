@@ -128,8 +128,10 @@ export default function IntakeForm({
       {/* ── docked bar: identity left, save state right, progress hairline under ── */}
       <header className="sticky top-0 z-30 border-b border-cream/15 bg-ink/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-6">
+          {/* same treatment as LamaNav: the PNG is already light on transparent,
+              so any filter here destroys it */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/MDLogo-trim.png" alt="MD Media" className="h-3 w-auto invert-0 brightness-0 invert" />
+          <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
           <p className="hidden font-lamam text-[10px] uppercase tracking-widest text-cream-dim sm:block">
             {clientName}
           </p>
@@ -159,7 +161,7 @@ export default function IntakeForm({
             Welcome to<br />MD Media.
           </h1>
           <p className="mt-6 max-w-[54ch] font-lamah text-[16px] leading-relaxed text-cream-dim">
-            This is the foundation we build everything on — the brand, the shoot,
+            This is the foundation we build everything on: the brand, the shoot,
             the content, the strategy. Take your time. There are no wrong
             answers, only honest ones. Everything saves as you type, so you can
             close this and come back whenever suits.
@@ -168,7 +170,7 @@ export default function IntakeForm({
 
         {locked && (
           <p className="max-w-[54ch] border-l border-cream pl-5 font-lamah text-[15px] leading-relaxed text-cream">
-            Thank you — this is with us now. If you need to change something,
+            Thank you. This is with us now. If you need to change something,
             tell your account manager and we will reopen it for you.
           </p>
         )}
@@ -249,7 +251,7 @@ export default function IntakeForm({
         {!locked && (
           <div className="border-t border-cream/15 pt-10">
             <p className="mb-7 max-w-[54ch] font-lamah text-[15px] leading-relaxed text-cream-dim">
-              Incomplete is fine — send us what you have and we will work the
+              Incomplete is fine, send us what you have and we will work the
               rest out together on the call.
             </p>
             <button

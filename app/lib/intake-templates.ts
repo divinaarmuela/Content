@@ -17,10 +17,10 @@ const WELCOME: Section = {
   blocks: [{
     id: 'welcome', type: 'guidance',
     label:
-      'This form is the foundation we build everything on — the brand, the shoot, ' +
+      'This form is the foundation we build everything on, the brand, the shoot, ' +
       'the content, the ongoing strategy. The more you give us here, the sharper ' +
       'the work we hand back. Take your time. There are no wrong answers, only ' +
-      'honest ones. Incomplete is fine — send us what you have.',
+      'honest ones. Incomplete is fine, send us what you have.',
   }],
 }
 
@@ -44,7 +44,7 @@ const PEOPLE: Section = {
   id: 'people', title: 'The people',
   intro: 'Who we are working with, and who appears in the story.',
   blocks: [
-    { id: 'primary_contact', type: 'long_text', label: 'Primary contact — full name and title as it should appear publicly' },
+    { id: 'primary_contact', type: 'long_text', label: 'Primary contact: full name and title as it should appear publicly' },
     { id: 'contact_mobile', type: 'short_text', label: 'Mobile (best number for shoot day)' },
     { id: 'contact_email', type: 'short_text', label: 'Email' },
     { id: 'best_call_window', type: 'short_text', label: 'Best window for calls' },
@@ -67,7 +67,7 @@ const VOICE: Section = {
       options: ['Warm and family', 'Aspirational and premium', 'Both, balanced'],
     },
     { id: 'tagline', type: 'short_text', label: 'Tagline or signature phrase, if you have one' },
-    { id: 'brand_files', type: 'file', label: 'Logo files, brand colours and fonts', help: 'Upload what you have — we can work from a PDF brand guide or loose files.' },
+    { id: 'brand_files', type: 'file', label: 'Logo files, brand colours and fonts', help: 'Upload what you have. We can work from a PDF brand guide or loose files.' },
   ],
 }
 
@@ -86,7 +86,7 @@ const CUSTOMER: Section = {
   blocks: [
     { id: 'ideal_customer', type: 'long_text', label: 'Describe the customer you want to clone', help: 'Age, location, lifestyle, values, and how they choose.' },
     { id: 'they_value', type: 'long_text', label: 'What do they value most when choosing?' },
-    { id: 'they_fear', type: 'long_text', label: 'What do they worry about — what would make them walk away?' },
+    { id: 'they_fear', type: 'long_text', label: 'What do they worry about? What would make them walk away?' },
     { id: 'booking_moment', type: 'long_text', label: 'The moment they decide to book' },
     { id: 'not_ideal', type: 'long_text', label: 'The customer you do NOT want more of' },
   ],
@@ -96,7 +96,7 @@ const COMPETITORS: Section = {
   id: 'competitors', title: 'Competitors and positioning',
   blocks: [
     { id: 'compared_to', type: 'short_text', label: 'Three businesses customers compare you to' },
-    { id: 'their_edge', type: 'long_text', label: 'Where those competitors have an edge on you', help: 'Be honest — this is what lets us position you properly.' },
+    { id: 'their_edge', type: 'long_text', label: 'Where those competitors have an edge on you', help: 'Be honest. This is what lets us position you properly.' },
     { id: 'your_edge', type: 'long_text', label: 'Where you clearly beat them' },
     { id: 'surprising_feedback', type: 'long_text', label: 'The thing customers say afterwards that still surprises you' },
   ],
@@ -105,7 +105,7 @@ const COMPETITORS: Section = {
 const VISUAL: Section = {
   id: 'visual', title: 'Visual direction',
   blocks: [
-    { id: 'refs_right', type: 'long_text', label: 'Three accounts whose content feels right', help: 'Paste links — it is faster than describing them.' },
+    { id: 'refs_right', type: 'long_text', label: 'Three accounts whose content feels right', help: 'Paste links. It is faster than describing them.' },
     { id: 'refs_wrong', type: 'long_text', label: 'Three that feel wrong, and why' },
     { id: 'existing_assets', type: 'long_text', label: 'Existing photography, renders or video we can use', help: 'A Drive or Dropbox link is fine.' },
     {
@@ -168,7 +168,7 @@ const STORY: Section = {
   intro: 'Specific and named beats generic every time. The more honest you are here, the more powerful the footage.',
   blocks: [
     { id: 'history', type: 'long_text', label: 'Your history, in your own words', help: 'How it started, and what it has meant to people over the years.' },
-    { id: 'turning_point', type: 'long_text', label: 'The turning point that led to this rebuild', help: 'Only what you are comfortable sharing — and tell us if you would rather it stayed out of the content entirely.' },
+    { id: 'turning_point', type: 'long_text', label: 'The turning point that led to this rebuild', help: 'Only what you are comfortable sharing, and tell us if you would rather it stayed out of the content entirely.' },
     { id: 'why_rebuild', type: 'long_text', label: 'Why you chose to rebuild rather than walk away', help: 'This is usually the emotional core of the whole story.' },
     { id: 'whats_better', type: 'long_text', label: 'What is different or better about the new space' },
     { id: 'design_decisions', type: 'long_text', label: 'Key design and material decisions worth explaining on camera', help: 'And the reasoning behind them.' },
@@ -184,7 +184,7 @@ const LAUNCH_PLAN: Section = {
   blocks: [
     { id: 'what_launching', type: 'long_text', label: 'What exactly are you launching?' },
     { id: 'launch_date', type: 'short_text', label: 'Target launch date' },
-    { id: 'why_now', type: 'long_text', label: 'Why now — what changed?' },
+    { id: 'why_now', type: 'long_text', label: 'Why now, what changed?' },
     { id: 'day_one_success', type: 'long_text', label: 'What does a successful launch day look like?' },
     { id: 'pre_launch_assets', type: 'long_text', label: 'What exists already', help: 'Renders, samples, prototypes, or a space we can film in.' },
   ],
@@ -209,12 +209,12 @@ const FOUNDERS: Section = {
   id: 'founders', title: 'The founders',
   intro: 'For a founder-led business the people are the brand. The more specific you are here, the more the content sounds like you rather than like an agency.',
   blocks: [
-    { id: 'founder_stories', type: 'long_text', label: 'Each founder, in their own words — where you came from and why you started this', help: 'One paragraph each is plenty. Write it the way you would say it.' },
+    { id: 'founder_stories', type: 'long_text', label: 'Each founder, in their own words, where you came from and why you started this', help: 'One paragraph each is plenty. Write it the way you would say it.' },
     { id: 'founder_superpowers', type: 'long_text', label: "What is each founder's superpower?" },
     { id: 'founder_known_for', type: 'long_text', label: 'What does each of you personally want to be known for in your industry?' },
-    { id: 'founder_comms_style', type: 'long_text', label: "Each founder's communication style", help: 'Direct and no-nonsense, warm and relationship-driven, educational, storytelling — this shapes how we write captions and scripts.' },
+    { id: 'founder_comms_style', type: 'long_text', label: "Each founder's communication style", help: 'Direct and no-nonsense, warm and relationship-driven, educational, storytelling, this shapes how we write captions and scripts.' },
     { id: 'founder_on_camera', type: 'long_text', label: 'Who is comfortable on camera, and how comfortable?', help: 'Talking-head and educational video included. "Sometimes" is a perfectly good answer.' },
-    { id: 'brand_or_personal', type: 'select', label: 'Should the content lead with the founders, or with the company?', options: ['Founders front and centre', 'Company as the hero', 'A mix — both'] },
+    { id: 'brand_or_personal', type: 'select', label: 'Should the content lead with the founders, or with the company?', options: ['Founders front and centre', 'Company as the hero', 'A mix, both'] },
   ],
 }
 
@@ -225,7 +225,7 @@ const PLATFORMS: Section = {
       id: 'platforms_managed', type: 'multi_select', label: 'Which platforms do you want us to manage?',
       options: ['Instagram', 'TikTok', 'Facebook', 'LinkedIn', 'YouTube Shorts'],
     },
-    { id: 'past_content', type: 'long_text', label: 'What have you posted before — and what worked?', help: 'Just as useful: what fell flat.' },
+    { id: 'past_content', type: 'long_text', label: 'What have you posted before, and what worked?', help: 'Just as useful: what fell flat.' },
     { id: 'repurposable', type: 'long_text', label: 'Existing content we can repurpose', help: 'Footage, photography, testimonials, walkthroughs. A link is fine.' },
     { id: 'current_cadence', type: 'short_text', label: 'How often do you post now?' },
     { id: 'social_goal_rank', type: 'long_text', label: 'The primary goal of your social, in priority order', help: 'Lead generation, brand awareness, trust building, recruitment, community.' },
@@ -237,10 +237,10 @@ const PLATFORMS: Section = {
 const PAID_ADS: Section = {
   id: 'paid_ads', title: 'Paid advertising',
   blocks: [
-    { id: 'ads_running', type: 'long_text', label: 'Are you running paid ads now?', help: 'If so — which platforms, and roughly what monthly spend.' },
+    { id: 'ads_running', type: 'long_text', label: 'Are you running paid ads now?', help: 'If so, which platforms, and roughly what monthly spend.' },
     { id: 'ads_goal', type: 'long_text', label: 'What are the ads meant to achieve?' },
     { id: 'crm', type: 'short_text', label: 'What CRM or lead management system do you use?' },
-    { id: 'quality_lead', type: 'long_text', label: 'What does a quality lead look like to you?', help: 'Be specific — budget range, timeframe, location, what they are after.' },
+    { id: 'quality_lead', type: 'long_text', label: 'What does a quality lead look like to you?', help: 'Be specific, budget range, timeframe, location, what they are after.' },
   ],
 }
 

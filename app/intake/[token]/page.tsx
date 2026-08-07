@@ -7,7 +7,7 @@ import IntakeForm from './IntakeForm'
 
 export const metadata: Metadata = {
   title: 'Welcome to MD Media',
-  robots: 'noindex, nofollow', // secret-link page — never indexed
+  robots: 'noindex, nofollow', // secret-link page, never indexed
 }
 
 /** Zoom stays ENABLED — disabling it breaks pinch-zoom for anyone who needs to
