@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { submitIntake, getIntakeDefaultRecipients } from '../../../../lib/intake'
+import {
+  submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
+} from '../../../../lib/intake'
 import { notify, renderEmail } from '../../../../lib/mailer'
 import { completion, resolveRecipients } from '../../../../lib/intake-core'
+import { renderIntakePdf } from '../../../../lib/intake-pdf'
+import { packIntakeFiles } from '../../../../lib/intake-attachments'
 import { inngest } from '../../../../inngest/client'
 import { intakeChannel } from '../../../../inngest/channels'
 
 export const dynamic = 'force-dynamic'
+// Building the PDF and pulling attachments out of storage takes longer than a
+// default serverless slice allows for a form with a folder of brand assets.
+export const maxDuration = 60
 
 export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -17,17 +24,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     .from('clients').select('name').eq('id', form.client_id).maybeSingle()
   const name = client?.name ?? 'A client'
   const progress = completion(form.definition, form.answers)
-  // An email link must be absolute. NEXT_PUBLIC_APP_URL is not set anywhere
-  // today, so falling back to '' would have produced "/dashboard/clients/…" —
-  // a dead link in every mail client. VERCEL_URL covers preview deployments.
+  // An email link must be absolute. NEXT_PUBLIC_APP_URL is set in production;
+  // VERCEL_URL covers previews; the domain is the last resort.
   const base =
     process.env.NEXT_PUBLIC_APP_URL
     ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
     ?? 'https://www.mdmmarketing.com.au'
 
-  // Best-effort. The answers are already saved, so a failed email must never
-  // fail the client's submission — they did their part. notify() carries its
-  // own dedupe key, so a double submit cannot send this twice.
   // Who hears about it: this form's own list, else the agency default, else
   // the sending mailbox — so a submission is never silently unannounced.
   const recipients = resolveRecipients(
@@ -36,9 +39,39 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     process.env.GMAIL_USER ?? '',
   )
 
+  // Everything below is best-effort. The answers are already saved and the
+  // client has done their part, so a failed PDF, a missing attachment or a
+  // bounced email must never turn a successful submission into an error they
+  // see. notify() carries its own dedupe key, so a retry cannot double-send.
   try {
-    // one notify() per recipient: its dedupe key includes the address, so each
-    // person is emailed exactly once even if submit is somehow retried
+    const files = await listIntakeFiles(form.id)
+    const [pdf, packed] = await Promise.all([
+      renderIntakePdf({
+        clientName: name,
+        formTitle: form.title || 'Intake form',
+        templateKey: form.template_key,
+        definition: form.definition,
+        answers: form.answers,
+        files,
+        submittedAt: new Date(),
+      }),
+      packIntakeFiles(files),
+    ])
+
+    const safeName =
+      name.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'client'
+
+    const attachedList = packed.attachments.length > 0
+      ? `<p style="margin:14px 0 0"><strong>Their files, attached:</strong> ${
+          packed.attachments.map(a => a.filename).join(', ')}</p>`
+      : ''
+    const linkedList = packed.linked.length > 0
+      ? `<p style="margin:14px 0 0"><strong>Too big to attach — download:</strong><br>${
+          packed.linked.map(l =>
+            `<a href="${l.url}">${l.filename}</a> <span style="color:#71717a">(${l.reason})</span>`,
+          ).join('<br>')}</p>`
+      : ''
+
     await Promise.all(recipients.map(to => notify({
       eventType: 'intake_submitted',
       entityType: 'intake_form',
@@ -48,10 +81,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
       bodyHtml: renderEmail(
         'Intake form submitted',
         `<p>${name} has completed their ${form.template_key.replace('_', '-')} intake form ` +
-        `— ${progress.answered} of ${progress.total} questions answered.</p>`,
+        `— ${progress.answered} of ${progress.total} questions answered. ` +
+        `The full brief is attached as a PDF.</p>${attachedList}${linkedList}`,
         'Open in dashboard',
         `${base}/dashboard/clients/${form.client_id}`,
       ),
+      attachments: [
+        { filename: `${safeName}-intake.pdf`, content: pdf, contentType: 'application/pdf' },
+        ...packed.attachments,
+      ],
     })))
   } catch (e) {
     console.error('intake submit notification failed:', e)

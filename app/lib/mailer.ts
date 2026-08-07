@@ -71,6 +71,12 @@ export function renderEmail(title: string, bodyHtml: string, ctaLabel?: string, 
   </div>`
 }
 
+export type NotifyAttachment = {
+  filename: string
+  content: Buffer
+  contentType?: string
+}
+
 export type NotifyInput = {
   eventType: string
   entityType: string
@@ -79,6 +85,10 @@ export type NotifyInput = {
   recipientEmail: string
   subject: string
   bodyHtml: string
+  /** Attachments are NOT recorded in notification_log — only the body is. A
+   *  log row is for answering "was this sent, and what did it say"; storing
+   *  megabytes of PDF against every row would make that table unusable. */
+  attachments?: NotifyAttachment[]
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed'
@@ -121,6 +131,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
       to: input.recipientEmail,
       subject: input.subject,
       html: input.bodyHtml,
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     })
     await supabase
       .from('notification_log')
