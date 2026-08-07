@@ -53,10 +53,7 @@ export default function OverviewPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Overview</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Live numbers from the master database.</p>
-      </div>
+      <Greeting subtitle="Live numbers from the master database." />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Leads · total" value={leads?.length ?? 0} loading={loading} hint="All form submissions" icon={Inbox} />

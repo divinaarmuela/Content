@@ -72,7 +72,7 @@ export default function ClientsPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load')
       setClients(await res.json())
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load clients — has website_cms.sql been run in Supabase?')
+      toast.error(e instanceof Error ? e.message : 'Failed to load clients. Has website_cms.sql been run in Supabase?')
       setClients([])
     }
   }, [])
@@ -117,7 +117,7 @@ export default function ClientsPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Clients</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Master registry — website case studies and (soon) client portal access key off this list.
+            Master registry. Website case studies and (soon) client portal access key off this list.
           </p>
         </div>
         <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
@@ -229,7 +229,7 @@ export default function ClientsPage() {
             <div>
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">No clients yet</p>
               <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-                Add one manually, or import the current site projects from the Website page — it creates a client per project automatically.
+                Add one manually, or import the current site projects from the Website page. It creates a client per project automatically.
               </p>
             </div>
             <div className="mt-1 flex gap-2">
