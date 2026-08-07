@@ -21,7 +21,6 @@ export type IntakeForm = {
   token: string
   status: IntakeStatus
   answers: Answers
-  send_copy_to_client: boolean
   sent_at: string | null
   first_opened_at: string | null
   submitted_at: string | null
@@ -32,7 +31,7 @@ export type IntakeFile = { block_id: string; filename: string; url: string }
 
 const COLS =
   'id, client_id, title, template_key, definition, token, status, answers, ' +
-  'send_copy_to_client, sent_at, first_opened_at, submitted_at, reopened_at'
+  'sent_at, first_opened_at, submitted_at, reopened_at'
 
 /** Create a form for this client. The template definition is COPIED in, not
  *  referenced — editing intake-templates.ts later must not alter a form a
