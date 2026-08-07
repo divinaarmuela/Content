@@ -55,6 +55,30 @@ export default function ScannerSettings() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [schedule, setSchedule] = useState<ScheduleStatus | null>(null)
   const [mailboxes, setMailboxes] = useState<MailboxEntry[]>([])
+  /** Result of the connect round-trip, read once from the URL Google sent us
+   *  back to. Cleared from the address bar so a refresh does not re-announce
+   *  something that happened five minutes ago. */
+  const [connectResult, setConnectResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const r = p.get('inbox')
+    if (!r) return
+    const detail = p.get('detail')
+    const messages: Record<string, { ok: boolean; text: string }> = {
+      connected:       { ok: true,  text: `Connected${detail ? ` — ${detail}` : ''}. It will be scanned on the next pass.` },
+      denied:          { ok: false, text: 'You cancelled, so nothing was connected.' },
+      wrong_domain:    { ok: false, text: 'Only @mdmmarketing.com.au mailboxes can be connected.' },
+      no_refresh_token:{ ok: false, text: 'Google did not return a refresh token. Remove this app from that account’s permissions and try again.' },
+      no_email:        { ok: false, text: 'Google did not tell us which mailbox that was.' },
+      exchange_failed: { ok: false, text: 'Google refused the exchange. Check the redirect URI on the OAuth client.' },
+      unauthorised:    { ok: false, text: 'Your session expired during the redirect. Sign in and try again.' },
+    }
+    setConnectResult(messages[r] ?? { ok: false, text: `Could not connect (${r}).` })
+    p.delete('inbox'); p.delete('detail')
+    const qs = p.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }, [])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [denied, setDenied] = useState(false)
@@ -281,15 +305,43 @@ export default function ScannerSettings() {
                 Switching this off hides the button; inboxes already connected
                 keep scanning until someone disconnects them.
               </p>
+              {connectResult && (
+                <p className={
+                  'mt-2 rounded-md border px-2 py-1.5 text-xs ' +
+                  (connectResult.ok
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300')
+                }>
+                  {connectResult.text}
+                </p>
+              )}
               {settings.allow_self_connect && (() => {
                 const mine = mailboxes.filter(m => m.source === 'self')
                 return (
                   <div className="mt-2 flex flex-col gap-2">
-                    {mine.length > 0 && (
-                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                        Connected: {mine.map(m => m.email).join(', ')}
+                    {mine.map(m => (
+                      <p key={m.email} className="flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+                        <span>Connected: {m.email}</span>
+                        <button
+                          type="button"
+                          className="text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
+                          onClick={async () => {
+                            const res = await fetch('/api/inbox/disconnect', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ email: m.email }),
+                            })
+                            const json = await res.json().catch(() => ({}))
+                            setConnectResult(res.ok
+                              ? { ok: true, text: `${m.email} disconnected. ${json.note ?? ''}` }
+                              : { ok: false, text: json.error ?? 'Could not disconnect.' })
+                            void load()
+                          }}
+                        >
+                          disconnect
+                        </button>
                       </p>
-                    )}
+                    ))}
                     <a
                       href="/api/inbox/connect"
                       className="inline-flex w-fit items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
