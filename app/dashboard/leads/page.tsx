@@ -138,20 +138,45 @@ export default function LeadsPage() {
     }
   }
 
-  const fetchLeads = useCallback(async () => {
-    setLoading(true); setError(null)
+  /** `quiet` refreshes in the background: no spinner, no error banner. A poll
+   *  that flickers the table or shouts about a dropped packet is worse than no
+   *  poll at all. */
+  const fetchLeads = useCallback(async (quiet = false) => {
+    if (!quiet) { setLoading(true); setError(null) }
     try {
       const res = await fetch('/api/leads')
       if (!res.ok) throw new Error(`${res.status}`)
       setLeads(await res.json())
     } catch {
-      setError('Could not load leads — check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.')
+      if (!quiet) {
+        setError('Could not load leads — check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.')
+      }
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
+
+  /**
+   * Keep the table current without a manual refresh.
+   *
+   * The inbox scanner runs on a 5-minute cron, so a lead can land minutes
+   * after the page was opened and the list would never know. Polls every 30s,
+   * but only while the tab is visible — an unwatched tab polling all afternoon
+   * is pure waste — and refreshes immediately on returning to the tab, which
+   * is the moment someone actually wants to see what arrived.
+   */
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) void fetchLeads(true) }
+    const id = window.setInterval(tick, 30_000)
+    const onVisible = () => { if (!document.hidden) void fetchLeads(true) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [fetchLeads])
 
   const toggleSort = (key: keyof Lead) =>
     setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
@@ -193,7 +218,10 @@ export default function LeadsPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Contact form submissions from mdmmarketing.com.au</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchLeads}>
+          {/* wrapped: passing fetchLeads directly hands it the click event as
+              its `quiet` argument, silencing the very errors this button exists
+              to surface */}
+          <Button variant="outline" size="sm" onClick={() => fetchLeads()}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
           <Button size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
