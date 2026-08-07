@@ -1,7 +1,8 @@
 # Inbox scanner: scanning more than one mailbox
 
 **Date:** 2026-08-07
-**Status:** design, approved in chat
+**Status:** ON HOLD — design settled, blocked on one Workspace admin action.
+Nothing to implement until that is resolved. Do not start the workarounds.
 
 ## Problem
 
@@ -9,8 +10,8 @@ The super-admin mailbox picker is built and works. It has nothing to choose from
 
 Everything on the app side already exists:
 
-- `scan_mailboxes` table — per-address `enabled` flag, `source` of `shared` or `connected`
-  (`supabase/scan_settings.sql`)
+- `scan_mailboxes` table — per-address `enabled` flag, `source` of `shared` or
+  `connected` (`supabase/scan_settings.sql`)
 - `listMailboxEntries()` — discovers available addresses, registers new ones
   enabled-by-default, never silently re-enables one an admin turned off
   (`app/lib/scan-settings.ts:49`)
@@ -20,141 +21,158 @@ Everything on the app side already exists:
 - `scanMailbox` — Inngest fans out one invocation per mailbox,
   `concurrency: { limit: 3, key: 'event.data.email' }`, so each address has its own
   timeout and retries (`app/inngest/functions.ts:91`)
+- `getConnectionStatus()` / `GET /api/ingest/connection` — per-user connection
+  state, with a reason when absent (`app/lib/clerk-gmail.ts:50`)
 
-The gap is configuration. `getMailboxes()` supports three modes
-(`app/lib/gmail.ts:43`) and production is on the weakest one: the legacy
-`GMAIL_USER` + `GMAIL_REFRESH_TOKEN` pair, which yields exactly one mailbox.
-The multi-mailbox path has therefore never run against more than one address.
+The gap is configuration, not code. `getMailboxes()` supports three modes
+(`app/lib/gmail.ts:43`) and production runs the weakest: the legacy `GMAIL_USER`
++ `GMAIL_REFRESH_TOKEN` pair, which yields exactly one mailbox. The multi-mailbox
+path has therefore never run against more than one address.
 
-## Constraint that shaped the design
+## The decision
 
-Domain-wide delegation is the strongest option — one service account impersonates
-any mailbox on the domain, and adding an inbox becomes one entry in a list. It is
-**not available to us**: authorising it requires Workspace super-admin on
-admin.google.com, which the developer does not have.
+**Use domain-wide delegation. Do not build around its absence.**
 
-Everything below is designed around that.
+This reverses the earlier draft of this spec, which planned per-mailbox refresh
+tokens as "phase 1" because delegation was blocked. That was solving the wrong
+problem. Every alternative below exists only to route around one missing thing: a
+Workspace admin clicking through one screen.
 
-## Decisions
+| | Delegation | Every alternative |
+|---|---|---|
+| Add `sales@` | Type the address | Mint a token, store it, deploy |
+| Add all 13 people | Type the addresses | 13 people each consent, coverage decays |
+| Credentials stored | One service account key | One per mailbox, forever |
+| Code to write | Effectively none | Migration + OAuth route + UI + tests |
+| Blocked on | One admin click | Nothing |
 
-**Scan scope: all mailboxes (option C), phased.** Not because the alternatives were
-unworkable but because the cost objections turned out to be false — the Inngest
-fan-out already handles 13 addresses, and per-message claiming in
-`email_ingest_log` means the 5-minute cron does not multiply Anthropic spend. Only
-genuinely new mail is classified.
+The requirement that settled it: *adding a new shared mailbox must not require a
+script run, an env edit, or a deploy.* Today's env list (`hello@`, `contact@`,
+`info@`) is an accident of what was configured, not a design. `sales@` tomorrow and
+`accounts@` next month must be as cheap as typing an address.
 
-Two conditions attach to that decision:
+Only delegation makes that true, because under delegation **there is no per-mailbox
+credential at all**. The app asks Google for read access to an address and Google
+grants it. `app/lib/gmail.ts:45` already switches to this mode the moment the two
+service-account env vars exist; `delegatedToken()` at line 87 does the impersonation.
+The code is written and unused.
 
-1. **The team is told before individual inboxes are scanned.** Under option C every
-   email a staff member receives is fetched, reduced to plain text, and sent to
-   Anthropic for classification. The prefilter (`app/lib/gmail-core.ts:71`) targets
-   newsletters and no-reply senders; private correspondence survives it. This is
-   ordinary company email on a company domain — the risk is not legality, it is
-   people finding out afterwards.
+## What is blocked
+
+Domain-wide delegation is authorised in admin.google.com → Security → Access and
+data control → API controls → Domain-wide delegation, and **only** there. That
+requires Workspace super-admin, which the developer does not have.
+
+The ask is small and should be made rather than engineered around:
+
+- Client ID of a service account (any team member can create this — see below)
+- One scope: `https://www.googleapis.com/auth/gmail.readonly` — read-only; it cannot
+  send, delete or modify
+- Revocable from the same screen at any time
+
+### Prepared work that needs no admin rights
+
+All of this produces the Client ID that goes in the request, and can be done now:
+
+1. New Google Cloud project, **signed in as `@mdmmarketing.com.au`** so it lands
+   inside the Workspace organisation. Verify the Location field shows the domain and
+   not "No organisation" — a project under a personal account can never publish an
+   Internal consent screen, which matters for the Clerk work below.
+2. Enable the **Gmail API**.
+3. IAM & Admin → Service Accounts → create `inbox-scanner` → create a **JSON key**.
+   Yields `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`.
+4. Copy the service account's **Client ID** (the long number, not the email address).
+
+The existing OAuth client (project `251277523150`) is unreachable — the developer
+has no IAM on that project, so a fresh project is required regardless.
+
+## Design, once unblocked
+
+**Mailbox list moves from env to the database.** `GMAIL_SCAN_MAILBOXES` becomes the
+bootstrap, not the source of truth. A super admin adds a mailbox by typing an
+address into `scan_mailboxes`; `getMailboxes()` returns those rows as
+`{ email, delegated: true }`. No token, no OAuth flow in the UI, no deploy.
+
+This is roughly an hour of work: one migration, one `getMailboxes()` source, an
+"Add mailbox" input in `ScannerSettings.tsx`, and a `super_admin`-gated route.
+
+**Scan scope: every mailbox on the domain**, subject to two conditions agreed in
+discussion:
+
+1. **The team is told before individual inboxes are scanned.** Every email a staff
+   member receives is fetched, reduced to plain text, and sent to Anthropic for
+   classification. The prefilter (`app/lib/gmail-core.ts:71`) targets newsletters and
+   no-reply senders; private correspondence survives it. This is ordinary company
+   email on a company domain — the risk is not legality, it is people finding out
+   afterwards.
 2. **`min_confidence` is raised for individual inboxes.** A shared inbox exists to
    receive enquiries, so a low bar is right. A personal inbox does not, so the same
    bar produces false leads — and `leads` is the table the dashboard counts and
    reports on.
 
-**Phase 1 before phase 2.** Phase 1 needs no permission from anyone and proves the
-multi-mailbox path end to end — fan-out, per-mailbox run history, the enable/disable
-toggle, the health column — before phase 2 spends anyone's goodwill.
+Cost is not a factor: per-message claiming in `email_ingest_log` means the 5-minute
+cron does not multiply Anthropic spend. Only genuinely new mail is classified.
 
-**Phase 2 is the Clerk path, not delegation.** Each person authorises their own
-mailbox. This avoids the Workspace admin entirely, and the Google Cloud OAuth client
-it requires is *the same client Clerk production needs anyway* — Clerk dev instances
-borrow Clerk's shared Google credentials, production requires your own. The Google
-Cloud work and the Clerk production migration are one piece of work, not two.
+## Fallbacks, in preference order — build none of these unless the admin request fails
 
-## Phase 1 — shared mailboxes (no permissions required)
+**A. Dashboard-managed shared mailboxes with stored tokens.** Add a nullable
+encrypted `refresh_token` column to `scan_mailboxes`; a `super_admin`-only OAuth
+flow in the browser stores an encrypted token per mailbox, reusing `CREDENTIALS_KEY`
+and the AES-256-GCM helper the client-credentials feature already uses. Tokens are
+never returned by any read endpoint — same rule as client passwords. Gets the same
+"add a mailbox from the dashboard" UX as delegation, at the cost of a credential per
+mailbox and roughly a day of work.
 
-`contact@mdmmarketing.com.au` and `info@mdmmarketing.com.au` are confirmed separate
-mailboxes, not aliases of hello@. Each can mint its own refresh token.
+**B. The Clerk path.** Each person connects their own Google account; their inbox
+appears as `source: connected`. Needs an Internal OAuth consent screen and Clerk
+custom credentials — the same OAuth client Clerk production requires anyway, so this
+overlaps with the Clerk migration rather than adding to it. Two weaknesses:
+coverage is voluntary and decays silently when someone revokes, and a Workspace admin
+can block restricted scopes for unconfigured third-party apps, which would reintroduce
+an admin action anyway. Also needs a "Connect my inbox" panel that does not exist —
+`GET /api/ingest/connection` serves the status but nothing renders it.
 
-`scripts/gmail-add-mailbox.cjs` already implements this: loopback OAuth on
-`http://localhost:5599/callback`, `prompt=consent` to force a refresh token,
-appends to the existing list rather than replacing it, prints the env line.
+**C. Per-mailbox refresh tokens via `scripts/gmail-add-mailbox.cjs`.** One run per
+mailbox, ever. Only genuinely required for `hello@`, whose *send* token
+(`GMAIL_REFRESH_TOKEN`) the contact form uses in `app/api/submit/route.ts` — env is
+the right home for a sending credential. The script gained a `--send` flag for
+exactly this (commit `55ac32a`): a refresh token is bound to the client that issued
+it, so moving to a new OAuth client replaces the send token, and read scope alone
+would leave the form saving leads while silently emailing nobody.
 
-**Prerequisite:** the OAuth client `251277523150-…` must have
-`http://localhost:5599/callback` registered as a redirect URI. This needs access to
-the Google Cloud project that owns that client — the only unknown in phase 1. If
-that project is inaccessible, phase 1 creates its own OAuth client instead, which
-also removes the dependency on whoever set up the original.
-
-**Result:**
-
-```
-GMAIL_MAILBOXES=[{"email":"hello@…","refreshToken":"…"},{"email":"contact@…","refreshToken":"…"},{"email":"info@…","refreshToken":"…"}]
-```
-
-`getMailboxes()` reads this at `app/lib/gmail.ts:57`. `GMAIL_USER` and
-`GMAIL_REFRESH_TOKEN` stay — the sending path in `app/api/submit/route.ts` uses
-them, and `getMailboxes()` folds the legacy pair in without duplicating.
-
-No code changes. The picker goes from one row to three.
-
-## Phase 2 — connected mailboxes + Clerk production
-
-One Google Cloud project, created signed in as `@mdmmarketing.com.au` so it lands
-inside the Workspace organisation. That is what makes the consent screen **Internal**,
-and Internal is what makes `gmail.readonly` skip Google's restricted-scope review —
-otherwise a multi-week verification with a privacy policy and a demo video.
-
-1. Google Cloud project, Gmail API enabled
-2. OAuth consent screen → **Internal**
-3. OAuth client (Web application), redirect URI = Clerk's callback
-4. Clerk: Google connection switched to custom credentials, with
-   `https://www.googleapis.com/auth/gmail.readonly` added as an extra scope
-5. Clerk production instance; replace `pk_test` / `sk_test`
-6. Each team member signs in with Google and approves
-
-`app/lib/clerk-gmail.ts:32` already pulls a fresh per-user token on demand,
-including when the user is offline, so scheduled scans keep working.
-`listConnectedMailboxes()` filters to the company domain, so a personal Gmail
-signed into the dashboard is never scanned (`app/lib/clerk-gmail.ts:79`).
-
-**Known risk:** `gmail.readonly` is a restricted scope. A Workspace admin can block
-unconfigured third-party apps from restricted scopes even for an Internal app. If
-that setting is on, users hit "Access blocked" at consent and one admin action is
-needed after all — smaller than delegation, but not zero. This surfaces the first
-time someone tries; there is no way to check it in advance without admin access.
+**D. Forwarding filters.** Each person forwards enquiry mail to one scanned inbox.
+No Google Cloud, no admin, no consent. Last resort if every permission request fails.
 
 ## Gap found while reading
 
 A mailbox that is connected and then revoked **silently vanishes** from
 `listMailboxEntries()`. `listConnectedMailboxes()` only returns users whose token
-still resolves (`app/lib/clerk-gmail.ts:82`), so a revoked mailbox is simply absent
-from the picker — indistinguishable from one that was never connected.
+still resolves (`app/lib/clerk-gmail.ts:82`), so a revoked mailbox is simply absent —
+indistinguishable from one that was never connected.
 
-Under phase 2 that is the difference between "this person's mail is being scanned"
-and "this person's mail silently stopped being scanned three weeks ago, and nobody
-noticed". Coverage decays invisibly.
+That is the difference between "this person's mail is being scanned" and "this
+person's mail silently stopped being scanned three weeks ago". Coverage decays
+invisibly.
 
 **Fix:** `scan_mailboxes` already persists every address ever seen. Render entries
-that exist in the table but are missing from the live availability list as
-**"not connected"** rather than omitting them. The row stays, the health column
-tells the truth, and a super admin can see at a glance who has dropped out.
+present in the table but missing from live availability as **"not connected"** rather
+than omitting them. Worth doing regardless of which mode wins.
 
-## Testing
+## Testing, when built
 
-`scan-core.ts` and `gmail-core.ts` are the pure, testable units and are already
-covered. What is not covered is mailbox *resolution*:
+`scan-core.ts` and `gmail-core.ts` are covered. Mailbox *resolution* is not:
 
-- `getMailboxes()` — mode A wins over mode B when the service account is configured;
-  `GMAIL_MAILBOXES` parses; malformed JSON falls back to the legacy pair rather than
-  throwing; the legacy pair is not duplicated when already present in the array
+- `getMailboxes()` — delegation wins over refresh tokens when the service account is
+  configured; `GMAIL_MAILBOXES` parses; malformed JSON falls back to the legacy pair
+  rather than throwing; the legacy pair is not duplicated when already in the array
 - `listMailboxEntries()` — a previously-seen address absent from live availability
   renders as not-connected; an address an admin disabled is never re-enabled by
   rediscovery
 - `enabledMailboxEmails()` — only enabled addresses are returned
 
-These are pure given fixtures for env and the Clerk/env sources, so they belong in
-the existing vitest suite rather than requiring live credentials.
+All pure given fixtures, so they belong in the existing vitest suite.
 
-## Out of scope
+## Next action
 
-- Domain-wide delegation. Revisit if Workspace super-admin becomes available; the
-  code path already exists (`app/lib/gmail.ts:45`) and switching is a straight env
-  swap with no code change.
-- Forwarding filters as a fallback. Held in reserve for the case where both the
-  admin request and per-user consent are refused.
+Ask whoever holds Workspace super-admin for the delegation authorisation. Everything
+else waits on that answer. If it is refused, revisit fallback A.
