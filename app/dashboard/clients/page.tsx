@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { publicUrl } from '@/app/lib/public-url'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
@@ -277,7 +278,7 @@ export default function ClientsPage() {
                           variant="ghost" size="icon" className="h-8 w-8"
                           aria-label={`Copy read-only portal link for ${c.name}`}
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/portal/${c.share_token}`)
+                            navigator.clipboard.writeText(publicUrl(`/portal/${c.share_token}`))
                             toast.success(`Read-only portal link for ${c.name} copied`)
                           }}
                         >

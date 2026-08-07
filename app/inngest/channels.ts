@@ -32,3 +32,31 @@ export const leadsChannel = channel({
     },
   },
 })
+
+/**
+ * Intake form progress, so a client filling one in is visible live rather
+ * than on refresh.
+ *
+ * Its own channel rather than a topic on `leads`: the audiences differ. Every
+ * team member watches leads; only whoever has a client page open cares about
+ * that client's form. Subscribers filter on client_id.
+ *
+ * Published on every autosaved field. That is a lot of small messages by
+ * design — the payload is four numbers and two ids, and the alternative is a
+ * progress counter that lies until someone reloads.
+ */
+export const intakeChannel = channel({
+  name: 'intake',
+  topics: {
+    progress: {
+      schema: z.object({
+        form_id: z.string(),
+        client_id: z.string(),
+        status: z.string(),
+        answered: z.number(),
+        total: z.number(),
+        ts: z.number(),
+      }),
+    },
+  },
+})

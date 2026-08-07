@@ -17,6 +17,7 @@ import {
 import { ArrowLeft, ClipboardList, Copy, ExternalLink, KeyRound, MessageSquare, Share2, Users } from 'lucide-react'
 import ContactsPanel from './ContactsPanel'
 import NotesPanel from './NotesPanel'
+import { publicUrl } from '@/app/lib/public-url'
 import IntakePanel from './IntakePanel'
 import CredentialsPanel from '../../CredentialsPanel'
 import SocialChannels from '../SocialChannels'
@@ -100,7 +101,7 @@ export default function ClientDetailPage() {
   if (!client) return <Skeleton className="h-96 w-full" />
 
   const portalUrl = client.share_token
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/portal/${client.share_token}`
+    ? publicUrl(`/portal/${client.share_token}`)
     : null
 
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getIntakeByToken, saveIntakeAnswers, listIntakeFiles } from '../../../lib/intake'
 import { completion } from '../../../lib/intake-core'
+import { inngest } from '../../../inngest/client'
+import { intakeChannel } from '../../../inngest/channels'
 
 /**
  * Public intake form, resolved by token alone.
@@ -37,5 +39,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
 
   const saved = await saveIntakeAnswers(token, patch)
   if (!saved) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Announce progress so an open client page updates as they type. Fire and
+  // forget: the answer is already saved, and a publish failure must never turn
+  // a successful autosave into an error the client sees.
+  const form = await getIntakeByToken(token)
+  if (form) {
+    const c = completion(form.definition, saved.answers)
+    void inngest.realtime.publish(intakeChannel.progress, {
+      form_id: form.id,
+      client_id: form.client_id,
+      status: saved.status,
+      answered: c.answered,
+      total: c.total,
+      ts: Date.now(),
+    }).catch(e => console.error('intake realtime publish failed:', e))
+  }
+
   return NextResponse.json(saved)
 }

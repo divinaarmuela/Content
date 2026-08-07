@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { submitIntake } from '../../../../lib/intake'
 import { notify, renderEmail } from '../../../../lib/mailer'
 import { completion } from '../../../../lib/intake-core'
+import { inngest } from '../../../../inngest/client'
+import { intakeChannel } from '../../../../inngest/channels'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +46,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   } catch (e) {
     console.error('intake submit notification failed:', e)
   }
+
+  void inngest.realtime.publish(intakeChannel.progress, {
+    form_id: form.id,
+    client_id: form.client_id,
+    status: form.status,
+    answered: progress.answered,
+    total: progress.total,
+    ts: Date.now(),
+  }).catch(e => console.error('intake realtime publish failed:', e))
 
   return NextResponse.json({ status: form.status })
 }

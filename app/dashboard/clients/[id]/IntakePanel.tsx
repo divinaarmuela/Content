@@ -1,6 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRealtime } from 'inngest/react'
+import { intakeChannel } from '@/app/inngest/channels'
+import { fetchIntakeSubscriptionToken } from './actions'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-core'
+import { publicUrl } from '@/app/lib/public-url'
 import IntakeEditor from './IntakeEditor'
 
 type Status = 'draft' | 'sent' | 'in_progress' | 'submitted'
@@ -81,15 +85,44 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Form | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false) => {
     const res = await fetch(`/api/clients/${clientId}/intake`)
-    if (!res.ok) { toast.error('Could not load intake forms'); return }
+    if (!res.ok) { if (!quiet) toast.error('Could not load intake forms'); return }
     const json = await res.json()
     setForms(json.forms ?? [])
     setCanManage(Boolean(json.can_manage))
   }, [clientId])
 
   useEffect(() => { void load() }, [load])
+
+  /**
+   * Watch the client fill it in, live. Every autosaved field publishes a
+   * progress message; this refetches on the ones for this client.
+   *
+   * Never while editing — a refetch mid-edit would replace the draft you are
+   * typing into with whatever the server last saw, which is a good way to lose
+   * a rewritten question.
+   */
+  const { messages } = useRealtime({
+    channel: intakeChannel,
+    topics: ['progress'] as const,
+    token: () => fetchIntakeSubscriptionToken(),
+    // a fan-out channel never "completes"
+    autoCloseOnTerminal: false,
+    // a client typing produces a message per field; batch so the panel
+    // re-renders a few times a second at most, not per keystroke burst
+    bufferInterval: 1_000,
+    historyLimit: 10,
+  })
+
+  useEffect(() => {
+    if (editing) return
+    const latest = messages.last
+    if (!latest) return
+    const d = latest.data as { client_id?: string }
+    if (d?.client_id !== clientId) return
+    void load(true)
+  }, [messages.last, clientId, editing, load])
 
   const post = async (body: unknown, ok: string) => {
     setBusy(true)
@@ -133,7 +166,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   }
 
   const copy = async (form: Form) => {
-    const url = `${window.location.origin}/intake/${form.token}`
+    const url = publicUrl(`/intake/${form.token}`)
     await navigator.clipboard.writeText(url)
     toast.success('Link copied')
     // copying is how the link actually gets sent — a status nobody remembers
@@ -205,7 +238,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
 
       {/* ── one card per form ── */}
       {forms.map(form => {
-        const url = typeof window === 'undefined' ? '' : `${window.location.origin}/intake/${form.token}`
+        const url = publicUrl(`/intake/${form.token}`)
         const editable = form.status === 'draft' || form.status === 'sent'
         const isEditing = editing === form.id
         const isOpen = expanded === form.id
