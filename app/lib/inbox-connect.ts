@@ -29,12 +29,20 @@ export function inboxConnectConfigured(): boolean {
   )
 }
 
+/**
+ * Must match a URI registered on the Google client, character for character.
+ *
+ * Built from NEXT_PUBLIC_APP_HOST, not NEXT_PUBLIC_APP_URL: the latter points
+ * at the marketing host (www) because Asana and social OAuth callbacks are
+ * registered against it, and sending www here produced redirect_uri_mismatch.
+ * The signed-in app lives on the app host, and that is what is registered.
+ */
 function redirectUri(): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL
-    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    ?? 'https://app.mdmmarketing.com.au'
-  return `${base.replace(/\/$/, '')}/api/inbox/connect/callback`
+  const host = process.env.NEXT_PUBLIC_APP_HOST?.trim()
+  const base = host
+    ? `https://${host.replace(/^https?:\/\//, '').replace(/\/$/, '')}`
+    : (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'https://app.mdmmarketing.com.au')
+  return `${base}/api/inbox/connect/callback`
 }
 
 /**
