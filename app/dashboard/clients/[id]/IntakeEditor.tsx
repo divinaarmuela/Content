@@ -57,6 +57,16 @@ export default function IntakeEditor({
   const [drag, setDrag] = useState<Drag>(null)
   const [over, setOver] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
+  /**
+   * Raw text of the options field while it is being typed, keyed by block.
+   *
+   * The field cannot be driven straight from `options`. Parsing on every
+   * keystroke and rendering the joined result back means the comma you just
+   * typed is stripped before it reaches the screen — filter(Boolean) drops the
+   * empty segment after it — so a second option is impossible to type. The raw
+   * string is held here and parsed on blur.
+   */
+  const [optionsDraft, setOptionsDraft] = useState<Record<string, string>>({})
 
   const setSections = (sections: Section[]) => setDraft({ ...draft, sections })
   const patchSection = (si: number, patch: Partial<Section>) =>
@@ -229,16 +239,26 @@ export default function IntakeEditor({
                         />
                       )}
 
-                      {(block.type === 'select' || block.type === 'multi_select') && (
-                        <Input
-                          value={(block.options ?? []).join(', ')}
-                          placeholder="Their choices, separated by commas"
-                          onChange={e => patchBlock(si, bi, {
-                            options: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-                          })}
-                          className="h-8 text-xs"
-                        />
-                      )}
+                      {(block.type === 'select' || block.type === 'multi_select') && (() => {
+                        const key = `${si}-${bi}`
+                        const draft = optionsDraft[key]
+                        const commit = (raw: string) => {
+                          patchBlock(si, bi, {
+                            options: raw.split(',').map(o => o.trim()).filter(Boolean),
+                          })
+                          setOptionsDraft(d => { const n = { ...d }; delete n[key]; return n })
+                        }
+                        return (
+                          <Input
+                            value={draft ?? (block.options ?? []).join(', ')}
+                            placeholder="Their choices, separated by commas"
+                            onChange={e => setOptionsDraft(d => ({ ...d, [key]: e.target.value }))}
+                            onBlur={e => commit(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                            className="h-8 text-xs"
+                          />
+                        )
+                      })()}
                     </div>
 
                     <div className="flex flex-col opacity-0 transition-opacity group-hover/block:opacity-100 focus-within:opacity-100">

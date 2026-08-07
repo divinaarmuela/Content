@@ -55,6 +55,15 @@ export default function ScannerSettings() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [schedule, setSchedule] = useState<ScheduleStatus | null>(null)
   const [mailboxes, setMailboxes] = useState<MailboxEntry[]>([])
+  /**
+   * Raw text of the block lists while they are being typed.
+   *
+   * These cannot be driven straight from the array. Splitting on every
+   * keystroke and rendering the joined result back means the newline you just
+   * pressed is removed before it reaches the screen, so a second line is
+   * impossible to type. Parsed on blur instead.
+   */
+  const [listDraft, setListDraft] = useState<{ domains?: string; senders?: string }>({})
   /** Result of the connect round-trip, read once from the URL Google sent us
    *  back to. Cleared from the address bar so a refresh does not re-announce
    *  something that happened five minutes ago. */
@@ -425,7 +434,11 @@ export default function ScannerSettings() {
               id="bd" rows={4}
               placeholder={'spammy-agency.com\nnewsletter.example.net'}
               value={settings.blocked_domains.join('\n')}
-              onChange={e => patch({ blocked_domains: e.target.value.split(/[\s,]+/).filter(Boolean) })}
+              onChange={e => setListDraft(d => ({ ...d, domains: e.target.value }))}
+              onBlur={e => {
+                patch({ blocked_domains: e.target.value.split(/[\s,]+/).filter(Boolean) })
+                setListDraft(d => ({ ...d, domains: undefined }))
+              }}
             />
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               One per line. Subdomains are included automatically.
@@ -437,7 +450,11 @@ export default function ScannerSettings() {
               id="bs" rows={4}
               placeholder={'noreply@example.com\nsales@vendor.com'}
               value={settings.blocked_senders.join('\n')}
-              onChange={e => patch({ blocked_senders: e.target.value.split(/[\s,]+/).filter(Boolean) })}
+              onChange={e => setListDraft(d => ({ ...d, senders: e.target.value }))}
+              onBlur={e => {
+                patch({ blocked_senders: e.target.value.split(/[\s,]+/).filter(Boolean) })
+                setListDraft(d => ({ ...d, senders: undefined }))
+              }}
             />
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Full addresses, one per line.
