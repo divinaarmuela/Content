@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,6 +55,8 @@ type ScheduleStatus = {
 export default function ScannerSettings() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [schedule, setSchedule] = useState<ScheduleStatus | null>(null)
+  const { user } = useUser()
+  const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? ''
   const [mailboxes, setMailboxes] = useState<MailboxEntry[]>([])
   /**
    * Raw text of the block lists while they are being typed.
@@ -326,8 +329,21 @@ export default function ScannerSettings() {
               )}
               {settings.allow_self_connect && (() => {
                 const mine = mailboxes.filter(m => m.source === 'self')
+                // Your own mailbox may already be scanned by another route —
+                // hello@ runs on a refresh token set on the server. Offering
+                // "Connect my inbox" to someone whose inbox is already covered
+                // invites a pointless consent screen.
+                const already = mailboxes.find(m => m.email === myEmail)
                 return (
                   <div className="mt-2 flex flex-col gap-2">
+                    {already && already.source !== 'self' && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        Your inbox ({already.email}) is already being scanned
+                        {already.source === 'shared'
+                          ? ' — configured on the server, nothing to do here.'
+                          : ' through your Google account.'}
+                      </p>
+                    )}
                     {mine.map(m => (
                       <p key={m.email} className="flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
                         <span>Connected: {m.email}</span>
@@ -355,7 +371,7 @@ export default function ScannerSettings() {
                       href="/api/inbox/connect"
                       className="inline-flex w-fit items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
                     >
-                      {mine.length > 0 ? 'Connect another mailbox' : 'Connect my inbox'}
+                      {mine.length > 0 || already ? 'Connect another mailbox' : 'Connect my inbox'}
                     </a>
                   </div>
                 )
