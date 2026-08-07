@@ -21,28 +21,40 @@ import { allowedMailDomain } from './clerk-gmail'
 
 const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
 
+/**
+ * The inbox-connect app is NOT the app that sends mail.
+ *
+ * GMAIL_CLIENT_ID belongs to a Google Cloud project nobody here can reach any
+ * more, and hello@'s refresh token is bound to it — repointing it would break
+ * the contact form's email. So the connect flow gets its own pair, and falls
+ * back to the old one only so local development without them still runs.
+ */
+export function inboxClientId(): string {
+  return process.env.INBOX_CLIENT_ID?.trim() || process.env.GMAIL_CLIENT_ID?.trim() || ''
+}
+export function inboxClientSecret(): string {
+  return process.env.INBOX_CLIENT_SECRET?.trim() || process.env.GMAIL_CLIENT_SECRET?.trim() || ''
+}
+
 export function inboxConnectConfigured(): boolean {
-  return Boolean(
-    process.env.GMAIL_CLIENT_ID?.trim() &&
-    process.env.GMAIL_CLIENT_SECRET?.trim() &&
-    credentialsKeyConfigured(),
-  )
+  return Boolean(inboxClientId() && inboxClientSecret() && credentialsKeyConfigured())
 }
 
 /**
  * Must match a URI registered on the Google client, character for character.
  *
- * Built from NEXT_PUBLIC_APP_HOST, not NEXT_PUBLIC_APP_URL: the latter points
- * at the marketing host (www) because Asana and social OAuth callbacks are
- * registered against it, and sending www here produced redirect_uri_mismatch.
- * The signed-in app lives on the app host, and that is what is registered.
+ * Derived from the REQUEST, not from configuration. Env-derived versions of
+ * this were wrong twice: NEXT_PUBLIC_APP_URL points at the marketing host
+ * (Asana and social OAuth callbacks are registered against it), and any other
+ * variable is a second place for the value to drift out of step with what is
+ * registered in Google.
+ *
+ * The browser is on the app host when it starts the flow and when Google sends
+ * it back, so the origin is identical on both legs by construction — which is
+ * the only property the token exchange actually requires.
  */
-function redirectUri(): string {
-  const host = process.env.NEXT_PUBLIC_APP_HOST?.trim()
-  const base = host
-    ? `https://${host.replace(/^https?:\/\//, '').replace(/\/$/, '')}`
-    : (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'https://app.mdmmarketing.com.au')
-  return `${base}/api/inbox/connect/callback`
+export function redirectUriFor(req: Request): string {
+  return `${new URL(req.url).origin}/api/inbox/connect/callback`
 }
 
 /**
@@ -53,10 +65,10 @@ function redirectUri(): string {
  * which expires in an hour and leaves a mailbox that scans once and then
  * silently stops.
  */
-export function inboxConsentUrl(state: string): string {
+export function inboxConsentUrl(req: Request, state: string): string {
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-    client_id: process.env.GMAIL_CLIENT_ID!,
-    redirect_uri: redirectUri(),
+    client_id: inboxClientId(),
+    redirect_uri: redirectUriFor(req),
     response_type: 'code',
     scope: GMAIL_READ_SCOPE,
     access_type: 'offline',
@@ -77,15 +89,15 @@ export type ConnectResult =
  * it: a consent screen is a UI, and this is the boundary that actually writes
  * a scannable mailbox to the database.
  */
-export async function completeInboxConnect(code: string, by: string): Promise<ConnectResult> {
+export async function completeInboxConnect(req: Request, code: string, by: string): Promise<ConnectResult> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GMAIL_CLIENT_ID!,
-      client_secret: process.env.GMAIL_CLIENT_SECRET!,
-      redirect_uri: redirectUri(),
+      client_id: inboxClientId(),
+      client_secret: inboxClientSecret(),
+      redirect_uri: redirectUriFor(req),
       grant_type: 'authorization_code',
     }),
   })

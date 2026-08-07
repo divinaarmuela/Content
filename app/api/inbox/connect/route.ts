@@ -12,7 +12,7 @@ import { getScanSettings } from '../../../lib/scan-settings'
  */
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await requireRole('editor')
 
@@ -33,7 +33,7 @@ export async function GET() {
 
     // state carries who started it, so the callback can record who connected
     // without trusting anything the browser sends back
-    return NextResponse.redirect(inboxConsentUrl(encodeURIComponent(user.email)))
+    return NextResponse.redirect(inboxConsentUrl(req, encodeURIComponent(user.email)))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

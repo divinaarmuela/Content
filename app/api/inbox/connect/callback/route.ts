@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   try {
     const user = await requireRole('editor')
-    const result = await completeInboxConnect(code, user.email)
+    const result = await completeInboxConnect(req, code, user.email)
     if (!result.ok) return back(result.reason)
     return back('connected', result.email)
   } catch {

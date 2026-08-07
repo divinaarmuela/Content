@@ -30,6 +30,11 @@ export type Mailbox = {
   delegated?: boolean
   /** Mode C: a ready access token (e.g. supplied by Clerk for a signed-in user) */
   accessToken?: string
+  /** Which OAuth client issued `refreshToken`. A refresh token is bound to its
+   *  client, so a mailbox connected through the inbox-connect app cannot be
+   *  refreshed with the credentials that minted hello@'s token 60 days ago. */
+  clientId?: string
+  clientSecret?: string
 }
 
 const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
@@ -120,15 +125,17 @@ async function delegatedToken(mailboxEmail: string, scope = GMAIL_READ_SCOPE): P
 }
 
 /** Mode B: refresh-token exchange. */
-async function refreshTokenAccess(refreshToken: string): Promise<string> {
+async function refreshTokenAccess(
+  refreshToken: string, clientId?: string, clientSecret?: string,
+): Promise<string> {
   const hit = cached(refreshToken)
   if (hit) return hit
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.GMAIL_CLIENT_ID ?? '',
-      client_secret: process.env.GMAIL_CLIENT_SECRET ?? '',
+      client_id: clientId || process.env.GMAIL_CLIENT_ID || '',
+      client_secret: clientSecret || process.env.GMAIL_CLIENT_SECRET || '',
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
@@ -142,7 +149,9 @@ async function refreshTokenAccess(refreshToken: string): Promise<string> {
 async function accessTokenForMailbox(mailbox: Mailbox, scope = GMAIL_READ_SCOPE): Promise<string> {
   if (mailbox.accessToken) return mailbox.accessToken // Mode C — already fresh
   if (mailbox.delegated) return delegatedToken(mailbox.email, scope)
-  if (mailbox.refreshToken) return refreshTokenAccess(mailbox.refreshToken)
+  if (mailbox.refreshToken) {
+    return refreshTokenAccess(mailbox.refreshToken, mailbox.clientId, mailbox.clientSecret)
+  }
   throw new Error(`No credentials for mailbox ${mailbox.email}`)
 }
 

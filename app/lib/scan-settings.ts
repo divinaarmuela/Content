@@ -4,6 +4,7 @@ import { getMailboxes, type Mailbox } from './gmail'
 import { listConnectedMailboxes } from './clerk-gmail'
 import { normaliseSettings, DEFAULT_SCAN_SETTINGS, type ScanSettings } from './scan-core'
 import { decryptSecret } from './secret-box'
+import { inboxClientId, inboxClientSecret } from './inbox-connect'
 
 export type { ScanSettings } from './scan-core'
 
@@ -132,6 +133,9 @@ export async function listSelfConnectedMailboxes(): Promise<Mailbox[]> {
       out.push({
         email: (row.email as string).toLowerCase(),
         refreshToken: decryptSecret(row.refresh_token_encrypted as string),
+        // bound to the connect app, not the mail-sending one
+        clientId: inboxClientId(),
+        clientSecret: inboxClientSecret(),
       })
     } catch (e) {
       console.error(`could not decrypt the stored token for ${row.email}:`, e)
