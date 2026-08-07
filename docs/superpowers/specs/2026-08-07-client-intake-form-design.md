@@ -176,13 +176,32 @@ of prose.
 
 Pure given fixtures, so they belong in the existing vitest suite.
 
-## Open questions
+## Settled
 
-1. **One engagement type per client, or many?** Unresolved. If a client can hold a
-   rebrand and an ongoing retainer at once, `intake_forms.client_id` should point at
-   an engagement instead. Cheap now, expensive later.
-2. **Who may create and send a form** — super admin only, matching every other
-   client-scoped write, or account managers for their own clients? Account managers
-   remain scoped to assigned clients (confirmed in discussion), so this decides
-   whether onboarding bottlenecks on one person.
-3. Should a client receive a copy of their own submitted answers?
+**Super admin creates and sends forms.** Consistent with every other client-scoped
+write (`POST /api/team`, `PATCH /api/team/[id]`), and account managers remain scoped
+to their assigned clients. Accepted consequence: onboarding a new client waits on a
+super admin. Revisit if that becomes a bottleneck in practice rather than in theory.
+
+**The client does not receive a copy of their answers by default.** A per-form option
+to email them a copy on submission, defaulted off. Off by default because the answers
+contain candid competitor assessments — the Emerald form names four rival venues and
+states plainly where each has the edge. That is written for us, and a copy landing in
+a shared `info@` inbox is a different audience than the person who wrote it.
+
+**One intake form per client, sent once.** The form is onboarding — it is sent after
+the kickoff call and never again, even if the client later signs a different kind of
+work. So `intake_forms.client_id` is correct and gets a **unique constraint**: one
+row per client, enforced in the database rather than by the UI declining to show a
+button.
+
+This also removes engagements as a blocker for this build. Whether a client can hold
+several concurrent engagements remains an open design question for *commitments and
+reporting* — Emerald is a rebuild campaign aimed at a 2027 reopening, which is
+exactly the shape that ends and is followed by something else — but it no longer
+gates the intake form. If engagements are introduced later, an intake form stays
+where it is: attached to the client, captured once, at the start of the relationship.
+
+The template still varies by engagement type, since a rebrand form asks about
+heritage and continuity where a one-off does not. That is a choice made once, when
+the form is created.
