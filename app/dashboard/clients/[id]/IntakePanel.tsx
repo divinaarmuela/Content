@@ -19,6 +19,9 @@ import IntakeEditor from './IntakeEditor'
 
 type Status = 'draft' | 'sent' | 'in_progress' | 'submitted'
 
+/** Someone who can be picked to receive submission notifications. */
+type TeamMember = { name: string; email: string }
+
 type Form = {
   id: string
   title: string
@@ -28,6 +31,7 @@ type Form = {
   sent_at: string | null
   first_opened_at: string | null
   submitted_at: string | null
+  notify_emails: string[] | null
   definition: TemplateDefinition
   answers: Answers
   completion: Completion
@@ -76,6 +80,11 @@ function relative(iso: string | null): string {
 export default function IntakePanel({ clientId }: { clientId: string }) {
   const [forms, setForms] = useState<Form[] | null>(null)
   const [canManage, setCanManage] = useState(false)
+  const [team, setTeam] = useState<TeamMember[]>([])
+  const [defaults, setDefaults] = useState<string[]>([])
+  const [recipientsFor, setRecipientsFor] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string[]>([])
+  const [applyAll, setApplyAll] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newType, setNewType] = useState('ongoing')
   const [newTitle, setNewTitle] = useState('')
@@ -91,6 +100,8 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     const json = await res.json()
     setForms(json.forms ?? [])
     setCanManage(Boolean(json.can_manage))
+    setTeam(json.team ?? [])
+    setDefaults(json.default_recipients ?? [])
   }, [clientId])
 
   useEffect(() => { void load() }, [load])
@@ -378,6 +389,78 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   if (ok) setEditing(null)
                 }}
               />
+            )}
+
+            {/* ── who hears about it ── */}
+            {canManage && !isEditing && (
+              recipientsFor === form.id ? (
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-4">
+                  <div>
+                    <p className="text-sm font-medium">Notify when this is submitted</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pick from the team. Nobody selected means nobody is emailed.
+                    </p>
+                  </div>
+                  <div className="flex max-h-52 flex-col gap-1 overflow-y-auto rounded border border-border bg-background p-2">
+                    {team.map(m => {
+                      const on = picked.includes(m.email)
+                      return (
+                        <button
+                          key={m.email} type="button"
+                          onClick={() => setPicked(p =>
+                            on ? p.filter(e => e !== m.email) : [...p, m.email])}
+                          className={
+                            'flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition ' +
+                            (on ? 'bg-primary/10 text-foreground' : 'hover:bg-muted')
+                          }
+                        >
+                          <span className={
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ' +
+                            (on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')
+                          }>{on ? '✓' : ''}</span>
+                          <span className="font-medium">{m.name || m.email}</span>
+                          <span className="ml-auto font-mono text-[10px] text-muted-foreground">{m.email}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" checked={applyAll}
+                      onChange={e => setApplyAll(e.target.checked)} />
+                    Use this list for all intake forms, not just this one
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" disabled={busy}
+                      onClick={async () => {
+                        await patch({ form_id: form.id, action: 'set_recipients', emails: picked, apply_to_all: applyAll }, 'Recipients saved')
+                        setRecipientsFor(null); setApplyAll(false)
+                      }}>Save</Button>
+                    <Button size="sm" variant="ghost" disabled={busy}
+                      onClick={async () => {
+                        await patch({ form_id: form.id, action: 'set_recipients', emails: null }, 'Back to the default list')
+                        setRecipientsFor(null); setApplyAll(false)
+                      }}>Use the default</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setRecipientsFor(null); setApplyAll(false) }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPicked(form.notify_emails ?? defaults)
+                    setRecipientsFor(form.id)
+                  }}
+                  className="-mt-1 self-start text-left text-xs text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  {(() => {
+                    const list = form.notify_emails ?? defaults
+                    const who = list.length === 0
+                      ? (form.notify_emails ? 'nobody' : 'nobody set')
+                      : list.length <= 2 ? list.join(', ') : `${list.length} people`
+                    return `Notifies ${who}${form.notify_emails ? '' : ' (default)'} · change`
+                  })()}
+                </button>
+              )
             )}
 
             {/* ── answers ── */}

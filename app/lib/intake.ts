@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { supabase } from '@/lib/supabase'
 import { templateFor } from './intake-templates'
 import {
-  mergeAnswers, nextStatus, isWritable,
+  mergeAnswers, nextStatus, isWritable, normaliseRecipients,
   type Answers, type IntakeStatus, type TemplateKey, type TemplateDefinition,
 } from './intake-core'
 
@@ -25,13 +25,15 @@ export type IntakeForm = {
   first_opened_at: string | null
   submitted_at: string | null
   reopened_at: string | null
+  /** null = inherit the agency default; [] = notify nobody */
+  notify_emails: string[] | null
 }
 
 export type IntakeFile = { block_id: string; filename: string; url: string }
 
 const COLS =
   'id, client_id, title, template_key, definition, token, status, answers, ' +
-  'sent_at, first_opened_at, submitted_at, reopened_at'
+  'sent_at, first_opened_at, submitted_at, reopened_at, notify_emails'
 
 /** Create a form for this client. The template definition is COPIED in, not
  *  referenced — editing intake-templates.ts later must not alter a form a
@@ -198,4 +200,39 @@ export async function listIntakeFiles(formId: string): Promise<IntakeFile[]> {
     .select('block_id, filename, url').eq('form_id', formId)
     .order('created_at', { ascending: true })
   return (data ?? []) as IntakeFile[]
+}
+
+/** The agency-wide default recipient list. Never throws: a missing row means
+ *  no default, which resolveRecipients turns into the sending mailbox rather
+ *  than into silence. */
+export async function getIntakeDefaultRecipients(): Promise<string[]> {
+  const { data } = await supabase
+    .from('intake_settings').select('notify_emails').eq('id', 1).maybeSingle()
+  return normaliseRecipients(data?.notify_emails)
+}
+
+export async function saveIntakeDefaultRecipients(raw: unknown, by: string): Promise<string[]> {
+  const notify_emails = normaliseRecipients(raw)
+  const { error } = await supabase.from('intake_settings').upsert({
+    id: 1, notify_emails, updated_at: new Date().toISOString(), updated_by: by,
+  })
+  if (error) throw new Error(error.message)
+  return notify_emails
+}
+
+/** Set one form's own recipients. Pass null to go back to inheriting. */
+export async function setFormRecipients(formId: string, raw: unknown): Promise<string[] | null> {
+  const notify_emails = raw === null ? null : normaliseRecipients(raw)
+  const { error } = await supabase
+    .from('intake_forms').update({ notify_emails }).eq('id', formId)
+  if (error) throw new Error(error.message)
+  return notify_emails
+}
+
+/** Everyone who could be picked in the recipients dropdown: the active team. */
+export async function listTeamRecipients(): Promise<{ name: string; email: string }[]> {
+  const { data } = await supabase
+    .from('team_users').select('name, email')
+    .eq('active_status', true).order('name')
+  return (data ?? []).filter(u => u.email) as { name: string; email: string }[]
 }

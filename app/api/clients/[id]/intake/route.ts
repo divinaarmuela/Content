@@ -4,6 +4,8 @@ import {
   createIntakeForm, listIntakeFormsForClient, getIntakeFormForClient,
   reopenIntake, rotateIntakeToken, markIntakeSent, listIntakeFiles,
   deleteIntakeForm, updateIntakeDefinition, renameIntakeForm,
+  getIntakeDefaultRecipients, saveIntakeDefaultRecipients,
+  setFormRecipients, listTeamRecipients,
 } from '../../../../lib/intake'
 import { completion, normaliseDefinition, type TemplateKey } from '../../../../lib/intake-core'
 
@@ -23,10 +25,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const user = await requireRole('editor')
     const { id } = await params
-    const forms = await listIntakeFormsForClient(id)
+    const [forms, team, defaultRecipients] = await Promise.all([
+      listIntakeFormsForClient(id), listTeamRecipients(), getIntakeDefaultRecipients(),
+    ])
 
     return NextResponse.json({
       can_manage: roleSatisfies(user.role, 'super_admin'),
+      team,
+      default_recipients: defaultRecipients,
       forms: await Promise.all(forms.map(async f => ({
         id: f.id,
         title: f.title,
@@ -36,6 +42,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         sent_at: f.sent_at,
         first_opened_at: f.first_opened_at,
         submitted_at: f.submitted_at,
+        notify_emails: f.notify_emails,
         definition: f.definition,
         answers: f.answers,
         completion: completion(f.definition, f.answers),
@@ -86,6 +93,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       case 'mark_sent':
         await markIntakeSent(form.id)
         return NextResponse.json({ ok: true })
+
+      case 'set_recipients': {
+        // `emails: null` means "go back to inheriting the default"
+        const emails = body?.emails === null ? null : body?.emails
+        await setFormRecipients(form.id, emails)
+        // one control, two scopes: ticking "use for all" writes the same list
+        // as the agency default, so the next form created inherits it
+        if (body?.apply_to_all && emails !== null) {
+          const admin = await requireRole('super_admin')
+          await saveIntakeDefaultRecipients(emails, admin.email)
+        }
+        return NextResponse.json({ ok: true })
+      }
 
       case 'rename':
         await renameIntakeForm(form.id, String(body?.title ?? ''))

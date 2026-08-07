@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { submitIntake } from '../../../../lib/intake'
+import { submitIntake, getIntakeDefaultRecipients } from '../../../../lib/intake'
 import { notify, renderEmail } from '../../../../lib/mailer'
-import { completion } from '../../../../lib/intake-core'
+import { completion, resolveRecipients } from '../../../../lib/intake-core'
 import { inngest } from '../../../../inngest/client'
 import { intakeChannel } from '../../../../inngest/channels'
 
@@ -28,12 +28,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // Best-effort. The answers are already saved, so a failed email must never
   // fail the client's submission — they did their part. notify() carries its
   // own dedupe key, so a double submit cannot send this twice.
+  // Who hears about it: this form's own list, else the agency default, else
+  // the sending mailbox — so a submission is never silently unannounced.
+  const recipients = resolveRecipients(
+    form.notify_emails,
+    await getIntakeDefaultRecipients(),
+    process.env.GMAIL_USER ?? '',
+  )
+
   try {
-    await notify({
+    // one notify() per recipient: its dedupe key includes the address, so each
+    // person is emailed exactly once even if submit is somehow retried
+    await Promise.all(recipients.map(to => notify({
       eventType: 'intake_submitted',
       entityType: 'intake_form',
       entityId: form.id,
-      recipientEmail: process.env.GMAIL_USER ?? '',
+      recipientEmail: to,
       subject: `Intake form submitted — ${name}`,
       bodyHtml: renderEmail(
         'Intake form submitted',
@@ -42,7 +52,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
         'Open in dashboard',
         `${base}/dashboard/clients/${form.client_id}`,
       ),
-    })
+    })))
   } catch (e) {
     console.error('intake submit notification failed:', e)
   }
