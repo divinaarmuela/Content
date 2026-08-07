@@ -21,6 +21,7 @@ type Settings = {
   duplicate_window_days: number
   rules_only: boolean
   schedule_enabled: boolean
+  allow_self_connect: boolean
   blocked_domains: string[]
   blocked_senders: string[]
 }
@@ -264,6 +265,31 @@ export default function ScannerSettings() {
         <Separator />
 
         <CardContent className="flex flex-col gap-4 pt-6">
+          {/* ── connect my inbox ── */}
+          <div className="flex items-start gap-3">
+            <Switch
+              id="selfconnect" checked={settings.allow_self_connect}
+              onCheckedChange={v => patch({ allow_self_connect: v })}
+            />
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="selfconnect">Let the team connect their own inbox</Label>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Each person grants read access to their own mailbox, once. Only
+                @mdmmarketing.com.au accounts can — Google refuses the rest.
+                Switching this off hides the button; inboxes already connected
+                keep scanning until someone disconnects them.
+              </p>
+              {settings.allow_self_connect && (
+                <a
+                  href="/api/inbox/connect"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
+                >
+                  Connect my inbox
+                </a>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-start gap-3">
             <Switch
               id="sched" checked={settings.schedule_enabled}

@@ -11,6 +11,8 @@ export type ScanSettings = {
   duplicate_window_days: number
   rules_only: boolean
   schedule_enabled: boolean
+  /** whether the "connect my inbox" control is offered at all */
+  allow_self_connect: boolean
   blocked_domains: string[]
   blocked_senders: string[]
 }
@@ -22,6 +24,7 @@ export const DEFAULT_SCAN_SETTINGS: ScanSettings = {
   duplicate_window_days: 30,
   rules_only: false,
   schedule_enabled: true,
+  allow_self_connect: true,
   blocked_domains: [],
   blocked_senders: [],
 }
@@ -49,6 +52,9 @@ export function normaliseSettings(input: unknown): ScanSettings {
     duplicate_window_days: clamp(Math.round(num(r.duplicate_window_days, 30)), 0, 365),
     rules_only:            Boolean(r.rules_only),
     schedule_enabled:      r.schedule_enabled === undefined ? true : Boolean(r.schedule_enabled),
+    // defaults ON: an existing row predating this column should not silently
+    // remove a control the team already relies on
+    allow_self_connect:    r.allow_self_connect === undefined ? true : Boolean(r.allow_self_connect),
     blocked_domains:       list(r.blocked_domains).map(d => d.replace(/^@/, '')),
     blocked_senders:       list(r.blocked_senders),
   }

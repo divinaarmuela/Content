@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getMailboxes, type Mailbox } from './gmail'
 import { listConnectedMailboxes } from './clerk-gmail'
 import { normaliseSettings, DEFAULT_SCAN_SETTINGS, type ScanSettings } from './scan-core'
+import { decryptSecret } from './secret-box'
 
 export type { ScanSettings } from './scan-core'
 
@@ -28,7 +29,7 @@ export async function saveScanSettings(patch: unknown, updatedBy: string): Promi
 
 export type MailboxEntry = {
   email: string
-  source: 'shared' | 'connected'
+  source: 'shared' | 'connected' | 'self'
   enabled: boolean
   label: string | null
   /** health, from the most recent run */
@@ -49,12 +50,16 @@ export type MailboxEntry = {
 export async function listMailboxEntries(): Promise<MailboxEntry[]> {
   const shared = getMailboxes()
   const connected = await listConnectedMailboxes().catch(() => [] as Mailbox[])
+  const self = await listSelfConnectedMailboxes()
 
   const seen = new Set(shared.map(m => m.email.toLowerCase()))
-  const available: { email: string; source: 'shared' | 'connected' }[] = [
+  const available: { email: string; source: 'shared' | 'connected' | 'self' }[] = [
     ...shared.map(m => ({ email: m.email.toLowerCase(), source: 'shared' as const })),
-    ...connected
+    ...self
       .filter(m => !seen.has(m.email.toLowerCase()))
+      .map(m => ({ email: m.email.toLowerCase(), source: 'self' as const })),
+    ...connected
+      .filter(m => !seen.has(m.email.toLowerCase()) && !self.some(s => s.email === m.email.toLowerCase()))
       .map(m => ({ email: m.email.toLowerCase(), source: 'connected' as const })),
   ]
 
@@ -106,4 +111,31 @@ export async function setMailboxEnabled(email: string, enabled: boolean, by: str
 export async function enabledMailboxEmails(): Promise<string[]> {
   const entries = await listMailboxEntries()
   return entries.filter(e => e.enabled).map(e => e.email)
+}
+
+/**
+ * Mailboxes whose owner connected them through the dashboard.
+ *
+ * The token is decrypted here and nowhere else; a decryption failure means a
+ * rotated CREDENTIALS_KEY, and losing one mailbox to that is better than
+ * throwing and losing the whole scan.
+ */
+export async function listSelfConnectedMailboxes(): Promise<Mailbox[]> {
+  const { data } = await supabase
+    .from('scan_mailboxes')
+    .select('email, refresh_token_encrypted')
+    .not('refresh_token_encrypted', 'is', null)
+
+  const out: Mailbox[] = []
+  for (const row of data ?? []) {
+    try {
+      out.push({
+        email: (row.email as string).toLowerCase(),
+        refreshToken: decryptSecret(row.refresh_token_encrypted as string),
+      })
+    } catch (e) {
+      console.error(`could not decrypt the stored token for ${row.email}:`, e)
+    }
+  }
+  return out
 }

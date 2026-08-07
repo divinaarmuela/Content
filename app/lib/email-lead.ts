@@ -15,7 +15,7 @@ import { listConnectedMailboxes } from './clerk-gmail'
 import {
   FatalScanError, fatalApiReason, gmailQuery, blockedReason, type ScanSettings,
 } from './scan-core'
-import { getScanSettings, enabledMailboxEmails } from './scan-settings'
+import { getScanSettings, enabledMailboxEmails, listSelfConnectedMailboxes } from './scan-settings'
 
 export { FatalScanError, fatalApiReason }
 
@@ -147,9 +147,22 @@ export async function scanInbox(onEvent?: Emit): Promise<ScanResult> {
 /** Every mailbox the scanner has credentials for, de-duplicated by address. */
 async function availableMailboxes(): Promise<Mailbox[]> {
   const configured = getMailboxes()
+  const self = await listSelfConnectedMailboxes().catch(() => [] as Mailbox[])
   const connected = await listConnectedMailboxes().catch(() => [] as Mailbox[])
+
+  // precedence: env config, then a token its owner granted us, then whatever
+  // Clerk still holds. Env wins because it is the one an operator set
+  // deliberately; a self-connected token beats Clerk's because it survives
+  // sign-in changes.
   const seen = new Set(configured.map(m => m.email.toLowerCase()))
-  return [...configured, ...connected.filter(m => !seen.has(m.email.toLowerCase()))]
+  const out = [...configured]
+  for (const m of [...self, ...connected]) {
+    const email = m.email.toLowerCase()
+    if (seen.has(email)) continue
+    seen.add(email)
+    out.push(m)
+  }
+  return out
 }
 
 /**
