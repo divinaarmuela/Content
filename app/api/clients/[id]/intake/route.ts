@@ -4,7 +4,7 @@ import {
   createIntakeForm, listIntakeFormsForClient, getIntakeFormForClient,
   reopenIntake, rotateIntakeToken, markIntakeSent, listIntakeFiles,
   deleteIntakeForm, updateIntakeDefinition, renameIntakeForm,
-  getIntakeDefaultRecipients, saveIntakeDefaultRecipients,
+  getIntakeDefaultRecipients, saveIntakeDefaultRecipients, saveTemplateDefinition,
   setFormRecipients, listTeamRecipients,
 } from '../../../../lib/intake'
 import { completion, normaliseDefinition, type TemplateKey } from '../../../../lib/intake-core'
@@ -117,6 +117,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const definition = normaliseDefinition(body?.definition, form.template_key)
         if (definition.sections.length === 0) {
           return NextResponse.json({ error: 'A form needs at least one section' }, { status: 400 })
+        }
+        // one control, two scopes — the same shape as the recipients list:
+        // this form always, and optionally every future form of its category
+        if (body?.apply_to_template) {
+          const admin = await requireRole('super_admin')
+          await saveTemplateDefinition(form.template_key, definition, admin.email)
         }
         const ok = await updateIntakeDefinition(form.id, definition)
         if (!ok) {

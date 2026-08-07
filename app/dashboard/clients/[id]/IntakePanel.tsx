@@ -377,12 +377,16 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             {isEditing && (
               <IntakeEditor
                 definition={form.definition}
+                templateLabel={TYPES.find(t => t.key === form.template_key)?.label ?? form.template_key}
                 saving={busy}
                 onCancel={() => setEditing(null)}
-                onSave={async next => {
+                onSave={async (next, applyToTemplate) => {
                   const ok = await patch(
-                    { form_id: form.id, action: 'update_definition', definition: next },
-                    'Questions saved',
+                    {
+                      form_id: form.id, action: 'update_definition',
+                      definition: next, apply_to_template: applyToTemplate,
+                    },
+                    applyToTemplate ? 'Questions saved, and set as the template' : 'Questions saved',
                   )
                   if (ok) setEditing(null)
                 }}

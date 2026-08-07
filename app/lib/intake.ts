@@ -2,6 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { supabase } from '@/lib/supabase'
 import { templateFor } from './intake-templates'
+import { normaliseDefinition } from './intake-core'
 import {
   mergeAnswers, nextStatus, isWritable, normaliseRecipients,
   type Answers, type IntakeStatus, type TemplateKey, type TemplateDefinition,
@@ -38,10 +39,36 @@ const COLS =
 /** Create a form for this client. The template definition is COPIED in, not
  *  referenced — editing intake-templates.ts later must not alter a form a
  *  client is halfway through. */
+/**
+ * The questions a new form of this category starts from.
+ *
+ * A saved override wins over the code default, so an improvement made while
+ * tailoring one client's form carries to every form created afterwards. The
+ * code remains the fallback, which is what makes deleting a row a safe undo.
+ */
+export async function resolveTemplate(key: TemplateKey): Promise<TemplateDefinition> {
+  const { data } = await supabase
+    .from('intake_templates').select('definition').eq('key', key).maybeSingle()
+  if (!data?.definition) return templateFor(key)
+  // repaired, not trusted: a stored override came from a browser once
+  const def = normaliseDefinition(data.definition, key)
+  return def.sections.length > 0 ? def : templateFor(key)
+}
+
+/** Save the questions as the default for this category. */
+export async function saveTemplateDefinition(
+  key: TemplateKey, definition: TemplateDefinition, by: string,
+): Promise<void> {
+  const { error } = await supabase.from('intake_templates').upsert({
+    key, definition, updated_at: new Date().toISOString(), updated_by: by,
+  })
+  if (error) throw new Error(error.message)
+}
+
 export async function createIntakeForm(
   clientId: string, key: TemplateKey, createdBy: string, title = '',
 ): Promise<IntakeForm> {
-  const def = templateFor(key)
+  const def = await resolveTemplate(key)
   const { data, error } = await supabase
     .from('intake_forms')
     .insert({
