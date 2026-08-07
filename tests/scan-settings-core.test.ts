@@ -45,8 +45,10 @@ describe('normaliseSettings', () => {
 
 describe('gmailQuery', () => {
   it('builds the search from the lookback window', () => {
-    expect(gmailQuery({ lookback_days: 3 })).toBe('in:inbox newer_than:3d')
-    expect(gmailQuery({ lookback_days: 14 })).toBe('in:inbox newer_than:14d')
+    expect(gmailQuery({ lookback_days: 3 }))
+      .toBe('newer_than:3d -in:sent -in:draft -in:trash -in:spam -in:chats')
+    expect(gmailQuery({ lookback_days: 14 }))
+      .toBe('newer_than:14d -in:sent -in:draft -in:trash -in:spam -in:chats')
   })
 })
 

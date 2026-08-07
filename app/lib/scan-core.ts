@@ -62,7 +62,12 @@ export function normaliseSettings(input: unknown): ScanSettings {
 
 /** The Gmail search this settings object implies. */
 export function gmailQuery(s: Pick<ScanSettings, 'lookback_days'>): string {
-  return `in:inbox newer_than:${s.lookback_days}d`
+  // NOT `in:inbox`. contact@ has four messages in its inbox and two thousand
+  // in labels — a filter files enquiries away on arrival, so an inbox-only
+  // query found nothing there and always would have. Everything recent is
+  // read except the categories that are never an enquiry: our own sent mail,
+  // drafts, deleted items, spam and chats.
+  return `newer_than:${s.lookback_days}d -in:sent -in:draft -in:trash -in:spam -in:chats`
 }
 
 /** Is this sender blocked outright? Domains match the part after @, including
