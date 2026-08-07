@@ -15,7 +15,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     .from('clients').select('name').eq('id', form.client_id).maybeSingle()
   const name = client?.name ?? 'A client'
   const progress = completion(form.definition, form.answers)
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  // An email link must be absolute. NEXT_PUBLIC_APP_URL is not set anywhere
+  // today, so falling back to '' would have produced "/dashboard/clients/…" —
+  // a dead link in every mail client. VERCEL_URL covers preview deployments.
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    ?? 'https://www.mdmmarketing.com.au'
 
   // Best-effort. The answers are already saved, so a failed email must never
   // fail the client's submission — they did their part. notify() carries its
