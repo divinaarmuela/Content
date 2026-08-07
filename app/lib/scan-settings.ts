@@ -33,6 +33,8 @@ export type MailboxEntry = {
   source: 'shared' | 'connected' | 'self'
   enabled: boolean
   label: string | null
+  /** who granted access, for mailboxes connected through the dashboard */
+  connected_by: string | null
   /** health, from the most recent run */
   last_run_at: string | null
   last_status: 'running' | 'success' | 'error' | null
@@ -72,7 +74,7 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
   }
 
   const { data: rows } = await supabase
-    .from('scan_mailboxes').select('email, enabled, label, source')
+    .from('scan_mailboxes').select('email, enabled, label, source, connected_by')
   const byEmail = new Map((rows ?? []).map(r => [r.email as string, r]))
 
   // one most-recent run per mailbox
@@ -92,6 +94,7 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
       source: a.source,
       enabled: row?.enabled ?? true,
       label: (row?.label as string | null) ?? null,
+      connected_by: (row?.connected_by as string | null) ?? null,
       last_run_at: run?.started_at ?? null,
       last_status: (run?.status as MailboxEntry['last_status']) ?? null,
       last_error: run?.error ?? null,

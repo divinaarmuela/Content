@@ -30,6 +30,7 @@ type Settings = {
 type MailboxEntry = {
   email: string
   source: 'shared' | 'connected' | 'self'
+  connected_by?: string | null
   enabled: boolean
   last_run_at: string | null
   last_status: 'running' | 'success' | 'error' | null
@@ -201,10 +202,18 @@ export default function ScannerSettings() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm">{m.email}</span>
                     <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                      {/* "self" means connected through the dashboard by its
+                          owner — not by whoever happens to be reading this */}
                       {m.source === 'shared' ? 'shared'
-                        : m.source === 'self' ? 'you connected this'
-                        : 'connected'}
+                        : m.source === 'self'
+                          ? (m.connected_by === myEmail ? 'you connected this' : 'connected')
+                          : 'connected'}
                     </span>
+                    {m.source === 'self' && m.connected_by && m.connected_by !== myEmail && (
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                        by {m.connected_by}
+                      </span>
+                    )}
                     {m.last_status === 'error' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
                         <AlertTriangle className="h-3 w-3" /> failing
