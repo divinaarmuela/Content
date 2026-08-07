@@ -103,7 +103,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
    * typing into with whatever the server last saw, which is a good way to lose
    * a rewritten question.
    */
-  const { messages } = useRealtime({
+  const { messages, connectionStatus, error: rtError } = useRealtime({
     channel: intakeChannel,
     topics: ['progress'] as const,
     token: () => fetchIntakeSubscriptionToken(),
@@ -120,9 +120,17 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     const latest = messages.last
     if (!latest) return
     const d = latest.data as { client_id?: string }
+    console.log('[intake realtime] message', d)
     if (d?.client_id !== clientId) return
     void load(true)
   }, [messages.last, clientId, editing, load])
+
+  // Temporary: a websocket that never connects looks identical to one that
+  // connects and receives nothing. Surfaced so the difference is visible
+  // instead of inferred from server log timing.
+  useEffect(() => {
+    console.log('[intake realtime] status', connectionStatus, rtError ?? '')
+  }, [connectionStatus, rtError])
 
   const post = async (body: unknown, ok: string) => {
     setBusy(true)
@@ -185,6 +193,17 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Intake forms</h3>
+              <span
+                title={rtError ? String(rtError) : `realtime: ${connectionStatus}`}
+                className={
+                  'rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ' +
+                  (connectionStatus === 'open'
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                    : 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300')
+                }
+              >
+                live: {connectionStatus}
+              </span>
                 <p className="text-xs text-muted-foreground">
                   A shareable link with no login. Start from a template, then tailor the questions.
                 </p>
