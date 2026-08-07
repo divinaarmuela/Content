@@ -396,7 +396,7 @@ export default function ScannerSettings() {
             <div className="min-w-0">
               <Label htmlFor="sched">Scan automatically</Label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {schedule?.window ?? '6:00am – 10:45pm Melbourne, every 15 minutes'}.
+                {schedule?.window ?? 'every 5 minutes, around the clock'}.
                 Off means the scanner only runs when someone presses the button.
               </p>
 

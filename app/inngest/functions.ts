@@ -32,7 +32,12 @@ export const scanInboxScheduled = inngest.createFunction(
   {
     id: 'scan-inbox-scheduled',
     name: 'Dispatch inbox scans',
-    triggers: [{ cron: 'TZ=Australia/Melbourne */5 6-22 * * *' }],
+    // Every five minutes, around the clock. The 6am-10:45pm window meant an
+    // enquiry arriving at 11pm sat unseen until the morning — and enquiries
+    // do not keep office hours. Frequency does not multiply Anthropic spend:
+    // each message id is claimed once in email_ingest_log, so only genuinely
+    // new mail is ever classified.
+    triggers: [{ cron: '*/5 * * * *' }],
     retries: 2,
     // the dispatcher is cheap; one at a time is plenty and avoids double-sends
     concurrency: { limit: 1 },

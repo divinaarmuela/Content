@@ -26,8 +26,7 @@ async function scheduleStatus() {
   return {
     connected,
     last_scheduled_run: data?.started_at ?? null,
-    // hours 6-22 inclusive at :00/:15/:30/:45 — the final run of the day is 22:45
-    window: '6:00am – 10:45pm Melbourne, every 15 minutes',
+    window: 'every 5 minutes, around the clock',
   }
 }
 
