@@ -129,6 +129,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   // connects and receives nothing. Surfaced so the difference is visible
   // instead of inferred from server log timing.
   useEffect(() => {
+    // console only — the badge was UI clutter, but the signal is still needed
     console.log('[intake realtime] status', connectionStatus, rtError ?? '')
   }, [connectionStatus, rtError])
 
@@ -215,17 +216,6 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Intake forms</h3>
-              <span
-                title={rtError ? String(rtError) : `realtime: ${connectionStatus}`}
-                className={
-                  'rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ' +
-                  (connectionStatus === 'open'
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300')
-                }
-              >
-                live: {connectionStatus}
-              </span>
                 <p className="text-xs text-muted-foreground">
                   A shareable link with no login. Start from a template, then tailor the questions.
                 </p>
