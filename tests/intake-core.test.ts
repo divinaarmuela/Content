@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { answerableBlocks, mergeAnswers, type TemplateDefinition } from '../app/lib/intake-core'
+import {
+  answerableBlocks, mergeAnswers, completion, isWritable, nextStatus,
+  type TemplateDefinition,
+} from '../app/lib/intake-core'
 
 const DEF: TemplateDefinition = {
   key: 'rebrand',
@@ -64,5 +67,65 @@ describe('mergeAnswers', () => {
   it('survives junk in place of a patch object', () => {
     expect(mergeAnswers(DEF, { venue_name: 'The Emerald' }, null)).toEqual({ venue_name: 'The Emerald' })
     expect(mergeAnswers(DEF, { venue_name: 'The Emerald' }, 'nope')).toEqual({ venue_name: 'The Emerald' })
+  })
+})
+
+describe('completion', () => {
+  it('counts answered blocks overall and per section, ignoring guidance', () => {
+    const c = completion(DEF, { venue_name: 'The Emerald', tone: 'Both' })
+    expect(c.answered).toBe(2)
+    expect(c.total).toBe(4)
+    expect(c.sections).toEqual([
+      { id: 'brand', title: 'Brand snapshot', answered: 1, total: 2 },
+      { id: 'voice', title: 'Brand and voice', answered: 1, total: 2 },
+    ])
+  })
+
+  it('counts an empty array as unanswered', () => {
+    const def: TemplateDefinition = {
+      key: 'launch', name: 'x',
+      sections: [{ id: 's', title: 's', blocks: [
+        { id: 'files', type: 'file', label: 'Logo files' },
+      ] }],
+    }
+    expect(completion(def, { files: [] }).answered).toBe(0)
+    expect(completion(def, { files: ['a.png'] }).answered).toBe(1)
+  })
+})
+
+describe('isWritable', () => {
+  it('allows writes until submitted', () => {
+    expect(isWritable('draft')).toBe(true)
+    expect(isWritable('sent')).toBe(true)
+    expect(isWritable('in_progress')).toBe(true)
+  })
+
+  it('refuses writes once submitted — a forwarded link cannot rewrite history', () => {
+    expect(isWritable('submitted')).toBe(false)
+  })
+})
+
+describe('nextStatus', () => {
+  it('marks in_progress on the first save, not on opening the link', () => {
+    expect(nextStatus('sent', 'open')).toBe('sent')
+    expect(nextStatus('sent', 'save')).toBe('in_progress')
+  })
+
+  it('does not move backwards once in progress', () => {
+    expect(nextStatus('in_progress', 'save')).toBe('in_progress')
+    expect(nextStatus('in_progress', 'open')).toBe('in_progress')
+  })
+
+  it('submits from any writable state', () => {
+    expect(nextStatus('sent', 'submit')).toBe('submitted')
+    expect(nextStatus('in_progress', 'submit')).toBe('submitted')
+  })
+
+  it('reopening returns to in_progress so the client can carry on', () => {
+    expect(nextStatus('submitted', 'reopen')).toBe('in_progress')
+  })
+
+  it('a save against a submitted form changes nothing', () => {
+    expect(nextStatus('submitted', 'save')).toBe('submitted')
   })
 })

@@ -72,3 +72,47 @@ export function mergeAnswers(
   }
   return out
 }
+
+export type SectionProgress = { id: string; title: string; answered: number; total: number }
+export type Completion = { answered: number; total: number; sections: SectionProgress[] }
+
+function isAnswered(value: string | string[] | undefined): boolean {
+  if (Array.isArray(value)) return value.length > 0
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+/** Progress, for a client filling this in over three sittings. Never blocking —
+ *  incomplete submission is explicitly allowed. */
+export function completion(def: TemplateDefinition, answers: Answers): Completion {
+  const sections = def.sections.map(s => {
+    const blocks = s.blocks.filter(b => b.type !== 'guidance')
+    return {
+      id: s.id,
+      title: s.title,
+      answered: blocks.filter(b => isAnswered(answers[b.id])).length,
+      total: blocks.length,
+    }
+  })
+  return {
+    answered: sections.reduce((n, s) => n + s.answered, 0),
+    total: sections.reduce((n, s) => n + s.total, 0),
+    sections,
+  }
+}
+
+export type IntakeEvent = 'open' | 'save' | 'submit' | 'reopen'
+
+/** Submitted forms are read-only. The token is the only credential, so a
+ *  forwarded link must not be able to alter answers a shot list was built on. */
+export function isWritable(status: IntakeStatus): boolean {
+  return status !== 'submitted'
+}
+
+export function nextStatus(current: IntakeStatus, event: IntakeEvent): IntakeStatus {
+  if (event === 'reopen') return current === 'submitted' ? 'in_progress' : current
+  if (!isWritable(current)) return current
+  if (event === 'submit') return 'submitted'
+  // 'started' means they typed something, not that they opened the link
+  if (event === 'save') return 'in_progress'
+  return current
+}
