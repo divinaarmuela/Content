@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // ClerkProvider is scoped here (and to the auth/sso routes) rather than the
   // root layout, so the public marketing pages don't load the Clerk SDK.
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/sign-in">
       <TooltipProvider>
         <DashboardInner>{children}</DashboardInner>
       </TooltipProvider>
@@ -214,6 +214,10 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
                 {user.firstName ?? user.emailAddresses[0]?.emailAddress}
               </span>
             )}
+            {/* Signing out defaults to "/" on the CURRENT host, and this host
+                also serves the marketing site — so the default drops a staff
+                member on the homepage as if they had wandered onto the public
+                site. Send them to sign-in instead. */}
             <UserButton
               appearance={{ elements: { avatarBox: { width: 28, height: 28, borderRadius: 8 } } }}
             />

@@ -71,3 +71,5 @@ vercel-login.log
 # Agent skills installed via `npx skills add` — third-party, re-installable
 .agents/
 .claude/skills/inngest-*
+.vercel
+.env*

@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/sonner'
  *  preflight/tokens apply here exactly as in the dashboard. */
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/sign-in">
       <div className="dbx min-h-screen bg-zinc-50 text-zinc-900 antialiased">
         <Header />
         <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
@@ -35,6 +35,7 @@ function Header() {
         <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-400">Client portal</p>
         <div className="ml-auto flex items-center gap-3">
           {user && <span className="hidden text-xs text-zinc-500 sm:block">{user.firstName ?? user.emailAddresses[0]?.emailAddress}</span>}
+          {/* see dashboard/layout.tsx — "/" on this host is the marketing site */}
           <UserButton appearance={{ elements: { avatarBox: { width: 28, height: 28, borderRadius: 8 } } }} />
         </div>
       </div>
