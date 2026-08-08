@@ -140,18 +140,21 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
       {urls.length > 0 && (
         <div className="flex flex-col gap-2">
           {urls.map((url, i) => (
-            <div key={`${url}-${i}`} className="flex items-center gap-3">
-              <MediaThumb url={url} />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{url}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" type="button" disabled={i === 0}
+            <div key={`${url}-${i}`} className="flex w-full min-w-0 items-center gap-2">
+              <span className="shrink-0"><MediaThumb url={url} /></span>
+              {/* the only element allowed to give: min-w-0 lets truncate work
+                  inside a flex row, and shrink-0 on the controls stops a long
+                  R2 filename pushing them past the edge of the panel */}
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{url}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" type="button" disabled={i === 0}
                 onClick={() => onChange(moveItem(urls, i, -1))} aria-label="Move up">
                 <ChevronUp className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" type="button" disabled={i === urls.length - 1}
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" type="button" disabled={i === urls.length - 1}
                 onClick={() => onChange(moveItem(urls, i, 1))} aria-label="Move down">
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
                 type="button" onClick={() => onChange(urls.filter((_, j) => j !== i))} aria-label="Remove">
                 <X className="h-3.5 w-3.5" />
               </Button>
@@ -159,18 +162,21 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
           ))}
         </div>
       )}
-      <div className="flex items-center gap-3">
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
         <Input
           value={draft}
-          placeholder="Paste a URL and press Add, or upload →"
+          placeholder="Paste a URL and press Add, or upload"
           onChange={e => setDraft(e.target.value)}
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
-        <Button variant="outline" type="button" disabled={!draft.trim()}
+        <Button variant="outline" type="button" className="shrink-0" disabled={!draft.trim()}
           onClick={() => { append(draft); setDraft('') }}>
           Add
         </Button>
-        <Button variant="outline" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
+        {/* fixed width: "Uploading…" is wider than "Upload", and letting the
+            button grow mid-upload reflows the row under the cursor */}
+        <Button variant="outline" type="button" className="w-[116px] shrink-0"
+          disabled={busy} onClick={() => fileRef.current?.click()}>
           <Upload className="h-4 w-4" /> {busy ? 'Uploading…' : 'Upload'}
         </Button>
         <input
