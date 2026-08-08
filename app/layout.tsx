@@ -168,6 +168,7 @@ const jsonLd = {
 import SiteShell from './components/SiteShell'
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import Clarity from "./Clarity";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -190,6 +191,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </head>
         <body>
           <SiteShell>{children}</SiteShell>
+          <Clarity />
         </body>
       </html>
   )
