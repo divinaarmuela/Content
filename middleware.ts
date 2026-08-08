@@ -48,7 +48,17 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   if (isProtectedRoute(req)) {
-    await auth.protect()
+    // auth.protect() answers a signed-out request with a hard 404, so the page
+    // never admits it exists. Correct for an API, wrong for a page someone
+    // sends a colleague: the link preview reads "404: This page could not be
+    // found", and clicking it signed out shows the same. Pages redirect to
+    // sign-in and come back afterwards; API routes keep the 404, since a
+    // fetch has nowhere to send a person.
+    const { userId, redirectToSignIn } = await auth()
+    if (!userId) {
+      if (req.nextUrl.pathname.startsWith('/api/')) { await auth.protect(); return }
+      return redirectToSignIn({ returnBackUrl: req.url })
+    }
   }
 })
 
