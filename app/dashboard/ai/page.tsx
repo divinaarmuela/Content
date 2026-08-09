@@ -18,6 +18,11 @@ import {
  * Approve, and Deny tells the model no.
  */
 
+/** The instructions already forbid em dashes, but models slip; renders are
+ *  where the guarantee lives. Em dash only, deliberately: en dashes carry
+ *  ranges like "3–5 days" and replacing those would corrupt them. */
+const noEmDash = (t: string) => t.replace(/\s*—\s*/g, ', ')
+
 const TOOL_LABELS: Record<string, string> = {
   search_clients: 'Searching clients',
   get_client: 'Reading client profile',
@@ -150,7 +155,7 @@ export default function AssistantPage() {
                     {m.parts.map((part, i) => {
                       if (part.type === 'text') {
                         return part.text
-                          ? <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{part.text}</p>
+                          ? <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{noEmDash(part.text)}</p>
                           : null
                       }
 
