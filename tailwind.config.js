@@ -6,7 +6,13 @@ module.exports = {
   // arrow would sit nudged after being scrolled past. This restricts every
   // hover: variant to devices that actually have a pointer.
   future: { hoverOnlyWhenSupported: true },
-  content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx}'],
+  content: [
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx}',
+    // streamdown (assistant markdown) styles itself with Tailwind classes;
+    // v3 needs its dist scanned or those classes purge to nothing
+    './node_modules/streamdown/dist/*.js',
+  ],
   // the site has its own global reset/custom CSS — don't let Tailwind's
   // preflight reset everything site-wide; we only want the utility classes
   corePlugins: { preflight: false },

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
+import { Streamdown } from 'streamdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -155,7 +156,11 @@ export default function AssistantPage() {
                     {m.parts.map((part, i) => {
                       if (part.type === 'text') {
                         return part.text
-                          ? <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{noEmDash(part.text)}</p>
+                          ? (
+                            <div key={i} className="max-w-none text-sm leading-relaxed [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5">
+                              <Streamdown>{noEmDash(part.text)}</Streamdown>
+                            </div>
+                          )
                           : null
                       }
 
