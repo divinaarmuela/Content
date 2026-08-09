@@ -43,7 +43,9 @@ function ToolRow({ label, done }: { label: string; done: boolean }) {
       {done
         ? <Wrench className="h-3 w-3" />
         : <Loader2 className="h-3 w-3 animate-spin" />}
-      <span>{label}{done ? '' : '…'}</span>
+      {done
+        ? <span>{label}</span>
+        : <span className="animate-shimmer bg-gradient-to-r from-muted-foreground via-foreground to-muted-foreground bg-[length:200%_100%] bg-clip-text text-transparent">{label}…</span>}
     </div>
   )
 }
@@ -189,8 +191,13 @@ export default function AssistantPage() {
           ))}
 
           {busy && messages[messages.length - 1]?.role === 'user' && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" /> Thinking
+            <div className="flex w-full max-w-[95%] gap-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+                <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+              <span className="animate-shimmer bg-gradient-to-r from-muted-foreground via-foreground to-muted-foreground bg-[length:200%_100%] bg-clip-text text-sm text-transparent">
+                Thinking…
+              </span>
             </div>
           )}
           {error && (
