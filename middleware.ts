@@ -13,6 +13,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/leads(.*)',
   '/api/team(.*)',
   '/api/production(.*)',
+  '/api/assistant(.*)',
 ])
 
 /**
@@ -81,6 +82,7 @@ export const config = {
     '/client/:path*',
     '/sign-in/:path*',
     '/sign-up/:path*',
+    '/api/assistant/:path*',
     '/api/clients/:path*',
     '/api/db-tables/:path*',
     '/api/inbox/:path*',

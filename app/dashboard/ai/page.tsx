@@ -1,134 +1,209 @@
 'use client'
 
-import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { useEffect, useRef, useState } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { Info, SendHorizontal, Sparkles } from 'lucide-react'
+import {
+  Bot, Loader2, SendHorizontal, ShieldAlert, Sparkles, Wrench,
+} from 'lucide-react'
 
-type Message = {
-  id: number
-  role: 'assistant' | 'user'
-  text: string
-  time: string
+/**
+ * The dashboard assistant, for real: an agent over the agency's own data.
+ *
+ * Everything the model does is visible. Read tools render as activity rows
+ * ("Searching clients…"), and the write tools stop the loop and render an
+ * approval card — nothing changes in the database until the person clicks
+ * Approve, and Deny tells the model no.
+ */
+
+const TOOL_LABELS: Record<string, string> = {
+  search_clients: 'Searching clients',
+  get_client: 'Reading client profile',
+  get_leads: 'Reading leads',
+  get_schedule: 'Reading the schedule',
+  get_intake_status: 'Checking intake forms',
+  get_scanner_status: 'Checking the inbox scanner',
+  get_team: 'Reading the team',
+  update_client: 'Editing client',
+  update_lead_note: 'Editing lead',
 }
 
-const DEMO_MESSAGES: Message[] = [
-  {
-    id: 1,
-    role: 'assistant',
-    text: "Hi! I'm the MD Media assistant. I can draft shoot briefs, summarise client performance, flag overdue approvals, and write status updates.",
-    time: '09:00',
-  },
-  {
-    id: 2,
-    role: 'user',
-    text: 'Summarise May performance for Harbourline Cafe.',
-    time: '09:02',
-  },
-  {
-    id: 3,
-    role: 'assistant',
-    text: 'Harbourline Cafe reached 48.2k accounts in May, up 12% month on month. Reels drove most of the growth; two approvals are still pending for the June calendar.',
-    time: '09:02',
-  },
-  {
-    id: 4,
-    role: 'user',
-    text: 'Draft a shoot brief for the June menu launch.',
-    time: '09:05',
-  },
-  {
-    id: 5,
-    role: 'assistant',
-    text: 'Here is a starting point: a 2-hour on-location shoot covering 6 hero dishes, 3 behind-the-scenes clips for Reels, and a set of vertical stills for Stories. Want me to expand any section?',
-    time: '09:05',
-  },
+const SUGGESTIONS = [
+  'Which clients have not submitted their intake form?',
+  'What did the inbox scanner find in the last 24 hours?',
+  'How many leads came in this month, and from where?',
+  'Who is on the team and what are their roles?',
 ]
 
-export default function AIPage() {
+function ToolRow({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className="flex w-fit items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+      {done
+        ? <Wrench className="h-3 w-3" />
+        : <Loader2 className="h-3 w-3 animate-spin" />}
+      <span>{label}{done ? '' : '…'}</span>
+    </div>
+  )
+}
+
+function ApprovalCard({ title, detail, onDecide }: {
+  title: string
+  detail: string
+  onDecide: (approved: boolean) => void
+}) {
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
+      <div className="flex items-center gap-2 text-sm font-medium text-amber-900 dark:text-amber-200">
+        <ShieldAlert className="h-4 w-4" /> {title} — approval needed
+      </div>
+      <p className="mt-1 break-all font-mono text-xs text-amber-800 dark:text-amber-300">{detail}</p>
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" onClick={() => onDecide(true)}>Approve</Button>
+        <Button size="sm" variant="outline" onClick={() => onDecide(false)}>Deny</Button>
+      </div>
+    </div>
+  )
+}
+
+export default function AssistantPage() {
   const [input, setInput] = useState('')
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  const { messages, sendMessage, addToolApprovalResponse, status, error } = useChat({
+    transport: new DefaultChatTransport({ api: '/api/assistant' }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+  })
+
+  const busy = status === 'submitted' || status === 'streaming'
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const send = (text: string) => {
+    const t = text.trim()
+    if (!t || busy) return
+    setInput('')
+    void sendMessage({ text: t })
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">AI Assistant</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Draft briefs, summarise performance, and flag blockers.
-          </p>
-        </div>
-        <Badge
-          variant="outline"
-          className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
-        >
-          Demo data
-        </Badge>
-      </div>
-
-      <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-        <Info className="h-4 w-4 shrink-0" />
-        Assistant not yet connected — UI preview
-      </div>
-
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-3">
-          <Sparkles className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-          <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            Conversation
-          </CardTitle>
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-            Preview
-          </span>
-        </CardHeader>
-        <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-        <CardContent className="p-0">
-          <ScrollArea className="h-[420px]">
-            <div className="flex flex-col gap-4 p-4">
-              {DEMO_MESSAGES.map((message) => (
-                <div
-                  key={message.id}
-                  className={
-                    message.role === 'user'
-                      ? 'flex flex-col items-end gap-1'
-                      : 'flex flex-col items-start gap-1'
-                  }
-                >
-                  <div
-                    className={
-                      message.role === 'user'
-                        ? 'max-w-[80%] rounded-lg bg-zinc-900 dark:bg-zinc-100 p-3 text-sm text-white dark:text-zinc-900'
-                        : 'max-w-[80%] rounded-lg bg-zinc-100 dark:bg-zinc-800 p-3 text-sm text-zinc-900 dark:text-zinc-100'
-                    }
-                  >
-                    {message.text}
-                  </div>
-                  <span className="font-mono text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                    {message.time}
-                  </span>
-                </div>
+    <div className="mx-auto flex h-[calc(100vh-9rem)] w-full max-w-3xl flex-col">
+      <div className="flex-1 overflow-y-auto pr-1">
+        {messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-muted">
+              <Sparkles className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Ask about your agency</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Clients, leads, intake forms, the schedule, the scanner, the team.
+                Edits always ask you first.
+              </p>
+            </div>
+            <div className="grid w-full gap-2 sm:grid-cols-2">
+              {SUGGESTIONS.map(s => (
+                <button key={s} onClick={() => send(s)}
+                  className="rounded-lg border border-border bg-card px-3 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  {s}
+                </button>
               ))}
             </div>
-          </ScrollArea>
-          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-          <div className="flex items-end gap-2 p-4">
-            <Textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about clients, content, approvals, reports..."
-              className="min-h-[44px] flex-1 resize-none border-zinc-200 dark:border-zinc-800 text-sm"
-              rows={2}
-            />
-            <Button disabled className="shrink-0">
-              <SendHorizontal className="h-4 w-4" />
-              Send
-            </Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+
+        <div className="flex flex-col gap-4 py-4">
+          {messages.map(m => (
+            <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+              {m.role === 'user' ? (
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                  {m.parts.map(p => p.type === 'text' ? p.text : '').join('')}
+                </div>
+              ) : (
+                <div className="flex w-full max-w-[95%] gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+                    <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    {m.parts.map((part, i) => {
+                      if (part.type === 'text') {
+                        return part.text
+                          ? <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">{part.text}</p>
+                          : null
+                      }
+
+                      if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
+                        const p = part as unknown as {
+                          type: string
+                          state: string
+                          toolCallId: string
+                          toolName?: string
+                          input?: unknown
+                          approval?: { id: string }
+                        }
+                        const name = p.toolName ?? p.type.slice(5)
+                        const label = TOOL_LABELS[name] ?? name
+
+                        if (p.state === 'approval-requested' && p.approval) {
+                          const approvalId = p.approval.id
+                          return (
+                            <ApprovalCard key={p.toolCallId}
+                              title={label}
+                              detail={JSON.stringify(p.input)}
+                              onDecide={approved =>
+                                addToolApprovalResponse({ id: approvalId, approved })}
+                            />
+                          )
+                        }
+                        return (
+                          <ToolRow key={p.toolCallId} label={label}
+                            done={p.state === 'output-available' || p.state === 'output-error' || p.state === 'approval-responded'} />
+                        )
+                      }
+                      return null
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {busy && messages[messages.length - 1]?.role === 'user' && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Thinking
+            </div>
+          )}
+          {error && (
+            <p className="text-xs text-destructive">Something went wrong: {error.message}</p>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) }
+            }}
+            placeholder="Ask about clients, leads, the schedule…"
+            rows={1}
+            className="max-h-40 min-h-[44px] flex-1 resize-none text-base sm:text-sm"
+          />
+          <Button size="icon" onClick={() => send(input)} disabled={busy || !input.trim()}
+            className="h-11 w-11 shrink-0">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Answers come from live agency data. Edits always ask for approval first.
+        </p>
+      </div>
     </div>
   )
 }
