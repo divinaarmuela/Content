@@ -69,7 +69,9 @@ function ApprovalCard({ title, detail, onDecide }: {
 
 export default function AssistantPage() {
   const [input, setInput] = useState('')
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  /** whether the reader is at the bottom — the only case where we follow the stream */
+  const pinned = useRef(true)
 
   const { messages, sendMessage, addToolApprovalResponse, status, error } = useChat({
     transport: new DefaultChatTransport({ api: '/api/assistant' }),
@@ -78,20 +80,35 @@ export default function AssistantPage() {
 
   const busy = status === 'submitted' || status === 'streaming'
 
+  /**
+   * Stick-to-bottom, not force-to-bottom. Following on every update means
+   * every streamed token yanks the page down while someone is reading an
+   * earlier answer. So: scrolling up unpins; only a pinned reader follows.
+   * Scroll the container directly — scrollIntoView also scrolls ancestors,
+   * which is what made the whole page jump.
+   */
+  const onScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollRef.current
+    if (el && pinned.current) el.scrollTop = el.scrollHeight
   }, [messages])
 
   const send = (text: string) => {
     const t = text.trim()
     if (!t || busy) return
     setInput('')
+    pinned.current = true
     void sendMessage({ text: t })
   }
 
   return (
     <div className="mx-auto flex h-[calc(100vh-9rem)] w-full max-w-3xl flex-col">
-      <div className="flex-1 overflow-y-auto pr-1">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto pr-1">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-muted">
@@ -179,7 +196,6 @@ export default function AssistantPage() {
           {error && (
             <p className="text-xs text-destructive">Something went wrong: {error.message}</p>
           )}
-          <div ref={bottomRef} />
         </div>
       </div>
 
