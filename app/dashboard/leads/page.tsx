@@ -59,10 +59,13 @@ const COLS: { key: keyof Lead; label: string; mono?: boolean }[] = [
   { key: 'timeline',   label: 'Timeline', mono: true },
 ]
 
+type TodayLead = { id: string; created_at: string; name: string; biz: string | null; source: string; reason: string }
+
 export default function LeadsPage() {
   const { can } = useRole()
   const canScan = can('account_manager')
   const [leads, setLeads]     = useState<Lead[]>([])
+  const [today, setToday] = useState<TodayLead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState('')
@@ -148,6 +151,9 @@ export default function LeadsPage() {
     if (!quiet) { setLoading(true); setError(null) }
     try {
       const res = await fetch('/api/leads')
+      void fetch('/api/leads/today').then(async r => {
+        if (r.ok) setToday((await r.json()).leads ?? [])
+      })
       if (!res.ok) throw new Error(`${res.status}`)
       setLeads(await res.json())
     } catch {
@@ -242,6 +248,38 @@ export default function LeadsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {today.length > 0 && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-600 px-1.5 font-mono text-xs font-semibold text-white">
+              +{today.length}
+            </span>
+            <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+              New lead{today.length === 1 ? '' : 's'} today
+            </h3>
+          </div>
+          <ul className="mt-2.5 flex flex-col gap-1.5">
+            {today.map(t => (
+              <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 text-sm text-emerald-950 dark:text-emerald-100">
+                <span className="font-mono text-[11px] tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {new Date(t.created_at).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="font-medium">{t.name}</span>
+                {t.biz && <span className="text-emerald-800 dark:text-emerald-300">({t.biz})</span>}
+                <span className={
+                  'rounded-full px-1.5 py-px font-mono text-[10px] uppercase tracking-wide ' +
+                  (t.source === 'web_form'
+                    ? 'bg-emerald-600/15 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-sky-600/15 text-sky-800 dark:text-sky-300')
+                }>
+                  {t.source === 'web_form' ? 'web form' : 'scanner'}
+                </span>
+                <span className="basis-full text-xs text-emerald-800/80 dark:text-emerald-300/80">{t.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Leads</h2>
