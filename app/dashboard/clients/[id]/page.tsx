@@ -14,11 +14,12 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, ClipboardList, Copy, ExternalLink, KeyRound, MessageSquare, Share2, Users } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Copy, ExternalLink, KeyRound, MessageSquare, Share2, Users , Palette } from 'lucide-react'
 import ContactsPanel from './ContactsPanel'
 import NotesPanel from './NotesPanel'
 import { publicUrl } from '@/app/lib/public-url'
 import IntakePanel from './IntakePanel'
+import BrandPanel from './BrandPanel'
 import CredentialsPanel from '../../CredentialsPanel'
 import SocialChannels from '../SocialChannels'
 
@@ -41,7 +42,7 @@ const STATUS: Record<string, string> = {
   archived: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 }
 
-type Tab = 'overview' | 'contacts' | 'notes' | 'credentials' | 'social' | 'intake'
+type Tab = 'overview' | 'contacts' | 'notes' | 'credentials' | 'social' | 'intake' | 'brand'
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>()
@@ -111,6 +112,7 @@ export default function ClientDetailPage() {
     { key: 'credentials', label: 'Credentials', icon: KeyRound },
     { key: 'social', label: 'Social', icon: Share2 },
     { key: 'intake', label: 'Intake', icon: ClipboardList },
+    { key: 'brand', label: 'Brand', icon: Palette },
   ]
 
   return (
@@ -231,6 +233,7 @@ export default function ClientDetailPage() {
       {tab === 'contacts' && <ContactsPanel clientId={clientId} />}
       {tab === 'notes' && <NotesPanel clientId={clientId} />}
       {tab === 'intake' && <IntakePanel clientId={clientId} />}
+      {tab === 'brand' && <BrandPanel clientId={clientId} />}
       {tab === 'credentials' && <CredentialsPanel endpoint={`/api/website/clients/${clientId}/credentials`} />}
       {tab === 'social' && (
         <SocialChannels clientId={clientId} />
