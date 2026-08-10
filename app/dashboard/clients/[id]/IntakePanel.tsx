@@ -15,6 +15,7 @@ import {
 import { Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-core'
 import { publicUrl } from '@/app/lib/public-url'
+import ManagersCard from './ManagersCard'
 import IntakeEditor from './IntakeEditor'
 
 type Status = 'draft' | 'sent' | 'in_progress' | 'submitted'
@@ -220,6 +221,9 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* the moment after a brief lands: give the client an owner */}
+      <ManagersCard clientId={clientId} intakeComplete={forms.some(f => f.status === 'submitted')} />
+
       {/* ── create ── */}
       {canManage && (
         <div className="rounded-lg border border-border bg-card p-5">
