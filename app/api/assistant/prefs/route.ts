@@ -1,52 +1,23 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse, roleSatisfies } from '../../../lib/authz'
+import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { getInstructions, saveInstructions } from '../../../lib/assistant-chats'
-import { MAX_INSTRUCTIONS } from '../../../lib/assistant-core'
+import { MAX_INSTRUCTIONS, isValidTimezone } from '../../../lib/assistant-core'
 
 /**
- * Assistant behaviour, per person.
- *
- * Everyone reads and writes their own standing instructions. A super admin
- * can additionally set behaviour for any team member by email — that is the
- * "per email/user" control — which is why the write resolves the target
- * through team_users rather than trusting an arbitrary id.
+ * Assistant behaviour: strictly self-service. You read and write your own
+ * standing instructions and timezone, nobody else's — the target is always
+ * the signed-in user, never a parameter.
  */
 
-async function resolveTarget(user: { role: string; clerk_user_id: string | null; email: string }, email: string | null) {
-  if (!email) {
-    return { id: user.clerk_user_id ?? user.email, email: user.email }
-  }
-  if (!roleSatisfies(user.role as never, 'super_admin')) return null
-  const { data } = await supabase
-    .from('team_users')
-    .select('clerk_user_id, email')
-    .eq('email', email.toLowerCase())
-    .maybeSingle()
-  if (!data) return null
-  return { id: data.clerk_user_id ?? data.email, email: data.email }
-}
-
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const user = await requireRole('editor')
-    const email = new URL(req.url).searchParams.get('user')
-    const target = await resolveTarget(user, email)
-    if (!target) return NextResponse.json({ error: 'No such team member' }, { status: 404 })
-
-    const [instructions, team] = await Promise.all([
-      getInstructions(target.id),
-      roleSatisfies(user.role, 'super_admin')
-        ? supabase.from('team_users').select('email, name').eq('active_status', true).order('name')
-            .then(r => r.data ?? [])
-        : Promise.resolve([]),
-    ])
+    const instructions = await getInstructions(user.clerk_user_id ?? user.email)
     return NextResponse.json({
-      email: target.email,
       instructions,
+      timezone: user.timezone,
       max_length: MAX_INSTRUCTIONS,
-      can_manage_others: roleSatisfies(user.role, 'super_admin'),
-      team,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -58,11 +29,23 @@ export async function PUT(req: Request) {
   try {
     const user = await requireRole('editor')
     const body = await req.json().catch(() => ({}))
-    const target = await resolveTarget(user, typeof body?.user === 'string' ? body.user : null)
-    if (!target) return NextResponse.json({ error: 'No such team member' }, { status: 404 })
 
-    const saved = await saveInstructions(target.id, target.email, body?.instructions, user.email)
-    return NextResponse.json({ instructions: saved })
+    const saved = await saveInstructions(
+      user.clerk_user_id ?? user.email, user.email, body?.instructions, user.email,
+    )
+
+    let timezone = user.timezone
+    if (typeof body?.timezone === 'string' && body.timezone !== user.timezone) {
+      if (!isValidTimezone(body.timezone)) {
+        return NextResponse.json({ error: 'That is not a valid timezone' }, { status: 400 })
+      }
+      const { error } = await supabase.from('team_users')
+        .update({ timezone: body.timezone }).eq('id', user.id)
+      if (error) throw new Error(error.message)
+      timezone = body.timezone
+    }
+
+    return NextResponse.json({ instructions: saved, timezone })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

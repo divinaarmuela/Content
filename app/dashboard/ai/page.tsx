@@ -28,8 +28,8 @@ import {
  *
  * Chats persist per signed-in user. The browser mints the chat id; the server
  * stores the conversation under it when each response completes, so reopening
- * a chat replays it exactly. Behaviour (standing instructions) is per user,
- * and a super admin can set it for any team member.
+ * a chat replays it exactly. Behaviour (standing instructions and timezone)
+ * is strictly the signed-in user's own.
  */
 
 /** The instructions already forbid em dashes, but models slip; renders are
@@ -297,36 +297,40 @@ function SettingsSheet() {
   const [open, setOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [instructions, setInstructions] = useState('')
+  const [timezone, setTimezone] = useState('Australia/Melbourne')
   const [maxLen, setMaxLen] = useState(2000)
-  const [canManage, setCanManage] = useState(false)
-  const [team, setTeam] = useState<{ email: string; name: string }[]>([])
-  const [forUser, setForUser] = useState('')  // '' = yourself
   const [saving, setSaving] = useState(false)
 
-  const load = useCallback(async (user: string) => {
+  const TIMEZONES = [
+    'Australia/Melbourne', 'Australia/Sydney', 'Australia/Brisbane',
+    'Australia/Adelaide', 'Australia/Perth', 'Australia/Hobart',
+    'Australia/Darwin', 'Pacific/Auckland', 'Asia/Singapore', 'UTC',
+  ]
+  // whatever the account already has stays choosable even if it is not ours
+  const zones = TIMEZONES.includes(timezone) ? TIMEZONES : [timezone, ...TIMEZONES]
+
+  const load = useCallback(async () => {
     setLoaded(false)
-    const qs = user ? `?user=${encodeURIComponent(user)}` : ''
-    const res = await fetch(`/api/assistant/prefs${qs}`)
+    const res = await fetch('/api/assistant/prefs')
     if (!res.ok) { toast.error('Could not load assistant settings'); return }
     const json = await res.json()
     setInstructions(json.instructions ?? '')
+    setTimezone(json.timezone || 'Australia/Melbourne')
     setMaxLen(json.max_length ?? 2000)
-    setCanManage(Boolean(json.can_manage_others))
-    setTeam(json.team ?? [])
     setLoaded(true)
   }, [])
 
-  useEffect(() => { if (open) void load(forUser) }, [open, forUser, load])
+  useEffect(() => { if (open) void load() }, [open, load])
 
   const save = async () => {
     setSaving(true)
     const res = await fetch('/api/assistant/prefs', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instructions, ...(forUser ? { user: forUser } : {}) }),
+      body: JSON.stringify({ instructions, timezone }),
     })
     setSaving(false)
     if (!res.ok) toast.error('Could not save')
-    else toast.success(forUser ? `Saved for ${forUser}` : 'Saved')
+    else toast.success('Saved')
   }
 
   return (
@@ -340,34 +344,35 @@ function SettingsSheet() {
         <SheetHeader>
           <SheetTitle>Assistant behaviour</SheetTitle>
           <SheetDescription>
-            Standing instructions the assistant follows in every chat, such as tone,
-            format, or what to focus on. They shape style, never permissions.
+            Yours alone: how the assistant talks to you in every chat. Style and
+            focus only, never permissions.
           </SheetDescription>
         </SheetHeader>
 
-        {canManage && (
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Set behaviour for</Label>
-            <Select value={forUser || 'me'} onValueChange={v => setForUser(v === 'me' ? '' : v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="me">Yourself</SelectItem>
-                {team.map(t => (
-                  <SelectItem key={t.email} value={t.email}>{t.name || t.email}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
         {loaded ? (
           <>
-            <Textarea
-              value={instructions}
-              onChange={e => setInstructions(e.target.value.slice(0, maxLen))}
-              placeholder={'e.g. Keep answers under five sentences.\nAlways include the client status when listing clients.'}
-              className="min-h-48 flex-1 resize-none text-sm"
-            />
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Your timezone</Label>
+              <Select value={timezone} onValueChange={setTimezone}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {zones.map(z => <SelectItem key={z} value={z}>{z.replace('_', ' ')}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                The assistant presents dates and times in this timezone.
+              </p>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+              <Label className="text-xs">Standing instructions</Label>
+              <Textarea
+                value={instructions}
+                onChange={e => setInstructions(e.target.value.slice(0, maxLen))}
+                placeholder={'e.g. Keep answers under five sentences.\nAlways include the client status when listing clients.'}
+                className="min-h-48 flex-1 resize-none text-sm"
+              />
+            </div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] tabular-nums text-muted-foreground">
                 {instructions.length}/{maxLen}

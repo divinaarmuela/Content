@@ -73,6 +73,20 @@ export function trimForModel<T extends ChatMessage>(messages: T[]): T[] {
   return firstUser <= 0 ? tail : tail.slice(firstUser)
 }
 
+/**
+ * A timezone is only valid if the runtime can actually format with it — the
+ * IANA list changes, so ask the engine instead of keeping our own.
+ */
+export function isValidTimezone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || !tz) return false
+  try {
+    new Intl.DateTimeFormat('en-AU', { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** A chat id is minted in the browser; trust its shape, not its origin. */
 export function isChatId(v: unknown): v is string {
   return typeof v === 'string' &&
