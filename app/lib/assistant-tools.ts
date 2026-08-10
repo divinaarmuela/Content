@@ -118,6 +118,52 @@ export function assistantTools(role: Role) {
       },
     }),
 
+    get_intake_answers: tool({
+      description:
+        'Read what a client has actually written in an intake form so far, question by question, ' +
+        'including partially filled forms: answered questions with their answers, and which are still blank. ' +
+        'Defaults to the client\'s most recent form; pass form_id for a specific one.',
+      inputSchema: z.object({
+        client_id: z.string().uuid(),
+        form_id: z.string().uuid().optional(),
+      }),
+      execute: async ({ client_id, form_id }) => {
+        let q = supabase.from('intake_forms')
+          .select('id, title, template_key, status, definition, answers, submitted_at, created_at')
+          .eq('client_id', client_id).order('created_at', { ascending: false })
+        if (form_id) q = q.eq('id', form_id)
+        const { data, error } = await q.limit(1)
+        if (error) return { error: error.message }
+        const form = data?.[0]
+        if (!form) return { error: 'This client has no intake form' }
+
+        const answers = (form.answers ?? {}) as Record<string, unknown>
+        const def = form.definition as {
+          sections?: { title: string; blocks?: { id: string; type: string; label: string }[] }[]
+        }
+        const sections = (def.sections ?? []).map(s => ({
+          title: s.title,
+          questions: (s.blocks ?? [])
+            .filter(b => b.type !== 'guidance')
+            .map(b => {
+              const v = answers[b.id]
+              return {
+                question: b.label,
+                answer: v === undefined || v === '' ? null
+                  : Array.isArray(v) ? v.join(', ') : String(v),
+              }
+            }),
+        }))
+        const flat = sections.flatMap(s => s.questions)
+        return {
+          form: { id: form.id, title: form.title, status: form.status, submitted_at: form.submitted_at },
+          answered: flat.filter(x => x.answer !== null).length,
+          total: flat.length,
+          sections,
+        }
+      },
+    }),
+
     get_scanner_status: tool({
       description:
         'Inbox scanner health: connected mailboxes, most recent runs, and what the scanner picked up lately.',
