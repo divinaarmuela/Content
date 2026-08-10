@@ -1,4 +1,4 @@
-# Project state — as at 1 August 2026
+# Project state — as at 8 August 2026
 
 Written so a fresh session can pick up without re-deriving anything. Update the
 date and the sections below whenever the picture changes.
@@ -11,12 +11,11 @@ folder (the source-of-truth specs for the production workflow).
 
 ## 1. Where things stand
 
-**Nothing built after 30 July has been deployed.** Last push to
-`divinaarmuela/Content.git` was `e0d6fa1`, 30 Jul 2026 21:24 — the marketing site
-and contact form only. Everything since (dashboard, auth, workflow, portal, lead
-ingest, reports) exists **locally and uncommitted**.
+**Everything is deployed and live in production.** The app runs on Vercel behind
+`app.mdmmarketing.com.au` (marketing site on `www`), Clerk production instance,
+auto-deploy on push to `divinaarmuela/Content.git`.
 
-Verified green locally: `npm test` (58 passing), `npx tsc --noEmit`, `npm run build`.
+Verified green: `npm test` (230 passing), `npx tsc --noEmit`, `npm run build`.
 
 ### Dashboard pages
 
@@ -34,7 +33,10 @@ Verified green locally: `npm test` (58 passing), `npx tsc --noEmit`, `npm run bu
 | `activity` | **Demo data** |
 | `reports` | **Demo data** on the page; the PDF generator itself is real |
 | `notifications` | **Demo data** — email notifications are real, this inbox is a mock |
-| `ai` | **Demo data** |
+| `ai` | Live — real agent (AI SDK 6 + Sonnet 5) over agency data: 10 typed tools, approval-gated edits, per-user chat history at `/dashboard/ai/[chatId]`, per-user behaviour + timezone, dictation |
+| clients → Intake tab | Live — per-client intake forms: templates, editing, step UI, PDF+attachments email, submissions page, realtime progress |
+| clients → Brand tab | Live — brand guidelines PDF scanned once by Haiku into a structured profile (fonts, colours, voice, rules); requires `client_brand.sql` |
+| clients → Overview | Live — account-manager assignment card (any time, not intake-gated) |
 
 Pages on sample data carry a visible "Demo data" badge. Keep that honest — do not
 remove a badge until the page actually reads from the database.
@@ -49,7 +51,9 @@ remove a badge until the page actually reads from the database.
 - **Lead ingest**: website form → lead; business domain + verifiable live site →
   auto-creates a "Prospect" client.
 - **Inbox scanning**: Gmail API → prefilter → Claude Haiku → lead. Exactly-once via
-  a unique claim on `gmail_message_id`. Currently one mailbox (`hello@`).
+  a unique claim on `gmail_message_id`. Three mailboxes (`hello@`, `contact@`,
+  `tech@`), self-service OAuth connect (Internal Google app, `INBOX_CLIENT_*`),
+  24/7 every 5 minutes, duplicate-client suppression, realtime lead toasts.
 - **Monthly report**: branded PDF, configurable recipients/date, manual or scheduled.
 - **Inngest v4**: inbox scan every 15 min (Melbourne time, 6am–10pm), daily report
   check. Chosen over Vercel Cron, whose free tier allows one job per day.
@@ -200,14 +204,19 @@ GitHub remote that auto-deploys, so a hardcoded key is a published key.
 
 ## 4. Next
 
-1. Deploy + Clerk production instance (section 2 and 3). Everything else waits.
-2. Extend inbox scanning past `hello@`. First check whether `contact@` and `info@`
-   receive unique enquiries or only copies of website form submissions — if the
-   latter, coverage is already complete and this work is unnecessary.
-3. Wire `calendar` to real `schedule_entries`, then `activity`, then `reports`.
-4. Monthly commitments — the portal shows progress against quotas, but there is no
+1. **Production workflow flow** — built but unused. Needs in-app draft uploads
+   (`/api/production/items/[id]/versions` accepts URLs only) and a first real
+   client run. Divina's stated next build.
+2. Wire `calendar` to real `schedule_entries`, then `activity`, then `reports`.
+3. Monthly commitments — the portal shows progress against quotas, but there is no
    interface for an account manager to set them per client per month.
-5. Content sign-off: Releeph, Alia, The Real Deal and Stretchworks case studies use
-   placeholder images and draft copy; journal publish dates and event dates are
-   provisional. Needs Divina's assets before the site is promoted.
-6. Real in-app notification inbox; client-facing digests rather than instant email.
+4. Content sign-off: case studies still using placeholder images and draft copy;
+   journal/event dates provisional. Needs Divina's assets before promotion.
+5. Real in-app notification inbox; client-facing digests rather than instant email.
+6. OG images for the marketing site — root layout has no `openGraph`/`metadataBase`
+   and case pages have no `images`, so shared links have text-only previews.
+   (Dashboard links now redirect to sign-in rather than 404 — fixed 8 Aug.)
+7. Image optimisation on upload (no resizing/WebP today).
+8. Rotate the two pasted Google client secrets (scanner + sign-in apps).
+9. Migrations pending: `client_brand.sql` (awaiting run). `assistant.sql`,
+   `intake*.sql`, `inbox_connect.sql` are applied.
