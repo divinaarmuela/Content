@@ -20,7 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  History, Loader2, Plus, SendHorizontal, Settings2, ShieldAlert,
+  History, Loader2, Mic, Plus, SendHorizontal, Settings2, ShieldAlert,
   Sparkles, Trash2, Wrench,
 } from 'lucide-react'
 
@@ -84,6 +84,49 @@ function Spark({ className = '' }: { className?: string }) {
   )
 }
 
+/**
+ * Dictation via the browser's own speech engine (Web Speech API): no audio
+ * ever touches our servers. Interim words land in the input as they are
+ * recognised; the browser closes the session on silence. Hidden entirely
+ * where the API does not exist.
+ */
+function useDictation(onText: (text: string) => void) {
+  const recRef = useRef<{ stop: () => void } | null>(null)
+  const [listening, setListening] = useState(false)
+  const supported = typeof window !== 'undefined' &&
+    Boolean((window as never as Record<string, unknown>).SpeechRecognition ||
+            (window as never as Record<string, unknown>).webkitSpeechRecognition)
+
+  const stop = () => { recRef.current?.stop(); setListening(false) }
+
+  const start = () => {
+    const w = window as never as Record<string, unknown>
+    const Ctor = (w.SpeechRecognition ?? w.webkitSpeechRecognition) as
+      new () => {
+        lang: string; interimResults: boolean; continuous: boolean
+        onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void
+        onend: () => void; onerror: () => void
+        start: () => void; stop: () => void
+      }
+    const rec = new Ctor()
+    rec.lang = 'en-AU'
+    rec.interimResults = true
+    rec.continuous = true
+    rec.onresult = e => {
+      let text = ''
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript
+      onText(text.trim())
+    }
+    rec.onend = () => setListening(false)
+    rec.onerror = () => setListening(false)
+    recRef.current = rec
+    setListening(true)
+    rec.start()
+  }
+
+  return { supported, listening, toggle: () => (listening ? stop() : start()) }
+}
+
 function ToolRow({ label, done }: { label: string; done: boolean }) {
   return (
     <div className="flex w-fit items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
@@ -122,6 +165,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  const dictation = useDictation(setInput)
 
   const { messages, sendMessage, addToolApprovalResponse, status, error } = useChat({
     id: chatId,
@@ -259,6 +303,13 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             rows={1}
             className="max-h-40 min-h-[44px] flex-1 resize-none text-base sm:text-sm"
           />
+          {dictation.supported && (
+            <Button size="icon" variant={dictation.listening ? 'default' : 'outline'}
+              onClick={dictation.toggle} className="h-11 w-11 shrink-0"
+              aria-label={dictation.listening ? 'Stop dictating' : 'Dictate'}>
+              <Mic className={dictation.listening ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
+            </Button>
+          )}
           <Button size="icon" onClick={() => send(input)} disabled={busy || !input.trim()}
             className="h-11 w-11 shrink-0">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
