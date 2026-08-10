@@ -63,10 +63,16 @@ module.exports = {
           '0%': { backgroundPosition: '200% 0' },
           '100%': { backgroundPosition: '-200% 0' },
         },
+        spark: {
+          '0%': { transform: 'rotate(0deg) scale(0.85)' },
+          '50%': { transform: 'rotate(180deg) scale(1.1)' },
+          '100%': { transform: 'rotate(360deg) scale(0.85)' },
+        },
       },
       animation: {
         'lama-marquee': 'lama-marquee 40s linear infinite',
         shimmer: 'shimmer 2s linear infinite',
+        spark: 'spark 2.4s ease-in-out infinite',
       },
     },
   },
