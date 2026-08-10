@@ -24,10 +24,12 @@ const initials = (name: string, email: string) =>
 
 const roleLabel = (r: string) => r === 'super_admin' ? 'Director' : 'Account manager'
 
-export default function ManagersCard({ clientId, intakeComplete }: {
+export default function ManagersCard({ clientId, intakeComplete = false, hideWhenIdle = false }: {
   clientId: string
   /** a submitted intake form exists — the trigger for the assign invitation */
-  intakeComplete: boolean
+  intakeComplete?: boolean
+  /** for secondary placements: render nothing unless inviting or assigned */
+  hideWhenIdle?: boolean
 }) {
   const [managers, setManagers] = useState<Manager[] | null>(null)
   const [eligible, setEligible] = useState<Eligible[]>([])
@@ -76,8 +78,9 @@ export default function ManagersCard({ clientId, intakeComplete }: {
   const inviting = intakeComplete && managers.length === 0 && canManage
   const showPicker = (inviting || adding) && unassigned.length > 0
 
-  // nothing to say: no managers, no completed intake, or a viewer who cannot act
-  if (managers.length === 0 && !inviting) return null
+  // secondary placements stay quiet unless there is something to say;
+  // the primary placement always offers the assignment
+  if (hideWhenIdle && managers.length === 0 && !inviting) return null
 
   return (
     <div className={
@@ -91,13 +94,19 @@ export default function ManagersCard({ clientId, intakeComplete }: {
           <h3 className="text-sm font-semibold">
             {inviting ? 'Intake complete. Who will run this client?' : 'Account managers'}
           </h3>
-          {inviting && (
+          {inviting ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
               The brief is in. Assign an account manager so it has an owner from day one.
             </p>
-          )}
+          ) : managers.length === 0 ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {canManage
+                ? 'Nobody runs this client yet. Assign any time, before or after the intake.'
+                : 'Nobody has been assigned yet.'}
+            </p>
+          ) : null}
         </div>
-        {!inviting && canManage && !adding && unassigned.length > 0 && (
+        {!inviting && !showPicker && canManage && unassigned.length > 0 && (
           <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setAdding(true)}>
             <UserRoundPlus className="mr-1.5 h-3.5 w-3.5" /> Add
           </Button>

@@ -222,7 +222,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   return (
     <div className="flex flex-col gap-4">
       {/* the moment after a brief lands: give the client an owner */}
-      <ManagersCard clientId={clientId} intakeComplete={forms.some(f => f.status === 'submitted')} />
+      <ManagersCard clientId={clientId} hideWhenIdle intakeComplete={forms.some(f => f.status === 'submitted')} />
 
       {/* ── create ── */}
       {canManage && (

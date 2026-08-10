@@ -20,6 +20,7 @@ import NotesPanel from './NotesPanel'
 import { publicUrl } from '@/app/lib/public-url'
 import IntakePanel from './IntakePanel'
 import BrandPanel from './BrandPanel'
+import ManagersCard from './ManagersCard'
 import CredentialsPanel from '../../CredentialsPanel'
 import SocialChannels from '../SocialChannels'
 
@@ -160,6 +161,8 @@ export default function ClientDetailPage() {
       </Tabs>
 
       {tab === 'overview' && (
+        <div className="flex flex-col gap-5">
+        <ManagersCard clientId={clientId} />
         <Card>
           <CardContent className="grid gap-4 py-5 sm:grid-cols-2">
             <div className="grid gap-1.5">
@@ -228,6 +231,7 @@ export default function ClientDetailPage() {
             {saving && <p className="text-xs text-zinc-400 sm:col-span-2">Saving…</p>}
           </CardContent>
         </Card>
+        </div>
       )}
 
       {tab === 'contacts' && <ContactsPanel clientId={clientId} />}
