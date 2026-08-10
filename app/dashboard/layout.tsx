@@ -194,7 +194,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
 
-          <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? 'Dashboard'}</h1>
+          <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).sort((a, b) => b.length - a.length).find(k => path.startsWith(`${k}/`)) ?? ''] ?? 'Dashboard'}</h1>
           <Separator orientation="vertical" className="h-4 bg-zinc-200 dark:bg-zinc-700" />
           <p className="hidden rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-[11px] text-zinc-500 sm:block dark:bg-zinc-800 dark:text-zinc-400">
             {path}
