@@ -47,6 +47,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_intake_answers: 'Reading intake answers',
   get_scanner_status: 'Checking the inbox scanner',
   get_team: 'Reading the team',
+  get_asana_tasks: 'Reading Asana tasks',
   update_client: 'Editing client',
   update_lead_note: 'Editing lead',
 }

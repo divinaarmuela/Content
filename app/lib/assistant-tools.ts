@@ -3,6 +3,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { roleSatisfies, type Role } from './identity-core'
+import { asanaConfigured, tasksForAssignee } from './asana'
 
 /**
  * The assistant's toolbox.
@@ -197,6 +198,59 @@ export function assistantTools(role: Role) {
           .select('name, email, role, employment_type, active_status').order('name')
         if (error) return { error: error.message }
         return { team: data }
+      },
+    }),
+
+    get_asana_tasks: tool({
+      description:
+        'One team member\'s Asana tasks: open tasks with due dates, and what they completed recently. ' +
+        'Requires a specific team member; if the user has not named one, ask them which team member ' +
+        'before calling this. If the name is ambiguous or unknown, the result lists who is available.',
+      inputSchema: z.object({
+        team_member: z.string().min(1).describe('Name or email of the team member'),
+        completed_days: z.number().int().min(1).max(30).default(7),
+      }),
+      execute: async ({ team_member, completed_days }) => {
+        if (!asanaConfigured()) return { error: 'Asana is not connected' }
+        const workspace = process.env.ASANA_WORKSPACE_GID
+        if (!workspace) return { error: 'Asana workspace is not configured' }
+
+        const { data: members, error } = await supabase.from('team_users')
+          .select('name, email, asana_user_gid')
+          .eq('active_status', true).not('asana_user_gid', 'is', null)
+        if (error) return { error: error.message }
+
+        const q = team_member.toLowerCase()
+        const hits = (members ?? []).filter(m =>
+          m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q))
+        if (hits.length !== 1) {
+          return {
+            error: hits.length === 0
+              ? `No team member matching "${team_member}" is linked to Asana`
+              : `"${team_member}" matches more than one person; ask the user which one`,
+            available: (members ?? []).map(m => m.name || m.email),
+          }
+        }
+
+        const since = new Date(Date.now() - completed_days * 86_400_000).toISOString()
+        const tasks = await tasksForAssignee(hits[0].asana_user_gid!, workspace, since)
+          .catch((e: Error) => e)
+        if (tasks instanceof Error) return { error: `Asana said: ${tasks.message}` }
+
+        const today = new Date().toISOString().slice(0, 10)
+        const shape = (t: typeof tasks[number]) => ({
+          name: t.name,
+          due_on: t.due_on,
+          overdue: Boolean(!t.completed && t.due_on && t.due_on < today),
+          projects: (t.projects ?? []).map(p => p.name).filter(Boolean),
+          url: t.permalink_url,
+        })
+        return {
+          member: hits[0].name || hits[0].email,
+          open: tasks.filter(t => !t.completed).map(shape).slice(0, 50),
+          completed_recently: tasks.filter(t => t.completed)
+            .map(t => ({ name: t.name, completed_at: t.completed_at })).slice(0, 30),
+        }
       },
     }),
 
