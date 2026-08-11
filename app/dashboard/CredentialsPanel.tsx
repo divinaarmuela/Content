@@ -122,7 +122,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
         )}
       </div>
 
-      <p className="flex items-start gap-2 rounded-md bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+      <p className="flex items-start gap-2 rounded-md bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
         Passwords are encrypted before they are stored and are never included when this list
         loads — click the eye to reveal one.{canEdit ? '' : ' Only a super admin can change them.'}
@@ -246,7 +246,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                     <div className="flex items-center gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{c.platform}</p>
-                        {c.label && <p className="truncate text-[11px] text-zinc-400">{c.label}</p>}
+                        {c.label && <p className="truncate text-xs text-zinc-400">{c.label}</p>}
                       </div>
                       {c.url && (
                         <a href={c.url} target="_blank" rel="noreferrer noopener"
@@ -261,7 +261,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   <TableCell>
                     {c.username ? (
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate font-mono text-[12px] text-zinc-600 dark:text-zinc-300">
+                        <span className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-300">
                           {c.username}
                         </span>
                         <button onClick={() => { navigator.clipboard.writeText(c.username); toast.success('Username copied') }}
@@ -278,7 +278,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                       <span className="text-xs text-zinc-400">none stored</span>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-700 dark:text-zinc-200">
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
                           {revealed[c.id] ?? '••••••••••'}
                         </span>
                         <button onClick={() => reveal(c)}
@@ -298,11 +298,11 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   </TableCell>
 
                   <TableCell>
-                    <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                       {new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                     </p>
                     {c.updated_by_name && (
-                      <p className="truncate text-[10px] text-zinc-400">by {c.updated_by_name}</p>
+                      <p className="truncate text-[11px] text-zinc-400">by {c.updated_by_name}</p>
                     )}
                   </TableCell>
 
@@ -337,7 +337,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
       {items.some(c => c.notes) && (
         <div className="flex flex-col gap-1.5">
           {items.filter(c => c.notes).map(c => (
-            <p key={c.id} className="text-[12px] text-zinc-500 dark:text-zinc-400">
+            <p key={c.id} className="text-xs text-zinc-500 dark:text-zinc-400">
               <Badge variant="outline" className="mr-2 font-normal">{c.platform}</Badge>
               {c.notes}
             </p>

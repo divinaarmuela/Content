@@ -76,7 +76,7 @@ function SectionEditor({ sections, onChange }: {
         <Card key={i} className="border-zinc-200 dark:border-zinc-800">
           <CardContent className="flex flex-col gap-2.5 py-4">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+              <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-400">
                 Section {i + 1}
               </span>
               <div className="ml-auto flex gap-1">
@@ -285,7 +285,7 @@ export default function JournalAdmin() {
         </CardContent></Card>
 
         <div>
-          <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-zinc-400">Body</p>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-zinc-400">Body</p>
           <SectionEditor sections={sections} onChange={next => set({ sections: next })} />
         </div>
       </div>
@@ -353,7 +353,7 @@ export default function JournalAdmin() {
                       {p.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{p.title}</p>
-                        <p className="truncate font-mono text-[11px] text-zinc-400">/journal/{p.slug}</p>
+                        <p className="truncate font-mono text-xs text-zinc-400">/journal/{p.slug}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -362,7 +362,7 @@ export default function JournalAdmin() {
                       ? <Badge variant="outline" className="font-normal">{p.category}</Badge>
                       : <span className="text-xs text-zinc-400">—</span>}
                   </TableCell>
-                  <TableCell className="font-mono text-[11px] text-zinc-500">
+                  <TableCell className="font-mono text-xs text-zinc-500">
                     {p.published_at ?? '—'}
                   </TableCell>
                   <TableCell>

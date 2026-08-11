@@ -203,7 +203,7 @@ export default function ProductionPage() {
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <span className={`h-2 w-2 rounded-full ${col.tint}`} />
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{col.title}</span>
-                    <span className="ml-auto font-mono text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
+                    <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
                   </div>
                   <div className="flex min-h-24 flex-col gap-2">
                     {colItems.map(item => (
@@ -218,15 +218,15 @@ export default function ProductionPage() {
                               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                                 {item.clients?.name ?? '—'}
                               </Badge>
-                              <span className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
+                              <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
                               {item.current_version_number > 0 && (
-                                <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500">v{item.current_version_number}</span>
+                                <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">v{item.current_version_number}</span>
                               )}
                             </div>
                             {(item.due_date || item.status === 'revision_required' || item.status === 'client_changes_requested') && (
                               <div className="flex items-center gap-2">
                                 {item.due_date && (
-                                  <span className="flex items-center gap-1 font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                                  <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
                                     <CalendarDays className="h-3 w-3" />
                                     {new Date(item.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                                   </span>

@@ -160,7 +160,7 @@ export default function SocialAnalyticsPage() {
                         <p className="truncate text-sm font-medium">
                           {a.username ? `@${a.username}` : brandFor(a.platform).label}
                         </p>
-                        <p className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                        <p className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
                           {(f?.currentFollowers ?? 0).toLocaleString()} followers
                           {typeof f?.growth === 'number' && f.growth !== 0 &&
                             ` · ${f.growth > 0 ? '+' : ''}${f.growth}`}
@@ -216,7 +216,7 @@ export default function SocialAnalyticsPage() {
                         <tr key={p._id ?? i} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
                           <td className="max-w-[280px] py-2 pr-3">
                             <p className="truncate">{p.content || '(no caption)'}</p>
-                            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                            <p className="text-xs text-zinc-400 dark:text-zinc-500">
                               {when(p.publishedAt)}
                             </p>
                           </td>
@@ -259,7 +259,7 @@ function Stat({ label, value, subtle }: { label: string; value: number; subtle?:
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
         <p className={`font-mono tabular-nums ${subtle ? 'text-lg' : 'text-2xl'}`}>
           {value.toLocaleString()}
         </p>
@@ -280,16 +280,16 @@ function Bars({ points }: { points: DailyPoint[] }) {
           const v = p.metrics?.impressions ?? 0
           return (
             <div key={p.date} className="flex w-10 shrink-0 flex-col items-center gap-1">
-              <span className="font-mono text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">{v}</span>
+              <span className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">{v}</span>
               <div className="w-full rounded-t bg-zinc-400 dark:bg-zinc-600"
                    style={{ height: Math.max(3, (v / max) * 68) }}
                    title={`${p.date} · ${v} impressions`} />
-              <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{p.date.slice(5)}</span>
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{p.date.slice(5)}</span>
             </div>
           )
         })}
       </div>
-      <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+      <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
         Impressions per day{recent.length === 1 ? ' — only one day of data so far' : ''}
       </p>
     </div>

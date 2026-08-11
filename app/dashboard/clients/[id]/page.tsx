@@ -132,7 +132,7 @@ export default function ClientDetailPage() {
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-lg font-semibold tracking-tight">{client.name}</h2>
-            <p className="font-mono text-[11px] text-zinc-400">
+            <p className="font-mono text-xs text-zinc-400">
               {client.industry || 'No industry set'} · /{client.slug}
             </p>
           </div>
@@ -214,10 +214,10 @@ export default function ClientDetailPage() {
                 looks lost, with a route to the replacement. */}
             {(client.contact_name || client.email || client.phone) && (
               <div className="sm:col-span-2">
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+                <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-zinc-400">
                   Original contact
                 </p>
-                <div className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-200 px-3 py-2.5 text-[13px] dark:border-zinc-800">
+                <div className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-800">
                   <span className="text-zinc-700 dark:text-zinc-300">{client.contact_name || '—'}</span>
                   {client.email && <span className="text-zinc-500">{client.email}</span>}
                   {client.phone && <span className="text-zinc-500">{client.phone}</span>}

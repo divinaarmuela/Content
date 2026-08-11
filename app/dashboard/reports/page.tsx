@@ -68,7 +68,7 @@ export default function ReportsPage() {
         </div>
         <Badge
           variant="outline"
-          className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+          className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
         >
           Demo data
         </Badge>
@@ -116,7 +116,7 @@ export default function ReportsPage() {
         {METRICS.map(m => (
           <Card key={m.label} className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
             <CardHeader className="pb-2">
-              <CardTitle className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+              <CardTitle className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                 {m.label}
               </CardTitle>
             </CardHeader>
@@ -193,11 +193,11 @@ export default function ReportsPage() {
               </LineChart>
             </ResponsiveContainer>
             <div className="mt-2 flex items-center gap-4">
-              <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+              <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
                 Reach
               </span>
-              <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+              <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
                 Engagement
               </span>
@@ -215,16 +215,16 @@ export default function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                     Platform
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                     Reach
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                     Engagement
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
                     Clicks
                   </TableHead>
                 </TableRow>

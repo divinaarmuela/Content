@@ -145,7 +145,7 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
               {/* the only element allowed to give: min-w-0 lets truncate work
                   inside a flex row, and shrink-0 on the controls stops a long
                   R2 filename pushing them past the edge of the panel */}
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{url}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{url}</span>
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" type="button" disabled={i === 0}
                 onClick={() => onChange(moveItem(urls, i, -1))} aria-label="Move up">
                 <ChevronUp className="h-3.5 w-3.5" />
@@ -500,7 +500,7 @@ export default function WebsiteAdminPage() {
                   <TableCell><MediaThumb url={p.card_media_url} /></TableCell>
                   <TableCell>
                     <div className="text-sm font-medium">{p.name}</div>
-                    <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">/work/{p.slug}</div>
+                    <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">/work/{p.slug}</div>
                   </TableCell>
                   <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{p.industry || '—'}</TableCell>
                   <TableCell>

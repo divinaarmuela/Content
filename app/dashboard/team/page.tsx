@@ -313,11 +313,11 @@ export default function TeamPage() {
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <Avatar className="h-7 w-7">
-                        <AvatarFallback className="text-[10px] font-semibold">{initials(m.name, m.email)}</AvatarFallback>
+                        <AvatarFallback className="text-[11px] font-semibold">{initials(m.name, m.email)}</AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="text-sm font-medium">{m.name || '—'}</div>
-                        <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{m.email}</div>
+                        <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{m.email}</div>
                       </div>
                     </div>
                   </TableCell>

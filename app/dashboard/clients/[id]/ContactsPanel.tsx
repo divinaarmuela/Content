@@ -163,7 +163,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                       )}
                     </div>
                     {c.role && (
-                      <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+                      <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
                         {c.role}
                       </p>
                     )}
@@ -181,7 +181,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                 </div>
 
                 {c.email && (
-                  <div className="flex items-center gap-2 text-[13px]">
+                  <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
                     <a href={`mailto:${c.email}`} className="min-w-0 flex-1 truncate text-zinc-600 hover:underline dark:text-zinc-300">
                       {c.email}
@@ -193,7 +193,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                   </div>
                 )}
                 {c.phone && (
-                  <div className="flex items-center gap-2 text-[13px]">
+                  <div className="flex items-center gap-2 text-sm">
                     <Phone className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
                     <a href={`tel:${c.phone}`} className="min-w-0 flex-1 truncate text-zinc-600 hover:underline dark:text-zinc-300">
                       {c.phone}
@@ -205,7 +205,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                   </div>
                 )}
                 {c.notes && (
-                  <p className="text-[12px] text-zinc-500 dark:text-zinc-400">{c.notes}</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{c.notes}</p>
                 )}
               </CardContent>
             </Card>

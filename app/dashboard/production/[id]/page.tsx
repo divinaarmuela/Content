@@ -254,7 +254,7 @@ export default function ItemDetailPage() {
               </Button>
             ))}
             {isTeam && detail.status === 'internal_review' && detail.client_approval_required && (
-              <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                 client approval required
               </span>
             )}
@@ -309,12 +309,12 @@ export default function ItemDetailPage() {
               <>
                 <Separator />
                 <div className="flex flex-col gap-2.5">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">New version</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">New version</p>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
                       <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : verDraft.file_url ? 'Replace file' : 'Upload file'}
                     </Button>
-                    {verDraft.file_url && <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">file ready ✓</span>}
+                    {verDraft.file_url && <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">file ready ✓</span>}
                     <input ref={fileRef} type="file" accept="image/*,video/*" hidden
                       onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
                   </div>
@@ -360,7 +360,7 @@ export default function ItemDetailPage() {
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
-                      <p className="mt-0.5 flex items-center gap-2 font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">
+                      <p className="mt-0.5 flex items-center gap-2 font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">
                         {new Date(c.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                         {isTeam && c.visibility === 'client' && (
                           <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">client</Badge>
@@ -410,7 +410,7 @@ export default function ItemDetailPage() {
                     <span className="ml-auto">
                       {s.live_url
                         ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
-                        : <span className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{s.publish_status}</span>}
+                        : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{s.publish_status}</span>}
                     </span>
                   </div>
                 ))}

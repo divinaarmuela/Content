@@ -124,7 +124,7 @@ export default function NotificationsPage() {
         </div>
         <Badge
           variant="outline"
-          className="ml-auto font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+          className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
         >
           Demo data
         </Badge>

@@ -261,13 +261,13 @@ export default function LeadsPage() {
           <ul className="mt-2.5 flex flex-col gap-1.5">
             {today.map(t => (
               <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 text-sm text-emerald-950 dark:text-emerald-100">
-                <span className="font-mono text-[11px] tabular-nums text-emerald-700 dark:text-emerald-400">
+                <span className="font-mono text-xs tabular-nums text-emerald-700 dark:text-emerald-400">
                   {new Date(t.created_at).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span className="font-medium">{t.name}</span>
                 {t.biz && <span className="text-emerald-800 dark:text-emerald-300">({t.biz})</span>}
                 <span className={
-                  'rounded-full px-1.5 py-px font-mono text-[10px] uppercase tracking-wide ' +
+                  'rounded-full px-1.5 py-px font-mono text-[11px] uppercase tracking-wide ' +
                   (t.source === 'web_form'
                     ? 'bg-emerald-600/15 text-emerald-800 dark:text-emerald-300'
                     : 'bg-sky-600/15 text-sky-800 dark:text-sky-300')

@@ -103,7 +103,7 @@ export default function ServicePicker({
         </div>
       )}
 
-      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {isNew
           ? `“${draft.trim()}” is new — adding it here makes it available to every project, and it becomes a filter on the Work page.`
           : 'These are the filters visitors see on the Work page. Reuse an existing one where you can.'}

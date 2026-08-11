@@ -260,7 +260,7 @@ export default function ClientsPage() {
                   <TableCell>
                     <Link href={`/dashboard/clients/${c.id}`} className="group block">
                       <div className="text-sm font-medium group-hover:underline">{c.name}</div>
-                      <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{c.slug}</div>
+                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{c.slug}</div>
                     </Link>
                   </TableCell>
                   <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{c.industry || '—'}</TableCell>

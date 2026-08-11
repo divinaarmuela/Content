@@ -312,13 +312,13 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <Pencil className="h-3 w-3" />
                 </Button>
               )}
-              <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
+              <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
                 {form.status.replace('_', ' ')}
               </span>
-              <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${TYPE_STYLE}`}>
+              <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TYPE_STYLE}`}>
                 {form.template_key.replace('_', ' ')}
               </span>
-              <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
+              <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
                 {form.completion.answered}/{form.completion.total}
               </span>
             </div>
@@ -349,7 +349,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               </Button>
             </div>
 
-            <p className="font-mono text-[11px] text-muted-foreground">
+            <p className="font-mono text-xs text-muted-foreground">
               sent {relative(form.sent_at)} · opened {relative(form.first_opened_at)}
               {form.submitted_at ? ` · submitted ${relative(form.submitted_at)}` : ''}
             </p>
@@ -421,11 +421,11 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                           }
                         >
                           <span className={
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ' +
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] ' +
                             (on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')
                           }>{on ? '✓' : ''}</span>
                           <span className="font-medium">{m.name || m.email}</span>
-                          <span className="ml-auto font-mono text-[10px] text-muted-foreground">{m.email}</span>
+                          <span className="ml-auto font-mono text-[11px] text-muted-foreground">{m.email}</span>
                         </button>
                       )
                     })}

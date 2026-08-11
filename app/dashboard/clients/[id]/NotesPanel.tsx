@@ -118,7 +118,7 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
               </SelectContent>
             </Select>
 
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               {VISIBILITY[visibility].hint}. Saved with your name and the time.
             </p>
 
@@ -144,14 +144,14 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
         <ol className="flex flex-col">
           {notes.map(n => (
             <li key={n.id} className="group flex gap-3 border-b border-zinc-100 py-4 last:border-b-0 dark:border-zinc-800">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 {initials(n.author_name)}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="text-sm font-medium">{n.author_name || 'Unknown'}</span>
                   <span
-                    className="font-mono text-[10px] text-zinc-400"
+                    className="font-mono text-[11px] text-zinc-400"
                     title={new Date(n.created_at).toLocaleString('en-AU')}
                   >
                     {when(n.created_at)}
@@ -160,7 +160,7 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
                       would be noise on the default case. */}
                   {n.visibility && n.visibility !== 'team' && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                      className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                       title={VISIBILITY[n.visibility].hint}
                     >
                       {(() => { const I = VISIBILITY[n.visibility].icon; return <I className="h-2.5 w-2.5" /> })()}
@@ -180,7 +180,7 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
                   </button>
                 </div>
                 {/* whitespace-pre-wrap so paragraphs survive as typed */}
-                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
                   {n.body}
                 </p>
               </div>

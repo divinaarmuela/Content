@@ -72,7 +72,7 @@ export default function IntegrationsSettings() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{it.name}</p>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">{it.detail}</p>
-                <p className="mt-0.5 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
                   {it.status}
                 </p>
               </div>

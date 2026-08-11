@@ -118,11 +118,11 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
           {managers.map(m => (
             <span key={m.team_user_id}
               className="group flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-sm">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
                 {initials(m.name, m.email)}
               </span>
               {m.name || m.email}
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {roleLabel(m.role)}
               </span>
               {canManage && (
@@ -152,7 +152,7 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{e.name || e.email}</span>
-                  <span className="block text-[11px] text-muted-foreground">
+                  <span className="block text-xs text-muted-foreground">
                     {roleLabel(e.role)} · {e.client_count === 0
                       ? 'no clients yet'
                       : `${e.client_count} client${e.client_count === 1 ? '' : 's'}`}

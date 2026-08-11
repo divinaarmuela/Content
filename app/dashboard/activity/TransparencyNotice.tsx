@@ -28,7 +28,7 @@ export default function TransparencyNotice() {
           <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">
             What this page collects
           </span>
-          <span className="mt-0.5 block text-[13px] text-zinc-500 dark:text-zinc-400">
+          <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
             Task activity from Asana only. No screenshots, no keystrokes, nothing running on your
             device — and you can always see your own data.
           </span>
@@ -39,29 +39,29 @@ export default function TransparencyNotice() {
       </button>
 
       {open && (
-        <dl className="grid gap-x-8 gap-y-4 border-t border-zinc-100 px-4 py-4 text-[13px] sm:grid-cols-2 dark:border-zinc-800">
+        <dl className="grid gap-x-8 gap-y-4 border-t border-zinc-100 px-4 py-4 text-sm sm:grid-cols-2 dark:border-zinc-800">
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">Collected</dt>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Collected</dt>
             <dd className="mt-1 text-zinc-600 dark:text-zinc-400">
               Asana events on tracked projects — task created, assigned, completed, due date changed —
               with who did it and when. Plus the current state of tasks assigned to you.
             </dd>
           </div>
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">Never collected</dt>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Never collected</dt>
             <dd className="mt-1 text-zinc-600 dark:text-zinc-400">
               Screenshots, keystrokes, browsing, idle time, location, or anything from your machine.
               No agent is installed anywhere.
             </dd>
           </div>
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">Who sees it</dt>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Who sees it</dt>
             <dd className="mt-1 text-zinc-600 dark:text-zinc-400">
               You see your own row. Super admins see the team. Clients never have access to this page.
             </dd>
           </div>
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">Why</dt>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Why</dt>
             <dd className="mt-1 text-zinc-600 dark:text-zinc-400">
               So work in progress is visible in one place instead of scattered across Asana projects —
               for planning and workload balance, not for individual performance scoring.

@@ -189,7 +189,7 @@ export default function SocialPage() {
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold tracking-tight">{c.name}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                     {c.status}
                   </span>
 

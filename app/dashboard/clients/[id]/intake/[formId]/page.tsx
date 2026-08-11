@@ -127,10 +127,10 @@ export default function IntakeSubmissionPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{form.title || 'Intake form'}</h1>
-          <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             {form.template_key.replace('_', ' ')}
           </span>
-          <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             {form.status.replace('_', ' ')}
           </span>
           <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
@@ -195,12 +195,12 @@ export default function IntakeSubmissionPage() {
         return (
           <section key={section.id} className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-baseline gap-3 border-b border-border pb-3">
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
                 {String(i + 1).padStart(2, '0')}
               </span>
               <h2 className="text-sm font-semibold">{section.title}</h2>
               {done && (
-                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
                   {done.answered}/{done.total}
                 </span>
               )}

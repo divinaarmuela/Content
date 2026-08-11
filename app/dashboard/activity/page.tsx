@@ -198,7 +198,7 @@ export default function ActivityPage() {
       )}
 
       {isAdmin && data?.connection?.configured && (
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
           {data.connection.trackedProjects} projects tracked · {data.connection.liveWebhooks} live ·
           {' '}last change {sinceLabel(data.connection.lastEventAt)}
         </p>
@@ -221,7 +221,7 @@ function PersonCard({ person, expanded, onToggle, days }: {
       <p className={`font-mono text-lg tabular-nums ${alert && value > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
         {value}
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-400">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">{label}</p>
     </div>
   )
 
@@ -234,12 +234,12 @@ function PersonCard({ person, expanded, onToggle, days }: {
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
       >
         <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-100 font-mono text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-100 font-mono text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
           {initials(person.name, person.email)}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{person.name || person.email}</span>
-          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
             {person.employment_type}
             {!person.linked && (
               <span className="inline-flex items-center gap-1 normal-case tracking-normal text-amber-600 dark:text-amber-500">
@@ -261,7 +261,7 @@ function PersonCard({ person, expanded, onToggle, days }: {
       {expanded && (
         <CardContent className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
           {person.tasks.open.length === 0 && person.tasks.done.length === 0 ? (
-            <p className="py-2 text-[13px] text-zinc-500 dark:text-zinc-400">
+            <p className="py-2 text-sm text-zinc-500 dark:text-zinc-400">
               {person.linked ? 'No tasks in this period.' : 'No Asana account matched to this person yet.'}
             </p>
           ) : (
@@ -341,7 +341,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
         <div className="min-w-[720px]">
           <div className="grid grid-cols-7 gap-px rounded-t-lg bg-zinc-200 dark:bg-zinc-800">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-              <div key={d} className="bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <div key={d} className="bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                 {d}
               </div>
             ))}
@@ -354,7 +354,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
               const past = k < todayKey
               return (
                 <div key={k} className={`min-h-[104px] bg-white p-1.5 dark:bg-zinc-900 ${otherMonth ? 'opacity-40' : ''}`}>
-                  <span className={`text-[11px] tabular-nums ${
+                  <span className={`text-xs tabular-nums ${
                     k === todayKey
                       ? 'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : 'text-zinc-400 dark:text-zinc-500'
@@ -368,7 +368,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
                           href={task.url ?? undefined}
                           target="_blank" rel="noreferrer noopener"
                           title={`${task.name} — ${who}${task.project ? ` · ${task.project}` : ''}`}
-                          className={`block truncate rounded px-1 py-0.5 text-[10px] transition-colors ${
+                          className={`block truncate rounded px-1 py-0.5 text-[11px] transition-colors ${
                             past
                               ? 'bg-red-50 text-red-800 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300'
@@ -380,7 +380,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
                       </li>
                     ))}
                     {items.length > 3 && (
-                      <li className="px-1 text-[10px] text-zinc-400">+{items.length - 3} more</li>
+                      <li className="px-1 text-[11px] text-zinc-400">+{items.length - 3} more</li>
                     )}
                   </ul>
                 </div>
@@ -390,7 +390,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
         </div>
       </div>
 
-      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Open tasks by due date. Red is past due. Completed work isn’t shown here — use the People view for that.
       </p>
     </div>
@@ -400,7 +400,7 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
 function TaskList({ title, tasks, done = false }: { title: string; tasks: Task[]; done?: boolean }) {
   return (
     <div>
-      <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">{title}</p>
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">{title}</p>
       <ul className="flex flex-col">
         {tasks.map(t => (
           <li key={t.gid}
@@ -409,7 +409,7 @@ function TaskList({ title, tasks, done = false }: { title: string; tasks: Task[]
               ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
               : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${t.overdue ? 'bg-red-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />}
 
-            <span className={`min-w-0 flex-1 truncate text-[13px] ${done ? 'text-zinc-500 line-through dark:text-zinc-500' : ''}`}>
+            <span className={`min-w-0 flex-1 truncate text-sm ${done ? 'text-zinc-500 line-through dark:text-zinc-500' : ''}`}>
               {t.name}
             </span>
 
@@ -420,7 +420,7 @@ function TaskList({ title, tasks, done = false }: { title: string; tasks: Task[]
             )}
 
             {!done && (
-              <span className={`shrink-0 font-mono text-[11px] tabular-nums ${
+              <span className={`shrink-0 font-mono text-xs tabular-nums ${
                 t.overdue ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'
               }`}>
                 {dueLabel(t.due_on)}

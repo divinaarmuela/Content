@@ -112,7 +112,7 @@ export default function ScheduleCalendar() {
         <div className="min-w-[720px]">
           <div className="grid grid-cols-7 gap-px rounded-t-lg bg-zinc-200 dark:bg-zinc-800">
             {DAYS.map(d => (
-              <div key={d} className="bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <div key={d} className="bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                 {d}
               </div>
             ))}
@@ -127,7 +127,7 @@ export default function ScheduleCalendar() {
                 <div key={k}
                   className={`min-h-[96px] bg-white p-1.5 dark:bg-zinc-900 ${otherMonth ? 'opacity-40' : ''}`}>
                   <div className="flex items-center">
-                    <span className={`text-[11px] tabular-nums ${
+                    <span className={`text-xs tabular-nums ${
                       k === todayKey
                         ? 'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                         : 'text-zinc-400 dark:text-zinc-500'
@@ -142,7 +142,7 @@ export default function ScheduleCalendar() {
                       return (
                         <li key={e.id}>
                           <Link href={`/dashboard/production/${e.item_id}`}
-                            className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] transition-colors ${
+                            className={`flex items-center gap-1 rounded px-1 py-0.5 text-[11px] transition-colors ${
                               live
                                 ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300'
                                 : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300'
@@ -161,7 +161,7 @@ export default function ScheduleCalendar() {
                       )
                     })}
                     {dayEntries.length > 3 && (
-                      <li className="px-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                      <li className="px-1 text-[11px] text-zinc-400 dark:text-zinc-500">
                         +{dayEntries.length - 3} more
                       </li>
                     )}
@@ -173,7 +173,7 @@ export default function ScheduleCalendar() {
         </div>
       </div>
 
-      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Green means published, with a live link. Grey is booked but not yet out.
       </p>
     </div>

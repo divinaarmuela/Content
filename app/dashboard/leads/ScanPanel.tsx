@@ -211,11 +211,11 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
 
             {mailboxes.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Monitoring</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Monitoring</span>
                 {mailboxes.map(e => (
                   <span
                     key={e}
-                    className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                    className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
                   >
                     {e}
                   </span>
@@ -242,7 +242,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span className="truncate">{phase}</span>
             {live.length > 0 && (
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+              <span className="ml-auto shrink-0 font-mono text-xs text-zinc-400 dark:text-zinc-500">
                 {live.length} checked
               </span>
             )}
@@ -279,7 +279,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
                       )}
                     </div>
                     {ev.reason && (
-                      <p className="mt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                      <p className="mt-0.5 text-xs leading-snug text-zinc-500 dark:text-zinc-400">
                         {ev.reason}
                         {typeof ev.confidence === 'number' && (
                           <span className="ml-1 font-mono">({Math.round(ev.confidence * 100)}%)</span>
@@ -318,13 +318,13 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
                 { k: 'Errors',        v: result.errors },
               ].map(s => (
                 <div key={s.k} className="px-3 py-2">
-                  <dt className="text-[11px] text-zinc-500 dark:text-zinc-400">{s.k}</dt>
+                  <dt className="text-xs text-zinc-500 dark:text-zinc-400">{s.k}</dt>
                   <dd className="font-mono text-sm tabular-nums">{s.v}</dd>
                 </div>
               ))}
             </dl>
             {result.claimed === 0 && result.scanned > 0 && (
-              <p className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              <p className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 Every message had already been checked by an earlier scan, so nothing
                 was sent to Claude. This is the normal result when scans run often.
               </p>
@@ -369,24 +369,24 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
                         <TableRow key={e.id}>
                           <TableCell
                             title={absolute(e.created_at)}
-                            className="whitespace-nowrap font-mono text-[11px] text-zinc-500 dark:text-zinc-400"
+                            className="whitespace-nowrap font-mono text-xs text-zinc-500 dark:text-zinc-400"
                           >
                             {relative(e.created_at)}
                           </TableCell>
                           <TableCell>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${s.cls}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${s.cls}`}>
                               {s.label}
                             </span>
                           </TableCell>
                           <TableCell className="max-w-[260px] truncate text-xs">
                             {e.subject || <span className="text-zinc-400 dark:text-zinc-500">—</span>}
                             {e.from_email && (
-                              <span className="block truncate font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                              <span className="block truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
                                 {e.from_email}
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[320px] text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <TableCell className="max-w-[320px] text-xs text-zinc-500 dark:text-zinc-400">
                             {e.error || e.reasoning || '—'}
                             {typeof e.confidence === 'number' && (
                               <span className="ml-1 font-mono">({Math.round(e.confidence * 100)}%)</span>

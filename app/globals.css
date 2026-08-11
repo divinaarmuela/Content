@@ -80,7 +80,7 @@ body:has(.dbx) {
   }
   :where(body:has(.dbx)) {
     font-family: var(--font-sans, 'Inter Tight'), 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.5;
   }
   :where(body:has(.dbx) a) { text-decoration: none; color: inherit; font-family: inherit; }
@@ -100,6 +100,9 @@ body:has(.dbx) {
     font-family: inherit;
   }
   :where(.intake section) { padding: 0; border-bottom: 0; }
+  /* dashboard child pages use semantic <section> too — same marketing rule
+     (100px padding + dark bottom border) must not land on them */
+  :where(body:has(.dbx) section) { padding: 0; border-bottom: 0; }
   :where(.intake button) { background: transparent; color: inherit; font: inherit; cursor: pointer; }
   :where(.intake a) { color: inherit; }
 

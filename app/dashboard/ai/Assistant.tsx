@@ -315,7 +315,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
           </Button>
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           Answers come from live agency data. Edits always ask for approval first.
         </p>
       </div>
@@ -425,7 +425,7 @@ function SettingsSheet() {
                   {zones.map(z => <SelectItem key={z} value={z}>{z.replace('_', ' ')}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 The assistant presents dates and times in this timezone.
               </p>
             </div>
@@ -440,7 +440,7 @@ function SettingsSheet() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] tabular-nums text-muted-foreground">
+              <span className="text-xs tabular-nums text-muted-foreground">
                 {instructions.length}/{maxLen}
               </span>
               <Button size="sm" onClick={() => void save()} disabled={saving}>

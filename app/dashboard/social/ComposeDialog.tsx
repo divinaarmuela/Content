@@ -194,7 +194,7 @@ export default function ComposeDialog({
                   type="button"
                   onClick={() => i < step && setStep(i)}
                   disabled={i > step}
-                  className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs transition-colors ${
                     i === step
                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : i < step
@@ -301,7 +301,7 @@ export default function ComposeDialog({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={m.url} alt="" className="h-16 w-16 rounded object-cover" />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded bg-zinc-100 text-[10px] dark:bg-zinc-800">
+                        <div className="flex h-16 w-16 items-center justify-center rounded bg-zinc-100 text-[11px] dark:bg-zinc-800">
                           video
                         </div>
                       )}
@@ -327,7 +327,7 @@ export default function ComposeDialog({
                 <div className="flex items-center">
                   <Label htmlFor="caption">Caption</Label>
                   {limit !== null && !captionIgnored && (
-                    <span className={`ml-auto font-mono text-[11px] tabular-nums ${
+                    <span className={`ml-auto font-mono text-xs tabular-nums ${
                       caption.length > limit ? 'text-red-600 dark:text-red-400' : 'text-zinc-400 dark:text-zinc-500'
                     }`}>
                       {caption.length}/{limit}

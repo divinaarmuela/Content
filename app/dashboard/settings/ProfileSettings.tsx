@@ -128,7 +128,7 @@ export default function ProfileSettings() {
             {/* Read-only: identity comes from Clerk, and editing it here would
                 only desynchronise the two. */}
             <Input id="profile-email" value={me.email} readOnly className="text-zinc-500" />
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Managed by your sign-in account.
             </p>
           </div>
@@ -145,7 +145,7 @@ export default function ProfileSettings() {
               </SelectContent>
             </Select>
             {localTime && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 It is <span className="font-mono text-zinc-700 dark:text-zinc-300">{localTime}</span> for you.
               </p>
             )}
@@ -172,7 +172,7 @@ export default function ProfileSettings() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
             Your access
           </span>
           <Badge variant="outline" className="font-normal capitalize">
@@ -181,7 +181,7 @@ export default function ProfileSettings() {
           <Badge variant="outline" className="font-normal capitalize">
             {me.employment_type}
           </Badge>
-          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
             — changed by a super admin in Team, not here.
           </span>
         </div>
@@ -189,7 +189,7 @@ export default function ProfileSettings() {
         <Separator className="bg-zinc-200 dark:bg-zinc-800" />
 
         <div className="flex flex-col gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
             Email notifications
           </span>
           <div className="flex items-center justify-between gap-4">

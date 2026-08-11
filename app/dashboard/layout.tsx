@@ -108,7 +108,7 @@ function NavLinks({ role, path, onNavigate }: { role: string | null; path: strin
         key={item.href}
         href={item.href}
         onClick={onNavigate}
-        className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-all duration-150 ${
+        className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-sm transition-all duration-150 ${
           active
             ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
             : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
@@ -122,10 +122,10 @@ function NavLinks({ role, path, onNavigate }: { role: string | null; path: strin
   }
   return (
     <nav className="flex flex-col gap-0.5 px-3">
-      <p className="px-2.5 pb-1.5 pt-4 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">Workspace</p>
+      <p className="px-2.5 pb-1.5 pt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Workspace</p>
       {main.map(link)}
       {tools.length > 0 && (
-        <p className="px-2.5 pb-1.5 pt-5 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">System</p>
+        <p className="px-2.5 pb-1.5 pt-5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">System</p>
       )}
       {tools.map(link)}
     </nav>
@@ -169,7 +169,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             href="https://www.mdmmarketing.com.au"
             target="_blank"
             rel="noreferrer noopener"
-            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-700"
+            className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-700"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             mdmmarketing.com.au
@@ -196,7 +196,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
 
           <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).sort((a, b) => b.length - a.length).find(k => path.startsWith(`${k}/`)) ?? ''] ?? 'Dashboard'}</h1>
           <Separator orientation="vertical" className="h-4 bg-zinc-200 dark:bg-zinc-700" />
-          <p className="hidden rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-[11px] text-zinc-500 sm:block dark:bg-zinc-800 dark:text-zinc-400">
+          <p className="hidden rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-500 sm:block dark:bg-zinc-800 dark:text-zinc-400">
             {path}
           </p>
 
@@ -205,7 +205,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             {role && role !== 'super_admin' && (
-              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
+              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-600">
                 {role.replace('_', ' ')}
               </span>
             )}

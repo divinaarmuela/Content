@@ -21,7 +21,7 @@ function Stat({ label, value, hint, loading, icon: Icon }: {
     <Card>
       <CardContent className="p-5">
         <div className="flex items-center justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{label}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{label}</p>
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-950/40">
             <Icon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
           </div>
@@ -87,7 +87,7 @@ export default function OverviewPage() {
               <div key={l.id} className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
                 <span className="text-sm font-medium">{l.fname} {l.lname}</span>
                 <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{l.biz}</span>
-                <span className="ml-auto shrink-0 font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">
+                <span className="ml-auto shrink-0 font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">
                   {new Date(l.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                 </span>
               </div>

@@ -143,7 +143,7 @@ export default function IntakeEditor({
                 >
                   <GripVertical className="h-4 w-4" />
                 </span>
-                <span className="w-6 shrink-0 text-center font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="w-6 shrink-0 text-center font-mono text-xs tabular-nums text-muted-foreground">
                   {si + 1}
                 </span>
                 <Input
@@ -321,7 +321,7 @@ function Preview({ definition }: { definition: TemplateDefinition }) {
           {definition.sections.map((section, i) => (
             <div key={`p-${i}`} className="flex flex-col gap-8">
               <div className="flex flex-col gap-3">
-                <span className="font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
+                <span className="font-lamam text-[11px] tabular-nums tracking-widest text-cream-faint">
                   {String(i + 1).padStart(2, '0')} / {String(definition.sections.length).padStart(2, '0')}
                 </span>
                 <h2 className="font-lamah text-[28px] font-medium tracking-[-0.03em] text-cream">

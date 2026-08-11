@@ -148,14 +148,14 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               <h2 className="text-lg font-semibold tracking-tight">
                 {account.username ? `@${account.username}` : account.name ?? brand.label}
               </h2>
-              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                 {brand.label}
               </span>
               {token?.valid
-                ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                     <CheckCircle2 className="h-3 w-3" /> Healthy
                   </span>
-                : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
                     <XCircle className="h-3 w-3" /> Needs reconnecting
                   </span>}
             </div>
@@ -225,7 +225,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {insights?.dateRange?.since && (
-        <p className="-mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+        <p className="-mt-2 text-xs text-zinc-400 dark:text-zinc-500">
           {insights.dateRange.since} → {insights.dateRange.until}
           {insights.dataDelay ? ` · ${insights.dataDelay}` : ''}
         </p>
@@ -249,7 +249,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               Posts <span className="font-normal text-zinc-400 dark:text-zinc-500">({analysedPosts.length})</span>
             </h3>
             {overview && (
-              <span className="ml-auto text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
                 {overview.publishedPosts ?? 0} published · {overview.scheduledPosts ?? 0} scheduled
               </span>
             )}
@@ -269,7 +269,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm">{p.content || '(no caption)'}</p>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
                           {p.status ?? 'published'} · {when(p.publishedAt ?? p.createdAt)}
                           {typeof m.engagementRate === 'number' && m.engagementRate > 0 &&
                             ` · ${m.engagementRate.toFixed(1)}% engagement`}
@@ -288,7 +288,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                     <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
                       {POST_METRICS.map(([k, label]) => (
                         <div key={k}>
-                          <dt className="text-[10px] text-zinc-500 dark:text-zinc-400">{label}</dt>
+                          <dt className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</dt>
                           <dd className="font-mono text-sm tabular-nums">
                             {typeof m[k] === 'number' ? (m[k] as number).toLocaleString() : '—'}
                           </dd>
@@ -325,7 +325,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{c.content || '(no caption)'}</p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{when(c.createdTime)}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{when(c.createdTime)}</p>
                   </div>
                   {c.permalink && (
                     <a href={c.permalink} target="_blank" rel="noopener noreferrer"
@@ -360,11 +360,11 @@ function Stat({ label, value, sub }: { label: string; value: number | null; sub?
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
         <p className="font-mono text-2xl tabular-nums">
           {value === null ? <span className="text-zinc-300 dark:text-zinc-600">—</span> : value.toLocaleString()}
         </p>
-        {sub && <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{sub}</p>}
+        {sub && <p className="text-xs text-zinc-500 dark:text-zinc-400">{sub}</p>}
       </CardContent>
     </Card>
   )
@@ -387,7 +387,7 @@ function Trend({ points }: { points: DailyPoint[] }) {
           const v = p.metrics?.impressions ?? 0
           return (
             <div key={p.date} className="flex w-9 shrink-0 flex-col items-center gap-1">
-              <span className="font-mono text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
+              <span className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
                 {v}
               </span>
               <div
@@ -395,14 +395,14 @@ function Trend({ points }: { points: DailyPoint[] }) {
                 style={{ height: Math.max(3, (v / max) * 56) }}
                 title={`${p.date} · ${v} impressions`}
               />
-              <span className="text-[9px] text-zinc-400 dark:text-zinc-500">
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
                 {p.date.slice(5)}
               </span>
             </div>
           )
         })}
       </div>
-      <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+      <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
         Impressions per day{recent.length === 1 ? ' — only one day of data so far' : ''}
       </p>
     </div>

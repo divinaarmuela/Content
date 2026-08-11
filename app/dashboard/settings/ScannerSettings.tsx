@@ -201,7 +201,7 @@ export default function ScannerSettings() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm">{m.email}</span>
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                       {/* "self" means connected through the dashboard by its
                           owner — not by whoever happens to be reading this */}
                       {m.source === 'shared' ? 'shared'
@@ -210,17 +210,17 @@ export default function ScannerSettings() {
                           : 'connected'}
                     </span>
                     {m.source === 'self' && m.connected_by && m.connected_by !== myEmail && (
-                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
                         by {m.connected_by}
                       </span>
                     )}
                     {m.last_status === 'error' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
                         <AlertTriangle className="h-3 w-3" /> failing
                       </span>
                     )}
                     {m.last_status === 'success' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                         <CheckCircle2 className="h-3 w-3" /> healthy
                       </span>
                     )}

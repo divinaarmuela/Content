@@ -142,7 +142,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
           )}
         </div>
         {docs.length > 0 && (
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-foreground">
             From {docs.map((d, i) => (
               <span key={d.url}>
                 {i > 0 && ', '}
@@ -170,7 +170,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                       style={isHex(c.hex) ? { backgroundColor: c.hex } : { background: 'repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0/12px 12px' }} />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{c.name || c.hex || 'Unnamed'}</span>
-                      <span className="block font-mono text-[11px] text-muted-foreground">
+                      <span className="block font-mono text-xs text-muted-foreground">
                         {isHex(c.hex) ? c.hex.toUpperCase() : 'no hex given'}{c.usage ? ` · ${c.usage}` : ''}
                       </span>
                     </span>
@@ -188,7 +188,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                     <span className="text-lg font-semibold">{f.family}</span>
                     {f.usage && <span className="text-xs text-muted-foreground">{f.usage}</span>}
                     {(f.weights?.length ?? 0) > 0 && (
-                      <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                      <span className="ml-auto font-mono text-xs text-muted-foreground">
                         {f.weights!.join(' · ')}
                       </span>
                     )}
@@ -207,7 +207,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
               {(profile.voice.keywords?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {profile.voice.keywords!.map(k => (
-                    <span key={k} className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <span key={k} className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
                       {k}
                     </span>
                   ))}

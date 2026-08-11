@@ -108,7 +108,7 @@ export default function SchedulerPage() {
             {LANES.map(l => (
               <TabsTrigger key={l.key} value={l.key} className="gap-1.5">
                 {l.label}
-                <span className="font-mono text-[10px] tabular-nums text-zinc-400">{counts[l.key] ?? 0}</span>
+                <span className="font-mono text-[11px] tabular-nums text-zinc-400">{counts[l.key] ?? 0}</span>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -151,7 +151,7 @@ export default function SchedulerPage() {
                   <TableRow key={item.id}>
                     <TableCell>
                       <div className="text-sm font-medium">{item.title}</div>
-                      <div className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                      <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
                         {item.content_type} · v{item.current_version_number}
                       </div>
                     </TableCell>
@@ -172,7 +172,7 @@ export default function SchedulerPage() {
                               <Badge variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">
                                 {e.platform}
                                 {e.scheduled_at && (
-                                  <span className="ml-1 font-mono text-[10px]">
+                                  <span className="ml-1 font-mono text-[11px]">
                                     {new Date(e.scheduled_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                                   </span>
                                 )}

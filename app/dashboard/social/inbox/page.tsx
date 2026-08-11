@@ -181,12 +181,12 @@ export default function InboxPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <PlatformIcon platform={p.platform} size={14} />
-                          <span className="truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
                             @{p.accountUsername}
                           </span>
                         </div>
                         <p className="truncate text-sm">{p.content || '(no caption)'}</p>
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500">
                           {ago(p.createdTime)}
                           {typeof p.commentCount === 'number' && ` · ${p.commentCount} comment${p.commentCount === 1 ? '' : 's'}`}
                         </p>
@@ -214,7 +214,7 @@ export default function InboxPage() {
                 <div className="mb-3 flex items-start gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{active.content || '(no caption)'}</p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       @{active.accountUsername} · {ago(active.createdTime)}
                     </p>
                   </div>
@@ -240,11 +240,11 @@ export default function InboxPage() {
                       <li key={c.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
                         <div className="flex items-baseline gap-2">
                           <span className="font-mono text-xs font-medium">@{author(c)}</span>
-                          <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500">
                             {ago(c.createdTime ?? c.timestamp)}
                           </span>
                           {c.hidden && (
-                            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">
+                            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-500 dark:bg-zinc-800">
                               hidden
                             </span>
                           )}
@@ -292,7 +292,7 @@ export default function InboxPage() {
                               onChange={e => setDmDraft(e.target.value)} />
                             <Input value={dmLink} placeholder="Optional link for a button — https://…"
                               onChange={e => setDmLink(e.target.value)} />
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
                               One private reply is allowed per comment, and only for a
                               limited period after it was posted.
                             </p>
