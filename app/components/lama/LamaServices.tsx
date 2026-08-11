@@ -2,6 +2,7 @@ import Reveal from './Reveal'
 import Rule from './Rule'
 import SiteMedia from '../SiteMedia'
 import { Scramble } from './Scramble'
+import { media } from '../../lib/asset'
 
 // The static-pack SERVICES section: kicker + two-line heading + intro,
 // then five alternating rows (text | media, media side flipping each row)
@@ -14,35 +15,35 @@ const SERVICES = [
     title: 'Strategy & Consulting',
     desc: 'Sometimes you don’t need more content, you need a clearer direction. We sharpen your positioning, fix your offers, and map the path from where you are to where you want to be. Then we build it, or hand you the playbook.',
     items: ['Positioning', 'Offer & pricing review', 'Marketing roadmap', 'Ongoing advisory'],
-    media: '/strategy-waterside.mp4',
+    media: media('strategy-waterside.mp4'),
   },
   {
     n: '02',
     title: 'Branding Suite',
     desc: 'A strong brand makes everything else work harder, your content earns more trust, your ads convert better, your prices hold. We build the full identity: how you look, how you sound, and how you’re remembered.',
     items: ['Logo & identity', 'Messaging & voice', 'Colour & type system', 'Templates & assets'],
-    media: '/Senorita.mp4',
+    media: media('Senorita.mp4'),
   },
   {
     n: '03',
     title: 'Custom Websites',
     desc: 'A website is where interest turns into enquiries. We design and build fast, custom sites that look like your brand and are built to convert, not template drag-and-drop. Then we keep them running so they never go stale.',
     items: ['Design & build', 'Copy & structure', 'Mobile & speed', 'Hosting & care'],
-    media: '/website-landscape.mp4',
+    media: media('website-landscape.mp4'),
   },
   {
     n: '04',
     title: 'Content & Visibility',
     desc: 'If people can’t see you, nothing else matters. We create the photo, video, and social content that makes you look established and keeps you consistently in front of the right audience, without you becoming a full-time creator. We also run full campaign shoots for brands, taking a vision from ideation and concepting through to production and final execution.',
     items: ['Content strategy', 'Photo, video & campaign shoots', 'Social & captions', 'Ongoing posting'],
-    media: '/cecconis.mp4',
+    media: media('cecconis.mp4'),
   },
   {
     n: '05',
     title: 'Paid Advertising',
     desc: 'Content gets you seen. Paid gets you seen by the exact people most likely to buy. We plan, build, and manage campaigns across Meta, Google, and more, then optimise against what matters: enquiries, bookings, and revenue.',
     items: ['Campaign strategy', 'Ad creative & copy', 'Setup & management', 'Clear reporting'],
-    media: '/Automodellista.mp4',
+    media: media('Automodellista.mp4'),
   },
 ]
 

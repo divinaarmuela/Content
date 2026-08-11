@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Scramble } from './Scramble'
 import { useExperienceActive, useLamaReady } from './ready'
+import { media } from '../../lib/asset'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
 
 // the preview rotates through real work footage — intentionally not the
 // hero backdrop video
-const PREVIEW_VIDEOS = ['/cecconis.mp4', '/Waterside%20Website%20(1).mp4', '/Automodellista.mp4', '/melbourne-junction.mp4']
+const PREVIEW_VIDEOS = [media('cecconis.mp4'), media('Senorita.mp4')]
 const ROTATE_MS = 6000
 
 // Reference-site right rail: a fixed column at right-4 top-4 holding a

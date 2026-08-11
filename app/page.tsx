@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { archivo, sometype } from './components/lama/fonts'
+import { media } from './lib/asset'
 import LamaLoader from './components/lama/LamaLoader'
 import LamaBackdrop from './components/lama/LamaBackdrop'
 import LamaNav from './components/lama/LamaNav'
@@ -48,7 +49,7 @@ export default function HomePage() {
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink [&_section]:border-b-0`}>
       {/* start the hero footage download at HTML time, not after hydration */}
-      <link rel="preload" href="/hero-divina.mp4" as="video" type="video/mp4" />
+      <link rel="preload" href={media('hero-spec-ad.mp4')} as="video" type="video/mp4" crossOrigin="anonymous" />
       <LamaLoader />
       <LamaBackdrop />
       <LamaNav />

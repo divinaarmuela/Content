@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { media } from '../lib/asset'
 
 const WIX = 'https://static.wixstatic.com/media/'
 
@@ -145,7 +146,7 @@ export default function FilmHero() {
               className="absolute inset-0 h-full w-full object-cover"
               autoPlay muted loop playsInline preload="auto" poster="/hero-poster.jpg"
             >
-              <source src="/website-landscape.mp4" type="video/mp4" />
+              <source src={media('website-landscape.mp4')} type="video/mp4" />
             </video>
           </div>
           {arms.map((a, i) => (

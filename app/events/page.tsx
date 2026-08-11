@@ -6,6 +6,7 @@ import Reveal from '../components/lama/Reveal'
 import Rule from '../components/lama/Rule'
 import { archivo, sometype } from '../components/lama/fonts'
 import styles from './events.module.css'
+import { media } from '../lib/asset'
 
 const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
 
@@ -14,7 +15,7 @@ const MONO = 'var(--font-space-mono), monospace'
 const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
 const EMAIL = 'mailto:hello@mdmmarketing.com.au'
 const INVITE = `${EMAIL}?subject=Request%20an%20invite%20%E2%80%94%20The%20Room`
-const HERO_VIDEO = '/jason-hero.mp4'
+const HERO_VIDEO = media('jason-hero.mp4')
 
 // Future CMS seam: this array becomes a Supabase fetch in the CMS pass.
 const upcoming = [

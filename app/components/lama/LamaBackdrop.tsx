@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useLamaReady } from './ready'
+import { media } from '../../lib/asset'
 
 // WebGL2 dither backdrop, the reference site's exact mechanism: the screen
 // splits into cells of 4x4 dots and the luminance of the backdrop video
@@ -9,7 +10,8 @@ import { useLamaReady } from './ready'
 // ordered threshold matrix. The video is never a DOM layer — after the
 // preloader, a reveal progress sweeps through the same threshold matrix and
 // the dots dissolve into the actual video pixels. Swap VIDEO_SRC only.
-const VIDEO_SRC = '/hero-divina.mp4'
+// "SPEC AD for WEBSITE" master, transcoded 4K→1080p / 12MB for the backdrop
+const VIDEO_SRC = media('hero-spec-ad.mp4')
 // band2 (the second video-as-dither band behind the services section) is
 // retired — per the static-pack design the page is plain black after the
 // client section. The shader plumbing stays; it just never gets fed.

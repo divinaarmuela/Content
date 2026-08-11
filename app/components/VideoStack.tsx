@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { media } from '../lib/asset'
 
 const videos = [
-  { src: '/cecconis.mp4',          title: 'Cecconis',          poster: '/cecconis-poster.jpg', preload: 'auto'     as const },
-  { src: '/Automodellista.mp4',    title: 'Automodellista',   poster: '/auto-frame0.jpg',     preload: 'metadata' as const },
-  { src: '/Pattons.mp4', title: 'Pattons', poster: '/pattons-poster.jpg', preload: 'metadata' as const },
+  { src: media('cecconis.mp4'),       title: 'Cecconis',       poster: '/cecconis-poster.jpg', preload: 'auto'     as const },
+  { src: media('Automodellista.mp4'), title: 'Automodellista', poster: '/auto-frame0.jpg',     preload: 'metadata' as const },
+  { src: media('Pattons.mp4'),        title: 'Pattons',        poster: '/pattons-poster.jpg',  preload: 'metadata' as const },
 ]
 
 function IconMuted() {
