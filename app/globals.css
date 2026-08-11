@@ -80,7 +80,7 @@ body:has(.dbx) {
   }
   :where(body:has(.dbx)) {
     font-family: var(--font-sans, 'Inter Tight'), 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 15px;
+    font-size: 0.9375rem; /* 15px at the default root — rem so the large-screen root bump scales it */
     line-height: 1.5;
   }
   :where(body:has(.dbx) a) { text-decoration: none; color: inherit; font-family: inherit; }
@@ -113,14 +113,15 @@ body:has(.dbx) {
 }
 
 /* Big monitors at 100% OS scale: the dashboard's 14px-keyed type is physically
-   tiny on a 2.5K+ display, so scale the whole app (portals included — zoom sits
-   on body). Standardised zoom leaves viewport units and media queries alone, so
-   h-screen layouts and breakpoints behave. Marketing pages are untouched. */
+   tiny on a 2.5K+ display. Scale via the rem root — every Tailwind/shadcn
+   utility (text, spacing, heights, portals) is rem-based so the whole app grows
+   together, and unlike CSS zoom this leaves Radix's positioning math intact.
+   Marketing pages don't render .dbx, so they are untouched. */
 @media (min-width: 1800px) {
-  body:has(.dbx) { zoom: 1.1; }
+  html:has(.dbx) { font-size: 17px; }
 }
 @media (min-width: 2200px) {
-  body:has(.dbx) { zoom: 1.2; }
+  html:has(.dbx) { font-size: 19px; }
 }
 
 :root {
