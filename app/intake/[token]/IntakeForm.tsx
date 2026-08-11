@@ -53,6 +53,10 @@ export default function IntakeForm({
   // steps = every section, then a review step at the end
   const lastStep = definition.sections.length
   const onReview = step === lastStep
+  // Once they have seen the review step, going back to fill a missed section
+  // must not mean walking every step again — a shortcut straight back appears.
+  const [reviewed, setReviewed] = useState(false)
+  useEffect(() => { if (onReview) setReviewed(true) }, [onReview])
   const section = definition.sections[step]
   /** A section of nothing but guidance is a cover, not a form page. The welcome
    *  note is the case: rendering it as a step with an empty question column
@@ -173,8 +177,8 @@ export default function IntakeForm({
         </h1>
         <p className="mt-6 max-w-[46ch] text-center font-lamah text-[16px] leading-relaxed text-cream-dim">
           We will read every word before the call, and come back with a shot list
-          and a content plan built around it. If something needs changing, tell
-          your account manager and we will reopen it for you.
+          and a content plan built around it. If something needs changing, email
+          us at hello@mdmmarketing.com.au and we will reopen it for you.
         </p>
         <p className="mt-10 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
           {progress.answered} of {progress.total} answered
@@ -402,7 +406,7 @@ export default function IntakeForm({
               })}
             </div>
 
-            <div className="flex items-center gap-4 border-t border-cream/15 pt-8 lg:col-span-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-5 border-t border-cream/15 pt-8 lg:col-span-2">
               {step > 0 && (
                 <button
                   type="button" onClick={() => void goto(step - 1)}
@@ -413,12 +417,21 @@ export default function IntakeForm({
                   ← Back
                 </button>
               )}
+              {reviewed && step < lastStep - 1 && (
+                <button
+                  type="button" onClick={() => void goto(lastStep)}
+                  className="ml-auto bg-transparent font-lamam text-[11px] uppercase tracking-widest text-cream-dim transition-colors hover:text-cream"
+                >
+                  Skip to review
+                </button>
+              )}
               <button
                 type="button" onClick={() => void goto(step + 1)}
                 className={
-                  'group ml-auto inline-flex items-center gap-3 bg-cream px-7 py-3.5 ' +
+                  'group inline-flex items-center gap-3 bg-cream px-7 py-3.5 ' +
                   'font-lamam text-[11px] uppercase tracking-widest text-ink ' +
-                  'transition-opacity hover:opacity-85'
+                  'transition-opacity hover:opacity-85 ' +
+                  (reviewed && step < lastStep - 1 ? '' : 'ml-auto')
                 }
               >
                 {isCover ? 'Begin' : step === lastStep - 1 ? 'Review' : 'Continue'}
