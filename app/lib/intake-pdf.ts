@@ -122,6 +122,10 @@ export function renderIntakePdf(data: IntakePdfData): Promise<Buffer> {
     const range = doc.bufferedPageRange()
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i)
+      // The footer sits below the bottom margin; writing there would trigger
+      // pdfkit's auto page-break and spawn a blank page per footer. Lift the
+      // margin while stamping so the text stays on this page.
+      doc.page.margins.bottom = 0
       doc.fillColor(FAINT).font('Courier').fontSize(7)
         .text(
           `${data.clientName} · intake · ${i + 1}/${range.count}`,

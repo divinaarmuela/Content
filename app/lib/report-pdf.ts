@@ -170,6 +170,9 @@ export function renderLeadsReportPdf(data: LeadsReportData): Promise<Buffer> {
     const range = doc.bufferedPageRange()
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i)
+      // Footer sits below the bottom margin — lift it so pdfkit doesn't
+      // auto-page-break and stamp the footer onto a spawned blank page.
+      doc.page.margins.bottom = 0
       doc.fillColor(FAINT).font('Courier').fontSize(7)
         .text(
           `MD MEDIA · get seen · get known · get booked · page ${i + 1}/${range.count}`,
