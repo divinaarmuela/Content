@@ -162,6 +162,43 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
   return out
 }
 
+/**
+ * Duplicate a section in place — for "two founders, two sections".
+ *
+ * The copy carries every question but no ids: the save path derives fresh
+ * unique ids from the labels, so the original section's ids — and therefore
+ * any answers already given against them — are never disturbed. The title is
+ * numbered rather than suffixed with "(copy)": "The Founders" becomes
+ * "The Founders 2", duplicating that gives "The Founders 3", and an existing
+ * title is never collided with.
+ */
+export function duplicateSection(sections: Section[], si: number): Section[] {
+  const src = sections[si]
+  if (!src) return sections
+
+  const m = src.title.trim().match(/^(.*?)\s*(\d+)$/)
+  const base = (m ? m[1] : src.title).trim() || 'Section'
+  let n = m ? parseInt(m[2], 10) + 1 : 2
+  const titles = new Set(sections.map(s => s.title.trim().toLowerCase()))
+  let title = `${base} ${n}`
+  while (titles.has(title.toLowerCase())) title = `${base} ${++n}`
+
+  const copy: Section = {
+    id: '',
+    title,
+    blocks: src.blocks.map(b => {
+      const nb: Block = { ...b, id: '' }
+      if (nb.options) nb.options = [...nb.options]
+      return nb
+    }),
+  }
+  if (src.intro) copy.intro = src.intro
+
+  const out = [...sections]
+  out.splice(si + 1, 0, copy)
+  return out
+}
+
 export type SectionProgress = { id: string; title: string; answered: number; total: number }
 export type Completion = { answered: number; total: number; sections: SectionProgress[] }
 

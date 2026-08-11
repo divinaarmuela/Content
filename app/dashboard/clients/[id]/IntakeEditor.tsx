@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ChevronDown, ChevronUp, Eye, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Copy, Eye, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { archivo, sometype } from '@/app/components/lama/fonts'
 import {
-  BLOCK_TYPES, moveItem,
+  BLOCK_TYPES, duplicateSection, moveItem,
   type Block, type BlockType, type Section, type TemplateDefinition,
 } from '@/app/lib/intake-core'
 import {
@@ -161,6 +161,11 @@ export default function IntakeEditor({
                     disabled={si === draft.sections.length - 1} aria-label="Move section down"
                     onClick={() => setSections(moveItem(draft.sections, si, si + 1))}>
                     <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7"
+                    aria-label="Duplicate section" title="Duplicate this section — e.g. a second founder"
+                    onClick={() => setSections(duplicateSection(draft.sections, si))}>
+                    <Copy className="h-3.5 w-3.5" />
                   </Button>
                   <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive"
                     aria-label="Delete section"

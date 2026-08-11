@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  answerableBlocks, mergeAnswers, completion, isWritable, nextStatus,
+  answerableBlocks, duplicateSection, mergeAnswers, completion, isWritable, nextStatus,
   normaliseDefinition, moveItem, slugify, normaliseRecipients, resolveRecipients,
   type TemplateDefinition,
 } from '../app/lib/intake-core'
@@ -326,5 +326,92 @@ describe('resolveRecipients', () => {
 
   it('respects an empty list on the form as "notify nobody"', () => {
     expect(resolveRecipients([], ['x@y.co'], 'hello@z.co')).toEqual([])
+  })
+})
+
+describe('duplicateSection', () => {
+  it('inserts the copy directly after the original with every block carried over', () => {
+    const out = duplicateSection(DEF.sections, 0)
+    expect(out).toHaveLength(3)
+    expect(out[0]).toBe(DEF.sections[0])           // original untouched, same reference
+    expect(out[2]).toBe(DEF.sections[1])           // later sections just shift down
+    expect(out[1].blocks.map(b => b.label)).toEqual(
+      DEF.sections[0].blocks.map(b => b.label))
+    expect(out[1].blocks.map(b => b.type)).toEqual(
+      DEF.sections[0].blocks.map(b => b.type))
+  })
+
+  it('blanks every id so the save path mints fresh ones and answers never migrate', () => {
+    const out = duplicateSection(DEF.sections, 1)
+    expect(out[2].id).toBe('')
+    expect(out[2].blocks.every(b => b.id === '')).toBe(true)
+    // the original keeps its ids — existing answers stay attached to it
+    expect(out[1].blocks.map(b => b.id)).toEqual(['tone', 'never'])
+  })
+
+  it('numbers the title: "The Founders" becomes "The Founders 2"', () => {
+    const sections = [{ id: 'f', title: 'The Founders', blocks: [] }]
+    expect(duplicateSection(sections, 0)[1].title).toBe('The Founders 2')
+  })
+
+  it('increments an already-numbered title instead of stacking numbers', () => {
+    const sections = [
+      { id: 'f1', title: 'The Founders', blocks: [] },
+      { id: 'f2', title: 'The Founders 2', blocks: [] },
+    ]
+    expect(duplicateSection(sections, 1)[2].title).toBe('The Founders 3')
+  })
+
+  it('skips over titles that already exist rather than colliding', () => {
+    const sections = [
+      { id: 'f1', title: 'The Founders', blocks: [] },
+      { id: 'f2', title: 'The Founders 2', blocks: [] },
+      { id: 'f3', title: 'The Founders 3', blocks: [] },
+    ]
+    // duplicating the FIRST section: 2 and 3 are taken, so the copy is 4
+    expect(duplicateSection(sections, 0)[1].title).toBe('The Founders 4')
+  })
+
+  it('falls back to "Section 2" for an untitled section', () => {
+    const sections = [{ id: 's', title: '  ', blocks: [] }]
+    expect(duplicateSection(sections, 0)[1].title).toBe('Section 2')
+  })
+
+  it('copies intro and deep-copies options so editing the copy never edits the original', () => {
+    const sections = [{
+      id: 's', title: 'Voice', intro: 'Why we ask',
+      blocks: [{ id: 'tone', type: 'select' as const, label: 'Tone', options: ['Warm', 'Premium'] }],
+    }]
+    const out = duplicateSection(sections, 0)
+    expect(out[1].intro).toBe('Why we ask')
+    out[1].blocks[0].options!.push('Loud')
+    expect(sections[0].blocks[0].options).toEqual(['Warm', 'Premium'])
+  })
+
+  it('is a no-op for an out-of-range index', () => {
+    expect(duplicateSection(DEF.sections, 5)).toBe(DEF.sections)
+    expect(duplicateSection(DEF.sections, -1)).toBe(DEF.sections)
+  })
+
+  it('round-trips through normaliseDefinition: original ids survive, the copy gets fresh unique ids', () => {
+    const def: TemplateDefinition = {
+      ...DEF,
+      sections: duplicateSection(DEF.sections, 0),
+    }
+    const normalised = normaliseDefinition(def, 'rebrand')
+    const [orig, copy] = normalised.sections
+    // answers keyed on the original ids still resolve
+    expect(orig.blocks.map(b => b.id)).toEqual(['g1', 'venue_name', 'website'])
+    // the copy's ids exist, and none of them shadow the original's
+    const origIds = new Set(orig.blocks.map(b => b.id))
+    expect(copy.blocks).toHaveLength(3)
+    for (const b of copy.blocks) {
+      expect(b.id).not.toBe('')
+      expect(origIds.has(b.id)).toBe(false)
+    }
+    // completion counts the duplicated questions independently
+    const done = completion(normalised, { venue_name: 'The Emerald' })
+    expect(done.total).toBe(6)     // 2 answerable per Brand section × 2 + 2 in Voice
+    expect(done.answered).toBe(1)  // only the original's venue_name
   })
 })
