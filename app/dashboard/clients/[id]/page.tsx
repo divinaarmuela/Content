@@ -31,6 +31,7 @@ type Client = {
   industry: string
   status: string
   share_token: string | null
+  website: string | null
   social_profile_id: string | null
   contact_name: string | null
   email: string | null
@@ -182,6 +183,21 @@ export default function ClientDetailPage() {
               <Input defaultValue={client.slug} className="font-mono text-sm" onBlur={e => {
                 if (e.target.value !== client.slug) patch({ slug: e.target.value })
               }} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Website</Label>
+              <div className="flex items-center gap-2">
+                <Input defaultValue={client.website ?? ''} placeholder="https://…" onBlur={e => {
+                  if (e.target.value.trim() !== (client.website ?? '')) patch({ website: e.target.value })
+                }} />
+                {client.website && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={client.website} target="_blank" rel="noreferrer noopener" aria-label="Open website">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="grid gap-1.5">
               <Label>Status</Label>

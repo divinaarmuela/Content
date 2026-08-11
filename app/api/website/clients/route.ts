@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { normaliseWebsite } from '@/app/lib/website-url'
 
 /** Master client registry — dashboard only (Clerk-gated in middleware). */
 export async function GET() {
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
       contact_name: body.contact_name ?? null,
       email: body.email ?? null,
       phone: body.phone ?? null,
+      website: normaliseWebsite(body.website),
       status: body.status ?? 'active',
       notes: body.notes ?? null,
     })

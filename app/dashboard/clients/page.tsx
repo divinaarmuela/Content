@@ -266,7 +266,13 @@ export default function ClientsPage() {
                   <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{c.industry || '—'}</TableCell>
                   <TableCell>
                     <div className="text-sm">{c.contact_name || '—'}</div>
-                    {c.email && <a href={`mailto:${c.email}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{c.email}</a>}
+                    {c.email && <a href={`mailto:${c.email}`} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline">{c.email}</a>}
+                    {c.website && (
+                      <a href={c.website} target="_blank" rel="noreferrer noopener"
+                        className="block text-xs text-zinc-500 hover:underline dark:text-zinc-400">
+                        {c.website.replace(/^https?:\/\//i, '')}
+                      </a>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`capitalize ${STATUS_STYLE[c.status] ?? ''}`}>{c.status}</Badge>

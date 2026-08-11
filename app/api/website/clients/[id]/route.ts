@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
+import { normaliseWebsite } from '@/app/lib/website-url'
 
 /** One client, for the detail page. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,6 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const allowed = ['name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'website', 'status', 'notes', 'clerk_user_id'] as const
   const patch: Record<string, unknown> = {}
   for (const key of allowed) if (key in body) patch[key] = body[key]
+  if ('website' in patch) patch.website = normaliseWebsite(patch.website)
   const { data, error } = await supabase.from('clients').update(patch).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
