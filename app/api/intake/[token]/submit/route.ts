@@ -84,7 +84,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
         `— ${progress.answered} of ${progress.total} questions answered. ` +
         `The full brief is attached as a PDF.</p>${attachedList}${linkedList}`,
         'Open in dashboard',
-        `${base}/dashboard/clients/${form.client_id}`,
+        `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
       ),
       attachments: [
         { filename: `${safeName}-intake.pdf`, content: pdf, contentType: 'application/pdf' },
