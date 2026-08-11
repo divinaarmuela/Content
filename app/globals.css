@@ -112,6 +112,17 @@ body:has(.dbx) {
   body:has(.dbx)::before, body:has(.dbx)::after { display: none; }
 }
 
+/* Big monitors at 100% OS scale: the dashboard's 14px-keyed type is physically
+   tiny on a 2.5K+ display, so scale the whole app (portals included — zoom sits
+   on body). Standardised zoom leaves viewport units and media queries alone, so
+   h-screen layouts and breakpoints behave. Marketing pages are untouched. */
+@media (min-width: 1800px) {
+  body:has(.dbx) { zoom: 1.1; }
+}
+@media (min-width: 2200px) {
+  body:has(.dbx) { zoom: 1.2; }
+}
+
 :root {
   --blue: #0057FF;
   --blue-deep: #0044CC;
@@ -665,7 +676,10 @@ nav {
 .marquee-dot { color: var(--blue); }
 
 /* SECTIONS */
-section { padding: 100px 0; border-bottom: 1px solid var(--ink); position: relative; }
+/* marketing-only: :where() keeps specificity at plain `section` (0-0-1) so all
+   existing marketing overrides still win, while dashboard pages — where sonner
+   and semantic markup also emit <section> — are excluded entirely */
+:where(body:not(:has(.dbx))) section { padding: 100px 0; border-bottom: 1px solid var(--ink); position: relative; }
 
 .section-tag {
   display: grid;
@@ -4805,7 +4819,7 @@ body.video-active .video-vol-ctrl {
   .stats-inner { gap: 16px; }
   .stat-item { padding: 0 16px; min-width: 80px; }
   .stat-div { display: none; }
-  section { padding: 64px 0; }
+  :where(body:not(:has(.dbx))) section { padding: 64px 0; }
   .section-tag { grid-template-columns: 1fr; gap: 8px; }
   .section-tag .meta { justify-self: start; }
   .diagnostic-grid { grid-template-columns: 1fr; }

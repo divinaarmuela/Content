@@ -224,7 +224,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:px-8">{children}</main>
       </div>
 
       <Toaster />
