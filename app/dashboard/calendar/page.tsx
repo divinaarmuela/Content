@@ -4,5 +4,5 @@ import { redirect } from 'next/navigation'
  *  different zoom level. Kept as a redirect so existing links and bookmarks
  *  still land somewhere sensible. */
 export default function CalendarPage() {
-  redirect('/dashboard/scheduler')
+  redirect('/dashboard/scheduler/calendar')
 }

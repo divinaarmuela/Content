@@ -6,13 +6,13 @@ import { completeCalendarConnect } from '../../../../lib/gcal'
  *  a short result in the query string, never a raw JSON body. */
 export const dynamic = 'force-dynamic'
 
-const AVAILABILITY = '/dashboard/scheduler?view=availability'
+const AVAILABILITY = '/dashboard/scheduler/availability'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const back = (status: string, detail?: string) =>
     NextResponse.redirect(new URL(
-      `${AVAILABILITY}&cal=${status}${detail ? `&detail=${encodeURIComponent(detail)}` : ''}`,
+      `${AVAILABILITY}?cal=${status}${detail ? `&detail=${encodeURIComponent(detail)}` : ''}`,
       url.origin,
     ))
 

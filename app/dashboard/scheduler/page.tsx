@@ -7,13 +7,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import ScheduleCalendar from './ScheduleCalendar'
-import AvailabilityView from './AvailabilityView'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { ExternalLink, ArrowRight, CalendarClock, CalendarDays, ListChecks } from 'lucide-react'
+import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
@@ -39,15 +37,12 @@ const STATUS_BADGE: Record<string, string> = {
   published: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
 }
 
+/** The QUEUE view. Calendar and Availability are sibling routes; the shared
+ *  header and view switcher live in layout.tsx. */
 export default function SchedulerPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
-  // the calendar-connect callback redirects to ?view=availability, so honour it
-  const [view, setView] = useState<'queue' | 'calendar' | 'availability'>(() =>
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('view') === 'availability'
-      ? 'availability' : 'queue')
 
   const load = useCallback(async () => {
     try {
@@ -80,38 +75,6 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Scheduler</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {view === 'queue'
-              ? 'Only client-approved content appears here. Open an item to set platforms, dates, and live links.'
-              : view === 'calendar'
-              ? 'Everything with a date, and whether it actually went out.'
-              : 'Google Calendars side by side — empty space is shootable time.'}
-          </p>
-        </div>
-
-        {/* Queue and Calendar are the same data at two zoom levels — a list of
-            what needs a time, and a grid of what has one. Two separate pages
-            invited the question of which was authoritative. */}
-        <Tabs value={view} onValueChange={v => v && setView(v as 'queue' | 'calendar' | 'availability')} className="ml-auto">
-          <TabsList>
-            <TabsTrigger value="queue" className="gap-1.5">
-              <ListChecks className="h-3.5 w-3.5" /> Queue
-            </TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5" /> Calendar
-            </TabsTrigger>
-            <TabsTrigger value="availability" className="gap-1.5">
-              <CalendarClock className="h-3.5 w-3.5" /> Availability
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {view === 'availability' ? <AvailabilityView /> : view === 'calendar' ? <ScheduleCalendar /> : (
-      <>
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={lane} onValueChange={v => v && setLane(v)}>
           <TabsList>
@@ -211,8 +174,6 @@ export default function SchedulerPage() {
             </TableBody>
           </Table>
         </Card>
-      )}
-      </>
       )}
     </div>
   )
