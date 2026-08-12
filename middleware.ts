@@ -87,6 +87,7 @@ export const config = {
     '/api/audience/:path*',
     '/api/clients/:path*',
     '/api/db-tables/:path*',
+    '/api/gcal/:path*',
     '/api/inbox/:path*',
     '/api/intake-templates/:path*',
     '/api/ingest/:path*',

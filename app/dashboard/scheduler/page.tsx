@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import ScheduleCalendar from './ScheduleCalendar'
+import AvailabilityView from './AvailabilityView'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -42,7 +43,11 @@ export default function SchedulerPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
-  const [view, setView] = useState<'queue' | 'calendar'>('queue')
+  // the calendar-connect callback redirects to ?view=availability, so honour it
+  const [view, setView] = useState<'queue' | 'calendar' | 'availability'>(() =>
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('view') === 'availability'
+      ? 'availability' : 'queue')
 
   const load = useCallback(async () => {
     try {
@@ -81,14 +86,16 @@ export default function SchedulerPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {view === 'queue'
               ? 'Only client-approved content appears here. Open an item to set platforms, dates, and live links.'
-              : 'Everything with a date, and whether it actually went out.'}
+              : view === 'calendar'
+              ? 'Everything with a date, and whether it actually went out.'
+              : 'Google Calendars side by side — empty space is shootable time.'}
           </p>
         </div>
 
         {/* Queue and Calendar are the same data at two zoom levels — a list of
             what needs a time, and a grid of what has one. Two separate pages
             invited the question of which was authoritative. */}
-        <Tabs value={view} onValueChange={v => v && setView(v as 'queue' | 'calendar')} className="ml-auto">
+        <Tabs value={view} onValueChange={v => v && setView(v as 'queue' | 'calendar' | 'availability')} className="ml-auto">
           <TabsList>
             <TabsTrigger value="queue" className="gap-1.5">
               <ListChecks className="h-3.5 w-3.5" /> Queue
@@ -96,11 +103,14 @@ export default function SchedulerPage() {
             <TabsTrigger value="calendar" className="gap-1.5">
               <CalendarDays className="h-3.5 w-3.5" /> Calendar
             </TabsTrigger>
+            <TabsTrigger value="availability" className="gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5" /> Availability
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      {view === 'calendar' ? <ScheduleCalendar /> : (
+      {view === 'availability' ? <AvailabilityView /> : view === 'calendar' ? <ScheduleCalendar /> : (
       <>
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={lane} onValueChange={v => v && setLane(v)}>

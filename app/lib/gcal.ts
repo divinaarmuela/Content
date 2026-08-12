@@ -1,0 +1,205 @@
+import 'server-only'
+import { supabase } from '@/lib/supabase'
+import { decryptSecret, encryptSecret } from './secret-box'
+import { inboxClientId, inboxClientSecret, redirectUriFor } from './inbox-connect'
+import type { CalEvent } from './gcal-core'
+
+/**
+ * Google Calendar for shoot planning — "when are we free".
+ *
+ * Reuses the inbox-connect Internal app (only @mdmmarketing.com.au accounts
+ * can consent; Google enforces the domain). calendar.readonly is a separate
+ * grant from gmail.readonly, so connecting a calendar is its own consent even
+ * for a mailbox that is already scanned.
+ */
+
+const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+
+export type CalendarAccount = {
+  email: string
+  enabled: boolean
+  connected: boolean
+  connected_at: string | null
+  connected_by: string | null
+}
+
+/** Where to send someone to grant calendar access. Same shape as the inbox
+ *  consent URL; prompt=consent + access_type=offline forces a refresh token. */
+export function calendarConsentUrl(req: Request, state: string): string {
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: inboxClientId(),
+    redirect_uri: calendarRedirectUri(req),
+    response_type: 'code',
+    scope: CAL_SCOPE,
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+  })
+}
+
+export function calendarRedirectUri(req: Request): string {
+  return `${new URL(req.url).origin}/api/gcal/connect/callback`
+}
+
+export type CalConnectResult =
+  | { ok: true; email: string }
+  | { ok: false; reason: 'exchange_failed' | 'no_refresh_token' | 'no_email'; detail?: string }
+
+export async function completeCalendarConnect(
+  req: Request, code: string, by: string,
+): Promise<CalConnectResult> {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: inboxClientId(),
+      client_secret: inboxClientSecret(),
+      redirect_uri: calendarRedirectUri(req),
+      grant_type: 'authorization_code',
+    }),
+  })
+  if (!res.ok) return { ok: false, reason: 'exchange_failed', detail: (await res.text()).slice(0, 200) }
+
+  const token = await res.json() as { access_token?: string; refresh_token?: string }
+  if (!token.refresh_token) return { ok: false, reason: 'no_refresh_token' }
+
+  // whose calendar is it? The primary calendar's id IS the account email —
+  // no extra scope needed to learn it.
+  const calRes = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList/primary',
+    { headers: { Authorization: `Bearer ${token.access_token}` } },
+  )
+  const email = String(((await calRes.json()) as { id?: string })?.id ?? '').trim().toLowerCase()
+  if (!email || !email.includes('@')) return { ok: false, reason: 'no_email' }
+
+  const { data: existing } = await supabase
+    .from('calendar_accounts').select('email, enabled').eq('email', email).maybeSingle()
+
+  const { error } = await supabase.from('calendar_accounts').upsert({
+    email,
+    refresh_token_encrypted: encryptSecret(token.refresh_token),
+    connected_at: new Date().toISOString(),
+    connected_by: by,
+    ...(existing ? {} : { enabled: true }),
+  }, { onConflict: 'email' })
+  if (error) return { ok: false, reason: 'exchange_failed', detail: error.message }
+
+  return { ok: true, email }
+}
+
+/** All calendar accounts, tokens never included. */
+export async function listCalendarAccounts(): Promise<CalendarAccount[]> {
+  const { data, error } = await supabase
+    .from('calendar_accounts')
+    .select('email, enabled, connected_at, connected_by, refresh_token_encrypted')
+    .order('email')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(r => ({
+    email: r.email,
+    enabled: r.enabled,
+    connected: Boolean(r.refresh_token_encrypted),
+    connected_at: r.connected_at,
+    connected_by: r.connected_by,
+  }))
+}
+
+export async function setCalendarEnabled(email: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase.from('calendar_accounts')
+    .update({ enabled }).eq('email', email.toLowerCase())
+  if (error) throw new Error(error.message)
+}
+
+/** Forget the token; the row keeps its enabled state for a reconnect. */
+export async function disconnectCalendar(email: string): Promise<void> {
+  const { error } = await supabase.from('calendar_accounts')
+    .update({ refresh_token_encrypted: null, connected_at: null, connected_by: null })
+    .eq('email', email.toLowerCase())
+  if (error) throw new Error(error.message)
+}
+
+// one cached access token per refresh token
+const tokenCache = new Map<string, { token: string; expiresAt: number }>()
+
+async function accessToken(refreshToken: string): Promise<string> {
+  const hit = tokenCache.get(refreshToken)
+  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: inboxClientId(),
+      client_secret: inboxClientSecret(),
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  })
+  if (!res.ok) throw new Error(`Calendar token exchange failed: ${await res.text()}`)
+  const json = await res.json()
+  tokenCache.set(refreshToken, { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 })
+  return json.access_token
+}
+
+type GoogleEvent = {
+  status?: string
+  summary?: string
+  transparency?: string
+  start?: { dateTime?: string; date?: string }
+  end?: { dateTime?: string; date?: string }
+}
+
+/**
+ * Events from every ENABLED connected calendar in [timeMin, timeMax).
+ *
+ * One calendar failing (revoked token, suspended account) must not blank the
+ * whole availability view — its error is reported alongside the others'
+ * events. Google marks "free" (transparent) events; they are kept, because a
+ * placeholder like "maybe shoot?" is exactly what shoot planning wants to see.
+ */
+export async function listCalendarEvents(
+  timeMin: string, timeMax: string,
+): Promise<{ events: CalEvent[]; errors: { calendar: string; message: string }[] }> {
+  const { data, error } = await supabase
+    .from('calendar_accounts')
+    .select('email, refresh_token_encrypted')
+    .eq('enabled', true)
+    .not('refresh_token_encrypted', 'is', null)
+  if (error) throw new Error(error.message)
+
+  const events: CalEvent[] = []
+  const errors: { calendar: string; message: string }[] = []
+
+  await Promise.all((data ?? []).map(async row => {
+    try {
+      const token = await accessToken(decryptSecret(row.refresh_token_encrypted!))
+      const url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?' +
+        new URLSearchParams({
+          timeMin, timeMax,
+          singleEvents: 'true',   // expand recurring events into instances
+          orderBy: 'startTime',
+          maxResults: '250',
+          fields: 'items(status,summary,transparency,start,end)',
+        })
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 160)}`)
+      const json = await res.json() as { items?: GoogleEvent[] }
+
+      for (const e of json.items ?? []) {
+        if (e.status === 'cancelled') continue
+        const allDay = Boolean(e.start?.date)
+        const start = e.start?.dateTime ?? e.start?.date
+        const end = e.end?.dateTime ?? e.end?.date
+        if (!start || !end) continue
+        events.push({
+          calendar: row.email,
+          title: e.summary?.trim() || '(untitled)',
+          start, end, allDay,
+        })
+      }
+    } catch (err) {
+      errors.push({ calendar: row.email, message: err instanceof Error ? err.message : String(err) })
+    }
+  }))
+
+  return { events, errors }
+}
