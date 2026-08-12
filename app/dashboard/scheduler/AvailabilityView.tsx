@@ -327,8 +327,10 @@ export default function AvailabilityView() {
         ))}
 
         <Button variant="outline" size="sm" asChild>
-          {/* full navigation, not fetch: the route replies with a redirect to Google */}
-          <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Connect calendar</a>
+          {/* full navigation, not fetch: the route replies with a redirect to Google.
+              "Add", not "Connect" — next to a connected chip, "Connect calendar"
+              read as if the connect had not worked. */}
+          <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Add calendar</a>
         </Button>
 
         <div className="ml-auto flex items-center gap-1">
