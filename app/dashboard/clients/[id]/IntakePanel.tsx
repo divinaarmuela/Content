@@ -90,6 +90,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   const [newType, setNewType] = useState('ongoing')
   const [newTitle, setNewTitle] = useState('')
   const [copyFrom, setCopyFrom] = useState('')
+  // every form across every client, for "start from an existing form"
+  const [copySources, setCopySources] = useState<
+    { id: string; title: string; client: string; questions: number }[]
+  >([])
   const [editing, setEditing] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -235,13 +239,38 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   A shareable link with no login. Start from a template, then tailor the questions.
                 </p>
               </div>
-              <Button size="sm" className="ml-auto" onClick={() => setCreating(true)}>
+              <Button size="sm" className="ml-auto" onClick={() => {
+                setCreating(true)
+                // fetched on open, not on mount — most visits never create
+                fetch(`/api/clients/${clientId}/intake?copy_sources=1`)
+                  .then(r => r.ok ? r.json() : { sources: [] })
+                  .then(j => setCopySources(j.sources ?? []))
+                  .catch(() => {})
+              }}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" /> New form
               </Button>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold">New intake form</h3>
+
+              {/* start from an existing form — any client's — or a blank template */}
+              {copySources.length > 0 && (
+                <select
+                  value={copyFrom}
+                  onChange={e => setCopyFrom(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Start from a blank template ↓</option>
+                  {copySources.map(s => (
+                    <option key={s.id} value={s.id}>
+                      Duplicate: {s.client} — {s.title} ({s.questions} questions)
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {!copyFrom && (
               <div className="flex flex-wrap gap-2">
                 {TYPES.map(t => (
                   <button
@@ -257,6 +286,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   </button>
                 ))}
               </div>
+              )}
               <Input
                 value={newTitle} placeholder="Name it (optional), e.g. Rebuild campaign brief"
                 onChange={e => setNewTitle(e.target.value)}

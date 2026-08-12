@@ -25,10 +25,31 @@ import {
  * to a different client cannot be operated on by someone who knows it.
  */
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireRole('editor')
     const { id } = await params
+
+    // ?copy_sources=1 — every form across every client, light fields only,
+    // for the "start from an existing form" picker when creating a new one.
+    if (new URL(req.url).searchParams.get('copy_sources')) {
+      const { data, error } = await supabase
+        .from('intake_forms')
+        .select('id, title, template_key, definition, clients(name)')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (error) throw new Error(error.message)
+      return NextResponse.json({
+        sources: (data ?? []).map(f => ({
+          id: f.id,
+          title: f.title || 'Intake form',
+          client: (f.clients as { name?: string } | null)?.name ?? '—',
+          questions: completion(
+            normaliseDefinition(f.definition, (f.template_key ?? 'one_off') as TemplateKey), {},
+          ).total,
+        })),
+      })
+    }
     const [forms, team, defaultRecipients] = await Promise.all([
       listIntakeFormsForClient(id), listTeamRecipients(), getIntakeDefaultRecipients(),
     ])
