@@ -15,6 +15,65 @@ import type { JournalPost } from '../lib/journalPosts'
  * reasoning as the /work service chips. A topic typed in the CMS becomes a
  * filter here with nothing else to edit.
  */
+function SubscribeForm() {
+  const [email, setEmail] = useState('')
+  const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (state === 'sending') return
+    setState('sending')
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      setState('done')
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Something went wrong')
+      setState('error')
+    }
+  }
+
+  if (state === 'done') {
+    return (
+      <p className="mt-6 font-lamam text-xs uppercase tracking-[0.06em] text-cream">
+        You&rsquo;re on the list. First field notes coming soon. ✓
+      </p>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-6">
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={e => { setEmail(e.target.value); if (state === 'error') setState('idle') }}
+          placeholder="your@email.com"
+          aria-label="Email address"
+          className="min-w-0 flex-1 basis-52 rounded-full border border-cream/25 bg-transparent px-6 py-4 font-lamam text-[16px] text-cream placeholder:text-cream/35 focus:border-cream/60 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={state === 'sending'}
+          className="inline-flex items-center gap-2 rounded-full bg-cream px-7 py-4 font-lamam text-xs font-bold uppercase tracking-[0.06em] text-ink transition-opacity duration-300 hover:opacity-85 disabled:opacity-50"
+        >
+          {state === 'sending' ? 'subscribing…' : 'subscribe'} <span className="text-sm">&rarr;</span>
+        </button>
+      </div>
+      {state === 'error' && (
+        <p className="mt-3 font-lamam text-xs tracking-[0.06em] text-[#E2725B]">{message}</p>
+      )}
+    </form>
+  )
+}
+
 export default function JournalIndex({ posts }: { posts: JournalPost[] }) {
   const [topic, setTopic] = useState<string>('all')
 
@@ -181,10 +240,7 @@ export default function JournalIndex({ posts }: { posts: JournalPost[] }) {
         )}
       </section>
 
-      {/* ── NEWSLETTER ──
-          A mailto rather than a fake subscribe box: there is no list to add
-          anyone to yet, and a form that silently does nothing is worse than
-          an honest link. Swap the href for a real endpoint when one exists. */}
+      {/* ── NEWSLETTER ── collects into newsletter_subscribers via /api/subscribe */}
       <section className="border-t border-cream/[0.12] px-6 py-[clamp(70px,11vh,140px)] sm:px-10">
         <div className="grid items-center gap-[clamp(28px,5vw,80px)] lg:grid-cols-[1.1fr_1fr]">
           <h2 className="m-0 font-lamah font-medium text-cream leading-[1.05] tracking-[-0.03em] text-[clamp(1.8rem,4vw,3rem)]">
@@ -195,12 +251,7 @@ export default function JournalIndex({ posts }: { posts: JournalPost[] }) {
               Occasional, practical writing on getting seen, known, and booked. No spam,
               unsubscribe anytime.
             </p>
-            <a
-              href="mailto:hello@mdmmarketing.com.au?subject=Subscribe%20to%20field%20notes"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-cream px-7 py-4 font-lamam text-xs font-bold uppercase tracking-[0.06em] text-ink no-underline transition-opacity duration-300 hover:opacity-85"
-            >
-              subscribe <span className="text-sm">&rarr;</span>
-            </a>
+            <SubscribeForm />
           </div>
         </div>
       </section>
