@@ -93,21 +93,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // repaired the same way any stored definition is.
     let copyFrom: TemplateDefinition | undefined
     let copyNotify: string[] | null | undefined
+    let title = String(body?.title ?? '').trim()
     const sourceId = String(body?.copy_from_form_id ?? '')
     if (sourceId) {
       const { data: src } = await supabase
         .from('intake_forms')
-        .select('definition, template_key, client_id, notify_emails')
+        .select('definition, template_key, client_id, notify_emails, title')
         .eq('id', sourceId).maybeSingle()
       if (src?.definition) {
         copyFrom = normaliseDefinition(src.definition, (src.template_key ?? key) as TemplateKey)
         // recipients follow the questions only within the same client — another
         // client's notification list must never be inherited silently
         if (src.client_id === id) copyNotify = src.notify_emails ?? null
+        // an unrenamed duplicate must not be a twin of its source — two forms
+        // named identically is how the wrong link gets sent
+        if (!title) title = `${String(src.title ?? '').trim() || 'Intake form'} (copy)`
       }
     }
 
-    const form = await createIntakeForm(id, key, admin.id, String(body?.title ?? ''), copyFrom, copyNotify)
+    const form = await createIntakeForm(id, key, admin.id, title, copyFrom, copyNotify)
     return NextResponse.json(
       { id: form.id, token: form.token, status: form.status, title: form.title },
       { status: 201 },
