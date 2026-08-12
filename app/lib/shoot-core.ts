@@ -5,11 +5,12 @@
 
 export type ShootStatus = 'pending' | 'accepted' | 'declined' | 'cancelled'
 
-/** A client may change their answer while plans are still changeable — a
- *  declined shoot can become accepted and vice versa. A cancelled proposal is
- *  the team's deliberate act and the token stops working. */
+/** The FIRST answer is final. The link is shared between several recipients,
+ *  so a changeable answer would let someone with a stale tab silently reverse
+ *  a teammate's booking. Changing plans goes through MD Media, who cancel and
+ *  re-propose. */
 export function canRespond(status: ShootStatus): boolean {
-  return status !== 'cancelled'
+  return status === 'pending'
 }
 
 export function nextStatus(current: ShootStatus, answer: 'yes' | 'no'): ShootStatus {

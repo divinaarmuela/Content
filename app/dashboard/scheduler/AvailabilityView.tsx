@@ -81,6 +81,7 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
   const [knownEmails, setKnownEmails] = useState<{ email: string; label: string }[]>([])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [customEmail, setCustomEmail] = useState('')
+  const [notifyEmails, setNotifyEmails] = useState('hello@mdmmarketing.com.au')
   const [location, setLocation] = useState('')
   const [note, setNote] = useState('')
   const [sending, setSending] = useState(false)
@@ -121,9 +122,21 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
         }
       } catch { /* contacts are optional — the base email below still works */ }
       add(c.email, `${c.name} — ${c.email?.toLowerCase()}`)
+
+      // who hears the answer: this client's account managers, else hello@
+      let managers: string[] = []
+      try {
+        const res = await fetch(`/api/clients/${c.id}/managers`)
+        if (res.ok) {
+          const json = await res.json() as { managers?: { email?: string }[] }
+          managers = (json.managers ?? []).map(m => (m.email ?? '').toLowerCase()).filter(Boolean)
+        }
+      } catch { /* fall back to the default below */ }
+
       if (stale) return
       setKnownEmails(options)
       setPicked(new Set(options.length > 0 ? [options[0].email] : []))
+      setNotifyEmails(managers.length > 0 ? managers.join(', ') : 'hello@mdmmarketing.com.au')
     })()
     return () => { stale = true }
   }, [clientId, clients])
@@ -149,6 +162,7 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
           starts_at: `${day}T${start}:00+10:00`,
           ends_at: `${day}T${end}:00+10:00`,
           send_to: recipients,
+          notify_emails: notifyEmails.split(',').map(s => s.trim()).filter(Boolean),
           location, note,
         }),
       })
@@ -218,6 +232,13 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
             <Input
               type="text" value={customEmail} onChange={e => setCustomEmail(e.target.value)}
               placeholder={knownEmails.length > 0 ? 'More emails, comma separated (optional)' : 'client@business.com, other@business.com'}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label>Notify on answer <span className="text-xs text-zinc-400">(prefilled with the client&rsquo;s account managers)</span></Label>
+            <Input
+              value={notifyEmails} onChange={e => setNotifyEmails(e.target.value)}
+              placeholder="hello@mdmmarketing.com.au"
             />
           </div>
           <div className="grid gap-1.5">

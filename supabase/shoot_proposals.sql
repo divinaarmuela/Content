@@ -25,6 +25,9 @@ create table if not exists shoot_proposals (
 
 create index if not exists shoot_proposals_time_idx on shoot_proposals (starts_at);
 
+-- Who on the team hears about the answer. Null/empty = the sending mailbox.
+alter table shoot_proposals add column if not exists notify_emails text[];
+
 alter table shoot_proposals enable row level security;
 
 

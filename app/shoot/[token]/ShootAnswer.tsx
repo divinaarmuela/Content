@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CAL_TZ } from '../../lib/gcal-core'
 import type { ShootStatus } from '../../lib/shoot-core'
 
 /**
- * Yes / No, in the same dark visual world as the intake form. A cancelled
- * proposal reads as no longer available; an answered one shows the current
- * answer and still lets them change it — plans change, and a stale "yes"
- * nobody can retract is worse than a changed one the team hears about.
+ * Yes / No, in the same dark visual world as the intake form.
+ *
+ * The FIRST answer is final — the link is shared between several recipients,
+ * so the page re-checks the status when the tab regains focus (and on a slow
+ * poll) and locks itself the moment a co-recipient has answered. A cancelled
+ * proposal reads as no longer available.
  */
 export default function ShootAnswer({
   token, clientName, title, startsAt, endsAt, location, note, initialStatus,
@@ -24,6 +26,7 @@ export default function ShootAnswer({
 }) {
   const [status, setStatus] = useState<ShootStatus>(initialStatus)
   const [sending, setSending] = useState<'yes' | 'no' | null>(null)
+  const [beaten, setBeaten] = useState(false) // their click arrived second
   const [error, setError] = useState('')
 
   const day = new Date(startsAt).toLocaleDateString('en-AU', {
@@ -31,6 +34,22 @@ export default function ShootAnswer({
   })
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString('en-AU', { timeZone: CAL_TZ, hour: 'numeric', minute: '2-digit' })
+
+  // a pre-opened tab catches up when they come back to it
+  const sync = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/shoot/${token}`)
+      if (res.ok) setStatus((await res.json()).status as ShootStatus)
+    } catch { /* offline — the answer POST still re-checks server-side */ }
+  }, [token])
+
+  useEffect(() => {
+    if (status !== 'pending') return
+    const onFocus = () => void sync()
+    window.addEventListener('focus', onFocus)
+    const id = window.setInterval(() => void sync(), 60_000)
+    return () => { window.removeEventListener('focus', onFocus); window.clearInterval(id) }
+  }, [status, sync])
 
   const answer = async (a: 'yes' | 'no') => {
     if (sending) return
@@ -45,6 +64,7 @@ export default function ShootAnswer({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
       setStatus(json.status as ShootStatus)
+      setBeaten(json.applied === false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong — please try again')
     } finally {
@@ -52,7 +72,7 @@ export default function ShootAnswer({
     }
   }
 
-  const pill = (a: 'yes' | 'no', label: string, active: boolean) => (
+  const pill = (a: 'yes' | 'no', label: string) => (
     <button
       type="button"
       onClick={() => void answer(a)}
@@ -61,12 +81,8 @@ export default function ShootAnswer({
         'rounded-full px-8 py-4 font-lamam text-[12px] font-bold uppercase tracking-widest transition-opacity ' +
         'disabled:opacity-50 ' +
         (a === 'yes'
-          ? active
-            ? 'bg-cream text-ink'
-            : 'bg-cream text-ink hover:opacity-85'
-          : active
-            ? 'border border-cream/60 bg-transparent text-cream'
-            : 'border border-cream/30 bg-transparent text-cream-dim hover:border-cream/60 hover:text-cream')
+          ? 'bg-cream text-ink hover:opacity-85'
+          : 'border border-cream/30 bg-transparent text-cream-dim hover:border-cream/60 hover:text-cream')
       }
     >
       {sending === a ? '…' : label}
@@ -104,26 +120,34 @@ export default function ShootAnswer({
         <p className="mt-10 max-w-[40ch] text-center font-lamam text-[12px] uppercase tracking-widest leading-relaxed text-cream-faint">
           This proposal is no longer active — we&rsquo;ll be in touch with a new date.
         </p>
-      ) : (
+      ) : status === 'pending' ? (
         <>
-          {status !== 'pending' && (
-            <p className="mt-10 font-lamam text-[11px] uppercase tracking-widest text-cream">
-              {status === 'accepted'
-                ? 'Locked in ✓ — a calendar invite is on its way to your inbox'
-                : 'Noted — we’ll propose another date'}
-            </p>
-          )}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
-            {pill('yes', status === 'accepted' ? 'Yes — confirmed' : 'Yes, works for us', status === 'accepted')}
-            {pill('no', status === 'declined' ? 'No — declined' : 'No, that doesn’t work', status === 'declined')}
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+            {pill('yes', 'Yes, works for us')}
+            {pill('no', 'No, that doesn’t work')}
           </div>
-          {status !== 'pending' && (
-            <p className="mt-5 font-lamah text-[13px] text-cream-faint">
-              Changed your mind? Just answer again — we&rsquo;ll get the update.
-            </p>
-          )}
           {error && <p className="mt-5 font-lamam text-[12px] tracking-widest text-[#E2725B]">{error}</p>}
         </>
+      ) : (
+        <div className="mt-10 flex flex-col items-center gap-3 text-center">
+          <p className="font-lamam text-[11px] uppercase tracking-widest text-cream">
+            {status === 'accepted'
+              ? 'Locked in ✓ — a calendar invite is on its way'
+              : 'Declined — we’ll propose another date'}
+          </p>
+          {beaten && (
+            <p className="max-w-[42ch] font-lamah text-[14px] leading-relaxed text-cream-dim">
+              Someone from your side answered just before you, so their answer stands.
+            </p>
+          )}
+          <p className="max-w-[42ch] font-lamah text-[13px] text-cream-faint">
+            Plans changed? Email{' '}
+            <a href="mailto:hello@mdmmarketing.com.au" className="text-cream-dim underline">
+              hello@mdmmarketing.com.au
+            </a>{' '}
+            and we&rsquo;ll sort a new date.
+          </p>
+        </div>
       )}
     </div>
   )

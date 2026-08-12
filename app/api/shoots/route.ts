@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
+import { normaliseRecipients } from '../../lib/intake-core'
 import { createShootProposal, listShootProposals, listAllShootProposals } from '../../lib/shoots'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +63,8 @@ export async function POST(req: NextRequest) {
       location: String(body.location ?? '').trim().slice(0, 200) || null,
       note: String(body.note ?? '').trim().slice(0, 1000) || null,
       send_to,
+      // cleaned like the intake lists: lowercased, deduped, implausible dropped
+      notify_emails: normaliseRecipients(body.notify_emails),
       created_by: user.email,
     })
     return NextResponse.json({ proposal })

@@ -7,15 +7,21 @@ describe('shoot status machine', () => {
     expect(nextStatus('pending', 'no')).toBe('declined')
   })
 
-  it('answers can change while plans are changeable', () => {
-    expect(nextStatus('accepted', 'no')).toBe('declined')
-    expect(nextStatus('declined', 'yes')).toBe('accepted')
+  it('the FIRST answer is final — a second click cannot reverse it', () => {
+    expect(canRespond('accepted')).toBe(false)
+    expect(canRespond('declined')).toBe(false)
+    expect(nextStatus('accepted', 'no')).toBe('accepted')
+    expect(nextStatus('declined', 'yes')).toBe('declined')
   })
 
   it('a cancelled proposal stops accepting answers', () => {
     expect(canRespond('cancelled')).toBe(false)
     expect(nextStatus('cancelled', 'yes')).toBe('cancelled')
     expect(nextStatus('cancelled', 'no')).toBe('cancelled')
+  })
+
+  it('only pending can be answered', () => {
+    expect(canRespond('pending')).toBe(true)
   })
 })
 

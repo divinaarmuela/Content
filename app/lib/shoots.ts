@@ -2,7 +2,7 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { notify, renderEmail } from './mailer'
 import { publicUrl } from './public-url'
-import { canRespond, nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
+import { nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
 import { CAL_TZ } from './gcal-core'
 
 /**
@@ -22,10 +22,19 @@ export type ShootProposal = {
   location: string | null
   note: string | null
   send_to: string
+  /** team addresses told about the answer; null/empty = the sending mailbox */
+  notify_emails: string[] | null
   status: ShootStatus
   created_by: string | null
   responded_at: string | null
   clients?: { name: string } | null
+}
+
+/** Who on the team hears about the answer. */
+const teamRecipients = (p: ShootProposal): string[] => {
+  if (p.notify_emails && p.notify_emails.length > 0) return p.notify_emails
+  const fallback = (process.env.GMAIL_USER ?? '').toLowerCase()
+  return fallback ? [fallback] : []
 }
 
 const fmtRange = (startsAt: string, endsAt: string): string => {
@@ -45,6 +54,7 @@ export async function createShootProposal(input: {
   location?: string | null
   note?: string | null
   send_to: string[]
+  notify_emails?: string[]
   created_by: string
 }): Promise<ShootProposal> {
   const recipients = [...new Set(input.send_to.map(e => e.trim().toLowerCase()).filter(Boolean))]
@@ -58,6 +68,7 @@ export async function createShootProposal(input: {
       location: input.location || null,
       note: input.note || null,
       send_to: recipients.join(', '),
+      notify_emails: input.notify_emails?.length ? input.notify_emails : null,
       created_by: input.created_by,
     })
     .select('*, clients(name)')
@@ -168,39 +179,44 @@ export async function cancelShootProposal(id: string): Promise<void> {
 }
 
 /**
- * The client's answer. Repeatable — plans change, the latest answer wins and
- * the team hears about every change. Returns null for an unknown token or a
- * cancelled proposal.
+ * The client's answer. The FIRST one is final: the update is conditional on
+ * status still being pending (optimistic concurrency, never check-then-write),
+ * so when two recipients race, exactly one answer lands and the loser is told
+ * what the winner chose. Returns null for an unknown token.
  */
 export async function respondToShoot(
   token: string, answer: 'yes' | 'no',
-): Promise<ShootProposal | null> {
-  const current = await getShootByToken(token)
-  if (!current || !canRespond(current.status)) return null
-
-  const status = nextStatus(current.status, answer)
+): Promise<{ proposal: ShootProposal; applied: boolean } | null> {
+  const status = nextStatus('pending', answer)
   const { data, error } = await supabase
     .from('shoot_proposals')
     .update({ status, responded_at: new Date().toISOString() })
     .eq('token', token)
+    .eq('status', 'pending')   // zero rows = answered or cancelled already
     .select('*, clients(name)')
-    .single()
+    .maybeSingle()
   if (error) throw new Error(error.message)
+
+  if (!data) {
+    // someone beat them to it (or the team cancelled) — report, don't apply
+    const current = await getShootByToken(token)
+    return current ? { proposal: current, applied: false } : null
+  }
   const proposal = data as ShootProposal
 
   const team = (process.env.GMAIL_USER ?? '').toLowerCase()
   const clientName = proposal.clients?.name ?? 'The client'
   const when = fmtRange(proposal.starts_at, proposal.ends_at)
 
-  // team heads-up — entityId varies per response so a changed answer is not
-  // swallowed by the notification dedupe key
-  if (team) {
+  // team heads-up — only the answer that actually landed gets announced, to
+  // the proposal's own notify list (or the sending mailbox by default)
+  await Promise.all(teamRecipients(proposal).map(async teamTo => {
     try {
       await notify({
         eventType: `shoot_${status}`,
         entityType: 'shoot_proposal',
         entityId: `${proposal.id}:${proposal.responded_at}`,
-        recipientEmail: team,
+        recipientEmail: teamTo,
         subject: status === 'accepted'
           ? `✅ ${clientName} accepted — ${proposal.title}`
           : `❌ ${clientName} declined — ${proposal.title}`,
@@ -222,7 +238,7 @@ export async function respondToShoot(
               endsAt: proposal.ends_at,
               location: proposal.location,
               note: proposal.note,
-              organizerEmail: team,
+              organizerEmail: team || 'hello@mdmmarketing.com.au',
               attendeeEmail: splitRecipients(proposal.send_to)[0] ?? proposal.send_to,
             })),
             contentType: 'text/calendar; method=REQUEST',
@@ -230,9 +246,9 @@ export async function respondToShoot(
         } : {}),
       })
     } catch (e) {
-      console.error('shoot response team email failed:', e)
+      console.error(`shoot response team email failed for ${teamTo}:`, e)
     }
-  }
+  }))
 
   // confirmation + calendar file for every recipient, only on yes
   if (status === 'accepted') {
@@ -249,7 +265,7 @@ export async function respondToShoot(
           `<p><strong>${proposal.title}</strong></p><p>${when}` +
           (proposal.location ? `<br>${proposal.location}` : '') + `</p>` +
           `<p>The attached calendar file adds it to your calendar in one click. ` +
-          `If anything changes, use your original link to update your answer.</p>`,
+          `If anything changes, just reply to this email and we&rsquo;ll sort a new date.</p>`,
         ),
         attachments: [{
           filename: 'shoot.ics',
@@ -272,5 +288,5 @@ export async function respondToShoot(
     }))
   }
 
-  return proposal
+  return { proposal, applied: true }
 }
