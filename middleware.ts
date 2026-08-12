@@ -95,6 +95,7 @@ export const config = {
     '/api/portal/:path*',
     '/api/production/:path*',
     '/api/reports/:path*',
+    '/api/shoots/:path*',
     '/api/social/:path*',
     '/api/team/:path*',
     '/api/website/:path*',
