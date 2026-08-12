@@ -37,6 +37,12 @@ const fmtRange = (startsAt: string, endsAt: string): string => {
   return `${day}, ${t(startsAt)} – ${t(endsAt)}`
 }
 
+/** send_to is stored as a comma-joined list; every address on it receives the
+ *  invitation and, on a yes, the confirmation. One link, any of them answers —
+ *  two founders coordinate between themselves, not through us. */
+export const splitRecipients = (sendTo: string): string[] =>
+  sendTo.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
 export async function createShootProposal(input: {
   client_id: string
   title: string
@@ -44,9 +50,10 @@ export async function createShootProposal(input: {
   ends_at: string
   location?: string | null
   note?: string | null
-  send_to: string
+  send_to: string[]
   created_by: string
 }): Promise<ShootProposal> {
+  const recipients = [...new Set(input.send_to.map(e => e.trim().toLowerCase()).filter(Boolean))]
   const { data, error } = await supabase
     .from('shoot_proposals')
     .insert({
@@ -56,7 +63,7 @@ export async function createShootProposal(input: {
       ends_at: input.ends_at,
       location: input.location || null,
       note: input.note || null,
-      send_to: input.send_to.toLowerCase(),
+      send_to: recipients.join(', '),
       created_by: input.created_by,
     })
     .select('*, clients(name)')
@@ -64,29 +71,33 @@ export async function createShootProposal(input: {
   if (error) throw new Error(error.message)
   const proposal = data as ShootProposal
 
-  // The invitation. Yes and No are the same link — the answer is a button
-  // press on the page, never a GET an email scanner could prefetch.
-  try {
-    await notify({
-      eventType: 'shoot_proposed',
-      entityType: 'shoot_proposal',
-      entityId: proposal.id,
-      recipientEmail: proposal.send_to,
-      subject: `Shoot proposal — ${fmtRange(proposal.starts_at, proposal.ends_at)}`,
-      bodyHtml: renderEmail(
-        'We have a shoot date for you',
-        `<p><strong>${proposal.title}</strong></p>` +
-        `<p>${fmtRange(proposal.starts_at, proposal.ends_at)}` +
-        (proposal.location ? `<br>${proposal.location}` : '') + `</p>` +
-        (proposal.note ? `<p>${proposal.note}</p>` : '') +
-        `<p>Does this work for you? Answer with one click — yes or no, either helps us plan.</p>`,
-        'Answer yes or no',
-        publicUrl(`/shoot/${proposal.token}`),
-      ),
-    })
-  } catch (e) {
-    console.error('shoot proposal email failed:', e)
-  }
+  // The invitation, to every recipient. Yes and No are the same link — the
+  // answer is a button press on the page, never a GET an email scanner could
+  // prefetch. notify() dedupes per (event, entity, recipient), so each address
+  // gets exactly one.
+  await Promise.all(recipients.map(async to => {
+    try {
+      await notify({
+        eventType: 'shoot_proposed',
+        entityType: 'shoot_proposal',
+        entityId: proposal.id,
+        recipientEmail: to,
+        subject: `Shoot proposal — ${fmtRange(proposal.starts_at, proposal.ends_at)}`,
+        bodyHtml: renderEmail(
+          'We have a shoot date for you',
+          `<p><strong>${proposal.title}</strong></p>` +
+          `<p>${fmtRange(proposal.starts_at, proposal.ends_at)}` +
+          (proposal.location ? `<br>${proposal.location}` : '') + `</p>` +
+          (proposal.note ? `<p>${proposal.note}</p>` : '') +
+          `<p>Does this work for you? Answer with one click — yes or no, either helps us plan.</p>`,
+          'Answer yes or no',
+          publicUrl(`/shoot/${proposal.token}`),
+        ),
+      })
+    } catch (e) {
+      console.error(`shoot proposal email failed for ${to}:`, e)
+    }
+  }))
 
   return proposal
 }
@@ -175,7 +186,7 @@ export async function respondToShoot(
               location: proposal.location,
               note: proposal.note,
               organizerEmail: team,
-              attendeeEmail: proposal.send_to,
+              attendeeEmail: splitRecipients(proposal.send_to)[0] ?? proposal.send_to,
             })),
             contentType: 'text/calendar; method=REQUEST',
           }],
@@ -186,14 +197,15 @@ export async function respondToShoot(
     }
   }
 
-  // confirmation + calendar file for the client, only on yes
+  // confirmation + calendar file for every recipient, only on yes
   if (status === 'accepted') {
+    await Promise.all(splitRecipients(proposal.send_to).map(async to => {
     try {
       await notify({
         eventType: 'shoot_confirmed_client',
         entityType: 'shoot_proposal',
         entityId: `${proposal.id}:${proposal.responded_at}`,
-        recipientEmail: proposal.send_to,
+        recipientEmail: to,
         subject: `Locked in — ${proposal.title}`,
         bodyHtml: renderEmail(
           'Shoot confirmed',
@@ -212,14 +224,15 @@ export async function respondToShoot(
             location: proposal.location,
             note: proposal.note,
             organizerEmail: team || 'hello@mdmmarketing.com.au',
-            attendeeEmail: proposal.send_to,
+            attendeeEmail: to,
           })),
           contentType: 'text/calendar; method=REQUEST',
         }],
       })
     } catch (e) {
-      console.error('shoot confirmation email failed:', e)
+      console.error(`shoot confirmation email failed for ${to}:`, e)
     }
+    }))
   }
 
   return proposal

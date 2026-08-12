@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
     const title = String(body.title ?? '').trim().slice(0, 200)
     const starts_at = String(body.starts_at ?? '')
     const ends_at = String(body.ends_at ?? '')
-    const send_to = String(body.send_to ?? '').trim().toLowerCase()
+    // one address or several — a string still works for older callers
+    const send_to = (Array.isArray(body.send_to) ? body.send_to : [body.send_to])
+      .map((e: unknown) => String(e ?? '').trim().toLowerCase()).filter(Boolean)
 
     if (!client_id) return NextResponse.json({ error: 'Pick a client' }, { status: 400 })
     if (!title) return NextResponse.json({ error: 'Give the shoot a title' }, { status: 400 })
@@ -41,8 +43,12 @@ export async function POST(req: NextRequest) {
     if (Date.parse(ends_at) <= Date.parse(starts_at)) {
       return NextResponse.json({ error: 'The shoot must end after it starts' }, { status: 400 })
     }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(send_to)) {
-      return NextResponse.json({ error: 'Enter a valid email to send the proposal to' }, { status: 400 })
+    if (send_to.length === 0) {
+      return NextResponse.json({ error: 'Pick at least one recipient' }, { status: 400 })
+    }
+    const bad = send_to.find((e: string) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+    if (bad) {
+      return NextResponse.json({ error: `"${bad}" is not a valid email address` }, { status: 400 })
     }
 
     const proposal = await createShootProposal({

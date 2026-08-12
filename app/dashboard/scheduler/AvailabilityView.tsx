@@ -74,22 +74,65 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
   const [title, setTitle] = useState('')
   const [start, setStart] = useState('09:00')
   const [end, setEnd] = useState('12:00')
-  const [sendTo, setSendTo] = useState('')
+  // known addresses for the picked client: their base email + every contact,
+  // deduplicated. Any number can be ticked; extra addresses are typed below.
+  const [knownEmails, setKnownEmails] = useState<{ email: string; label: string }[]>([])
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [customEmail, setCustomEmail] = useState('')
   const [location, setLocation] = useState('')
   const [note, setNote] = useState('')
   const [sending, setSending] = useState(false)
 
-  // reset per open, and prefill the To address when a client is picked
+  const recipients = useMemo(() => [
+    ...picked,
+    ...customEmail.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+  ], [picked, customEmail])
+
+  // reset per open
   useEffect(() => {
-    if (day) { setTitle(''); setLocation(''); setNote(''); setSending(false) }
+    if (day) { setTitle(''); setLocation(''); setNote(''); setSending(false); setCustomEmail('') }
   }, [day])
+
+  // a picked client brings their address book with them; the primary contact
+  // (or the base email) starts ticked
   useEffect(() => {
     const c = clients.find(c => c.id === clientId)
-    if (c) {
-      setSendTo(c.email ?? '')
-      setTitle(t => t || `Content shoot — ${c.name}`)
-    }
+    if (!c) return
+    setTitle(t => t || `Content shoot — ${c.name}`)
+
+    let stale = false
+    ;(async () => {
+      const seen = new Set<string>()
+      const options: { email: string; label: string }[] = []
+      const add = (email: string | null | undefined, label: string) => {
+        const e = (email ?? '').trim().toLowerCase()
+        if (!e || seen.has(e)) return
+        seen.add(e)
+        options.push({ email: e, label })
+      }
+      try {
+        const res = await fetch(`/api/website/clients/${c.id}/contacts`)
+        if (res.ok) {
+          const contacts = await res.json() as { name?: string; email?: string; is_primary?: boolean }[]
+          const sorted = [...contacts].sort((a, b) => Number(b.is_primary ?? false) - Number(a.is_primary ?? false))
+          for (const ct of sorted) add(ct.email, ct.name ? `${ct.name} — ${ct.email?.toLowerCase()}` : ct.email ?? '')
+        }
+      } catch { /* contacts are optional — the base email below still works */ }
+      add(c.email, `${c.name} — ${c.email?.toLowerCase()}`)
+      if (stale) return
+      setKnownEmails(options)
+      setPicked(new Set(options.length > 0 ? [options[0].email] : []))
+    })()
+    return () => { stale = true }
   }, [clientId, clients])
+
+  const toggleRecipient = (email: string) =>
+    setPicked(prev => {
+      const next = new Set(prev)
+      if (next.has(email)) next.delete(email)
+      else next.add(email)
+      return next
+    })
 
   const submit = async () => {
     if (sending || !day) return
@@ -103,13 +146,13 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
           title,
           starts_at: `${day}T${start}:00+10:00`,
           ends_at: `${day}T${end}:00+10:00`,
-          send_to: sendTo,
+          send_to: recipients,
           location, note,
         }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not send proposal')
-      toast.success(`Proposal sent to ${sendTo}`)
+      toast.success(`Proposal sent to ${recipients.join(', ')}`)
       onCreated()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not send proposal')
@@ -154,8 +197,26 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label>Send proposal to</Label>
-            <Input type="email" value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="client@business.com" />
+            <Label>Send proposal to <span className="text-xs text-zinc-400">(everyone ticked gets it)</span></Label>
+            {knownEmails.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {knownEmails.map(o => (
+                  <label key={o.email} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(o.email)}
+                      onChange={() => toggleRecipient(o.email)}
+                      className="h-3.5 w-3.5 accent-blue-600"
+                    />
+                    <span className="truncate">{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <Input
+              type="text" value={customEmail} onChange={e => setCustomEmail(e.target.value)}
+              placeholder={knownEmails.length > 0 ? 'More emails, comma separated (optional)' : 'client@business.com, other@business.com'}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label>Location <span className="text-xs text-zinc-400">(optional)</span></Label>
@@ -166,8 +227,8 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
             <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
               placeholder="What we're shooting, what to have ready…" />
           </div>
-          <Button onClick={() => void submit()} disabled={sending || !clientId || !title.trim() || !sendTo.trim()}>
-            {sending ? 'Sending…' : 'Send proposal'}
+          <Button onClick={() => void submit()} disabled={sending || !clientId || !title.trim() || recipients.length === 0}>
+            {sending ? 'Sending…' : recipients.length > 1 ? `Send proposal to ${recipients.length} people` : 'Send proposal'}
           </Button>
         </div>
       </DialogContent>
