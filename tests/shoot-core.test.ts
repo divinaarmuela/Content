@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canRespond, nextStatus, shootIcs } from '../app/lib/shoot-core'
+import { canRespond, nextStatus, shootIcs, splitRecipients } from '../app/lib/shoot-core'
 
 describe('shoot status machine', () => {
   it('pending answers land on accepted or declined', () => {
@@ -16,6 +16,21 @@ describe('shoot status machine', () => {
     expect(canRespond('cancelled')).toBe(false)
     expect(nextStatus('cancelled', 'yes')).toBe('cancelled')
     expect(nextStatus('cancelled', 'no')).toBe('cancelled')
+  })
+})
+
+describe('splitRecipients', () => {
+  it('splits, trims, lowercases and drops blanks', () => {
+    expect(splitRecipients('A@x.com,  b@y.com , ,c@z.com'))
+      .toEqual(['a@x.com', 'b@y.com', 'c@z.com'])
+  })
+
+  it('a single address round-trips', () => {
+    expect(splitRecipients('justin@tkbg.com.au')).toEqual(['justin@tkbg.com.au'])
+  })
+
+  it('an empty list stays empty', () => {
+    expect(splitRecipients('')).toEqual([])
   })
 })
 

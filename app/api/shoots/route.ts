@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
-import { createShootProposal, listShootProposals } from '../../lib/shoots'
+import { createShootProposal, listShootProposals, listAllShootProposals } from '../../lib/shoots'
 
 export const dynamic = 'force-dynamic'
 
-/** Proposals overlapping [from, to) — the Availability week overlay. */
+/** With from/to: proposals overlapping that window (the Availability week).
+ *  Without: every proposal, newest first (the Proposals register). */
 export async function GET(req: NextRequest) {
   try {
     await requireRole('editor')
     const from = req.nextUrl.searchParams.get('from')
     const to = req.nextUrl.searchParams.get('to')
+    if (!from && !to) {
+      return NextResponse.json({ proposals: await listAllShootProposals() })
+    }
     if (!from || !to || isNaN(Date.parse(from)) || isNaN(Date.parse(to))) {
       return NextResponse.json({ error: 'Missing or invalid from/to' }, { status: 400 })
     }

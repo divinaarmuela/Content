@@ -43,7 +43,7 @@ export async function sendRawEmail(input: {
   const { gmailSendRaw } = await import('./gmail')
   const MailComposer = (await import('nodemailer/lib/mail-composer')).default
   const mail = new MailComposer({
-    from: `MD Media Dashboard <${process.env.GMAIL_USER}>`,
+    from: `MD Media <${process.env.GMAIL_USER}>`,
     to: input.to,
     subject: input.subject,
     html: input.html,
@@ -58,7 +58,7 @@ export function renderEmail(title: string, bodyHtml: string, ctaLabel?: string, 
   return `
   <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#fafafa;color:#18181b;">
     <div style="background:#18181b;padding:20px 32px;border-bottom:3px solid #2563eb;">
-      <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#a1a1aa;margin:0;">MD MEDIA · AGENCY OS</p>
+      <p style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#a1a1aa;margin:0;">MD MEDIA</p>
     </div>
     <div style="padding:32px;">
       <h2 style="font-size:18px;margin:0 0 12px;letter-spacing:-0.02em;">${title}</h2>
@@ -127,7 +127,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // 2. we own the row — send, then record the outcome
   try {
     await transporter.sendMail({
-      from: `MD Media Dashboard <${process.env.GMAIL_USER}>`,
+      from: `MD Media <${process.env.GMAIL_USER}>`,
       to: input.recipientEmail,
       subject: input.subject,
       html: input.bodyHtml,

@@ -2,7 +2,7 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { notify, renderEmail } from './mailer'
 import { publicUrl } from './public-url'
-import { canRespond, nextStatus, shootIcs, type ShootStatus } from './shoot-core'
+import { canRespond, nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
 import { CAL_TZ } from './gcal-core'
 
 /**
@@ -36,12 +36,6 @@ const fmtRange = (startsAt: string, endsAt: string): string => {
     new Date(iso).toLocaleTimeString('en-AU', { timeZone: CAL_TZ, hour: 'numeric', minute: '2-digit' })
   return `${day}, ${t(startsAt)} – ${t(endsAt)}`
 }
-
-/** send_to is stored as a comma-joined list; every address on it receives the
- *  invitation and, on a yes, the confirmation. One link, any of them answers —
- *  two founders coordinate between themselves, not through us. */
-export const splitRecipients = (sendTo: string): string[] =>
-  sendTo.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
 
 export async function createShootProposal(input: {
   client_id: string
@@ -114,6 +108,17 @@ export async function listShootProposals(from: string, to: string): Promise<Shoo
   return (data ?? []) as ShootProposal[]
 }
 
+/** Every proposal, newest first — the Proposals register. */
+export async function listAllShootProposals(limit = 200): Promise<ShootProposal[]> {
+  const { data, error } = await supabase
+    .from('shoot_proposals')
+    .select('*, clients(name)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ShootProposal[]
+}
+
 export async function getShootByToken(token: string): Promise<ShootProposal | null> {
   const { data, error } = await supabase
     .from('shoot_proposals')
@@ -124,10 +129,42 @@ export async function getShootByToken(token: string): Promise<ShootProposal | nu
   return data as ShootProposal | null
 }
 
+/**
+ * Cancel a proposal. Every address it was sent to is told — silently pulling
+ * a date someone accepted is how a client turns up to a shoot that is not
+ * happening. The email is best-effort after the write, as everywhere else.
+ */
 export async function cancelShootProposal(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('shoot_proposals').update({ status: 'cancelled' }).eq('id', id)
+  const { data, error } = await supabase
+    .from('shoot_proposals')
+    .update({ status: 'cancelled' })
+    .eq('id', id).neq('status', 'cancelled')
+    .select('*, clients(name)')
+    .maybeSingle()
   if (error) throw new Error(error.message)
+  if (!data) return // already cancelled — nothing to announce twice
+  const proposal = data as ShootProposal
+
+  const when = fmtRange(proposal.starts_at, proposal.ends_at)
+  await Promise.all(splitRecipients(proposal.send_to).map(async to => {
+    try {
+      await notify({
+        eventType: 'shoot_cancelled_client',
+        entityType: 'shoot_proposal',
+        entityId: proposal.id,
+        recipientEmail: to,
+        subject: `Cancelled — ${proposal.title}`,
+        bodyHtml: renderEmail(
+          'Shoot date cancelled',
+          `<p><strong>${proposal.title}</strong></p><p>${when}</p>` +
+          `<p>This date is off — apologies for the change. We&rsquo;ll be in touch ` +
+          `with a new one shortly.</p>`,
+        ),
+      })
+    } catch (e) {
+      console.error(`shoot cancellation email failed for ${to}:`, e)
+    }
+  }))
 }
 
 /**

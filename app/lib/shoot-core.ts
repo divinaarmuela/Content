@@ -17,6 +17,12 @@ export function nextStatus(current: ShootStatus, answer: 'yes' | 'no'): ShootSta
   return answer === 'yes' ? 'accepted' : 'declined'
 }
 
+/** send_to is stored comma-joined; every address on it receives the
+ *  invitation, the confirmation and any cancellation. */
+export function splitRecipients(sendTo: string): string[] {
+  return sendTo.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+}
+
 /** RFC 5545 instant: 20260821T090000Z */
 function icsInstant(iso: string): string {
   return new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')

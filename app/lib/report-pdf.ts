@@ -32,7 +32,7 @@ export function renderLeadsReportPdf(data: LeadsReportData): Promise<Buffer> {
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20)
       .text('Leads Report', PAGE.margin, 34)
     doc.fillColor(FAINT).font('Courier').fontSize(8)
-      .text('MD MEDIA · AGENCY OS', PAGE.margin, 62)
+      .text('MD MEDIA · MARKETING', PAGE.margin, 62)
     doc.fillColor('#ffffff').font('Helvetica').fontSize(11)
       .text(data.monthLabel, PAGE.margin, 78)
     doc.fillColor(FAINT).font('Courier').fontSize(8)

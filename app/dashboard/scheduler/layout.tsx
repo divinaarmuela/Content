@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarClock, CalendarDays, ListChecks } from 'lucide-react'
+import { CalendarClock, CalendarDays, ListChecks, Send } from 'lucide-react'
 
 /**
  * Scheduler shell: the three views are real CHILD ROUTES, not tab state —
@@ -28,6 +28,12 @@ const VIEWS = [
     label: 'Availability',
     icon: CalendarClock,
     blurb: 'Google Calendars side by side — empty space is shootable time.',
+  },
+  {
+    href: '/dashboard/scheduler/proposals',
+    label: 'Proposals',
+    icon: Send,
+    blurb: 'Every shoot invitation sent, its status, and the place to call one off.',
   },
 ]
 

@@ -34,6 +34,8 @@ type Proposal = {
   title: string
   starts_at: string
   ends_at: string
+  location: string | null
+  note: string | null
   status: ShootStatus
   send_to: string
   clients: { name: string } | null
@@ -478,24 +480,31 @@ export default function AvailabilityView() {
                         <div
                           key={p.id}
                           className={`rounded-md px-2 py-1.5 ${PROPOSAL_STYLE[p.status]}`}
-                          title={`${p.title} — ${p.clients?.name ?? ''} (${PROPOSAL_TAG[p.status]})`}
+                          title={[
+                            `${p.title} — ${p.clients?.name ?? ''} (${PROPOSAL_TAG[p.status]})`,
+                            p.location ? `Location: ${p.location}` : null,
+                            `Sent to: ${p.send_to}`,
+                            p.note ? `Note: ${p.note}` : null,
+                          ].filter(Boolean).join('\n')}
                         >
                           <div className="flex items-start justify-between gap-1">
                             <p className="truncate text-xs font-medium">
                               {p.title}{p.clients?.name ? ` · ${p.clients.name}` : ''}
                             </p>
-                            {(p.status === 'pending' || p.status === 'declined') && (
+                            {p.status !== 'cancelled' && (
                               <button
                                 type="button"
-                                title="Cancel this proposal"
-                                aria-label={`Cancel proposal ${p.title}`}
+                                title={p.status === 'accepted' ? 'Cancel this booked shoot' : 'Cancel this proposal'}
+                                aria-label={`Cancel ${p.title}`}
                                 onClick={async () => {
+                                  if (p.status === 'accepted' &&
+                                      !confirm(`Cancel the BOOKED shoot "${p.title}"? Everyone it was sent to gets a cancellation email.`)) return
                                   const res = await fetch(`/api/shoots/${p.id}`, {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ cancel: true }),
                                   })
-                                  if (res.ok) { toast.success('Proposal cancelled'); loadEvents() }
+                                  if (res.ok) { toast.success('Cancelled — recipients emailed'); loadEvents() }
                                   else toast.error('Could not cancel')
                                 }}
                                 className="shrink-0 opacity-50 transition-opacity hover:opacity-100"
@@ -507,6 +516,9 @@ export default function AvailabilityView() {
                           <p className="font-mono text-[10px] opacity-80">
                             {fmtTime(p.starts_at)} – {fmtTime(p.ends_at)} · {PROPOSAL_TAG[p.status]}
                           </p>
+                          {p.location && (
+                            <p className="truncate font-mono text-[10px] opacity-70">{p.location}</p>
+                          )}
                         </div>
                       ))}
                     </div>
