@@ -288,7 +288,9 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
       {/* ── one card per form ── */}
       {forms.map(form => {
         const url = publicUrl(`/intake/${form.token}`)
-        const editable = form.status === 'draft' || form.status === 'sent'
+        // editable until submitted: answers key off stable block ids, so a
+        // mid-fill edit never touches what the client already typed
+        const editable = form.status !== 'submitted'
         const isEditing = editing === form.id
 
         return (
@@ -362,7 +364,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   </Button>
                 ) : (
                   <span className="self-center text-xs text-muted-foreground">
-                    Questions are locked, the client has started answering.
+                    Questions are locked — the form is submitted. Reopen to edit.
                   </span>
                 )}
                 {form.status === 'submitted' && (
@@ -382,6 +384,12 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               </div>
             )}
 
+            {isEditing && form.status === 'in_progress' && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                The client has this form open or started — saved answers are safe, and
+                your changes appear next time they load the link.
+              </p>
+            )}
             {isEditing && (
               <IntakeEditor
                 definition={form.definition}

@@ -210,10 +210,14 @@ export async function deleteIntakeForm(formId: string): Promise<void> {
 export async function updateIntakeDefinition(
   formId: string, definition: TemplateDefinition,
 ): Promise<boolean> {
+  // Editable until SUBMITTED — not until opened. Answers key off stable block
+  // ids, so editing questions mid-fill never orphans what the client typed;
+  // a submitted form is a document a shot list gets built on, so that one
+  // stays read-only until deliberately reopened.
   const { data } = await supabase
     .from('intake_forms')
     .update({ definition })
-    .eq('id', formId).in('status', ['draft', 'sent'])
+    .eq('id', formId).neq('status', 'submitted')
     .select('id').maybeSingle()
   return Boolean(data)
 }
