@@ -71,6 +71,9 @@ export async function createIntakeForm(
    *  duplicating another client's form, which is usually closer to what you
    *  want than starting from the generic template again */
   copyFrom?: TemplateDefinition,
+  /** recipients carried over when duplicating within the SAME client — another
+   *  client's notification list must never follow the questions across */
+  copyNotifyEmails?: string[] | null,
 ): Promise<IntakeForm> {
   const def = copyFrom ?? await resolveTemplate(key)
   const { data, error } = await supabase
@@ -78,6 +81,7 @@ export async function createIntakeForm(
     .insert({
       client_id: clientId, template_key: def.key, definition: def,
       created_by: createdBy, title: title.trim() || def.name,
+      ...(copyNotifyEmails !== undefined ? { notify_emails: copyNotifyEmails } : {}),
     })
     .select(COLS)
     .single()

@@ -92,16 +92,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // through the DB rather than trusted from the body, and its questions are
     // repaired the same way any stored definition is.
     let copyFrom: TemplateDefinition | undefined
+    let copyNotify: string[] | null | undefined
     const sourceId = String(body?.copy_from_form_id ?? '')
     if (sourceId) {
       const { data: src } = await supabase
-        .from('intake_forms').select('definition, template_key').eq('id', sourceId).maybeSingle()
+        .from('intake_forms')
+        .select('definition, template_key, client_id, notify_emails')
+        .eq('id', sourceId).maybeSingle()
       if (src?.definition) {
         copyFrom = normaliseDefinition(src.definition, (src.template_key ?? key) as TemplateKey)
+        // recipients follow the questions only within the same client — another
+        // client's notification list must never be inherited silently
+        if (src.client_id === id) copyNotify = src.notify_emails ?? null
       }
     }
 
-    const form = await createIntakeForm(id, key, admin.id, String(body?.title ?? ''), copyFrom)
+    const form = await createIntakeForm(id, key, admin.id, String(body?.title ?? ''), copyFrom, copyNotify)
     return NextResponse.json(
       { id: form.id, token: form.token, status: form.status, title: form.title },
       { status: 201 },
