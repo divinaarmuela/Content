@@ -13,7 +13,16 @@ import type { CalEvent } from './gcal-core'
  * for a mailbox that is already scanned.
  */
 
-const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+// readonly feeds the availability week; events lets an accepted shoot be
+// WRITTEN to the booking calendar. Tokens minted before the second scope was
+// added keep working for reading — writing through them just fails softly.
+const CAL_SCOPE =
+  'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events'
+
+/** The calendar accepted shoots are booked into. */
+export function bookingCalendarEmail(): string {
+  return (process.env.GCAL_BOOKING_CALENDAR ?? 'hello@mdmmarketing.com.au').toLowerCase()
+}
 
 export type CalendarAccount = {
   email: string
@@ -138,6 +147,70 @@ async function accessToken(refreshToken: string): Promise<string> {
   const json = await res.json()
   tokenCache.set(refreshToken, { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 })
   return json.access_token
+}
+
+/** The stored token for one connected account, or null if not connected. */
+async function tokenFor(email: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('calendar_accounts')
+    .select('refresh_token_encrypted')
+    .eq('email', email.toLowerCase())
+    .not('refresh_token_encrypted', 'is', null)
+    .maybeSingle()
+  if (!data?.refresh_token_encrypted) return null
+  return accessToken(decryptSecret(data.refresh_token_encrypted))
+}
+
+/**
+ * Book an accepted shoot into the booking calendar. Best-effort by contract:
+ * returns the Google event id, or null when the booking calendar is not
+ * connected (or its token predates the write scope) — the caller already has
+ * the .ics email as the fallback path, so a null is a log line, not an error.
+ */
+export async function createBookingEvent(input: {
+  summary: string
+  description?: string | null
+  location?: string | null
+  startIso: string
+  endIso: string
+}): Promise<string | null> {
+  try {
+    const token = await tokenFor(bookingCalendarEmail())
+    if (!token) return null
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: input.summary,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.location ? { location: input.location } : {}),
+        start: { dateTime: input.startIso },
+        end: { dateTime: input.endIso },
+      }),
+    })
+    if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 160)}`)
+    return ((await res.json()) as { id?: string }).id ?? null
+  } catch (e) {
+    console.error('booking calendar event create failed:', e)
+    return null
+  }
+}
+
+/** Remove a booked event after a cancellation. Already-gone is success. */
+export async function deleteBookingEvent(eventId: string): Promise<void> {
+  try {
+    const token = await tokenFor(bookingCalendarEmail())
+    if (!token) return
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!res.ok && res.status !== 404 && res.status !== 410) {
+      throw new Error(`${res.status}: ${(await res.text()).slice(0, 160)}`)
+    }
+  } catch (e) {
+    console.error('booking calendar event delete failed:', e)
+  }
 }
 
 type GoogleEvent = {

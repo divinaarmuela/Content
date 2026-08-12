@@ -4,6 +4,7 @@ import { notify, renderEmail } from './mailer'
 import { publicUrl } from './public-url'
 import { nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
 import { CAL_TZ } from './gcal-core'
+import { createBookingEvent, deleteBookingEvent } from './gcal'
 
 /**
  * Shoot proposals — the team offers a client a date from the Availability
@@ -24,6 +25,8 @@ export type ShootProposal = {
   send_to: string
   /** team addresses told about the answer; null/empty = the sending mailbox */
   notify_emails: string[] | null
+  /** the event created in the booking calendar on acceptance, if any */
+  gcal_event_id: string | null
   status: ShootStatus
   created_by: string | null
   responded_at: string | null
@@ -156,6 +159,9 @@ export async function cancelShootProposal(id: string): Promise<void> {
   if (!data) return // already cancelled — nothing to announce twice
   const proposal = data as ShootProposal
 
+  // a booked event comes off the team calendar again (best-effort)
+  if (proposal.gcal_event_id) await deleteBookingEvent(proposal.gcal_event_id)
+
   const when = fmtRange(proposal.starts_at, proposal.ends_at)
   await Promise.all(splitRecipients(proposal.send_to).map(async to => {
     try {
@@ -207,6 +213,26 @@ export async function respondToShoot(
   const team = (process.env.GMAIL_USER ?? '').toLowerCase()
   const clientName = proposal.clients?.name ?? 'The client'
   const when = fmtRange(proposal.starts_at, proposal.ends_at)
+
+  // book it into the team calendar — best-effort; the .ics emails below are
+  // the fallback when the booking calendar is not connected for writing
+  if (status === 'accepted') {
+    const eventId = await createBookingEvent({
+      summary: `Shoot — ${proposal.title} (${clientName})`,
+      description: [
+        proposal.note,
+        `Sent to: ${proposal.send_to}`,
+        'Booked via the MD Media shoot proposal flow.',
+      ].filter(Boolean).join('\n'),
+      location: proposal.location,
+      startIso: proposal.starts_at,
+      endIso: proposal.ends_at,
+    })
+    if (eventId) {
+      proposal.gcal_event_id = eventId
+      await supabase.from('shoot_proposals').update({ gcal_event_id: eventId }).eq('id', proposal.id)
+    }
+  }
 
   // team heads-up — only the answer that actually landed gets announced, to
   // the proposal's own notify list (or the sending mailbox by default)

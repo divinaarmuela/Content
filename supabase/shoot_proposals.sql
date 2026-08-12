@@ -28,6 +28,11 @@ create index if not exists shoot_proposals_time_idx on shoot_proposals (starts_a
 -- Who on the team hears about the answer. Null/empty = the sending mailbox.
 alter table shoot_proposals add column if not exists notify_emails text[];
 
+-- Accepted shoots are booked into the team booking calendar (hello@) when it
+-- is connected with the write scope; the event id lets a cancellation remove
+-- the event again.
+alter table shoot_proposals add column if not exists gcal_event_id text;
+
 alter table shoot_proposals enable row level security;
 
 
