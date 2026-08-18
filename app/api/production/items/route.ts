@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse } from '../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
@@ -8,7 +8,11 @@ import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } fro
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
 export async function GET(req: Request) {
   try {
-    const user = await requireRole('client') // any signed-in role; scoping below
+    // Every signed-in role may LIST; what they get back is scoped below.
+    // `requireRole('client')` looked like "the lowest bar" but means the
+    // opposite: client is a separate axis, so it admitted clients and
+    // refused the editors who live on this page.
+    const user = await requireSignedIn()
     const url = new URL(req.url)
     const clientFilter = url.searchParams.get('client_id')
     const statusFilter = url.searchParams.get('status')

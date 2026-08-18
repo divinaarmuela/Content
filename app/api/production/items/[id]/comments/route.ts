@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail } from '../../../../../lib/mailer'
@@ -13,7 +13,7 @@ const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  *  (doc 1 §8 — the gatekeeper rule). */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('client')
+    const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json()

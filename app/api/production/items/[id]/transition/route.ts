@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { performTransition } from '../../../../../lib/workflow'
 import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core'
@@ -8,7 +8,7 @@ import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core
  *  optimistic-concurrency guard all live in performTransition. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('client') // clients approve/request from client_review
+    const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json()

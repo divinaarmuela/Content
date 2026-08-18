@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse } from '../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 
 /**
@@ -12,7 +12,7 @@ import { accessibleClientIds } from '../../../lib/production-access'
  */
 export async function GET(req: Request) {
   try {
-    const user = await requireRole('client') // any signed-in role; scoped below
+    const user = await requireSignedIn()
     const url = new URL(req.url)
     const from = url.searchParams.get('from')
     const to = url.searchParams.get('to')

@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('client')
+    const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
 

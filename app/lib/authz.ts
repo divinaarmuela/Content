@@ -136,6 +136,21 @@ export async function resolveTeamUser(): Promise<TeamUser> {
   return created as TeamUser
 }
 
+/**
+ * Any signed-in, ACTIVE account — team member or client — for endpoints that
+ * everyone may call and that scope their own result.
+ *
+ * Use this rather than `requireRole('client')`, which reads like the lowest
+ * bar and means the opposite: `client` is a separate axis, so requiring it
+ * admits clients and refuses every team role. That mistake hid the whole
+ * production board from the editors who live on it.
+ */
+export async function requireSignedIn(): Promise<TeamUser> {
+  const tu = await resolveTeamUser()
+  if (!tu.active_status) throw new AuthzError('Account deactivated', 403)
+  return tu
+}
+
 /** Route guard: resolve + require a minimum role. */
 export async function requireRole(required: Role): Promise<TeamUser> {
   const tu = await resolveTeamUser()
