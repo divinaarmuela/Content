@@ -13,7 +13,28 @@ export async function GET() {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Who runs each client, attached here rather than fetched per row: the list
+  // is the page where "who owns this?" is actually asked, and N requests for
+  // N clients would be the slowest possible way to answer it.
+  const { data: assignments } = await supabase
+    .from('team_user_clients')
+    .select('client_id, team_users!team_user_clients_team_user_id_fkey(id, name, email, role, active_status)')
+
+  const byClient = new Map<string, { id: string; name: string; email: string }[]>()
+  for (const row of assignments ?? []) {
+    const u = row.team_users as unknown as
+      { id: string; name: string; email: string; role: string; active_status: boolean } | null
+    if (!u || !u.active_status) continue
+    if (!['account_manager', 'super_admin'].includes(u.role)) continue
+    const list = byClient.get(row.client_id) ?? []
+    list.push({ id: u.id, name: u.name, email: u.email })
+    byClient.set(row.client_id, list)
+  }
+
+  return NextResponse.json(
+    (data ?? []).map(c => ({ ...c, managers: byClient.get(c.id) ?? [] })),
+  )
 }
 
 export async function POST(req: Request) {

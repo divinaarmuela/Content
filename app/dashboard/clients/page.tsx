@@ -42,7 +42,15 @@ type Client = {
   share_token?: string
   status: 'prospect' | 'active' | 'paused' | 'archived'
   notes: string | null
+  /** who runs this client — from team_user_clients, attached by the list API */
+  managers?: { id: string; name: string; email: string }[]
 }
+
+/** Initials for the manager chip: "Abby Chen" → AC, else the email's first
+ *  two letters, so an invited-but-unnamed manager still reads as somebody. */
+const initials = (name: string, email: string) =>
+  (name || email).split(/[\s@.]+/).filter(Boolean).slice(0, 2)
+    .map(w => w[0]?.toUpperCase() ?? '').join('')
 
 const EMPTY: Partial<Client> = { name: '', industry: '', contact_name: '', email: '', phone: '', website: '', status: 'active', notes: '' }
 
@@ -248,7 +256,8 @@ export default function ClientsPage() {
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
                 <TableHead>Client</TableHead>
-                <TableHead>Industry</TableHead>
+                <TableHead>Account manager</TableHead>
+                <TableHead className="hidden lg:table-cell">Industry</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24" />
@@ -263,7 +272,34 @@ export default function ClientsPage() {
                       <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{c.slug}</div>
                     </Link>
                   </TableCell>
-                  <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{c.industry || '—'}</TableCell>
+                  <TableCell>
+                    {(c.managers?.length ?? 0) === 0 ? (
+                      <Link
+                        href={`/dashboard/clients/${c.id}`}
+                        className="text-xs text-amber-600 hover:underline dark:text-amber-500"
+                      >
+                        Unassigned
+                      </Link>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {c.managers!.map(m => (
+                          <span
+                            key={m.id}
+                            title={`${m.name || m.email} · ${m.email}`}
+                            className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-0.5 pl-0.5 pr-2 dark:border-zinc-700"
+                          >
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 font-mono text-[9px] text-white dark:bg-zinc-700">
+                              {initials(m.name, m.email)}
+                            </span>
+                            <span className="max-w-28 truncate text-xs text-zinc-600 dark:text-zinc-300">
+                              {m.name || m.email}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden text-sm text-zinc-600 lg:table-cell dark:text-zinc-400">{c.industry || '—'}</TableCell>
                   <TableCell>
                     <div className="text-sm">{c.contact_name || '—'}</div>
                     {c.email && <a href={`mailto:${c.email}`} className="block text-xs text-blue-600 dark:text-blue-400 hover:underline">{c.email}</a>}
