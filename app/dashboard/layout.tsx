@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Toaster } from '@/components/ui/sonner'
@@ -11,10 +11,10 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Activity,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock,
 } from 'lucide-react'
 import { useRole } from './useRole'
-import { visiblePages } from '@/app/lib/page-access-core'
+import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 import type { Role } from '@/app/lib/identity-core'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
@@ -167,6 +167,27 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   }, [])
   const { dark, toggle } = useDashTheme()
 
+  /**
+   * Hiding a link is not a lock. Someone who types the address, follows an
+   * old bookmark, or is sent a link lands on the page regardless — so the
+   * page itself is checked here too. Child routes inherit their section's
+   * permission (/dashboard/clients/123 is Clients), and nothing is blocked
+   * until the role is known, or a slow role fetch would flash a refusal at
+   * people who are perfectly entitled to be here.
+   */
+  const section = useMemo(() => {
+    const all = [...NAV_MAIN, ...NAV_TOOLS]
+    const exact = all.find(i => i.href === path)
+    if (exact) return exact.href
+    const nested = all
+      .filter(i => path.startsWith(`${i.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0]
+    return nested?.href ?? null
+  }, [path])
+
+  const blocked = role !== null && section !== null && !canSeePage(role, section, granted)
+  const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted)[0] ?? null
+
   return (
     <div className="dbx min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
       {/* Desktop sidebar */}
@@ -243,7 +264,22 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:px-8">
+          {blocked ? (
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
+              <Lock className="h-6 w-6 text-zinc-400" />
+              <p className="text-sm font-medium">This page is not part of your access</p>
+              <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
+                Ask a super admin to open it for you in Settings → Page access.
+              </p>
+              {firstAllowed && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={firstAllowed.href}>Go to {firstAllowed.label}</Link>
+                </Button>
+              )}
+            </div>
+          ) : children}
+        </main>
       </div>
 
       <Toaster />
