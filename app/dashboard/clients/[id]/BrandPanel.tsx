@@ -8,8 +8,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useRealtime } from 'inngest/react'
 import { FileUp, Loader2, Palette, RefreshCw, Trash2, Type } from 'lucide-react'
-import type { BrandProfile } from '@/app/lib/brand-extract'
+import type { BrandProfile } from '@/app/lib/brand-core'
+import { brandChannel } from '@/app/inngest/channels'
+import { fetchBrandSubscriptionToken } from './brandActions'
 
 /**
  * The client's brand, embedded where the team works: colours as real
@@ -43,6 +46,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
   const [canManage, setCanManage] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [scanning, setScanning] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number; message?: string } | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -58,9 +62,43 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
 
   useEffect(() => { void load() }, [load])
 
+  /**
+   * Live: the scan runs as a background job, so progress arrives here rather
+   * than on a held-open request. A page reload mid-scan rejoins the stream —
+   * the work is not tied to the tab that started it.
+   */
+  const { messages } = useRealtime({
+    channel: brandChannel,
+    topics: ['progress'] as const,
+    token: () => fetchBrandSubscriptionToken(),
+    autoCloseOnTerminal: false,
+    historyLimit: 20,
+  })
+  useEffect(() => {
+    const latest = messages.last
+    if (!latest) return
+    const d = latest.data as {
+      client_id: string; status: string; done: number; total: number; message?: string
+    }
+    if (!d || d.client_id !== clientId) return   // this channel carries every client
+
+    if (d.status === 'scanning') {
+      setScanning(true)
+      setProgress({ done: d.done, total: d.total, message: d.message })
+    } else if (d.status === 'done') {
+      setScanning(false); setProgress(null)
+      toast.success('Brand profile extracted')
+      void load()
+    } else if (d.status === 'failed') {
+      setScanning(false); setProgress(null)
+      toast.error(d.message || 'The scan failed')
+    }
+  }, [messages.last, clientId, load])
+
   const scan = async (file: File) => {
     if (file.type !== 'application/pdf') { toast.error('Brand guidelines must be a PDF'); return }
     setScanning(true)
+    setProgress(null)
     try {
       const signRes = await fetch(`/api/clients/${clientId}/brand`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -79,14 +117,13 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
         body: JSON.stringify({ action: 'scan', url: publicUrl, filename: file.name }),
       })
       if (!scanRes.ok) throw new Error((await scanRes.json()).error ?? 'The scan failed')
-      const json = await scanRes.json()
-      setProfile(json.profile)
-      setDocs(json.docs ?? [])
-      toast.success('Brand profile extracted')
+      // queued, not finished: the realtime effect above takes it from here and
+      // clears `scanning` when the job reports done or failed
+      toast.info('Reading the document — this page updates as it goes')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Something went wrong')
-    } finally {
       setScanning(false)
+    } finally {
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -119,7 +156,9 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
             </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {scanning
-                ? 'Reading the document. A long deck can take a minute or two.'
+                ? progress && progress.total > 1
+                  ? `Reading the document — part ${progress.done} of ${progress.total}${progress.message ? ` · ${progress.message}` : ''}. You can leave this page.`
+                  : `Reading the document${progress?.message ? ` — ${progress.message}` : ''}. A long deck takes a few minutes; you can leave this page.`
                 : empty
                   ? 'Upload the client\'s brand PDF and the typography, colours and voice are extracted into this page.'
                   : 'Scanning another document merges it into the profile below.'}
@@ -141,6 +180,14 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
             </div>
           )}
         </div>
+        {scanning && progress && progress.total > 1 && (
+          <div className="mt-3 h-1 w-full overflow-hidden rounded bg-muted">
+            <div
+              className="h-1 rounded bg-primary transition-[width] duration-500"
+              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+            />
+          </div>
+        )}
         {docs.length > 0 && (
           <p className="mt-3 text-xs text-muted-foreground">
             From {docs.map((d, i) => (

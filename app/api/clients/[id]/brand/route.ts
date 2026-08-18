@@ -2,20 +2,25 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import { signUpload } from '@/app/lib/storage'
-import { extractBrandProfile, type BrandProfile } from '../../../../lib/brand-extract'
-
-/** A 30-page brand PDF is minutes of model time, not seconds. */
-export const maxDuration = 300
+import { inngest } from '../../../../inngest/client'
 
 /**
  * Brand guidelines per client.
  *
  * The browser uploads the PDF straight to storage with a signed URL (the
- * server never carries the bytes twice), then asks for a scan. Extraction is
- * paid once per document; the panel and the assistant read the stored JSON.
+ * server never carries the bytes twice), then asks for a scan. The scan
+ * itself runs as a BACKGROUND JOB: a real guidelines document is 60 image
+ * heavy pages, chunked into several model calls, which is minutes of work —
+ * far past any serverless request budget. Progress streams to the panel over
+ * realtime and the profile appears when it lands.
+ *
+ * Extraction is paid once per document; everything downstream reads the
+ * stored JSON, never the PDF again.
  */
 
-const MAX_PDF_BYTES = 25 * 1024 * 1024
+/** Storage takes far more, but a document past this is a print master rather
+ *  than guidelines, and every page still costs model time. */
+const MAX_PDF_BYTES = 150 * 1024 * 1024
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -47,13 +52,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Brand guidelines must be a PDF' }, { status: 415 })
       }
       if ((body?.size ?? 0) > MAX_PDF_BYTES) {
-        return NextResponse.json({ error: 'That PDF is over 25MB. Export a lighter copy.' }, { status: 413 })
+        return NextResponse.json(
+          { error: 'That PDF is over 150MB — export a lighter copy or split it.' },
+          { status: 413 },
+        )
       }
       const signed = await signUpload(String(body?.name ?? 'brand.pdf'), 'application/pdf')
       return NextResponse.json(signed)
     }
 
-    // ── scan: fetch the uploaded PDF, extract, store ──
+    // ── scan: hand the uploaded PDF to the background job ──
     if (body?.action === 'scan') {
       const url = String(body?.url ?? '')
       const filename = String(body?.filename ?? 'brand.pdf')
@@ -61,32 +69,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'No uploaded document to scan' }, { status: 400 })
       }
 
-      const file = await fetch(url)
-      if (!file.ok) return NextResponse.json({ error: 'Could not read the uploaded PDF' }, { status: 502 })
-      const bytes = Buffer.from(await file.arrayBuffer())
-      if (bytes.byteLength > MAX_PDF_BYTES) {
-        return NextResponse.json({ error: 'That PDF is over 25MB' }, { status: 413 })
-      }
-
-      const { data: existing } = await supabase.from('client_brand')
-        .select('profile, docs').eq('client_id', id).maybeSingle()
-
-      const profile = await extractBrandProfile(
-        bytes.toString('base64'),
-        (existing?.profile ?? null) as BrandProfile | null,
-      )
-
-      const docs = [
-        ...(existing?.docs ?? []),
-        { filename, url, scanned_at: new Date().toISOString() },
-      ]
-      const { error } = await supabase.from('client_brand').upsert({
-        client_id: id, profile, docs,
-        updated_at: new Date().toISOString(), updated_by: user.email,
+      await inngest.send({
+        name: 'app/brand.scan.requested',
+        data: { clientId: id, url, filename, by: user.email },
       })
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-      return NextResponse.json({ profile, docs })
+      // 202: accepted, not finished. The panel watches the brand channel and
+      // fills itself in as chunks complete.
+      return NextResponse.json({ queued: true }, { status: 202 })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

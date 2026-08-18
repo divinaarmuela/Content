@@ -45,6 +45,50 @@ export const leadsChannel = channel({
  * design — the payload is four numbers and two ids, and the alternative is a
  * progress counter that lies until someone reloads.
  */
+/**
+ * Brand-guidelines scanning. A 60-page design document is chunked and read a
+ * chunk at a time, which takes minutes — so the panel watches progress here
+ * rather than holding a request open, and fills itself in when it lands.
+ * Subscribers filter on client_id.
+ */
+export const brandChannel = channel({
+  name: 'brand',
+  topics: {
+    progress: {
+      schema: z.object({
+        client_id: z.string(),
+        /** 'scanning' | 'done' | 'failed' */
+        status: z.string(),
+        done: z.number(),
+        total: z.number(),
+        message: z.string().optional(),
+        ts: z.number(),
+      }),
+    },
+  },
+})
+
+/**
+ * Attribution tracker activity — a click on a tracked link or a new asset in
+ * the Content Register. One global channel like `leads`: whoever has the
+ * Tracker open wants the same stream. Payloads are hints; the page refetches
+ * through the authenticated /api/tracker on receipt.
+ */
+export const trackerChannel = channel({
+  name: 'tracker',
+  topics: {
+    activity: {
+      schema: z.object({
+        kind: z.enum(['click', 'asset']),
+        asset_id: z.string(),
+        client_id: z.string().nullable(),
+        label: z.string(),
+        ts: z.number(),
+      }),
+    },
+  },
+})
+
 export const intakeChannel = channel({
   name: 'intake',
   topics: {

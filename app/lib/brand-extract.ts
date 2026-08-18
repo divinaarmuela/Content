@@ -1,30 +1,26 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
+import { PDFDocument } from 'pdf-lib'
+import { mergeProfiles, planChunks, type BrandProfile } from './brand-core'
+
+export type { BrandProfile } from './brand-core'
 
 /**
  * Turn a brand guidelines document into a structured profile.
  *
- * Cost discipline, because these documents run to 30 pages:
- * - Haiku 4.5, the same model the inbox scanner uses — a 30-page PDF lands
- *   around 60–100k input tokens, roughly ten cents, and it happens ONCE per
- *   document. Everything downstream (the panel, the assistant) reads the
- *   stored JSON, which is a few hundred tokens, never the document again.
+ * Real guidelines are design documents: 60 image-heavy pages, often far past
+ * the model's 32MB / 100-page per-request limits. So the PDF is SPLIT into
+ * page chunks here and scanned in sequence, each chunk merging into the
+ * profile built so far — one document of any size, one profile out.
+ *
+ * Cost discipline, because these run long:
+ * - Haiku 4.5, the same model the inbox scanner uses. Extraction happens ONCE
+ *   per document; the panel and anything downstream read the stored JSON,
+ *   never the document again.
  * - Output is forced through a tool schema, so the result is valid JSON by
- *   construction — no retry loop burning a second pass through the PDF.
- * - Re-scanning with a second document sends the previous PROFILE (small)
- *   plus the new document, never two documents at once.
+ *   construction — no retry loop burning a second pass through the pages.
+ * - Each chunk carries the profile so far (small) rather than earlier pages.
  */
-
-export type BrandProfile = {
-  summary?: string
-  fonts?: { family: string; usage?: string; weights?: string[] }[]
-  colors?: { name?: string; hex?: string; usage?: string }[]
-  logo_rules?: string[]
-  voice?: { tone?: string; description?: string; keywords?: string[] }
-  imagery?: string[]
-  dos_and_donts?: { dos?: string[]; donts?: string[] }
-  other_rules?: string[]
-}
 
 const PROFILE_SCHEMA = {
   type: 'object' as const,
@@ -74,14 +70,38 @@ const PROFILE_SCHEMA = {
   },
 }
 
-export async function extractBrandProfile(
-  pdfBase64: string,
-  previous: BrandProfile | null,
-): Promise<BrandProfile> {
-  const anthropic = new Anthropic()
+/** Split a PDF into page-range chunks. Returns the whole file untouched when
+ *  it is small enough to send in one request. */
+export async function splitPdf(bytes: Buffer): Promise<Buffer[]> {
+  const src = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true })
+  const ranges = planChunks(src.getPageCount())
+  if (ranges.length <= 1) return [bytes]
 
+  const out: Buffer[] = []
+  for (const [start, end] of ranges) {
+    const doc = await PDFDocument.create()
+    const pages = await doc.copyPages(src, Array.from({ length: end - start }, (_, i) => start + i))
+    for (const page of pages) doc.addPage(page)
+    out.push(Buffer.from(await doc.save()))
+  }
+  return out
+}
+
+/** How many pages the document has — for progress reporting before scanning. */
+export async function pdfPageCount(bytes: Buffer): Promise<number> {
+  try {
+    const doc = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true })
+    return doc.getPageCount()
+  } catch {
+    return 0
+  }
+}
+
+async function extractOne(
+  anthropic: Anthropic, pdfBase64: string, previous: BrandProfile | null, part: string,
+): Promise<BrandProfile> {
   const mergeNote = previous && Object.keys(previous).length > 0
-    ? `\n\nAn existing profile from earlier documents follows. MERGE: keep facts it has that this document lacks, correct anything this document contradicts, add what is new.\n${JSON.stringify(previous)}`
+    ? `\n\nThe profile built from earlier pages follows. Report only what THESE pages add or correct; do not repeat what is already recorded verbatim.\n${JSON.stringify(previous)}`
     : ''
 
   const res = await anthropic.messages.create({
@@ -99,23 +119,55 @@ export async function extractBrandProfile(
         {
           type: 'document',
           source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
-          // prompt caching would only pay off if the same PDF were sent twice,
-          // which the stored profile exists to prevent
         },
         {
           type: 'text',
           text:
-            'These are a client\'s brand guidelines. Extract the brand profile: every typeface ' +
-            'with its usage and weights, every colour with hex where stated (convert CMYK/Pantone ' +
-            'only when the document gives the conversion), logo usage rules, tone of voice, ' +
-            'imagery direction, and explicit dos and don\'ts. Be faithful to the document; ' +
-            'never invent values it does not contain.' + mergeNote,
+            `These are ${part} of a client's brand guidelines. Extract the brand profile: every ` +
+            'typeface with its usage and weights, every colour with hex where stated (convert ' +
+            'CMYK/Pantone only when the document gives the conversion), logo usage rules, tone of ' +
+            'voice, imagery direction, and explicit dos and don\'ts. Be faithful to the document; ' +
+            'never invent values it does not contain. If these pages contain none of the above, ' +
+            'return an empty object.' + mergeNote,
         },
       ],
     }],
   })
 
   const tool = res.content.find(b => b.type === 'tool_use')
-  if (!tool || tool.type !== 'tool_use') throw new Error('The model returned no profile')
+  if (!tool || tool.type !== 'tool_use') return {}
   return tool.input as BrandProfile
+}
+
+/**
+ * Extract a profile from a whole document, chunking as needed.
+ * `onProgress` reports chunk completion so a long scan can show progress.
+ * A failed chunk is logged and skipped — 58 good pages beat none.
+ */
+export async function extractBrandProfile(
+  pdfBase64OrBytes: string | Buffer,
+  previous: BrandProfile | null,
+  onProgress?: (done: number, total: number) => void | Promise<void>,
+): Promise<BrandProfile> {
+  const bytes = Buffer.isBuffer(pdfBase64OrBytes)
+    ? pdfBase64OrBytes
+    : Buffer.from(pdfBase64OrBytes, 'base64')
+
+  const anthropic = new Anthropic()
+  const chunks = await splitPdf(bytes)
+  let profile: BrandProfile | null = previous
+
+  for (let i = 0; i < chunks.length; i++) {
+    const part = chunks.length === 1 ? 'the pages' : `pages ${i * 20 + 1}–${i * 20 + 20}`
+    try {
+      const extracted = await extractOne(anthropic, chunks[i].toString('base64'), profile, part)
+      profile = mergeProfiles(profile, extracted)
+    } catch (e) {
+      console.error(`brand chunk ${i + 1}/${chunks.length} failed:`, e)
+    }
+    await onProgress?.(i + 1, chunks.length)
+  }
+
+  if (!profile) throw new Error('The document could not be read')
+  return profile
 }

@@ -238,6 +238,35 @@ export const asanaReconcile = inngest.createFunction(
   async ({ step }) => step.run('reconcile', () => reconcileAll())
 )
 
+/**
+ * Scan one brand-guidelines document into a client's profile.
+ *
+ * A background job because a 60-page design document is chunked into several
+ * model calls and runs for minutes — a request would be killed long before.
+ * Retries are safe: a re-run re-reads the same PDF and merges into the same
+ * profile, and merging is idempotent by construction (fonts by family,
+ * colours by hex, rules by text).
+ */
+export const brandScan = inngest.createFunction(
+  {
+    id: 'brand-scan',
+    name: 'Scan brand guidelines',
+    triggers: [{ event: 'app/brand.scan.requested' }],
+    retries: 1,
+    // one document at a time: each is many sequential model calls, and two
+    // scans of the same client would race on the stored profile
+    concurrency: { limit: 2 },
+  },
+  async ({ event, step }) => {
+    const { clientId, url, filename, by } = (event.data ?? {}) as Record<string, string>
+    if (!clientId || !url) return { skipped: 'missing clientId or url' }
+    return step.run('scan', async () => {
+      const { runBrandScan } = await import('../lib/brand-scan')
+      return runBrandScan({ clientId, url, filename: filename ?? 'brand.pdf', by: by ?? '' })
+    })
+  }
+)
+
 export const functions = [
   scanInboxScheduled,
   scanMailbox,
@@ -246,4 +275,5 @@ export const functions = [
   publishDispatcher,
   publishPost,
   asanaReconcile,
+  brandScan,
 ]
