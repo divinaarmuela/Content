@@ -57,6 +57,15 @@ and `npm run build` must pass. Do not report completion on tests alone.
    ```
 5. **pdfkit needs `serverExternalPackages: ['pdfkit']`** in `next.config.ts` or it
    throws `ENOENT … Helvetica.afm` at runtime.
+5b. **A NEW Inngest function does nothing until the app is re-synced.** Deploying
+   it is not enough: Inngest Cloud only knows the functions it discovered at the
+   last sync, so `inngest.send()` for an unknown event succeeds and is then
+   dropped — no run, no error, nothing in the dashboard. Cost half an hour on the
+   brand scanner. After deploying a new function:
+   ```bash
+   curl -X PUT https://app.mdmmarketing.com.au/api/inngest   # {"modified":true} = it registered something new
+   ```
+   Installing Inngest's Vercel integration makes this automatic on every deploy.
 6. **The vitest config must be `vitest.config.mts`** (`.ts` throws ERR_REQUIRE_ESM).
    `server-only` is aliased to a stub there.
 7. **`app/lib/supabase.ts` builds its client at module load** with non-null
