@@ -73,6 +73,26 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
   useEffect(() => { void load() }, [load])
 
   /**
+   * Realtime is a live stream, not a log: a browser suspends sockets on a
+   * hidden tab, so the "done" published while you were elsewhere never
+   * arrives and the panel waits forever. The stored status is the source of
+   * truth, so poll it while a scan is running and re-read it the moment the
+   * tab is looked at again.
+   */
+  useEffect(() => {
+    if (!scanning) return
+    const id = window.setInterval(() => void load(), 8000)
+    const onVisible = () => { if (document.visibilityState === 'visible') void load() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [scanning, load])
+
+  /**
    * Live: the scan runs as a background job, so progress arrives here rather
    * than on a held-open request. A page reload mid-scan rejoins the stream —
    * the work is not tied to the tab that started it.
