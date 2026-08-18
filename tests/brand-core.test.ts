@@ -1,7 +1,88 @@
 import { describe, it, expect } from 'vitest'
 import {
-  MAX_PAGES_PER_CHUNK, mergeProfiles, planChunks, profileIsEmpty, type BrandProfile,
+  MAX_PAGES_PER_CHUNK, asText, mergeProfiles, planChunks, profileIsEmpty,
+  sanitiseProfile, type BrandProfile,
 } from '../app/lib/brand-core'
+
+describe('asText — nothing the model returns may reach React as an object', () => {
+  it('passes strings through, trimmed', () => {
+    expect(asText('  Never stretch the logo  ')).toBe('Never stretch the logo')
+  })
+
+  it('flattens the {type, description} shape a real scan returned', () => {
+    expect(asText({ type: 'Photography style', description: 'Institutional, editorial' }))
+      .toBe('Photography style: Institutional, editorial')
+  })
+
+  it('handles other object shapes and arrays', () => {
+    expect(asText({ title: 'Iconography', detail: 'Horse symbol' })).toBe('Iconography: Horse symbol')
+    expect(asText({ rule: 'Keep clear space' })).toBe('Keep clear space')
+    expect(asText({ a: 'one', b: 'two' })).toBe('one — two')
+    expect(asText(['a', 'b'])).toBe('a, b')
+  })
+
+  it('never returns a non-string, whatever it is given', () => {
+    for (const v of [null, undefined, 42, true, {}, [], [null], { x: null }]) {
+      expect(typeof asText(v)).toBe('string')
+    }
+  })
+})
+
+describe('sanitiseProfile', () => {
+  it('rescues the exact profile that crashed the Capila panel', () => {
+    const raw = {
+      imagery: [
+        { type: 'Photography style', description: 'Institutional, editorial, quiet wealth' },
+        { type: 'Iconography', description: 'Horse symbol representing power' },
+      ],
+    } as unknown as BrandProfile
+    const clean = sanitiseProfile(raw)
+    expect(clean.imagery).toEqual([
+      'Photography style: Institutional, editorial, quiet wealth',
+      'Iconography: Horse symbol representing power',
+    ])
+    for (const item of clean.imagery!) expect(typeof item).toBe('string')
+  })
+
+  it('keeps a well-formed profile intact', () => {
+    const good: BrandProfile = {
+      summary: 'Warm and direct',
+      fonts: [{ family: 'Lora', usage: 'display', weights: ['Bold'] }],
+      colors: [{ name: 'Deep Forest', hex: '#14392B', usage: 'backgrounds' }],
+      logo_rules: ['Never stretch the logo'],
+      voice: { tone: 'Confident', keywords: ['clear'] },
+      dos_and_donts: { dos: ['Use white space'], donts: ['No filters'] },
+    }
+    expect(sanitiseProfile(good)).toEqual(good)
+  })
+
+  it('drops empty and malformed entries rather than rendering blanks', () => {
+    const clean = sanitiseProfile({
+      fonts: [{ family: '' }, { family: 'Inter' }],
+      colors: [{}, { hex: '#000000' }],
+      logo_rules: ['', null, 'Keep clear space'],
+    } as unknown as BrandProfile)
+    expect(clean.fonts).toEqual([{ family: 'Inter' }])
+    expect(clean.colors).toEqual([{ hex: '#000000' }])
+    expect(clean.logo_rules).toEqual(['Keep clear space'])
+  })
+
+  it('survives null and rubbish', () => {
+    expect(sanitiseProfile(null)).toEqual({})
+    expect(sanitiseProfile({} as BrandProfile)).toEqual({})
+  })
+})
+
+describe('mergeProfiles sanitises both sides', () => {
+  it('a malformed incoming list cannot poison the stored profile', () => {
+    const merged = mergeProfiles(
+      { imagery: ['Natural light'] },
+      { imagery: [{ type: 'Iconography', description: 'Horse symbol' }] } as unknown as BrandProfile,
+    )
+    expect(merged.imagery).toEqual(['Natural light', 'Iconography: Horse symbol'])
+    for (const item of merged.imagery!) expect(typeof item).toBe('string')
+  })
+})
 
 describe('planChunks', () => {
   it('leaves a small document in one piece', () => {

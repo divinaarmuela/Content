@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useRealtime } from 'inngest/react'
 import { FileUp, Loader2, Palette, RefreshCw, Trash2, Type } from 'lucide-react'
-import type { BrandProfile } from '@/app/lib/brand-core'
+import { sanitiseProfile, type BrandProfile } from '@/app/lib/brand-core'
 import { brandChannel } from '@/app/inngest/channels'
 import { fetchBrandSubscriptionToken } from './brandActions'
 
@@ -54,7 +54,9 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
     const res = await fetch(`/api/clients/${clientId}/brand`)
     if (!res.ok) return
     const json = await res.json()
-    setProfile(json.profile)
+    // sanitised on the way in as well as on the way out: profiles scanned
+    // before this existed can still hold shapes React refuses to render
+    setProfile(sanitiseProfile(json.profile))
     setDocs(json.docs ?? [])
     setCanManage(Boolean(json.can_manage))
     // a scan started before this page was opened is still ours to show
