@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
 import ScannerSettings from './ScannerSettings'
 import IntakeTemplates from './IntakeTemplates'
+import PageAccessSettings from './PageAccessSettings'
 import ProfileSettings from './ProfileSettings'
 import IntegrationsSettings from './IntegrationsSettings'
 import CredentialsPanel from '../CredentialsPanel'
@@ -83,6 +84,7 @@ export default function SettingsPage() {
           {isSuper && <TabsTrigger value="team">Team</TabsTrigger>}
           {isSuper && <TabsTrigger value="scanner">Inbox scanner</TabsTrigger>}
           {isSuper && <TabsTrigger value="intake">Intake templates</TabsTrigger>}
+          {isSuper && <TabsTrigger value="access">Page access</TabsTrigger>}
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
@@ -96,6 +98,12 @@ export default function SettingsPage() {
         {isSuper && (
           <TabsContent value="intake">
             <IntakeTemplates />
+          </TabsContent>
+        )}
+
+        {isSuper && (
+          <TabsContent value="access">
+            <PageAccessSettings />
           </TabsContent>
         )}
 

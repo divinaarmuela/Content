@@ -14,6 +14,8 @@ import {
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
 } from 'lucide-react'
 import { useRole } from './useRole'
+import { visiblePages, type PageAccess } from '@/app/lib/page-access-core'
+import type { Role } from '@/app/lib/identity-core'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
  *  the dark tokens too, persists to localStorage, and cleans up on unmount so
@@ -91,17 +93,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-function visibleFor(role: string | null, items: NavItem[]) {
-  if (role === null)        return []   // unknown identity — show nothing yet
-  if (role === 'editor')    return items.filter(i => i.href === '/dashboard/production')
-  if (role === 'scheduler') return items.filter(i => ['/dashboard/scheduler', '/dashboard/calendar'].includes(i.href))
-  if (role === 'client')    return []
-  return items
-}
-
-function NavLinks({ role, path, onNavigate }: { role: string | null; path: string; onNavigate?: () => void }) {
-  const main = visibleFor(role, NAV_MAIN)
-  const tools = role === null || ['editor', 'scheduler', 'client'].includes(role) ? [] : NAV_TOOLS
+function NavLinks({ role, access, path, onNavigate }: {
+  role: Role | null
+  access: PageAccess
+  path: string
+  onNavigate?: () => void
+}) {
+  // the role ladder decides by default; a super admin's grants can only add
+  const main = visiblePages(role, NAV_MAIN, access)
+  const tools = visiblePages(role, NAV_TOOLS, access)
   const link = (item: NavItem) => {
     const active = path === item.href
     const Icon = item.icon
@@ -156,6 +156,15 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // useRole starts as null and `visibleFor` shows nothing until it resolves,
   // so the failure now runs in the safe direction.
   const { role } = useRole()
+  // pages a super admin has opened to extra roles; empty until it loads, so
+  // the sidebar starts from the ladder and only ever gains entries
+  const [access, setAccess] = useState<PageAccess>({})
+  useEffect(() => {
+    fetch('/api/team/page-access')
+      .then(r => r.ok ? r.json() : { access: {} })
+      .then(j => setAccess(j.access ?? {}))
+      .catch(() => {})
+  }, [])
   const { dark, toggle } = useDashTheme()
 
   return (
@@ -164,7 +173,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-900">
         <SidebarHeader />
         <div className="flex-1 overflow-y-auto pb-6">
-          <NavLinks role={role} path={path} />
+          <NavLinks role={role} access={access} path={path} />
         </div>
         <div className="border-t border-zinc-100 px-5 py-3.5 dark:border-zinc-800">
           <a
@@ -192,7 +201,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <SheetContent side="left" className="w-64 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
-              <NavLinks role={role} path={path} onNavigate={() => setMobileOpen(false)} />
+              <NavLinks role={role} access={access} path={path} onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
 
