@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Activity,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock,
@@ -155,15 +156,17 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // never stamped rendered the *full* admin navigation — a client included.
   // useRole starts as null and `visibleFor` shows nothing until it resolves,
   // so the failure now runs in the safe direction.
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   // pages a super admin has opened to THIS person; empty until it loads, so
   // the sidebar starts from the role ladder and only ever gains entries
   const [granted, setGranted] = useState<string[]>([])
+  const [grantsLoaded, setGrantsLoaded] = useState(false)
   useEffect(() => {
     fetch('/api/team/page-access')
       .then(r => r.ok ? r.json() : { mine: [] })
       .then(j => setGranted(j.mine ?? []))
       .catch(() => {})
+      .finally(() => setGrantsLoaded(true))
   }, [])
   const { dark, toggle } = useDashTheme()
 
@@ -185,7 +188,15 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     return nested?.href ?? null
   }, [path])
 
-  const blocked = role !== null && section !== null && !canSeePage(role, section, granted)
+  /**
+   * Nothing renders until access is KNOWN. Deciding optimistically showed a
+   * page for the moment before the role arrived — a glimpse of Leads to
+   * someone who is not allowed Leads, which is a disclosure, not a flicker.
+   * Super admins skip the grants wait: nothing can change their answer.
+   */
+  const resolving = roleLoading || role === null
+    || (role !== 'super_admin' && !grantsLoaded)
+  const blocked = !resolving && section !== null && !canSeePage(role, section, granted)
   const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted)[0] ?? null
 
   return (
@@ -265,7 +276,12 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:px-8">
-          {blocked ? (
+          {resolving ? (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-8 w-56" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+          ) : blocked ? (
             <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
               <Lock className="h-6 w-6 text-zinc-400" />
               <p className="text-sm font-medium">This page is not part of your access</p>
