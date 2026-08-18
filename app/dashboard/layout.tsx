@@ -14,7 +14,7 @@ import {
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
 } from 'lucide-react'
 import { useRole } from './useRole'
-import { visiblePages, type PageAccess } from '@/app/lib/page-access-core'
+import { visiblePages } from '@/app/lib/page-access-core'
 import type { Role } from '@/app/lib/identity-core'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
@@ -93,15 +93,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-function NavLinks({ role, access, path, onNavigate }: {
+function NavLinks({ role, granted, path, onNavigate }: {
   role: Role | null
-  access: PageAccess
+  granted: string[]
   path: string
   onNavigate?: () => void
 }) {
   // the role ladder decides by default; a super admin's grants can only add
-  const main = visiblePages(role, NAV_MAIN, access)
-  const tools = visiblePages(role, NAV_TOOLS, access)
+  const main = visiblePages(role, NAV_MAIN, granted)
+  const tools = visiblePages(role, NAV_TOOLS, granted)
   const link = (item: NavItem) => {
     const active = path === item.href
     const Icon = item.icon
@@ -156,13 +156,13 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // useRole starts as null and `visibleFor` shows nothing until it resolves,
   // so the failure now runs in the safe direction.
   const { role } = useRole()
-  // pages a super admin has opened to extra roles; empty until it loads, so
-  // the sidebar starts from the ladder and only ever gains entries
-  const [access, setAccess] = useState<PageAccess>({})
+  // pages a super admin has opened to THIS person; empty until it loads, so
+  // the sidebar starts from the role ladder and only ever gains entries
+  const [granted, setGranted] = useState<string[]>([])
   useEffect(() => {
     fetch('/api/team/page-access')
-      .then(r => r.ok ? r.json() : { access: {} })
-      .then(j => setAccess(j.access ?? {}))
+      .then(r => r.ok ? r.json() : { mine: [] })
+      .then(j => setGranted(j.mine ?? []))
       .catch(() => {})
   }, [])
   const { dark, toggle } = useDashTheme()
@@ -173,7 +173,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-900">
         <SidebarHeader />
         <div className="flex-1 overflow-y-auto pb-6">
-          <NavLinks role={role} access={access} path={path} />
+          <NavLinks role={role} granted={granted} path={path} />
         </div>
         <div className="border-t border-zinc-100 px-5 py-3.5 dark:border-zinc-800">
           <a
@@ -201,7 +201,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <SheetContent side="left" className="w-64 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
-              <NavLinks role={role} access={access} path={path} onNavigate={() => setMobileOpen(false)} />
+              <NavLinks role={role} granted={granted} path={path} onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
 

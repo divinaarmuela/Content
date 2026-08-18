@@ -1,14 +1,43 @@
 import { NextResponse } from 'next/server'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse, type Role } from '../../lib/authz'
+import { requireRole, authzErrorResponse, AuthzError, type Role } from '../../lib/authz'
 
 const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
 
-/** List members + pending invites. super_admin only. */
+/**
+ * The team.
+ *
+ * A super admin gets everything: full member records, pending invites, client
+ * assignments, and the controls that go with them. Anyone else gets a
+ * DIRECTORY — who is on the team, their role and whether they are staff or a
+ * contractor — and only if a super admin has opened the Team page to their
+ * role in Settings. Hiding the link without gating the data would have been
+ * decoration; opening the page without opening the data would have been a
+ * link to an error.
+ */
 export async function GET() {
   try {
-    await requireRole('super_admin')
+    const user = await requireRole('scheduler')   // any team role
+
+    if (user.role !== 'super_admin') {
+      const { userMaySeePage } = await import('../../lib/page-access')
+      if (!(await userMaySeePage(user, '/dashboard/team'))) {
+        throw new AuthzError('Not found', 404)
+      }
+      const { data, error } = await supabase
+        .from('team_users')
+        .select('id, name, email, role, employment_type, timezone, active_status')
+        .eq('active_status', true)
+        .order('created_at', { ascending: true })
+      if (error) throw new Error(error.message)
+      return NextResponse.json({
+        members: data ?? [],
+        invites: [],          // pending invites are an admin concern
+        assignments: [],      // as is who runs which client
+        can_manage: false,
+      })
+    }
 
     const [membersRes, invitesRes, assignmentsRes] = await Promise.all([
       supabase.from('team_users').select('*').order('created_at', { ascending: true }),
@@ -22,6 +51,7 @@ export async function GET() {
       members: membersRes.data,
       invites: invitesRes.data,
       assignments: assignmentsRes.data ?? [],
+      can_manage: true,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

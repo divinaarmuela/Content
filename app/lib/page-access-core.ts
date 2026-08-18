@@ -1,24 +1,47 @@
 /**
- * Pure page-visibility logic — no imports, no I/O, fully unit-testable.
+ * Pure page-visibility logic — no imports beyond a type, no I/O, fully
+ * unit-testable.
  *
- * The role ladder decides who sees which dashboard page by default. A super
- * admin can open a page to roles that would not normally reach it; those
- * grants live in page_access and are applied here.
+ * A person's role decides which dashboard pages they see by default. A super
+ * admin can additionally open a page to an INDIVIDUAL — "let Manal see Leads"
+ * is the real request, and granting it to every account manager to reach one
+ * of them is how permissions sprawl.
  *
- * One rule holds the whole thing safe: a grant only ever ADDS. Nothing in
- * this file can take a page away from someone who already had it, so a
- * mistyped setting cannot lock the team out of its own work.
+ * One rule holds the whole thing safe: a grant only ever ADDS. Nothing here
+ * can take a page away from someone who has it by default, so a mistyped
+ * setting cannot lock the team out of its own work.
  */
 
 import type { Role } from './identity-core'
 
-/** Extra roles allowed per page: '/dashboard/leads' → ['editor']. */
-export type PageAccess = Record<string, string[]>
+/** Pages granted to one person, as hrefs. */
+export type GrantedPages = string[]
+
+/** Every page a super admin may hand out, in sidebar order. */
+export const GRANTABLE_PAGES: { href: string; label: string }[] = [
+  { href: '/dashboard', label: 'Overview' },
+  { href: '/dashboard/leads', label: 'Leads' },
+  { href: '/dashboard/clients', label: 'Clients' },
+  { href: '/dashboard/audience', label: 'Audience' },
+  { href: '/dashboard/social', label: 'Social channels' },
+  { href: '/dashboard/website', label: 'Website' },
+  { href: '/dashboard/production', label: 'Production' },
+  { href: '/dashboard/scheduler', label: 'Scheduler' },
+  { href: '/dashboard/calendar', label: 'Calendar' },
+  { href: '/dashboard/activity', label: 'Team Activity' },
+  { href: '/dashboard/reports', label: 'Reports' },
+  { href: '/dashboard/team', label: 'Team' },
+  { href: '/dashboard/ai', label: 'AI Assistant' },
+  { href: '/dashboard/notifications', label: 'Notifications' },
+  { href: '/dashboard/settings', label: 'Settings' },
+]
+
+const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 
 /**
- * The default ladder, mirroring what the sidebar has always done:
- * editors live on the production board, schedulers on the scheduler and
- * calendar, clients get nothing, and everyone above sees everything.
+ * The default ladder, mirroring what the sidebar has always done: editors
+ * live on the production board, schedulers on the scheduler and calendar,
+ * clients get nothing, and account managers and above see everything.
  */
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
@@ -28,36 +51,40 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   return true                                  // account_manager, super_admin
 }
 
-/** May this role see this page, once a super admin's grants are applied? */
-export function canSeePage(role: Role | null, href: string, access: PageAccess): boolean {
+/** May this person see this page — by role, or because they were granted it? */
+export function canSeePage(role: Role | null, href: string, granted: GrantedPages): boolean {
   if (role === null) return false
   if (defaultAllows(role, href)) return true
-  // super admins already pass above; a grant never widens beyond team roles
+  // a grant is for a team member; a client is a different axis entirely
   if (role === 'client') return false
-  return (access[href] ?? []).includes(role)
+  return granted.includes(href)
 }
 
 /** Filter a nav list. Order is preserved — a granted page appears where it
  *  always sits, not appended somewhere surprising. */
 export function visiblePages<T extends { href: string }>(
-  role: Role | null, items: T[], access: PageAccess,
+  role: Role | null, items: T[], granted: GrantedPages,
 ): T[] {
-  return items.filter(i => canSeePage(role, i.href, access))
+  return items.filter(i => canSeePage(role, i.href, granted))
 }
 
-/** Roles a page can be granted to. Super admins see everything already, and
- *  `client` is a different axis entirely — neither is offerable. */
-export const GRANTABLE_ROLES: Role[] = ['scheduler', 'editor', 'account_manager']
+/** Can this page be handed out at all? Guards the write path against a typo'd
+ *  or invented href being stored and later matched. */
+export function isGrantablePage(href: string): boolean {
+  return GRANTABLE_HREFS.has(href)
+}
 
-/** Clean a grant list arriving from a browser: known roles only, deduped,
- *  and never the two that make no sense. */
-export function normaliseGrantRoles(raw: unknown): string[] {
+/** Clean a list of hrefs arriving from a browser: known pages only, deduped,
+ *  and never a page the person already has by default (storing those would
+ *  make a later role change silently keep access it should have lost). */
+export function normaliseGrantedPages(raw: unknown, role: Role | null): string[] {
   const list = Array.isArray(raw) ? raw : []
   const out: string[] = []
   for (const item of list) {
-    const role = String(item ?? '').trim()
-    if (!GRANTABLE_ROLES.includes(role as Role)) continue
-    if (!out.includes(role)) out.push(role)
+    const href = String(item ?? '').trim()
+    if (!isGrantablePage(href)) continue
+    if (defaultAllows(role, href)) continue
+    if (!out.includes(href)) out.push(href)
   }
   return out
 }

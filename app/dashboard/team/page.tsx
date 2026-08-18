@@ -111,6 +111,9 @@ export default function TeamPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [clients, setClients] = useState<ClientRow[]>([])
   const [forbidden, setForbidden] = useState(false)
+  // a non-admin who has been granted the page sees the directory, not the
+  // controls — the server decides this, the UI only reflects it
+  const [canManage, setCanManage] = useState(true)
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteBusy, setInviteBusy] = useState(false)
@@ -129,12 +132,13 @@ export default function TeamPage() {
         fetch('/api/team'),
         fetch('/api/website/clients'),
       ])
-      if (teamRes.status === 403) { setForbidden(true); setMembers([]); return }
+      if (teamRes.status === 403 || teamRes.status === 404) { setForbidden(true); setMembers([]); return }
       if (!teamRes.ok) throw new Error((await teamRes.json()).error ?? 'Failed to load team')
       const json = await teamRes.json()
       setMembers(json.members)
       setInvites(json.invites)
       setAssignments(json.assignments)
+      setCanManage(json.can_manage !== false)
       if (clientsRes.ok) setClients(await clientsRes.json())
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load — has identity.sql been run in Supabase?')
@@ -233,12 +237,16 @@ export default function TeamPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Team</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            People, roles, and client assignments. Invites are emailed via Clerk and roles apply on first sign-in.
+            {canManage
+              ? 'People, roles, and client assignments. Invites are emailed via Clerk and roles apply on first sign-in.'
+              : 'Who is on the team and what they do. Only super admins can invite people or change roles.'}
           </p>
         </div>
-        <Button size="sm" className="ml-auto" onClick={() => setInviteOpen(true)}>
-          <Plus className="h-4 w-4" /> Invite person
-        </Button>
+        {canManage && (
+          <Button size="sm" className="ml-auto" onClick={() => setInviteOpen(true)}>
+            <Plus className="h-4 w-4" /> Invite person
+          </Button>
+        )}
       </div>
 
       {/* Pending invites */}
@@ -304,7 +312,7 @@ export default function TeamPage() {
                 <TableHead>Timezone</TableHead>
                 <TableHead>Clients</TableHead>
                 <TableHead>Active</TableHead>
-                <TableHead className="w-14" />
+                {canManage && <TableHead className="w-14" />}
               </TableRow>
             </TableHeader>
             <TableBody>
