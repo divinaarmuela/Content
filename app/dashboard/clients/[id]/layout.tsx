@@ -12,6 +12,7 @@ import {
   ArrowLeft, ClipboardList, Copy, KeyRound, MessageSquare, Palette, Share2, Users,
 } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
+import { useRole } from '../../useRole'
 
 /**
  * One client, one shell. The tabs are real CHILD ROUTES rather than state:
@@ -38,6 +39,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const params = useParams<{ id: string }>()
   const clientId = params.id
   const path = usePathname()
+  const { role } = useRole()
+  // notes and credentials carry internal commentary and secrets; an editor
+  // working on this client's content has no business in either
+  const senior = role === 'account_manager' || role === 'super_admin'
 
   const [client, setClient] = useState<Client | null>(null)
   const [missing, setMissing] = useState(false)
@@ -73,8 +78,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const TABS = [
     { href: base, label: 'Overview', icon: Users, exact: true },
     { href: `${base}/contacts`, label: 'Contacts', icon: Users },
-    { href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
-    { href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
+    ...(senior ? [
+      { href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
+      { href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
+    ] : []),
     { href: `${base}/social`, label: 'Social', icon: Share2 },
     { href: `${base}/intake`, label: 'Intake', icon: ClipboardList },
     { href: `${base}/brand`, label: 'Brand', icon: Palette },

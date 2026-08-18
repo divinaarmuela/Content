@@ -3,9 +3,15 @@ import { supabase } from '@/lib/supabase'
 import { guard } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 
-/** One client, for the detail page. */
+/**
+ * One client, for the detail page.
+ *
+ * READING is open to anyone who may see the Clients page — the list already
+ * is, and a page that lists clients but refuses every one of them is a wall
+ * with a menu on it. Editing stays account_manager, as it always was.
+ */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await guard('account_manager')
+  const denied = await guard('scheduler')
   if (denied) return denied
 
   const { id } = await params

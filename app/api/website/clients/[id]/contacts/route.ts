@@ -6,7 +6,7 @@ import { explainDbError } from '@/app/lib/db-errors'
 /** Contacts for one client. A client is an organisation, and organisations
  *  have an owner, a marketing lead, a bookkeeper — not one email address. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await guard('account_manager')
+  const denied = await guard('scheduler')
   if (denied) return denied
 
   const { id } = await params
