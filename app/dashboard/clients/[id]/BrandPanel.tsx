@@ -9,7 +9,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useRealtime } from 'inngest/react'
-import { FileUp, Loader2, Palette, RefreshCw, Trash2, Type } from 'lucide-react'
+import { Check, Copy, FileUp, Loader2, Palette, RefreshCw, Trash2, Type } from 'lucide-react'
 import { sanitiseProfile, type BrandProfile } from '@/app/lib/brand-core'
 import { brandChannel } from '@/app/inngest/channels'
 import { fetchBrandSubscriptionToken } from './brandActions'
@@ -25,15 +25,36 @@ type Doc = { filename: string; url: string; scanned_at: string }
 
 const isHex = (v?: string): v is string => Boolean(v && /^#[0-9a-f]{6}$/i.test(v))
 
-function Section({ icon: Icon, title, children }: {
+/** Copy anything, and say what was copied — a silent clipboard leaves you
+ *  wondering whether the click registered. */
+function copyText(value: string, label: string) {
+  navigator.clipboard.writeText(value)
+    .then(() => toast.success(`Copied ${label}`))
+    .catch(() => toast.error('Could not copy'))
+}
+
+function Section({ icon: Icon, title, copy, children }: {
   icon: React.ComponentType<{ className?: string }>
   title: string
+  /** what "copy all" puts on the clipboard, when the section supports it */
+  copy?: { value: string; label: string }
   children: React.ReactNode
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <Icon className="h-3.5 w-3.5" /> {title}
+        {copy && (
+          <button
+            type="button"
+            onClick={() => copyText(copy.value, copy.label)}
+            title={`Copy all ${title.toLowerCase()}`}
+            aria-label={`Copy all ${title.toLowerCase()}`}
+            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal normal-case tracking-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="h-3 w-3" /> Copy all
+          </button>
+        )}
       </h3>
       {children}
     </div>
@@ -239,29 +260,65 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
           )}
 
           {(profile.colors?.length ?? 0) > 0 && (
-            <Section icon={Palette} title="Colours">
+            <Section
+              icon={Palette}
+              title="Colours"
+              copy={{
+                label: 'every colour',
+                value: profile.colors!
+                  .map(c => [c.name, isHex(c.hex) ? c.hex.toUpperCase() : null, c.usage]
+                    .filter(Boolean).join(' · '))
+                  .join('\n'),
+              }}
+            >
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {profile.colors!.map((c, i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-md border border-border p-2.5">
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => copyText(
+                      isHex(c.hex) ? c.hex.toUpperCase() : (c.name ?? ''),
+                      isHex(c.hex) ? c.hex.toUpperCase() : 'the colour name',
+                    )}
+                    disabled={!isHex(c.hex) && !c.name}
+                    title={isHex(c.hex) ? `Copy ${c.hex.toUpperCase()}` : 'Copy the colour name'}
+                    className="group flex items-center gap-3 rounded-md border border-border p-2.5 text-left transition-colors hover:border-foreground/30 hover:bg-muted/50 disabled:cursor-default disabled:hover:border-border disabled:hover:bg-transparent"
+                  >
                     <span className="h-9 w-9 shrink-0 rounded-md border border-border"
                       style={isHex(c.hex) ? { backgroundColor: c.hex } : { background: 'repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0/12px 12px' }} />
-                    <span className="min-w-0">
+                    <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{c.name || c.hex || 'Unnamed'}</span>
                       <span className="block font-mono text-xs text-muted-foreground">
                         {isHex(c.hex) ? c.hex.toUpperCase() : 'no hex given'}{c.usage ? ` · ${c.usage}` : ''}
                       </span>
                     </span>
-                  </div>
+                    <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
                 ))}
               </div>
             </Section>
           )}
 
           {(profile.fonts?.length ?? 0) > 0 && (
-            <Section icon={Type} title="Typography">
+            <Section
+              icon={Type}
+              title="Typography"
+              copy={{
+                label: 'every typeface',
+                value: profile.fonts!
+                  .map(f => [f.family, f.usage, f.weights?.join(', ')].filter(Boolean).join(' · '))
+                  .join('\n'),
+              }}
+            >
               <div className="flex flex-col gap-3">
                 {profile.fonts!.map((f, i) => (
-                  <div key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-3 last:border-0 last:pb-0">
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => copyText(f.family, f.family)}
+                    title={`Copy ${f.family}`}
+                    className="group flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-3 text-left transition-colors last:border-0 last:pb-0 hover:text-foreground"
+                  >
                     <span className="text-lg font-semibold">{f.family}</span>
                     {f.usage && <span className="text-xs text-muted-foreground">{f.usage}</span>}
                     {(f.weights?.length ?? 0) > 0 && (
@@ -269,14 +326,26 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                         {f.weights!.join(' · ')}
                       </span>
                     )}
-                  </div>
+                    <Copy className={`h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 ${(f.weights?.length ?? 0) > 0 ? '' : 'ml-auto'}`} />
+                  </button>
                 ))}
               </div>
             </Section>
           )}
 
           {profile.voice && (profile.voice.tone || profile.voice.description) && (
-            <Section icon={Type} title="Voice">
+            <Section
+              icon={Type}
+              title="Voice"
+              copy={{
+                label: 'the voice',
+                value: [
+                  profile.voice.tone,
+                  profile.voice.description,
+                  profile.voice.keywords?.join(', '),
+                ].filter(Boolean).join('\n'),
+              }}
+            >
               {profile.voice.tone && <p className="text-sm font-medium">{profile.voice.tone}</p>}
               {profile.voice.description && (
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{profile.voice.description}</p>
@@ -298,7 +367,10 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
             { title: 'Imagery', items: profile.imagery },
             { title: 'Other rules', items: profile.other_rules },
           ].filter(s => (s.items?.length ?? 0) > 0).map(s => (
-            <Section key={s.title} icon={Palette} title={s.title}>
+            <Section
+              key={s.title} icon={Palette} title={s.title}
+              copy={{ label: s.title.toLowerCase(), value: s.items!.join('\n') }}
+            >
               <ul className="flex list-disc flex-col gap-1 pl-4 text-sm leading-relaxed">
                 {s.items!.map((r, i) => <li key={i}>{r}</li>)}
               </ul>
@@ -308,14 +380,20 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
           {profile.dos_and_donts && ((profile.dos_and_donts.dos?.length ?? 0) > 0 || (profile.dos_and_donts.donts?.length ?? 0) > 0) && (
             <div className="grid gap-4 sm:grid-cols-2">
               {(profile.dos_and_donts.dos?.length ?? 0) > 0 && (
-                <Section icon={Palette} title="Do">
+                <Section
+                  icon={Check} title="Do"
+                  copy={{ label: 'the dos', value: profile.dos_and_donts.dos!.join('\n') }}
+                >
                   <ul className="flex list-disc flex-col gap-1 pl-4 text-sm">
                     {profile.dos_and_donts.dos!.map((d, i) => <li key={i}>{d}</li>)}
                   </ul>
                 </Section>
               )}
               {(profile.dos_and_donts.donts?.length ?? 0) > 0 && (
-                <Section icon={Palette} title="Don't">
+                <Section
+                  icon={Palette} title="Don't"
+                  copy={{ label: 'the don\'ts', value: profile.dos_and_donts.donts!.join('\n') }}
+                >
                   <ul className="flex list-disc flex-col gap-1 pl-4 text-sm">
                     {profile.dos_and_donts.donts!.map((d, i) => <li key={i}>{d}</li>)}
                   </ul>
