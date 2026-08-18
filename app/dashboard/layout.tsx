@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Activity,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Crosshair,
 } from 'lucide-react'
 import { useRole } from './useRole'
 
@@ -48,6 +48,7 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
   { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
+  { href: '/dashboard/tracker',    label: 'Tracker',          icon: Crosshair },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
@@ -67,6 +68,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
+  '/dashboard/tracker':       'Tracker',
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Production',
   '/dashboard/scheduler':     'Scheduler',
@@ -197,6 +199,14 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
           </Sheet>
 
           <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).sort((a, b) => b.length - a.length).find(k => path.startsWith(`${k}/`)) ?? ''] ?? 'Dashboard'}</h1>
+          {/* Beta: this is in daily use while still being built, so the state
+              is stated rather than left to be discovered on a rough edge. */}
+          <span
+            title="In active development — expect rough edges, and tell us about them"
+            className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
+          >
+            Beta
+          </span>
           <Separator orientation="vertical" className="h-4 bg-zinc-200 dark:bg-zinc-700" />
           <p className="hidden rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-500 sm:block dark:bg-zinc-800 dark:text-zinc-400">
             {path}
