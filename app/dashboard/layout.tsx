@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Activity,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Crosshair,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
 } from 'lucide-react'
 import { useRole } from './useRole'
 
@@ -48,7 +48,6 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
   { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
-  { href: '/dashboard/tracker',    label: 'Tracker',          icon: Crosshair },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
@@ -68,7 +67,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
-  '/dashboard/tracker':       'Tracker',
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Production',
   '/dashboard/scheduler':     'Scheduler',
