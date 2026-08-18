@@ -76,6 +76,16 @@ export async function resolveTeamUser(): Promise<TeamUser> {
     client_id: string | null; assigned_client_ids: string[]
   } | null = null
 
+  // A person added by an admin exists BEFORE they ever sign in — with no
+  // clerk_user_id yet — so their role, clients and page access can be set up
+  // in advance. Adopt that row rather than treating them as a stranger.
+  const { data: waiting } = await supabase
+    .from('team_users')
+    .select('*')
+    .is('clerk_user_id', null)
+    .ilike('email', email)
+    .maybeSingle()
+
   if (!isSuper) {
     const { data: claimed } = await supabase
       .from('team_invites')
@@ -87,8 +97,10 @@ export async function resolveTeamUser(): Promise<TeamUser> {
     if (claimed) {
       invite = claimed
       role = claimed.role as Role
+    } else if (waiting) {
+      role = waiting.role as Role
     } else {
-      // no invite and not allowlisted → no access. Do not create a row.
+      // no invite, no prepared account, not allowlisted → no access.
       throw new AuthzError('No invitation found for this account. Ask an admin to invite you.', 403)
     }
   }
@@ -99,11 +111,13 @@ export async function resolveTeamUser(): Promise<TeamUser> {
       {
         clerk_user_id: userId,
         email,
-        name: [user?.firstName, user?.lastName].filter(Boolean).join(' ') || email,
+        // their real name once they exist; otherwise whatever the admin typed
+        name: [user?.firstName, user?.lastName].filter(Boolean).join(' ')
+          || waiting?.name || email,
         role,
-        employment_type: invite?.employment_type ?? 'employee',
-        timezone: invite?.timezone ?? 'Australia/Melbourne',
-        client_id: invite?.client_id ?? null,
+        employment_type: invite?.employment_type ?? waiting?.employment_type ?? 'employee',
+        timezone: invite?.timezone ?? waiting?.timezone ?? 'Australia/Melbourne',
+        client_id: invite?.client_id ?? waiting?.client_id ?? null,
       },
       { onConflict: 'email' }
     )

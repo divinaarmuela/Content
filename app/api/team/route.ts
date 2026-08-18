@@ -80,9 +80,16 @@ export async function POST(req: Request) {
     }
 
     const { data: existingUser } = await supabase
-      .from('team_users').select('id').ilike('email', email).maybeSingle()
+      .from('team_users').select('id, clerk_user_id').ilike('email', email).maybeSingle()
     if (existingUser) {
-      return NextResponse.json({ error: 'This email already has an account' }, { status: 409 })
+      return NextResponse.json(
+        {
+          error: existingUser.clerk_user_id
+            ? 'This email already has an account'
+            : 'This person is already on the team, waiting for their first sign-in',
+        },
+        { status: 409 },
+      )
     }
 
     // claim the pending-invite slot FIRST (unique index = race guard),
@@ -105,6 +112,30 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: dup ? 'A pending invite already exists for this email' : invErr.message },
         { status: dup ? 409 : 500 }
+      )
+    }
+
+    // The person exists NOW, before they ever sign in: a row with no
+    // clerk_user_id yet, which first sign-in adopts. Without this there is
+    // nothing to attach page access or client assignments to until they
+    // happen to log in, which is the wrong way round — the admin is setting
+    // them up precisely because they have not arrived yet.
+    await supabase.from('team_users').upsert({
+      email,
+      name: String(body.name ?? '').trim() || email,
+      role,
+      employment_type: body.employment_type === 'contractor' ? 'contractor' : 'employee',
+      timezone: body.timezone || 'Australia/Melbourne',
+      client_id: role === 'client' ? (body.client_id ?? null) : null,
+      active_status: true,
+    }, { onConflict: 'email', ignoreDuplicates: true })
+
+    const { data: person } = await supabase
+      .from('team_users').select('id').ilike('email', email).maybeSingle()
+    if (person && Array.isArray(body.assigned_client_ids) && body.assigned_client_ids.length > 0) {
+      await supabase.from('team_user_clients').upsert(
+        body.assigned_client_ids.map((client_id: string) => ({ team_user_id: person.id, client_id })),
+        { onConflict: 'team_user_id,client_id', ignoreDuplicates: true },
       )
     }
 

@@ -20,7 +20,11 @@ import type { Role } from '@/app/lib/identity-core'
  * tick, not a switch — a grant can only ever add.
  */
 
-type Member = { id: string; name: string; email: string; role: Role }
+type Member = {
+  id: string; name: string; email: string; role: Role
+  /** null until their first sign-in — set up now, arrives later */
+  clerk_user_id: string | null
+}
 
 const ROLE_LABEL: Record<string, string> = {
   scheduler: 'Scheduler',
@@ -102,6 +106,7 @@ export default function PageAccessSettings() {
               {members.map(m => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name || m.email} · {ROLE_LABEL[m.role] ?? m.role}
+                  {m.clerk_user_id ? '' : ' · not signed in yet'}
                 </SelectItem>
               ))}
             </SelectContent>

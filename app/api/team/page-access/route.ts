@@ -27,7 +27,7 @@ export async function GET() {
     const [{ data: grants }, { data: members }] = await Promise.all([
       supabase.from('user_page_access').select('team_user_id, href'),
       supabase.from('team_users')
-        .select('id, name, email, role, active_status')
+        .select('id, name, email, role, active_status, clerk_user_id')
         .eq('active_status', true)
         .neq('role', 'client')
         .order('name'),
