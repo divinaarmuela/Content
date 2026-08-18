@@ -57,6 +57,14 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
     setProfile(json.profile)
     setDocs(json.docs ?? [])
     setCanManage(Boolean(json.can_manage))
+    // a scan started before this page was opened is still ours to show
+    if (json.scan?.status === 'scanning' || json.scan?.status === 'queued') {
+      setScanning(true)
+      setProgress({ done: json.scan.done, total: json.scan.total, message: json.scan.message ?? undefined })
+    } else {
+      setScanning(false)
+      setProgress(null)
+    }
     setLoaded(true)
   }, [clientId])
 

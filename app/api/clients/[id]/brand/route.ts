@@ -27,11 +27,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const user = await requireRole('editor')
     const { id } = await params
     const { data } = await supabase.from('client_brand')
-      .select('profile, docs, updated_at, updated_by').eq('client_id', id).maybeSingle()
+      .select('profile, docs, updated_at, updated_by, scan_status, scan_done, scan_total, scan_message')
+      .eq('client_id', id).maybeSingle()
     return NextResponse.json({
       profile: data?.profile ?? null,
       docs: data?.docs ?? [],
       updated_at: data?.updated_at ?? null,
+      // a scan running right now, so reopening the tab shows it rather than
+      // an idle page that looks like nothing happened
+      scan: data?.scan_status
+        ? {
+            status: data.scan_status,
+            done: data.scan_done ?? 0,
+            total: data.scan_total ?? 1,
+            message: data.scan_message ?? null,
+          }
+        : null,
       can_manage: roleSatisfies(user.role, 'account_manager'),
     })
   } catch (e) {
@@ -65,6 +76,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!url.startsWith('https://')) {
         return NextResponse.json({ error: 'No uploaded document to scan' }, { status: 400 })
       }
+
+      // mark it before dispatching, so the panel shows a scan in flight even
+      // if the person navigates away a second later
+      await supabase.from('client_brand').upsert({
+        client_id: id, scan_status: 'queued', scan_done: 0, scan_total: 1,
+        scan_message: null,
+      })
 
       await inngest.send({
         name: 'app/brand.scan.requested',

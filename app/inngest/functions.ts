@@ -261,32 +261,9 @@ export const brandScan = inngest.createFunction(
     const { clientId, url, filename, by } = (event.data ?? {}) as Record<string, string>
     if (!clientId || !url) return { skipped: 'missing clientId or url' }
 
-    // Each chunk is its own step, deliberately. A step is one serverless
-    // invocation with its own time budget, so a 200-page document reading for
-    // ten minutes is ten short steps rather than one that gets killed. Steps
-    // are memoized, so a retry resumes rather than re-reading what is done.
-    const plan = await step.run('split', async () => {
-      const { splitBrandPdf } = await import('../lib/brand-scan')
-      return splitBrandPdf({ clientId, url })
-    })
-
-    for (let i = 0; i < plan.chunks.length; i++) {
-      await step.run(`scan-part-${i + 1}`, async () => {
-        const { scanBrandChunk } = await import('../lib/brand-scan')
-        return scanBrandChunk({
-          clientId, by: by ?? '',
-          chunkUrl: plan.chunks[i],
-          index: i, total: plan.chunks.length,
-        })
-      })
-    }
-
-    return step.run('finish', async () => {
-      const { finishBrandScan } = await import('../lib/brand-scan')
-      return finishBrandScan({
-        clientId, url, filename: filename ?? 'brand.pdf', by: by ?? '',
-        pages: plan.pages, chunks: plan.chunks.length,
-      })
+    return step.run('scan', async () => {
+      const { runBrandScan } = await import('../lib/brand-scan')
+      return runBrandScan({ clientId, url, filename: filename ?? 'brand.pdf', by: by ?? '' })
     })
   }
 )
