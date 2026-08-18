@@ -103,7 +103,7 @@ export default function IntakeSubmissionPage() {
     return (
       <div className="flex flex-col gap-4">
         <Button variant="ghost" size="sm" asChild className="-ml-2 w-fit">
-          <Link href={`/dashboard/clients/${params.id}`}>
+          <Link href={`/dashboard/clients/${params.id}/intake`}>
             <ArrowLeft className="h-4 w-4" /> Back to client
           </Link>
         </Button>
@@ -120,7 +120,7 @@ export default function IntakeSubmissionPage() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
       <div className="flex flex-col gap-3">
         <Button variant="ghost" size="sm" asChild className="-ml-2 w-fit">
-          <Link href={`/dashboard/clients/${params.id}`}>
+          <Link href={`/dashboard/clients/${params.id}/intake`}>
             <ArrowLeft className="h-4 w-4" /> Back to client
           </Link>
         </Button>
