@@ -1,70 +1,112 @@
 import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '@/lib/supabase'
 import { inngest } from '../inngest/client'
 import { brandChannel } from '../inngest/channels'
-import { extractBrandProfile, pdfPageCount } from './brand-extract'
+import { extractChunk, pdfPageCount, splitPdf } from './brand-extract'
+import { putObject } from './storage'
 import { mergeProfiles, type BrandProfile } from './brand-core'
 
 /**
- * Scan one uploaded document into a client's brand profile.
+ * Scanning one guidelines document into a client's brand profile, in three
+ * movements so each is a separate background step with its own time budget:
  *
- * Runs as a background job because a 60-page design document is minutes of
- * model time — far past a serverless request's budget — and progress is
- * published so the panel fills in live rather than holding a spinner.
+ *   splitBrandPdf   — read the upload once, cut it into page-range chunks,
+ *                     park them in storage. Nothing else ever loads the whole
+ *                     document again, which is what makes a 300MB print
+ *                     master survivable.
+ *   scanBrandChunk  — one chunk, one model call, merged straight into the
+ *                     stored profile. Called once per chunk, so the panel
+ *                     fills in progressively and a retry resumes mid-document.
+ *   finishBrandScan — record the document and announce completion.
  */
 
-export async function runBrandScan(input: {
-  clientId: string
-  url: string
-  filename: string
-  by: string
-}): Promise<{ pages: number; chunks: number }> {
-  const { clientId, url, filename, by } = input
+const say = (
+  clientId: string, status: string, done: number, total: number, message?: string,
+) =>
+  void inngest.realtime.publish(brandChannel.progress, {
+    client_id: clientId, status, done, total,
+    ...(message ? { message } : {}), ts: Date.now(),
+  }).catch(e => console.error('brand realtime publish failed:', e))
 
-  const say = (status: string, done: number, total: number, message?: string) =>
-    void inngest.realtime.publish(brandChannel.progress, {
-      client_id: clientId, status, done, total,
-      ...(message ? { message } : {}), ts: Date.now(),
-    }).catch(e => console.error('brand realtime publish failed:', e))
-
+export async function splitBrandPdf(input: { clientId: string; url: string }): Promise<{
+  chunks: string[]; pages: number
+}> {
+  const { clientId, url } = input
   try {
     const file = await fetch(url)
     if (!file.ok) throw new Error(`Could not read the uploaded PDF (${file.status})`)
     const bytes = Buffer.from(await file.arrayBuffer())
 
     const pages = await pdfPageCount(bytes)
-    const chunks = Math.max(1, Math.ceil(pages / 20))
-    say('scanning', 0, chunks, `${pages || '?'} pages`)
+    const parts = await splitPdf(bytes)
+    say(clientId, 'scanning', 0, parts.length, `${pages || '?'} pages`)
+
+    // a single-chunk document needs no copy in storage
+    if (parts.length === 1) return { chunks: [url], pages }
+
+    const chunks: string[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const { publicUrl } = await putObject(`brand-part-${i + 1}.pdf`, parts[i], 'application/pdf')
+      chunks.push(publicUrl)
+    }
+    return { chunks, pages }
+  } catch (e) {
+    say(clientId, 'failed', 0, 0, e instanceof Error ? e.message : String(e))
+    throw e
+  }
+}
+
+export async function scanBrandChunk(input: {
+  clientId: string; chunkUrl: string; index: number; total: number; by: string
+}): Promise<{ merged: boolean }> {
+  const { clientId, chunkUrl, index, total, by } = input
+  try {
+    const file = await fetch(chunkUrl)
+    if (!file.ok) throw new Error(`Could not read part ${index + 1} (${file.status})`)
+    const bytes = Buffer.from(await file.arrayBuffer())
 
     const { data: existing } = await supabase.from('client_brand')
-      .select('profile, docs').eq('client_id', clientId).maybeSingle()
+      .select('profile').eq('client_id', clientId).maybeSingle()
+    const previous = (existing?.profile ?? null) as BrandProfile | null
 
-    const profile = await extractBrandProfile(
-      bytes,
-      (existing?.profile ?? null) as BrandProfile | null,
-      (done, total) => { say('scanning', done, total) },
-    )
+    const part = total === 1 ? 'the pages' : `pages ${index * 20 + 1}–${index * 20 + 20}`
+    const extracted = await extractChunk(new Anthropic(), bytes, previous, part)
+    const merged = mergeProfiles(previous, extracted)
 
-    // merged again here: extractBrandProfile already merges chunk by chunk,
-    // and this keeps the contract explicit if that ever changes
-    const merged = mergeProfiles((existing?.profile ?? null) as BrandProfile | null, profile)
-
-    const docs = [
-      ...((existing?.docs ?? []) as { filename: string; url: string; scanned_at: string }[]),
-      { filename, url, scanned_at: new Date().toISOString(), pages },
-    ]
-
+    // written per chunk, so the panel fills in as it goes and a failure later
+    // in the document never costs the pages already read
     const { error } = await supabase.from('client_brand').upsert({
-      client_id: clientId, profile: merged, docs,
+      client_id: clientId, profile: merged,
       updated_at: new Date().toISOString(), updated_by: by,
     })
     if (error) throw new Error(error.message)
 
-    say('done', chunks, chunks)
-    return { pages, chunks }
+    say(clientId, 'scanning', index + 1, total)
+    return { merged: true }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    say('failed', 0, 0, message)
-    throw e
+    // one bad chunk must not lose the rest of the document
+    console.error(`brand chunk ${index + 1}/${total} failed:`, e)
+    say(clientId, 'scanning', index + 1, total, `part ${index + 1} could not be read`)
+    return { merged: false }
   }
+}
+
+export async function finishBrandScan(input: {
+  clientId: string; url: string; filename: string; by: string; pages: number; chunks: number
+}): Promise<{ pages: number; chunks: number }> {
+  const { clientId, url, filename, by, pages, chunks } = input
+
+  const { data: existing } = await supabase.from('client_brand')
+    .select('docs').eq('client_id', clientId).maybeSingle()
+  const docs = [
+    ...((existing?.docs ?? []) as Record<string, unknown>[]),
+    { filename, url, scanned_at: new Date().toISOString(), pages },
+  ]
+  await supabase.from('client_brand').upsert({
+    client_id: clientId, docs, updated_at: new Date().toISOString(), updated_by: by,
+  })
+
+  say(clientId, 'done', chunks, chunks)
+  return { pages, chunks }
 }

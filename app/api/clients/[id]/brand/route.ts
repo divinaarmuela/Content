@@ -18,9 +18,9 @@ import { inngest } from '../../../../inngest/client'
  * stored JSON, never the PDF again.
  */
 
-/** Storage takes far more, but a document past this is a print master rather
- *  than guidelines, and every page still costs model time. */
-const MAX_PDF_BYTES = 150 * 1024 * 1024
+/** Storage takes 5TB objects; this is only a sanity bound. Print masters run
+ *  to hundreds of megabytes and are exactly what clients send. */
+const MAX_PDF_BYTES = 2 * 1024 * 1024 * 1024
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -52,10 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Brand guidelines must be a PDF' }, { status: 415 })
       }
       if ((body?.size ?? 0) > MAX_PDF_BYTES) {
-        return NextResponse.json(
-          { error: 'That PDF is over 150MB — export a lighter copy or split it.' },
-          { status: 413 },
-        )
+        return NextResponse.json({ error: 'That file is over 2GB.' }, { status: 413 })
       }
       const signed = await signUpload(String(body?.name ?? 'brand.pdf'), 'application/pdf')
       return NextResponse.json(signed)

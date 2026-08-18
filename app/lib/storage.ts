@@ -69,6 +69,32 @@ export type SignedUpload = {
 }
 
 /**
+ * Upload bytes from the SERVER and return where they are readable.
+ *
+ * Used for derived files the browser never sees — the page-range chunks a
+ * large brand PDF is split into, so each scan step downloads only its own
+ * slice instead of the whole document.
+ */
+export async function putObject(
+  filename: string, bytes: Buffer, contentType: string,
+): Promise<{ publicUrl: string; key: string }> {
+  const key = objectKey(filename)
+
+  if (r2Configured()) {
+    await r2().send(new PutObjectCommand({
+      Bucket: R2_BUCKET!, Key: key, Body: bytes, ContentType: contentType,
+    }))
+    return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
+  }
+
+  const { error } = await supabase.storage
+    .from('website-assets').upload(key, bytes, { contentType })
+  if (error) throw new Error(error.message)
+  const { data: pub } = supabase.storage.from('website-assets').getPublicUrl(key)
+  return { publicUrl: pub.publicUrl, key }
+}
+
+/**
  * A URL the browser can upload one file to.
  *
  * contentType is part of the R2 signature: the PUT must send exactly the same

@@ -97,6 +97,14 @@ export async function pdfPageCount(bytes: Buffer): Promise<number> {
   }
 }
 
+/** One chunk, one model call. Exported so each chunk can be its own
+ *  background step rather than all of them sharing one time budget. */
+export async function extractChunk(
+  anthropic: Anthropic, pdf: Buffer, previous: BrandProfile | null, part: string,
+): Promise<BrandProfile> {
+  return extractOne(anthropic, pdf.toString('base64'), previous, part)
+}
+
 async function extractOne(
   anthropic: Anthropic, pdfBase64: string, previous: BrandProfile | null, part: string,
 ): Promise<BrandProfile> {
