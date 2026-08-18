@@ -123,7 +123,7 @@ export default function PageAccessSettings() {
             {person.name || person.email} is a super admin and already sees every page.
           </div>
         ) : (
-          <div className="grid gap-1.5 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
             {GRANTABLE_PAGES.map(page => {
               const byDefault = defaultAllows(person.role, page.href)
               const granted = theirGrants.includes(page.href)
@@ -131,6 +131,7 @@ export default function PageAccessSettings() {
                 <label
                   key={page.href}
                   className={
+                    (page.parent ? 'ml-6 ' : '') +
                     'flex items-center gap-3 rounded-md border px-3 py-2 text-sm ' +
                     (byDefault
                       ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
@@ -152,7 +153,10 @@ export default function PageAccessSettings() {
                     />
                   )}
                   <span className="min-w-0">
-                    <span className="block truncate">{page.label}</span>
+                    <span className="block truncate">
+                      {page.label}
+                      {page.parent && <span className="ml-1.5 text-[11px] text-muted-foreground">tab inside Clients</span>}
+                    </span>
                     <span className="block font-mono text-[11px] text-muted-foreground">{page.href}</span>
                   </span>
                   {byDefault && (

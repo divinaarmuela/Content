@@ -17,11 +17,23 @@ import type { Role } from './identity-core'
 /** Pages granted to one person, as hrefs. */
 export type GrantedPages = string[]
 
-/** Every page a super admin may hand out, in sidebar order. */
-export const GRANTABLE_PAGES: { href: string; label: string }[] = [
+/**
+ * Every page a super admin may hand out, in sidebar order.
+ *
+ * `parent` marks a SUBPAGE — a tab inside another page. A subpage is only
+ * ever reachable when its parent is, which keeps "can see Clients but not
+ * their credentials" expressible without inventing a second permission model.
+ */
+export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[] = [
   { href: '/dashboard', label: 'Overview' },
   { href: '/dashboard/leads', label: 'Leads' },
   { href: '/dashboard/clients', label: 'Clients' },
+  { href: '/dashboard/clients/:id/contacts', label: 'Contacts', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/notes', label: 'Notes', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/credentials', label: 'Credentials', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/social', label: 'Social', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/intake', label: 'Intake', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/brand', label: 'Brand', parent: '/dashboard/clients' },
   { href: '/dashboard/audience', label: 'Audience' },
   { href: '/dashboard/social', label: 'Social channels' },
   { href: '/dashboard/website', label: 'Website' },
@@ -49,6 +61,23 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === 'editor') return href === '/dashboard/production'
   if (role === 'scheduler') return ['/dashboard/scheduler', '/dashboard/calendar'].includes(href)
   return true                                  // account_manager, super_admin
+}
+
+/** The subpage key for a real path: /dashboard/clients/abc-123/brand →
+ *  /dashboard/clients/:id/brand. Ids vary; permissions do not. */
+export function subpageKey(path: string): string | null {
+  const m = path.match(/^\/dashboard\/clients\/[^/]+\/([^/]+)$/)
+  return m ? `/dashboard/clients/:id/${m[1]}` : null
+}
+
+/** A subpage needs BOTH its parent and itself. */
+export function canSeeSubpage(
+  role: Role | null, key: string, granted: GrantedPages,
+): boolean {
+  const page = GRANTABLE_PAGES.find(p => p.href === key)
+  if (!page?.parent) return canSeePage(role, key, granted)
+  if (!canSeePage(role, page.parent, granted)) return false
+  return canSeePage(role, key, granted)
 }
 
 /** May this person see this page — by role, or because they were granted it? */

@@ -9,7 +9,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronRight, ChevronLeft, ExternalLink, Inbox, Settings2, CircleAlert, CheckCircle2, Users, CalendarDays } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import TransparencyNotice from './TransparencyNotice'
 import AsanaSetup from './AsanaSetup'
 
 type Task = {
@@ -153,7 +152,6 @@ export default function ActivityPage() {
         </div>
       )}
 
-      <TransparencyNotice />
 
       {isAdmin && showSetup && <AsanaSetup onChanged={() => load()} />}
 

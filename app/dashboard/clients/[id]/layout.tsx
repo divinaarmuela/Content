@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
+import { canSeeSubpage } from '@/app/lib/page-access-core'
 
 /**
  * One client, one shell. The tabs are real CHILD ROUTES rather than state:
@@ -40,9 +41,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const clientId = params.id
   const path = usePathname()
   const { role } = useRole()
-  // notes and credentials carry internal commentary and secrets; an editor
-  // working on this client's content has no business in either
-  const senior = role === 'account_manager' || role === 'super_admin'
+  // which client tabs this person may open is configured in Settings rather
+  // than hardcoded — an editor might need Brand but never Credentials
+  const [granted, setGranted] = useState<string[]>([])
+  useEffect(() => {
+    fetch('/api/team/page-access')
+      .then(r => r.ok ? r.json() : { mine: [] })
+      .then(j => setGranted(j.mine ?? []))
+      .catch(() => {})
+  }, [])
 
   const [client, setClient] = useState<Client | null>(null)
   const [missing, setMissing] = useState(false)
@@ -75,17 +82,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   const base = `/dashboard/clients/${clientId}`
-  const TABS = [
-    { href: base, label: 'Overview', icon: Users, exact: true },
-    { href: `${base}/contacts`, label: 'Contacts', icon: Users },
-    ...(senior ? [
-      { href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
-      { href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
-    ] : []),
-    { href: `${base}/social`, label: 'Social', icon: Share2 },
-    { href: `${base}/intake`, label: 'Intake', icon: ClipboardList },
-    { href: `${base}/brand`, label: 'Brand', icon: Palette },
+  const ALL_TABS = [
+    { key: null, href: base, label: 'Overview', icon: Users, exact: true },
+    { key: '/dashboard/clients/:id/contacts', href: `${base}/contacts`, label: 'Contacts', icon: Users },
+    { key: '/dashboard/clients/:id/notes', href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
+    { key: '/dashboard/clients/:id/credentials', href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
+    { key: '/dashboard/clients/:id/social', href: `${base}/social`, label: 'Social', icon: Share2 },
+    { key: '/dashboard/clients/:id/intake', href: `${base}/intake`, label: 'Intake', icon: ClipboardList },
+    { key: '/dashboard/clients/:id/brand', href: `${base}/brand`, label: 'Brand', icon: Palette },
   ]
+  const TABS = ALL_TABS.filter(t => t.key === null || canSeeSubpage(role, t.key, granted))
 
   const portalUrl = client?.share_token ? publicUrl(`/portal/${client.share_token}`) : null
 
