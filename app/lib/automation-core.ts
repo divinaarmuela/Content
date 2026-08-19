@@ -13,6 +13,11 @@ export type AutomationDraft = {
   keywords: string[]
   dmMessage: string
   alsoMatchInDms: boolean
+  /** Wraps the button link in the provider's redirect to count clicks — the
+   *  tapper briefly sees the tracking domain. Off = clean direct link. */
+  linkTracking: boolean
+  /** Public reply posted under the triggering comment, alongside the DM. */
+  commentReply?: string
   buttonTitle?: string
   buttonUrl?: string
   platformPostId?: string
@@ -79,6 +84,10 @@ export function parseAutomationDraft(raw: unknown): ParseResult {
     value: {
       name, trigger, keywords, dmMessage,
       alsoMatchInDms: r.alsoMatchInDms === true,
+      linkTracking: r.linkTracking !== false, // provider default: on
+      ...(String(r.commentReply ?? '').trim()
+        ? { commentReply: String(r.commentReply).trim().slice(0, 300) }
+        : {}),
       ...(buttonUrl ? { buttonTitle, buttonUrl } : {}),
       ...(platformPostId ? { platformPostId } : {}),
     },
@@ -98,10 +107,14 @@ export function automationPayload(
     keywords: draft.keywords,
     dmMessage: draft.dmMessage,
     ...(draft.alsoMatchInDms ? { alsoMatchInDms: true } : {}),
+    ...(draft.commentReply ? { commentReply: draft.commentReply } : {}),
     // this endpoint's discriminator is 'url' | 'postback' | 'phone' — NOT the
     // 'web_url' the private-reply endpoint takes
     ...(draft.buttonUrl
-      ? { buttons: [{ type: 'url', title: draft.buttonTitle, url: draft.buttonUrl }] }
+      ? {
+          buttons: [{ type: 'url', title: draft.buttonTitle, url: draft.buttonUrl }],
+          ...(draft.linkTracking ? {} : { linkTracking: false }),
+        }
       : {}),
     ...(draft.platformPostId ? { platformPostId: draft.platformPostId } : {}),
   }

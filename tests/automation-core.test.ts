@@ -55,6 +55,20 @@ describe('parseAutomationDraft', () => {
     expect(parseAutomationDraft({ ...base, dmMessage: 'x'.repeat(1100) })).toMatchObject({ ok: false })
   })
 
+  it('keeps a public comment reply and drops a blank one', () => {
+    const r = parseAutomationDraft({ ...base, commentReply: '  Check your DMs!  ' })
+    expect(r).toMatchObject({ ok: true, value: { commentReply: 'Check your DMs!' } })
+    const blank = parseAutomationDraft({ ...base, commentReply: '   ' })
+    expect(blank.ok && !('commentReply' in blank.value)).toBe(true)
+  })
+
+  it('turns link tracking off only when explicitly false', () => {
+    const on = parseAutomationDraft(base)
+    expect(on).toMatchObject({ ok: true, value: { linkTracking: true } })
+    const off = parseAutomationDraft({ ...base, linkTracking: false })
+    expect(off).toMatchObject({ ok: true, value: { linkTracking: false } })
+  })
+
   it('keeps story_reply and post scoping when given', () => {
     const r = parseAutomationDraft({ ...base, trigger: 'story_reply', platformPostId: ' 123 ' })
     expect(r).toMatchObject({ ok: true, value: { trigger: 'story_reply', platformPostId: '123' } })
@@ -74,6 +88,19 @@ describe('automationPayload', () => {
       profileId: 'p1', accountId: 'a1', name: 'Launch', trigger: 'comment',
       keywords: ['LINK'], dmMessage: 'Here', alsoMatchInDms: true,
       buttons: [{ type: 'url', title: 'Shop', url: 'https://x.co' }],
+    })
+  })
+
+  it('passes linkTracking false through with the button', () => {
+    const draft = parseAutomationDraft({
+      name: 'L', keywords: 'x', dmMessage: 'm',
+      buttonTitle: 'Go', buttonUrl: 'https://x.co', linkTracking: false,
+    })
+    expect(draft.ok).toBe(true)
+    if (!draft.ok) return
+    expect(automationPayload(draft.value, { profileId: 'p', accountId: 'a' })).toMatchObject({
+      linkTracking: false,
+      buttons: [{ type: 'url', title: 'Go', url: 'https://x.co' }],
     })
   })
 })

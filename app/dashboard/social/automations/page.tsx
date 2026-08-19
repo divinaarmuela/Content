@@ -34,6 +34,7 @@ type Automation = {
   trigger?: string
   keywords?: string[]
   dmMessage?: string
+  commentReply?: string
   isActive?: boolean
   platformPostId?: string
   alsoMatchInDms?: boolean
@@ -61,7 +62,7 @@ export default function AutomationsPage() {
   const [draft, setDraft] = useState({
     accountRowId: '', name: '', trigger: 'comment',
     keywords: '', dmMessage: '', buttonTitle: '', buttonUrl: '',
-    alsoMatchInDms: false, platformPostId: '',
+    alsoMatchInDms: false, linkTracking: true, commentReply: '', platformPostId: '',
   })
 
   const load = useCallback(async () => {
@@ -260,6 +261,17 @@ export default function AutomationsPage() {
                 onChange={e => setDraft(d => ({ ...d, dmMessage: e.target.value }))} />
             </div>
 
+            {draft.trigger === 'comment' && (
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  Public reply under their comment <span className="font-normal text-zinc-400">optional</span>
+                </label>
+                <Input value={draft.commentReply} maxLength={300}
+                  placeholder="Check your DMs! 📩"
+                  onChange={e => setDraft(d => ({ ...d, commentReply: e.target.value }))} />
+              </div>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
@@ -281,6 +293,21 @@ export default function AutomationsPage() {
                 className="h-4 w-4 accent-blue-600" />
               Also answer when the keyword arrives as a DM
             </label>
+
+            {draft.buttonUrl.trim() !== '' && (
+              <label className="flex w-fit cursor-pointer items-start gap-2 text-sm">
+                <input type="checkbox" checked={draft.linkTracking}
+                  onChange={e => setDraft(d => ({ ...d, linkTracking: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 accent-blue-600" />
+                <span>
+                  Count link clicks
+                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                    Wraps the link in a short redirect — the tapper briefly sees the
+                    tracking domain. Turn off for a clean direct link (no click stats).
+                  </span>
+                </span>
+              </label>
+            )}
 
             <div className="flex items-center gap-3">
               <Button size="sm" disabled={busy !== null || problem !== null} onClick={create}>
@@ -342,6 +369,11 @@ export default function AutomationsPage() {
                 {a.dmMessage && (
                   <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
                     {a.dmMessage}
+                  </p>
+                )}
+                {a.commentReply && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Public reply: <span className="text-zinc-700 dark:text-zinc-300">{a.commentReply}</span>
                   </p>
                 )}
 
