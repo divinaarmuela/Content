@@ -210,9 +210,11 @@ export default function ItemDetailPage() {
       // assigned managers first, then the rest alphabetically
       list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
       setReviewers(list)
-      // default reviewer: whoever handed out the job; else the client's managers
-      const assigner = detail?.assigned_by && list.find(r => r.id === detail.assigned_by)
-      setChosen(assigner ? new Set([assigner.id]) : new Set(list.filter(r => r.assigned).map(r => r.id)))
+      // default reviewers: whoever handed out the job PLUS the client's
+      // current managers — reassigning a client's AM must change who hears
+      const defaults = new Set(list.filter(r => r.assigned).map(r => r.id))
+      if (detail?.assigned_by && list.some(r => r.id === detail.assigned_by)) defaults.add(detail.assigned_by)
+      setChosen(defaults)
     } catch (e) {
       // picker unavailable → submit still works, routed to assigned managers
       toast.error(e instanceof Error ? e.message : 'Could not load reviewers')
