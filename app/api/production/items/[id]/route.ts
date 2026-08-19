@@ -69,10 +69,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 /** Edit item fields. AM+ (editors edit via versions/comments, not metadata). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('account_manager')
+    // metadata edits are manager work — except the CAPTION, which is the
+    // scheduler's post text: they may polish it without touching anything else
+    const body = await req.json()
+    const keys = Object.keys(body ?? {})
+    const captionOnly = keys.length === 1 && keys[0] === 'caption'
+    const user = captionOnly ? await requireRole('scheduler') : await requireRole('account_manager')
     const { id } = await params
     await loadItemForUser(user, id)
-    const body = await req.json()
 
     const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets'] as const
     const patch: Record<string, unknown> = {}

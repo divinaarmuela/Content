@@ -777,6 +777,38 @@ export default function ItemDetailPage() {
             </Card>
           )}
 
+          {/* the caption IS the post: what the scheduler publishes and the
+              auto-publisher sends as the post text. Managers write it,
+              schedulers may polish it. */}
+          {isTeam && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm font-semibold">Caption</CardTitle></CardHeader>
+              <CardContent className="pt-0">
+                {['account_manager', 'super_admin', 'scheduler'].includes(role) ? (
+                  <Textarea
+                    rows={3}
+                    defaultValue={detail.caption ?? ''}
+                    placeholder="The post text — published exactly as written here…"
+                    onBlur={e => {
+                      const v = e.target.value.trim()
+                      if (v !== (detail.caption ?? '')) {
+                        void fetch(`/api/production/items/${id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ caption: v || null }),
+                        }).then(r => { if (r.ok) { toast.success('Caption saved'); load() } else toast.error('Save failed') })
+                      }
+                    }}
+                  />
+                ) : detail.caption ? (
+                  <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.caption}</p>
+                ) : (
+                  <p className="text-sm text-zinc-400 dark:text-zinc-500">No caption yet — the account manager writes the post text here.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {(canSchedule || detail.schedule.length > 0) && (
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Scheduling</CardTitle></CardHeader>
