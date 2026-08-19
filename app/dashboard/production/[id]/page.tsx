@@ -188,7 +188,15 @@ export default function ItemDetailPage() {
       setReviewPick(null)
       load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : `${label} failed`)
+      // a dropped RESPONSE is not a failed request — check before alarming
+      if (e instanceof TypeError) {
+        toast.message('Network hiccup — checking whether it went through…')
+        await load()
+        setReviewPick(null)
+        toast.message('Refreshed. If the status moved, it worked — don’t click again.')
+      } else {
+        toast.error(e instanceof Error ? e.message : `${label} failed`)
+      }
     } finally {
       setBusy(null)
     }
