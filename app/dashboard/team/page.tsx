@@ -118,7 +118,9 @@ export default function TeamPage() {
   const [forbidden, setForbidden] = useState(false)
   // a non-admin who has been granted the page sees the directory, not the
   // controls — the server decides this, the UI only reflects it
-  const [canManage, setCanManage] = useState(true)
+  // false until the server says otherwise — a flash of admin controls at
+  // people who cannot use them is an invitation to a 403
+  const [canManage, setCanManage] = useState(false)
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteBusy, setInviteBusy] = useState(false)
@@ -348,7 +350,7 @@ export default function TeamPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Switch
+                    {canManage ? <Switch
                       checked={m.active_status}
                       onCheckedChange={async v => {
                         const res = await fetch(`/api/team/${m.id}`, {
@@ -361,13 +363,19 @@ export default function TeamPage() {
                         load()
                       }}
                       aria-label={`Toggle active for ${m.email}`}
-                    />
+                    /> : (
+                      <span className={`font-mono text-[11px] uppercase ${m.active_status ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`}>
+                        {m.active_status ? 'active' : 'inactive'}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} aria-label={`Edit ${m.email}`}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      {canManage && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} aria-label={`Edit ${m.email}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {canManage && m.role !== 'super_admin' && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>

@@ -95,15 +95,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-function NavLinks({ role, granted, path, onNavigate }: {
+function NavLinks({ role, granted, hidden, path, onNavigate }: {
   role: Role | null
   granted: string[]
+  hidden: string[]
   path: string
   onNavigate?: () => void
 }) {
   // the role ladder decides by default; a super admin's grants can only add
-  const main = visiblePages(role, NAV_MAIN, granted)
-  const tools = visiblePages(role, NAV_TOOLS, granted)
+  const main = visiblePages(role, NAV_MAIN, granted, hidden)
+  const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
   const link = (item: NavItem) => {
     const active = path === item.href
     const Icon = item.icon
@@ -161,11 +162,13 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // pages a super admin has opened to THIS person; empty until it loads, so
   // the sidebar starts from the role ladder and only ever gains entries
   const [granted, setGranted] = useState<string[]>([])
+  // pages this person chose to mute for themselves — wins over everything
+  const [hidden, setHidden] = useState<string[]>([])
   const [grantsLoaded, setGrantsLoaded] = useState(false)
   useEffect(() => {
     fetch('/api/team/page-access')
-      .then(r => r.ok ? r.json() : { mine: [] })
-      .then(j => setGranted(j.mine ?? []))
+      .then(r => r.ok ? r.json() : { mine: [], hidden: [] })
+      .then(j => { setGranted(j.mine ?? []); setHidden(j.hidden ?? []) })
       .catch(() => {})
       .finally(() => setGrantsLoaded(true))
   }, [])
@@ -202,9 +205,9 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // scheduler may open item detail — the API still scopes what it returns
   // (schedulers get approved+ items only, or a 404)
   const isItemDetail = /^\/dashboard\/production\/[^/]+$/.test(path)
-  const blocked = !resolving && section !== null && !canSeePage(role, section, granted)
-    && !(isItemDetail && canSeePage(role, '/dashboard/scheduler', granted))
-  const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted)[0] ?? null
+  const blocked = !resolving && section !== null && !canSeePage(role, section, granted, hidden)
+    && !(isItemDetail && canSeePage(role, '/dashboard/scheduler', granted, hidden))
+  const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted, hidden)[0] ?? null
 
   return (
     <div className="dbx min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
@@ -212,7 +215,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-900">
         <SidebarHeader />
         <div className="flex-1 overflow-y-auto pb-6">
-          <NavLinks role={role} granted={granted} path={path} />
+          <NavLinks role={role} granted={granted} hidden={hidden} path={path} />
         </div>
         <div className="border-t border-zinc-100 px-5 py-3.5 dark:border-zinc-800">
           <a
@@ -240,7 +243,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <SheetContent side="left" className="w-64 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
-              <NavLinks role={role} granted={granted} path={path} onNavigate={() => setMobileOpen(false)} />
+              <NavLinks role={role} granted={granted} hidden={hidden} path={path} onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
 

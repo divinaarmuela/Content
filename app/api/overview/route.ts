@@ -110,15 +110,24 @@ export async function GET() {
       })
     }
 
-    // account_manager / super_admin — the funnel plus the front door
+    // account_manager / super_admin — the funnel plus the front door.
+    // Lead data only for those who may see the Leads page: supers by role,
+    // an AM only via an explicit per-person grant.
+    const { data: leadsRow } = await supabase.from('user_page_access')
+      .select('hidden').eq('team_user_id', user.id).eq('href', '/dashboard/leads').maybeSingle()
+    // hidden wins for everyone — a super admin who muted Leads sees none of it
+    const mayLeads = !leadsRow?.hidden
+      && (user.role === 'super_admin' || (!!leadsRow && !leadsRow.hidden))
     let clientsQ = supabase.from('clients').select('id, name').order('name')
     if (clientIds !== null) clientsQ = clientsQ.in('id', clientIds.length ? clientIds : ['00000000-0000-0000-0000-000000000000'])
     const [{ data: clientRows }, { data: leadRows }] = await Promise.all([
       clientsQ,
-      supabase.from('leads')
-        .select('id, fname, lname, biz, source, created_at')
-        .order('created_at', { ascending: false })
-        .limit(50),
+      mayLeads
+        ? supabase.from('leads')
+            .select('id, fname, lname, biz, source, created_at')
+            .order('created_at', { ascending: false })
+            .limit(50)
+        : Promise.resolve({ data: null }),
     ])
     const leads = leadRows ?? []
     const needsReview = items
@@ -134,9 +143,13 @@ export async function GET() {
         awaiting_client: (pipeline.client_review ?? 0) + (pipeline.client_changes_requested ?? 0),
         revisions_open: pipeline.revision_required ?? 0,
         needs_review: needsReview,
-        leads_total: leads.length,
-        leads_week: leads.filter(l => l.created_at >= weekAgo).length,
-        latest_leads: leads.slice(0, 6),
+        ...(mayLeads
+          ? {
+              leads_total: leads.length,
+              leads_week: leads.filter(l => l.created_at >= weekAgo).length,
+              latest_leads: leads.slice(0, 6),
+            }
+          : {}),
       },
     })
   } catch (e) {

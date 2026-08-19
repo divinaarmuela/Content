@@ -77,17 +77,21 @@ export function subpageKey(path: string): string | null {
 
 /** A subpage needs BOTH its parent and itself. */
 export function canSeeSubpage(
-  role: Role | null, key: string, granted: GrantedPages,
+  role: Role | null, key: string, granted: GrantedPages, hidden: GrantedPages = [],
 ): boolean {
   const page = GRANTABLE_PAGES.find(p => p.href === key)
-  if (!page?.parent) return canSeePage(role, key, granted)
-  if (!canSeePage(role, page.parent, granted)) return false
-  return canSeePage(role, key, granted)
+  if (!page?.parent) return canSeePage(role, key, granted, hidden)
+  if (!canSeePage(role, page.parent, granted, hidden)) return false
+  return canSeePage(role, key, granted, hidden)
 }
 
-/** May this person see this page — by role, or because they were granted it? */
-export function canSeePage(role: Role | null, href: string, granted: GrantedPages): boolean {
+/** May this person see this page — by role, or because they were granted it?
+ *  `hidden` is the person's OWN mute list: a preference that wins over
+ *  everything, including a super admin's blanket access. It never touches
+ *  server-side permissions — an API they may call, they may still call. */
+export function canSeePage(role: Role | null, href: string, granted: GrantedPages, hidden: GrantedPages = []): boolean {
   if (role === null) return false
+  if (hidden.includes(href)) return false
   if (defaultAllows(role, href)) return true
   // a grant is for a team member; a client is a different axis entirely
   if (role === 'client') return false
@@ -97,9 +101,9 @@ export function canSeePage(role: Role | null, href: string, granted: GrantedPage
 /** Filter a nav list. Order is preserved — a granted page appears where it
  *  always sits, not appended somewhere surprising. */
 export function visiblePages<T extends { href: string }>(
-  role: Role | null, items: T[], granted: GrantedPages,
+  role: Role | null, items: T[], granted: GrantedPages, hidden: GrantedPages = [],
 ): T[] {
-  return items.filter(i => canSeePage(role, i.href, granted))
+  return items.filter(i => canSeePage(role, i.href, granted, hidden))
 }
 
 /** Can this page be handed out at all? Guards the write path against a typo'd

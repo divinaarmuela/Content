@@ -1,8 +1,14 @@
 'use client'
 
 import ProfileSettings from './ProfileSettings'
+import MyPages from './MyPages'
 
-/** Settings home = your profile. The other sections are sibling routes. */
+/** Settings home = your profile + your own page preferences. */
 export default function SettingsProfilePage() {
-  return <ProfileSettings />
+  return (
+    <div className="flex flex-col gap-4">
+      <ProfileSettings />
+      <MyPages />
+    </div>
+  )
 }

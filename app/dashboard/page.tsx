@@ -47,9 +47,10 @@ type Overview = {
     awaiting_client: number
     revisions_open: number
     needs_review: ItemLite[]
-    leads_total: number
-    leads_week: number
-    latest_leads: LeadLite[]
+    /** absent for managers without a Leads grant */
+    leads_total?: number
+    leads_week?: number
+    latest_leads?: LeadLite[]
   }
 }
 
@@ -260,14 +261,16 @@ export default function OverviewPage() {
             <Stat label="Clients" value={data.manager.clients} loading={false} hint="You look after" icon={Users} />
             <Stat label="Internal review" value={data.manager.awaiting_internal_review} loading={false} hint="Waiting on your sign-off" icon={ClipboardList} />
             <Stat label="With client" value={data.manager.awaiting_client} loading={false} hint="In client review" icon={Send} />
-            <Stat label="Leads · 7 days" value={data.manager.leads_week} loading={false} hint={`${data.manager.leads_total}+ total`} icon={TrendingUp} />
+            {data.manager.latest_leads
+              ? <Stat label="Leads · 7 days" value={data.manager.leads_week ?? 0} loading={false} hint={`${data.manager.leads_total ?? 0}+ total`} icon={TrendingUp} />
+              : <Stat label="Revisions open" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
           </div>
           <Pipeline pipeline={data.pipeline} />
           <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
             <ItemList title="Waiting on review" icon={ClipboardList} items={data.manager.needs_review}
               empty="Nothing in review — the funnel is clear." actionHref="/dashboard/production" actionLabel="Open board" />
             <div className="flex flex-col gap-4">
-              <Card>
+              {data.manager.latest_leads && <Card>
                 <CardHeader className="flex-row items-center">
                   <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                     <Inbox className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Latest leads
@@ -290,7 +293,7 @@ export default function OverviewPage() {
                     </div>
                   ))}
                 </CardContent>
-              </Card>
+              </Card>}
               <Card>
                 <CardHeader className="flex-row items-center">
                   <CardTitle className="flex items-center gap-2 text-sm font-semibold">
