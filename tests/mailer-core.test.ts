@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { senderName, fromHeader, replyToFor } from '../app/lib/mailer-core'
+import { actorAlias, senderName, fromHeader, replyToFor } from '../app/lib/mailer-core'
 
 describe('senderName — the email reads as from the person who acted', () => {
   it('names the actor with the brand', () => {
@@ -26,6 +26,32 @@ describe('fromHeader', () => {
   it('builds a full RFC 5322 mailbox', () => {
     expect(fromHeader('hello@mdmmarketing.com.au', 'Renee Yap'))
       .toBe('Renee Yap · MD Media <hello@mdmmarketing.com.au>')
+  })
+})
+
+describe('actorAlias — everyone gets a sender identity on our domain', () => {
+  const D = 'mdmmarketing.com.au'
+
+  it('a work address IS the identity — used as-is', () => {
+    expect(actorAlias(D, 'Tech MD', 'tech@mdmmarketing.com.au')).toBe('tech@mdmmarketing.com.au')
+    expect(actorAlias(D, 'Tech MD', 'Tech@MDMMarketing.com.au')).toBe('tech@mdmmarketing.com.au')
+  })
+
+  it('a personal Gmail gets a stable alias from their name', () => {
+    expect(actorAlias(D, 'Manal Rizwan', 'manalrizwann@gmail.com')).toBe('manal.rizwan@mdmmarketing.com.au')
+    expect(actorAlias(D, 'Karly Merau', 'karly.merau.99@gmail.com')).toBe('karly.merau@mdmmarketing.com.au')
+  })
+
+  it('diacritics and punctuation flatten to a clean local part', () => {
+    expect(actorAlias(D, 'Sebastián Pulgarin', 'esevisualstudio@gmail.com'))
+      .toBe('sebastian.pulgarin@mdmmarketing.com.au')
+    expect(actorAlias(D, "  O'Neil-Smith,  Jr. ", 'x@y.com')).toBe('o.neil.smith.jr@mdmmarketing.com.au')
+  })
+
+  it('no name falls back to the email local part; nothing usable → null', () => {
+    expect(actorAlias(D, null, 'rainarao234@gmail.com')).toBe('rainarao234@mdmmarketing.com.au')
+    expect(actorAlias(D, null, null)).toBeNull()
+    expect(actorAlias('', 'Someone', 'a@b.c')).toBeNull()
   })
 })
 

@@ -28,7 +28,7 @@ const transporter = nodemailer.createTransport({
 
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
-import { fromHeader, replyToFor } from './mailer-core'
+import { actorAlias, fromHeader, replyToFor } from './mailer-core'
 
 /**
  * Hard test-mode kill-switch. When EMAIL_TEST_ONLY=1 (set by the E2E harness,
@@ -117,6 +117,51 @@ export type NotifyInput = {
   actorClerkId?: string | null
 }
 
+/**
+ * Send via Resend from the actor's personal alias on OUR verified domain.
+ * True = sent. This is the path that works for EVERYONE: staff on a work
+ * address send as that address; staff on a personal Gmail send as
+ * "their.name@<domain>" with Reply-To carrying their real inbox — nobody can
+ * ever legitimately send as gmail.com, so an alias on our domain is the
+ * correct identity, not a workaround. Active once RESEND_API_KEY is set and
+ * the domain is verified in Resend.
+ */
+async function sendViaResend(input: NotifyInput): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return false
+  const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+  const alias = actorAlias(domain, input.actorName, input.actorEmail)
+  if (!alias) return false
+  try {
+    const replyTo = replyToFor(input.actorEmail, alias)
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: `${input.actorName?.trim() || 'MD Media'} <${alias}>`,
+        to: [input.recipientEmail],
+        subject: input.subject,
+        html: input.bodyHtml,
+        ...(replyTo ? { reply_to: [replyTo] } : {}),
+        ...(input.attachments?.length
+          ? {
+              attachments: input.attachments.map(a => ({
+                filename: a.filename,
+                content: a.content.toString('base64'),
+                ...(a.contentType ? { content_type: a.contentType } : {}),
+              })),
+            }
+          : {}),
+      }),
+    })
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`)
+    return true
+  } catch (e) {
+    console.error('Resend send failed, falling back:', e)
+    return false
+  }
+}
+
 /** Try to send from the actor's own Gmail. True = sent person-to-person. */
 async function sendAsActor(input: NotifyInput): Promise<boolean> {
   if (!input.actorClerkId || !input.actorEmail) return false
@@ -179,7 +224,16 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // 2. we own the row — send, then record the outcome
   try {
     assertTestSafeRecipients(input.recipientEmail)
-    // first choice: the actor's own Gmail — the thread is between the two
+    // first choice: Resend, from the actor's alias on our domain — works for
+    // every team member whatever address they sign in with
+    if (await sendViaResend(input)) {
+      await supabase
+        .from('notification_log')
+        .update({ status: 'sent', sent_at: new Date().toISOString() })
+        .eq('id', claimed.id)
+      return 'sent'
+    }
+    // second choice: the actor's own Gmail — the thread is between the two
     // people, sits in the actor's Sent mail, replies go straight back
     const sentAsActor = await sendAsActor(input)
     if (!sentAsActor) {

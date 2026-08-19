@@ -24,6 +24,37 @@ export function fromHeader(fromAddress: string, actorName?: string | null): stri
   return `${senderName(actorName)} <${fromAddress}>`
 }
 
+/**
+ * Per-person sender alias on OUR domain — how a notification gets a personal
+ * From address for someone who signs in with a personal Gmail. Nobody can
+ * send as gmail.com (DMARC), but we can mint "manal.rizwan@mdmmarketing.com.au"
+ * on the domain we verified with Resend, with Reply-To carrying the real
+ * inbox. Deterministic from the name so the address is stable across sends.
+ */
+export function actorAlias(
+  domain: string,
+  actorName?: string | null,
+  actorEmail?: string | null,
+): string | null {
+  if (!domain) return null
+  // already on our domain? use the real address — it IS the person
+  const email = actorEmail?.trim().toLowerCase()
+  if (email?.endsWith(`@${domain.toLowerCase()}`)) return email
+
+  const fromName = (actorName ?? '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')   // strip diacritics left by NFKD
+    .replace(/[^a-z0-9]+/g, '.')       // spaces & punctuation → dots
+    .replace(/^\.+|\.+$/g, '')
+    .slice(0, 40)
+  if (fromName) return `${fromName}@${domain}`
+
+  // no usable name — fall back to their address's local part
+  const local = email?.split('@')[0]?.replace(/[^a-z0-9.]+/g, '.').replace(/^\.+|\.+$/g, '')
+  return local ? `${local}@${domain}` : null
+}
+
 /** Reply-To only when the actor has a usable address that is not the
  *  transport address itself (replying "to hello@" is the default anyway). */
 export function replyToFor(actorEmail?: string | null, fromAddress?: string): string | undefined {
