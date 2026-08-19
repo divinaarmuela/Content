@@ -73,7 +73,7 @@ describe('automationPayload', () => {
     expect(p).toEqual({
       profileId: 'p1', accountId: 'a1', name: 'Launch', trigger: 'comment',
       keywords: ['LINK'], dmMessage: 'Here', alsoMatchInDms: true,
-      buttons: [{ type: 'web_url', title: 'Shop', url: 'https://x.co' }],
+      buttons: [{ type: 'url', title: 'Shop', url: 'https://x.co' }],
     })
   })
 })

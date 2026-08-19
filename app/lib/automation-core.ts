@@ -98,8 +98,10 @@ export function automationPayload(
     keywords: draft.keywords,
     dmMessage: draft.dmMessage,
     ...(draft.alsoMatchInDms ? { alsoMatchInDms: true } : {}),
+    // this endpoint's discriminator is 'url' | 'postback' | 'phone' — NOT the
+    // 'web_url' the private-reply endpoint takes
     ...(draft.buttonUrl
-      ? { buttons: [{ type: 'web_url', title: draft.buttonTitle, url: draft.buttonUrl }] }
+      ? { buttons: [{ type: 'url', title: draft.buttonTitle, url: draft.buttonUrl }] }
       : {}),
     ...(draft.platformPostId ? { platformPostId: draft.platformPostId } : {}),
   }
