@@ -504,8 +504,8 @@ export default function WebsiteAdminPage() {
                   </TableCell>
                   <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{p.industry || '—'}</TableCell>
                   <TableCell>
-                    <div className="flex max-w-56 flex-wrap gap-1">
-                      {p.services.slice(0, 2).map(s => (
+                    <div className="flex max-w-72 flex-wrap gap-1">
+                      {p.services.map(s => (
                         <Badge key={s} variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">{s}</Badge>
                       ))}
                     </div>

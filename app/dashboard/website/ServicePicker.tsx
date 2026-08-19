@@ -70,6 +70,9 @@ export default function ServicePicker({
         <Input
           value={draft}
           onChange={e => setDraft(e.target.value)}
+          // "type it, then click Save project" must not lose the tag — commit
+          // whatever was typed the moment the field loses focus
+          onBlur={() => draft.trim() && commit(draft)}
           onKeyDown={e => {
             if (e.key === 'Enter') {
               // this sits inside the project form — Enter must add a tag, not
