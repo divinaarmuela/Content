@@ -23,6 +23,8 @@ export type PortalItem = {
 
 export type PortalData = {
   client: { id: string; name: string }
+  /** the client's scanned brand profile — the portal dresses in it */
+  brand: Record<string, unknown> | null
   commitment: {
     month: number; year: number
     quotas: { type: string; quota: number; published: number }[]
@@ -39,7 +41,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const month = now.getMonth() + 1
   const year = now.getFullYear()
 
-  const [clientRes, itemsRes, commitmentRes] = await Promise.all([
+  const [clientRes, itemsRes, commitmentRes, brandRes] = await Promise.all([
     supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
     supabase
       .from('content_items')
@@ -54,6 +56,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .eq('month', month)
       .eq('year', year)
       .maybeSingle(),
+    supabase.from('client_brand').select('profile').eq('client_id', clientId).maybeSingle(),
   ])
   if (!clientRes.data) return null
   const items = itemsRes.data ?? []
@@ -128,6 +131,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
   return {
     client: clientRes.data,
+    brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
     in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'client_changes_requested']),
