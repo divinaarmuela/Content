@@ -24,6 +24,12 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Trash2 } from 'lucide-react'
+import {
   availableTransitions, CLIENT_LABELS, type ItemStatus,
 } from '../../../lib/workflow-core'
 import type { Role } from '../../../lib/identity-core'
@@ -44,6 +50,7 @@ type Reviewer = { id: string; name: string; email: string; role: string; assigne
 type Detail = {
   id: string; title: string; client_id: string; client_name: string | null
   owner_id: string | null
+  assigned_by?: string | null
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
@@ -92,6 +99,9 @@ export default function ItemDetailPage() {
   const [reviewPick, setReviewPick] = useState<{ to: ItemStatus; label: string } | null>(null)
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
+
+  // type-to-confirm for deletion — a destructive click must be deliberate
+  const [deleteConfirm, setDeleteConfirm] = useState('')
 
   // editors for owner assignment + comment tasks (managers only)
   const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
@@ -200,7 +210,9 @@ export default function ItemDetailPage() {
       // assigned managers first, then the rest alphabetically
       list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
       setReviewers(list)
-      setChosen(new Set(list.filter(r => r.assigned).map(r => r.id)))
+      // default reviewer: whoever handed out the job; else the client's managers
+      const assigner = detail?.assigned_by && list.find(r => r.id === detail.assigned_by)
+      setChosen(assigner ? new Set([assigner.id]) : new Set(list.filter(r => r.assigned).map(r => r.id)))
     } catch (e) {
       // picker unavailable → submit still works, routed to assigned managers
       toast.error(e instanceof Error ? e.message : 'Could not load reviewers')
@@ -357,6 +369,48 @@ export default function ItemDetailPage() {
           <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
             {role === 'client' ? (detail.status_label ?? CLIENT_LABELS[detail.status]) : detail.status.replace(/_/g, ' ')}
           </Badge>
+          {['account_manager', 'super_admin'].includes(role) && (
+            <AlertDialog onOpenChange={o => !o && setDeleteConfirm('')}>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" aria-label="Delete item">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete “{detail.title}”?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The item and all its versions, comments, and schedule entries are removed
+                    for everyone, including the client&rsquo;s portal. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
+                  <Input
+                    value={deleteConfirm}
+                    onChange={e => setDeleteConfirm(e.target.value)}
+                    placeholder="delete"
+                    autoComplete="off"
+                  />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
+                    onClick={async () => {
+                      const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
+                      if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
+                      toast.success('Item deleted')
+                      router.push('/dashboard/production')
+                    }}
+                  >
+                    Delete item
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 

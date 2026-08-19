@@ -84,6 +84,8 @@ export async function POST(req: Request) {
         content_type: it.content_type ?? 'reel',
         platform_targets: Array.isArray(it.platform_targets) ? it.platform_targets : [],
         owner_id: it.owner_id ?? (user.role === 'editor' ? user.id : null),
+        // who handed out the job — the natural default reviewer later
+        assigned_by: it.owner_id ? user.id : null,
         due_date: it.due_date ?? null,
         priority: it.priority ?? 'normal',
         caption: it.caption ?? null,
