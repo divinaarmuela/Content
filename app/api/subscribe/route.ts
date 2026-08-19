@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { supabase } from '@/lib/supabase'
+import { sendSystemEmail } from '../../lib/mailer'
 
 /**
  * PUBLIC — newsletter signup from the journal page.
@@ -9,19 +9,6 @@ import { supabase } from '@/lib/supabase'
  * first; the team notification is best-effort and can never lose a signup.
  * Deliberately outside the middleware matcher, so it stays Clerk-free.
  */
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    type: 'OAuth2',
-    user: process.env.GMAIL_USER,
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-  },
-})
 
 export async function POST(req: NextRequest) {
   let body: { email?: string }
@@ -51,9 +38,8 @@ export async function POST(req: NextRequest) {
 
   // best-effort heads-up so signups are visible without a dashboard page
   try {
-    await transporter.sendMail({
-      from: `"MD Media" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
+    await sendSystemEmail({
+      to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
       subject: `New field notes subscriber — ${email}`,
       html: `<p><strong>${email}</strong> subscribed to field notes via the journal page.</p>`,
     })

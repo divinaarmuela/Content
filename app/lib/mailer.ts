@@ -169,6 +169,102 @@ async function sendViaResend(input: NotifyInput, dedupeKey: string): Promise<boo
 }
 
 /**
+ * Send via SMTP2GO from the actor's alias on our domain — the primary
+ * transport: instant activation, domain verified via three Wix-friendly
+ * CNAMEs, HTTPS API. Active once SMTP2GO_API_KEY is set.
+ */
+async function sendViaSmtp2go(input: NotifyInput): Promise<boolean> {
+  const apiKey = process.env.SMTP2GO_API_KEY
+  if (!apiKey) return false
+  const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+  // actorless (system) notifications still ride the same transport, as the
+  // company; replies route to the shared inbox
+  const alias = actorAlias(domain, input.actorName, input.actorEmail) ?? `no-reply@${domain}`
+  try {
+    const replyTo = replyToFor(input.actorEmail, alias)
+      ?? (!input.actorEmail ? process.env.GMAIL_USER : undefined)
+    const res = await fetch('https://api.smtp2go.com/v3/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Smtp2go-Api-Key': apiKey },
+      body: JSON.stringify({
+        sender: `${(input.actorName?.trim() || 'MD Media').replace(/["<>\r\n]/g, '')} <${alias}>`,
+        to: [input.recipientEmail],
+        subject: input.subject,
+        html_body: input.bodyHtml,
+        ...(replyTo ? { custom_headers: [{ header: 'Reply-To', value: replyTo }] } : {}),
+        ...(input.attachments?.length
+          ? {
+              attachments: input.attachments.map(a => ({
+                filename: a.filename,
+                fileblob: a.content.toString('base64'),
+                mimetype: a.contentType ?? 'application/octet-stream',
+              })),
+            }
+          : {}),
+      }),
+    })
+    const json = await res.json() as { data?: { succeeded?: number; failures?: string[] } }
+    if (!res.ok || !json.data?.succeeded) {
+      throw new Error(`SMTP2GO: ${JSON.stringify(json.data?.failures ?? json)}`)
+    }
+    return true
+  } catch (e) {
+    console.error('SMTP2GO send failed, falling back:', e)
+    return false
+  }
+}
+
+/**
+ * Company-voice email over the same HTTPS transport — for system mail with
+ * no acting person (contact-form acknowledgements, signup notices). Sends
+ * via SMTP2GO from no-reply@<domain>; falls back to the Gmail transporter
+ * so a transport outage never loses a lead notification.
+ */
+export async function sendSystemEmail(input: {
+  to: string | string[]
+  cc?: string | string[]
+  subject: string
+  html: string
+  replyTo?: string
+}): Promise<void> {
+  assertTestSafeRecipients(input.to)
+  if (input.cc) assertTestSafeRecipients(input.cc)
+  const toList = Array.isArray(input.to) ? input.to : [input.to]
+  const ccList = input.cc ? (Array.isArray(input.cc) ? input.cc : [input.cc]) : []
+  const apiKey = process.env.SMTP2GO_API_KEY
+  const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+  if (apiKey) {
+    try {
+      const res = await fetch('https://api.smtp2go.com/v3/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Smtp2go-Api-Key': apiKey },
+        body: JSON.stringify({
+          sender: `MD Media <no-reply@${domain}>`,
+          to: toList,
+          ...(ccList.length ? { cc: ccList } : {}),
+          subject: input.subject,
+          html_body: input.html,
+          custom_headers: [{ header: 'Reply-To', value: input.replyTo ?? process.env.GMAIL_USER ?? `hello@${domain}` }],
+        }),
+      })
+      const json = await res.json() as { data?: { succeeded?: number } }
+      if (res.ok && json.data?.succeeded) return
+      throw new Error(JSON.stringify(json))
+    } catch (e) {
+      console.error('system email via SMTP2GO failed, falling back:', e)
+    }
+  }
+  await transporter.sendMail({
+    from: `MD Media <${process.env.GMAIL_USER}>`,
+    to: toList,
+    ...(ccList.length ? { cc: ccList } : {}),
+    subject: input.subject,
+    html: input.html,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+  })
+}
+
+/**
  * Send via Mailjet from the actor's alias on our domain. Same identity design
  * as the Resend path; a separate provider because the domain's Mailjet
  * authentication (SPF + DKIM + validation token) is pure TXT records, which
@@ -285,7 +381,11 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     // whatever address they sign in with. Mailjet before Resend: the domain's
     // Mailjet auth is TXT-only (already live in Wix DNS), while Resend's
     // required subdomain MX is something Wix cannot host.
-    if ((await sendViaMailjet(input)) || (await sendViaResend(input, dedupe_key))) {
+    if (
+      (await sendViaSmtp2go(input)) ||
+      (await sendViaMailjet(input)) ||
+      (await sendViaResend(input, dedupe_key))
+    ) {
       await supabase
         .from('notification_log')
         .update({ status: 'sent', sent_at: new Date().toISOString() })
@@ -296,12 +396,20 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     // people, sits in the actor's Sent mail, replies go straight back
     const sentAsActor = await sendAsActor(input)
     if (!sentAsActor) {
+      const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+      const alias = actorAlias(domain, input.actorName, input.actorEmail)
       const replyTo = replyToFor(input.actorEmail, process.env.GMAIL_USER)
       await transporter.sendMail({
-        // shared-mailbox fallback: Gmail rewrites any other From ADDRESS; the
-        // display name and Reply-To are ours — so it still reads as from the
-        // person, and replying still reaches them (see mailer-core.ts)
-        from: fromHeader(process.env.GMAIL_USER ?? '', input.actorName),
+        // Gmail fallback: ask for the person's alias as the From. If that
+        // address is registered as a send-as alias of the transport account
+        // (Google Admin → user → email aliases — free, instant), Gmail
+        // honours it and the mail is genuinely from the person's address.
+        // If not, Gmail rewrites the ADDRESS back to the transport account
+        // but keeps the display name and Reply-To — today's behaviour,
+        // never worse.
+        from: alias
+          ? `${input.actorName?.trim() || 'MD Media'} <${alias}>`
+          : fromHeader(process.env.GMAIL_USER ?? '', input.actorName),
         to: input.recipientEmail,
         subject: input.subject,
         html: input.bodyHtml,

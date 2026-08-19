@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { supabase } from '@/lib/supabase'
+import { sendSystemEmail } from '../../lib/mailer'
 import { autoIngestLead } from '../../lib/lead-enrichment'
 import { inngest } from '../../inngest/client'
 import { leadsChannel } from '../../inngest/channels'
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    type: 'OAuth2',
-    user: process.env.GMAIL_USER,
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-  },
-})
 
 export async function POST(req: NextRequest) {
   let body: Record<string, string>
@@ -126,12 +113,12 @@ export async function POST(req: NextRequest) {
 
   let emailOk = true
   try {
-    await transporter.sendMail({
-      from:    `"MD Media" <${process.env.GMAIL_USER}>`,
-      to:      process.env.GMAIL_USER,
-      cc:      'contact@mdmmarketing.com.au',
+    await sendSystemEmail({
+      to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
+      cc: 'contact@mdmmarketing.com.au',
       subject: `New Lead — ${fname} ${lname} · ${biz}`,
-      html:    teamHtml,
+      html: teamHtml,
+      replyTo: email,
     })
   } catch (err) {
     emailOk = false
@@ -149,11 +136,10 @@ export async function POST(req: NextRequest) {
   // Confirmation to the contact — best-effort. The lead is already captured above,
   // so a failed auto-reply must NOT fail the submission.
   try {
-    await transporter.sendMail({
-      from:    `"MD Media" <${process.env.GMAIL_USER}>`,
-      to:      email,
+    await sendSystemEmail({
+      to: email,
       subject: `We've received your brief, ${fname}`,
-      html:    contactHtml,
+      html: contactHtml,
     })
   } catch (err) {
     console.error('Confirmation email error:', err)

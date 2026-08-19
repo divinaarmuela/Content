@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { supabase } from '@/lib/supabase'
+import { sendSystemEmail } from '../../lib/mailer'
 
 /**
  * PUBLIC — invite requests for The Room, from the events page.
@@ -8,19 +8,6 @@ import { supabase } from '@/lib/supabase'
  * Same shape as /api/submit and /api/subscribe: persist first, then a
  * best-effort team notification. Outside the middleware matcher, Clerk-free.
  */
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    type: 'OAuth2',
-    user: process.env.GMAIL_USER,
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-  },
-})
 
 export async function POST(req: NextRequest) {
   let body: { name?: string; email?: string; about?: string }
@@ -56,9 +43,8 @@ export async function POST(req: NextRequest) {
 
   // best-effort heads-up so requests are visible without a dashboard page
   try {
-    await transporter.sendMail({
-      from: `"MD Media" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
+    await sendSystemEmail({
+      to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
       subject: `The Room — invite request from ${name}`,
       html:
         `<p><strong>${name}</strong> &lt;${email}&gt; requested an invite to The Room.</p>` +
