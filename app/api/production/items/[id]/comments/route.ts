@@ -64,6 +64,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       for (const r of recipients) {
         await notify({
+          actorName: user.name,
+          actorEmail: user.email,
           eventType: 'client_comment',
           entityType: 'item_comment',
           entityId: comment.id,
@@ -86,6 +88,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .select('id, email').eq('id', comment.assigned_to).eq('active_status', true).maybeSingle()
       if (assignee) {
         await notify({
+          actorName: user.name,
+          actorEmail: user.email,
           eventType: 'comment_assigned',
           entityType: 'item_comment',
           entityId: comment.id,

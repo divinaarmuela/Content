@@ -28,6 +28,7 @@ const transporter = nodemailer.createTransport({
 
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
+import { fromHeader, replyToFor } from './mailer-core'
 
 /**
  * Hard test-mode kill-switch. When EMAIL_TEST_ONLY=1 (set by the E2E harness,
@@ -107,6 +108,11 @@ export type NotifyInput = {
    *  log row is for answering "was this sent, and what did it say"; storing
    *  megabytes of PDF against every row would make that table unusable. */
   attachments?: NotifyAttachment[]
+  /** Who did the thing this email is about. The email then arrives as
+   *  "Their Name · MD Media" with Reply-To set to their real address, instead
+   *  of every notification reading as anonymous hello@. */
+  actorName?: string | null
+  actorEmail?: string | null
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed'
@@ -145,11 +151,16 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // 2. we own the row — send, then record the outcome
   try {
     assertTestSafeRecipients(input.recipientEmail)
+    const replyTo = replyToFor(input.actorEmail, process.env.GMAIL_USER)
     await transporter.sendMail({
-      from: `MD Media <${process.env.GMAIL_USER}>`,
+      // Gmail rewrites any other From ADDRESS; the display name and Reply-To
+      // are ours — so the mail reads as from the person who acted, and
+      // replying goes to them, not the shared inbox (see mailer-core.ts)
+      from: fromHeader(process.env.GMAIL_USER ?? '', input.actorName),
       to: input.recipientEmail,
       subject: input.subject,
       html: input.bodyHtml,
+      ...(replyTo ? { replyTo } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     })
     await supabase

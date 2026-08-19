@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       // cleaned like the intake lists: lowercased, deduped, implausible dropped
       notify_emails: normaliseRecipients(body.notify_emails),
       created_by: user.email,
+      created_by_name: user.name,
     })
     return NextResponse.json({ proposal })
   } catch (e) {

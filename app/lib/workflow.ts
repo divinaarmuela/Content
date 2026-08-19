@@ -185,6 +185,8 @@ export async function performTransition(
           ? `${item.title} — ${label}`
           : `${check.rule.label}: ${item.title}`
         await notify({
+          actorName: actor.name,
+          actorEmail: actor.email,
           eventType: `transition_${from}_${to}`,
           entityType: 'content_item',
           // include the version so the same edge on a later loop iteration

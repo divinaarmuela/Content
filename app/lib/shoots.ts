@@ -59,6 +59,8 @@ export async function createShootProposal(input: {
   send_to: string[]
   notify_emails?: string[]
   created_by: string
+  /** display name of the proposer — the invitation then reads as from them */
+  created_by_name?: string | null
 }): Promise<ShootProposal> {
   const recipients = [...new Set(input.send_to.map(e => e.trim().toLowerCase()).filter(Boolean))]
   const { data, error } = await supabase
@@ -86,6 +88,8 @@ export async function createShootProposal(input: {
   await Promise.all(recipients.map(async to => {
     try {
       await notify({
+        actorName: input.created_by_name,
+        actorEmail: input.created_by,
         eventType: 'shoot_proposed',
         entityType: 'shoot_proposal',
         entityId: proposal.id,
