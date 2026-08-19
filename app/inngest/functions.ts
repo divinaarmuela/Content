@@ -268,7 +268,32 @@ export const brandScan = inngest.createFunction(
   }
 )
 
+/**
+ * Due-date reminders — every weekday morning (Melbourne), whoever owns the
+ * next move on an item that is due tomorrow, due today, or overdue gets one
+ * email for it:
+ *   - pre-approval statuses → the owner editor + the client's managers
+ *   - approved_for_scheduling → every scheduler
+ * The notification dedupe key includes today's date, so an overdue item
+ * reminds once per day, never more.
+ */
+export const dueReminders = inngest.createFunction(
+  {
+    id: 'due-reminders',
+    name: 'Production due-date reminders',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 0 8 * * 1-5' }],
+    retries: 1,
+  },
+  async ({ step }) => {
+    return step.run('remind', async () => {
+      const { runDueReminders } = await import('../lib/due-reminders')
+      return runDueReminders()
+    })
+  }
+)
+
 export const functions = [
+  dueReminders,
   scanInboxScheduled,
   scanMailbox,
   leadsReportScheduled,

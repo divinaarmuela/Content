@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { uploadMedia } from '../../uploadMedia'
 import { useProductionLive } from '../useProductionLive'
 import { enqueueJobAssets } from '../../uploadQueue'
+import BrandCard from '../BrandCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -503,6 +504,10 @@ export default function ItemDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* the client's brand guide travels with the job — editors cut to it,
+          schedulers caption in it; clients see their own portal instead */}
+      {isTeam && <BrandCard clientId={detail.client_id} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Versions */}

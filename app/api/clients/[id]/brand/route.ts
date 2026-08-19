@@ -24,7 +24,9 @@ const MAX_PDF_BYTES = 2 * 1024 * 1024 * 1024
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('editor')
+    // scheduler+: everyone producing or captioning for a client needs the
+    // brand guide — schedulers write captions in the brand voice
+    const user = await requireRole('scheduler')
     const { id } = await params
     const { data } = await supabase.from('client_brand')
       .select('profile, docs, updated_at, updated_by, scan_status, scan_done, scan_total, scan_message')
