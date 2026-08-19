@@ -89,10 +89,10 @@ describe('defaultAllows — the ladder as it always was', () => {
   })
 
   it('account managers get everything except business development', () => {
-    expect(defaultAllows('account_manager', '/dashboard/leads')).toBe(false)
-    expect(defaultAllows('account_manager', '/dashboard/audience')).toBe(false)
+    const excluded = ['/dashboard/leads', '/dashboard/audience', '/dashboard/reports']
+    for (const href of excluded) expect(defaultAllows('account_manager', href)).toBe(false)
     for (const { href } of GRANTABLE_PAGES) {
-      if (href === '/dashboard/leads' || href === '/dashboard/audience') continue
+      if (excluded.includes(href)) continue
       expect(defaultAllows('account_manager', href)).toBe(true)
     }
     // and a grant can still open them for a specific person

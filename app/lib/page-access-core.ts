@@ -64,7 +64,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // account managers run client delivery, not business development — the
   // lead funnel and audience lists stay out of their default world
   // (grantable per person when someone wears both hats)
-  if (role === 'account_manager') return !['/dashboard/leads', '/dashboard/audience'].includes(href)
+  if (role === 'account_manager') return !['/dashboard/leads', '/dashboard/audience', '/dashboard/reports'].includes(href)
   return true                                  // super_admin
 }
 

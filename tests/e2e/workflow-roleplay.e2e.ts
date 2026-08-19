@@ -196,10 +196,13 @@ describe('the funnel, role by role', () => {
     await new Promise(r => setTimeout(r, 2500))
     const { data } = await supabase
       .from('notification_log')
-      .select('recipient_email, entity_id, entity_type')
+      .select('recipient_email, entity_id, entity_type, status')
       .like('entity_id', `${itemId}%`)
     expect(data!.length).toBeGreaterThan(0) // the flow really did fan out
-    const leaked = data!.filter(r => !r.recipient_email.endsWith('.invalid'))
+    // a claim row to a real address with status 'failed' is the kill-switch
+    // doing its job (real schedulers exist on the roster now); only a SENT
+    // email to a real person is a leak
+    const leaked = data!.filter(r => !r.recipient_email.endsWith('.invalid') && r.status === 'sent')
     expect(leaked, `leaked to: ${leaked.map(r => `${r.recipient_email} (${r.entity_id})`).join(', ')}`)
       .toHaveLength(0)
   })

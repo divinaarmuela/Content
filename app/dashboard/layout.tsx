@@ -56,7 +56,6 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
   { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
-  { href: '/dashboard/reports',    label: 'Reports',          icon: BarChart3 },
 ]
 
 const NAV_TOOLS: NavItem[] = [

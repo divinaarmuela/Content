@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowRight, Inbox, Users, ExternalLink, TrendingUp, CalendarClock,
+  ArrowRight, Inbox, Users, TrendingUp, CalendarClock,
   ClipboardList, PencilLine, Send, CheckCircle2, Film,
 } from 'lucide-react'
 import Greeting from './Greeting'
@@ -266,11 +266,11 @@ export default function OverviewPage() {
               : <Stat label="Revisions open" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
           </div>
           <Pipeline pipeline={data.pipeline} />
-          <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+          <div className={data.manager.latest_leads ? "grid gap-4 lg:grid-cols-[1.5fr_1fr]" : "grid gap-4"}>
             <ItemList title="Waiting on review" icon={ClipboardList} items={data.manager.needs_review}
               empty="Nothing in review — the funnel is clear." actionHref="/dashboard/production" actionLabel="Open board" />
-            <div className="flex flex-col gap-4">
-              {data.manager.latest_leads && <Card>
+            {data.manager.latest_leads && <div className="flex flex-col gap-4">
+              <Card>
                 <CardHeader className="flex-row items-center">
                   <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                     <Inbox className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Latest leads
@@ -293,26 +293,8 @@ export default function OverviewPage() {
                     </div>
                   ))}
                 </CardContent>
-              </Card>}
-              <Card>
-                <CardHeader className="flex-row items-center">
-                  <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                    <ExternalLink className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Quick links
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-1 pt-0 text-sm">
-                  <a href="https://www.mdmmarketing.com.au" target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                    Live site <ExternalLink className="h-3 w-3" />
-                  </a>
-                  <a href="https://calendly.com/mdmmarketing-info" target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                    Calendly <ExternalLink className="h-3 w-3" />
-                  </a>
-                  <a href="https://scorecard.mdmmarketing.com.au" target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                    Diagnostic scorecard <ExternalLink className="h-3 w-3" />
-                  </a>
-                </CardContent>
               </Card>
-            </div>
+            </div>}
           </div>
         </>
       )}

@@ -103,7 +103,7 @@ export default function ProductionPage() {
       .then(r => (r.ok ? r.json() : { members: [] }))
       .then(json => setEditors(
         (json.members ?? [])
-          .filter((m: { role: string; active_status?: boolean }) => m.role === 'editor' && m.active_status !== false)
+          .filter((m: { role: string; active_status?: boolean }) => ['editor', 'super_admin'].includes(m.role) && m.active_status !== false)
           .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
       ))
       .catch(() => setEditors([]))
