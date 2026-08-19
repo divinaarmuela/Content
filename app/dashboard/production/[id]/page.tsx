@@ -54,6 +54,7 @@ type Detail = {
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
+  owner_name?: string | null; managers?: { name: string; email: string }[]
   raw_assets_url?: string | null; brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
@@ -415,6 +416,38 @@ export default function ItemDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Who's who + when — the job's vital signs, for every team role */}
+      {isTeam && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Due</span>
+            {detail.due_date ? (
+              <span className={`font-medium ${new Date(detail.due_date) < new Date(new Date().toDateString()) && !['scheduled', 'published'].includes(detail.status) ? 'text-red-600 dark:text-red-400' : ''}`}>
+                {new Date(detail.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+            ) : <span className="text-zinc-400">not set</span>}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Priority</span>
+            <span className="font-medium capitalize">{detail.priority}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Editor</span>
+            <span className="font-medium">{detail.owner_name ?? <span className="font-normal text-zinc-400">unassigned</span>}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              Account manager{(detail.managers?.length ?? 0) > 1 ? 's' : ''}
+            </span>
+            <span className="truncate font-medium">
+              {(detail.managers?.length ?? 0) > 0
+                ? detail.managers!.map(m => m.name).join(', ')
+                : <span className="font-normal text-zinc-400">none assigned</span>}
+            </span>
+          </span>
+        </div>
+      )}
 
       {/* Actions */}
       {transitions.length > 0 && (

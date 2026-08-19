@@ -31,9 +31,32 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }))
 
     const shaped = shapeItemDetail(user, item, versionsRes.data ?? [], commentsNamed)
+
+    // who's who on this job — every team role reads it at a glance
+    let owner_name: string | null = null
+    let managers: { name: string; email: string }[] = []
+    if (user.role !== 'client') {
+      const [ownerRes, mgrRes] = await Promise.all([
+        item.owner_id
+          ? supabase.from('team_users').select('name, email').eq('id', item.owner_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from('team_user_clients')
+          .select('team_users!team_user_clients_team_user_id_fkey(name, email, role, active_status)')
+          .eq('client_id', item.client_id),
+      ])
+      owner_name = ownerRes.data?.name || ownerRes.data?.email || null
+      managers = (mgrRes.data ?? [])
+        .map(r => r.team_users as unknown as { name: string; email: string; role: string; active_status: boolean })
+        .filter(u => u.active_status && ['account_manager', 'super_admin'].includes(u.role))
+        .map(u => ({ name: u.name || u.email, email: u.email }))
+    }
+
     return NextResponse.json({
       ...shaped,
       client_name: clientRes.data?.name ?? null,
+      owner_name,
+      managers,
       schedule: scheduleRes.data ?? [],
       viewer_role: user.role,
     })
