@@ -30,7 +30,11 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
   }
   const clientIds = await accessibleClientIds(user)
   if (clientIds !== null && !clientIds.includes(item.client_id)) {
-    throw new AuthzError('Item not found', 404) // don't reveal existence
+    // ownership grants visibility: the assigned editor sees their job even
+    // without a whole-client assignment
+    if (!(user.role !== 'client' && item.owner_id === user.id)) {
+      throw new AuthzError('Item not found', 404) // don't reveal existence
+    }
   }
   return item
 }

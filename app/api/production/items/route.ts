@@ -27,8 +27,16 @@ export async function GET(req: Request) {
 
     const clientIds = await accessibleClientIds(user)
     if (clientIds !== null) {
-      if (clientIds.length === 0) return NextResponse.json([])
-      q = q.in('client_id', clientIds)
+      if (user.role === 'client') {
+        if (clientIds.length === 0) return NextResponse.json([])
+        q = q.in('client_id', clientIds)
+      } else {
+        // owning an item grants visibility to it: an editor assigned a job
+        // must see the job, whether or not they're assigned the whole client
+        q = clientIds.length === 0
+          ? q.eq('owner_id', user.id)
+          : q.or(`client_id.in.(${clientIds.join(',')}),owner_id.eq.${user.id}`)
+      }
     }
     if (user.role === 'scheduler') q = q.in('status', SCHEDULER_STATUSES)
     if (clientFilter) q = q.eq('client_id', clientFilter)

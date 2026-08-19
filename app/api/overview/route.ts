@@ -40,8 +40,10 @@ export async function GET() {
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
-      if (clientIds.length === 0) itemsQ = itemsQ.in('client_id', ['00000000-0000-0000-0000-000000000000'])
-      else itemsQ = itemsQ.in('client_id', clientIds)
+      // ownership grants visibility, same rule as the items API
+      itemsQ = clientIds.length === 0
+        ? itemsQ.eq('owner_id', user.id)
+        : itemsQ.or(`client_id.in.(${clientIds.join(',')}),owner_id.eq.${user.id}`)
     }
     const { data: itemRows, error: itemsErr } = await itemsQ
     // the production tables may not exist yet in a fresh environment — the
