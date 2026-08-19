@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       notify_emails: normaliseRecipients(body.notify_emails),
       created_by: user.email,
       created_by_name: user.name,
+      created_by_clerk_id: user.clerk_user_id,
     })
     return NextResponse.json({ proposal })
   } catch (e) {

@@ -187,6 +187,7 @@ export async function performTransition(
         await notify({
           actorName: actor.name,
           actorEmail: actor.email,
+          actorClerkId: actor.clerk_user_id,
           eventType: `transition_${from}_${to}`,
           entityType: 'content_item',
           // include the version so the same edge on a later loop iteration

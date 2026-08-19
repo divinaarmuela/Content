@@ -66,6 +66,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await notify({
           actorName: user.name,
           actorEmail: user.email,
+          actorClerkId: user.clerk_user_id,
           eventType: 'client_comment',
           entityType: 'item_comment',
           entityId: comment.id,
@@ -90,6 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await notify({
           actorName: user.name,
           actorEmail: user.email,
+          actorClerkId: user.clerk_user_id,
           eventType: 'comment_assigned',
           entityType: 'item_comment',
           entityId: comment.id,

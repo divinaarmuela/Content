@@ -108,11 +108,39 @@ export type NotifyInput = {
    *  log row is for answering "was this sent, and what did it say"; storing
    *  megabytes of PDF against every row would make that table unusable. */
   attachments?: NotifyAttachment[]
-  /** Who did the thing this email is about. The email then arrives as
-   *  "Their Name · MD Media" with Reply-To set to their real address, instead
-   *  of every notification reading as anonymous hello@. */
+  /** Who did the thing this email is about. With a connected Google account
+   *  (actorClerkId + gmail.send granted) the mail is sent FROM their own
+   *  Gmail — a real person-to-person thread. Otherwise it falls back to the
+   *  shared mailbox showing "Their Name · MD Media" with Reply-To them. */
   actorName?: string | null
   actorEmail?: string | null
+  actorClerkId?: string | null
+}
+
+/** Try to send from the actor's own Gmail. True = sent person-to-person. */
+async function sendAsActor(input: NotifyInput): Promise<boolean> {
+  if (!input.actorClerkId || !input.actorEmail) return false
+  try {
+    const { getUserGmailSendToken } = await import('./clerk-gmail')
+    const token = await getUserGmailSendToken(input.actorClerkId)
+    if (!token) return false
+    const { gmailSendRawAs } = await import('./gmail')
+    const MailComposer = (await import('nodemailer/lib/mail-composer')).default
+    const mail = new MailComposer({
+      // their own account: this From is genuine, nothing rewritten
+      from: `${input.actorName?.trim() || input.actorEmail} <${input.actorEmail}>`,
+      to: input.recipientEmail,
+      subject: input.subject,
+      html: input.bodyHtml,
+      attachments: input.attachments,
+    })
+    await gmailSendRawAs(token, await mail.compile().build())
+    return true
+  } catch (e) {
+    // expired grant, revoked scope, quota — never lose the notification over it
+    console.error('send-as-actor failed, falling back to shared mailbox:', e)
+    return false
+  }
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed'
@@ -151,18 +179,23 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // 2. we own the row — send, then record the outcome
   try {
     assertTestSafeRecipients(input.recipientEmail)
-    const replyTo = replyToFor(input.actorEmail, process.env.GMAIL_USER)
-    await transporter.sendMail({
-      // Gmail rewrites any other From ADDRESS; the display name and Reply-To
-      // are ours — so the mail reads as from the person who acted, and
-      // replying goes to them, not the shared inbox (see mailer-core.ts)
-      from: fromHeader(process.env.GMAIL_USER ?? '', input.actorName),
-      to: input.recipientEmail,
-      subject: input.subject,
-      html: input.bodyHtml,
-      ...(replyTo ? { replyTo } : {}),
-      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-    })
+    // first choice: the actor's own Gmail — the thread is between the two
+    // people, sits in the actor's Sent mail, replies go straight back
+    const sentAsActor = await sendAsActor(input)
+    if (!sentAsActor) {
+      const replyTo = replyToFor(input.actorEmail, process.env.GMAIL_USER)
+      await transporter.sendMail({
+        // shared-mailbox fallback: Gmail rewrites any other From ADDRESS; the
+        // display name and Reply-To are ours — so it still reads as from the
+        // person, and replying still reaches them (see mailer-core.ts)
+        from: fromHeader(process.env.GMAIL_USER ?? '', input.actorName),
+        to: input.recipientEmail,
+        subject: input.subject,
+        html: input.bodyHtml,
+        ...(replyTo ? { replyTo } : {}),
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      })
+    }
     await supabase
       .from('notification_log')
       .update({ status: 'sent', sent_at: new Date().toISOString() })

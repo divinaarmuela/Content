@@ -225,6 +225,20 @@ export function mailboxAddress(): string {
  *
  *  Sending needs a send scope, so under domain-wide delegation the service
  *  account must also be authorised for gmail.send. */
+/** Send a raw RFC822 message from WHOEVER owns this access token — used to
+ *  send workflow notifications from the acting person's own Gmail, so the
+ *  conversation is genuinely between them and the recipient. */
+export async function gmailSendRawAs(accessToken: string, rfc822: Buffer): Promise<string> {
+  const raw = rfc822.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw }),
+  })
+  if (!res.ok) throw new Error(`Gmail send-as failed (${res.status}): ${await res.text()}`)
+  return (await res.json()).id
+}
+
 export async function gmailSendRaw(rfc822: Buffer): Promise<string> {
   const boxes = getMailboxes()
   const primary = boxes.find(m => m.email === mailboxAddress()) ?? boxes[0]

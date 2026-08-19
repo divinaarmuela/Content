@@ -17,6 +17,7 @@ import type { Mailbox } from './gmail'
  */
 
 export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
 
 /** Restrict per-user scanning to the company domain. */
 export function allowedMailDomain(): string {
@@ -37,6 +38,28 @@ export async function getUserGmailToken(userId: string): Promise<string | null> 
     return withScope?.token ?? null
   } catch {
     return null // no Google connection on this account
+  }
+}
+
+/**
+ * Access token able to SEND from this person's own Gmail, or null.
+ *
+ * This is what makes a notification genuinely between two people: the mail
+ * leaves the actor's own account, sits in their Sent folder, and a reply goes
+ * straight back to them. Works for personal Gmail too — it is their account,
+ * so there is nothing to forge. Requires the gmail.send scope on the Clerk
+ * Google connection (one-time dashboard change) and the person to have signed
+ * in with Google after that.
+ */
+export async function getUserGmailSendToken(userId: string): Promise<string | null> {
+  try {
+    const client = await clerkClient()
+    const res = await client.users.getUserOauthAccessToken(userId, 'google')
+    const withScope = res.data.find(t =>
+      (t.scopes ?? []).some(s => s === GMAIL_SEND_SCOPE || s === 'https://mail.google.com/'))
+    return withScope?.token ?? null
+  } catch {
+    return null
   }
 }
 
