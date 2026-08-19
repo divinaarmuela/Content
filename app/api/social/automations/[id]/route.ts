@@ -7,7 +7,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     await requireRole('scheduler')
     const { id } = await params
-    return NextResponse.json({ automation: await getPublisher().getAutomation(id) })
+    const publisher = getPublisher()
+    const [automation, logs] = await Promise.all([
+      publisher.getAutomation(id),
+      publisher.automationLogs(id),
+    ])
+    return NextResponse.json({ automation, logs })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

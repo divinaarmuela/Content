@@ -27,6 +27,18 @@ type SocialAccount = {
 
 type PostRow = { id: string; accountId: string; content: string }
 
+type TriggerLog = {
+  id: string
+  commenterName?: string
+  commentText?: string
+  status?: string
+  error?: string | null
+  commentReplyStatus?: string
+  clickedAt?: string | null
+  clickCount?: number
+  createdAt?: string
+}
+
 type Automation = {
   id: string
   name?: string
@@ -58,6 +70,9 @@ export default function AutomationsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Automation | null>(null)
+  // per-person history, loaded on demand per automation
+  const [openLogs, setOpenLogs] = useState<string | null>(null)
+  const [logs, setLogs] = useState<Record<string, TriggerLog[] | null>>({})
 
   const [draft, setDraft] = useState({
     accountRowId: '', name: '', trigger: 'comment',
@@ -148,6 +163,23 @@ export default function AutomationsPage() {
       toast.error(e instanceof Error ? e.message : 'Could not update')
     } finally {
       setBusy(null)
+    }
+  }
+
+  const toggleLogs = async (a: Automation) => {
+    if (openLogs === a.id) { setOpenLogs(null); return }
+    setOpenLogs(a.id)
+    if (logs[a.id]) return
+    setLogs(prev => ({ ...prev, [a.id]: null }))
+    try {
+      const res = await fetch(`/api/social/automations/${a.id}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load activity')
+      const raw = json.logs
+      setLogs(prev => ({ ...prev, [a.id]: raw?.logs ?? raw?.data ?? (Array.isArray(raw) ? raw : []) }))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load activity')
+      setLogs(prev => ({ ...prev, [a.id]: [] }))
     }
   }
 
@@ -377,7 +409,7 @@ export default function AutomationsPage() {
                   </p>
                 )}
 
-                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                   {STAT_LABELS.map(([k, label]) => (
                     <span key={k} className="text-xs text-zinc-500 dark:text-zinc-400">
                       {label}{' '}
@@ -386,7 +418,46 @@ export default function AutomationsPage() {
                       </span>
                     </span>
                   ))}
+                  {(a.stats?.triggered ?? 0) > 0 && (
+                    <button type="button" onClick={() => void toggleLogs(a)}
+                      className="text-xs text-blue-600 hover:underline dark:text-blue-400">
+                      {openLogs === a.id ? 'Hide activity' : 'Who triggered it'}
+                    </button>
+                  )}
                 </div>
+
+                {openLogs === a.id && (
+                  logs[a.id] === null ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : (logs[a.id] ?? []).length === 0 ? (
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">No activity recorded yet.</p>
+                  ) : (
+                    <div className="flex flex-col divide-y divide-zinc-100 rounded-lg border border-zinc-100 dark:divide-zinc-800 dark:border-zinc-800">
+                      {(logs[a.id] ?? []).map(l => (
+                        <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-xs">
+                          <span className="font-medium">{l.commenterName ?? 'someone'}</span>
+                          {l.commentText && (
+                            <span className="text-zinc-500 dark:text-zinc-400">&ldquo;{l.commentText.slice(0, 60)}&rdquo;</span>
+                          )}
+                          <span className="ml-auto flex items-center gap-2">
+                            <span className={l.status === 'sent'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-zinc-400 dark:text-zinc-500'}>
+                              {l.status === 'sent' ? 'DM sent' : l.status ?? '—'}
+                            </span>
+                            {l.clickedAt ? (
+                              <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                Clicked{(l.clickCount ?? 0) > 1 ? ` ×${l.clickCount}` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300 dark:text-zinc-600">no click</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
               </CardContent>
             </Card>
           ))}

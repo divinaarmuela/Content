@@ -49,6 +49,7 @@ export interface Publisher {
   /** Comment→DM automations: list / detail / create / update / delete. */
   listAutomations(): Promise<unknown>
   getAutomation(id: string): Promise<unknown>
+  automationLogs(id: string): Promise<unknown>
   createAutomation(body: Record<string, unknown>): Promise<unknown>
   updateAutomation(id: string, body: Record<string, unknown>): Promise<unknown>
   deleteAutomation(id: string): Promise<unknown>
@@ -287,6 +288,12 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/comment-automations/${encodeURIComponent(id)}`)
   }
 
+  /** Per-commenter trigger history — includes clickedAt/clickCount per
+   *  person (undocumented but real; verified live). */
+  automationLogs(id: string) {
+    return this.getJson(`/comment-automations/${encodeURIComponent(id)}/logs`)
+  }
+
   createAutomation(body: Record<string, unknown>) {
     return this.post('/comment-automations', body)
   }
@@ -448,6 +455,7 @@ class UnconfiguredPublisher implements Publisher {
   async bestTimes() { return null }
   async listAutomations() { return null }
   async getAutomation() { return null }
+  async automationLogs() { return null }
   async createAutomation(): Promise<unknown> { return this.fail() }
   async updateAutomation(): Promise<unknown> { return this.fail() }
   async deleteAutomation(): Promise<unknown> { return this.fail() }
