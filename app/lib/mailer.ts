@@ -126,7 +126,7 @@ export type NotifyInput = {
  * correct identity, not a workaround. Active once RESEND_API_KEY is set and
  * the domain is verified in Resend.
  */
-async function sendViaResend(input: NotifyInput): Promise<boolean> {
+async function sendViaResend(input: NotifyInput, dedupeKey: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return false
   const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
@@ -136,7 +136,13 @@ async function sendViaResend(input: NotifyInput): Promise<boolean> {
     const replyTo = replyToFor(input.actorEmail, alias)
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        // second belt on our notification_log dedupe: even a retried request
+        // that somehow re-claims cannot double-send within Resend's 24h window
+        'Idempotency-Key': dedupeKey.slice(0, 256),
+      },
       body: JSON.stringify({
         from: `${input.actorName?.trim() || 'MD Media'} <${alias}>`,
         to: [input.recipientEmail],
@@ -158,6 +164,57 @@ async function sendViaResend(input: NotifyInput): Promise<boolean> {
     return true
   } catch (e) {
     console.error('Resend send failed, falling back:', e)
+    return false
+  }
+}
+
+/**
+ * Send via Mailjet from the actor's alias on our domain. Same identity design
+ * as the Resend path; a separate provider because the domain's Mailjet
+ * authentication (SPF + DKIM + validation token) is pure TXT records, which
+ * Wix DNS can host — Resend's required return-path MX on a subdomain, Wix
+ * cannot. Active once MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE are set.
+ */
+async function sendViaMailjet(input: NotifyInput): Promise<boolean> {
+  const pub = process.env.MJ_APIKEY_PUBLIC
+  const priv = process.env.MJ_APIKEY_PRIVATE
+  if (!pub || !priv) return false
+  const domain = (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+  const alias = actorAlias(domain, input.actorName, input.actorEmail)
+  if (!alias) return false
+  try {
+    const replyTo = replyToFor(input.actorEmail, alias)
+    const res = await fetch('https://api.mailjet.com/v3.1/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${pub}:${priv}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        Messages: [{
+          From: { Email: alias, Name: input.actorName?.trim() || 'MD Media' },
+          To: [{ Email: input.recipientEmail }],
+          Subject: input.subject,
+          HTMLPart: input.bodyHtml,
+          ...(replyTo ? { ReplyTo: { Email: replyTo } } : {}),
+          ...(input.attachments?.length
+            ? {
+                Attachments: input.attachments.map(a => ({
+                  Filename: a.filename,
+                  ContentType: a.contentType ?? 'application/octet-stream',
+                  Base64Content: a.content.toString('base64'),
+                })),
+              }
+            : {}),
+        }],
+      }),
+    })
+    if (!res.ok) throw new Error(`Mailjet ${res.status}: ${await res.text()}`)
+    const body = await res.json() as { Messages?: { Status?: string }[] }
+    if (body.Messages?.[0]?.Status !== 'success') throw new Error(`Mailjet status: ${JSON.stringify(body)}`)
+    return true
+  } catch (e) {
+    console.error('Mailjet send failed, falling back:', e)
     return false
   }
 }
@@ -224,9 +281,11 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // 2. we own the row — send, then record the outcome
   try {
     assertTestSafeRecipients(input.recipientEmail)
-    // first choice: Resend, from the actor's alias on our domain — works for
-    // every team member whatever address they sign in with
-    if (await sendViaResend(input)) {
+    // first choice: an alias on our domain — works for every team member
+    // whatever address they sign in with. Mailjet before Resend: the domain's
+    // Mailjet auth is TXT-only (already live in Wix DNS), while Resend's
+    // required subdomain MX is something Wix cannot host.
+    if ((await sendViaMailjet(input)) || (await sendViaResend(input, dedupe_key))) {
       await supabase
         .from('notification_log')
         .update({ status: 'sent', sent_at: new Date().toISOString() })
