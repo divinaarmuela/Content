@@ -18,6 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     const updated = await performTransition(user, item, to, {
       reviewerIds: Array.isArray(body.notify_ids) ? body.notify_ids : undefined,
+      schedulerIds: Array.isArray(body.scheduler_ids) ? body.scheduler_ids : undefined,
     })
     return NextResponse.json(updated)
   } catch (e) {

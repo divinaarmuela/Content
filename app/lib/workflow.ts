@@ -150,6 +150,47 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
 }
 
 /**
+ * "Please schedule this" — the manager hands an approved item to specific
+ * schedulers. Used after a CLIENT approves (the client cannot pick, so the
+ * approval fans out to everyone; this narrows it to the right person).
+ */
+export async function notifyScheduleHandoff(
+  actor: TeamUser,
+  item: ContentItem,
+  schedulerIds: string[],
+): Promise<number> {
+  const ids = schedulerIds.filter(x => typeof x === 'string').slice(0, 20)
+  if (ids.length === 0) return 0
+  const { data } = await supabase
+    .from('team_users')
+    .select('id, email, name, role, active_status')
+    .in('id', ids)
+  const people = (data ?? []).filter(u =>
+    u.active_status && (u.role === 'scheduler' || u.role === 'super_admin') && u.id !== actor.id)
+  await Promise.all(people.map(p => notify({
+    actorName: actor.name,
+    actorEmail: actor.email,
+    actorClerkId: actor.clerk_user_id,
+    eventType: 'schedule_handoff',
+    entityType: 'content_item',
+    // per-person per-version: handing the next revision to the same person
+    // notifies again; a retried click cannot double-send
+    entityId: `${item.id}#handoff#${p.id}#v${item.current_version_number}`,
+    recipientId: p.id,
+    recipientEmail: p.email,
+    subject: `Please schedule: ${item.title}`,
+    bodyHtml: renderEmail(
+      `Please schedule: ${item.title}`,
+      `<p><strong>${item.title}</strong> is approved and ${actor.name || actor.email} picked you to schedule it.</p>` +
+      (item.due_date ? `<p><strong>Due:</strong> ${item.due_date}</p>` : ''),
+      'Open the item',
+      `${DASHBOARD_URL}/dashboard/production/${item.id}`
+    ),
+  })))
+  return people.length
+}
+
+/**
  * "This went out" — tell the people who answer to the client. The scheduler
  * picks who hears; unpicked, it goes to the client's assigned managers.
  */
@@ -210,6 +251,7 @@ export async function performTransition(
      *  the manager audience becomes exactly those people (validated to be
      *  active managing roles) instead of everyone assigned. */
     reviewerIds?: string[]
+    schedulerIds?: string[]
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -284,6 +326,7 @@ export async function performTransition(
   const audiences = TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
+  const schedulerIds = (opts?.schedulerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   void (async () => {
     for (const audience of audiences) {
       let people = await resolveAudience(audience, item)
@@ -297,6 +340,17 @@ export async function performTransition(
           .in('id', reviewerIds)
         const chosen = (picked ?? []).filter(u =>
           u.active_status && (u.role === 'account_manager' || u.role === 'super_admin'))
+        if (chosen.length > 0) people = chosen
+      }
+      if (audience === 'schedulers' && schedulerIds.length > 0) {
+        // the approver picked who schedules this — same trust rule as
+        // reviewers: only active scheduling roles survive the filter
+        const { data: picked } = await supabase
+          .from('team_users')
+          .select('id, email, name, role, active_status')
+          .in('id', schedulerIds)
+        const chosen = (picked ?? []).filter(u =>
+          u.active_status && (u.role === 'scheduler' || u.role === 'super_admin'))
         if (chosen.length > 0) people = chosen
       }
       for (const person of people) {

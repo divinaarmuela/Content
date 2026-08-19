@@ -177,6 +177,10 @@ export default function ItemDetailPage() {
 
   // editors for owner assignment + comment tasks (managers only)
   const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
+  // "who schedules this?" — for the approve edge and the post-client-approval handoff
+  const [schedulers, setSchedulers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
+  const [schedPick, setSchedPick] = useState<{ to: ItemStatus; label: string } | 'handoff' | null>(null)
+  const [schedChosen, setSchedChosen] = useState<Set<string>>(new Set())
   const [commentAssignee, setCommentAssignee] = useState<string>('')
 
   // job-pack source file uploads — queued in the background so you can keep
@@ -219,12 +223,18 @@ export default function ItemDetailPage() {
     if (viewerRole !== 'account_manager' && viewerRole !== 'super_admin') return
     fetch('/api/team')
       .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setEditors(
-        (json.members ?? [])
-          .filter((m: { role: string; active_status?: boolean }) => ['editor', 'super_admin'].includes(m.role) && m.active_status !== false)
-          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
-      ))
-      .catch(() => setEditors([]))
+      .then(json => {
+        const active = (json.members ?? []).filter(
+          (m: { active_status?: boolean }) => m.active_status !== false)
+        setEditors(active
+          .filter((m: { role: string }) => ['editor', 'super_admin'].includes(m.role))
+          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })))
+        setSchedulers(active
+          .filter((m: { role: string }) => ['scheduler', 'super_admin'].includes(m.role))
+          .map((m: { id: string; name: string; email: string; role: string }) =>
+            ({ id: m.id, name: m.name, email: m.email, role: m.role })))
+      })
+      .catch(() => { setEditors([]); setSchedulers([]) })
   }, [viewerRole])
 
   if (!detail) {
@@ -245,18 +255,23 @@ export default function ItemDetailPage() {
   const transitions = availableTransitions(role, detail.status)
   const latest = detail.versions[0]
 
-  const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[]) => {
+  const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[], schedulerIds?: string[]) => {
     setBusy(to)
     try {
       const res = await fetch(`/api/production/items/${id}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, ...(notifyIds?.length ? { notify_ids: notifyIds } : {}) }),
+        body: JSON.stringify({
+          to,
+          ...(notifyIds?.length ? { notify_ids: notifyIds } : {}),
+          ...(schedulerIds?.length ? { scheduler_ids: schedulerIds } : {}),
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
       toast.success(label)
       setReviewPick(null)
+      setSchedPick(null)
       load()
     } catch (e) {
       // a dropped RESPONSE is not a failed request — check before alarming
@@ -268,6 +283,25 @@ export default function ItemDetailPage() {
       } else {
         toast.error(e instanceof Error ? e.message : `${label} failed`)
       }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const sendHandoff = async () => {
+    setBusy('handoff')
+    try {
+      const res = await fetch(`/api/production/items/${id}/handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduler_ids: [...schedChosen] }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not notify')
+      toast.success(`Notified ${json.notified} scheduler${json.notified === 1 ? '' : 's'}`)
+      setSchedPick(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not notify')
     } finally {
       setBusy(null)
     }
@@ -541,7 +575,9 @@ export default function ItemDetailPage() {
                 onClick={() =>
                   (t.to === 'internal_review' || t.to === 'revision_complete')
                     ? openReviewerPick(t)
-                    : doTransition(t.to, t.label)
+                    : (t.to === 'approved_for_scheduling' && schedulers.length > 0)
+                      ? (setSchedPick(t), setSchedChosen(new Set(schedulers.filter(s => s.role === 'scheduler').map(s => s.id))))
+                      : doTransition(t.to, t.label)
                 }
               >
                 {busy === t.to ? 'Working…' : t.label}
@@ -552,6 +588,26 @@ export default function ItemDetailPage() {
                 client approval required
               </span>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* the client approved → every scheduler heard; the manager narrows it
+          to the person who actually takes it */}
+      {['account_manager', 'super_admin'].includes(role)
+        && detail.status === 'approved_for_scheduling' && schedulers.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Approved and waiting to be scheduled.
+            </p>
+            <Button size="sm" variant="outline" className="ml-auto" disabled={busy !== null}
+              onClick={() => {
+                setSchedPick('handoff')
+                setSchedChosen(new Set(schedulers.filter(s => s.role === 'scheduler').map(s => s.id)))
+              }}>
+              Hand to a scheduler
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -994,6 +1050,56 @@ export default function ItemDetailPage() {
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
               {busy !== null ? 'Working…' : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}` : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* who schedules this? */}
+      <Dialog open={schedPick !== null} onOpenChange={o => !o && busy === null && setSchedPick(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{schedPick === 'handoff' ? 'Hand to a scheduler' : 'Who schedules this?'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              They&rsquo;ll be emailed to schedule and publish it. Untick anyone who
+              shouldn&rsquo;t hear about it.
+            </p>
+            {schedulers.map(s => (
+              <label key={s.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                <input
+                  type="checkbox"
+                  checked={schedChosen.has(s.id)}
+                  onChange={() => setSchedChosen(prev => {
+                    const next = new Set(prev)
+                    if (next.has(s.id)) next.delete(s.id); else next.add(s.id)
+                    return next
+                  })}
+                  className="h-4 w-4 shrink-0 accent-blue-600"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{s.name || s.email}</span>
+                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                    {s.role === 'super_admin' ? 'Super admin' : 'Scheduler'}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSchedPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button
+              disabled={busy !== null || schedChosen.size === 0}
+              onClick={() => {
+                if (schedPick === 'handoff') void sendHandoff()
+                else if (schedPick) void doTransition(schedPick.to, schedPick.label, undefined, [...schedChosen])
+              }}
+            >
+              {busy !== null ? 'Working…'
+                : schedPick === 'handoff' ? `Notify ${schedChosen.size || ''}`.trim()
+                : 'Approve & notify'}
             </Button>
           </DialogFooter>
         </DialogContent>
