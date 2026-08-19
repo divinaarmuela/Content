@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { uploadMedia } from '../../uploadMedia'
 import { useProductionLive } from '../useProductionLive'
+import { enqueueJobAssets } from '../../uploadQueue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -95,31 +96,15 @@ export default function ItemDetailPage() {
   const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
   const [commentAssignee, setCommentAssignee] = useState<string>('')
 
-  // job-pack source file uploads (managers)
+  // job-pack source file uploads — queued in the background so you can keep
+  // working; the tray in the layout shows progress and the item live-refreshes
+  // when each file attaches
   const jobFileRef = useRef<HTMLInputElement>(null)
-  const onJobFiles = async (files: FileList | null) => {
-    if (!files?.length || !detail) return
-    setBusy('job-assets')
-    try {
-      const added: { url: string; name: string }[] = []
-      for (const f of Array.from(files)) {
-        const { url } = await uploadMedia(f, { purpose: 'production' })
-        added.push({ url, name: f.name })
-      }
-      const res = await fetch(`/api/production/items/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_assets: [...(detail.raw_assets ?? []), ...added] }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
-      toast.success(added.length === 1 ? 'File added to the job' : `${added.length} files added`)
-      load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed')
-    } finally {
-      setBusy(null)
-      if (jobFileRef.current) jobFileRef.current.value = ''
-    }
+  const onJobFiles = (files: FileList | null) => {
+    if (!files?.length) return
+    enqueueJobAssets(id, Array.from(files))
+    toast.success(`Uploading ${files.length} file${files.length > 1 ? 's' : ''} in the background — you can keep working`)
+    if (jobFileRef.current) jobFileRef.current.value = ''
   }
   const [commentVisibility, setCommentVisibility] = useState<'internal' | 'client'>('internal')
 
@@ -508,10 +493,10 @@ export default function ItemDetailPage() {
             {['account_manager', 'super_admin'].includes(role) && (
               <div>
                 <input ref={jobFileRef} type="file" multiple className="hidden"
-                  onChange={e => void onJobFiles(e.target.files)} />
-                <Button type="button" variant="outline" size="sm" disabled={busy === 'job-assets'}
+                  onChange={e => onJobFiles(e.target.files)} />
+                <Button type="button" variant="outline" size="sm"
                   onClick={() => jobFileRef.current?.click()}>
-                  <Upload className="h-3.5 w-3.5" /> {busy === 'job-assets' ? 'Uploading…' : 'Upload source files'}
+                  <Upload className="h-3.5 w-3.5" /> Upload source files
                 </Button>
               </div>
             )}

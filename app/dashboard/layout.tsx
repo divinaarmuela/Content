@@ -15,6 +15,7 @@ import {
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock,
 } from 'lucide-react'
 import { useRole } from './useRole'
+import UploadTray from './UploadTray'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 import type { Role } from '@/app/lib/identity-core'
 
@@ -299,6 +300,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       </div>
 
       <Toaster />
+      <UploadTray />
     </div>
   )
 }
