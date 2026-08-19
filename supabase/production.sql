@@ -64,6 +64,12 @@ create table if not exists content_items (
   -- denormalised for cheap board queries; maintained by the server engine
   current_version_number int not null default 0
 );
+-- the job handoff: where the raw footage lives and what the edit should be.
+-- Without these an assigned editor has a title and a deadline but no assets.
+alter table content_items add column if not exists raw_assets_url text;
+alter table content_items add column if not exists brief text;
+-- directly-uploaded source files: [{ "url": "...", "name": "..." }]
+alter table content_items add column if not exists raw_assets jsonb not null default '[]'::jsonb;
 create index if not exists content_items_board_idx  on content_items (client_id, status);
 create index if not exists content_items_status_idx on content_items (status);
 create index if not exists content_items_batch_idx  on content_items (batch_id);

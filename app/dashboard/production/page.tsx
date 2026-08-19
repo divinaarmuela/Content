@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Plus, CalendarDays, Flag } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { useProductionLive } from './useProductionLive'
+import { useRole } from '../useRole'
+import { Textarea } from '@/components/ui/textarea'
+import { uploadMedia } from '../uploadMedia'
 
 type Item = {
   id: string
@@ -67,7 +70,44 @@ export default function ProductionPage() {
   const [newBusy, setNewBusy] = useState(false)
   const [draft, setDraft] = useState({
     client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
+    owner_id: '', raw_assets_url: '', brief: '',
+    raw_assets: [] as { url: string; name: string }[],
   })
+  const assetFileRef = useRef<HTMLInputElement>(null)
+  const [assetBusy, setAssetBusy] = useState(false)
+  const onAssetFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    setAssetBusy(true)
+    try {
+      // straight to R2, same as deliverables — the API body cap never sees them
+      for (const f of Array.from(files)) {
+        const { url } = await uploadMedia(f, { purpose: 'production' })
+        setDraft(d => ({ ...d, raw_assets: [...d.raw_assets, { url, name: f.name }] }))
+      }
+      toast.success(files.length === 1 ? 'File uploaded' : `${files.length} files uploaded`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setAssetBusy(false)
+      if (assetFileRef.current) assetFileRef.current.value = ''
+    }
+  }
+  // managers assign the job to an editor at creation; the editor gets the
+  // job-pack email (brief + raw assets + due date)
+  const { can } = useRole()
+  const isManager = can('account_manager')
+  const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
+  useEffect(() => {
+    if (!isManager) return
+    fetch('/api/team')
+      .then(r => (r.ok ? r.json() : { members: [] }))
+      .then(json => setEditors(
+        (json.members ?? [])
+          .filter((m: { role: string; active_status?: boolean }) => m.role === 'editor' && m.active_status !== false)
+          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
+      ))
+      .catch(() => setEditors([]))
+  }, [isManager])
 
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
@@ -113,6 +153,10 @@ export default function ProductionPage() {
         content_type: draft.content_type,
         priority: draft.priority,
         due_date: draft.due_date || null,
+        ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
+        raw_assets_url: draft.raw_assets_url.trim() || null,
+        brief: draft.brief.trim() || null,
+        raw_assets: draft.raw_assets,
       }))
       const res = await fetch('/api/production/items', {
         method: 'POST',
@@ -122,7 +166,7 @@ export default function ProductionPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
       toast.success(count === 1 ? 'Item created' : `${count} items created`)
       setNewOpen(false)
-      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1 })
+      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', raw_assets_url: '', brief: '', raw_assets: [] })
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Create failed')
@@ -316,6 +360,49 @@ export default function ProductionPage() {
               <Label>How many?</Label>
               <Input type="number" min={1} max={30} value={draft.count}
                 onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
+            </div>
+            {isManager && (
+              <div className="grid gap-1.5">
+                <Label>Assign editor</Label>
+                <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Later" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Assign later</SelectItem>
+                    {editors.map(ed => <SelectItem key={ed.id} value={ed.id}>{ed.name || ed.email}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>Raw assets link <span className="text-xs font-normal text-zinc-400">(Dropbox/Drive folder the editor works from)</span></Label>
+              <Input value={draft.raw_assets_url} placeholder="https://www.dropbox.com/…"
+                onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-xs" />
+            </div>
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>Brief <span className="text-xs font-normal text-zinc-400">(what the edit should be — sent to the editor)</span></Label>
+              <Textarea rows={3} value={draft.brief} placeholder="Hook in the first 2s, use the b-roll from cam B, end on the offer…"
+                onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
+            </div>
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>Source files <span className="text-xs font-normal text-zinc-400">(uploaded for the editor — or use the assets link for full shoots)</span></Label>
+              {draft.raw_assets.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.raw_assets.map(a => (
+                    <Badge key={a.url} variant="secondary" className="gap-1 font-normal">
+                      <span className="max-w-40 truncate">{a.name}</span>
+                      <button type="button" aria-label={`Remove ${a.name}`}
+                        onClick={() => setDraft(d => ({ ...d, raw_assets: d.raw_assets.filter(x => x.url !== a.url) }))}
+                        className="text-zinc-400 hover:text-red-500">✕</button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <input ref={assetFileRef} type="file" multiple className="hidden"
+                onChange={e => void onAssetFiles(e.target.files)} />
+              <Button type="button" variant="outline" size="sm" className="w-fit"
+                disabled={assetBusy} onClick={() => assetFileRef.current?.click()}>
+                <Plus className="h-3.5 w-3.5" /> {assetBusy ? 'Uploading…' : 'Upload files'}
+              </Button>
             </div>
           </div>
           <DialogFooter>

@@ -45,6 +45,8 @@ type Detail = {
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
+  raw_assets_url?: string | null; brief?: string | null
+  raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
   viewer_role: Role
 }
@@ -92,6 +94,33 @@ export default function ItemDetailPage() {
   // editors for owner assignment + comment tasks (managers only)
   const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
   const [commentAssignee, setCommentAssignee] = useState<string>('')
+
+  // job-pack source file uploads (managers)
+  const jobFileRef = useRef<HTMLInputElement>(null)
+  const onJobFiles = async (files: FileList | null) => {
+    if (!files?.length || !detail) return
+    setBusy('job-assets')
+    try {
+      const added: { url: string; name: string }[] = []
+      for (const f of Array.from(files)) {
+        const { url } = await uploadMedia(f, { purpose: 'production' })
+        added.push({ url, name: f.name })
+      }
+      const res = await fetch(`/api/production/items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_assets: [...(detail.raw_assets ?? []), ...added] }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
+      toast.success(added.length === 1 ? 'File added to the job' : `${added.length} files added`)
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusy(null)
+      if (jobFileRef.current) jobFileRef.current.value = ''
+    }
+  }
   const [commentVisibility, setCommentVisibility] = useState<'internal' | 'client'>('internal')
 
   const [schedDraft, setSchedDraft] = useState({ platform: 'instagram', scheduled_at: '', live_url: '' })
@@ -388,6 +417,103 @@ export default function ItemDetailPage() {
               <a href={latest.dropbox_url} target="_blank" rel="noreferrer noopener" className="text-sm text-zinc-500 hover:underline dark:text-zinc-400">
                 Dropbox master
               </a>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Job pack — internal only (never in the client or scheduler payload):
+          the brief and raw footage the editor works from */}
+      {isTeam && role !== 'scheduler' && (detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0 || ['account_manager', 'super_admin'].includes(role)) && (
+        <Card>
+          <CardHeader className="flex-row items-center">
+            <CardTitle className="text-sm font-semibold">Job pack</CardTitle>
+            {detail.raw_assets_url && (
+              <Button variant="outline" size="sm" className="ml-auto" asChild>
+                <a href={detail.raw_assets_url} target="_blank" rel="noreferrer noopener">
+                  <Upload className="h-3.5 w-3.5 rotate-180" /> Open raw assets
+                </a>
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 pt-0">
+            {['account_manager', 'super_admin'].includes(role) ? (
+              <>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Raw assets link</Label>
+                  <Input
+                    defaultValue={detail.raw_assets_url ?? ''}
+                    placeholder="https://www.dropbox.com/… (folder the editor works from)"
+                    className="font-mono text-xs"
+                    onBlur={e => {
+                      const v = e.target.value.trim()
+                      if (v !== (detail.raw_assets_url ?? '')) {
+                        void fetch(`/api/production/items/${id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ raw_assets_url: v || null }),
+                        }).then(r => { if (r.ok) { toast.success('Assets link saved'); load() } else toast.error('Save failed') })
+                      }
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Brief</Label>
+                  <Textarea
+                    rows={3}
+                    defaultValue={detail.brief ?? ''}
+                    placeholder="What the edit should be…"
+                    onBlur={e => {
+                      const v = e.target.value.trim()
+                      if (v !== (detail.brief ?? '')) {
+                        void fetch(`/api/production/items/${id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ brief: v || null }),
+                        }).then(r => { if (r.ok) { toast.success('Brief saved'); load() } else toast.error('Save failed') })
+                      }
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              detail.brief && <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.brief}</p>
+            )}
+            {(detail.raw_assets?.length ?? 0) > 0 && (
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Source files</Label>
+                <div className="flex flex-col gap-1">
+                  {detail.raw_assets!.map(a => (
+                    <div key={a.url} className="flex items-center gap-2">
+                      <a href={a.url} target="_blank" rel="noreferrer noopener"
+                        className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
+                        {a.name || a.url}
+                      </a>
+                      {['account_manager', 'super_admin'].includes(role) && (
+                        <button type="button" aria-label={`Remove ${a.name}`}
+                          className="text-zinc-400 hover:text-red-500"
+                          onClick={() => {
+                            void fetch(`/api/production/items/${id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }),
+                            }).then(r => { if (r.ok) { toast.success('File removed'); load() } else toast.error('Remove failed') })
+                          }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {['account_manager', 'super_admin'].includes(role) && (
+              <div>
+                <input ref={jobFileRef} type="file" multiple className="hidden"
+                  onChange={e => void onJobFiles(e.target.files)} />
+                <Button type="button" variant="outline" size="sm" disabled={busy === 'job-assets'}
+                  onClick={() => jobFileRef.current?.click()}>
+                  <Upload className="h-3.5 w-3.5" /> {busy === 'job-assets' ? 'Uploading…' : 'Upload source files'}
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

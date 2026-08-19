@@ -14,7 +14,7 @@ export function announceItemChange(args: {
   item_id: string
   client_id: string
   status: string
-  kind: 'created' | 'transition' | 'version' | 'comment' | 'schedule'
+  kind: 'created' | 'transition' | 'version' | 'comment' | 'schedule' | 'updated'
 }) {
   void inngest.realtime
     .publish(productionChannel.changed, { ...args, ts: Date.now() })

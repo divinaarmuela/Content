@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
-import { logActivity } from '../../../lib/workflow'
+import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 
@@ -79,6 +79,9 @@ export async function POST(req: Request) {
         due_date: it.due_date ?? null,
         priority: it.priority ?? 'normal',
         caption: it.caption ?? null,
+        raw_assets_url: it.raw_assets_url ? String(it.raw_assets_url).slice(0, 2000) : null,
+        brief: it.brief ? String(it.brief).slice(0, 5000) : null,
+        raw_assets: sanitiseRawAssets(it.raw_assets),
         client_approval_required: it.client_approval_required ?? true,
       })
     }
@@ -92,6 +95,8 @@ export async function POST(req: Request) {
         action: 'created', newValue: item.title,
       })
       announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
+      // the handoff: an item created FOR an editor emails them the job
+      notifyJobAssigned(user, item)
     }
     return NextResponse.json(data, { status: 201 })
   } catch (e) {

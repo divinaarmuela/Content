@@ -23,6 +23,10 @@ export type ContentItem = {
   caption: string | null
   client_approval_required: boolean
   current_version_number: number
+  due_date?: string | null
+  raw_assets_url?: string | null
+  brief?: string | null
+  raw_assets?: { url: string; name: string }[] | null
 }
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -89,6 +93,60 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return data ?? []
     }
   }
+}
+
+/** Directly-uploaded source files on a job: [{url, name}], server-validated. */
+export function sanitiseRawAssets(raw: unknown): { url: string; name: string }[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((a): a is { url?: unknown; name?: unknown } => !!a && typeof a === 'object')
+    .map(a => ({ url: String(a.url ?? '').slice(0, 2000), name: String(a.name ?? '').slice(0, 200) }))
+    .filter(a => /^https:\/\//.test(a.url))
+    .slice(0, 50)
+}
+
+/**
+ * The job handoff email: "you've been assigned this edit" with the brief,
+ * the raw assets link, and the due date — everything an editor needs to
+ * start. Fired when an item is created with an owner, or re-assigned.
+ * Fire-and-forget like every notification; never blocks the write.
+ */
+export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
+  if (!item.owner_id || item.owner_id === actor.id) return
+  void (async () => {
+    const { data: editor } = await supabase
+      .from('team_users')
+      .select('id, email, name')
+      .eq('id', item.owner_id)
+      .eq('active_status', true)
+      .maybeSingle()
+    if (!editor) return
+    await notify({
+      actorName: actor.name,
+      actorEmail: actor.email,
+      actorClerkId: actor.clerk_user_id,
+      eventType: 'job_assigned',
+      entityType: 'content_item',
+      // re-assignment to the same person after someone else held it should
+      // notify again — key on the owner, not just the item
+      entityId: `${item.id}#${item.owner_id}`,
+      recipientId: editor.id,
+      recipientEmail: editor.email,
+      subject: `New job: ${item.title}`,
+      bodyHtml: renderEmail(
+        `New job: ${item.title}`,
+        `<p><strong>${item.title}</strong> (${item.content_type}) has been assigned to you by ${actor.name || actor.email}.</p>` +
+        (item.brief ? `<p><strong>Brief:</strong><br>${String(item.brief).slice(0, 2000).replace(/\n/g, '<br>')}</p>` : '') +
+        (item.raw_assets_url ? `<p><strong>Raw assets folder:</strong> <a href="${item.raw_assets_url}">${item.raw_assets_url}</a></p>` : '') +
+        ((item.raw_assets?.length ?? 0) > 0
+          ? `<p><strong>Files:</strong><br>${item.raw_assets!.slice(0, 20).map(a => `<a href="${a.url}">${a.name || a.url}</a>`).join('<br>')}</p>`
+          : '') +
+        (item.due_date ? `<p><strong>Due:</strong> ${item.due_date}</p>` : ''),
+        'Open the job',
+        `${DASHBOARD_URL}/dashboard/production/${item.id}`
+      ),
+    })
+  })().catch(e => console.error('job-assigned notification error:', e))
 }
 
 /**

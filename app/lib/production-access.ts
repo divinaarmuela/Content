@@ -58,10 +58,16 @@ export function shapeItemDetail(
 ) {
   const status = item.status as ItemStatus
 
+  // the job pack (brief, raw footage) is internal production material —
+  // clients never see it, and schedulers work from final links only
+  const { raw_assets_url: _raw, brief: _brief, raw_assets: _files, ...itemPublic } =
+    item as Record<string, unknown> & { raw_assets_url?: unknown; brief?: unknown; raw_assets?: unknown }
+  void _raw; void _brief; void _files
+
   if (user.role === 'client') {
     const latest = versions[0]
     return {
-      ...item,
+      ...itemPublic,
       status_label: CLIENT_LABELS[status],
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
@@ -73,7 +79,7 @@ export function shapeItemDetail(
   if (user.role === 'scheduler') {
     const latest = versions[0]
     return {
-      ...item,
+      ...itemPublic,
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
         : [],

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
-import { logActivity } from '../../../../lib/workflow'
+import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -39,9 +40,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await loadItemForUser(user, id)
     const body = await req.json()
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
+    if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'No editable fields in request' }, { status: 400 })
     }
@@ -54,6 +56,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       entityType: 'content_item', entityId: id,
       action: 'updated', detail: Object.keys(patch).join(', '),
     })
+    // (re)assignment is a handoff: email the editor their job pack
+    if ('owner_id' in patch && patch.owner_id) notifyJobAssigned(user, data)
+    announceItemChange({ item_id: id, client_id: data.client_id, status: data.status, kind: 'updated' })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
