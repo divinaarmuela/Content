@@ -14,7 +14,11 @@ export const dynamic = 'force-dynamic'
 /** View-only portal behind an unguessable per-client token. No login, no
  *  actions — progress, schedule, and published links only. */
 export default async function SharedPortalPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params
+  const { token: raw } = await params
+  // links read "/portal/clientname--token" so the URL carries the client's
+  // name; the trailing token is still the only thing checked, so a link is
+  // memorable but never guessable. Bare-token links from before keep working.
+  const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const data = await getPortalDataByToken(token)
   if (!data) notFound()
 

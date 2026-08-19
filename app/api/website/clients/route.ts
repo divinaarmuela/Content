@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { guard } from '@/app/lib/authz'
+import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 
 /** Master client registry — dashboard only (Clerk-gated in middleware). */
 export async function GET() {
-  const denied = await guard('scheduler')
-  if (denied) return denied
+  let mayShare = false
+  try {
+    const user = await requireRole('scheduler')
+    mayShare = roleSatisfies(user.role, 'account_manager')
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
 
   const { data, error } = await supabase
     .from('clients')
@@ -33,7 +39,13 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    (data ?? []).map(c => ({ ...c, managers: byClient.get(c.id) ?? [] })),
+    (data ?? []).map(c => ({
+      ...c,
+      // the portal link is the client's front door — only their managers may
+      // hand it out, so lower roles never even receive the token
+      share_token: mayShare ? c.share_token : null,
+      managers: byClient.get(c.id) ?? [],
+    })),
   )
 }
 

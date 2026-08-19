@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { guard } from '@/app/lib/authz'
+import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 
 /**
@@ -11,14 +11,20 @@ import { normaliseWebsite } from '@/app/lib/website-url'
  * with a menu on it. Editing stays account_manager, as it always was.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await guard('scheduler')
-  if (denied) return denied
-
+  let mayShare = false
+  try {
+    const user = await requireRole('scheduler')
+    mayShare = roleSatisfies(user.role, 'account_manager')
+  } catch (e) {
+    const { error: msg, status } = authzErrorResponse(e)
+    return NextResponse.json({ error: msg }, { status })
+  }
   const { id } = await params
   const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!data) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
-  return NextResponse.json(data)
+  // the portal link stays with the client's managers
+  return NextResponse.json({ ...data, share_token: mayShare ? data.share_token : null })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
