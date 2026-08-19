@@ -104,6 +104,48 @@ export default function ItemDetailPage() {
   // type-to-confirm for deletion — a destructive click must be deliberate
   const [deleteConfirm, setDeleteConfirm] = useState('')
 
+  // connected social publishing (the Zernio integration): what WOULD go out
+  type PublishPlan = {
+    targets: { platform: string }[]
+    missing: string[]
+    scheduledFor: string | null
+    blocked: string | null
+  }
+  const [plan, setPlan] = useState<PublishPlan | null>(null)
+  const [planBusy, setPlanBusy] = useState(false)
+  const checkPlan = async () => {
+    setPlanBusy(true)
+    try {
+      const res = await fetch(`/api/production/items/${id}/publish`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not check channels')
+      setPlan(json)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not check channels')
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+  const queuePublish = async (publishNow: boolean) => {
+    setBusy('auto-publish')
+    try {
+      const res = await fetch(`/api/production/items/${id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishNow }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Publish failed')
+      toast.success(publishNow ? 'Publishing now via connected accounts' : 'Queued for its scheduled time')
+      setPlan(null)
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Publish failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   // editors for owner assignment + comment tasks (managers only)
   const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
   const [commentAssignee, setCommentAssignee] = useState<string>('')
@@ -771,6 +813,61 @@ export default function ItemDetailPage() {
                         onChange={e => setSchedDraft(d => ({ ...d, live_url: e.target.value }))} />
                       <Button size="sm" variant="outline" disabled={busy === 'schedule'} onClick={() => saveSchedule(false)}>Set date</Button>
                       <Button size="sm" disabled={busy === 'schedule' || !schedDraft.live_url} onClick={() => saveSchedule(true)}>Save live</Button>
+                    </div>
+
+                    {/* connected publishing: post through the client's linked
+                        social accounts instead of copying files by hand */}
+                    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                          Connected accounts
+                        </span>
+                        <Button variant="outline" size="sm" disabled={planBusy} onClick={checkPlan}>
+                          {planBusy ? 'Checking…' : plan ? 'Re-check' : 'Check channels'}
+                        </Button>
+                      </div>
+                      {plan && (
+                        <>
+                          {plan.blocked ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">{plan.blocked}</p>
+                          ) : (
+                            <>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {plan.targets.map(t => (
+                                  <Badge key={t.platform} variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 font-normal capitalize text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-3 w-3" /> {t.platform}
+                                  </Badge>
+                                ))}
+                                {plan.missing.map(p => (
+                                  <Badge key={p} variant="outline" className="border-amber-200 bg-amber-50 font-normal capitalize text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">
+                                    {p} — not connected
+                                  </Badge>
+                                ))}
+                                {plan.targets.length === 0 && plan.missing.length === 0 && (
+                                  <span className="text-xs text-zinc-400">No platform targets on this item.</span>
+                                )}
+                              </div>
+                              {plan.missing.length > 0 && (
+                                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                  Connect accounts on the client&rsquo;s <span className="font-medium">Social</span> tab to publish there automatically.
+                                </p>
+                              )}
+                              {plan.targets.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  <Button size="sm" disabled={busy !== null} onClick={() => queuePublish(true)}>
+                                    {busy === 'auto-publish' ? 'Working…' : 'Publish now'}
+                                  </Button>
+                                  {plan.scheduledFor && (
+                                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => queuePublish(false)}>
+                                      Queue for {new Date(plan.scheduledFor).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

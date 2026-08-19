@@ -231,31 +231,49 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
   )
 }
 
-export function PortalItemRow({ item }: { item: PortalItem }) {
+/** A piece as a media card — the work stays visible at every stage, not
+ *  just while it's being reviewed. No preview yet → a quiet dark slate. */
+export function PortalItemCard({ item }: { item: PortalItem }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={surface}>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{item.title}</p>
-        <p className="font-mono text-[10px] uppercase tracking-wider opacity-50">{item.content_type}</p>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
-          <span key={s.platform} className="flex items-center gap-1 font-mono text-[10px] uppercase opacity-60">
-            <CalendarDays className="h-3 w-3" />
-            {s.platform} · {new Date(s.scheduled_at!).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-          </span>
-        ))}
-        {item.schedule.filter(s => s.live_url).map(s => (
-          <a key={s.platform} href={s.live_url!} target="_blank" rel="noreferrer noopener"
-            className="flex items-center gap-1 text-xs font-medium capitalize hover:underline"
-            style={{ color: 'var(--p-accent, #18181b)' }}>
-            {s.platform} <ExternalLink className="h-3 w-3" />
-          </a>
-        ))}
-        <span className="rounded-full px-2.5 py-1 text-[11px]"
-          style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)' }}>
-          {item.status_label}
+    <div className="group overflow-hidden rounded-xl" style={surface}>
+      <div className="relative aspect-video w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
+        {item.preview_url ? (
+          /\.(mp4|webm|mov)(\?|$)/i.test(item.preview_url)
+            ? <video src={item.preview_url} controls playsInline preload="metadata" className="h-full w-full object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element
+            : <img src={item.preview_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] opacity-30">{item.content_type} · in the works</span>
+          </div>
+        )}
+        <span className="absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
+          style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
+          {item.content_type}
         </span>
+      </div>
+      <div className="flex flex-col gap-1.5 px-3 py-2.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-sm font-medium">{item.title}</p>
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-50">{item.status_label}</span>
+        </div>
+        {(item.schedule.length > 0) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
+              <span key={s.platform} className="flex items-center gap-1 font-mono text-[10px] uppercase opacity-60">
+                <CalendarDays className="h-3 w-3" />
+                {s.platform} · {new Date(s.scheduled_at!).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+              </span>
+            ))}
+            {item.schedule.filter(s => s.live_url).map(s => (
+              <a key={s.platform} href={s.live_url!} target="_blank" rel="noreferrer noopener"
+                className="flex items-center gap-1 text-xs font-medium capitalize hover:underline"
+                style={{ color: 'var(--p-accent, #18181b)' }}>
+                Watch on {s.platform} <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -269,7 +287,7 @@ export function PortalSection({ title, items, empty, token }: {
       <SectionHeading count={items.length}>{title}</SectionHeading>
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
-        : <div className="flex flex-col gap-2">{items.map(i => <PortalItemRow key={i.id} item={i} />)}</div>}
+        : <div className="grid gap-3 sm:grid-cols-2">{items.map(i => <PortalItemCard key={i.id} item={i} />)}</div>}
       {void token}
     </div>
   )
