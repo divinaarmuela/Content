@@ -41,7 +41,11 @@ export default clerkMiddleware(async (auth, req) => {
     // the app host and never will be, and redirecting it would make every
     // preview unusable
     const isLocal = host === 'localhost' || host?.endsWith('.vercel.app')
-    if (host && host !== APP_HOST && !isLocal) {
+    // the portal lives on the PUBLIC host by design (its links go to clients),
+    // and a fetch POST cannot follow a cross-host redirect — so its API must
+    // answer wherever the portal page is. Token-authed, no Clerk cookie needed.
+    const isPortalApi = req.nextUrl.pathname.startsWith('/api/portal')
+    if (host && host !== APP_HOST && !isLocal && !isPortalApi) {
       const url = new URL(req.url)
       url.host = APP_HOST
       url.protocol = 'https:'
@@ -100,6 +104,7 @@ export const config = {
     '/api/shoots/:path*',
     '/api/social/:path*',
     '/api/team/:path*',
+    '/api/tracker/:path*',
     '/api/website/:path*',
     '/__clerk/:path*',
   ],
