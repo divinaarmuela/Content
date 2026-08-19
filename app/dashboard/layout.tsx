@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Clock, Activity,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Activity,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock,
 } from 'lucide-react'
 import { useRole } from './useRole'
@@ -54,7 +54,6 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
-  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: Clock },
   { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
 ]
 
