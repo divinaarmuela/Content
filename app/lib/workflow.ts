@@ -280,8 +280,12 @@ export async function performTransition(
             isClientFacing && audience === 'client_users'
               ? `<p><strong>${item.title}</strong> is ready for your review.</p>`
               : `<p><strong>${item.title}</strong> moved from “${from.replace(/_/g, ' ')}” to “${to.replace(/_/g, ' ')}” by ${actor.name || actor.email}.</p>`,
-            'Open dashboard',
-            `${DASHBOARD_URL}/dashboard/production/${item.id}`
+            // a client account cannot open the team dashboard — send them to
+            // their portal; the team gets the item itself
+            audience === 'client_users' ? 'Open your portal' : 'Open the item',
+            audience === 'client_users'
+              ? `${DASHBOARD_URL}/client`
+              : `${DASHBOARD_URL}/dashboard/production/${item.id}`
           ),
         })
       }
