@@ -46,6 +46,12 @@ export interface Publisher {
   markConversationRead(conversationId: string, accountId: string): Promise<unknown>
   /** Best posting slots from historical engagement. */
   bestTimes(providerAccountId?: string): Promise<unknown>
+  /** Comment→DM automations: list / detail / create / update / delete. */
+  listAutomations(): Promise<unknown>
+  getAutomation(id: string): Promise<unknown>
+  createAutomation(body: Record<string, unknown>): Promise<unknown>
+  updateAutomation(id: string, body: Record<string, unknown>): Promise<unknown>
+  deleteAutomation(id: string): Promise<unknown>
   /** Comments on one post. */
   postComments(postId: string): Promise<unknown>
   /** Public reply, visible under the comment. */
@@ -256,6 +262,44 @@ class ZernioPublisher implements Publisher {
     return json
   }
 
+  /** Same contract as post(), for other verbs. */
+  private async send(method: 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<unknown> {
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const j = json as Record<string, unknown>
+      throw new Error(String(j.error ?? j.message ?? `Request failed (${res.status})`))
+    }
+    return json
+  }
+
+  /* ── comment→DM automations: "comment LINK and I'll DM you" ─────────── */
+
+  listAutomations() {
+    return this.getJson('/comment-automations')
+  }
+
+  getAutomation(id: string) {
+    return this.getJson(`/comment-automations/${encodeURIComponent(id)}`)
+  }
+
+  createAutomation(body: Record<string, unknown>) {
+    return this.post('/comment-automations', body)
+  }
+
+  // the docs say PUT; the live API answers 405 to PUT and accepts PATCH
+  updateAutomation(id: string, body: Record<string, unknown>) {
+    return this.send('PATCH', `/comment-automations/${encodeURIComponent(id)}`, body)
+  }
+
+  deleteAutomation(id: string) {
+    return this.send('DELETE', `/comment-automations/${encodeURIComponent(id)}`)
+  }
+
   postComments(postId: string) {
     return this.getJson(`/inbox/comments/${encodeURIComponent(postId)}`)
   }
@@ -402,6 +446,11 @@ class UnconfiguredPublisher implements Publisher {
   async sendConversationMessage() { return this.fail() }
   async markConversationRead() { return null }
   async bestTimes() { return null }
+  async listAutomations() { return null }
+  async getAutomation() { return null }
+  async createAutomation(): Promise<unknown> { return this.fail() }
+  async updateAutomation(): Promise<unknown> { return this.fail() }
+  async deleteAutomation(): Promise<unknown> { return this.fail() }
   async postComments() { return null }
   async replyToComment() { return this.fail() }
   async privateReply() { return this.fail() }

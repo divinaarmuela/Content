@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, BarChart3, MessageSquare, PenLine, Search, Share2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, MessageSquare, PenLine, Search, Share2 , Zap } from 'lucide-react'
 import SocialChannels from '../clients/SocialChannels'
 import PlatformIcon from './PlatformIcon'
 import ComposeDialog from './ComposeDialog'
@@ -120,6 +120,9 @@ export default function SocialPage() {
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/social/analytics"><BarChart3 className="h-4 w-4" /> Analytics</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/social/automations"><Zap className="h-4 w-4" /> Automations</Link>
           </Button>
           <Button size="sm" onClick={() => setComposeFor('')} disabled={!configured}>
             <PenLine className="h-4 w-4" /> New post
