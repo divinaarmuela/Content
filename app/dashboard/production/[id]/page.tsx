@@ -19,6 +19,9 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeft, Upload, Send, CheckCircle2, CircleDashed } from 'lucide-react'
 import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
   availableTransitions, CLIENT_LABELS, type ItemStatus,
 } from '../../../lib/workflow-core'
 import type { Role } from '../../../lib/identity-core'
@@ -34,8 +37,11 @@ type Comment = {
 type ScheduleEntry = {
   id: string; platform: string; scheduled_at: string | null; live_url: string | null; publish_status: string
 }
+type Reviewer = { id: string; name: string; email: string; role: string; assigned: boolean }
+
 type Detail = {
   id: string; title: string; client_id: string; client_name: string | null
+  owner_id: string | null
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
@@ -77,6 +83,15 @@ export default function ItemDetailPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [commentDraft, setCommentDraft] = useState('')
+
+  // "Submit for review" reviewer picker — the editor chooses who is asked
+  const [reviewPick, setReviewPick] = useState<{ to: ItemStatus; label: string } | null>(null)
+  const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
+  const [chosen, setChosen] = useState<Set<string>>(new Set())
+
+  // editors for owner assignment + comment tasks (managers only)
+  const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
+  const [commentAssignee, setCommentAssignee] = useState<string>('')
   const [commentVisibility, setCommentVisibility] = useState<'internal' | 'client'>('internal')
 
   const [schedDraft, setSchedDraft] = useState({ platform: 'instagram', scheduled_at: '', live_url: '' })
@@ -100,6 +115,21 @@ export default function ItemDetailPage() {
     if (!change || change.item_id === id) void load()
   }, [id, load]))
 
+  // managers can (re)assign the item's editor and hand out comment tasks —
+  // load the editor directory once the role is known
+  const viewerRole = detail?.viewer_role
+  useEffect(() => {
+    if (viewerRole !== 'account_manager' && viewerRole !== 'super_admin') return
+    fetch('/api/team')
+      .then(r => (r.ok ? r.json() : { members: [] }))
+      .then(json => setEditors(
+        (json.members ?? [])
+          .filter((m: { role: string; active_status?: boolean }) => m.role === 'editor' && m.active_status !== false)
+          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
+      ))
+      .catch(() => setEditors([]))
+  }, [viewerRole])
+
   if (!detail) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -118,22 +148,48 @@ export default function ItemDetailPage() {
   const transitions = availableTransitions(role, detail.status)
   const latest = detail.versions[0]
 
-  const doTransition = async (to: ItemStatus, label: string) => {
+  const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[]) => {
     setBusy(to)
     try {
       const res = await fetch(`/api/production/items/${id}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to }),
+        body: JSON.stringify({ to, ...(notifyIds?.length ? { notify_ids: notifyIds } : {}) }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
       toast.success(label)
+      setReviewPick(null)
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : `${label} failed`)
     } finally {
       setBusy(null)
+    }
+  }
+
+  /** The editor's submit edges prompt "who should review this?" — any
+   *  managing person (account manager or super admin) can be picked; the
+   *  client's assigned managers come pre-ticked. */
+  const openReviewerPick = async (t: { to: ItemStatus; label: string }) => {
+    setReviewPick(t)
+    setReviewers(null)
+    try {
+      const res = await fetch(`/api/clients/${detail!.client_id}/managers`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load reviewers')
+      const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
+      const list: Reviewer[] = (json.eligible ?? []).map((u: { id: string; name: string; email: string; role: string }) => ({
+        ...u, assigned: assignedIds.has(u.id),
+      }))
+      // assigned managers first, then the rest alphabetically
+      list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
+      setReviewers(list)
+      setChosen(new Set(list.filter(r => r.assigned).map(r => r.id)))
+    } catch (e) {
+      // picker unavailable → submit still works, routed to assigned managers
+      toast.error(e instanceof Error ? e.message : 'Could not load reviewers')
+      setReviewers([])
     }
   }
 
@@ -182,10 +238,15 @@ export default function ItemDetailPage() {
       const res = await fetch(`/api/production/items/${id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: commentDraft, visibility: commentVisibility }),
+        body: JSON.stringify({
+          body: commentDraft,
+          visibility: commentVisibility,
+          ...(commentVisibility === 'internal' && commentAssignee ? { assigned_to: commentAssignee } : {}),
+        }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Comment failed')
       setCommentDraft('')
+      setCommentAssignee('')
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Comment failed')
@@ -202,6 +263,24 @@ export default function ItemDetailPage() {
     })
     if (!res.ok) return toast.error('Update failed')
     load()
+  }
+
+  const saveOwner = async (ownerId: string) => {
+    setBusy('owner')
+    try {
+      const res = await fetch(`/api/production/items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_id: ownerId === 'none' ? null : ownerId }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign')
+      toast.success(ownerId === 'none' ? 'Editor unassigned' : 'Editor assigned')
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not assign')
+    } finally {
+      setBusy(null)
+    }
   }
 
   const saveSchedule = async (withLive: boolean) => {
@@ -241,9 +320,29 @@ export default function ItemDetailPage() {
             {detail.current_version_number > 0 && <> · <span className="font-mono text-xs">v{detail.current_version_number}</span></>}
           </p>
         </div>
-        <Badge variant="outline" className={`ml-auto ${STATUS_TINT[detail.status] ?? ''}`}>
-          {role === 'client' ? (detail.status_label ?? CLIENT_LABELS[detail.status]) : detail.status.replace(/_/g, ' ')}
-        </Badge>
+        <div className="ml-auto flex items-center gap-2">
+          {/* spec §3: the AM assigns the job — the owner is who "Request
+              revisions" notifies and whose board queue this item sits in */}
+          {(role === 'account_manager' || role === 'super_admin') && (
+            <Select
+              value={detail.owner_id ?? 'none'}
+              onValueChange={v => v && v !== (detail.owner_id ?? 'none') && saveOwner(v)}
+            >
+              <SelectTrigger className="h-8 w-44 bg-white text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
+                <SelectValue placeholder="Assign editor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No editor assigned</SelectItem>
+                {editors.map(e => (
+                  <SelectItem key={e.id} value={e.id}>{e.name || e.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
+            {role === 'client' ? (detail.status_label ?? CLIENT_LABELS[detail.status]) : detail.status.replace(/_/g, ' ')}
+          </Badge>
+        </div>
       </div>
 
       {/* Actions */}
@@ -256,7 +355,11 @@ export default function ItemDetailPage() {
                 size="sm"
                 variant={t.to === 'revision_required' || t.to === 'client_changes_requested' ? 'outline' : 'default'}
                 disabled={busy !== null}
-                onClick={() => doTransition(t.to, t.label)}
+                onClick={() =>
+                  (t.to === 'internal_review' || t.to === 'revision_complete')
+                    ? openReviewerPick(t)
+                    : doTransition(t.to, t.label)
+                }
               >
                 {busy === t.to ? 'Working…' : t.label}
               </Button>
@@ -384,7 +487,7 @@ export default function ItemDetailPage() {
                     placeholder={role === 'client' ? 'Ask a question or request a change…' : 'Add a comment…'}
                     onChange={e => setCommentDraft(e.target.value)}
                   />
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     {(role === 'account_manager' || role === 'super_admin') && (
                       <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                         <Switch
@@ -393,6 +496,21 @@ export default function ItemDetailPage() {
                         />
                         Visible to client
                       </label>
+                    )}
+                    {/* spec: "AM assigns editor task" — an internal comment
+                        with an assignee emails that editor as a task */}
+                    {(role === 'account_manager' || role === 'super_admin') && commentVisibility === 'internal' && (
+                      <Select value={commentAssignee || 'none'} onValueChange={v => setCommentAssignee(v === 'none' ? '' : v ?? '')}>
+                        <SelectTrigger className="h-8 w-40 bg-white text-xs dark:bg-zinc-900">
+                          <SelectValue placeholder="Assign as task" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No assignee</SelectItem>
+                          {editors.map(e => (
+                            <SelectItem key={e.id} value={e.id}>{e.name || e.email}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                     <Button size="sm" className="ml-auto" disabled={busy === 'comment' || !commentDraft.trim()} onClick={postComment}>
                       <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
@@ -447,6 +565,59 @@ export default function ItemDetailPage() {
           )}
         </div>
       </div>
+
+      {/* who should review this? */}
+      <Dialog open={reviewPick !== null} onOpenChange={o => !o && busy === null && setReviewPick(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{reviewPick?.label}</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Who should review this? They&rsquo;ll be emailed as your reviewer.
+            </p>
+            {reviewers === null && (
+              <div className="flex flex-col gap-2 py-2">
+                <Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" />
+              </div>
+            )}
+            {reviewers?.length === 0 && (
+              <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+                No managers found — it will go to this client&rsquo;s assigned managers.
+              </p>
+            )}
+            {(reviewers ?? []).map(r => (
+              <label key={r.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                <input
+                  type="checkbox"
+                  checked={chosen.has(r.id)}
+                  onChange={() => setChosen(prev => {
+                    const next = new Set(prev)
+                    if (next.has(r.id)) next.delete(r.id); else next.add(r.id)
+                    return next
+                  })}
+                  className="h-4 w-4 shrink-0 accent-blue-600"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{r.name || r.email}</span>
+                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                    {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
+                    {r.assigned && ' · manages this client'}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button
+              disabled={busy !== null || reviewers === null}
+              onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
+            >
+              {busy !== null ? 'Working…' : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}` : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

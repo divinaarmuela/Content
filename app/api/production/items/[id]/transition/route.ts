@@ -16,7 +16,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!(ITEM_STATUSES as readonly string[]).includes(to)) {
       return NextResponse.json({ error: 'Invalid target status' }, { status: 400 })
     }
-    const updated = await performTransition(user, item, to)
+    const updated = await performTransition(user, item, to, {
+      reviewerIds: Array.isArray(body.notify_ids) ? body.notify_ids : undefined,
+    })
     return NextResponse.json(updated)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

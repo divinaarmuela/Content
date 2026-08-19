@@ -56,7 +56,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq('client_id', item.client_id)
       let recipients = (data ?? [])
         .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean })
-        .filter(u => u.role === 'account_manager' && u.active_status)
+        // assigned super admins count as the client's manager here too
+        .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
       if (recipients.length === 0) {
         const { data: admins } = await supabase.from('team_users')
           .select('id, email, role, active_status').eq('role', 'super_admin').eq('active_status', true)

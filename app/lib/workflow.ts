@@ -69,7 +69,9 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
         .eq('client_id', item.client_id)
       const ams = (data ?? [])
         .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean })
-        .filter(u => u.role === 'account_manager' && u.active_status)
+        // anyone ASSIGNED as this client's manager hears about it — a super
+        // admin who manages a client is still its account manager
+        .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
       if (ams.length > 0) return ams
       // fall back to super admins so nothing goes unnoticed on unassigned clients
       const { data: admins } = await supabase.from('team_users')
@@ -103,6 +105,12 @@ export async function performTransition(
   actor: TeamUser,
   item: ContentItem,
   to: ItemStatus,
+  opts?: {
+    /** Chosen reviewers: when the actor picked who should hear about this,
+     *  the manager audience becomes exactly those people (validated to be
+     *  active managing roles) instead of everyone assigned. */
+    reviewerIds?: string[]
+  },
 ): Promise<ContentItem> {
   const from = item.status
   const check = checkTransition(actor.role, from, to)
@@ -175,9 +183,22 @@ export async function performTransition(
   // notifications — fire-and-forget; the outbox dedupe makes retries safe
   const audiences = TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
   const isClientFacing = to === 'client_review'
+  const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   void (async () => {
     for (const audience of audiences) {
-      const people = await resolveAudience(audience, item)
+      let people = await resolveAudience(audience, item)
+      if (audience === 'account_managers' && reviewerIds.length > 0) {
+        // the actor picked their reviewers — honour the choice, but only
+        // among active managing roles (a picked editor or a stale id is
+        // silently dropped, never trusted)
+        const { data: picked } = await supabase
+          .from('team_users')
+          .select('id, email, name, role, active_status')
+          .in('id', reviewerIds)
+        const chosen = (picked ?? []).filter(u =>
+          u.active_status && (u.role === 'account_manager' || u.role === 'super_admin'))
+        if (chosen.length > 0) people = chosen
+      }
       for (const person of people) {
         if (person.id === actor.id) continue // don't notify yourself
         const label = audience === 'client_users' ? CLIENT_LABELS[to] : check.rule.label
