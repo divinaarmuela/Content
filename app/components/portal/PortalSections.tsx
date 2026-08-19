@@ -108,7 +108,14 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
       setAsking(false)
       router.refresh()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+      if (e instanceof TypeError) {
+        // the connection dropped — the action may or may not have landed;
+        // refresh so the page shows the truth rather than guessing
+        toast.message('Connection hiccup — refreshing to check…')
+        router.refresh()
+      } else {
+        toast.error(e instanceof Error ? e.message : 'Something went wrong')
+      }
     } finally {
       setBusy(null)
     }
