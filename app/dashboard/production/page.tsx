@@ -169,7 +169,16 @@ export default function ProductionPage() {
       setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', raw_assets_url: '', brief: '', raw_assets: [] })
       load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Create failed')
+      // "Failed to fetch" is the RESPONSE dying, not the request — the server
+      // may well have created everything. Check before inviting a retry that
+      // would duplicate the batch.
+      if (e instanceof TypeError) {
+        toast.message('Network hiccup — checking whether they were created…')
+        await load()
+        toast.message('Board refreshed. If your items are there, do NOT create them again.')
+      } else {
+        toast.error(e instanceof Error ? e.message : 'Create failed')
+      }
     } finally {
       setNewBusy(false)
     }
