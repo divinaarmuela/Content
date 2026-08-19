@@ -88,6 +88,11 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
 
   const act = async (action: 'approve' | 'request_changes') => {
     if (!token) return
+    // a dead-looking disabled button explains nothing — validate loudly
+    if (action === 'request_changes') {
+      if (!note.trim()) return toast.error('Write what should change first')
+      if (!name.trim()) return toast.error('Add your name so the team knows who asked')
+    }
     if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
     setBusy(action)
     try {
@@ -178,12 +183,12 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
                 <>
                   <button
                     type="button"
-                    disabled={busy !== null || !note.trim() || !name.trim()}
+                    disabled={busy !== null}
                     onClick={() => act('request_changes')}
                     className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
                   >
-                    <Send className="h-4 w-4" /> {busy === 'request_changes' ? 'Sending…' : 'Send to your account manager'}
+                    <Send className="h-4 w-4" /> {busy === 'request_changes' ? 'Sending…' : 'Send'}
                   </button>
                   <button
                     type="button"
