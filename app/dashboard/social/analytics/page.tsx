@@ -58,6 +58,17 @@ function toHour(v: unknown): number | null {
 function parseBestTimes(raw: unknown): BestSlot[] {
   if (!raw || typeof raw !== 'object') return []
   const r = raw as Record<string, unknown>
+  // client-scoped responses arrive as one entry per account — merge them,
+  // keeping the strongest score where the same day+hour appears twice
+  if (Array.isArray(r.sources)) {
+    const best = new Map<string, BestSlot>()
+    for (const slot of r.sources.flatMap(parseBestTimes)) {
+      const key = `${slot.day}-${slot.hour}`
+      const prev = best.get(key)
+      if (!prev || slot.score > prev.score) best.set(key, slot)
+    }
+    return [...best.values()]
+  }
   const inner = r.data ?? r.bestTimes ?? r.times ?? raw
   const out: BestSlot[] = []
 
@@ -123,16 +134,18 @@ export default function SocialAnalyticsPage() {
   } | null>(null)
   const [clientId, setClientId] = useState<string>('all')
 
+  // refetched per client: daily and best-times come from the provider already
+  // scoped to that client's accounts, not filtered after the fact
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/social/analytics')
+      const res = await fetch(`/api/social/analytics${clientId === 'all' ? '' : `?clientId=${encodeURIComponent(clientId)}`}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load analytics')
       setData(json)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load analytics')
     }
-  }, [])
+  }, [clientId])
 
   useEffect(() => { load() }, [load])
 

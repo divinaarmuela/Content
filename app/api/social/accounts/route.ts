@@ -8,7 +8,7 @@ import { SUPPORTED_PLATFORMS } from '../../../lib/publish-core'
  *  configured at all — so the UI can explain rather than fail silently. */
 export async function GET(req: Request) {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const clientId = new URL(req.url).searchParams.get('clientId')
 
     let q = supabase

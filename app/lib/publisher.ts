@@ -40,9 +40,9 @@ export interface Publisher {
   /** DM inbox: conversations across connected accounts. */
   listConversations(): Promise<unknown>
   /** Messages inside one conversation. */
-  conversationMessages(conversationId: string): Promise<unknown>
+  conversationMessages(conversationId: string, accountId: string): Promise<unknown>
   /** Send a reply into a conversation. */
-  sendConversationMessage(conversationId: string, message: string): Promise<unknown>
+  sendConversationMessage(conversationId: string, accountId: string, message: string): Promise<unknown>
   /** Best posting slots from historical engagement. */
   bestTimes(providerAccountId?: string): Promise<unknown>
   /** Comments on one post. */
@@ -213,12 +213,17 @@ class ZernioPublisher implements Publisher {
     return this.getJson('/inbox/conversations')
   }
 
-  conversationMessages(conversationId: string) {
-    return this.getJson(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`)
+  // the messages endpoints require the owning account as well as the
+  // conversation — the conversation id alone is a 400
+  conversationMessages(conversationId: string, accountId: string) {
+    return this.getJson(
+      `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?accountId=${encodeURIComponent(accountId)}`)
   }
 
-  sendConversationMessage(conversationId: string, message: string) {
-    return this.post(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, { message })
+  sendConversationMessage(conversationId: string, accountId: string, message: string) {
+    return this.post(
+      `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?accountId=${encodeURIComponent(accountId)}`,
+      { message, accountId })
   }
 
   /** Best posting slots from historical engagement — the Later signature. */

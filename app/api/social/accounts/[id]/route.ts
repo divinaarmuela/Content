@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const { id } = await params
 
     // our row first — it carries the client link, which is what makes this

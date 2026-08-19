@@ -5,7 +5,7 @@ import { getPublisher } from '@/app/lib/publisher'
 /** Posts that have comments, across every connected account. */
 export async function GET() {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const publisher = getPublisher()
     if (!publisher.configured()) return NextResponse.json({ data: [], configured: false })
 

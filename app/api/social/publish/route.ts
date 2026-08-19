@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 /** Recent publish jobs, newest first — the audit trail for what went out. */
 export async function GET(req: Request) {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const url = new URL(req.url)
     const clientId = url.searchParams.get('clientId')
 

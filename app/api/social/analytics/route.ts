@@ -3,6 +3,30 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
 
+/** Sum per-account daily series into one, matched by date. */
+function mergeDaily(raws: unknown[]): { dailyData: { date: string; metrics: Record<string, number> }[] } | null {
+  const byDate = new Map<string, Record<string, number>>()
+  for (const raw of raws) {
+    const days = (raw as { dailyData?: unknown } | null)?.dailyData
+    if (!Array.isArray(days)) continue
+    for (const d of days) {
+      const { date, metrics } = (d ?? {}) as { date?: string; metrics?: Record<string, unknown> }
+      if (!date) continue
+      const bucket = byDate.get(date) ?? {}
+      for (const [k, v] of Object.entries(metrics ?? {})) {
+        if (typeof v === 'number') bucket[k] = (bucket[k] ?? 0) + v
+      }
+      byDate.set(date, bucket)
+    }
+  }
+  if (byDate.size === 0) return null
+  return {
+    dailyData: [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, metrics]) => ({ date, metrics })),
+  }
+}
+
 /**
  * Cross-account analytics for the whole agency, or one client.
  *
@@ -11,7 +35,7 @@ import { getPublisher } from '@/app/lib/publisher'
  */
 export async function GET(req: Request) {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const clientId = new URL(req.url).searchParams.get('clientId')
 
     let q = supabase
@@ -22,11 +46,20 @@ export async function GET(req: Request) {
     const { data: accounts } = await q
 
     const publisher = getPublisher()
+    const providerIds = (accounts ?? []).map(a => a.provider_account_id).filter(Boolean)
+
+    // The provider aggregates across every connected account by default, so a
+    // client filter means asking per-account and merging — not filtering after.
     const [daily, followers, analytics, bestTimes] = await Promise.all([
-      publisher.dailyMetrics(),
+      clientId
+        ? Promise.all(providerIds.map(id => publisher.dailyMetrics(id))).then(mergeDaily)
+        : publisher.dailyMetrics(),
       publisher.followerStats(),
       publisher.postAnalytics(),
-      publisher.bestTimes(),
+      clientId
+        ? Promise.all(providerIds.map(id => publisher.bestTimes(id)))
+            .then(list => ({ sources: list.filter(Boolean) }))
+        : publisher.bestTimes(),
     ])
 
     // clients, so the UI can name an account's owner without a second call

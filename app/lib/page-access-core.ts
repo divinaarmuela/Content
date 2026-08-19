@@ -60,7 +60,11 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === 'client') return false
   // every team role gets the Overview — it shapes itself to the role
   if (role === 'editor') return ['/dashboard', '/dashboard/production'].includes(href)
-  if (role === 'scheduler') return ['/dashboard', '/dashboard/scheduler', '/dashboard/calendar'].includes(href)
+  // schedulers run the client channels day-to-day: queue, calendar, and the
+  // social area itself (channels, inbox, analytics) — that is where they post
+  if (role === 'scheduler') {
+    return ['/dashboard', '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social'].includes(href)
+  }
   // account managers run client delivery, not business development — the
   // lead funnel and audience lists stay out of their default world
   // (grantable per person when someone wears both hats)

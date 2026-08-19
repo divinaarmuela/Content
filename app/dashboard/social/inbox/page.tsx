@@ -61,6 +61,7 @@ function ago(iso?: string): string {
  */
 type Conversation = {
   id: string
+  accountId?: string
   platform?: string
   participantName?: string
   participantUsername?: string
@@ -77,7 +78,9 @@ type Message = {
   direction?: string
   isFromMe?: boolean
   from?: { username?: string; name?: string }
+  senderName?: string
   createdTime?: string
+  createdAt?: string
   timestamp?: string
 }
 
@@ -86,7 +89,8 @@ const convName = (c: Conversation) =>
 const convPreview = (c: Conversation) =>
   typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? ''
 const msgText = (m: Message) => m.text ?? m.message ?? ''
-const msgMine = (m: Message) => m.isFromMe === true || m.direction === 'sent' || m.direction === 'outbound'
+const msgMine = (m: Message) =>
+  m.isFromMe === true || m.direction === 'outgoing' || m.direction === 'sent' || m.direction === 'outbound'
 
 export default function InboxPage() {
   const [posts, setPosts] = useState<PostRow[] | null>(null)
@@ -115,7 +119,8 @@ export default function InboxPage() {
   const openConvo = async (c: Conversation) => {
     setActiveConvo(c); setMessages(null)
     try {
-      const res = await fetch(`/api/social/messages?conversationId=${encodeURIComponent(c.id)}`)
+      const res = await fetch(
+        `/api/social/messages?conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId ?? '')}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load the conversation')
       const raw = json.messages
@@ -134,7 +139,11 @@ export default function InboxPage() {
       const res = await fetch('/api/social/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: activeConvo.id, message: msgDraft.trim() }),
+        body: JSON.stringify({
+          conversationId: activeConvo.id,
+          accountId: activeConvo.accountId,
+          message: msgDraft.trim(),
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not send')
@@ -317,7 +326,7 @@ export default function InboxPage() {
                       }`}>
                         {msgText(m)}
                         <span className={`mt-0.5 block text-[10px] ${msgMine(m) ? 'text-blue-100' : 'text-zinc-400 dark:text-zinc-500'}`}>
-                          {ago(m.createdTime ?? m.timestamp)}
+                          {ago(m.createdTime ?? m.createdAt ?? m.timestamp)}
                         </span>
                       </div>
                     ))}

@@ -5,7 +5,7 @@ import { getPublisher } from '@/app/lib/publisher'
 /** Comments on one post. */
 export async function GET(req: Request) {
   try {
-    await requireRole('editor')
+    await requireRole('scheduler')
     const postId = new URL(req.url).searchParams.get('postId')
     if (!postId) return NextResponse.json({ error: 'postId is required' }, { status: 400 })
     return NextResponse.json({ comments: await getPublisher().postComments(postId) })
