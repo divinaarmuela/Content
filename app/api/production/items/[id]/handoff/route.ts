@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyScheduleHandoff } from '../../../../../lib/workflow'
+import { announceItemChange } from '../../../../../lib/production-live'
 
 /** Hand an approved item to specific schedulers — the follow-up to a client
  *  approval, where the fan-out went to everyone and the manager narrows it. */
@@ -22,6 +24,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const sent = await notifyScheduleHandoff(user, item, ids)
+
+    // persist the assignment: the scheduler dashboard shows THEIR items, the
+    // way an editor's board shows their own jobs
+    await supabase.from('content_items').update({ scheduler_ids: ids }).eq('id', id)
+    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'updated' })
 
     await logActivity({
       actor: user, clientId: item.client_id,

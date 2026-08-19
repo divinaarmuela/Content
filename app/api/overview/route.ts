@@ -21,6 +21,7 @@ type ItemLite = {
   content_type: string
   priority: string
   due_date: string | null
+  scheduler_ids?: unknown
   client_id: string
   owner_id: string | null
   updated_at: string
@@ -36,7 +37,7 @@ export async function GET() {
 
     let itemsQ = supabase
       .from('content_items')
-      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, updated_at, clients(name)')
+      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name)')
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
@@ -82,7 +83,13 @@ export async function GET() {
     }
 
     if (user.role === 'scheduler') {
-      const queue = items.filter(i => i.status === 'approved_for_scheduling')
+      // their queue, the way an editor's board is their jobs: items handed to
+      // them, plus unassigned ones so nothing approved can go invisible
+      const queue = items.filter(i => {
+        if (i.status !== 'approved_for_scheduling') return false
+        const assigned = Array.isArray(i.scheduler_ids) ? i.scheduler_ids : []
+        return assigned.length === 0 || assigned.includes(user.id)
+      })
       let upcoming: unknown[] = []
       let publishedWeek = 0
       const { data: entries } = await supabase
