@@ -43,6 +43,7 @@ export interface Publisher {
   conversationMessages(conversationId: string, accountId: string): Promise<unknown>
   /** Send a reply into a conversation. */
   sendConversationMessage(conversationId: string, accountId: string, message: string): Promise<unknown>
+  markConversationRead(conversationId: string, accountId: string): Promise<unknown>
   /** Best posting slots from historical engagement. */
   bestTimes(providerAccountId?: string): Promise<unknown>
   /** Comments on one post. */
@@ -226,6 +227,14 @@ class ZernioPublisher implements Publisher {
       { message, accountId })
   }
 
+  /** Clears the provider-side unread count, so every surface agrees on
+   *  what has been seen. Undocumented but real: returns {success, markedCount}. */
+  markConversationRead(conversationId: string, accountId: string) {
+    return this.post(
+      `/inbox/conversations/${encodeURIComponent(conversationId)}/read?accountId=${encodeURIComponent(accountId)}`,
+      { accountId })
+  }
+
   /** Best posting slots from historical engagement — the Later signature. */
   bestTimes(accountId?: string) {
     return this.getJson(`/analytics/best-time-to-post${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`)
@@ -391,6 +400,7 @@ class UnconfiguredPublisher implements Publisher {
   async listConversations() { return null }
   async conversationMessages() { return null }
   async sendConversationMessage() { return this.fail() }
+  async markConversationRead() { return null }
   async bestTimes() { return null }
   async postComments() { return null }
   async replyToComment() { return this.fail() }

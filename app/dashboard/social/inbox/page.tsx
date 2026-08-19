@@ -144,6 +144,16 @@ export default function InboxPage() {
 
   const openConvo = async (c: Conversation) => {
     setActiveConvo(c); setMessages(null)
+    // opening = seeing: clear the badge here and tell the provider, so the
+    // list agrees no matter which page it is loaded from next
+    if (typeof c.unreadCount === 'number' && c.unreadCount > 0 && c.accountId) {
+      setConvos(prev => prev?.map(x => x.id === c.id ? { ...x, unreadCount: 0 } : x) ?? prev)
+      void fetch('/api/social/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'read', conversationId: c.id, accountId: c.accountId }),
+      }).catch(() => { /* cosmetic — the next full load reconciles */ })
+    }
     try {
       const res = await fetch(
         `/api/social/messages?conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId ?? '')}`)

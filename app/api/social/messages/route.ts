@@ -53,13 +53,19 @@ export async function GET(req: Request) {
   }
 }
 
-/** Send a reply into a conversation. */
+/** Send a reply into a conversation, or mark it read. */
 export async function POST(req: Request) {
   try {
     await requireRole('scheduler')
     const body = await req.json()
     const conversationId = String(body.conversationId ?? '')
     const accountId = String(body.accountId ?? '')
+    if (body.action === 'read') {
+      if (!conversationId || !accountId) {
+        return NextResponse.json({ error: 'conversationId and accountId are required' }, { status: 400 })
+      }
+      return NextResponse.json({ read: await getPublisher().markConversationRead(conversationId, accountId) })
+    }
     const message = String(body.message ?? '').trim()
     if (!conversationId || !accountId || !message) {
       return NextResponse.json({ error: 'conversationId, accountId and message are required' }, { status: 400 })
