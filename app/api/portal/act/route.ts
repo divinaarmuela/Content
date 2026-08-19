@@ -120,7 +120,9 @@ export async function POST(req: Request) {
     if (action === 'approve' || action === 'request_changes') {
       const to = action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested'
       const updated = await performTransition(actor, item as ContentItem, to)
-      if (action === 'request_changes') {
+      // any note riding along (a preferred posting date, a thank-you, a
+      // condition) must reach the manager, approval or not
+      if (comment) {
         void notifyManagers(client.id, item.id, item.title, speaker, comment)
       }
       return NextResponse.json({ ok: true, status: updated.status })

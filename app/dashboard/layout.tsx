@@ -197,7 +197,13 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
    */
   const resolving = roleLoading || role === null
     || (role !== 'super_admin' && !grantsLoaded)
+  // an ITEM page is shared ground: the scheduler queue links straight to
+  // /dashboard/production/<id> for scheduling, so anyone who may see the
+  // scheduler may open item detail — the API still scopes what it returns
+  // (schedulers get approved+ items only, or a 404)
+  const isItemDetail = /^\/dashboard\/production\/[^/]+$/.test(path)
   const blocked = !resolving && section !== null && !canSeePage(role, section, granted)
+    && !(isItemDetail && canSeePage(role, '/dashboard/scheduler', granted))
   const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted)[0] ?? null
 
   return (

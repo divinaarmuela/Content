@@ -81,7 +81,8 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
   const router = useRouter()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [asking, setAsking] = useState(false)
+  // null = the two buttons · 'changes' = request-changes note · 'approve' = approve-with-note
+  const [mode, setMode] = useState<null | 'changes' | 'approve'>(null)
   // who at the client is speaking — asked once, remembered in this browser
   const [name, setName] = useState(() =>
     typeof window === 'undefined' ? '' : localStorage.getItem('mdm-portal-name') ?? '')
@@ -92,6 +93,9 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
     if (action === 'request_changes') {
       if (!note.trim()) return toast.error('Write what should change first')
       if (!name.trim()) return toast.error('Add your name so the team knows who asked')
+    }
+    if (action === 'approve' && note.trim() && !name.trim()) {
+      return toast.error('Add your name so the team knows who the note is from')
     }
     if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
     setBusy(action)
@@ -105,7 +109,7 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
       if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
       toast.success(action === 'approve' ? 'Approved — thank you!' : 'Sent to your account manager')
       setNote('')
-      setAsking(false)
+      setMode(null)
       router.refresh()
     } catch (e) {
       if (e instanceof TypeError) {
@@ -144,7 +148,7 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
 
         {token && (
           <>
-            {asking && (
+            {mode !== null && (
               <div className="flex flex-col gap-2">
                 <input
                   value={name}
@@ -158,14 +162,16 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
                   value={note}
                   autoFocus
                   onChange={e => setNote(e.target.value)}
-                  placeholder="What should change? e.g. “Tighter intro, and use the daytime shots.”"
+                  placeholder={mode === 'changes'
+                    ? 'What should change? e.g. “Tighter intro, and use the daytime shots.”'
+                    : 'Anything with your approval — e.g. “Love it. Can this go out Friday morning?”'}
                   className="w-full rounded-lg p-3 text-sm outline-none"
                   style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
                 />
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              {!asking ? (
+              {mode === null ? (
                 <>
                   <button
                     type="button"
@@ -179,11 +185,19 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
                   <button
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => setAsking(true)}
+                    onClick={() => setMode('changes')}
                     className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
                     style={{ background: 'transparent', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
                   >
                     <MessageSquare className="h-4 w-4" /> Request changes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => setMode('approve')}
+                    className="px-1 py-2 text-xs underline-offset-2 opacity-60 hover:underline hover:opacity-100"
+                  >
+                    Approve with a note
                   </button>
                 </>
               ) : (
@@ -191,16 +205,18 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
                   <button
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => act('request_changes')}
+                    onClick={() => act(mode === 'changes' ? 'request_changes' : 'approve')}
                     className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
                   >
-                    <Send className="h-4 w-4" /> {busy === 'request_changes' ? 'Sending…' : 'Send'}
+                    {mode === 'changes'
+                      ? <><Send className="h-4 w-4" /> {busy ? 'Sending…' : 'Send'}</>
+                      : <><Check className="h-4 w-4" /> {busy ? 'Approving…' : 'Approve'}</>}
                   </button>
                   <button
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => { setAsking(false); setNote('') }}
+                    onClick={() => { setMode(null); setNote('') }}
                     className="rounded-lg px-3 py-2 text-sm opacity-60 hover:opacity-100"
                   >
                     Cancel
