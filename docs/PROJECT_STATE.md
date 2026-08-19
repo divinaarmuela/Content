@@ -1,4 +1,25 @@
-# Project state — as at 8 August 2026
+# Project state — as at 19 August 2026
+
+## Latest: role-based build (19 Aug)
+
+- **Realtime everywhere on production**: `productionChannel` (app/inngest/channels.ts)
+  announces every item create / transition / version / comment / schedule; the
+  board, scheduler queue, calendar, item detail, and Overview subscribe via
+  `useProductionLive` and refetch instantly (60s visibility-aware poll as fallback).
+- **Overview is per-role**: `/api/overview` shapes one payload per role; editors
+  and schedulers now have `/dashboard` by default (page-access-core defaults).
+- **Fixed a real notification bug**: the `team_users` embed on `team_user_clients`
+  was ambiguous (two FKs) → PostgREST error → empty AM list → fallback emailed
+  EVERY super admin on every transition. FK is now named explicitly in
+  workflow.ts and the comments route.
+- Scheduler can open Availability/Proposals (gcal + shoots GETs are scheduler+;
+  editor-only controls hidden). Reports readable/downloadable by AMs.
+- Settings and Audience tabs are child routes now — refresh keeps your place.
+- **Live E2E role-play**: `npx vitest run --config vitest.e2e.config.mts` drives
+  editor→AM→client→scheduler through the whole funnel against the
+  "ZZ TEST - Workflow (do not touch)" client using `.invalid` test accounts.
+  `EMAIL_TEST_ONLY=1` (set by the harness) makes the mailer refuse any real
+  recipient — testing can never email actual team members.
 
 Written so a fresh session can pick up without re-deriving anything. Update the
 date and the sections below whenever the picture changes.
