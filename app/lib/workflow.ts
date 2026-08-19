@@ -150,6 +150,48 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
 }
 
 /**
+ * "This went out" — tell the people who answer to the client. The scheduler
+ * picks who hears; unpicked, it goes to the client's assigned managers.
+ */
+export function notifyPublishQueued(
+  actor: TeamUser,
+  item: ContentItem,
+  opts: { jobId: string; publishNow: boolean; recipientIds?: string[] },
+) {
+  void (async () => {
+    let recipients: { id: string; email: string; name: string }[]
+    if (opts.recipientIds && opts.recipientIds.length > 0) {
+      const { data } = await supabase.from('team_users')
+        .select('id, email, name, role')
+        .in('id', opts.recipientIds.slice(0, 20))
+        .eq('active_status', true)
+        .neq('role', 'client')
+      recipients = data ?? []
+    } else {
+      recipients = await resolveAudience('account_managers', item)
+    }
+    const when = opts.publishNow ? 'is being published now' : 'is queued for its scheduled time'
+    await Promise.all(recipients.filter(r => r.id !== actor.id).map(r => notify({
+      actorName: actor.name,
+      actorEmail: actor.email,
+      actorClerkId: actor.clerk_user_id,
+      eventType: 'publish_queued',
+      entityType: 'content_item',
+      entityId: `${item.id}#${opts.jobId}`,
+      recipientId: r.id,
+      recipientEmail: r.email,
+      subject: `${opts.publishNow ? 'Publishing' : 'Scheduled'}: ${item.title}`,
+      bodyHtml: renderEmail(
+        `${opts.publishNow ? 'Publishing' : 'Scheduled'}: ${item.title}`,
+        `<p><strong>${item.title}</strong> ${when} on the client's connected accounts, sent by ${actor.name || actor.email}.</p>`,
+        'Open the item',
+        `${DASHBOARD_URL}/dashboard/production/${item.id}`
+      ),
+    })))
+  })().catch(e => console.error('publish notification error:', e))
+}
+
+/**
  * Execute a status transition with the full guarantee set:
  *  - legality + role permission from the pure state machine
  *  - requirement evidence (reviewable asset / schedule entry / live url)

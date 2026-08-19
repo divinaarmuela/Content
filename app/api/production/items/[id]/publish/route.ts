@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { logActivity } from '../../../../../lib/workflow'
+import { logActivity, notifyPublishQueued } from '../../../../../lib/workflow'
 import { planItemPublish, queueItemPublish } from '../../../../../lib/production-publish'
 import { announceItemChange } from '../../../../../lib/production-live'
 
@@ -42,6 +42,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       entityType: 'content_item', entityId: id,
       action: body.publishNow ? 'publish_requested' : 'publish_queued',
       detail: `publish job ${result.id}`,
+    })
+
+    notifyPublishQueued(user, item, {
+      jobId: result.id,
+      publishNow: body.publishNow === true,
+      recipientIds: Array.isArray(body.notifyIds)
+        ? body.notifyIds.map((v: unknown) => String(v)).filter(Boolean)
+        : undefined,
     })
 
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'schedule' })

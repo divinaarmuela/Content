@@ -126,17 +126,46 @@ export default function ItemDetailPage() {
       setPlanBusy(false)
     }
   }
-  const queuePublish = async (publishNow: boolean) => {
+  /** "Publish/queue → who should hear about it?" — the client's assigned
+   *  account managers come pre-ticked; anyone managing can be added. */
+  const [publishPick, setPublishPick] = useState<{ publishNow: boolean } | null>(null)
+  const [pubPeople, setPubPeople] = useState<Reviewer[] | null>(null)
+  const [pubChosen, setPubChosen] = useState<Set<string>>(new Set())
+
+  const openPublishPick = async (publishNow: boolean) => {
+    setPublishPick({ publishNow })
+    setPubPeople(null)
+    try {
+      const res = await fetch(`/api/clients/${detail!.client_id}/managers`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load people')
+      const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
+      const list: Reviewer[] = (json.eligible ?? []).map((u: { id: string; name: string; email: string; role: string }) => ({
+        ...u, assigned: assignedIds.has(u.id),
+      }))
+      list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
+      setPubPeople(list)
+      setPubChosen(new Set(list.filter(r => r.assigned).map(r => r.id)))
+    } catch {
+      // picker unavailable → publishing still works, notifications go to the
+      // client's assigned managers server-side
+      setPubPeople([])
+      setPubChosen(new Set())
+    }
+  }
+
+  const queuePublish = async (publishNow: boolean, notifyIds?: string[]) => {
     setBusy('auto-publish')
     try {
       const res = await fetch(`/api/production/items/${id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publishNow }),
+        body: JSON.stringify({ publishNow, notifyIds }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Publish failed')
       toast.success(publishNow ? 'Publishing now via connected accounts' : 'Queued for its scheduled time')
+      setPublishPick(null)
       setPlan(null)
       load()
     } catch (e) {
@@ -885,16 +914,24 @@ export default function ItemDetailPage() {
                                 </p>
                               )}
                               {plan.targets.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                  <Button size="sm" disabled={busy !== null} onClick={() => queuePublish(true)}>
-                                    {busy === 'auto-publish' ? 'Working…' : 'Publish now'}
-                                  </Button>
-                                  {plan.scheduledFor && (
-                                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => queuePublish(false)}>
-                                      Queue for {new Date(plan.scheduledFor).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                                <>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" disabled={busy !== null} onClick={() => void openPublishPick(true)}>
+                                      {busy === 'auto-publish' ? 'Working…' : 'Publish now'}
                                     </Button>
+                                    {plan.scheduledFor && (
+                                      <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openPublishPick(false)}>
+                                        Queue for {new Date(plan.scheduledFor).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  {!plan.scheduledFor && (
+                                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                      To post at a specific time: pick a date in the field above, press
+                                      <span className="font-medium"> Set date</span>, and a Queue button appears here.
+                                    </p>
                                   )}
-                                </div>
+                                </>
                               )}
                             </>
                           )}
@@ -957,6 +994,61 @@ export default function ItemDetailPage() {
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
               {busy !== null ? 'Working…' : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}` : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* publish → who should hear about it? */}
+      <Dialog open={publishPick !== null} onOpenChange={o => !o && busy === null && setPublishPick(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{publishPick?.publishNow ? 'Publish now' : 'Queue for the scheduled time'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Who should be told this went out? The client&rsquo;s account manager is picked for you.
+            </p>
+            {pubPeople === null && (
+              <div className="flex flex-col gap-2 py-2">
+                <Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" />
+              </div>
+            )}
+            {pubPeople?.length === 0 && (
+              <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+                No managers found — this client&rsquo;s assigned managers will be notified.
+              </p>
+            )}
+            {(pubPeople ?? []).map(r => (
+              <label key={r.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                <input
+                  type="checkbox"
+                  checked={pubChosen.has(r.id)}
+                  onChange={() => setPubChosen(prev => {
+                    const next = new Set(prev)
+                    if (next.has(r.id)) next.delete(r.id); else next.add(r.id)
+                    return next
+                  })}
+                  className="h-4 w-4 shrink-0 accent-blue-600"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{r.name || r.email}</span>
+                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                    {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
+                    {r.assigned && ' · manages this client'}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button
+              disabled={busy !== null || pubPeople === null}
+              onClick={() => publishPick && queuePublish(publishPick.publishNow, [...pubChosen])}
+            >
+              {busy !== null ? 'Working…' : publishPick?.publishNow ? 'Publish now' : 'Queue it'}
             </Button>
           </DialogFooter>
         </DialogContent>
