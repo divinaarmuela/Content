@@ -82,11 +82,21 @@ describe('defaultAllows — the ladder as it always was', () => {
     for (const role of TEAM_ROLES) expect(defaultAllows(role, '/dashboard')).toBe(true)
   })
 
-  it('gives account managers and super admins every page', () => {
+  it('gives super admins every page', () => {
     for (const { href } of GRANTABLE_PAGES) {
-      expect(defaultAllows('account_manager', href)).toBe(true)
       expect(defaultAllows('super_admin', href)).toBe(true)
     }
+  })
+
+  it('account managers get everything except business development', () => {
+    expect(defaultAllows('account_manager', '/dashboard/leads')).toBe(false)
+    expect(defaultAllows('account_manager', '/dashboard/audience')).toBe(false)
+    for (const { href } of GRANTABLE_PAGES) {
+      if (href === '/dashboard/leads' || href === '/dashboard/audience') continue
+      expect(defaultAllows('account_manager', href)).toBe(true)
+    }
+    // and a grant can still open them for a specific person
+    expect(canSeePage('account_manager', '/dashboard/leads', ['/dashboard/leads'])).toBe(true)
   })
 
   it('shows nothing to a client or an unresolved identity', () => {
@@ -110,7 +120,7 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
   it('cannot take away what the ladder already gave', () => {
     expect(canSeePage('editor', '/dashboard/production', [])).toBe(true)
     expect(canSeePage('scheduler', '/dashboard/scheduler', [])).toBe(true)
-    expect(canSeePage('account_manager', '/dashboard/leads', [])).toBe(true)
+    expect(canSeePage('account_manager', '/dashboard/clients', [])).toBe(true)
   })
 
   it('never lets a client or an unknown identity in, however it is configured', () => {
@@ -167,7 +177,9 @@ describe('normaliseGrantedPages', () => {
     // storing these would let a later role change silently keep access
     expect(normaliseGrantedPages(['/dashboard/production', '/dashboard/leads'], 'editor'))
       .toEqual(['/dashboard/leads'])
-    expect(normaliseGrantedPages(['/dashboard/leads'], 'account_manager')).toEqual([])
+    expect(normaliseGrantedPages(['/dashboard/clients'], 'account_manager')).toEqual([])
+    // leads is NOT an AM default anymore, so a leads grant survives cleaning
+    expect(normaliseGrantedPages(['/dashboard/leads'], 'account_manager')).toEqual(['/dashboard/leads'])
   })
 
   it('drops invented pages and rubbish', () => {

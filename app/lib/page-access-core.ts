@@ -61,7 +61,11 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // every team role gets the Overview — it shapes itself to the role
   if (role === 'editor') return ['/dashboard', '/dashboard/production'].includes(href)
   if (role === 'scheduler') return ['/dashboard', '/dashboard/scheduler', '/dashboard/calendar'].includes(href)
-  return true                                  // account_manager, super_admin
+  // account managers run client delivery, not business development — the
+  // lead funnel and audience lists stay out of their default world
+  // (grantable per person when someone wears both hats)
+  if (role === 'account_manager') return !['/dashboard/leads', '/dashboard/audience'].includes(href)
+  return true                                  // super_admin
 }
 
 /** The subpage key for a real path: /dashboard/clients/abc-123/brand →
