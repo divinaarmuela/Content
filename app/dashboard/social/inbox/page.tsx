@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
@@ -92,10 +95,33 @@ const msgText = (m: Message) => m.text ?? m.message ?? ''
 const msgMine = (m: Message) =>
   m.isFromMe === true || m.direction === 'outgoing' || m.direction === 'sent' || m.direction === 'outbound'
 
+type SocialAccount = {
+  id: string
+  provider_account_id: string
+  platform: string
+  username: string | null
+  name: string | null
+}
+
 export default function InboxPage() {
   const [posts, setPosts] = useState<PostRow[] | null>(null)
   // comments | messages — comments are post threads, messages are DMs
   const [tab, setTab] = useState<'comments' | 'messages'>('comments')
+  // one account, or every account — an account page links here pre-scoped
+  const [acct, setAcct] = useState<string>('all')
+  const [accounts, setAccounts] = useState<SocialAccount[]>([])
+
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('account')
+    if (wanted) { setAcct(wanted); setTab('messages') }
+    void (async () => {
+      try {
+        const res = await fetch('/api/social/accounts')
+        const json = await res.json()
+        if (res.ok) setAccounts(json.accounts ?? json.data ?? [])
+      } catch { /* the filter simply stays at "all accounts" */ }
+    })()
+  }, [])
   const [convos, setConvos] = useState<Conversation[] | null>(null)
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[] | null>(null)
@@ -226,6 +252,19 @@ export default function InboxPage() {
     }
   }
 
+  const visibleConvos = convos === null ? null
+    : acct === 'all' ? convos : convos.filter(c => c.accountId === acct)
+  const visiblePosts = posts === null ? null
+    : acct === 'all' ? posts : posts.filter(p => p.accountId === acct)
+  const acctLabel = (a: SocialAccount) => a.username ? `@${a.username}` : a.name ?? a.platform
+
+  const changeAccount = (v: string) => {
+    setAcct(v)
+    // whatever was open may belong to another account — don't show it scoped wrong
+    if (v !== 'all' && activeConvo && activeConvo.accountId !== v) { setActiveConvo(null); setMessages(null) }
+    if (v !== 'all' && active && active.accountId !== v) { setActive(null); setComments(null) }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Link
@@ -243,7 +282,19 @@ export default function InboxPage() {
             from one place.
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {accounts.length > 0 && (
+          <Select value={acct} onValueChange={changeAccount}>
+            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All accounts</SelectItem>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.provider_account_id}>{acctLabel(a)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
           {(['comments', 'messages'] as const).map(t => (
             <button
               key={t}
@@ -259,6 +310,7 @@ export default function InboxPage() {
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {tab === 'messages' ? (
@@ -266,17 +318,17 @@ export default function InboxPage() {
         {/* ── conversations ── */}
         <Card className="h-fit">
           <CardContent className="p-2">
-            {convos === null ? (
+            {visibleConvos === null ? (
               <div className="flex flex-col gap-2 p-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
               </div>
-            ) : convos.length === 0 ? (
+            ) : visibleConvos.length === 0 ? (
               <p className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
                 No conversations yet — Instagram and Telegram DMs land here once people message the connected accounts.
               </p>
             ) : (
               <ul className="flex flex-col">
-                {convos.map(c => (
+                {visibleConvos.map(c => (
                   <li key={c.id}>
                     <button
                       type="button"
@@ -349,17 +401,17 @@ export default function InboxPage() {
         {/* ── posts ─────────────────────────────────────────────────── */}
         <Card className="h-fit">
           <CardContent className="p-2">
-            {posts === null ? (
+            {visiblePosts === null ? (
               <div className="flex flex-col gap-2 p-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
               </div>
-            ) : posts.length === 0 ? (
+            ) : visiblePosts.length === 0 ? (
               <p className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
                 No posts with comments yet.
               </p>
             ) : (
               <ul className="flex flex-col">
-                {posts.map(p => (
+                {visiblePosts.map(p => (
                   <li key={p.id}>
                     <button
                       type="button"

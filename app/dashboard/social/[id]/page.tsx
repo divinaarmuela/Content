@@ -166,6 +166,12 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               {' · '}connected {when(account.connected_at)}
             </p>
           </div>
+          <Link
+            href={`/dashboard/social/inbox?account=${encodeURIComponent(account.provider_account_id)}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+          >
+            <MessageSquare className="h-3.5 w-3.5" /> Inbox
+          </Link>
         </CardContent>
       </Card>
 
