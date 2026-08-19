@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
 import { getPortalDataByToken, type PortalItem } from '../../lib/portal-data'
 import { archivo, sometype } from '../../components/lama/fonts'
+import Reveal from '../../components/lama/Reveal'
+import Rule from '../../components/lama/Rule'
+import { Scramble } from '../../components/lama/Scramble'
+import PortalShell from '../../components/portal/PortalShell'
 import {
   CommitmentCards, PortalSection, ReviewSection,
 } from '../../components/portal/PortalSections'
@@ -16,21 +20,11 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 /**
- * The client portal in MD Media's own dark, cinematic identity — near-black
- * ground, one golden accent, the client's name in display type over a hero
- * cut from their own latest work. One look for every client, deliberately:
- * the portal is the agency's stage; the client's brand is the work on it.
+ * The client portal in the marketing site's own voice: ink and cream, Archivo
+ * display over a hero cut from the client's latest work, Sometype mono
+ * kickers with scramble entrances, growing hairline rules, staggered
+ * reveals. One stage for every client — the client's brand is the work on it.
  */
-
-// MD Media's own tokens — same ink and amber as the marketing site
-const T = {
-  bg: '#0B0B0B',
-  ink: '#fafafa',
-  surface: '#141414',
-  border: '#262626',
-  accent: '#FFB300',
-  accentInk: '#0B0B0B',
-}
 
 /** The most recent piece with visible media — the hero backdrop. */
 function heroMedia(items: PortalItem[]): string | null {
@@ -48,94 +42,105 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
   const words = data.client.name.trim().split(/\s+/)
   const lastWord = words.length > 1 ? words.pop()! : null
   const firstWords = words.join(' ')
-  const totalActive = data.needs_review.length + data.in_production.length + data.approved.length + data.scheduled.length
 
   return (
-    <div
-      className={`dbx ${archivo.variable} ${sometype.variable} min-h-screen antialiased`}
-      style={{
-        background: T.bg,
-        color: T.ink,
+    <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
+      <div style={{
         fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif',
-        ['--p-bg' as string]: T.bg,
-        ['--p-ink' as string]: T.ink,
-        ['--p-surface' as string]: T.surface,
-        ['--p-border' as string]: T.border,
-        ['--p-accent' as string]: T.accent,
-        ['--p-accent-ink' as string]: T.accentInk,
         ['--p-heading-font' as string]: 'var(--font-archivo), sans-serif',
         ['--p-mono-font' as string]: 'var(--font-sometype), monospace',
-      }}
-    >
+      }}>
       {/* ── hero: the client's name over their own work ── */}
       <div className="relative overflow-hidden" style={{ background: '#000' }}>
         {hero && (
           <div className="absolute inset-0">
             {/\.(mp4|webm|mov)(\?|$)/i.test(hero) ? (
-              <video src={hero} autoPlay muted loop playsInline className="h-full w-full object-cover opacity-60" />
+              <video src={hero} autoPlay muted loop playsInline className="h-full w-full object-cover opacity-50" />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={hero} alt="" className="h-full w-full object-cover opacity-60" />
+              <img src={hero} alt="" className="h-full w-full object-cover opacity-50" />
             )}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #0a0a0a 8%, rgba(10,10,10,0.55) 45%, rgba(10,10,10,0.25) 100%)' }} />
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #0B0B0B 6%, rgba(11,11,11,0.55) 45%, rgba(11,11,11,0.2) 100%)' }} />
           </div>
         )}
-        <div className="relative mx-auto flex min-h-[300px] max-w-5xl flex-col justify-end px-4 pb-8 pt-24 sm:min-h-[380px] sm:px-6">
-          <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.24em]" style={{ color: T.accent }}>
-            Content portal
-          </p>
-          <h1 className="text-4xl font-bold uppercase leading-[0.95] tracking-tight sm:text-6xl" style={{ fontFamily: 'var(--font-archivo), sans-serif' }}>
-            {firstWords}
-            {lastWord && <><br /><span style={{ color: T.accent }}>{lastWord}</span></>}
-          </h1>
-          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2">
-            {[
-              ['In review', data.needs_review.length],
-              ['In production', data.in_production.length],
-              ['Queued', data.approved.length + data.scheduled.length],
-              ['Published', data.published.length],
-            ].map(([label, n]) => (
-              <div key={label as string}>
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] opacity-50">{label}</p>
-                <p className="font-mono text-lg font-semibold tabular-nums" style={{ color: (n as number) > 0 ? T.ink : undefined, opacity: (n as number) > 0 ? 1 : 0.35 }}>
-                  {String(n).padStart(2, '0')}
-                </p>
-              </div>
-            ))}
+        <div className="absolute left-6 top-5 z-10 sm:left-10">
+          <div className="flex w-fit items-center rounded-lg bg-gradient-to-b from-zinc-800 to-zinc-950 px-2.5 py-2 shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/MDLogo-trim.png" alt="MD Media" className="h-3.5 w-auto" />
           </div>
+        </div>
+        <div className="relative flex min-h-[300px] flex-col justify-end px-6 pb-8 pt-24 text-cream sm:min-h-[420px] sm:px-10 sm:pb-10">
+          <Scramble
+            gate={false}
+            text="CONTENT PORTAL"
+            className="mb-4 block text-[11px] uppercase tracking-[0.24em] [word-spacing:0.45em]"
+            as="p"
+          />
+          <Reveal gate={false}>
+            <h1 className="font-medium uppercase leading-[1.0] tracking-[-0.04em] text-[clamp(2.2rem,7vw,6rem)]">
+              {firstWords}
+              {lastWord && (
+                <>
+                  {' '}
+                  <span className="bg-cream px-[0.12em] py-[0.02em] text-ink [box-decoration-break:clone] [-webkit-box-decoration-break:clone]">
+                    {lastWord}
+                  </span>
+                </>
+              )}
+            </h1>
+          </Reveal>
+          <Reveal gate={false} delay={160}>
+            <div className="mt-7 flex flex-wrap gap-x-10 gap-y-3" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
+              {[
+                ['In review', data.needs_review.length],
+                ['In production', data.in_production.length],
+                ['Queued', data.approved.length + data.scheduled.length],
+                ['Published', data.published.length],
+              ].map(([label, n]) => (
+                <div key={label as string}>
+                  <p className="text-[9px] uppercase tracking-[0.2em] opacity-50">{label}</p>
+                  <p className="text-lg tabular-nums" style={{ opacity: (n as number) > 0 ? 1 : 0.35 }}>
+                    {String(n).padStart(2, '0')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Reveal>
         </div>
       </div>
 
       {/* ── sticky mini-header once scrolled past the hero ── */}
-      <header className="sticky top-0 z-20 backdrop-blur" style={{ background: 'rgba(10,10,10,0.85)', borderBottom: `1px solid ${T.border}` }}>
-        <div className="mx-auto flex h-12 max-w-5xl items-center gap-3 px-4 sm:px-6">
-          <span className="h-2 w-2 rounded-full" style={{ background: T.accent }} />
-          <p className="truncate text-sm font-semibold tracking-tight">{data.client.name}</p>
-          <p className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] opacity-40">
+      <header className="sticky top-0 z-20 backdrop-blur" style={{ background: 'color-mix(in srgb, var(--p-bg) 85%, transparent)', borderBottom: '1px solid var(--p-border)' }}>
+        <div className="flex h-12 items-center gap-3 px-6 sm:px-10">
+          <div className="flex shrink-0 items-center rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 px-2 py-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/MDLogo-trim.png" alt="MD Media" className="h-2.5 w-auto" />
+          </div>
+          <p className="truncate text-sm font-medium uppercase tracking-tight">{data.client.name}</p>
+          <p className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.2em] opacity-40" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
             by MD Media
           </p>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-10 sm:px-6">
-        <ReviewSection items={data.needs_review} token={token} />
-        <CommitmentCards data={data} />
-        <div className="grid gap-8 lg:grid-cols-2">
-          <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." />
-          <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." />
+      <main className="flex w-full flex-col gap-16 px-6 py-14 sm:px-10">
+        <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} /></Reveal>
+        <Reveal gate={false}><CommitmentCards data={data} /></Reveal>
+        <div className="grid gap-12 lg:grid-cols-2">
+          <Reveal gate={false}><PortalSection title="IN PRODUCTION" items={data.in_production} empty="Nothing in production right now." /></Reveal>
+          <Reveal gate={false} delay={120}><PortalSection title="APPROVED & SCHEDULED" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." /></Reveal>
         </div>
-        <PortalSection title="Published" items={data.published} empty="Published posts appear here with live links." />
-        {totalActive === 0 && data.published.length === 0 && (
-          <p className="text-center text-sm opacity-40">Your first pieces will appear here as production begins.</p>
-        )}
+        <Reveal gate={false}><PortalSection title="PUBLISHED" items={data.published} empty="Published posts appear here with live links." /></Reveal>
       </main>
 
-      <footer className="mx-auto max-w-5xl px-4 pb-10 sm:px-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] opacity-40">
+      <footer className="px-6 pb-10 sm:px-10">
+        <Rule className="mb-6 bg-current opacity-30" once />
+        <p className="text-[10px] uppercase tracking-[0.14em] opacity-40" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
           MD Media · get seen · get known · get booked
         </p>
       </footer>
-      <Toaster position="bottom-right" theme="dark" />
-    </div>
+      <Toaster position="bottom-right" />
+      </div>
+    </PortalShell>
   )
 }

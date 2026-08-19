@@ -20,18 +20,24 @@ const surface: React.CSSProperties = {
 
 export function SectionHeading({ children, count }: { children: React.ReactNode; count?: number }) {
   return (
-    <div className="flex items-baseline gap-2.5">
-      <h2 className="text-base font-semibold tracking-tight" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
-        {children}
-      </h2>
-      {typeof count === 'number' && count > 0 && (
-        <span
-          className="rounded-full px-2 py-0.5 font-mono text-[11px] tabular-nums"
-          style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-baseline gap-3">
+        <h2
+          className="text-xs uppercase tracking-[0.14em]"
+          style={{ fontFamily: 'var(--p-mono-font, var(--p-heading-font, inherit))' }}
         >
-          {count}
-        </span>
-      )}
+          {children}
+        </h2>
+        {typeof count === 'number' && count > 0 && (
+          <span
+            className="px-1.5 py-0.5 font-mono text-[10px] tabular-nums"
+            style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
+          >
+            {String(count).padStart(2, '0')}
+          </span>
+        )}
+      </div>
+      <div className="h-0.5 w-full origin-left" style={{ background: 'var(--p-border, #e4e4e7)' }} />
     </div>
   )
 }
@@ -287,7 +293,7 @@ export function PortalSection({ title, items, empty, token }: {
       <SectionHeading count={items.length}>{title}</SectionHeading>
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
-        : <div className="grid gap-3 sm:grid-cols-2">{items.map(i => <PortalItemCard key={i.id} item={i} />)}</div>}
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} />)}</div>}
       {void token}
     </div>
   )
@@ -303,7 +309,7 @@ export function ReviewSection({ items, token }: { items: PortalItem[]; token?: s
           Nothing waiting on you — we&rsquo;ll email you when the next piece is ready.
         </p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
           {items.map(i => <ReviewCard key={i.id} item={i} token={token} />)}
         </div>
       )}

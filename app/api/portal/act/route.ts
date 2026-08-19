@@ -124,6 +124,32 @@ export async function POST(req: Request) {
       // condition) must reach the manager, approval or not
       if (comment) {
         void notifyManagers(client.id, item.id, item.title, speaker, comment)
+        // an APPROVAL note often carries the "when" — the schedulers who'll
+        // actually set the date must hear it too (they never see comments)
+        if (action === 'approve') {
+          void (async () => {
+            const { data: schedulers } = await supabase
+              .from('team_users').select('id, email')
+              .eq('role', 'scheduler').eq('active_status', true)
+            for (const s of schedulers ?? []) {
+              await notify({
+                actorName: speaker,
+                eventType: 'approval_note',
+                entityType: 'content_item',
+                entityId: `${item.id}#note`,
+                recipientId: s.id,
+                recipientEmail: s.email,
+                subject: `Approved with a note: ${item.title}`,
+                bodyHtml: renderEmail(
+                  `Approved with a note: ${item.title}`,
+                  `<p><strong>${item.title}</strong> was approved by ${speaker} with this note — it may say when they want it posted:</p><p>“${comment.slice(0, 500)}”</p>`,
+                  'Open the item',
+                  `${DASHBOARD_URL}/dashboard/production/${item.id}`
+                ),
+              })
+            }
+          })().catch(e => console.error('approval-note scheduler notify error:', e))
+        }
       }
       return NextResponse.json({ ok: true, status: updated.status })
     }
