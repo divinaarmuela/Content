@@ -19,7 +19,12 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Mail, Plus, Pencil, X } from 'lucide-react'
+import { Mail, Plus, Pencil, X, Trash2 } from 'lucide-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 type Member = {
   id: string
@@ -359,9 +364,46 @@ export default function TeamPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} aria-label={`Edit ${m.email}`}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} aria-label={`Edit ${m.email}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {canManage && m.role !== 'super_admin' && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" aria-label={`Delete ${m.email}`}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete {m.name || m.email}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                They lose all dashboard access immediately, their client assignments and
+                                page grants are removed, and any items they owned become unassigned. Their
+                                past comments and activity stay in the history. This cannot be undone —
+                                if they might come back, deactivate them instead.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Keep them</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={async () => {
+                                  const res = await fetch(`/api/team/${m.id}?kind=member`, { method: 'DELETE' })
+                                  const json = await res.json()
+                                  if (!res.ok) return toast.error(json.error ?? 'Delete failed')
+                                  toast.success(`${m.email} deleted`)
+                                  load()
+                                }}
+                              >
+                                Delete member
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

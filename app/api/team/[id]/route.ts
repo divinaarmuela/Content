@@ -61,11 +61,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-/** Revoke a pending invite (id = invite id). super_admin only. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+/** Revoke a pending invite (id = invite id), or with ?kind=member delete a
+ *  team member outright. super_admin only. */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole('super_admin')
+    const actor = await requireRole('super_admin')
     const { id } = await params
+
+    if (new URL(req.url).searchParams.get('kind') === 'member') {
+      if (id === actor.id) {
+        return NextResponse.json({ error: 'You cannot delete yourself' }, { status: 400 })
+      }
+      const { data: member } = await supabase.from('team_users').select('id, role, email').eq('id', id).maybeSingle()
+      if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+      if (member.role === 'super_admin') {
+        // allowlisted supers re-create themselves on next sign-in — deleting
+        // one is confusion, not removal
+        return NextResponse.json({ error: 'Super admins cannot be deleted — deactivate instead' }, { status: 400 })
+      }
+      // detach everything that points at them, keep their authored history
+      await supabase.from('team_user_clients').delete().eq('team_user_id', id)
+      await supabase.from('user_page_access').delete().eq('team_user_id', id)
+      await supabase.from('content_items').update({ owner_id: null }).eq('owner_id', id)
+      const { error: delErr } = await supabase.from('team_users').delete().eq('id', id)
+      if (delErr) {
+        // an FK we don't know about (comments, approvals…) — keep the record
+        return NextResponse.json(
+          { error: 'This person has work history attached. Deactivate them instead.' },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ ok: true })
+    }
     const { data, error } = await supabase
       .from('team_invites')
       .update({ status: 'revoked' })

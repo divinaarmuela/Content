@@ -56,6 +56,49 @@ export default function PageAccessSettings() {
   )
   const theirGrants = grants[selected] ?? []
 
+  /** Change what someone IS, not just what they see: their role drives the
+   *  default pages (green ticks) and every server-side permission. Ticking
+   *  boxes can never turn an editor into an account manager — this can. */
+  const setRole = async (role: Role) => {
+    if (!person || person.role === role) return
+    setBusy('role')
+    try {
+      const res = await fetch(`/api/team/${person.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not change role')
+      toast.success(`${person.name || person.email} is now ${ROLE_LABEL[role] ?? role}`)
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change role')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const clearGrants = async () => {
+    if (!person || theirGrants.length === 0) return
+    setBusy('clear')
+    try {
+      const res = await fetch('/api/team/page-access', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_user_id: person.id, hrefs: [] }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not clear')
+      setGrants(json.grants ?? {})
+      toast.success(`${person.name || person.email} is back to their role's defaults`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not clear')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const toggle = async (href: string) => {
     if (!person) return
     const next = theirGrants.includes(href)
@@ -123,7 +166,42 @@ export default function PageAccessSettings() {
             {person.name || person.email} is a super admin and already sees every page.
           </div>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-3">
+            {/* the role IS the baseline — change it here rather than
+                approximating a role with a pile of page grants */}
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+              <span className="text-xs text-muted-foreground">Role</span>
+              {(['scheduler', 'editor', 'account_manager'] as Role[]).map(r => (
+                <button
+                  key={r}
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void setRole(r)}
+                  className={
+                    'rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ' +
+                    (person.role === r
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-border bg-background text-muted-foreground hover:text-foreground')
+                  }
+                >
+                  {ROLE_LABEL[r]}
+                </button>
+              ))}
+              <span className="text-[11px] text-muted-foreground">
+                changes their default pages and permissions everywhere
+              </span>
+              {theirGrants.length > 0 && (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void clearGrants()}
+                  className="ml-auto rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                >
+                  Clear {theirGrants.length} extra page{theirGrants.length > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col gap-1.5">
             {GRANTABLE_PAGES.map(page => {
               const byDefault = defaultAllows(person.role, page.href)
               const granted = theirGrants.includes(page.href)
@@ -167,6 +245,7 @@ export default function PageAccessSettings() {
                 </label>
               )
             })}
+            </div>
           </div>
         )}
 
