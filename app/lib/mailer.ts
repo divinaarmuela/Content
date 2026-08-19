@@ -207,9 +207,17 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   try {
     assertTestSafeRecipients(input.recipientEmail)
     const domain = FROM_DOMAIN()
-    const alias = actorAlias(domain, input.actorName, input.actorEmail) ?? `no-reply@${domain}`
-    const replyTo = replyToFor(input.actorEmail, alias)
-      ?? (!input.actorEmail ? process.env.GMAIL_USER : undefined)
+    // the portal's machine identity (portal+<id>@) is for the audit trail,
+    // never for a From line — those emails speak as the company, replies to
+    // the shared inbox
+    const isPortalActor = input.actorEmail?.toLowerCase().startsWith('portal+') ?? false
+    const alias = isPortalActor
+      ? `no-reply@${domain}`
+      : actorAlias(domain, input.actorName, input.actorEmail) ?? `no-reply@${domain}`
+    const replyTo = isPortalActor
+      ? process.env.GMAIL_USER
+      : replyToFor(input.actorEmail, alias)
+        ?? (!input.actorEmail ? process.env.GMAIL_USER : undefined)
     await smtp2goSend({
       from: `${displayName(input.actorName)} <${alias}>`,
       to: [input.recipientEmail],
