@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
+import { announceItemChange } from '../../../lib/production-live'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
         entityType: 'content_item', entityId: item.id,
         action: 'created', newValue: item.title,
       })
+      announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
     }
     return NextResponse.json(data, { status: 201 })
   } catch (e) {

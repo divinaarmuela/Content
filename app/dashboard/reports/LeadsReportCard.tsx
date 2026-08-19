@@ -17,6 +17,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { FileDown, Send, X, Plus, CalendarClock, Mail } from 'lucide-react'
+import { useRole } from '../useRole'
 
 type Settings = {
   enabled: boolean
@@ -43,6 +44,10 @@ function monthOptions(): { label: string; month: number; year: number }[] {
 }
 
 export default function LeadsReportCard() {
+  // account managers view settings and download; changing settings and
+  // emailing the report stay super_admin (matching the API)
+  const { can } = useRole()
+  const canEdit = can('super_admin')
   const [settings, setSettings] = useState<Settings | null>(null)
   const [visible, setVisible] = useState(true)
   const [newRecipient, setNewRecipient] = useState('')
@@ -130,7 +135,7 @@ export default function LeadsReportCard() {
           Monthly leads report
         </CardTitle>
         <label className="ml-auto flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <Switch checked={settings.enabled} onCheckedChange={v => save({ enabled: v })} />
+          <Switch checked={settings.enabled} disabled={!canEdit} onCheckedChange={v => canEdit && save({ enabled: v })} />
           {settings.enabled ? 'Automatic sending on' : 'Automatic sending off'}
         </label>
       </CardHeader>
@@ -143,35 +148,39 @@ export default function LeadsReportCard() {
               {settings.recipients.map(r => (
                 <Badge key={r} variant="secondary" className="gap-1 font-normal">
                   {r}
-                  <button
-                    aria-label={`Remove ${r}`}
-                    onClick={() => save({ recipients: settings.recipients.filter(x => x !== r) })}
-                    className="text-zinc-400 hover:text-red-500"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      aria-label={`Remove ${r}`}
+                      onClick={() => save({ recipients: settings.recipients.filter(x => x !== r) })}
+                      className="text-zinc-400 hover:text-red-500"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                 </Badge>
               ))}
               {settings.recipients.length === 0 && (
                 <span className="text-xs text-zinc-400 dark:text-zinc-500">No recipients yet</span>
               )}
             </div>
-            <div className="flex gap-2">
-              <Input
-                value={newRecipient}
-                placeholder="name@mdmmarketing.com.au"
-                onChange={e => setNewRecipient(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addRecipient()}
-                className="h-8 text-sm"
-              />
-              <Button size="sm" variant="outline" onClick={addRecipient}><Plus className="h-4 w-4" /></Button>
-            </div>
+            {canEdit && (
+              <div className="flex gap-2">
+                <Input
+                  value={newRecipient}
+                  placeholder="name@mdmmarketing.com.au"
+                  onChange={e => setNewRecipient(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addRecipient()}
+                  className="h-8 text-sm"
+                />
+                <Button size="sm" variant="outline" onClick={addRecipient}><Plus className="h-4 w-4" /></Button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label className="text-xs">Send on day</Label>
-              <Select value={String(settings.send_day)} onValueChange={v => v && save({ send_day: Number(v) })}>
+              <Select value={String(settings.send_day)} disabled={!canEdit} onValueChange={v => v && canEdit && save({ send_day: Number(v) })}>
                 <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-64">
                   {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
@@ -187,7 +196,8 @@ export default function LeadsReportCard() {
               <Input
                 type="date"
                 value={settings.data_from ?? ''}
-                onChange={e => save({ data_from: e.target.value || null })}
+                disabled={!canEdit}
+                onChange={e => canEdit && save({ data_from: e.target.value || null })}
                 className="h-8 font-mono text-xs"
               />
             </div>
@@ -213,9 +223,11 @@ export default function LeadsReportCard() {
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => generate('download')}>
               <FileDown className="h-4 w-4" /> {busy === 'download' ? 'Building…' : 'Download PDF'}
             </Button>
-            <Button size="sm" disabled={busy !== null || settings.recipients.length === 0} onClick={() => setConfirmSend(true)}>
-              <Send className="h-4 w-4" /> {busy === 'send' ? 'Sending…' : 'Email to recipients'}
-            </Button>
+            {canEdit && (
+              <Button size="sm" disabled={busy !== null || settings.recipients.length === 0} onClick={() => setConfirmSend(true)}>
+                <Send className="h-4 w-4" /> {busy === 'send' ? 'Sending…' : 'Email to recipients'}
+              </Button>
+            )}
           </div>
           <p className="text-xs text-zinc-400 dark:text-zinc-500">
             Includes lead totals, source split, service interest, inbox scanner stats, and the full lead register.

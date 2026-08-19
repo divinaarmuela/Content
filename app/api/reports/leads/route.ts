@@ -9,10 +9,11 @@ export const maxDuration = 120
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-/** Read report settings. super_admin only. */
+/** Read report settings. Account managers see the Reports page by default,
+ *  so reading must not 403 for them; changing settings stays super_admin. */
 export async function GET() {
   try {
-    await requireRole('super_admin')
+    await requireRole('account_manager')
     const { data, error } = await supabase
       .from('report_settings').select('*').eq('id', 'leads_report').maybeSingle()
     if (error) throw new Error(error.message)
@@ -61,11 +62,15 @@ export async function PUT(req: Request) {
 }
 
 /** Generate a report. body: { month, year, action: 'download' | 'send' }.
- *  super_admin only. */
+ *  Downloading is account_manager+; SENDING it to the configured recipients
+ *  is an outbound email and stays super_admin. */
 export async function POST(req: Request) {
   try {
-    await requireRole('super_admin')
+    const user = await requireRole('account_manager')
     const body = await req.json()
+    if (body.action === 'send' && user.role !== 'super_admin') {
+      return NextResponse.json({ error: 'Only a super admin can email the report' }, { status: 403 })
+    }
     const month = Number(body.month)
     const year = Number(body.year)
     if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {

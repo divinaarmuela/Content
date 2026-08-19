@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    await requireRole('editor')
+    // scheduler+: the Availability tab is a scheduler's home page, and this
+    // list is just "which calendars feed it". Managing them stays editor+.
+    await requireRole('scheduler')
     return NextResponse.json({ accounts: await listCalendarAccounts() })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

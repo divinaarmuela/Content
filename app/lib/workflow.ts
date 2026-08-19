@@ -2,6 +2,7 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { notify, renderEmail } from './mailer'
 import { AuthzError, type TeamUser } from './authz'
+import { announceItemChange } from './production-live'
 import {
   checkTransition,
   versionSatisfiesSubmission,
@@ -60,7 +61,11 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
     case 'account_managers': {
       const { data } = await supabase
         .from('team_user_clients')
-        .select('team_users!inner(id, email, name, role, active_status)')
+        // the FK must be named: team_user_clients has TWO links to team_users
+        // (team_user_id and assigned_by), and the bare embed is ambiguous —
+        // PostgREST errors, data comes back null, and the empty-AM fallback
+        // then emails every super admin on every transition.
+        .select('team_users!team_user_clients_team_user_id_fkey!inner(id, email, name, role, active_status)')
         .eq('client_id', item.client_id)
       const ams = (data ?? [])
         .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean })
@@ -200,6 +205,9 @@ export async function performTransition(
       }
     }
   })().catch(e => console.error('notification fan-out error:', e))
+
+  // live hint for every open board/queue/calendar/item page
+  announceItemChange({ item_id: item.id, client_id: item.client_id, status: to, kind: 'transition' })
 
   return updated as ContentItem
 }

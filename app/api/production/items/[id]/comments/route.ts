@@ -4,6 +4,7 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../..
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail } from '../../../../../lib/mailer'
+import { announceItemChange } from '../../../../../lib/production-live'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -49,7 +50,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (user.role === 'client') {
       const { data } = await supabase
         .from('team_user_clients')
-        .select('team_users!inner(id, email, name, role, active_status)')
+        // FK named explicitly — the bare embed is ambiguous (two links to
+        // team_users) and silently resolves to nobody, see workflow.ts
+        .select('team_users!team_user_clients_team_user_id_fkey!inner(id, email, name, role, active_status)')
         .eq('client_id', item.client_id)
       let recipients = (data ?? [])
         .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean })
@@ -99,6 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'comment' })
     return NextResponse.json(comment, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

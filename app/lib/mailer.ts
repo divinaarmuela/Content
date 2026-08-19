@@ -29,6 +29,23 @@ const transporter = nodemailer.createTransport({
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
 
+/**
+ * Hard test-mode kill-switch. When EMAIL_TEST_ONLY=1 (set by the E2E harness,
+ * never in production env), any recipient whose address does not end in
+ * `.invalid` is refused before a byte leaves the process. Testing must never
+ * be able to email a real team member, whatever bug is upstream — the leak we
+ * are defending against was exactly an upstream bug (an ambiguous join whose
+ * empty result fell back to "email every super admin").
+ */
+function assertTestSafeRecipients(to: string | string[]): void {
+  if (process.env.EMAIL_TEST_ONLY !== '1') return
+  const all = Array.isArray(to) ? to : [to]
+  const real = all.filter(a => !a.trim().toLowerCase().endsWith('.invalid'))
+  if (real.length > 0) {
+    throw new Error(`EMAIL_TEST_ONLY: refused to email real recipient(s): ${real.join(', ')}`)
+  }
+}
+
 /** Direct send with optional attachments — used for generated documents
  *  (e.g. the monthly leads report). Sends via the Gmail REST API (HTTPS)
  *  rather than SMTP: verified deliverable end-to-end, and immune to the
@@ -40,6 +57,7 @@ export async function sendRawEmail(input: {
   html: string
   attachments?: { filename: string; content: Buffer; contentType: string }[]
 }): Promise<void> {
+  assertTestSafeRecipients(input.to)
   const { gmailSendRaw } = await import('./gmail')
   const MailComposer = (await import('nodemailer/lib/mail-composer')).default
   const mail = new MailComposer({
@@ -126,6 +144,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 
   // 2. we own the row — send, then record the outcome
   try {
+    assertTestSafeRecipients(input.recipientEmail)
     await transporter.sendMail({
       from: `MD Media <${process.env.GMAIL_USER}>`,
       to: input.recipientEmail,

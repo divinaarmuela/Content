@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import PlatformIcon from '../social/PlatformIcon'
+import { useProductionLive } from '../production/useProductionLive'
 
 type Entry = {
   id: string
@@ -67,6 +68,9 @@ export default function ScheduleCalendar() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // live calendar: schedule entries appear as they are set, no reload
+  useProductionLive(load)
 
   const byDay = useMemo(() => {
     const map = new Map<string, Entry[]>()

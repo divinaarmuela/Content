@@ -18,6 +18,7 @@ import { Ban, Copy } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { CAL_TZ } from '../../../lib/gcal-core'
 import type { ShootStatus } from '../../../lib/shoot-core'
+import { useRole } from '../../useRole'
 
 type Proposal = {
   id: string
@@ -50,6 +51,9 @@ const fmtWhen = (startsAt: string, endsAt: string) => {
 
 /** Every invitation ever sent, newest first — and the place to call one off. */
 export default function ProposalsPage() {
+  // schedulers read the register; cancelling stays editor+ (matches the API)
+  const { can } = useRole()
+  const canManage = can('editor')
   const [proposals, setProposals] = useState<Proposal[] | null>(null)
 
   const load = useCallback(async () => {
@@ -151,7 +155,7 @@ export default function ProposalsPage() {
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
-                    {p.status !== 'cancelled' && (
+                    {canManage && p.status !== 'cancelled' && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-red-600"

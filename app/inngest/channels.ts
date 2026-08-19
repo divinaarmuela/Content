@@ -89,6 +89,32 @@ export const trackerChannel = channel({
   },
 })
 
+/**
+ * Production workflow activity — an item was created, moved status, got a new
+ * version, a comment, or a schedule entry. One global channel like `leads`:
+ * the board, the scheduler queue, the calendar, and every open item page all
+ * want the same stream and refetch through their own authenticated API on
+ * receipt. The payload is a hint, never the data — so a subscriber can only
+ * learn "something about item X changed", and the refetch re-applies all the
+ * role/client scoping server-side.
+ */
+export const productionChannel = channel({
+  name: 'production',
+  topics: {
+    changed: {
+      schema: z.object({
+        item_id: z.string(),
+        client_id: z.string(),
+        /** current status after the change */
+        status: z.string(),
+        /** 'created' | 'transition' | 'version' | 'comment' | 'schedule' */
+        kind: z.string(),
+        ts: z.number(),
+      }),
+    },
+  },
+})
+
 export const intakeChannel = channel({
   name: 'intake',
   topics: {

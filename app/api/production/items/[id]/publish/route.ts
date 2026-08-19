@@ -3,6 +3,7 @@ import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { planItemPublish, queueItemPublish } from '../../../../../lib/production-publish'
+import { announceItemChange } from '../../../../../lib/production-live'
 
 /** What would be published for this item, and what is stopping it. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       detail: `publish job ${result.id}`,
     })
 
+    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'schedule' })
     return NextResponse.json({ jobId: result.id })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

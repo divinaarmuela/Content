@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
+import { useProductionLive } from '../production/useProductionLive'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
 type Item = {
@@ -69,6 +70,9 @@ export default function SchedulerPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // live queue: an approval lands in "To schedule" the moment the AM clicks it
+  useProductionLive(load)
 
   const visible = (items ?? []).filter(i => i.status === lane)
   const counts = Object.fromEntries(LANES.map(l => [l.key, (items ?? []).filter(i => i.status === l.key).length]))

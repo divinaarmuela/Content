@@ -58,8 +58,9 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
   if (role === 'client') return false
-  if (role === 'editor') return href === '/dashboard/production'
-  if (role === 'scheduler') return ['/dashboard/scheduler', '/dashboard/calendar'].includes(href)
+  // every team role gets the Overview — it shapes itself to the role
+  if (role === 'editor') return ['/dashboard', '/dashboard/production'].includes(href)
+  if (role === 'scheduler') return ['/dashboard', '/dashboard/scheduler', '/dashboard/calendar'].includes(href)
   return true                                  // account_manager, super_admin
 }
 

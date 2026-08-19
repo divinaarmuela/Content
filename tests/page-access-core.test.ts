@@ -63,17 +63,23 @@ const NAV = [
 const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
 
 describe('defaultAllows — the ladder as it always was', () => {
-  it('keeps an editor on the production board only', () => {
+  it('keeps an editor on the overview and production board only', () => {
+    expect(defaultAllows('editor', '/dashboard')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/production')).toBe(true)
-    for (const href of ['/dashboard', '/dashboard/leads', '/dashboard/settings']) {
+    for (const href of ['/dashboard/leads', '/dashboard/settings', '/dashboard/scheduler']) {
       expect(defaultAllows('editor', href)).toBe(false)
     }
   })
 
-  it('keeps a scheduler on the scheduler and calendar only', () => {
+  it('keeps a scheduler on the overview, scheduler and calendar only', () => {
+    expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/calendar')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/production')).toBe(false)
+  })
+
+  it('every team role sees the overview — it shapes itself to the role', () => {
+    for (const role of TEAM_ROLES) expect(defaultAllows(role, '/dashboard')).toBe(true)
   })
 
   it('gives account managers and super admins every page', () => {
@@ -120,11 +126,11 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 describe('visiblePages', () => {
   it('filters to what the person may see and preserves nav order', () => {
     const seen = visiblePages('editor', NAV, ['/dashboard/leads'])
-    expect(seen.map(s => s.href)).toEqual(['/dashboard/leads', '/dashboard/production'])
+    expect(seen.map(s => s.href)).toEqual(['/dashboard', '/dashboard/leads', '/dashboard/production'])
   })
 
-  it('an editor with no grants still sees only production', () => {
-    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual(['/dashboard/production'])
+  it('an editor with no grants still sees only overview and production', () => {
+    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual(['/dashboard', '/dashboard/production'])
   })
 
   it('an unresolved role sees nothing, grants or not', () => {
@@ -134,8 +140,8 @@ describe('visiblePages', () => {
   it('two people with the same role can differ', () => {
     const manal = visiblePages('editor', NAV, ['/dashboard/leads'])
     const other = visiblePages('editor', NAV, [])
-    expect(manal.length).toBe(2)
-    expect(other.length).toBe(1)
+    expect(manal.length).toBe(3)
+    expect(other.length).toBe(2)
   })
 })
 

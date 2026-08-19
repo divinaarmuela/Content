@@ -20,6 +20,7 @@ import {
   bucketByDay, calendarColors, dayKey, shiftWeek, weekOf, CAL_TZ, type CalEvent,
 } from '../../lib/gcal-core'
 import type { ShootStatus } from '../../lib/shoot-core'
+import { useRole } from '../useRole'
 
 type Account = {
   email: string
@@ -274,6 +275,10 @@ const fmtDayHeading = (key: string) => {
  * calendar toggles on and off; empty days read as free at a glance.
  */
 export default function AvailabilityView() {
+  // schedulers read the week; proposing, cancelling, and managing calendars
+  // stay editor+ (matching the API), so those controls simply don't render
+  const { can } = useRole()
+  const canManage = can('editor')
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [events, setEvents] = useState<CalEvent[] | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])
@@ -394,8 +399,9 @@ export default function AvailabilityView() {
           <button
             key={a.email}
             type="button"
-            onClick={() => patchAccount({ email: a.email, enabled: !a.enabled })}
-            title={a.enabled ? 'Hide this calendar' : 'Show this calendar'}
+            disabled={!canManage}
+            onClick={() => canManage && patchAccount({ email: a.email, enabled: !a.enabled })}
+            title={canManage ? (a.enabled ? 'Hide this calendar' : 'Show this calendar') : undefined}
             className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
               a.enabled
                 ? 'border-zinc-300 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
@@ -410,12 +416,14 @@ export default function AvailabilityView() {
           </button>
         ))}
 
-        <Button variant="outline" size="sm" asChild>
-          {/* full navigation, not fetch: the route replies with a redirect to Google.
-              "Add", not "Connect" — next to a connected chip, "Connect calendar"
-              read as if the connect had not worked. */}
-          <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Add calendar</a>
-        </Button>
+        {canManage && (
+          <Button variant="outline" size="sm" asChild>
+            {/* full navigation, not fetch: the route replies with a redirect to Google.
+                "Add", not "Connect" — next to a connected chip, "Connect calendar"
+                read as if the connect had not worked. */}
+            <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Add calendar</a>
+          </Button>
+        )}
 
         <div className="ml-auto flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous week"
@@ -446,9 +454,11 @@ export default function AvailabilityView() {
               account when Google asks) and the week fills in with everyone&rsquo;s commitments —
               empty space is shootable time.
             </p>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Connect a calendar</a>
-            </Button>
+            {canManage && (
+              <Button variant="outline" size="sm" asChild>
+                <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Connect a calendar</a>
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -467,7 +477,7 @@ export default function AvailabilityView() {
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="font-mono text-[11px] text-zinc-400">{day}</span>
-                      <button
+                      {canManage && <button
                         type="button"
                         onClick={() => setProposeDay(key)}
                         title="Propose a shoot on this day"
@@ -475,7 +485,7 @@ export default function AvailabilityView() {
                         className="rounded p-0.5 text-zinc-300 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                       >
                         <Plus className="h-3.5 w-3.5" />
-                      </button>
+                      </button>}
                     </span>
                   </div>
                   {list.length === 0 && dayProposals.length === 0 ? (
@@ -512,7 +522,7 @@ export default function AvailabilityView() {
                             <p className="truncate text-xs font-medium">
                               {p.title}{p.clients?.name ? ` · ${p.clients.name}` : ''}
                             </p>
-                            {p.status !== 'cancelled' && (
+                            {canManage && p.status !== 'cancelled' && (
                               <button
                                 type="button"
                                 title={p.status === 'accepted' ? 'Cancel this booked shoot' : 'Cancel this proposal'}
@@ -559,7 +569,7 @@ export default function AvailabilityView() {
       />
 
       {/* ── manage connected calendars ── */}
-      {connected.length > 0 && (
+      {canManage && connected.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
           <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wider">
             {CAL_TZ.replace('_', ' ')}

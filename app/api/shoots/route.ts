@@ -9,7 +9,9 @@ export const dynamic = 'force-dynamic'
  *  Without: every proposal, newest first (the Proposals register). */
 export async function GET(req: NextRequest) {
   try {
-    await requireRole('editor')
+    // scheduler+ may READ proposals (they live on Availability/Proposals);
+    // creating and cancelling stays editor+.
+    await requireRole('scheduler')
     const from = req.nextUrl.searchParams.get('from')
     const to = req.nextUrl.searchParams.get('to')
     if (!from && !to) {

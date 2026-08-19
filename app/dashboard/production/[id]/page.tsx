@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { uploadMedia } from '../../uploadMedia'
+import { useProductionLive } from '../useProductionLive'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -91,6 +92,13 @@ export default function ItemDetailPage() {
   }, [id, router])
 
   useEffect(() => { load() }, [load])
+
+  // live item: a comment, version, or status change from anyone else appears
+  // without a reload. Only this item's hints trigger a refetch; the periodic
+  // fallback (change === undefined) refreshes regardless.
+  useProductionLive(useCallback((change?: { item_id: string }) => {
+    if (!change || change.item_id === id) void load()
+  }, [id, load]))
 
   if (!detail) {
     return (

@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 /** Events across every enabled calendar for [from, to) — ISO instants. */
 export async function GET(req: NextRequest) {
   try {
-    await requireRole('editor')
+    // scheduler+: reading availability is the scheduler's job description
+    await requireRole('scheduler')
     const from = req.nextUrl.searchParams.get('from')
     const to = req.nextUrl.searchParams.get('to')
     if (!from || !to || isNaN(Date.parse(from)) || isNaN(Date.parse(to))) {

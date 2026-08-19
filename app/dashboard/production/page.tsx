@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Plus, CalendarDays, Flag } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
+import { useProductionLive } from './useProductionLive'
 
 type Item = {
   id: string
@@ -94,6 +95,9 @@ export default function ProductionPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // live board: any item created/moved/commented anywhere refreshes the columns
+  useProductionLive(load)
 
   const visible = (items ?? []).filter(i => clientFilter === 'all' || i.client_id === clientFilter)
 

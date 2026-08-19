@@ -14,6 +14,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/leads(.*)',
   '/api/team(.*)',
   '/api/production(.*)',
+  '/api/overview(.*)',
   '/api/assistant(.*)',
 ])
 
@@ -93,6 +94,7 @@ export const config = {
     '/api/ingest/:path*',
     '/api/leads/:path*',
     '/api/portal/:path*',
+    '/api/overview/:path*',
     '/api/production/:path*',
     '/api/reports/:path*',
     '/api/shoots/:path*',

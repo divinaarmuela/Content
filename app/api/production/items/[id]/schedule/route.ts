@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
+import { announceItemChange } from '../../../../../lib/production-live'
 
 /** Upsert a platform schedule entry (scheduler+). unique(item_id, platform)
  *  means concurrent upserts for the same platform collapse to one row. */
@@ -42,6 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       action: body.live_url ? 'live_link_added' : 'schedule_set',
       detail: `${patch.platform}${body.scheduled_at ? ` @ ${body.scheduled_at}` : ''}`,
     })
+    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'schedule' })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
