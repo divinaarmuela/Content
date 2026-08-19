@@ -19,7 +19,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       supabase.from('clients').select('name').eq('id', item.client_id).maybeSingle(),
     ])
 
-    const shaped = shapeItemDetail(user, item, versionsRes.data ?? [], commentsRes.data ?? [])
+    // name the comment authors — "who said this" is half of a comment's meaning
+    const authorIds = [...new Set((commentsRes.data ?? []).map(c => c.author_id).filter(Boolean))]
+    const { data: authors } = authorIds.length
+      ? await supabase.from('team_users').select('id, name, email').in('id', authorIds)
+      : { data: [] }
+    const authorName = new Map((authors ?? []).map(a => [a.id, a.name || a.email]))
+    const commentsNamed = (commentsRes.data ?? []).map(c => ({
+      ...c,
+      author_name: c.author_id ? authorName.get(c.author_id) ?? null : null,
+    }))
+
+    const shaped = shapeItemDetail(user, item, versionsRes.data ?? [], commentsNamed)
     return NextResponse.json({
       ...shaped,
       client_name: clientRes.data?.name ?? null,

@@ -33,8 +33,8 @@ type Version = {
   file_url: string; drive_url: string; dropbox_url?: string; notes?: string | null
 }
 type Comment = {
-  id: string; created_at: string; author_id: string | null; visibility: string
-  body: string; resolved: boolean
+  id: string; created_at: string; author_id: string | null; author_name?: string | null
+  visibility: string; body: string; resolved: boolean
 }
 type ScheduleEntry = {
   id: string; platform: string; scheduled_at: string | null; live_url: string | null; publish_status: string
@@ -588,9 +588,10 @@ export default function ItemDetailPage() {
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
                       <p className="mt-0.5 flex items-center gap-2 font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">
+                        {c.author_name && <span className="text-zinc-500 dark:text-zinc-400">{c.author_name}</span>}
                         {new Date(c.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                         {isTeam && c.visibility === 'client' && (
-                          <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">client</Badge>
+                          <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal normal-case text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">visible to client</Badge>
                         )}
                       </p>
                     </div>
