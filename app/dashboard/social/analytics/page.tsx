@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, ExternalLink, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Clock, ExternalLink, TrendingUp } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 
 type Account = {
@@ -25,6 +25,76 @@ type Post = {
   _id?: string; content?: string; publishedAt?: string; status?: string
   analytics?: Record<string, number | undefined>
   platforms?: { platform?: string; accountId?: string; platformPostUrl?: string }[]
+}
+
+/** One "post at this time" suggestion, normalised from whatever shape the
+ *  provider returns (array of slots, day-keyed object, nested `data`…). */
+type BestSlot = { day: number; hour: number; score: number }
+
+const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAY_INDEX: Record<string, number> = {
+  sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2,
+  wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4,
+  friday: 5, fri: 5, saturday: 6, sat: 6,
+}
+
+function toDay(v: unknown): number | null {
+  if (typeof v === 'number' && v >= 0 && v <= 6) return v
+  if (typeof v === 'string') {
+    const byName = DAY_INDEX[v.trim().toLowerCase()]
+    if (byName !== undefined) return byName
+    const n = Number(v)
+    if (Number.isInteger(n) && n >= 0 && n <= 6) return n
+  }
+  return null
+}
+
+function toHour(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v.replace(/[^\d.]/g, '')) : v
+  if (typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 23) return Math.floor(n)
+  return null
+}
+
+function parseBestTimes(raw: unknown): BestSlot[] {
+  if (!raw || typeof raw !== 'object') return []
+  const r = raw as Record<string, unknown>
+  const inner = r.data ?? r.bestTimes ?? r.times ?? raw
+  const out: BestSlot[] = []
+
+  const pushSlot = (o: Record<string, unknown>, dayHint?: unknown) => {
+    const day = toDay(o.day ?? o.dayOfWeek ?? o.weekday ?? dayHint)
+    const hour = toHour(o.hour ?? o.time ?? o.hourOfDay)
+    if (day === null || hour === null) return
+    const s = o.score ?? o.engagement ?? o.value ?? o.avgEngagement
+    out.push({ day, hour, score: typeof s === 'number' ? s : 1 })
+  }
+
+  if (Array.isArray(inner)) {
+    for (const item of inner) {
+      if (item && typeof item === 'object') pushSlot(item as Record<string, unknown>)
+    }
+  } else if (inner && typeof inner === 'object') {
+    // { monday: [{hour, score}, …] | [18, 20] } style
+    for (const [key, val] of Object.entries(inner as Record<string, unknown>)) {
+      const day = toDay(key)
+      if (day === null || !Array.isArray(val)) continue
+      for (const item of val) {
+        if (item && typeof item === 'object') pushSlot(item as Record<string, unknown>, key)
+        else {
+          const hour = toHour(item)
+          if (hour !== null) out.push({ day, hour, score: 1 })
+        }
+      }
+    }
+  }
+  return out
+}
+
+function hourLabel(h: number) {
+  if (h === 0) return '12am'
+  if (h < 12) return `${h}am`
+  if (h === 12) return '12pm'
+  return `${h - 12}pm`
 }
 
 const METRICS: [string, string][] = [
@@ -49,6 +119,7 @@ export default function SocialAnalyticsPage() {
     daily: { dailyData?: DailyPoint[]; platformBreakdown?: Record<string, number>[] } | null
     followers: { accounts?: { _id: string; currentFollowers?: number; growth?: number }[] } | null
     analytics: { posts?: Post[]; overview?: Record<string, number> } | null
+    bestTimes?: unknown
   } | null>(null)
   const [clientId, setClientId] = useState<string>('all')
 
@@ -103,6 +174,7 @@ export default function SocialAnalyticsPage() {
   }
 
   const daily = data.daily?.dailyData ?? []
+  const bestSlots = parseBestTimes(data.bestTimes)
 
   return (
     <div className="flex flex-col gap-4">
@@ -187,6 +259,21 @@ export default function SocialAnalyticsPage() {
         </Card>
       )}
 
+      {/* when to post ── */}
+      {bestSlots.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+              <Clock className="h-3.5 w-3.5 text-zinc-400" /> Best times to post
+            </h3>
+            <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+              When your audience has engaged the most, from your connected accounts&rsquo; history.
+            </p>
+            <BestTimes slots={bestSlots} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* posts, best first ── */}
       <Card>
         <CardContent className="p-4">
@@ -265,6 +352,65 @@ function Stat({ label, value, subtle }: { label: string; value: number; subtle?:
         </p>
       </CardContent>
     </Card>
+  )
+}
+
+/** Top suggested slots as chips, then a day × hour heat grid. One hue only —
+ *  intensity carries the magnitude; the exact figure lives in the tooltip. */
+function BestTimes({ slots }: { slots: BestSlot[] }) {
+  const max = Math.max(...slots.map(s => s.score), 0.0001)
+  const top = [...slots].sort((a, b) => b.score - a.score).slice(0, 3)
+  const byCell = new Map(slots.map(s => [`${s.day}-${s.hour}`, s.score]))
+  const hours = [...new Set(slots.map(s => s.hour))].sort((a, b) => a - b)
+  // pad the grid a little either side so single hours don't float alone
+  const lo = Math.max(0, (hours[0] ?? 8) - 1)
+  const hi = Math.min(23, (hours[hours.length - 1] ?? 20) + 1)
+  const range = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {top.map((s, i) => (
+          <span key={`${s.day}-${s.hour}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+            {i === 0 && <span className="text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400">best</span>}
+            {DAY_LABEL[s.day]} {hourLabel(s.hour)}
+          </span>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[420px]">
+          {DAY_LABEL.map((label, day) => (
+            <div key={label} className="flex items-center gap-1.5 py-0.5">
+              <span className="w-8 shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
+              {range.map(h => {
+                const score = byCell.get(`${day}-${h}`)
+                return (
+                  <div key={h}
+                    title={score !== undefined ? `${label} ${hourLabel(h)} — strong time to post` : `${label} ${hourLabel(h)}`}
+                    className="h-5 flex-1 rounded-[3px]"
+                    style={{
+                      minWidth: 14,
+                      background: score !== undefined
+                        ? `rgba(37, 99, 235, ${0.25 + 0.75 * (score / max)})`
+                        : 'var(--best-times-empty, rgba(161,161,170,0.12))',
+                    }} />
+                )
+              })}
+            </div>
+          ))}
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="w-8 shrink-0" />
+            {range.map(h => (
+              <span key={h} className="flex-1 text-center text-[10px] text-zinc-400 dark:text-zinc-500" style={{ minWidth: 14 }}>
+                {h % 3 === 0 ? hourLabel(h) : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

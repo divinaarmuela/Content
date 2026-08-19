@@ -38,12 +38,13 @@ export async function GET() {
     ])
 
     const byUser: Record<string, string[]> = {}
+    const hiddenByUser: Record<string, string[]> = {}
     for (const g of grants ?? []) {
-      if (g.hidden) continue
-      byUser[g.team_user_id] = [...(byUser[g.team_user_id] ?? []), g.href]
+      const map = g.hidden ? hiddenByUser : byUser
+      map[g.team_user_id] = [...(map[g.team_user_id] ?? []), g.href]
     }
 
-    return NextResponse.json({ mine, hidden, grants: byUser, members: members ?? [] })
+    return NextResponse.json({ mine, hidden, grants: byUser, hiddenByUser, members: members ?? [] })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
@@ -80,6 +81,25 @@ export async function PATCH(req: NextRequest) {
     const admin = await requireRole('super_admin')
     const teamUserId = String(body?.team_user_id ?? '').trim()
     if (!teamUserId) return NextResponse.json({ error: 'Missing team_user_id' }, { status: 400 })
+
+    // an admin may also set ANOTHER person's hides — how a super admin's view
+    // gets tailored (Yusuf's "no leads for me") by whoever runs the workspace
+    if (Array.isArray(body?.hidden_hrefs)) {
+      const hrefs = [...new Set(
+        (body.hidden_hrefs as unknown[])
+          .filter((h): h is string => typeof h === 'string')
+          .filter(h => h !== '/dashboard' && isGrantablePage(h))
+      )]
+      await supabase.from('user_page_access')
+        .delete().eq('team_user_id', teamUserId).eq('hidden', true)
+      if (hrefs.length > 0) {
+        const { error } = await supabase.from('user_page_access').insert(
+          hrefs.map(href => ({ team_user_id: teamUserId, href, hidden: true, granted_by: admin.email })),
+        )
+        if (error) throw new Error(error.message)
+      }
+      return NextResponse.json({ hidden: hrefs })
+    }
 
     // the person's own role decides which grants are meaningful, so it is read
     // here rather than trusted from the browser

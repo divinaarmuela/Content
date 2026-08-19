@@ -59,8 +59,94 @@ function ago(iso?: string): string {
  * working surface rather than a report: pick a post, read the thread, reply
  * publicly or send the author a DM without leaving the dashboard.
  */
+type Conversation = {
+  id: string
+  platform?: string
+  participantName?: string
+  participantUsername?: string
+  participant?: { name?: string; username?: string }
+  lastMessage?: { text?: string; createdTime?: string } | string
+  updatedTime?: string
+  accountUsername?: string
+  unreadCount?: number
+}
+type Message = {
+  id: string
+  text?: string
+  message?: string
+  direction?: string
+  isFromMe?: boolean
+  from?: { username?: string; name?: string }
+  createdTime?: string
+  timestamp?: string
+}
+
+const convName = (c: Conversation) =>
+  c.participantName ?? c.participant?.name ?? c.participantUsername ?? c.participant?.username ?? 'someone'
+const convPreview = (c: Conversation) =>
+  typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? ''
+const msgText = (m: Message) => m.text ?? m.message ?? ''
+const msgMine = (m: Message) => m.isFromMe === true || m.direction === 'sent' || m.direction === 'outbound'
+
 export default function InboxPage() {
   const [posts, setPosts] = useState<PostRow[] | null>(null)
+  // comments | messages — comments are post threads, messages are DMs
+  const [tab, setTab] = useState<'comments' | 'messages'>('comments')
+  const [convos, setConvos] = useState<Conversation[] | null>(null)
+  const [activeConvo, setActiveConvo] = useState<Conversation | null>(null)
+  const [messages, setMessages] = useState<Message[] | null>(null)
+  const [msgDraft, setMsgDraft] = useState('')
+
+  const loadConvos = useCallback(async () => {
+    try {
+      const res = await fetch('/api/social/messages')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load messages')
+      const raw = json.conversations
+      const list: Conversation[] = raw?.data ?? raw?.conversations ?? (Array.isArray(raw) ? raw : [])
+      setConvos(list)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load messages')
+      setConvos([])
+    }
+  }, [])
+  useEffect(() => { if (tab === 'messages' && convos === null) void loadConvos() }, [tab, convos, loadConvos])
+
+  const openConvo = async (c: Conversation) => {
+    setActiveConvo(c); setMessages(null)
+    try {
+      const res = await fetch(`/api/social/messages?conversationId=${encodeURIComponent(c.id)}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not load the conversation')
+      const raw = json.messages
+      const list: Message[] = raw?.data ?? raw?.messages ?? (Array.isArray(raw) ? raw : [])
+      setMessages(list)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load the conversation')
+      setMessages([])
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!activeConvo || !msgDraft.trim()) return
+    setBusy('send-dm')
+    try {
+      const res = await fetch('/api/social/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: activeConvo.id, message: msgDraft.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not send')
+      toast.success('Sent')
+      setMsgDraft('')
+      void openConvo(activeConvo)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send')
+    } finally {
+      setBusy(null)
+    }
+  }
   const [active, setActive] = useState<PostRow | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -140,15 +226,116 @@ export default function InboxPage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Social channels
       </Link>
 
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Inbox</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Comments across every connected account. Reply publicly, or send the
-          commenter a direct message — the standard way to hand out a link,
-          since Instagram does not allow link stickers via any API.
-        </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Inbox</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Comments and direct messages across every connected account, answered
+            from one place.
+          </p>
+        </div>
+        <div className="ml-auto flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
+          {(['comments', 'messages'] as const).map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`rounded-md px-3 py-1.5 text-sm capitalize transition-colors ${
+                tab === t
+                  ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {tab === 'messages' ? (
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
+        {/* ── conversations ── */}
+        <Card className="h-fit">
+          <CardContent className="p-2">
+            {convos === null ? (
+              <div className="flex flex-col gap-2 p-2">
+                {[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+              </div>
+            ) : convos.length === 0 ? (
+              <p className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
+                No conversations yet — Instagram and Telegram DMs land here once people message the connected accounts.
+              </p>
+            ) : (
+              <ul className="flex flex-col">
+                {convos.map(c => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openConvo(c)}
+                      className={`flex w-full flex-col gap-0.5 rounded-lg p-2.5 text-left transition-colors ${
+                        activeConvo?.id === c.id ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {c.platform && <PlatformIcon platform={c.platform} size={14} />}
+                        <span className="truncate text-sm font-medium">{convName(c)}</span>
+                        {typeof c.unreadCount === 'number' && c.unreadCount > 0 && (
+                          <span className="ml-auto rounded-full bg-blue-600 px-1.5 py-0.5 font-mono text-[10px] text-white">{c.unreadCount}</span>
+                        )}
+                      </span>
+                      <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{convPreview(c)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── thread ── */}
+        <Card>
+          <CardContent className="p-4">
+            {!activeConvo ? (
+              <div className="flex flex-col items-center gap-2 py-16 text-center">
+                <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Choose a conversation to read and reply.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <p className="border-b border-zinc-200 pb-2 text-sm font-medium dark:border-zinc-800">{convName(activeConvo)}</p>
+                {messages === null ? (
+                  <div className="flex flex-col gap-2">{[0, 1].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                ) : messages.length === 0 ? (
+                  <p className="py-6 text-xs text-zinc-500 dark:text-zinc-400">No messages loaded for this conversation.</p>
+                ) : (
+                  <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto">
+                    {messages.map(m => (
+                      <div key={m.id} className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
+                        msgMine(m)
+                          ? 'self-end bg-blue-600 text-white'
+                          : 'self-start bg-zinc-100 dark:bg-zinc-800'
+                      }`}>
+                        {msgText(m)}
+                        <span className={`mt-0.5 block text-[10px] ${msgMine(m) ? 'text-blue-100' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                          {ago(m.createdTime ?? m.timestamp)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                  <Textarea rows={1} value={msgDraft} placeholder={`Message ${convName(activeConvo)}…`}
+                    onChange={e => setMsgDraft(e.target.value)} className="min-h-9" />
+                  <Button size="sm" onClick={() => void sendMessage()} disabled={!msgDraft.trim() || busy === 'send-dm'}>
+                    {busy === 'send-dm' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      ) : (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
         {/* ── posts ─────────────────────────────────────────────────── */}
         <Card className="h-fit">
@@ -314,6 +501,7 @@ export default function InboxPage() {
           </CardContent>
         </Card>
       </div>
+      )}
     </div>
   )
 }

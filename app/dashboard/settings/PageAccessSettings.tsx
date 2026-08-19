@@ -36,6 +36,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function PageAccessSettings() {
   const [members, setMembers] = useState<Member[] | null>(null)
   const [grants, setGrants] = useState<Record<string, string[]>>({})
+  const [hiddenBy, setHiddenBy] = useState<Record<string, string[]>>({})
   const [selected, setSelected] = useState<string>('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -45,6 +46,7 @@ export default function PageAccessSettings() {
     const json = await res.json()
     setMembers(json.members ?? [])
     setGrants(json.grants ?? {})
+    setHiddenBy(json.hiddenByUser ?? {})
     setSelected(prev => prev || (json.members?.[0]?.id ?? ''))
   }, [])
 
@@ -161,9 +163,52 @@ export default function PageAccessSettings() {
             No team members to configure yet.
           </p>
         ) : person.role === 'super_admin' ? (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-6 text-sm text-muted-foreground">
-            <Lock className="h-4 w-4 shrink-0" />
-            {person.name || person.email} is a super admin and already sees every page.
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4 shrink-0" />
+              {person.name || person.email} is a super admin and may see every page — but you
+              can hide pages from their view. Their permissions stay untouched.
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {GRANTABLE_PAGES.filter(p => !p.parent && p.href !== '/dashboard').map(page => {
+                const isHidden = (hiddenBy[person.id] ?? []).includes(page.href)
+                return (
+                  <label key={page.href}
+                    className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      disabled={busy === page.href}
+                      onChange={async () => {
+                        const current = hiddenBy[person.id] ?? []
+                        const next = isHidden ? current.filter(h => h !== page.href) : [...current, page.href]
+                        setBusy(page.href)
+                        try {
+                          const res = await fetch('/api/team/page-access', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ team_user_id: person.id, hidden_hrefs: next }),
+                          })
+                          const json = await res.json()
+                          if (!res.ok) throw new Error(json.error ?? 'Could not save')
+                          setHiddenBy(prev => ({ ...prev, [person.id]: json.hidden ?? next }))
+                          toast.success(isHidden
+                            ? `${page.label} visible to ${person.name || person.email} again`
+                            : `${page.label} hidden from ${person.name || person.email}`)
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Could not save')
+                        } finally {
+                          setBusy(null)
+                        }
+                      }}
+                      className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                    />
+                    <span className={isHidden ? 'text-muted-foreground line-through' : ''}>{page.label}</span>
+                    {isHidden && <span className="ml-auto text-[11px] text-muted-foreground">hidden</span>}
+                  </label>
+                )
+              })}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">

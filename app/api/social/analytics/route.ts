@@ -22,10 +22,11 @@ export async function GET(req: Request) {
     const { data: accounts } = await q
 
     const publisher = getPublisher()
-    const [daily, followers, analytics] = await Promise.all([
+    const [daily, followers, analytics, bestTimes] = await Promise.all([
       publisher.dailyMetrics(),
       publisher.followerStats(),
       publisher.postAnalytics(),
+      publisher.bestTimes(),
     ])
 
     // clients, so the UI can name an account's owner without a second call
@@ -37,6 +38,7 @@ export async function GET(req: Request) {
       daily,
       followers,
       analytics,
+      bestTimes,
       provider: { configured: publisher.configured() },
     })
   } catch (e) {

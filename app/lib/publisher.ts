@@ -37,6 +37,14 @@ export interface Publisher {
   postAnalytics(postId?: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
   listComments(): Promise<unknown>
+  /** DM inbox: conversations across connected accounts. */
+  listConversations(): Promise<unknown>
+  /** Messages inside one conversation. */
+  conversationMessages(conversationId: string): Promise<unknown>
+  /** Send a reply into a conversation. */
+  sendConversationMessage(conversationId: string, message: string): Promise<unknown>
+  /** Best posting slots from historical engagement. */
+  bestTimes(providerAccountId?: string): Promise<unknown>
   /** Comments on one post. */
   postComments(postId: string): Promise<unknown>
   /** Public reply, visible under the comment. */
@@ -200,6 +208,24 @@ class ZernioPublisher implements Publisher {
     return this.getJson('/inbox/comments')
   }
 
+  /** DM inbox: every conversation across connected accounts (IG, Telegram…). */
+  listConversations() {
+    return this.getJson('/inbox/conversations')
+  }
+
+  conversationMessages(conversationId: string) {
+    return this.getJson(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`)
+  }
+
+  sendConversationMessage(conversationId: string, message: string) {
+    return this.post(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, { message })
+  }
+
+  /** Best posting slots from historical engagement — the Later signature. */
+  bestTimes(accountId?: string) {
+    return this.getJson(`/analytics/best-time-to-post${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`)
+  }
+
   /** POST returning parsed JSON, throwing with the provider's own message so
    *  the operator sees why an action was refused rather than a status code. */
   private async post(path: string, body?: unknown): Promise<unknown> {
@@ -357,6 +383,10 @@ class UnconfiguredPublisher implements Publisher {
   async listPosts() { return null }
   async postAnalytics() { return null }
   async listComments() { return null }
+  async listConversations() { return null }
+  async conversationMessages() { return null }
+  async sendConversationMessage() { return this.fail() }
+  async bestTimes() { return null }
   async postComments() { return null }
   async replyToComment() { return this.fail() }
   async privateReply() { return this.fail() }
