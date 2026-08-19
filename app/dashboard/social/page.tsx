@@ -160,12 +160,6 @@ export default function SocialPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
-        <strong>Use a private window when connecting.</strong> The platform will use
-        whichever account is already signed in on this browser — connect a client’s
-        channel while signed into your own and their posts would publish to yours.
-        Check the handle shown after connecting.
-      </div>
 
       {clients === null ? (
         <Card><CardContent className="flex flex-col gap-3 p-6">
