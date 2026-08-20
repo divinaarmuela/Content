@@ -171,7 +171,9 @@ export default function TeamPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Invite failed')
-      toast.success(`Invite sent to ${invite.email}`)
+      toast.success(json.already_has_account
+        ? `${invite.email} already has a login — they're on the team and can sign in right now, no email needed`
+        : `Invite sent to ${invite.email}`)
       setInviteOpen(false)
       setInvite({ email: '', role: 'editor', employment_type: 'employee', timezone: 'Australia/Melbourne', client_id: '', assigned_client_ids: [] })
       load()

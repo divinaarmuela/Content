@@ -141,6 +141,24 @@ export async function POST(req: Request) {
 
     try {
       const clerk = await clerkClient()
+
+      // someone who was on the team before still has their login — Clerk
+      // refuses to "invite" an existing account, so adopt it instead: link
+      // the row and tell the admin they can sign straight in
+      const { data: existing } = await clerk.users.getUserList({ emailAddress: [email] })
+      if (existing.length > 0) {
+        await supabase.from('team_users')
+          .update({ clerk_user_id: existing[0].id })
+          .ilike('email', email)
+        await supabase.from('team_invites')
+          .update({ status: 'accepted' })
+          .eq('id', invite.id)
+        return NextResponse.json(
+          { ...invite, status: 'accepted', already_has_account: true },
+          { status: 201 },
+        )
+      }
+
       const clerkInvite = await clerk.invitations.createInvitation({
         emailAddress: email,
         publicMetadata: { role },
