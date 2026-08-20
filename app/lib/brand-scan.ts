@@ -46,20 +46,29 @@ export async function runBrandScan(input: {
 }): Promise<{ pages: number }> {
   const { clientId, url, filename, by } = input
 
+  // status writes MUST land in order: progress callbacks fire without being
+  // awaited, and an unqueued late "scanning" write used to overwrite the
+  // final "done", leaving the page spinning over a finished profile
+  let queue: Promise<void> = Promise.resolve()
+  const report = (status: string, done: number, total: number, message?: string): Promise<void> => {
+    queue = queue.then(() => say(clientId, status, done, total, message)).catch(() => {})
+    return queue
+  }
+
   try {
     const file = await fetch(url)
     if (!file.ok) throw new Error(`Could not read the uploaded PDF (${file.status})`)
     const bytes = Buffer.from(await file.arrayBuffer())
 
     const pages = await pdfPageCount(bytes)
-    await say(clientId, 'scanning', 0, 1, `${pages || '?'} pages`)
+    await report('scanning', 0, 1, `${pages || '?'} pages`)
 
     const { data: existing } = await supabase.from('client_brand')
       .select('profile, docs').eq('client_id', clientId).maybeSingle()
     const previous = (existing?.profile ?? null) as BrandProfile | null
 
     const extracted = await extractBrandProfile(bytes, previous, (done, total) => {
-      void say(clientId, 'scanning', done, total)
+      void report('scanning', done, total)
     })
     const profile = mergeProfiles(previous, extracted)
 
@@ -75,11 +84,11 @@ export async function runBrandScan(input: {
     })
     if (error) throw new Error(error.message)
 
-    await say(clientId, 'done', 1, 1)
+    await report('done', 1, 1)
     return { pages }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    await say(clientId, 'failed', 0, 0, message)
+    await report('failed', 0, 0, message)
     throw e
   }
 }
