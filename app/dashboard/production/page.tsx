@@ -37,7 +37,11 @@ type Item = {
   batches: { title: string } | null
 }
 type ClientRow = { id: string; name: string }
-type Batch = { id: string; title: string; client_id: string }
+type Batch = {
+  id: string; title: string; client_id: string; shoot_date?: string | null
+  clients?: { name: string } | null
+  content_items?: { count: number }[]
+}
 
 /** Board columns — revision-loop states share columns to keep the board tight. */
 const COLUMNS: { key: string; title: string; statuses: ItemStatus[]; tint: string }[] = [
@@ -64,6 +68,7 @@ export default function ProductionPage() {
   const [clients, setClients] = useState<ClientRow[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
   const [clientFilter, setClientFilter] = useState<string>('all')
+  const [batchFilter, setBatchFilter] = useState<string>('all')
   const [needsSchema, setNeedsSchema] = useState(false)
 
   const [newOpen, setNewOpen] = useState(false)
@@ -139,7 +144,9 @@ export default function ProductionPage() {
   // live board: any item created/moved/commented anywhere refreshes the columns
   useProductionLive(load)
 
-  const visible = (items ?? []).filter(i => clientFilter === 'all' || i.client_id === clientFilter)
+  const visible = (items ?? [])
+    .filter(i => clientFilter === 'all' || i.client_id === clientFilter)
+    .filter(i => batchFilter === 'all' || i.batch_id === batchFilter)
 
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
@@ -245,6 +252,43 @@ export default function ProductionPage() {
           </Button>
         </div>
       </div>
+
+      {/* shoots exist as first-class things, not just a dropdown inside the
+          create dialog — a new batch appears here immediately, and clicking
+          one narrows the board to that shoot's items */}
+      {batches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+            Batches
+          </span>
+          <button type="button" onClick={() => setBatchFilter('all')}
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              batchFilter === 'all'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
+            }`}>
+            All
+          </button>
+          {batches
+            .filter(b => clientFilter === 'all' || b.client_id === clientFilter)
+            .map(b => {
+              const count = b.content_items?.[0]?.count ?? 0
+              return (
+                <button key={b.id} type="button"
+                  onClick={() => setBatchFilter(f => (f === b.id ? 'all' : b.id))}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    batchFilter === b.id
+                      ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  }`}>
+                  {b.title}
+                  {b.clients?.name && <span className="opacity-60"> · {b.clients.name}</span>}
+                  <span className="ml-1 font-mono tabular-nums opacity-60">{count}</span>
+                </button>
+              )
+            })}
+        </div>
+      )}
 
       {items === null ? (
         <div className="flex gap-3 overflow-x-hidden">
