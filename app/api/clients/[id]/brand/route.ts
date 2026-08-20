@@ -38,12 +38,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       // a scan running right now, so reopening the tab shows it rather than
       // an idle page that looks like nothing happened
       scan: data?.scan_status
-        ? {
-            status: data.scan_status,
-            done: data.scan_done ?? 0,
-            total: data.scan_total ?? 1,
-            message: data.scan_message ?? null,
-          }
+        ? (() => {
+            // a scanning row with no heartbeat for 30 minutes is a dead job —
+            // report it failed so the page never spins forever
+            const running = data.scan_status === 'scanning' || data.scan_status === 'queued'
+            const stale = running && data.updated_at
+              && Date.now() - new Date(data.updated_at).getTime() > 30 * 60_000
+            return stale
+              ? { status: 'failed', done: 0, total: 1, message: 'The scan stalled — upload the PDF again.' }
+              : {
+                  status: data.scan_status,
+                  done: data.scan_done ?? 0,
+                  total: data.scan_total ?? 1,
+                  message: data.scan_message ?? null,
+                }
+          })()
         : null,
       can_manage: roleSatisfies(user.role, 'account_manager'),
     })

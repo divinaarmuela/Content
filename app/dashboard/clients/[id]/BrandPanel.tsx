@@ -70,6 +70,8 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
   const [progress, setProgress] = useState<{ done: number; total: number; message?: string } | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  /** true from file-pick until the server has the scan queued */
+  const uploadRef = useRef(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/clients/${clientId}/brand`)
@@ -84,7 +86,10 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
     if (json.scan?.status === 'scanning' || json.scan?.status === 'queued') {
       setScanning(true)
       setProgress({ done: json.scan.done, total: json.scan.total, message: json.scan.message ?? undefined })
-    } else {
+    } else if (!uploadRef.current) {
+      // NOT while our own upload is in flight: picking a file refocuses the
+      // window, this refetch fires before the server has marked the scan
+      // queued, and without the guard it resets the button mid-upload
       setScanning(false)
       setProgress(null)
     }
@@ -148,8 +153,9 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
 
   const scan = async (file: File) => {
     if (file.type !== 'application/pdf') { toast.error('Brand guidelines must be a PDF'); return }
+    uploadRef.current = true
     setScanning(true)
-    setProgress(null)
+    setProgress({ done: 0, total: 1, message: 'Uploading the PDF…' })
     try {
       const signRes = await fetch(`/api/clients/${clientId}/brand`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -170,11 +176,14 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
       if (!scanRes.ok) throw new Error((await scanRes.json()).error ?? 'The scan failed')
       // queued, not finished: the realtime effect above takes it from here and
       // clears `scanning` when the job reports done or failed
+      setProgress({ done: 0, total: 1, message: 'Reading the document…' })
       toast.info('Reading the document — this page updates as it goes')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Something went wrong')
       setScanning(false)
+      setProgress(null)
     } finally {
+      uploadRef.current = false
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -231,12 +240,29 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
             </div>
           )}
         </div>
-        {scanning && progress && progress.total > 1 && (
-          <div className="mt-3 h-1 w-full overflow-hidden rounded bg-muted">
-            <div
-              className="h-1 rounded bg-primary transition-[width] duration-500"
-              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
-            />
+        {/* a scan runs for minutes — it must LOOK alive the whole time, or
+            people assume it failed and start over */}
+        {scanning && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            {progress && progress.total > 1 ? (
+              <div className="h-1 w-full overflow-hidden rounded bg-muted">
+                <div
+                  className="h-1 rounded bg-primary transition-[width] duration-500"
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              </div>
+            ) : (
+              <div className="h-1 w-full overflow-hidden rounded bg-muted">
+                <div className="h-1 w-1/3 animate-pulse rounded bg-primary" />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {progress?.total && progress.total > 1
+                ? `Reading section ${progress.done + 1} of ${progress.total}…`
+                : progress?.message ?? 'Reading the document…'}{' '}
+              This takes a few minutes for a long document — you can leave the page,
+              the scan keeps running.
+            </p>
           </div>
         )}
         {docs.length > 0 && (

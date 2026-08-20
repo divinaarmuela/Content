@@ -31,6 +31,9 @@ async function say(
     scan_done: done,
     scan_total: total,
     scan_message: message ?? null,
+    // heartbeat: a "scanning" row that stops being touched is a dead job, and
+    // the GET uses this to stop showing an eternal spinner
+    updated_at: new Date().toISOString(),
   })
   if (error) console.error('brand status write failed:', error.message)
 }
