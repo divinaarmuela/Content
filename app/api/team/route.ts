@@ -169,6 +169,10 @@ export async function POST(req: Request) {
         .eq('id', invite.id)
     } catch (e) {
       await supabase.from('team_invites').delete().eq('id', invite.id)
+      // roll back the person row too — but only if this invite created it
+      // (no sign-in yet); leaving it made every re-invite 409 as "already
+      // on the team" for someone who was never actually invited
+      await supabase.from('team_users').delete().ilike('email', email).is('clerk_user_id', null)
       const msg = e instanceof Error ? e.message : 'Clerk invitation failed'
       return NextResponse.json({ error: `Invitation email failed: ${msg}` }, { status: 502 })
     }

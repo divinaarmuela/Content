@@ -21,7 +21,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const patch: Record<string, unknown> = {}
     if (body.role) {
       if (!ROLES.includes(body.role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+      // a client-role user with no client is attached to nothing — the invite
+      // path enforces this pairing, so the role-change path must too
+      if (body.role === 'client' && !body.client_id) {
+        return NextResponse.json({ error: 'A client user must be linked to a client' }, { status: 400 })
+      }
       patch.role = body.role
+      if (body.role === 'client') patch.client_id = body.client_id
     }
     if (body.employment_type) patch.employment_type = body.employment_type === 'contractor' ? 'contractor' : 'employee'
     if (body.timezone) patch.timezone = body.timezone
@@ -83,6 +89,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await supabase.from('team_user_clients').delete().eq('team_user_id', id)
       await supabase.from('user_page_access').delete().eq('team_user_id', id)
       await supabase.from('content_items').update({ owner_id: null }).eq('owner_id', id)
+      // scheduling handoffs too — an item must not stay assigned to a ghost
+      const { data: handed } = await supabase
+        .from('content_items').select('id, scheduler_ids').contains('scheduler_ids', JSON.stringify([id]))
+      for (const item of handed ?? []) {
+        const remaining = (Array.isArray(item.scheduler_ids) ? item.scheduler_ids : []).filter(x => x !== id)
+        await supabase.from('content_items').update({ scheduler_ids: remaining }).eq('id', item.id)
+      }
       const { error: delErr } = await supabase.from('team_users').delete().eq('id', id)
       if (delErr) {
         // an FK we don't know about (comments, approvals…) — keep the record
