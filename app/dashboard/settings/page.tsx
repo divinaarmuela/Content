@@ -2,6 +2,7 @@
 
 import ProfileSettings from './ProfileSettings'
 import MyPages from './MyPages'
+import WorkKindsSettings from './WorkKindsSettings'
 
 /** Settings home = your profile + your own page preferences. */
 export default function SettingsProfilePage() {
@@ -9,6 +10,7 @@ export default function SettingsProfilePage() {
     <div className="flex flex-col gap-4">
       <ProfileSettings />
       <MyPages />
+      <WorkKindsSettings />
     </div>
   )
 }
