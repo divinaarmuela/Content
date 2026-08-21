@@ -142,6 +142,14 @@ export default function ProductionPage() {
       .then(j => setMyRole(j?.role ?? '')).catch(() => {})
   }, [])
   const [adhocReason, setAdhocReason] = useState('')
+  const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number }[] | null>(null)
+  useEffect(() => {
+    if (clientFilter === 'all') { setStrip(null); return }
+    fetch(`/api/production/deliverables-progress?client_id=${clientFilter}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => setStrip(j?.per_type ?? []))
+      .catch(() => setStrip([]))
+  }, [clientFilter])
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
   const [batchDraft, setBatchDraft] = useState({ client_id: '', title: '', shoot_date: '' })
@@ -332,6 +340,25 @@ export default function ProductionPage() {
                 </button>
               )
             })}
+        </div>
+      )}
+
+      {strip && strip.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+            {new Date().toLocaleDateString('en-AU', { month: 'long' })}
+          </span>
+          {strip.map(r => (
+            <span key={r.type}
+              title={`${r.delivered} delivered · ${r.planned - r.delivered > 0 ? `${r.planned - r.delivered} in production · ` : ''}${Math.max(0, r.quota - r.planned)} remaining`}
+              className={`rounded-full border px-2.5 py-1 font-mono text-xs tabular-nums ${
+                r.delivered > r.quota
+                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
+                  : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
+              }`}>
+              {r.label} {r.delivered}/{r.quota}
+            </span>
+          ))}
         </div>
       )}
 

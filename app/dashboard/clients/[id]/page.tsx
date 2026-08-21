@@ -14,6 +14,7 @@ import {
 import { ExternalLink } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import ManagersCard from './ManagersCard'
+import MonthProgress from './MonthProgress'
 
 /** Overview — the client's own details. Header and tabs live in the layout. */
 
@@ -76,6 +77,7 @@ export default function ClientOverviewPage() {
   return (
     <div className="flex flex-col gap-5">
       <ManagersCard clientId={clientId} />
+      <MonthProgress clientId={clientId} />
       <Card>
         <CardContent className="grid gap-4 py-5 sm:grid-cols-2">
           <div className="grid gap-1.5">
