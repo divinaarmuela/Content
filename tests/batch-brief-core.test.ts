@@ -159,6 +159,32 @@ describe('canvas cards', () => {
   })
 })
 
+describe('canvas arrows', () => {
+  it('sanitiser keeps well-formed arrows and drops self-loops or missing ends', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'n1', kind: 'note', x: 0, y: 0, text: 'a' },
+      { id: 'n2', kind: 'note', x: 100, y: 0, text: 'b' },
+      { id: 'e1', kind: 'arrow', x: 0, y: 0, from: 'n1', to: 'n2' },
+      { id: 'e2', kind: 'arrow', x: 0, y: 0, from: 'n1', to: 'n1' },
+      { id: 'e3', kind: 'arrow', x: 0, y: 0, from: 'n1' },
+    ])
+    expect(cards.map(c => c.id)).toEqual(['n1', 'n2', 'e1'])
+    expect(cards[2]).toMatchObject({ from: 'n1', to: 'n2' })
+  })
+
+  it('deleting a card prunes its arrows in the same op', async () => {
+    const { applyCanvasOp } = await import('../app/lib/batch-brief-core')
+    const current = [
+      { id: 'n1', kind: 'note', x: 0, y: 0, text: 'a' },
+      { id: 'n2', kind: 'note', x: 1, y: 1, text: 'b' },
+      { id: 'e1', kind: 'arrow', x: 0, y: 0, from: 'n1', to: 'n2' },
+    ]
+    const next = applyCanvasOp(current, { remove: ['n2'] })
+    expect(next.map(c => c.id)).toEqual(['n1'])
+  })
+})
+
 describe('isInProduction', () => {
   it('means a locked/shot brief with items actually under way', () => {
     expect(isInProduction({ status: 'locked' }, 3)).toBe(true)

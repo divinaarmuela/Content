@@ -144,7 +144,7 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 
 /* ── the brief canvas: freeform cards on a pan/zoom board ── */
 
-export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label'] as const
+export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow'] as const
 export const CANVAS_NOTE_COLORS = ['paper', 'yellow', 'pink', 'blue', 'green', 'purple'] as const
 const CANVAS_BOUND = 20_000
 const CANVAS_MAX_CARDS = 200
@@ -160,6 +160,9 @@ export type CanvasCard = {
   url?: string
   name?: string
   color?: (typeof CANVAS_NOTE_COLORS)[number]
+  /** arrow endpoints — ids of the two cards it connects */
+  from?: string
+  to?: string
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -176,6 +179,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue
     const url = String(r.url ?? '').slice(0, 2000)
     if ((kind === 'image' || kind === 'link') && !url.startsWith('https://')) continue
+    const from = String(r.from ?? '').slice(0, 40)
+    const to = String(r.to ?? '').slice(0, 40)
+    if (kind === 'arrow' && (!from || !to || from === to)) continue
     const id = String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10)
     const color = String(r.color ?? '')
     const card: CanvasCard = {
@@ -193,6 +199,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
         : {}),
+      ...(kind === 'arrow' ? { from, to } : {}),
     }
     byId.set(card.id, card) // dedupe by id, keep-last
   }
@@ -209,6 +216,12 @@ export function applyCanvasOp(
   for (const card of sanitiseCanvasCards(op.upsert)) byId.set(card.id, card)
   const removes = Array.isArray(op.remove) ? op.remove.slice(0, 200) : []
   for (const id of removes) byId.delete(String(id ?? '').slice(0, 40))
+  // an arrow with a missing endpoint is noise — deleting a card takes its
+  // arrows with it, whoever deleted it
+  const solid = new Set([...byId.values()].filter(c => c.kind !== 'arrow').map(c => c.id))
+  for (const c of [...byId.values()]) {
+    if (c.kind === 'arrow' && (!solid.has(c.from ?? '') || !solid.has(c.to ?? ''))) byId.delete(c.id)
+  }
   return [...byId.values()].slice(0, CANVAS_MAX_CARDS)
 }
 

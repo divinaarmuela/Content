@@ -25,9 +25,24 @@ function CanvasCardInner({
   onCommitText: (text: string) => void
 }) {
   if (card.kind === 'label') {
+    if (editing) {
+      return (
+        <input
+          autoFocus
+          defaultValue={card.text ?? ''}
+          placeholder="SECTION TITLE"
+          className="w-56 bg-transparent font-mono text-sm uppercase tracking-widest text-zinc-500 outline-none placeholder:text-zinc-300 dark:text-zinc-400 dark:placeholder:text-zinc-600"
+          onBlur={e => onCommitText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() }
+          }}
+          onPointerDown={e => e.stopPropagation()}
+        />
+      )
+    }
     return (
       <span className="select-none whitespace-nowrap font-mono text-sm uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-        {card.text || 'Label'}
+        {card.text || 'Double-click to name this section'}
       </span>
     )
   }

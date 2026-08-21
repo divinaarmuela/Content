@@ -6,8 +6,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
-  ExternalLink, ImagePlus, Link2, Maximize2, Minimize2, Minus, Plus, Scan,
-  StickyNote, Trash2, Type,
+  ExternalLink, ImagePlus, Link2, Maximize2, Minimize2, Minus, MoveUpRight, Plus,
+  Scan, StickyNote, Trash2, Type,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
@@ -73,6 +73,10 @@ export default function BriefCanvas({
   const fileRef = useRef<HTMLInputElement>(null)
   const [linkPrompt, setLinkPrompt] = useState(false)
   const linkInputRef = useRef<HTMLInputElement>(null)
+  /** arrow-drawing mode: the card the next click will connect FROM */
+  const [connectFrom, setConnectFrom] = useState<string | null>(null)
+  const cardEls = useRef(new Map<string, HTMLElement>())
+  const arrowEls = useRef(new Map<string, SVGLineElement[]>())
 
   const readOnly = !canEdit
   const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -109,6 +113,23 @@ export default function BriefCanvas({
       return [...rest, card]
     })
   }, [])
+
+  /** A card's centre in world space — height measured from the DOM. */
+  const centreOf = useCallback((c: CanvasCard, liveX?: number, liveY?: number) => {
+    const h = cardEls.current.get(c.id)?.offsetHeight ?? 100
+    return { cx: (liveX ?? c.x) + c.w / 2, cy: (liveY ?? c.y) + h / 2 }
+  }, [])
+
+  // arrow endpoints need measured heights — nudge one re-render after the
+  // first paint so lines land on card centres, not estimates
+  const measuredRef = useRef(false)
+  useEffect(() => {
+    if (!measuredRef.current && cards.length > 0) {
+      measuredRef.current = true
+      const t = window.setTimeout(() => forceRender(n => n + 1), 50)
+      return () => window.clearTimeout(t)
+    }
+  }, [cards.length])
 
   /* ── viewport gestures: pan (wheel / drag背景) and zoom-to-cursor ── */
   useGesture(
@@ -200,6 +221,17 @@ export default function BriefCanvas({
     const nx = d.ox + dx / s
     const ny = d.oy + dy / s
     if (d.el) d.el.style.transform = `translate(${nx}px, ${ny}px)`
+    // arrows follow their card through the drag, not after it
+    const { cx, cy } = centreOf(card, nx, ny)
+    for (const c of cards) {
+      if (c.kind !== 'arrow') continue
+      const lines = arrowEls.current.get(c.id)
+      if (!lines) continue
+      for (const line of lines) {
+        if (c.from === card.id) { line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy)) }
+        if (c.to === card.id) { line.setAttribute('x2', String(cx)); line.setAttribute('y2', String(cy)) }
+      }
+    }
   }
   const onCardPointerUp = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
@@ -318,7 +350,8 @@ export default function BriefCanvas({
       const t = e.target as HTMLElement
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
       if (e.key === 'Escape') {
-        if (editing) setEditing(null)
+        if (connectFrom) setConnectFrom(null)
+        else if (editing) setEditing(null)
         else if (selected) setSelected(null)
         else if (fullscreen) setFullscreen(false)
         return
@@ -396,9 +429,47 @@ export default function BriefCanvas({
         }}
       >
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
-          {ordered.map(card => (
+          <svg className="absolute left-0 top-0 overflow-visible" width={1} height={1} aria-hidden>
+            <defs>
+              <marker id="brief-arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" className="fill-zinc-400 dark:fill-zinc-500" />
+              </marker>
+            </defs>
+            {ordered.filter(c => c.kind === 'arrow').map(arrow => {
+              const fromCard = cards.find(c => c.id === arrow.from)
+              const toCard = cards.find(c => c.id === arrow.to)
+              if (!fromCard || !toCard) return null
+              const a = centreOf(fromCard)
+              const b = centreOf(toCard)
+              const isSel = selected === arrow.id
+              return (
+                <g key={arrow.id}
+                  ref={g => {
+                    if (g) arrowEls.current.set(arrow.id, Array.from(g.querySelectorAll('line')))
+                    else arrowEls.current.delete(arrow.id)
+                  }}>
+                  {/* wide invisible hit line so the arrow is clickable */}
+                  <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
+                    stroke="transparent" strokeWidth={14}
+                    style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'pointer' }}
+                    onClick={e => { e.stopPropagation(); setSelected(arrow.id) }} />
+                  <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
+                    className={isSel ? 'stroke-blue-500' : 'stroke-zinc-400 dark:stroke-zinc-500'}
+                    strokeWidth={isSel ? 2.5 : 1.5}
+                    markerEnd="url(#brief-arrowhead)"
+                    style={{ pointerEvents: 'none' }} />
+                </g>
+              )
+            })}
+          </svg>
+          {ordered.filter(c => c.kind !== 'arrow').map(card => (
             <div
               key={card.id}
+              ref={el => {
+                if (el) cardEls.current.set(card.id, el)
+                else cardEls.current.delete(card.id)
+              }}
               data-card
               tabIndex={0}
               aria-label={`${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
@@ -412,6 +483,15 @@ export default function BriefCanvas({
               onClick={e => {
                 e.stopPropagation()
                 if (viewOnly) { setSheetCard(card); return }
+                if (connectFrom && connectFrom !== card.id) {
+                  const arrow: CanvasCard = {
+                    id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0,
+                    from: connectFrom, to: card.id,
+                  }
+                  upsertLocal(arrow); persist([arrow])
+                  setConnectFrom(null); setSelected(arrow.id)
+                  return
+                }
                 if (card.kind === 'link' && (e.ctrlKey || e.metaKey) && card.url) window.open(card.url, '_blank')
                 setSelected(card.id)
               }}
@@ -450,6 +530,11 @@ export default function BriefCanvas({
           </div>
         )}
 
+        {connectFrom && (
+          <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 shadow-sm dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-300">
+            Click another card to draw the arrow — Esc cancels
+          </div>
+        )}
         {coarse && (
           <span className="absolute right-3 top-2 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
             View only on mobile
@@ -472,7 +557,7 @@ export default function BriefCanvas({
               <Link2 className="h-3.5 w-3.5" /> Link
             </Button>
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
-              onClick={() => addCard({ kind: 'label', text: 'SECTION' })}>
+              onClick={() => addCard({ kind: 'label', text: '' })}>
               <Type className="h-3.5 w-3.5" /> Label
             </Button>
           </div>
@@ -505,6 +590,12 @@ export default function BriefCanvas({
                 ))}
                 <span className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
               </>
+            )}
+            {selectedCard.kind !== 'arrow' && (
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+                onClick={() => { setConnectFrom(selectedCard.id); setSelected(null) }}>
+                <MoveUpRight className="h-3.5 w-3.5" /> Arrow
+              </Button>
             )}
             {selectedCard.kind === 'link' && selectedCard.url && (
               <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" asChild>
