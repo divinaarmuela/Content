@@ -114,6 +114,51 @@ describe('sanitisers', () => {
   })
 })
 
+describe('canvas cards', () => {
+  it('sanitiser drops bad kinds, non-https media, and non-finite coords; clamps and dedupes', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'a', kind: 'note', x: 10.6, y: -99999, text: 'hi', color: 'yellow' },
+      { id: 'a', kind: 'note', x: 5, y: 5, text: 'kept-last' },
+      { id: 'b', kind: 'image', x: 0, y: 0, url: 'http://insecure.co/x.jpg' },
+      { id: 'c', kind: 'link', x: 0, y: 0, url: 'https://ok.co', w: 9999 },
+      { id: 'd', kind: 'wormhole', x: 0, y: 0 },
+      { id: 'e', kind: 'note', x: Infinity, y: 0 },
+    ])
+    expect(cards.map(c => c.id)).toEqual(['a', 'c'])
+    expect(cards[0]).toMatchObject({ text: 'kept-last', x: 5 })
+    expect(cards[1].w).toBe(1200)
+  })
+
+  it('applyCanvasOp merges upserts by id then applies removes', async () => {
+    const { applyCanvasOp } = await import('../app/lib/batch-brief-core')
+    const current = [
+      { id: 'a', kind: 'note', x: 0, y: 0, text: 'old' },
+      { id: 'b', kind: 'note', x: 1, y: 1, text: 'stays' },
+    ]
+    const next = applyCanvasOp(current, {
+      upsert: [{ id: 'a', kind: 'note', x: 50, y: 50, text: 'moved' }, { id: 'c', kind: 'label', x: 0, y: 0, text: 'NEW' }],
+      remove: ['b', 'c'], // remove wins even over a same-op upsert
+    })
+    expect(next.map(c => c.id).sort()).toEqual(['a'])
+    expect(next[0]).toMatchObject({ x: 50, text: 'moved' })
+  })
+
+  it('seeding is deterministic and lays references into columns', async () => {
+    const { seedCardsFromReferences } = await import('../app/lib/batch-brief-core')
+    const refs = [
+      { kind: 'image' as const, url: 'https://cdn.co/a.jpg', name: 'a.jpg' },
+      { kind: 'link' as const, url: 'https://milanote.com/b' },
+    ]
+    const one = seedCardsFromReferences(refs)
+    const two = seedCardsFromReferences(refs)
+    expect(one).toEqual(two)
+    expect(one[0]).toMatchObject({ id: 'seed-label', kind: 'label', text: 'REFERENCES' })
+    expect(one.slice(1).map(c => c.kind)).toEqual(['image', 'link'])
+    expect(seedCardsFromReferences([])).toEqual([])
+  })
+})
+
 describe('isInProduction', () => {
   it('means a locked/shot brief with items actually under way', () => {
     expect(isInProduction({ status: 'locked' }, 3)).toBe(true)

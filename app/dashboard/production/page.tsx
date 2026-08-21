@@ -357,7 +357,7 @@ export default function ProductionPage() {
         </div>
       ) : (
         <ScrollArea className="w-full">
-          <div className="flex gap-3 pb-3">
+          <div className="flex w-max gap-3 pb-3">
             {COLUMNS.map(col => {
               const colItems = visible.filter(i => col.statuses.includes(i.status))
               return (

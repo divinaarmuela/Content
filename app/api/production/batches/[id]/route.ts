@@ -5,7 +5,7 @@ import { accessibleClientIds } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import {
-  sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
+  applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
 } from '../../../../lib/batch-brief-core'
 
 /** Load a brief the caller may touch, or answer with the right refusal. */
@@ -93,6 +93,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const patch: Record<string, unknown> = {}
+    // board edits arrive as per-card ops and merge server-side, so two people
+    // moving different cards both win. Per-card last-write-wins; the small
+    // read-modify-write window is accepted for v1 (realtime reload keeps
+    // collisions rare; a jsonb-merge SQL function is the future tightening).
+    if (body.canvas_op && typeof body.canvas_op === 'object') {
+      patch.canvas_cards = applyCanvasOp(batch.canvas_cards, {
+        upsert: (body.canvas_op as { upsert?: unknown }).upsert,
+        remove: (body.canvas_op as { remove?: unknown }).remove,
+      })
+    }
     if ('title' in body) {
       const t = String(body.title ?? '').trim().slice(0, 120)
       if (!t) return NextResponse.json({ error: 'A shoot needs a title' }, { status: 422 })

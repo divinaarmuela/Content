@@ -142,6 +142,104 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
     .slice(0, 60)
 }
 
+/* ── the brief canvas: freeform cards on a pan/zoom board ── */
+
+export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label'] as const
+export const CANVAS_NOTE_COLORS = ['paper', 'yellow', 'pink', 'blue', 'green', 'purple'] as const
+const CANVAS_BOUND = 20_000
+const CANVAS_MAX_CARDS = 200
+
+export type CanvasCard = {
+  id: string
+  kind: (typeof CANVAS_CARD_KINDS)[number]
+  x: number
+  y: number
+  w: number
+  z: number
+  text?: string
+  url?: string
+  name?: string
+  color?: (typeof CANVAS_NOTE_COLORS)[number]
+}
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
+  if (!Array.isArray(raw)) return []
+  const byId = new Map<string, CanvasCard>()
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const r = item as Record<string, unknown>
+    const kind = String(r.kind ?? '')
+    if (!(CANVAS_CARD_KINDS as readonly string[]).includes(kind)) continue
+    const x = Number(r.x); const y = Number(r.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    const url = String(r.url ?? '').slice(0, 2000)
+    if ((kind === 'image' || kind === 'link') && !url.startsWith('https://')) continue
+    const id = String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10)
+    const color = String(r.color ?? '')
+    const card: CanvasCard = {
+      id,
+      kind: kind as CanvasCard['kind'],
+      x: clamp(Math.round(x), -CANVAS_BOUND, CANVAS_BOUND),
+      y: clamp(Math.round(y), -CANVAS_BOUND, CANVAS_BOUND),
+      w: clamp(Math.round(Number(r.w)) || 240, 120, 1200),
+      z: clamp(Math.round(Number(r.z)) || 0, 0, 1_000_000),
+      ...(kind === 'note' || kind === 'label'
+        ? { text: String(r.text ?? '').slice(0, kind === 'label' ? 120 : 4000) }
+        : {}),
+      ...(kind === 'image' || kind === 'link' ? { url } : {}),
+      ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
+        ? { color: color as CanvasCard['color'] }
+        : {}),
+    }
+    byId.set(card.id, card) // dedupe by id, keep-last
+  }
+  return [...byId.values()].slice(0, CANVAS_MAX_CARDS)
+}
+
+/** Per-card merge: upserts win by id, then removes drop theirs. This is what
+ *  makes concurrent editors last-write-wins per CARD, not per board. */
+export function applyCanvasOp(
+  current: unknown,
+  op: { upsert?: unknown; remove?: unknown },
+): CanvasCard[] {
+  const byId = new Map(sanitiseCanvasCards(current).map(c => [c.id, c]))
+  for (const card of sanitiseCanvasCards(op.upsert)) byId.set(card.id, card)
+  const removes = Array.isArray(op.remove) ? op.remove.slice(0, 200) : []
+  for (const id of removes) byId.delete(String(id ?? '').slice(0, 40))
+  return [...byId.values()].slice(0, CANVAS_MAX_CARDS)
+}
+
+/** First-open seeding: the existing reference images laid out as a grid.
+ *  DETERMINISTIC ids — two people opening at once persist mergeable sets,
+ *  never duplicates. In-memory until the first user action. */
+export function seedCardsFromReferences(refs: ReferenceMedia[]): CanvasCard[] {
+  if (refs.length === 0) return []
+  const cards: CanvasCard[] = [{
+    id: 'seed-label', kind: 'label', text: 'REFERENCES', x: 0, y: -48, w: 240, z: 0,
+  }]
+  const COL_W = 240 + 16
+  const colHeights = [0, 0, 0]
+  refs.slice(0, CANVAS_MAX_CARDS - 1).forEach((ref, i) => {
+    const col = colHeights.indexOf(Math.min(...colHeights))
+    const estHeight = ref.kind === 'image' ? 240 : 64
+    cards.push({
+      id: `seed-${ref.url}`.slice(0, 40).replace(/[^\w-]/g, '-').slice(0, 40) || `seed-${i}`,
+      kind: ref.kind === 'image' ? 'image' : 'link',
+      x: col * COL_W,
+      y: colHeights[col],
+      w: 240,
+      z: i + 1,
+      url: ref.url,
+      ...(ref.name ? { name: ref.name } : {}),
+    })
+    colHeights[col] += estHeight + 16
+  })
+  return cards
+}
+
 /** Who hears about a brief's lifecycle moments. */
 export const BATCH_TRANSITION_NOTIFICATIONS: Record<string, ('owner_editor' | 'account_managers')[]> = {
   'brief>locked': ['owner_editor', 'account_managers'],

@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -17,13 +17,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, ImagePlus, Link2, Lock, MapPin, Plus, Trash2, X,
+  ArrowLeft, Camera, Check, Lock, MapPin, Plus, Trash2, X,
 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
-import { uploadMedia } from '../../../uploadMedia'
 import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
+import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import {
-  availableBatchTransitions, type BatchStatus, type ReferenceMedia, type ShotRow,
+  availableBatchTransitions, sanitiseCanvasCards,
+  type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
 } from '../../../../lib/batch-brief-core'
 import { TYPE_LABELS, type ContentType } from '../../../../lib/agreement-core'
 
@@ -31,6 +32,7 @@ type Batch = {
   id: string; client_id: string; title: string; status: BatchStatus
   description: string | null; concept: string | null; location: string | null
   shoot_date: string | null; shot_list: ShotRow[]; reference_media: ReferenceMedia[]
+  canvas_cards?: CanvasCard[]
   planned_deliverables: { type: string; qty: number }[]
   locked_at: string | null; shot_at: string | null
   month: number | null; year: number | null
@@ -69,9 +71,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [dateOpen, setDateOpen] = useState(false)
   const [dateDraft, setDateDraft] = useState({ shoot_date: '', reason: '' })
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [linkDraft, setLinkDraft] = useState('')
-  const [addingLink, setAddingLink] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/production/batches/${id}`)
@@ -143,23 +142,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  const addReferenceFiles = async (files: FileList) => {
-    if (!batch) return
-    setBusy('refs')
-    try {
-      const added: ReferenceMedia[] = []
-      for (const file of Array.from(files)) {
-        const { url } = await uploadMedia(file, { purpose: 'production' })
-        added.push({ kind: 'image', url, name: file.name })
-      }
-      await patch('reference_media', [...(batch.reference_media ?? []), ...added], true)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed')
-    } finally {
-      setBusy(null)
-      if (fileRef.current) fileRef.current.value = ''
-    }
-  }
+
 
   if (!batch) {
     return (
@@ -279,69 +262,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="flex flex-col gap-3 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">References</p>
-              {(batch.reference_media ?? []).length === 0 && (
-                <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700"
-                  onClick={() => fileRef.current?.click()}>
-                  <ImagePlus className="h-5 w-5" />
-                  Drop reference images or add links.
-                </label>
-              )}
-              <div className="columns-2 gap-2 sm:columns-3 [&>*]:mb-2">
-                {(batch.reference_media ?? []).map((ref, i) => (
-                  <div key={ref.url} className="group relative break-inside-avoid overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
-                    {ref.kind === 'image' ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ref.url} alt={ref.name ?? 'reference'} className="w-full" />
-                    ) : (
-                      <a href={ref.url} target="_blank" rel="noreferrer noopener"
-                        className="flex items-center gap-2 p-3 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                        <Link2 className="h-4 w-4 shrink-0 text-zinc-400" />
-                        <span className="truncate">{ref.name || new URL(ref.url).hostname}</span>
-                      </a>
-                    )}
-                    {canEdit && (
-                      <button type="button"
-                        className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100"
-                        onClick={() => void patch('reference_media', (batch.reference_media ?? []).filter((_, j) => j !== i), true)}>
-                        <X className="h-3 w-3 text-white" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {canEdit && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <input ref={fileRef} type="file" multiple accept="image/*" className="hidden"
-                    onChange={e => e.target.files?.length && void addReferenceFiles(e.target.files)} />
-                  <Button size="sm" variant="outline" disabled={busy === 'refs'} onClick={() => fileRef.current?.click()}>
-                    <ImagePlus className="h-3.5 w-3.5" /> {busy === 'refs' ? 'Uploading…' : 'Image'}
-                  </Button>
-                  {addingLink ? (
-                    <div className="flex items-center gap-1.5">
-                      <Input autoFocus value={linkDraft} placeholder="https://…" className="h-8 w-64 text-xs"
-                        onChange={e => setLinkDraft(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' && linkDraft.trim().startsWith('https://')) {
-                            void patch('reference_media', [...(batch.reference_media ?? []), { kind: 'link', url: linkDraft.trim() }], true)
-                            setLinkDraft(''); setAddingLink(false)
-                          }
-                          if (e.key === 'Escape') setAddingLink(false)
-                        }} />
-                      <Button size="sm" variant="ghost" onClick={() => setAddingLink(false)}>Cancel</Button>
-                    </div>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => setAddingLink(true)}>
-                      <Link2 className="h-3.5 w-3.5" /> Link
-                    </Button>
-                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
 
         {/* ── rail ── */}
         <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
@@ -482,6 +403,36 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* ── the board: the Milanote-style canvas ── */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline gap-3">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Board</p>
+          <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
+            {(batch.canvas_cards ?? []).length === 1 ? '1 card' : `${(batch.canvas_cards ?? []).length} cards`}
+          </span>
+        </div>
+        <BriefCanvas
+          cards={sanitiseCanvasCards(batch.canvas_cards)}
+          references={batch.reference_media ?? []}
+          canEdit={canEdit}
+          onOp={async (op: CanvasOp) => {
+            const res = await fetch(`/api/production/batches/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ canvas_op: op }),
+            })
+            if (!res.ok) {
+              toast.error('Could not save the board')
+              void load()
+              return false
+            }
+            const json = await res.json()
+            setBatch(b => (b ? { ...b, canvas_cards: json.canvas_cards } : b))
+            return true
+          }}
+        />
       </div>
 
       {/* ── the lock ceremony ── */}
