@@ -197,6 +197,12 @@ export default function ItemDetailPage() {
 
   const [schedDraft, setSchedDraft] = useState({ platform: 'instagram', scheduled_at: '', live_url: '' })
 
+  // guard against the stale-blur race: these fields are uncontrolled, and a
+  // live refetch updates state without touching the DOM — so a plain
+  // focus+blur used to see "DOM differs from state" and PATCH old text back,
+  // reverting someone else's edit. Only what YOU typed since focus is saved.
+  const focusVal = useRef<Record<string, string>>({})
+
   const load = useCallback(async () => {
     const res = await fetch(`/api/production/items/${id}`)
     if (!res.ok) {
@@ -652,11 +658,14 @@ export default function ItemDetailPage() {
                 <div className="grid gap-1.5">
                   <Label className="text-xs">Raw assets link</Label>
                   <Input
+                    key={detail.raw_assets_url ?? ''}
                     defaultValue={detail.raw_assets_url ?? ''}
+                    onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
                     placeholder="https://www.dropbox.com/… (folder the editor works from)"
                     className="font-mono text-xs"
                     onBlur={e => {
                       const v = e.target.value.trim()
+                      if (v === (focusVal.current.raw_assets_url ?? '').trim()) return // nothing typed — never save
                       if (v !== (detail.raw_assets_url ?? '')) {
                         void fetch(`/api/production/items/${id}`, {
                           method: 'PATCH',
@@ -671,10 +680,13 @@ export default function ItemDetailPage() {
                   <Label className="text-xs">Brief</Label>
                   <Textarea
                     rows={3}
+                    key={detail.brief ?? ''}
                     defaultValue={detail.brief ?? ''}
+                    onFocus={e => { focusVal.current.brief = e.target.value }}
                     placeholder="What the edit should be…"
                     onBlur={e => {
                       const v = e.target.value.trim()
+                      if (v === (focusVal.current.brief ?? '').trim()) return // nothing typed — never save
                       if (v !== (detail.brief ?? '')) {
                         void fetch(`/api/production/items/${id}`, {
                           method: 'PATCH',
@@ -872,10 +884,13 @@ export default function ItemDetailPage() {
                 {['account_manager', 'super_admin', 'scheduler'].includes(role) ? (
                   <Textarea
                     rows={3}
+                    key={detail.caption ?? ''}
                     defaultValue={detail.caption ?? ''}
+                    onFocus={e => { focusVal.current.caption = e.target.value }}
                     placeholder="The post text — published exactly as written here…"
                     onBlur={e => {
                       const v = e.target.value.trim()
+                      if (v === (focusVal.current.caption ?? '').trim()) return // nothing typed — never save
                       if (v !== (detail.caption ?? '')) {
                         void fetch(`/api/production/items/${id}`, {
                           method: 'PATCH',

@@ -201,7 +201,23 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     console.error('notification claim failed:', insErr.message)
     return 'failed'
   }
-  if (!claimed) return 'duplicate' // another producer already owns this event
+  let owned = claimed
+  if (!owned) {
+    // someone owns the key — but a FAILED send (or a pending row stranded by
+    // a crash >10 min ago) must not block the event forever. Re-claim it with
+    // an optimistic guard: exactly one retrier wins, a sent row stays sent.
+    const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString()
+    const { data: reclaimed } = await supabase
+      .from('notification_log')
+      .update({ status: 'pending', body_html: input.bodyHtml, subject: input.subject })
+      .eq('dedupe_key', dedupe_key)
+      .or(`status.eq.failed,and(status.eq.pending,created_at.lt.${staleBefore})`)
+      .select()
+      .maybeSingle()
+    if (!reclaimed) return 'duplicate' // genuinely sent (or in flight) — stop
+    owned = reclaimed
+  }
+  const claimedId = owned.id
 
   // 2. we own the row — send as the actor (or the company when actorless)
   try {
@@ -230,13 +246,13 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     await supabase
       .from('notification_log')
       .update({ status: 'sent', sent_at: new Date().toISOString() })
-      .eq('id', claimed.id)
+      .eq('id', claimedId)
     return 'sent'
   } catch (e) {
     await supabase
       .from('notification_log')
       .update({ status: 'failed', error: e instanceof Error ? e.message : String(e) })
-      .eq('id', claimed.id)
+      .eq('id', claimedId)
     return 'failed'
   }
 }

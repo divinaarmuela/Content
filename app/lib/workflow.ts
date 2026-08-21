@@ -24,6 +24,7 @@ export type ContentItem = {
   client_approval_required: boolean
   current_version_number: number
   due_date?: string | null
+  updated_at?: string | null
   raw_assets_url?: string | null
   brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
@@ -129,7 +130,9 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       entityType: 'content_item',
       // re-assignment to the same person after someone else held it should
       // notify again — key on the owner, not just the item
-      entityId: `${item.id}#${item.owner_id}`,
+      // updated_at is part of the key so re-assigning an item back to a
+      // previous owner notifies again — the id#owner pair alone never did
+      entityId: `${item.id}#${item.owner_id}#${item.updated_at ?? ''}`,
       recipientId: editor.id,
       recipientEmail: editor.email,
       subject: `New job: ${item.title}`,
@@ -365,9 +368,11 @@ export async function performTransition(
           actorClerkId: actor.clerk_user_id,
           eventType: `transition_${from}_${to}`,
           entityType: 'content_item',
-          // include the version so the same edge on a later loop iteration
-          // notifies again, while a retried request cannot double-send
-          entityId: `${item.id}#v${item.current_version_number}`,
+          // keyed on THIS successful write (updated_at bumps on every update):
+          // a repeated edge — even at the same version — notifies again, while
+          // a retried request cannot double-send because the optimistic guard
+          // 409s before a second write ever happens
+          entityId: `${item.id}#${updated.updated_at ?? `v${item.current_version_number}`}`,
           recipientId: person.id,
           recipientEmail: person.email,
           subject,

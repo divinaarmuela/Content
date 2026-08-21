@@ -25,7 +25,7 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
-    await requireRole('account_manager')
+    await requireRole('scheduler')
     const { action, postId, commentId, message, buttons } = await req.json()
 
     if (typeof postId !== 'string' || typeof commentId !== 'string') {

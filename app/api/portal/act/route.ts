@@ -123,11 +123,14 @@ export async function POST(req: Request) {
       // any note riding along (a preferred posting date, a thank-you, a
       // condition) must reach the manager, approval or not
       if (comment) {
-        void notifyManagers(client.id, item.id, item.title, speaker, comment)
+        // AWAITED: on serverless the invocation freezes the moment we return,
+        // so fire-and-forget here silently lost the emails
+        await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+          console.error('portal manager notify error:', e))
         // an APPROVAL note often carries the "when" — the schedulers who'll
         // actually set the date must hear it too (they never see comments)
         if (action === 'approve') {
-          void (async () => {
+          await (async () => {
             const { data: schedulers } = await supabase
               .from('team_users').select('id, email')
               .eq('role', 'scheduler').eq('active_status', true)
@@ -154,7 +157,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, status: updated.status })
     }
     if (action === 'comment') {
-      void notifyManagers(client.id, item.id, item.title, speaker, comment)
+      await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+        console.error('portal manager notify error:', e))
       return NextResponse.json({ ok: true })
     }
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

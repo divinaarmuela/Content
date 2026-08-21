@@ -37,7 +37,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
 
   const { data, error } = await supabase
     .from('content_items')
-    .select('id, title, status, due_date, client_id, owner_id, clients(name)')
+    .select('id, title, status, due_date, client_id, owner_id, scheduler_ids, clients(name)')
     .lte('due_date', tomorrow)
     .not('due_date', 'is', null)
     .not('status', 'in', '(scheduled,published)')
@@ -77,7 +77,12 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
     const tag = label(item.due_date, today)
     const recipients = new Map<string, Person>()
     if (item.status === 'approved_for_scheduling') {
-      for (const s of schedulers) recipients.set(s.id, s)
+      // honour the handoff: an item assigned to specific schedulers reminds
+      // only them, matching whose queue it actually appears in
+      const raw = (item as unknown as { scheduler_ids?: unknown }).scheduler_ids
+      const assigned = Array.isArray(raw) ? (raw as string[]) : []
+      const pool = assigned.length > 0 ? schedulers.filter(s => assigned.includes(s.id)) : schedulers
+      for (const s of (pool.length > 0 ? pool : schedulers)) recipients.set(s.id, s)
     } else {
       const owner = item.owner_id ? owners.get(item.owner_id) : undefined
       if (owner) recipients.set(owner.id, owner)

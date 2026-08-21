@@ -255,7 +255,7 @@ export const brandScan = inngest.createFunction(
     retries: 1,
     // one document at a time: each is many sequential model calls, and two
     // scans of the same client would race on the stored profile
-    concurrency: { limit: 2 },
+    concurrency: { limit: 2, key: 'event.data.clientId' },
   },
   async ({ event, step }) => {
     const { clientId, url, filename, by } = (event.data ?? {}) as Record<string, string>

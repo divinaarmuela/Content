@@ -17,7 +17,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!(ITEM_STATUSES as readonly string[]).includes(to)) {
       return NextResponse.json({ error: 'Invalid target status' }, { status: 400 })
     }
-    const schedulerIds = Array.isArray(body.scheduler_ids)
+    // scheduler assignment is a TEAM decision — a client-role caller (the
+    // portal approves through this machinery) must not be able to pick who
+    // schedules or narrow another scheduler's queue
+    const schedulerIds = user.role !== 'client' && Array.isArray(body.scheduler_ids)
       ? body.scheduler_ids.map((v: unknown) => String(v)).filter(Boolean).slice(0, 20)
       : undefined
     const updated = await performTransition(user, item, to, {

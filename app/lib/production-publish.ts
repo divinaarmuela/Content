@@ -1,4 +1,5 @@
 import 'server-only'
+import { announceItemChange } from './production-live'
 import { supabase } from '@/lib/supabase'
 import { queuePublishJob } from './publish'
 import {
@@ -106,12 +107,18 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   if (media) plan.media = [media]
 
   // what the client actually has connected
-  const wanted = ((item.platform_targets as string[]) ?? []).map(p => p.toLowerCase())
   const { data: accounts } = await supabase
     .from('social_accounts')
     .select('platform, provider_account_id, active')
     .eq('client_id', item.client_id)
     .eq('active', true)
+
+  // no explicit targets (the common case — nothing in the UI set them) means
+  // every connected channel, rather than a permanently dead publish button
+  let wanted = ((item.platform_targets as string[]) ?? []).map(p => p.toLowerCase())
+  if (wanted.length === 0) {
+    wanted = [...new Set((accounts ?? []).map(a => (a.platform as string).toLowerCase()))]
+  }
 
   // production already knows what kind of content this is — carry it through
   // so a Reel is published as a Reel rather than a plain video post
@@ -143,7 +150,7 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
 
   if (!plan.blocked && plan.targets.length === 0) {
     plan.blocked = wanted.length === 0
-      ? 'This item has no target platforms set'
+      ? 'This client has no connected accounts yet'
       : `No connected channel for ${plan.missing.join(', ')}`
   }
 
@@ -189,10 +196,16 @@ export async function recordPublishOnItem(
     if (permalink) patch.live_url = permalink
 
     await supabase.from('schedule_entries').update(patch).eq('item_id', contentItemId)
-    await supabase
+    const { data: updated } = await supabase
       .from('content_items')
       .update({ status: 'published', updated_at: new Date().toISOString() })
       .eq('id', contentItemId)
+      .select('client_id')
+      .maybeSingle()
+    // open boards must hear about it, not wait for the 60s poll
+    if (updated) {
+      announceItemChange({ item_id: contentItemId, client_id: updated.client_id, status: 'published', kind: 'transition' })
+    }
   } catch (e) {
     console.error('could not record publish on content item', contentItemId, e)
   }

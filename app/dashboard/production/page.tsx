@@ -237,7 +237,7 @@ export default function ProductionPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Select value={clientFilter} onValueChange={v => v && setClientFilter(v)}>
+          <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
             <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All clients</SelectItem>

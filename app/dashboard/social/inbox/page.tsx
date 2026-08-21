@@ -161,7 +161,9 @@ export default function InboxPage() {
       if (!res.ok) throw new Error(json.error ?? 'Could not load the conversation')
       const raw = json.messages
       const list: Message[] = raw?.data ?? raw?.messages ?? (Array.isArray(raw) ? raw : [])
-      setMessages(list)
+      // a slow response for a conversation you already left must not clobber
+      // the one now open
+      setActiveConvo(cur => { if (cur?.id === c.id) setMessages(list); return cur })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load the conversation')
       setMessages([])
@@ -223,7 +225,7 @@ export default function InboxPage() {
       if (!res.ok) throw new Error(json.error ?? 'Could not load comments')
       const raw = json.comments
       const list: Comment[] = raw?.data ?? raw?.comments ?? (Array.isArray(raw) ? raw : [])
-      setComments(list)
+      setActive(cur => { if (cur?.id === p.id) setComments(list); return cur })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load comments')
       setComments([])

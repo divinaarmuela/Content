@@ -138,6 +138,24 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           attempts: job.attempts + 1,
           error: null,
         })
+        // Content Register (attribution tracker): every post that leaves
+        // through here becomes a registered asset. Idempotent on the provider
+        // post id, so the Zernio webhook announcing the same post later only
+        // fills in the permalink. Best-effort — publishing must never fail
+        // because registration did.
+        if (outcome.postId) {
+          try {
+            const { registerFromZernioEvent } = await import('./tracker')
+            await registerFromZernioEvent('post.published', {
+              id: outcome.postId,
+              caption: job.caption,
+              platforms: (job.targets ?? []).map(t => ({ platform: t.platform })),
+              publishedAt: isFuture ? job.scheduled_for : new Date().toISOString(),
+            }, job.client_id)
+          } catch (e) {
+            console.error('asset auto-registration failed:', e)
+          }
+        }
         if (isFuture) return 'scheduled'
         // close the loop back into production: the board and the scheduler
         // must reflect that this actually went out
@@ -244,12 +262,15 @@ export async function reclaimStalePublishing(olderThanMinutes = 15): Promise<num
  * success for posts that never appeared.
  */
 export async function reconcilePublishedJobs(): Promise<number> {
-  const since = new Date(Date.now() - 24 * 3600_000).toISOString()
+  const since = new Date(Date.now() - 14 * 24 * 3600_000).toISOString()
+  // 'scheduled' jobs are included: the provider posts them at their time and
+  // nothing else ever flips our row to published — without this they sit as
+  // "scheduled" forever while the post is live
   const { data: jobs } = await supabase
     .from('publish_jobs')
-    .select('id, provider_post_id, content_item_id')
-    .eq('status', 'published')
-    .gte('published_at', since)
+    .select('id, status, provider_post_id, content_item_id')
+    .in('status', ['published', 'scheduled'])
+    .gte('created_at', since)
     .not('provider_post_id', 'is', null)
     .limit(50)
 
@@ -268,6 +289,22 @@ export async function reconcilePublishedJobs(): Promise<number> {
     const remote = byId.get(job.provider_post_id as string)
     if (!remote?.status) continue
 
+    if (job.status === 'scheduled' && ['published', 'posted', 'success'].includes(remote.status)) {
+      const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl ?? null
+      await supabase.from('publish_jobs').update({
+        status: 'published',
+        published_at: new Date().toISOString(),
+        ...(url ? { permalink: url } : {}),
+        updated_at: new Date().toISOString(),
+      }).eq('id', job.id).eq('status', 'scheduled')
+      if (job.content_item_id) {
+        const { recordPublishOnItem } = await import('./production-publish')
+        await recordPublishOnItem(job.content_item_id as string, url)
+      }
+      changed++
+      continue
+    }
+
     if (remote.status === 'failed' || remote.status === 'partial') {
       await supabase.from('publish_jobs').update({
         status: 'failed',
@@ -280,6 +317,11 @@ export async function reconcilePublishedJobs(): Promise<number> {
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
       if (url) {
         await supabase.from('publish_jobs').update({ permalink: url }).eq('id', job.id)
+        // mirror it onto the registered asset so evidence links to the live post
+        await supabase.from('content_assets')
+          .update({ post_url: url })
+          .eq('provider_post_id', job.provider_post_id as string)
+          .is('post_url', null)
         // the platform assigns the permalink after the fact; push it through
         // to the schedule entry so the client-facing live link is populated
         const { data: full } = await supabase
