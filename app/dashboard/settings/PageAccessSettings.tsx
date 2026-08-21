@@ -270,7 +270,7 @@ export default function PageAccessSettings() {
                     <input
                       type="checkbox"
                       checked={granted}
-                      disabled={busy === page.href}
+                      disabled={busy !== null}
                       onChange={() => void toggle(page.href)}
                       className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
                     />

@@ -99,6 +99,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
     }
 
+    // for approve/request_changes, validate the transition FIRST: a refused
+    // state change (someone acted concurrently) must not leave an orphan note
+    // in the thread claiming an action that never happened
+    let transitioned: { status?: string } | null = null
+    if (action === 'approve' || action === 'request_changes') {
+      const to = action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested'
+      transitioned = await performTransition(actor, item as ContentItem, to)
+    }
+
     // any note the client wrote lands in the thread, client-visible
     if (comment) {
       const { error } = await supabase.from('item_comments').insert({
@@ -118,8 +127,6 @@ export async function POST(req: Request) {
     }
 
     if (action === 'approve' || action === 'request_changes') {
-      const to = action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested'
-      const updated = await performTransition(actor, item as ContentItem, to)
       // any note riding along (a preferred posting date, a thank-you, a
       // condition) must reach the manager, approval or not
       if (comment) {
@@ -154,7 +161,7 @@ export async function POST(req: Request) {
           })().catch(e => console.error('approval-note scheduler notify error:', e))
         }
       }
-      return NextResponse.json({ ok: true, status: updated.status })
+      return NextResponse.json({ ok: true, status: transitioned?.status })
     }
     if (action === 'comment') {
       await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>

@@ -64,10 +64,10 @@ export async function GET() {
         .filter(i => ['revision_required', 'draft_uploaded', 'revision_complete'].includes(i.status))
         .sort((a, b) => (a.status === 'revision_required' ? -1 : 1) - (b.status === 'revision_required' ? -1 : 1))
         .slice(0, 8)
-      const dueSoon = pool
+      const dueSoonAll = pool
         .filter(i => i.due_date && i.due_date <= weekAhead.slice(0, 10) && !['published', 'scheduled'].includes(i.status))
         .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
-        .slice(0, 8)
+      const dueSoon = dueSoonAll.slice(0, 8)
       return NextResponse.json({
         role: user.role,
         name: user.name,
@@ -78,6 +78,7 @@ export async function GET() {
           revisions_needed: pool.filter(i => i.status === 'revision_required').length,
           needs_action: needsAction,
           due_soon: dueSoon,
+          due_soon_count: dueSoonAll.length,
         },
       })
     }
@@ -91,6 +92,7 @@ export async function GET() {
         return assigned.length === 0 || assigned.includes(user.id)
       })
       let upcoming: unknown[] = []
+      let upcomingCount = 0
       let publishedWeek = 0
       const { data: entries } = await supabase
         .from('schedule_entries')
@@ -102,9 +104,10 @@ export async function GET() {
         .limit(200)
       if (entries) {
         const now = new Date().toISOString()
-        upcoming = entries
+        const upcomingAll = entries
           .filter(e => e.scheduled_at && e.scheduled_at >= now && e.scheduled_at <= weekAhead)
-          .slice(0, 8)
+        upcoming = upcomingAll.slice(0, 8)
+        upcomingCount = upcomingAll.length
         publishedWeek = entries.filter(e => e.published_at && e.published_at >= weekAgo).length
       }
       return NextResponse.json({
@@ -115,6 +118,7 @@ export async function GET() {
           to_schedule: queue.length,
           queue: queue.slice(0, 8),
           upcoming,
+          upcoming_count: upcomingCount,
           published_week: publishedWeek,
         },
       })

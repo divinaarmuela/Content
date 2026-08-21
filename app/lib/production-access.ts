@@ -70,8 +70,15 @@ export function shapeItemDetail(
 
   if (user.role === 'client') {
     const latest = versions[0]
+    // internal workings stay internal: who edits, who schedules, who assigned
+    // — and the raw status, which status_label exists to translate
+    const {
+      owner_id: _o, assigned_by: _a, scheduler_ids: _s, status: _st,
+      ...clientSafe
+    } = itemPublic as Record<string, unknown>
+    void _o; void _a; void _s; void _st
     return {
-      ...itemPublic,
+      ...clientSafe,
       status_label: CLIENT_LABELS[status],
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]

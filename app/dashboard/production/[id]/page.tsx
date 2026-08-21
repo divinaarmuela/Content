@@ -160,7 +160,7 @@ export default function ItemDetailPage() {
       const res = await fetch(`/api/production/items/${id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publishNow, notifyIds }),
+        body: JSON.stringify({ publishNow, notifyIds: notifyIds ?? [] }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Publish failed')

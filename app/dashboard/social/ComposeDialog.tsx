@@ -160,6 +160,10 @@ export default function ComposeDialog({
 
       if (json.status === 'failed') {
         toast.error('The provider rejected the post — check the job for details')
+      } else if (json.status === 'queued') {
+        // a retryable provider hiccup: the job is saved and will retry, but
+        // nothing has been posted yet — success would be a lie here
+        toast.message('The platform did not accept it yet — the post is queued and will retry automatically')
       } else {
         toast.success(
           json.status === 'published' ? 'Published'

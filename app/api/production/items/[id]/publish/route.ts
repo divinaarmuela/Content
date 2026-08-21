@@ -44,13 +44,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       detail: `publish job ${result.id}`,
     })
 
-    notifyPublishQueued(user, item, {
-      jobId: result.id,
-      publishNow: body.publishNow === true,
-      recipientIds: Array.isArray(body.notifyIds)
-        ? body.notifyIds.map((v: unknown) => String(v)).filter(Boolean)
-        : undefined,
-    })
+    // an explicit empty pick means "tell no one" — only an ABSENT field
+    // falls back to the client's assigned managers
+    if (!Array.isArray(body.notifyIds) || body.notifyIds.length > 0) {
+      notifyPublishQueued(user, item, {
+        jobId: result.id,
+        publishNow: body.publishNow === true,
+        recipientIds: Array.isArray(body.notifyIds)
+          ? body.notifyIds.map((v: unknown) => String(v)).filter(Boolean)
+          : undefined,
+      })
+    }
 
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'schedule' })
     return NextResponse.json({ jobId: result.id })

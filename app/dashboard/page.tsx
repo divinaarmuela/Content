@@ -34,11 +34,13 @@ type Overview = {
     revisions_needed: number
     needs_action: ItemLite[]
     due_soon: ItemLite[]
+    due_soon_count?: number
   }
   scheduler?: {
     to_schedule: number
     queue: ItemLite[]
     upcoming: UpcomingEntry[]
+    upcoming_count?: number
     published_week: number
   }
   manager?: {
@@ -195,7 +197,7 @@ export default function OverviewPage() {
               <Stat label="My items" value={data!.editor!.my_items} loading={false} hint="Assigned to you" icon={Film} />
               <Stat label="Needs re-edit" value={data!.editor!.revisions_needed} loading={false} hint="Revision required" icon={PencilLine} />
               <Stat label="In internal review" value={data!.editor!.in_internal_review} loading={false} hint="With the account manager" icon={Send} />
-              <Stat label="Due this week" value={data!.editor!.due_soon.length} loading={false} hint="Not yet scheduled" icon={CalendarClock} />
+              <Stat label="Due this week" value={data!.editor!.due_soon_count ?? data!.editor!.due_soon.length} loading={false} hint="Not yet scheduled" icon={CalendarClock} />
             </div>
             <Pipeline pipeline={data!.pipeline} />
             <div className="grid gap-4 lg:grid-cols-2">
@@ -213,7 +215,7 @@ export default function OverviewPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat label="To schedule" value={data.scheduler.to_schedule} loading={false} hint="Approved, waiting on you" icon={ClipboardList} />
-            <Stat label="Going out · 7 days" value={data.scheduler.upcoming.length} loading={false} hint="Scheduled posts" icon={CalendarClock} />
+            <Stat label="Going out · 7 days" value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} loading={false} hint="Scheduled posts" icon={CalendarClock} />
             <Stat label="Published · 7 days" value={data.scheduler.published_week} loading={false} hint="Live this week" icon={CheckCircle2} />
             <Stat label="Scheduled total" value={data.pipeline.scheduled ?? 0} loading={false} hint="In the calendar" icon={Send} />
           </div>

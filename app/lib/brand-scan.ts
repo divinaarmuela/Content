@@ -20,7 +20,7 @@ import { mergeProfiles, type BrandProfile } from './brand-core'
 async function say(
   clientId: string, status: string, done: number, total: number, message?: string,
 ): Promise<void> {
-  void inngest.realtime.publish(brandChannel.progress, {
+  await inngest.realtime.publish(brandChannel.progress, {
     client_id: clientId, status, done, total,
     ...(message ? { message } : {}), ts: Date.now(),
   }).catch(e => console.error('brand realtime publish failed:', e))
