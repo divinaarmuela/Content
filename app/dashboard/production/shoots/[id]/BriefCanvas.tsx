@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   ExternalLink, ImagePlus, Link2, Maximize2, Minimize2, Minus, MoveUpRight, Plus,
-  Scan, StickyNote, Trash2, Type,
+  Scan, Smartphone, StickyNote, Trash2, Type,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
@@ -72,6 +72,9 @@ export default function BriefCanvas({
   const [sheetCard, setSheetCard] = useState<CanvasCard | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [linkPrompt, setLinkPrompt] = useState(false)
+  const [mockupMenu, setMockupMenu] = useState(false)
+  /** when set, the next file upload lands INSIDE this mockup frame */
+  const mockupTargetRef = useRef<string | null>(null)
   const linkInputRef = useRef<HTMLInputElement>(null)
   /** arrow-drawing mode: the card the next click will connect FROM */
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
@@ -277,6 +280,25 @@ export default function BriefCanvas({
   }
 
   const addImages = async (files: FileList) => {
+    // an upload aimed at a mockup frame fills THAT frame, not the canvas
+    const target = mockupTargetRef.current
+    mockupTargetRef.current = null
+    if (target) {
+      const card = cards.find(c => c.id === target)
+      const file = files[0]
+      if (card && file) {
+        try {
+          const { url } = await uploadMedia(file, { purpose: 'production' })
+          const next = { ...card, url }
+          upsertLocal(next); persist([next])
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : 'Upload failed')
+        } finally {
+          if (fileRef.current) fileRef.current.value = ''
+        }
+        return
+      }
+    }
     try {
       for (const file of Array.from(files)) {
         const { url } = await uploadMedia(file, { purpose: 'production' })
@@ -561,6 +583,24 @@ export default function BriefCanvas({
               onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
               <MoveUpRight className="h-3.5 w-3.5" /> Arrow
             </Button>
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+              onClick={() => setMockupMenu(v => !v)}>
+              <Smartphone className="h-3.5 w-3.5" /> Preview
+            </Button>
+          </div>
+        )}
+        {mockupMenu && (
+          <div className="absolute left-3 top-14 z-10 flex flex-col gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+            {([['ig_post', 'Instagram post'], ['ig_carousel', 'Instagram carousel'], ['ig_reel', 'Instagram reel'], ['ig_story', 'Instagram story'], ['linkedin', 'LinkedIn post']] as const).map(([pf, label]) => (
+              <button key={pf} type="button"
+                className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                onClick={() => {
+                  addCard({ kind: 'mockup', platform: pf, w: pf === 'ig_story' || pf === 'ig_reel' ? 200 : 280 })
+                  setMockupMenu(false)
+                }}>
+                {label}
+              </button>
+            ))}
           </div>
         )}
         {linkPrompt && (
@@ -591,6 +631,12 @@ export default function BriefCanvas({
                 ))}
                 <span className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
               </>
+            )}
+            {selectedCard.kind === 'mockup' && (
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+                onClick={() => { mockupTargetRef.current = selectedCard.id; fileRef.current?.click() }}>
+                <ImagePlus className="h-3.5 w-3.5" /> {selectedCard.url ? 'Swap image' : 'Add image'}
+              </Button>
             )}
             {selectedCard.kind !== 'arrow' && (
               <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"

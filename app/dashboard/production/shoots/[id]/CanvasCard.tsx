@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Bookmark, Heart, ImagePlus, MessageCircle, MoreHorizontal, Send, ThumbsUp } from 'lucide-react'
 import { Link2 } from 'lucide-react'
 import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
 
@@ -69,6 +70,102 @@ function CanvasCardInner({
             {card.text || <span className="text-zinc-400">Write it down…</span>}
           </p>
         )}
+      </div>
+    )
+  }
+
+  if (card.kind === 'mockup') {
+    const platform = card.platform ?? 'ig_post'
+    const handle = 'yourclient'
+    const img = card.url ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={card.url} alt="mockup" loading="lazy" decoding="async" draggable={false}
+        className="h-full w-full select-none object-cover" />
+    ) : (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-zinc-400">
+        <ImagePlus className="h-5 w-5" />
+        <span className="text-[10px]">Select, then add the image</span>
+      </div>
+    )
+
+    if (platform === 'ig_story' || platform === 'ig_reel') {
+      // 9:16 phone frame
+      return (
+        <div className="overflow-hidden rounded-2xl border border-zinc-300 bg-black shadow-md dark:border-zinc-700" style={{ width: card.w }}>
+          <div className="relative" style={{ aspectRatio: '9 / 16' }}>
+            <div className="absolute inset-0 bg-zinc-900">{img}</div>
+            <div className="absolute inset-x-0 top-0 flex items-center gap-2 bg-gradient-to-b from-black/60 to-transparent p-2">
+              <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-amber-400 via-rose-500 to-violet-500 p-[2px]">
+                <span className="block h-full w-full rounded-full bg-zinc-800" />
+              </span>
+              <span className="text-[10px] font-semibold text-white">{handle}</span>
+              <span className="text-[9px] text-white/70">{platform === 'ig_story' ? '2h' : 'Reels'}</span>
+              <MoreHorizontal className="ml-auto h-3.5 w-3.5 text-white" />
+            </div>
+            {platform === 'ig_reel' && (
+              <div className="absolute bottom-2 right-2 flex flex-col items-center gap-2.5 text-white">
+                <Heart className="h-4 w-4" /><MessageCircle className="h-4 w-4" /><Send className="h-4 w-4" />
+              </div>
+            )}
+            {platform === 'ig_story' && (
+              <div className="absolute inset-x-0 top-1 flex gap-1 px-2">
+                <span className="h-0.5 flex-1 rounded bg-white/90" />
+                <span className="h-0.5 flex-1 rounded bg-white/30" />
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    if (platform === 'linkedin') {
+      return (
+        <div className="overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md dark:border-zinc-700 dark:bg-zinc-900" style={{ width: card.w }}>
+          <div className="flex items-center gap-2 p-2.5">
+            <span className="h-8 w-8 rounded-full bg-sky-700" />
+            <span className="min-w-0">
+              <span className="block text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">Your Client</span>
+              <span className="block text-[9px] text-zinc-500">1,204 followers · 2h</span>
+            </span>
+            <MoreHorizontal className="ml-auto h-3.5 w-3.5 text-zinc-400" />
+          </div>
+          <div className="relative bg-zinc-100 dark:bg-zinc-800" style={{ aspectRatio: '1.91 / 1' }}>{img}</div>
+          <div className="flex items-center gap-4 px-3 py-2 text-zinc-500">
+            <span className="flex items-center gap-1 text-[10px]"><ThumbsUp className="h-3 w-3" /> Like</span>
+            <span className="flex items-center gap-1 text-[10px]"><MessageCircle className="h-3 w-3" /> Comment</span>
+            <span className="flex items-center gap-1 text-[10px]"><Send className="h-3 w-3" /> Share</span>
+          </div>
+        </div>
+      )
+    }
+
+    // ig_post / ig_carousel — square feed frame
+    return (
+      <div className="overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md dark:border-zinc-700 dark:bg-zinc-900" style={{ width: card.w }}>
+        <div className="flex items-center gap-2 p-2">
+          <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-amber-400 via-rose-500 to-violet-500 p-[2px]">
+            <span className="block h-full w-full rounded-full bg-white dark:bg-zinc-900" />
+          </span>
+          <span className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">{handle}</span>
+          <MoreHorizontal className="ml-auto h-3.5 w-3.5 text-zinc-400" />
+        </div>
+        <div className="relative bg-zinc-100 dark:bg-zinc-800" style={{ aspectRatio: '1 / 1' }}>
+          {img}
+          {platform === 'ig_carousel' && (
+            <>
+              <span className="absolute right-2 top-2 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] text-white">1/5</span>
+              <div className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1">
+                {[0, 1, 2, 3, 4].map(i => (
+                  <span key={i} className={`h-1 w-1 rounded-full ${i === 0 ? 'bg-sky-500' : 'bg-white/60'}`} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3 px-2.5 py-2 text-zinc-700 dark:text-zinc-300">
+          <Heart className="h-4 w-4" /><MessageCircle className="h-4 w-4" /><Send className="h-4 w-4" />
+          <Bookmark className="ml-auto h-4 w-4" />
+        </div>
       </div>
     )
   }

@@ -144,7 +144,8 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 
 /* ── the brief canvas: freeform cards on a pan/zoom board ── */
 
-export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow'] as const
+export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup'] as const
+export const MOCKUP_PLATFORMS = ['ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin'] as const
 export const CANVAS_NOTE_COLORS = ['paper', 'yellow', 'pink', 'blue', 'green', 'purple'] as const
 const CANVAS_BOUND = 20_000
 const CANVAS_MAX_CARDS = 200
@@ -163,6 +164,8 @@ export type CanvasCard = {
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
+  /** mockup frame — which platform chrome wraps the image */
+  platform?: (typeof MOCKUP_PLATFORMS)[number]
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -179,9 +182,12 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue
     const url = String(r.url ?? '').slice(0, 2000)
     if ((kind === 'image' || kind === 'link') && !url.startsWith('https://')) continue
+    // a mockup may exist as an empty frame awaiting its image
     const from = String(r.from ?? '').slice(0, 40)
     const to = String(r.to ?? '').slice(0, 40)
     if (kind === 'arrow' && (!from || !to || from === to)) continue
+    const platform = String(r.platform ?? '')
+    if (kind === 'mockup' && !(MOCKUP_PLATFORMS as readonly string[]).includes(platform)) continue
     const id = String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10)
     const color = String(r.color ?? '')
     const card: CanvasCard = {
@@ -195,11 +201,13 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         ? { text: String(r.text ?? '').slice(0, kind === 'label' ? 120 : 4000) }
         : {}),
       ...(kind === 'image' || kind === 'link' ? { url } : {}),
+      ...(kind === 'mockup' && url.startsWith('https://') ? { url } : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
+      ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
     }
     byId.set(card.id, card) // dedupe by id, keep-last
   }

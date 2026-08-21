@@ -159,6 +159,21 @@ describe('canvas cards', () => {
   })
 })
 
+describe('mockup cards', () => {
+  it('keeps valid platforms, drops invented ones, allows an empty frame', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'm1', kind: 'mockup', x: 0, y: 0, platform: 'ig_reel', url: 'https://cdn.co/v.jpg' },
+      { id: 'm2', kind: 'mockup', x: 0, y: 0, platform: 'ig_post' },
+      { id: 'm3', kind: 'mockup', x: 0, y: 0, platform: 'myspace' },
+    ])
+    expect(cards.map(c => c.id)).toEqual(['m1', 'm2'])
+    expect(cards[0].platform).toBe('ig_reel')
+    expect(cards[0].url).toBe('https://cdn.co/v.jpg')
+    expect(cards[1].url).toBeUndefined()
+  })
+})
+
 describe('canvas arrows', () => {
   it('sanitiser keeps well-formed arrows and drops self-loops or missing ends', async () => {
     const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
