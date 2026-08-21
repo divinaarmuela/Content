@@ -75,8 +75,6 @@ export default function BriefCanvas({
   const linkInputRef = useRef<HTMLInputElement>(null)
   /** arrow-drawing mode: the card the next click will connect FROM */
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
-  const cardEls = useRef(new Map<string, HTMLElement>())
-  const arrowEls = useRef(new Map<string, SVGLineElement[]>())
 
   const readOnly = !canEdit
   const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -114,9 +112,12 @@ export default function BriefCanvas({
     })
   }, [])
 
-  /** A card's centre in world space — height measured from the DOM. */
+  /** A card's centre in world space — height measured from the DOM by
+   *  attribute query: NO callback refs (React 19 re-runs inline refs every
+   *  commit, which hard-froze this subtree). */
   const centreOf = useCallback((c: CanvasCard, liveX?: number, liveY?: number) => {
-    const h = cardEls.current.get(c.id)?.offsetHeight ?? 100
+    const el = viewportRef.current?.querySelector(`[data-cid="${c.id}"]`) as HTMLElement | null
+    const h = el?.offsetHeight ?? 100
     return { cx: (liveX ?? c.x) + c.w / 2, cy: (liveY ?? c.y) + h / 2 }
   }, [])
 
@@ -224,10 +225,10 @@ export default function BriefCanvas({
     // arrows follow their card through the drag, not after it
     const { cx, cy } = centreOf(card, nx, ny)
     for (const c of cards) {
-      if (c.kind !== 'arrow') continue
-      const lines = arrowEls.current.get(c.id)
-      if (!lines) continue
-      for (const line of lines) {
+      if (c.kind !== 'arrow' || (c.from !== card.id && c.to !== card.id)) continue
+      const g = viewportRef.current?.querySelector(`[data-arrow="${c.id}"]`)
+      if (!g) continue
+      for (const line of Array.from(g.querySelectorAll('line'))) {
         if (c.from === card.id) { line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy)) }
         if (c.to === card.id) { line.setAttribute('x2', String(cx)); line.setAttribute('y2', String(cy)) }
       }
@@ -444,11 +445,7 @@ export default function BriefCanvas({
               const b = centreOf(toCard)
               const isSel = selected === arrow.id
               return (
-                <g key={arrow.id}
-                  ref={g => {
-                    if (g) arrowEls.current.set(arrow.id, Array.from(g.querySelectorAll('line')))
-                    else arrowEls.current.delete(arrow.id)
-                  }}>
+                <g key={arrow.id} data-arrow={arrow.id}>
                   {/* wide invisible hit line so the arrow is clickable */}
                   <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
                     stroke="transparent" strokeWidth={14}
@@ -466,11 +463,8 @@ export default function BriefCanvas({
           {ordered.filter(c => c.kind !== 'arrow').map(card => (
             <div
               key={card.id}
-              ref={el => {
-                if (el) cardEls.current.set(card.id, el)
-                else cardEls.current.delete(card.id)
-              }}
               data-card
+              data-cid={card.id}
               tabIndex={0}
               aria-label={`${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
@@ -483,6 +477,7 @@ export default function BriefCanvas({
               onClick={e => {
                 e.stopPropagation()
                 if (viewOnly) { setSheetCard(card); return }
+                if (connectFrom === '') { setConnectFrom(card.id); return }
                 if (connectFrom && connectFrom !== card.id) {
                   const arrow: CanvasCard = {
                     id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0,
@@ -530,9 +525,11 @@ export default function BriefCanvas({
           </div>
         )}
 
-        {connectFrom && (
-          <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 shadow-sm dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-300">
-            Click another card to draw the arrow — Esc cancels
+        {connectFrom !== null && (
+          <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 shadow-sm dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-300">
+            {connectFrom === ''
+              ? 'Click the first card the arrow starts from — Esc cancels'
+              : 'Now click the card it points to — Esc cancels'}
           </div>
         )}
         {coarse && (
@@ -559,6 +556,10 @@ export default function BriefCanvas({
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
               onClick={() => addCard({ kind: 'label', text: '' })}>
               <Type className="h-3.5 w-3.5" /> Label
+            </Button>
+            <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs"
+              onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
+              <MoveUpRight className="h-3.5 w-3.5" /> Arrow
             </Button>
           </div>
         )}
