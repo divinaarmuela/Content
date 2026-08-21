@@ -98,6 +98,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   useEffect(() => { void load() }, [load])
   useProductionLive(useCallback(() => { void load() }, [load]))
 
+  // stable identities for the canvas props — and ABOVE the early return:
+  // hooks below a conditional return crash React with a hook-order error
+  const canvasCards = useMemo(() => sanitiseCanvasCards(batch?.canvas_cards), [batch?.canvas_cards])
+  const canvasRefs = useMemo(() => batch?.reference_media ?? [], [batch?.reference_media])
+
   const isManager = ['account_manager', 'super_admin'].includes(role)
   const canEdit = ['editor', 'account_manager', 'super_admin'].includes(role)
 
@@ -153,8 +158,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   }
 
   const briefTask = items.find(i => i.work_kinds?.slug === 'shoot_brief') ?? null
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const canvasCards = useMemo(() => sanitiseCanvasCards(batch.canvas_cards), [batch.canvas_cards])
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
@@ -463,7 +466,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         </div>
         <BriefCanvas
           cards={canvasCards}
-          references={batch.reference_media ?? []}
+          references={canvasRefs}
           canEdit={canEdit}
           onOp={async (op: CanvasOp) => {
             const res = await fetch(`/api/production/batches/${id}`, {
