@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -38,7 +38,7 @@ type Batch = {
   month: number | null; year: number | null
   clients: { name: string } | null
 }
-type ItemLite = { id: string; title: string; status: string }
+type ItemLite = { id: string; title: string; status: string; work_kinds?: { slug?: string } | null }
 type Progress = { type: string; label: string; quota: number; planned: number; delivered: number }
 
 const CONTENT_TYPE_OPTIONS = Object.entries(TYPE_LABELS) as [ContentType, string][]
@@ -152,6 +152,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     )
   }
 
+  const briefTask = items.find(i => i.work_kinds?.slug === 'shoot_brief') ?? null
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const canvasCards = useMemo(() => sanitiseCanvasCards(batch.canvas_cards), [batch.canvas_cards])
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
@@ -196,6 +199,51 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       <p className="-mt-2 text-sm text-zinc-500 dark:text-zinc-400">
         <Link href="/dashboard/clients" className="underline decoration-dotted">{batch.clients?.name}</Link>
       </p>
+
+      {isManager && batch.status === 'brief' && !briefTask && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950/40">
+          <p className="text-sm text-sky-900 dark:text-sky-200">
+            This shoot isn&rsquo;t on the pipeline yet — a brief task puts it through
+            review and books the date.
+          </p>
+          <Button size="sm" className="ml-auto" disabled={busy !== null}
+            onClick={async () => {
+              setBusy('brief-task')
+              try {
+                const kindsRes = await fetch('/api/production/work-kinds?active=1')
+                const kinds = kindsRes.ok ? (await kindsRes.json()).kinds ?? [] : []
+                const briefKind = kinds.find((k: { slug: string }) => k.slug === 'shoot_brief')
+                if (!briefKind) throw new Error('The Shoot brief work type is missing')
+                const res = await fetch('/api/production/items', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ items: [{
+                    client_id: batch.client_id,
+                    batch_id: batch.id,
+                    title: batch.title,
+                    work_kind_id: briefKind.id,
+                  }] }),
+                })
+                const json = await res.json()
+                if (!res.ok) throw new Error(json.error ?? 'Could not create the brief task')
+                toast.success('Brief task created — it starts in Shoot brief on the board')
+                void load()
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Could not create the brief task')
+              } finally {
+                setBusy(null)
+              }
+            }}>
+            {busy === 'brief-task' ? 'Creating…' : 'Create brief task'}
+          </Button>
+        </div>
+      )}
+      {briefTask && (
+        <Link href={`/dashboard/production/${briefTask.id}`}
+          className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
+          Brief task on the pipeline →
+        </Link>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── working column ── */}
@@ -414,7 +462,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </span>
         </div>
         <BriefCanvas
-          cards={sanitiseCanvasCards(batch.canvas_cards)}
+          cards={canvasCards}
           references={batch.reference_media ?? []}
           canEdit={canEdit}
           onOp={async (op: CanvasOp) => {

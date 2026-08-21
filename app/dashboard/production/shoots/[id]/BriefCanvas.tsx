@@ -47,11 +47,18 @@ export default function BriefCanvas({
   const seedPendingRef = useRef(Boolean(seeded && savedCards.length === 0))
 
   const interactingRef = useRef(false)
+  const pendingOpsRef = useRef(0)
   useEffect(() => {
-    // realtime reloads arrive as new savedCards — apply them unless a drag or
-    // edit is mid-flight (the local gesture wins until it commits)
-    if (interactingRef.current) return
-    if (savedCards.length > 0) { setCards(savedCards); seedPendingRef.current = false }
+    // realtime reloads arrive as new savedCards — apply them ONLY when
+    // nothing local is ahead of the server: not during a drag or edit, not
+    // while a save is in flight (a stale parent render mid-save used to snap
+    // the card back to its old spot, then forward again), and never when the
+    // content is already identical (parent renders mint new array identities)
+    if (interactingRef.current || pendingOpsRef.current > 0) return
+    if (savedCards.length === 0) return
+    setCards(prev =>
+      JSON.stringify(prev) === JSON.stringify(savedCards) ? prev : savedCards)
+    seedPendingRef.current = false
   }, [savedCards])
 
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -91,7 +98,9 @@ export default function BriefCanvas({
       ? [...cards.filter(c => !changed.some(u => u.id === c.id)), ...changed]
       : changed
     seedPendingRef.current = false
+    pendingOpsRef.current += 1
     void onOp({ ...(upsert.length ? { upsert } : {}), ...(removed.length ? { remove: removed } : {}) })
+      .finally(() => { pendingOpsRef.current = Math.max(0, pendingOpsRef.current - 1) })
   }, [cards, onOp])
 
   const upsertLocal = useCallback((card: CanvasCard) => {

@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const [{ data: items }, { data: lockedBy }, { data: proposal }] = await Promise.all([
       supabase.from('content_items')
-        .select('id, title, status, content_type')
+        .select('id, title, status, content_type, work_kinds(slug)')
         .eq('batch_id', id).order('created_at', { ascending: true }).limit(100),
       loaded.batch.locked_by
         ? supabase.from('team_users').select('name, email').eq('id', loaded.batch.locked_by).maybeSingle()
