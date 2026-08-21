@@ -452,7 +452,11 @@ export default function BriefCanvas({
         }}
       >
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
-          <svg className="absolute left-0 top-0 overflow-visible" width={1} height={1} aria-hidden>
+          {/* maxWidth must be inline: the preflight's svg{max-width:100%} against this
+              0-width parent collapses the svg to 0px, and Chrome skips painting
+              zero-width svgs entirely — every arrow drew invisibly until this */}
+          <svg className="absolute left-0 top-0" width={1} height={1}
+            style={{ overflow: 'visible', maxWidth: 'none' }} aria-hidden>
             <defs>
               <marker id="brief-arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
                 markerWidth="7" markerHeight="7" orient="auto-start-reverse">
