@@ -77,6 +77,43 @@ describe('canCreateItemsUnder — the production gate', () => {
   })
 })
 
+describe('sanitisers', () => {
+  it('shot list: keeps real rows, drops blanks, caps junk, mints missing ids', async () => {
+    const { sanitiseShotList } = await import('../app/lib/batch-brief-core')
+    const rows = sanitiseShotList([
+      { id: 's1', text: 'Hero pour shot', type: 'reel', qty: 2, done: true },
+      { text: '   ' },
+      { text: 'B-roll hands', qty: -3 },
+      'junk', null,
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual({ id: 's1', text: 'Hero pour shot', type: 'reel', qty: 2, done: true })
+    expect(rows[1].id).toBeTruthy()
+    expect(rows[1]).not.toHaveProperty('qty')
+    expect(rows[1].done).toBe(false)
+  })
+
+  it('planned deliverables: positive integer quantities only', async () => {
+    const { sanitisePlannedDeliverables } = await import('../app/lib/batch-brief-core')
+    expect(sanitisePlannedDeliverables([
+      { type: 'static', qty: 8 }, { type: 'reel', qty: 0 }, { type: '', qty: 3 }, { type: 'video', qty: 2.5 },
+    ])).toEqual([{ type: 'static', qty: 8 }])
+  })
+
+  it('reference media: https only, kind defaults to image', async () => {
+    const { sanitiseReferenceMedia } = await import('../app/lib/batch-brief-core')
+    expect(sanitiseReferenceMedia([
+      { kind: 'link', url: 'https://milanote.com/board', name: 'Moodboard' },
+      { url: 'https://cdn.example.com/ref.jpg' },
+      { url: 'javascript:alert(1)' },
+      { url: 'http://insecure.example.com/x.png' },
+    ])).toEqual([
+      { kind: 'link', url: 'https://milanote.com/board', name: 'Moodboard' },
+      { kind: 'image', url: 'https://cdn.example.com/ref.jpg' },
+    ])
+  })
+})
+
 describe('isInProduction', () => {
   it('means a locked/shot brief with items actually under way', () => {
     expect(isInProduction({ status: 'locked' }, 3)).toBe(true)

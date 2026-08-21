@@ -11,6 +11,7 @@ import {
   type ItemStatus,
   type Audience,
 } from './workflow-core'
+import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
 
 export type ContentItem = {
   id: string
@@ -150,6 +151,57 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       ),
     })
   })().catch(e => console.error('job-assigned notification error:', e))
+}
+
+/**
+ * A shoot brief's lifecycle moments, told to the people they commit:
+ * locking a date informs the brief's owner and the client's managers;
+ * "shot" tells the managers footage exists and production can start.
+ */
+export function notifyBatchTransition(
+  actor: TeamUser,
+  batch: { id: string; client_id: string; title: string; owner_id?: string | null; shoot_date?: string | null },
+  from: string,
+  to: string,
+) {
+  const audiences = BATCH_TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
+  if (audiences.length === 0) return
+  void (async () => {
+    const stub: ContentItem = {
+      id: batch.id, client_id: batch.client_id, batch_id: batch.id,
+      title: batch.title, content_type: 'other', status: 'draft_uploaded',
+      owner_id: batch.owner_id ?? null, caption: null,
+      client_approval_required: false, current_version_number: 0,
+    }
+    const label = to === 'locked' ? 'Shoot date locked' : to === 'shot' ? 'Shoot marked as shot' : `Shoot ${to}`
+    const when = batch.shoot_date
+      ? new Date(batch.shoot_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+      : null
+    for (const audience of audiences) {
+      const people = await resolveAudience(audience, stub)
+      for (const person of people) {
+        if (person.id === actor.id) continue
+        await notify({
+          actorName: actor.name,
+          actorEmail: actor.email,
+          actorClerkId: actor.clerk_user_id,
+          eventType: `batch_${from}_${to}`,
+          entityType: 'batch',
+          entityId: `${batch.id}#${from}>${to}#${Date.now()}`,
+          recipientId: person.id,
+          recipientEmail: person.email,
+          subject: `${label}: ${batch.title}`,
+          bodyHtml: renderEmail(
+            `${label}: ${batch.title}`,
+            `<p><strong>${batch.title}</strong> — ${label.toLowerCase()} by ${actor.name || actor.email}.</p>` +
+            (when && to === 'locked' ? `<p><strong>Shoot date:</strong> ${when}</p>` : ''),
+            'Open the brief',
+            `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`
+          ),
+        })
+      }
+    }
+  })().catch(e => console.error('batch transition notification error:', e))
 }
 
 /**

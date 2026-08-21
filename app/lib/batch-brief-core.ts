@@ -88,6 +88,52 @@ export function isInProduction(b: { status: BatchStatus }, itemCount: number): b
   return (b.status === 'locked' || b.status === 'shot') && itemCount > 0
 }
 
+/* ── browser-input sanitisers: never trust a jsonb shape from a client ── */
+
+export type ShotRow = { id: string; text: string; type?: string; qty?: number; done: boolean }
+
+export function sanitiseShotList(raw: unknown): ShotRow[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map(r => ({
+      id: String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10),
+      text: String(r.text ?? '').slice(0, 300),
+      ...(r.type ? { type: String(r.type).slice(0, 20) } : {}),
+      ...(Number.isInteger(Number(r.qty)) && Number(r.qty) > 0 ? { qty: Number(r.qty) } : {}),
+      done: r.done === true,
+    }))
+    .filter(r => r.text.trim() !== '')
+    .slice(0, 100)
+}
+
+export type PlannedDeliverable = { type: string; qty: number }
+
+export function sanitisePlannedDeliverables(raw: unknown): PlannedDeliverable[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map(r => ({ type: String(r.type ?? '').slice(0, 20), qty: Number(r.qty) }))
+    .filter(r => r.type !== '' && Number.isInteger(r.qty) && r.qty > 0 && r.qty <= 500)
+    .slice(0, 20)
+}
+
+export type ReferenceMedia = { kind: 'image' | 'link'; url: string; name?: string; note?: string }
+
+export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map(r => ({
+      kind: (r.kind === 'link' ? 'link' : 'image') as 'image' | 'link',
+      url: String(r.url ?? '').slice(0, 2000),
+      ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      ...(r.note ? { note: String(r.note).slice(0, 300) } : {}),
+    }))
+    .filter(r => /^https:\/\//.test(r.url))
+    .slice(0, 60)
+}
+
 /** Who hears about a brief's lifecycle moments. */
 export const BATCH_TRANSITION_NOTIFICATIONS: Record<string, ('owner_editor' | 'account_managers')[]> = {
   'brief>locked': ['owner_editor', 'account_managers'],

@@ -58,6 +58,7 @@ export async function POST(req: Request) {
           carousel_quota: Number(body.carousel_quota ?? 0),
           story_quota: Number(body.story_quota ?? 0),
           static_quota: Number(body.static_quota ?? 0),
+          video_quota: Number(body.video_quota ?? 0),
           other_quota: Number(body.other_quota ?? 0),
           notes: body.notes ?? null,
         },

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
+import { canCreateItemsUnder, type BatchStatus } from '../../../lib/batch-brief-core'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
@@ -69,6 +70,17 @@ export async function POST(req: Request) {
     }
 
     const clientIds = await accessibleClientIds(user)
+
+    // ── THE PRE-PRODUCTION GATE ──
+    // Items belong to a shoot whose date is locked. An account manager can go
+    // around it for genuinely ad-hoc work, with a reason that gets logged.
+    const adhocReason = String(body.adhoc_reason ?? '').trim()
+    const batchIds = [...new Set(items.map((it: { batch_id?: string }) => it.batch_id).filter(Boolean))] as string[]
+    const { data: batchRows } = batchIds.length
+      ? await supabase.from('batches').select('id, client_id, status').in('id', batchIds)
+      : { data: [] }
+    const batchById = new Map((batchRows ?? []).map(b => [b.id as string, b]))
+
     const rows = []
     for (const it of items) {
       if (!it.client_id || !it.title) {
@@ -76,6 +88,24 @@ export async function POST(req: Request) {
       }
       if (clientIds !== null && !clientIds.includes(it.client_id)) {
         return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
+      }
+      if (it.batch_id) {
+        const batch = batchById.get(it.batch_id)
+        if (!batch) return NextResponse.json({ error: 'That shoot no longer exists' }, { status: 400 })
+        if (batch.client_id !== it.client_id) {
+          return NextResponse.json({ error: "That shoot belongs to a different client" }, { status: 403 })
+        }
+        if (!canCreateItemsUnder(batch.status as BatchStatus, user.role)) {
+          return NextResponse.json(
+            { error: 'Content items need a locked shoot. Lock the shoot date on its brief first.' },
+            { status: 422 },
+          )
+        }
+      } else if (!canCreateItemsUnder(null, user.role, { reason: adhocReason })) {
+        return NextResponse.json(
+          { error: 'Content items need a locked shoot. Lock the shoot date on its brief first.' },
+          { status: 422 },
+        )
       }
       rows.push({
         client_id: it.client_id,
@@ -103,6 +133,8 @@ export async function POST(req: Request) {
         actor: user, clientId: item.client_id,
         entityType: 'content_item', entityId: item.id,
         action: 'created', newValue: item.title,
+        // an ad-hoc creation records WHY it skipped the shoot gate
+        ...(item.batch_id ? {} : adhocReason ? { detail: `ad-hoc: ${adhocReason.slice(0, 300)}` } : {}),
       })
       announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
       // the handoff: an item created FOR an editor emails them the job

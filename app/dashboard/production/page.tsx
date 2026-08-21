@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Plus, CalendarDays, Flag } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { useProductionLive } from './useProductionLive'
+import { ViewSwitch } from './shoot-ui'
 import { useRole } from '../useRole'
 import { Textarea } from '@/components/ui/textarea'
 import { uploadMedia } from '../uploadMedia'
@@ -39,6 +40,7 @@ type Item = {
 type ClientRow = { id: string; name: string }
 type Batch = {
   id: string; title: string; client_id: string; shoot_date?: string | null
+  status?: 'brief' | 'locked' | 'shot' | 'wrapped'
   clients?: { name: string } | null
   content_items?: { count: number }[]
 }
@@ -114,6 +116,12 @@ export default function ProductionPage() {
       .catch(() => setEditors([]))
   }, [isManager])
 
+  const [myRole, setMyRole] = useState('')
+  useEffect(() => {
+    fetch('/api/overview').then(r => (r.ok ? r.json() : null))
+      .then(j => setMyRole(j?.role ?? '')).catch(() => {})
+  }, [])
+  const [adhocReason, setAdhocReason] = useState('')
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
   const [batchDraft, setBatchDraft] = useState({ client_id: '', title: '', shoot_date: '' })
@@ -140,6 +148,17 @@ export default function ProductionPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // arriving from a brief's "Create items": dialog open, client+shoot preset
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const forBatch = q.get('new_for_batch')
+    if (forBatch) {
+      setDraft(d => ({ ...d, batch_id: forBatch, client_id: q.get('client') ?? d.client_id }))
+      setNewOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // live board: any item created/moved/commented anywhere refreshes the columns
   useProductionLive(load)
@@ -168,7 +187,7 @@ export default function ProductionPage() {
       const res = await fetch('/api/production/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: payload }),
+        body: JSON.stringify({ items: payload, ...(draft.batch_id ? {} : { adhoc_reason: adhocReason.trim() }) }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
       toast.success(count === 1 ? 'Item created' : `${count} items created`)
@@ -237,6 +256,7 @@ export default function ProductionPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <ViewSwitch current="board" />
           <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
             <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -244,8 +264,8 @@ export default function ProductionPage() {
               {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => setBatchOpen(true)}>
-            <Plus className="h-4 w-4" /> Batch
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/production/shoots"><Plus className="h-4 w-4" /> Plan shoot</Link>
           </Button>
           <Button size="sm" onClick={() => setNewOpen(true)}>
             <Plus className="h-4 w-4" /> New item
@@ -270,6 +290,7 @@ export default function ProductionPage() {
             All
           </button>
           {batches
+            .filter(b => (b.status ?? 'shot') !== 'brief')
             .filter(b => clientFilter === 'all' || b.client_id === clientFilter)
             .map(b => {
               const count = b.content_items?.[0]?.count ?? 0
@@ -281,6 +302,9 @@ export default function ProductionPage() {
                       ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
                       : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
                   }`}>
+                  {(b.status === 'locked' || b.status === 'shot') && (
+                    <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${b.status === 'locked' ? 'bg-sky-500' : 'bg-violet-500'}`} />
+                  )}
                   {b.title}
                   {b.clients?.name && <span className="opacity-60"> · {b.clients.name}</span>}
                   <span className="ml-1 font-mono tabular-nums opacity-60">{count}</span>
@@ -372,16 +396,29 @@ export default function ProductionPage() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label>Batch (optional)</Label>
+              <Label>Shoot</Label>
               <Select value={draft.batch_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'none' ? '' : v ?? '' }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No batch</SelectItem>
-                  {batches.filter(b => !draft.client_id || b.client_id === draft.client_id).map(b => (
+                  {['account_manager', 'super_admin'].includes(myRole) && (
+                    <SelectItem value="none">Ad-hoc item (no shoot)</SelectItem>
+                  )}
+                  {batches
+                    .filter(b => ['locked', 'shot'].includes(b.status ?? 'shot'))
+                    .filter(b => !draft.client_id || b.client_id === draft.client_id).map(b => (
                     <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {!draft.batch_id && ['account_manager', 'super_admin'].includes(myRole) && (
+                <Input value={adhocReason} placeholder="Why no shoot? (required — this is logged)"
+                  onChange={e => setAdhocReason(e.target.value)} className="text-xs" />
+              )}
+              {!draft.batch_id && !['account_manager', 'super_admin'].includes(myRole) && (
+                <p className="text-[11px] text-zinc-400">
+                  Content items need a locked shoot. Lock the shoot date on its brief first.
+                </p>
+              )}
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
               <Label>Title * {draft.count > 1 && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>

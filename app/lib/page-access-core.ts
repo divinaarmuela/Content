@@ -34,6 +34,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/clients/:id/social', label: 'Social', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/intake', label: 'Intake', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/brand', label: 'Brand', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/agreement', label: 'Agreement', parent: '/dashboard/clients' },
   { href: '/dashboard/audience', label: 'Audience' },
   { href: '/dashboard/social', label: 'Social channels' },
   { href: '/dashboard/website', label: 'Website' },

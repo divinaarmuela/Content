@@ -3,6 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
+import { announceBatchChange } from '../../../lib/production-live'
+import {
+  sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
+} from '../../../lib/batch-brief-core'
 
 /** List batches (role-scoped, with per-batch item counts). */
 export async function GET() {
@@ -27,7 +31,8 @@ export async function GET() {
   }
 }
 
-/** Create a batch (a shoot). editor+. */
+/** Create a shoot brief. editor+ — it starts life as 'brief' (DB default):
+ *  a plan the team works up, not yet a commitment. */
 export async function POST(req: Request) {
   try {
     const user = await requireRole('editor')
@@ -43,9 +48,14 @@ export async function POST(req: Request) {
       .from('batches')
       .insert({
         client_id: body.client_id,
-        title: String(body.title),
+        title: String(body.title).slice(0, 120),
         description: body.description ?? null,
+        concept: body.concept ? String(body.concept).slice(0, 8000) : null,
+        location: body.location ? String(body.location).slice(0, 300) : null,
         shoot_date: body.shoot_date ?? null,
+        shot_list: sanitiseShotList(body.shot_list),
+        planned_deliverables: sanitisePlannedDeliverables(body.planned_deliverables),
+        reference_media: sanitiseReferenceMedia(body.reference_media),
         month: body.month ?? null,
         year: body.year ?? null,
         owner_id: user.id,
@@ -58,6 +68,7 @@ export async function POST(req: Request) {
       entityType: 'batch', entityId: data.id,
       action: 'created', newValue: data.title,
     })
+    announceBatchChange({ batch_id: data.id, client_id: data.client_id, status: data.status ?? 'brief', kind: 'created' })
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
