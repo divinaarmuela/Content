@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Plus, CalendarDays, Flag } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { useProductionLive } from './useProductionLive'
@@ -150,9 +150,6 @@ export default function ProductionPage() {
       .then(j => setStrip(j?.per_type ?? []))
       .catch(() => setStrip([]))
   }, [clientFilter])
-  const [batchOpen, setBatchOpen] = useState(false)
-  const [batchBusy, setBatchBusy] = useState(false)
-  const [batchDraft, setBatchDraft] = useState({ client_id: '', title: '', shoot_date: '' })
 
   const load = useCallback(async () => {
     try {
@@ -239,30 +236,7 @@ export default function ProductionPage() {
     }
   }
 
-  const createBatch = async () => {
-    if (!batchDraft.client_id || !batchDraft.title.trim()) return toast.error('Client and title are required')
-    setBatchBusy(true)
-    try {
-      const res = await fetch('/api/production/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: batchDraft.client_id,
-          title: batchDraft.title.trim(),
-          shoot_date: batchDraft.shoot_date || null,
-        }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
-      toast.success('Batch created')
-      setBatchOpen(false)
-      setBatchDraft({ client_id: '', title: '', shoot_date: '' })
-      load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Create failed')
-    } finally {
-      setBatchBusy(false)
-    }
-  }
+
 
   if (needsSchema) {
     return (
@@ -308,7 +282,7 @@ export default function ProductionPage() {
       {batches.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-            Batches
+            Shoots
           </span>
           <button type="button" onClick={() => setBatchFilter('all')}
             className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
@@ -431,6 +405,9 @@ export default function ProductionPage() {
               )
             })}
           </div>
+          {/* without an explicit horizontal bar, Radix suppresses the native
+              scrollbar and columns past the viewport are unreachable */}
+          <ScrollBar orientation="horizontal" />
         </ScrollArea>
       )}
 
@@ -578,35 +555,6 @@ export default function ProductionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* New batch dialog */}
-      <Dialog open={batchOpen} onOpenChange={o => !batchBusy && setBatchOpen(o)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>New batch (shoot)</DialogTitle></DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-1.5">
-              <Label>Client *</Label>
-              <Select value={batchDraft.client_id} onValueChange={v => v && setBatchDraft(d => ({ ...d, client_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Choose client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Title *</Label>
-              <Input value={batchDraft.title} placeholder="e.g. May studio shoot" onChange={e => setBatchDraft(d => ({ ...d, title: e.target.value }))} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Shoot date</Label>
-              <Input type="date" value={batchDraft.shoot_date} onChange={e => setBatchDraft(d => ({ ...d, shoot_date: e.target.value }))} className="font-mono" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchOpen(false)} disabled={batchBusy}>Cancel</Button>
-            <Button onClick={createBatch} disabled={batchBusy}>{batchBusy ? 'Creating…' : 'Create batch'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
