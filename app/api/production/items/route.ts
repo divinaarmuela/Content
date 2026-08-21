@@ -112,27 +112,31 @@ export async function POST(req: Request) {
       if (clientIds !== null && !clientIds.includes(it.client_id)) {
         return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
       }
+      // the kind decides WHICH gate applies, so it resolves first: a shoot
+      // BRIEF is the exception that may start from nothing — running the
+      // produced-item gate before knowing the kind rejected every brief
+      const kind = resolveKindForWrite(kinds, it.work_kind_id)
+      if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
+      const kindSlug = kinds.find(k => k.id === kind.id)?.slug ?? null
+
       if (it.batch_id) {
         const batch = batchById.get(it.batch_id)
         if (!batch) return NextResponse.json({ error: 'That shoot no longer exists' }, { status: 400 })
         if (batch.client_id !== it.client_id) {
           return NextResponse.json({ error: "That shoot belongs to a different client" }, { status: 403 })
         }
-        if (!canCreateItemsUnder(batch.status as BatchStatus, user.role)) {
+      }
+      if (kindSlug !== 'shoot_brief') {
+        const batchStatus = it.batch_id
+          ? ((batchById.get(it.batch_id)?.status ?? null) as BatchStatus | null)
+          : null
+        if (it.batch_id ? !canCreateItemsUnder(batchStatus, user.role) : !canCreateItemsUnder(null, user.role, { reason: adhocReason })) {
           return NextResponse.json(
             { error: 'Content items need a locked shoot. Lock the shoot date on its brief first.' },
             { status: 422 },
           )
         }
-      } else if (!canCreateItemsUnder(null, user.role, { reason: adhocReason })) {
-        return NextResponse.json(
-          { error: 'Content items need a locked shoot. Lock the shoot date on its brief first.' },
-          { status: 422 },
-        )
       }
-      const kind = resolveKindForWrite(kinds, it.work_kind_id)
-      if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
-      const kindSlug = kinds.find(k => k.id === kind.id)?.slug ?? null
 
       let briefBatchId: string | null = null
       if (kindSlug === 'shoot_brief') {

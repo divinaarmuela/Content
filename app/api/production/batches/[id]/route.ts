@@ -150,13 +150,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
 
-    if (loaded.batch.status !== 'brief') {
-      return NextResponse.json({ error: 'Only an unlocked brief can be deleted — wrap the shoot instead' }, { status: 409 })
-    }
+    // any shoot with no items can go — a shoot that produced work cannot
     const { count } = await supabase.from('content_items')
       .select('id', { count: 'exact', head: true }).eq('batch_id', id)
     if ((count ?? 0) > 0) {
-      return NextResponse.json({ error: 'This shoot has content items — it cannot be deleted' }, { status: 409 })
+      return NextResponse.json({ error: 'This shoot has content items — wrap it instead of deleting' }, { status: 409 })
     }
     const { error } = await supabase.from('batches').delete().eq('id', id)
     if (error) throw new Error(error.message)

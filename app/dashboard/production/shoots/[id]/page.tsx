@@ -191,7 +191,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           <Button size="sm" variant="outline" disabled={busy !== null}
             onClick={() => void transition('wrapped', 'Wrap shoot')}>Wrap</Button>
         )}
-        {isManager && batch.status === 'brief' && items.length === 0 && (
+        {isManager && items.length === 0 && (
           <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400"
             onClick={() => setDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /></Button>
         )}
