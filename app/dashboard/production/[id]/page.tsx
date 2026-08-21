@@ -176,7 +176,7 @@ export default function ItemDetailPage() {
   }
 
   // editors for owner assignment + comment tasks (managers only)
-  const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
+  const [editors, setEditors] = useState<{ id: string; name: string; email: string; role?: string }[]>([])
   // "who schedules this?" — for the approve edge and the post-client-approval handoff
   const [schedulers, setSchedulers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
   const [schedPick, setSchedPick] = useState<{ to: ItemStatus; label: string } | 'handoff' | null>(null)
@@ -232,9 +232,11 @@ export default function ItemDetailPage() {
       .then(json => {
         const active = (json.members ?? []).filter(
           (m: { active_status?: boolean }) => m.active_status !== false)
+        // open assignment: any active team member can carry a task
         setEditors(active
-          .filter((m: { role: string }) => ['editor', 'super_admin'].includes(m.role))
-          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })))
+          .filter((m: { role: string }) => m.role !== 'client')
+          .map((m: { id: string; name: string; email: string; role: string }) =>
+            ({ id: m.id, name: m.name, email: m.email, role: m.role })))
         setSchedulers(active
           .filter((m: { role: string }) => ['scheduler', 'super_admin'].includes(m.role))
           .map((m: { id: string; name: string; email: string; role: string }) =>
@@ -483,7 +485,9 @@ export default function ItemDetailPage() {
               <SelectContent>
                 <SelectItem value="none">No editor assigned</SelectItem>
                 {editors.map(e => (
-                  <SelectItem key={e.id} value={e.id}>{e.name || e.email}</SelectItem>
+                  <SelectItem key={e.id} value={e.id}>
+                    {(e.name || e.email) + (e.role && e.role !== 'editor' ? ` · ${e.role.replace('_', ' ')}` : '')}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

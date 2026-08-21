@@ -78,12 +78,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params
     await loadItemForUser(user, id)
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
     // re-assigning records who handed out the job
-    if ('owner_id' in patch && patch.owner_id) patch.assigned_by = user.id
+    if ('owner_id' in patch && patch.owner_id) {
+      // anyone active on the team can carry a task — but only real, active
+      // team members, never a client account or a stale id
+      const { data: owner } = await supabase.from('team_users')
+        .select('id, role, active_status').eq('id', patch.owner_id).maybeSingle()
+      const { isValidOwner } = await import('../../../../lib/work-kinds-core')
+      if (!isValidOwner(owner)) {
+        return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
+      }
+      patch.assigned_by = user.id
+    }
+    if ('work_kind_id' in patch && patch.work_kind_id) {
+      const { data: kind } = await supabase.from('work_kinds')
+        .select('id, active').eq('id', patch.work_kind_id).maybeSingle()
+      if (!kind?.active) {
+        return NextResponse.json({ error: 'Pick a current work type' }, { status: 400 })
+      }
+    }
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'No editable fields in request' }, { status: 400 })
     }

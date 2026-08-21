@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { canCreateItemsUnder, type BatchStatus } from '../../../lib/batch-brief-core'
+import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
 
     let q = supabase
       .from('content_items')
-      .select('*, clients(name), batches(title)')
+      .select('*, clients(name), batches(title), work_kinds(name, slug, color)')
       .order('updated_at', { ascending: false })
       .limit(500)
 
@@ -39,7 +40,11 @@ export async function GET(req: Request) {
           : q.or(`client_id.in.(${clientIds.join(',')}),owner_id.eq.${user.id}`)
       }
     }
-    if (user.role === 'scheduler') q = q.in('status', SCHEDULER_STATUSES)
+    if (user.role === 'scheduler') {
+      // a scheduler OWNING a job (they can be assigned work now) must see it
+      // at any status — the status gate is for other people's items
+      q = q.or(`status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${user.id}`)
+    }
     if (clientFilter) q = q.eq('client_id', clientFilter)
     if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)) {
       q = q.eq('status', statusFilter)
@@ -75,6 +80,23 @@ export async function POST(req: Request) {
     // Items belong to a shoot whose date is locked. An account manager can go
     // around it for genuinely ad-hoc work, with a reason that gets logged.
     const adhocReason = String(body.adhoc_reason ?? '').trim()
+
+    // work kinds: resolve/validate once per request
+    const { data: kindRows } = await supabase.from('work_kinds').select('*')
+    const kinds = (kindRows ?? []) as WorkKind[]
+
+    // open assignment: anyone active on the team can carry a task — validate
+    // every named owner in one query, never trust a raw uuid
+    const ownerIds = [...new Set(items.map((it: { owner_id?: string }) => it.owner_id).filter(Boolean))] as string[]
+    const { data: ownerRows } = ownerIds.length
+      ? await supabase.from('team_users').select('id, role, active_status').in('id', ownerIds)
+      : { data: [] }
+    const ownerById = new Map((ownerRows ?? []).map(o => [o.id as string, o]))
+    for (const oid of ownerIds) {
+      if (!isValidOwner(ownerById.get(oid) ?? null)) {
+        return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
+      }
+    }
     const batchIds = [...new Set(items.map((it: { batch_id?: string }) => it.batch_id).filter(Boolean))] as string[]
     const { data: batchRows } = batchIds.length
       ? await supabase.from('batches').select('id, client_id, status').in('id', batchIds)
@@ -107,7 +129,10 @@ export async function POST(req: Request) {
           { status: 422 },
         )
       }
+      const kind = resolveKindForWrite(kinds, it.work_kind_id)
+      if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
       rows.push({
+        work_kind_id: kind.id,
         client_id: it.client_id,
         batch_id: it.batch_id ?? null,
         title: String(it.title),

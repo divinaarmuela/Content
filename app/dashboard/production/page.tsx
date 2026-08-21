@@ -36,6 +36,7 @@ type Item = {
   current_version_number: number
   clients: { name: string } | null
   batches: { title: string } | null
+  work_kinds?: { name: string; slug: string; color: string } | null
 }
 type ClientRow = { id: string; name: string }
 type Batch = {
@@ -65,6 +66,17 @@ const PRIORITY_TINT: Record<string, string> = {
 
 const CONTENT_TYPES = ['reel', 'carousel', 'story', 'static', 'video', 'other']
 
+const KIND_CHIP: Record<string, string> = {
+  zinc: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+  pink: 'bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-400',
+  sky: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400',
+  indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400',
+  violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400',
+  emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
+  amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
+  rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400',
+}
+
 export default function ProductionPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [clients, setClients] = useState<ClientRow[]>([])
@@ -77,7 +89,7 @@ export default function ProductionPage() {
   const [newBusy, setNewBusy] = useState(false)
   const [draft, setDraft] = useState({
     client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
-    owner_id: '', raw_assets_url: '', brief: '',
+    owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '',
     raw_assets: [] as { url: string; name: string }[],
   })
   const assetFileRef = useRef<HTMLInputElement>(null)
@@ -103,18 +115,26 @@ export default function ProductionPage() {
   // job-pack email (brief + raw assets + due date)
   const { can } = useRole()
   const isManager = can('account_manager')
-  const [editors, setEditors] = useState<{ id: string; name: string; email: string }[]>([])
+  const [team, setTeam] = useState<{ id: string; name: string; email: string; role: string }[]>([])
+  const [kinds, setKinds] = useState<{ id: string; name: string; color: string; uses_media: boolean; default_roles: string[]; active: boolean }[]>([])
   useEffect(() => {
     if (!isManager) return
     fetch('/api/team')
       .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setEditors(
+      .then(json => setTeam(
         (json.members ?? [])
-          .filter((m: { role: string; active_status?: boolean }) => ['editor', 'super_admin'].includes(m.role) && m.active_status !== false)
-          .map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
+          // anyone on the team can carry a task — clients never
+          .filter((m: { role: string; active_status?: boolean }) => m.role !== 'client' && m.active_status !== false)
+          .map((m: { id: string; name: string; email: string; role: string }) => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
       ))
-      .catch(() => setEditors([]))
+      .catch(() => setTeam([]))
   }, [isManager])
+  useEffect(() => {
+    fetch('/api/production/work-kinds?active=1')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => setKinds(j?.kinds ?? []))
+      .catch(() => {})
+  }, [])
 
   const [myRole, setMyRole] = useState('')
   useEffect(() => {
@@ -180,6 +200,7 @@ export default function ProductionPage() {
         priority: draft.priority,
         due_date: draft.due_date || null,
         ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
+        ...(draft.work_kind_id ? { work_kind_id: draft.work_kind_id } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
@@ -192,7 +213,7 @@ export default function ProductionPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
       toast.success(count === 1 ? 'Item created' : `${count} items created`)
       setNewOpen(false)
-      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', raw_assets_url: '', brief: '', raw_assets: [] })
+      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', raw_assets: [] })
       load()
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
@@ -344,6 +365,11 @@ export default function ProductionPage() {
                                 {item.clients?.name ?? '—'}
                               </Badge>
                               <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
+                              {item.work_kinds && item.work_kinds.slug !== 'edit' && (
+                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[item.work_kinds.color] ?? KIND_CHIP.zinc}`}>
+                                  {item.work_kinds.name}
+                                </span>
+                              )}
                               {item.current_version_number > 0 && (
                                 <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">v{item.current_version_number}</span>
                               )}
@@ -451,14 +477,37 @@ export default function ProductionPage() {
               <Input type="number" min={1} max={30} value={draft.count}
                 onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
             </div>
+            {kinds.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label>Work type</Label>
+                <Select value={draft.work_kind_id || 'default'} onValueChange={v => setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">{kinds[0]?.name ?? 'Video edit'}</SelectItem>
+                    {kinds.slice(1).map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {isManager && (
               <div className="grid gap-1.5">
-                <Label>Assign editor</Label>
+                <Label>Assign to</Label>
                 <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
                   <SelectTrigger><SelectValue placeholder="Later" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Assign later</SelectItem>
-                    {editors.map(ed => <SelectItem key={ed.id} value={ed.id}>{ed.name || ed.email}</SelectItem>)}
+                    {(() => {
+                      const kind = kinds.find(k => k.id === draft.work_kind_id) ?? kinds[0]
+                      const suggested = kind ? team.filter(m => kind.default_roles.includes(m.role)) : []
+                      const ids = new Set(suggested.map(m => m.id))
+                      const rest = team.filter(m => !ids.has(m.id))
+                      return [...suggested, ...rest].map(m => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name || m.email}
+                          {ids.has(m.id) ? '' : ` · ${m.role.replace('_', ' ')}`}
+                        </SelectItem>
+                      ))
+                    })()}
                   </SelectContent>
                 </Select>
               </div>

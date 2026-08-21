@@ -25,7 +25,11 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
   if (error) throw new AuthzError(error.message, 500)
   if (!item) throw new AuthzError('Item not found', 404)
 
-  if (user.role === 'scheduler' && !SCHEDULER_STATUSES.includes(item.status as ItemStatus)) {
+  if (
+    user.role === 'scheduler'
+    && !SCHEDULER_STATUSES.includes(item.status as ItemStatus)
+    && item.owner_id !== user.id  // a scheduler assigned the job sees the job
+  ) {
     throw new AuthzError('Item not found', 404) // invisible to schedulers pre-approval
   }
   const clientIds = await accessibleClientIds(user)
