@@ -138,24 +138,6 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           attempts: job.attempts + 1,
           error: null,
         })
-        // Content Register (attribution tracker): every post that leaves
-        // through here becomes a registered asset. Idempotent on the provider
-        // post id, so the Zernio webhook announcing the same post later only
-        // fills in the permalink. Best-effort — publishing must never fail
-        // because registration did.
-        if (outcome.postId) {
-          try {
-            const { registerFromZernioEvent } = await import('./tracker')
-            await registerFromZernioEvent('post.published', {
-              id: outcome.postId,
-              caption: job.caption,
-              platforms: (job.targets ?? []).map(t => ({ platform: t.platform })),
-              publishedAt: isFuture ? job.scheduled_for : new Date().toISOString(),
-            }, job.client_id)
-          } catch (e) {
-            console.error('asset auto-registration failed:', e)
-          }
-        }
         if (isFuture) return 'scheduled'
         // close the loop back into production: the board and the scheduler
         // must reflect that this actually went out

@@ -73,3 +73,4 @@ vercel-login.log
 .claude/skills/inngest-*
 .vercel
 .env*
+parked/
