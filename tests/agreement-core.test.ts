@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest'
+import {
+  computeMonthlyProgress, effectiveQuotas, monthOfItem,
+  normaliseDeliverableLines, normaliseServices,
+} from '../app/lib/agreement-core'
+
+describe('normaliseDeliverableLines', () => {
+  it('accepts the Releeph shape and defaults labels', () => {
+    const r = normaliseDeliverableLines([
+      { type: 'static', monthly_qty: 20 },
+      { type: 'reel', monthly_qty: 8, label: '' },
+    ])
+    expect(r).toEqual({
+      lines: [
+        { type: 'static', label: 'Graphics', monthly_qty: 20 },
+        { type: 'reel', label: 'Reels', monthly_qty: 8 },
+      ],
+    })
+  })
+
+  it('rejects unknown types, duplicates, and non-integer quantities with a reason', () => {
+    expect('error' in normaliseDeliverableLines([{ type: 'poster', monthly_qty: 3 }])).toBe(true)
+    expect('error' in normaliseDeliverableLines([
+      { type: 'reel', monthly_qty: 8 }, { type: 'reel', monthly_qty: 4 },
+    ])).toBe(true)
+    expect('error' in normaliseDeliverableLines([{ type: 'reel', monthly_qty: 2.5 }])).toBe(true)
+    expect('error' in normaliseDeliverableLines([{ type: 'reel', monthly_qty: -1 }])).toBe(true)
+  })
+
+  it('treats junk as an empty agreement, not an error', () => {
+    expect(normaliseDeliverableLines(undefined)).toEqual({ lines: [] })
+    expect(normaliseDeliverableLines('nope')).toEqual({ lines: [] })
+  })
+})
+
+describe('normaliseServices', () => {
+  it('accepts catalog keys and custom entries, rejects invented keys', () => {
+    const ok = normaliseServices([
+      { key: 'manychat', label: 'ManyChat automation' },
+      { key: 'custom:tiktok-ads', label: 'TikTok ads', note: 'from Oct', active: false },
+    ])
+    expect('services' in ok && ok.services[1]).toEqual(
+      { key: 'custom:tiktok-ads', label: 'TikTok ads', note: 'from Oct', active: false })
+    expect('error' in normaliseServices([{ key: 'freebies', label: 'x' }])).toBe(true)
+    expect('error' in normaliseServices([{ key: 'manychat', label: ' ' }])).toBe(true)
+  })
+})
+
+describe('effectiveQuotas', () => {
+  const lines = [
+    { type: 'static' as const, label: 'Graphics', monthly_qty: 20 },
+    { type: 'reel' as const, label: 'Reels', monthly_qty: 8 },
+  ]
+
+  it('uses the agreement when no monthly override exists', () => {
+    expect(effectiveQuotas(lines, null)).toEqual([
+      { type: 'reel', label: 'Reels', quota: 8 },
+      { type: 'static', label: 'Graphics', quota: 20 },
+    ])
+  })
+
+  it('lets a commitments row override per type, partially', () => {
+    const q = effectiveQuotas(lines, { static_quota: 25, reel_quota: 0, video_quota: 2 })
+    expect(q).toEqual([
+      { type: 'reel', label: 'Reels', quota: 8 },      // 0 override = not set
+      { type: 'static', label: 'Graphics', quota: 25 }, // overridden
+      { type: 'video', label: 'Video', quota: 2 },      // row-only type appears
+    ])
+  })
+
+  it('a commitments row alone still yields quotas', () => {
+    expect(effectiveQuotas([], { reel_quota: 4 })).toEqual([{ type: 'reel', label: 'Reels', quota: 4 }])
+  })
+})
+
+describe('monthOfItem', () => {
+  it("prefers the shoot's month, then due date, then creation", () => {
+    expect(monthOfItem({ due_date: '2026-10-02' }, { month: 9, year: 2026 }))
+      .toEqual({ month: 9, year: 2026 })
+    expect(monthOfItem({ due_date: '2026-10-02' }, null)).toEqual({ month: 10, year: 2026 })
+    expect(monthOfItem({ created_at: '2026-12-31T23:00:00Z' }, null)).toEqual({ month: 12, year: 2026 })
+    expect(monthOfItem({}, null)).toBeNull()
+  })
+})
+
+describe('computeMonthlyProgress', () => {
+  const quotas = [
+    { type: 'static' as const, label: 'Graphics', quota: 20 },
+    { type: 'reel' as const, label: 'Reels', quota: 8 },
+  ]
+  const batches = new Map([['b1', { month: 9, year: 2026 }]])
+
+  it('counts planned vs delivered per type for the month, shoot-month first', () => {
+    const items = [
+      // September shoot delivering early October still counts to September
+      { content_type: 'reel', status: 'published', batch_id: 'b1', due_date: '2026-10-01' },
+      { content_type: 'reel', status: 'draft_uploaded', batch_id: 'b1' },
+      { content_type: 'static', status: 'approved_for_scheduling', due_date: '2026-09-15' },
+      // a different month — excluded
+      { content_type: 'static', status: 'published', due_date: '2026-08-15' },
+    ]
+    expect(computeMonthlyProgress(items, batches, 9, 2026, quotas)).toEqual([
+      { type: 'static', label: 'Graphics', quota: 20, planned: 1, delivered: 1 },
+      { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1 },
+    ])
+  })
+})
