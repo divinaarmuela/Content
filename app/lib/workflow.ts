@@ -12,6 +12,9 @@ import {
   type Audience,
 } from './workflow-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
+import {
+  briefSatisfiesSubmission, checkBriefTaskTransition, SHOOT_BRIEF_SLUG,
+} from './brief-task-core'
 
 export type ContentItem = {
   id: string
@@ -27,6 +30,7 @@ export type ContentItem = {
   due_date?: string | null
   updated_at?: string | null
   raw_assets_url?: string | null
+  brief_url?: string | null
   brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
 }
@@ -310,23 +314,49 @@ export async function performTransition(
   },
 ): Promise<ContentItem> {
   const from = item.status
-  const check = checkTransition(actor.role, from, to)
+
+  // a shoot-BRIEF task rides the same machine wearing its own words and
+  // evidence: the "asset" under review is the brief itself, and "scheduled"
+  // means the shoot is booked — which requires its date to be locked
+  const { data: kindRow } = item.id
+    ? await supabase.from('content_items')
+        .select('work_kinds(slug), batches(status, concept, shot_list)')
+        .eq('id', item.id).maybeSingle()
+    : { data: null }
+  const kindSlug = (kindRow?.work_kinds as { slug?: string } | null)?.slug ?? null
+  const briefBatch = (kindRow?.batches as { status?: string; concept?: string | null; shot_list?: unknown[] } | null) ?? null
+  const isBriefTask = kindSlug === SHOOT_BRIEF_SLUG
+
+  const check = isBriefTask
+    ? checkBriefTaskTransition(actor.role, from, to)
+    : checkTransition(actor.role, from, to)
   if (!check.ok) throw new AuthzError(check.reason, 403)
+
+  if (isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
+    if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
+      throw new AuthzError('Lock the shoot date on the brief page before marking it booked', 400)
+    }
+  }
 
   // requirement evidence
   if (check.rule.requires === 'reviewable_asset') {
-    const { data: latest } = await supabase
-      .from('asset_versions')
-      .select('file_url, drive_url, dropbox_url')
-      .eq('item_id', item.id)
-      .order('version_number', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
-    const valid = versionSatisfiesSubmission(latest)
-    if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
+    if (isBriefTask) {
+      const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
+      if (!ok.ok) throw new AuthzError(ok.missing, 400)
+    } else {
+      const { data: latest } = await supabase
+        .from('asset_versions')
+        .select('file_url, drive_url, dropbox_url')
+        .eq('item_id', item.id)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
+      const valid = versionSatisfiesSubmission(latest)
+      if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
+    }
   }
-  if (check.rule.requires === 'schedule_entry') {
+  if (check.rule.requires === 'schedule_entry' && !isBriefTask) {
     const { count } = await supabase
       .from('schedule_entries')
       .select('id', { count: 'exact', head: true })

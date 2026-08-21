@@ -12,11 +12,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const item = await loadItemForUser(user, id)
 
-    const [versionsRes, commentsRes, scheduleRes, clientRes] = await Promise.all([
+    const [versionsRes, commentsRes, scheduleRes, clientRes, kindRes] = await Promise.all([
       supabase.from('asset_versions').select('*').eq('item_id', id).order('version_number', { ascending: false }),
       supabase.from('item_comments').select('*').eq('item_id', id).order('created_at', { ascending: true }),
       supabase.from('schedule_entries').select('*').eq('item_id', id),
       supabase.from('clients').select('name').eq('id', item.client_id).maybeSingle(),
+      supabase.from('content_items')
+        .select('work_kinds(name, slug, color), batches(id, title, status, planned_deliverables)')
+        .eq('id', id).maybeSingle(),
     ])
 
     // name the comment authors — "who said this" is half of a comment's meaning
@@ -31,6 +34,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }))
 
     const shaped = shapeItemDetail(user, item, versionsRes.data ?? [], commentsNamed)
+    // the item's craft and its shoot — every surface labels itself by these
+    ;(shaped as Record<string, unknown>).work_kind = kindRes.data?.work_kinds ?? null
+    ;(shaped as Record<string, unknown>).batch = kindRes.data?.batches ?? null
 
     // who's who on this job — every team role reads it at a glance
     let owner_name: string | null = null
@@ -78,7 +84,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params
     await loadItemForUser(user, id)
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)

@@ -25,6 +25,7 @@ type Row = {
   entity_type: string
   entity_id: string
   created_at: string
+  read_at?: string | null
 }
 
 const ICON = (eventType: string) => {
@@ -32,7 +33,7 @@ const ICON = (eventType: string) => {
   if (eventType.startsWith('transition_')) return CheckCircle2
   if (eventType === 'client_comment' || eventType === 'comment_assigned' || eventType === 'approval_note') return MessageSquare
   if (eventType === 'due_reminder') return CalendarClock
-  if (eventType.startsWith('shoot_')) return CalendarClock
+  if (eventType.startsWith('shoot_') || eventType.startsWith('batch_')) return CalendarClock
   if (eventType === 'prospect_auto_ingested') return UserPlus
   if (eventType.startsWith('intake')) return FileText
   return Bell
@@ -64,6 +65,9 @@ export default function NotificationsPage() {
       const res = await fetch('/api/team/notifications')
       if (!res.ok) { setRows([]); return }
       setRows((await res.json()).notifications ?? [])
+      // seen = read: the badge clears, but rows keep their unread tint for
+      // this visit so what was new is still visible
+      void fetch('/api/team/notifications', { method: 'POST' }).catch(() => {})
     } catch {
       setRows([])
     }
@@ -100,9 +104,12 @@ export default function NotificationsPage() {
               const href = linkFor(r)
               const inner = (
                 <div className="flex items-center gap-3 px-4 py-3">
+                  {!r.read_at
+                    ? <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" aria-label="unread" />
+                    : <span className="h-2 w-2 shrink-0" />}
                   <Icon className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{r.subject}</p>
+                    <p className={`truncate text-sm ${r.read_at ? '' : 'font-medium'}`}>{r.subject}</p>
                     <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                       {r.event_type.replace(/_/g, ' ')}
                     </p>

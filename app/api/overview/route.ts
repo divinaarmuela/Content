@@ -37,7 +37,7 @@ export async function GET() {
 
     let itemsQ = supabase
       .from('content_items')
-      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name)')
+      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name), work_kinds(slug)')
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
@@ -88,6 +88,8 @@ export async function GET() {
       // them, plus unassigned ones so nothing approved can go invisible
       const queue = items.filter(i => {
         if (i.status !== 'approved_for_scheduling') return false
+        // an approved shoot BRIEF is booked by its account manager, not queued
+        if (((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === 'shoot_brief') return false
         const assigned = Array.isArray(i.scheduler_ids) ? i.scheduler_ids : []
         return assigned.length === 0 || assigned.includes(user.id)
       })

@@ -35,7 +35,7 @@ type Item = {
   due_date: string | null
   current_version_number: number
   clients: { name: string } | null
-  batches: { title: string } | null
+  batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   work_kinds?: { name: string; slug: string; color: string } | null
 }
 type ClientRow = { id: string; name: string }
@@ -89,7 +89,8 @@ export default function ProductionPage() {
   const [newBusy, setNewBusy] = useState(false)
   const [draft, setDraft] = useState({
     client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
-    owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '',
+    owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', brief_url: '',
+    deliverables: [] as { type: string; qty: number }[],
     raw_assets: [] as { url: string; name: string }[],
   })
   const assetFileRef = useRef<HTMLInputElement>(null)
@@ -116,7 +117,7 @@ export default function ProductionPage() {
   const { can } = useRole()
   const isManager = can('account_manager')
   const [team, setTeam] = useState<{ id: string; name: string; email: string; role: string }[]>([])
-  const [kinds, setKinds] = useState<{ id: string; name: string; color: string; uses_media: boolean; default_roles: string[]; active: boolean }[]>([])
+  const [kinds, setKinds] = useState<{ id: string; slug: string; name: string; color: string; uses_media: boolean; default_roles: string[]; active: boolean }[]>([])
   useEffect(() => {
     if (!isManager) return
     fetch('/api/team')
@@ -188,15 +189,24 @@ export default function ProductionPage() {
   // live board: any item created/moved/commented anywhere refreshes the columns
   useProductionLive(load)
 
+  // the chosen work kind reshapes the dialog: a shoot BRIEF is planned, not
+  // produced — no footage fields, its own gate, deliverables instead of type
+  const selectedKind = kinds.find(k => k.id === draft.work_kind_id) ?? kinds[0] ?? null
+  const isBriefKind = selectedKind?.slug === 'shoot_brief'
+  const hidesMedia = selectedKind ? !selectedKind.uses_media : false
+
   const visible = (items ?? [])
     .filter(i => clientFilter === 'all' || i.client_id === clientFilter)
     .filter(i => batchFilter === 'all' || i.batch_id === batchFilter)
 
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
+    if (isBriefKind && draft.deliverables.length === 0) {
+      return toast.error('Add at least one deliverable — the brief is the promise of what gets made.')
+    }
     setNewBusy(true)
     try {
-      const count = Math.min(Math.max(1, draft.count), 30)
+      const count = isBriefKind ? 1 : Math.min(Math.max(1, draft.count), 30)
       const payload = Array.from({ length: count }, (_, i) => ({
         client_id: draft.client_id,
         batch_id: draft.batch_id || null,
@@ -206,6 +216,11 @@ export default function ProductionPage() {
         due_date: draft.due_date || null,
         ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
         ...(draft.work_kind_id ? { work_kind_id: draft.work_kind_id } : {}),
+        ...(isBriefKind ? {
+          brief_url: draft.brief_url.trim() || null,
+          planned_deliverables: draft.deliverables,
+          batch_id: null,
+        } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
@@ -218,7 +233,7 @@ export default function ProductionPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
       toast.success(count === 1 ? 'Item created' : `${count} items created`)
       setNewOpen(false)
-      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', raw_assets: [] })
+      setDraft({ client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1, owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', brief_url: '', deliverables: [], raw_assets: [] })
       load()
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
@@ -255,7 +270,7 @@ export default function ProductionPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Production</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Every content item, from first draft to published. Click a card for detail, versions, and actions.
+            Every piece of work, from shoot brief to published. Click a card for detail and actions.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -355,7 +370,7 @@ export default function ProductionPage() {
                   <div className="flex min-h-24 flex-col gap-2">
                     {colItems.map(item => (
                       <Link key={item.id} href={`/dashboard/production/${item.id}`} className="block">
-                        <Card className="cursor-pointer py-0 transition-shadow hover:shadow-md">
+                        <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${item.work_kinds?.slug === 'shoot_brief' ? 'border-l-2 border-l-sky-400' : ''}`}>
                           <CardContent className="flex flex-col gap-1.5 p-3">
                             <div className="flex items-start justify-between gap-2">
                               <span className="text-sm font-medium leading-snug">{item.title}</span>
@@ -365,7 +380,20 @@ export default function ProductionPage() {
                               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                                 {item.clients?.name ?? '—'}
                               </Badge>
-                              <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
+                              {item.work_kinds?.slug !== 'shoot_brief' && (
+                                <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
+                              )}
+                              {item.work_kinds?.slug === 'shoot_brief' && item.status === 'scheduled' && (
+                                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                                  Shoot booked
+                                </span>
+                              )}
+                              {item.work_kinds?.slug === 'shoot_brief' && (item.batches?.planned_deliverables?.length ?? 0) > 0 && (
+                                <span className="font-mono text-[10.5px] text-zinc-400 dark:text-zinc-500">
+                                  {item.batches!.planned_deliverables!.slice(0, 3).map(d => `${d.qty} ${d.type}${d.qty > 1 ? 's' : ''}`).join(' · ')}
+                                  {item.batches!.planned_deliverables!.length > 3 ? ` +${item.batches!.planned_deliverables!.length - 3}` : ''}
+                                </span>
+                              )}
                               {item.work_kinds && item.work_kinds.slug !== 'edit' && (
                                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[item.work_kinds.color] ?? KIND_CHIP.zinc}`}>
                                   {item.work_kinds.name}
@@ -414,7 +442,7 @@ export default function ProductionPage() {
       {/* New item dialog */}
       <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>New content item{draft.count > 1 ? 's' : ''}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{isBriefKind ? 'New shoot brief' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle></DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>Client *</Label>
@@ -425,6 +453,7 @@ export default function ProductionPage() {
                 </SelectContent>
               </Select>
             </div>
+            {!isBriefKind && (
             <div className="grid gap-1.5">
               <Label>Shoot</Label>
               <Select value={draft.batch_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'none' ? '' : v ?? '' }))}>
@@ -450,10 +479,12 @@ export default function ProductionPage() {
                 </p>
               )}
             </div>
+            )}
             <div className="grid gap-1.5 sm:col-span-2">
               <Label>Title * {draft.count > 1 && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
               <Input value={draft.title} placeholder="e.g. May shoot — BTS reel" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
             </div>
+            {!isBriefKind && (
             <div className="grid gap-1.5">
               <Label>Type</Label>
               <Select value={draft.content_type} onValueChange={v => v && setDraft(d => ({ ...d, content_type: v }))}>
@@ -463,6 +494,7 @@ export default function ProductionPage() {
                 </SelectContent>
               </Select>
             </div>
+            )}
             <div className="grid gap-1.5">
               <Label>Priority</Label>
               <Select value={draft.priority} onValueChange={v => v && setDraft(d => ({ ...d, priority: v }))}>
@@ -473,14 +505,16 @@ export default function ProductionPage() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label>Due date</Label>
+              <Label>{isBriefKind ? 'Target shoot date' : 'Due date'}</Label>
               <Input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))} className="font-mono" />
             </div>
+            {!isBriefKind && (
             <div className="grid gap-1.5">
               <Label>How many?</Label>
               <Input type="number" min={1} max={30} value={draft.count}
                 onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
             </div>
+            )}
             {kinds.length > 0 && (
               <div className="grid gap-1.5">
                 <Label>Work type</Label>
@@ -495,7 +529,7 @@ export default function ProductionPage() {
             )}
             {isManager && (
               <div className="grid gap-1.5">
-                <Label>Assign to</Label>
+                <Label>{isBriefKind ? 'Account manager' : 'Assign to'}</Label>
                 <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
                   <SelectTrigger><SelectValue placeholder="Later" /></SelectTrigger>
                   <SelectContent>
@@ -516,16 +550,54 @@ export default function ProductionPage() {
                 </Select>
               </div>
             )}
+            {!hidesMedia && (
             <div className="grid gap-1.5 sm:col-span-2">
               <Label>Raw assets link <span className="text-xs font-normal text-zinc-400">(Dropbox/Drive folder the editor works from)</span></Label>
               <Input value={draft.raw_assets_url} placeholder="https://www.dropbox.com/…"
                 onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-xs" />
             </div>
+            )}
+            {isBriefKind && (
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Brief link <span className="text-xs font-normal text-zinc-400">(Milanote or anywhere — optional; you can also build it on our brief page)</span></Label>
+                <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
+                  onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-xs" />
+              </div>
+            )}
+            {isBriefKind && (
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>Deliverables * <span className="text-xs font-normal text-zinc-400">(what the shoot must produce)</span></Label>
+                {draft.deliverables.map((d0, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Select value={d0.type} onValueChange={v => v && setDraft(d => ({
+                      ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, type: v } : x),
+                    }))}>
+                      <SelectTrigger className="flex-1 capitalize"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" min={1} value={d0.qty} className="w-20 text-center font-mono"
+                      onChange={e => setDraft(d => ({
+                        ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x),
+                      }))} />
+                    <button type="button" aria-label="Remove deliverable"
+                      onClick={() => setDraft(d => ({ ...d, deliverables: d.deliverables.filter((_, j) => j !== i) }))}
+                      className="text-zinc-400 hover:text-red-500">&#10005;</button>
+                  </div>
+                ))}
+                <Button type="button" variant="ghost" size="sm" className="w-fit text-zinc-500"
+                  onClick={() => setDraft(d => ({ ...d, deliverables: [...d.deliverables, { type: 'reel', qty: 1 }] }))}>
+                  <Plus className="h-3.5 w-3.5" /> Add deliverable
+                </Button>
+              </div>
+            )}
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Brief <span className="text-xs font-normal text-zinc-400">(what the edit should be — sent to the editor)</span></Label>
-              <Textarea rows={3} value={draft.brief} placeholder="Hook in the first 2s, use the b-roll from cam B, end on the offer…"
+              <Label>{isBriefKind ? 'Note to reviewer' : 'Brief'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the brief)' : '(what the edit should be — sent to the editor)'}</span></Label>
+              <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
                 onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
             </div>
+            {!hidesMedia && (
             <div className="grid gap-1.5 sm:col-span-2">
               <Label>Source files <span className="text-xs font-normal text-zinc-400">(uploaded for the editor — or use the assets link for full shoots)</span></Label>
               {draft.raw_assets.length > 0 && (
@@ -547,10 +619,11 @@ export default function ProductionPage() {
                 <Plus className="h-3.5 w-3.5" /> {assetBusy ? 'Uploading…' : 'Upload files'}
               </Button>
             </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewOpen(false)} disabled={newBusy}>Cancel</Button>
-            <Button onClick={createItems} disabled={newBusy}>{newBusy ? 'Creating…' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
+            <Button onClick={createItems} disabled={newBusy}>{newBusy ? 'Creating…' : isBriefKind ? 'Create shoot brief' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

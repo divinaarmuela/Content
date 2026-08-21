@@ -73,8 +73,16 @@ export function canCreateItemsUnder(
   batchStatus: BatchStatus | null,
   role: Role,
   adhoc?: { reason: string },
+  kindSlug?: string,
 ): boolean {
   if (role === 'client' || role === 'scheduler') return false
+  // a shoot-BRIEF task is how a shoot begins — it may start from nothing
+  // (its shoot is created with it) or attach to a still-planning brief;
+  // account managers own that act
+  if (kindSlug === 'shoot_brief') {
+    if (role !== 'account_manager' && role !== 'super_admin') return false
+    return batchStatus === null || batchStatus === 'brief'
+  }
   if (batchStatus === 'locked' || batchStatus === 'shot') return true
   if (batchStatus === null) {
     if (role !== 'account_manager' && role !== 'super_admin') return false

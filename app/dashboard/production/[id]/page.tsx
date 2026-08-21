@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { uploadMedia } from '../../uploadMedia'
 import { useProductionLive } from '../useProductionLive'
@@ -31,7 +32,11 @@ import {
 import { Trash2 } from 'lucide-react'
 import {
   availableTransitions, CLIENT_LABELS, type ItemStatus,
+
 } from '../../../lib/workflow-core'
+import {
+  checkBriefTaskTransition, itemStatusLabel, SHOOT_BRIEF_SLUG,
+} from '../../../lib/brief-task-core'
 import type { Role } from '../../../lib/identity-core'
 
 type Version = {
@@ -55,6 +60,9 @@ type Detail = {
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
   owner_name?: string | null; managers?: { name: string; email: string }[]
+  brief_url?: string | null
+  work_kind?: { name: string; slug: string; color: string } | null
+  batch?: { id: string; title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   raw_assets_url?: string | null; brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
@@ -260,7 +268,19 @@ export default function ItemDetailPage() {
   const canAddVersion = ['editor', 'account_manager', 'super_admin'].includes(role)
   const canComment = role !== 'scheduler'
   const canSchedule = ['scheduler', 'super_admin'].includes(role)
-  const transitions = availableTransitions(role, detail.status)
+  const rawTransitions = availableTransitions(role, detail.status)
+  const isBrief = detail.work_kind?.slug === SHOOT_BRIEF_SLUG
+  // a brief task wears its own words and drops edges that make no sense for
+  // it (a booked shoot never "publishes")
+  const transitions = isBrief
+    ? rawTransitions
+        .map(t => {
+          const c = checkBriefTaskTransition(role as never, detail.status, t.to)
+          return c.ok ? { ...t, label: c.rule.label } : null
+        })
+        .filter((t): t is NonNullable<typeof t> => t !== null)
+    : rawTransitions
+
   const latest = detail.versions[0]
 
   const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[], schedulerIds?: string[]) => {
@@ -493,7 +513,9 @@ export default function ItemDetailPage() {
             </Select>
           )}
           <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
-            {role === 'client' ? (detail.status_label ?? CLIENT_LABELS[detail.status]) : detail.status.replace(/_/g, ' ')}
+            {role === 'client'
+              ? (detail.status_label ?? CLIENT_LABELS[detail.status])
+              : itemStatusLabel(detail.work_kind?.slug, detail.status, detail.status.replace(/_/g, ' '))}
           </Badge>
           {['account_manager', 'super_admin'].includes(role) && (
             <AlertDialog onOpenChange={o => !o && setDeleteConfirm('')}>
@@ -642,9 +664,80 @@ export default function ItemDetailPage() {
         </Card>
       )}
 
+      {/* The brief itself — a link out (Milanote or anywhere) or our own
+          brief page; either satisfies review */}
+      {isTeam && isBrief && (
+        <Card>
+          <CardHeader className="flex-row items-center">
+            <CardTitle className="text-sm font-semibold">The brief</CardTitle>
+            {detail.batch?.id && (
+              <Button size="sm" className="ml-auto" asChild>
+                <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open our brief page</Link>
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 pt-0">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Brief link <span className="font-normal text-zinc-400">(Milanote or anywhere — optional)</span></Label>
+              <div className="flex gap-2">
+                <Input
+                  key={detail.brief_url ?? ''}
+                  defaultValue={detail.brief_url ?? ''}
+                  placeholder="https://app.milanote.com/…"
+                  className="font-mono text-xs"
+                  onFocus={e => { focusVal.current.brief_url = e.target.value }}
+                  onBlur={e => {
+                    const v = e.target.value.trim()
+                    if (v === (focusVal.current.brief_url ?? '').trim()) return
+                    if (v !== (detail.brief_url ?? '')) {
+                      void fetch(`/api/production/items/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ brief_url: v || null }),
+                      }).then(r => { if (r.ok) { toast.success('Brief link saved'); load() } else toast.error('Save failed') })
+                    }
+                  }}
+                />
+                {detail.brief_url && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={detail.brief_url} target="_blank" rel="noreferrer noopener">Open brief ↗</a>
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Note to reviewer</Label>
+              <Textarea
+                key={detail.brief ?? ''}
+                rows={3}
+                defaultValue={detail.brief ?? ''}
+                placeholder="What the reviewer should look at first…"
+                onFocus={e => { focusVal.current.brief = e.target.value }}
+                onBlur={e => {
+                  const v = e.target.value.trim()
+                  if (v === (focusVal.current.brief ?? '').trim()) return
+                  if (v !== (detail.brief ?? '')) {
+                    void fetch(`/api/production/items/${id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ brief: v || null }),
+                    }).then(r => { if (r.ok) { toast.success('Note saved'); load() } else toast.error('Save failed') })
+                  }
+                }}
+              />
+            </div>
+            {detail.status === 'scheduled' && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Shoot booked — when it&rsquo;s shot, mark it shot on the brief page and create the content items there.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Job pack — internal only (never in the client or scheduler payload):
           the brief and raw footage the editor works from */}
-      {isTeam && role !== 'scheduler' && (detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0 || ['account_manager', 'super_admin'].includes(role)) && (
+      {isTeam && !isBrief && role !== 'scheduler' && (detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0 || ['account_manager', 'super_admin'].includes(role)) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">Job pack</CardTitle>
@@ -751,6 +844,7 @@ export default function ItemDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Versions */}
+        {!isBrief && (
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">Versions</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
@@ -808,6 +902,7 @@ export default function ItemDetailPage() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Comments / Schedule */}
         <div className="flex flex-col gap-4">
@@ -881,7 +976,7 @@ export default function ItemDetailPage() {
           {/* the caption IS the post: what the scheduler publishes and the
               auto-publisher sends as the post text. Managers write it,
               schedulers may polish it. */}
-          {isTeam && (
+          {isTeam && !isBrief && (
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Caption</CardTitle></CardHeader>
               <CardContent className="pt-0">
@@ -913,7 +1008,7 @@ export default function ItemDetailPage() {
             </Card>
           )}
 
-          {(canSchedule || detail.schedule.length > 0) && (
+          {!isBrief && (canSchedule || detail.schedule.length > 0) && (
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Scheduling</CardTitle></CardHeader>
               <CardContent className="flex flex-col gap-2.5 pt-0">

@@ -32,7 +32,7 @@ export async function GET(req: Request) {
       supabase.from('monthly_commitments').select('*')
         .eq('client_id', clientId).eq('month', month).eq('year', year).maybeSingle(),
       supabase.from('content_items')
-        .select('id, batch_id, content_type, status, due_date, created_at')
+        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug)')
         .eq('client_id', clientId).limit(1000),
       supabase.from('batches').select('id, month, year').eq('client_id', clientId).limit(200),
     ])
@@ -40,7 +40,10 @@ export async function GET(req: Request) {
     const lines = normaliseDeliverableLines(agreement?.deliverable_lines)
     const quotas = effectiveQuotas('lines' in lines ? lines.lines : [], commitment ?? null)
     const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
-    const per_type = computeMonthlyProgress(items ?? [], batchesById, month, year, quotas)
+    // brief TASKS are the plan, not the delivery — they never count
+    const producedItems = (items ?? []).filter(i =>
+      ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+    const per_type = computeMonthlyProgress(producedItems, batchesById, month, year, quotas)
 
     return NextResponse.json({ month, year, per_type, has_agreement: Boolean(agreement) })
   } catch (e) {

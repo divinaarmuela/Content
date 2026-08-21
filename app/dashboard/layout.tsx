@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useRole } from './useRole'
 import UploadTray from './UploadTray'
+import NotificationBell from './NotificationBell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 import type { Role } from '@/app/lib/identity-core'
 
@@ -269,6 +270,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
                 {role.replace('_', ' ')}
               </span>
             )}
+            <NotificationBell />
             {user && (
               <span className="hidden text-xs text-zinc-500 sm:block dark:text-zinc-400">
                 {user.firstName ?? user.emailAddresses[0]?.emailAddress}

@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
+  ArrowLeft, CalendarClock, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
@@ -295,6 +295,9 @@ export default function InboxPage() {
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Button size="sm" asChild>
+          <Link href="/dashboard/social"><CalendarClock className="h-4 w-4" /> Schedule a post</Link>
+        </Button>
         {accounts.length > 0 && (
           <Select value={acct} onValueChange={changeAccount}>
             <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>

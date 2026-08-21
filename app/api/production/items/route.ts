@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
-import { canCreateItemsUnder, type BatchStatus } from '../../../lib/batch-brief-core'
+import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
+import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
 import { accessibleClientIds } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
 
     let q = supabase
       .from('content_items')
-      .select('*, clients(name), batches(title), work_kinds(name, slug, color)')
+      .select('*, clients(name), batches(title, status, planned_deliverables), work_kinds(name, slug, color)')
       .order('updated_at', { ascending: false })
       .limit(500)
 
@@ -131,12 +132,51 @@ export async function POST(req: Request) {
       }
       const kind = resolveKindForWrite(kinds, it.work_kind_id)
       if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
+      const kindSlug = kinds.find(k => k.id === kind.id)?.slug ?? null
+
+      let briefBatchId: string | null = null
+      if (kindSlug === 'shoot_brief') {
+        // a brief task IS how a shoot begins: it creates its shoot with it
+        // (or attaches to one still in planning), and there is exactly one
+        // brief per shoot — the partial unique index enforces it
+        if (!canCreateItemsUnder(
+          it.batch_id ? ((batchById.get(it.batch_id)?.status ?? null) as BatchStatus | null) : null,
+          user.role, undefined, 'shoot_brief',
+        )) {
+          return NextResponse.json(
+            { error: 'Shoot briefs are created by account managers, on a shoot still in planning' },
+            { status: 403 },
+          )
+        }
+        if (it.batch_id) {
+          briefBatchId = it.batch_id
+        } else {
+          const { data: newBatch, error: bErr } = await supabase.from('batches').insert({
+            client_id: it.client_id,
+            title: String(it.title).slice(0, 120),
+            shoot_date: it.due_date ?? null,
+            planned_deliverables: sanitisePlannedDeliverables(it.planned_deliverables),
+            owner_id: it.owner_id ?? user.id,
+          }).select('id, status').single()
+          if (bErr) throw new Error(bErr.message)
+          briefBatchId = newBatch.id
+          announceBatchChange({ batch_id: newBatch.id, client_id: it.client_id, status: newBatch.status ?? 'brief', kind: 'created' })
+        }
+      }
+
       rows.push({
         work_kind_id: kind.id,
+        ...(kindSlug === 'shoot_brief'
+          ? {
+              batch_id: briefBatchId,
+              content_type: 'other',
+              brief_url: it.brief_url ? String(it.brief_url).trim().slice(0, 2000) : null,
+            }
+          : {}),
         client_id: it.client_id,
-        batch_id: it.batch_id ?? null,
+        batch_id: kindSlug === 'shoot_brief' ? briefBatchId : (it.batch_id ?? null),
         title: String(it.title),
-        content_type: it.content_type ?? 'reel',
+        content_type: kindSlug === 'shoot_brief' ? 'other' : (it.content_type ?? 'reel'),
         platform_targets: Array.isArray(it.platform_targets) ? it.platform_targets : [],
         owner_id: it.owner_id ?? (user.role === 'editor' ? user.id : null),
         // who handed out the job — the natural default reviewer later
@@ -152,7 +192,12 @@ export async function POST(req: Request) {
     }
 
     const { data, error } = await supabase.from('content_items').insert(rows).select()
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (/content_items_one_brief_per_batch_uidx/.test(error.message)) {
+        return NextResponse.json({ error: 'This shoot already has a brief task' }, { status: 409 })
+      }
+      throw new Error(error.message)
+    }
     for (const item of data ?? []) {
       await logActivity({
         actor: user, clientId: item.client_id,
