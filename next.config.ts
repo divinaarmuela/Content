@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
       },
       // the studio pitch now lives with events
       { source: '/podcast-studio', destination: '/events', permanent: true },
+      // the personal-brand pitch now lives on the work page
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'personalbrand.mdmmarketing.com.au' }],
+        destination: 'https://www.mdmmarketing.com.au/work',
+        permanent: true,
+      },
     ]
   },
 }
