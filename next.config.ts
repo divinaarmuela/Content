@@ -6,6 +6,20 @@ const nextConfig: NextConfig = {
   // "ENOENT ... C:\ROOT\...\Helvetica.afm"), so keep it external and let it
   // load from node_modules normally.
   serverExternalPackages: ['pdfkit'],
+
+  // content.mdmmarketing.com.au is a legacy alias of this same project (the
+  // Linktree still points at it) — send it to the canonical site instead of
+  // serving a duplicate homepage
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'content.mdmmarketing.com.au' }],
+        destination: 'https://www.mdmmarketing.com.au/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig
