@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
         destination: 'https://www.mdmmarketing.com.au/:path*',
         permanent: true,
       },
+      // the studio pitch now lives with events
+      { source: '/podcast-studio', destination: '/events', permanent: true },
     ]
   },
 }
