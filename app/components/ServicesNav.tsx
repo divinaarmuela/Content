@@ -97,7 +97,7 @@ const services = [
     text: 'I need a studio',
     desc: 'Professional podcast and photography studio in Melbourne. Fully equipped, ready to book. Perfect for content days, interviews, and brand shoots.',
     cta: 'Studio Hire',
-    href: '/podcast-studio',
+    href: '/events',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <rect x="10" y="3" width="8" height="14" rx="4" stroke="white" strokeWidth="1.8" />

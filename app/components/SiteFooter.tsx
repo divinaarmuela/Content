@@ -20,11 +20,9 @@ export default function SiteFooter({ vol, tagline }: { vol: string; tagline?: Re
           <div className="footer-col">
             <h4>&raquo; Services</h4>
             <a href="/content">Content Production</a>
-            <a href="/podcast-studio">Podcast Studio</a>
             <a href="/marketing">Ongoing Marketing</a>
             <a href="/website">Website Optimisation</a>
             <a href="/branding">Brand &amp; Strategy</a>
-            <a href="/personal-brand">Personal Brand</a>
           </div>
           <div className="footer-col">
             <h4>&raquo; Studio</h4>

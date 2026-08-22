@@ -7,7 +7,6 @@ const COLS: { label: string; links: { href: string; text: string; ext?: boolean 
       { href: '/content', text: 'Content Production' },
       { href: '/marketing', text: 'Ongoing Marketing' },
       { href: '/branding', text: 'Brand & Strategy' },
-      { href: '/personal-brand', text: 'Personal Brand' },
     ],
   },
   {

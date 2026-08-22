@@ -427,11 +427,9 @@ export default function BrandingPage() {
             <div className="footer-col">
               <h4>&raquo; Services</h4>
               <a href="/content">Content Production</a>
-              <a href="/podcast-studio">Podcast Studio</a>
               <a href="/marketing">Ongoing Marketing</a>
               <a href="/website">Website Optimisation</a>
               <a href="/branding">Brand Strategy</a>
-              <a href="/personal-brand">Personal Brand</a>
             </div>
             <div className="footer-col">
               <h4>&raquo; Office</h4>

@@ -27,7 +27,6 @@ export default function SiteHeader() {
             <a href="/content">Content</a>
             <a href="/branding">Branding</a>
             <a href="/marketing">Marketing</a>
-            <a href="/personal-brand">Personal Brand</a>
             <a href="/work">Work</a>
           </div>
           <a

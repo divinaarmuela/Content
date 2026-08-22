@@ -32,14 +32,14 @@ const services = [
     name: 'Personal Brand',
     sub: 'Voice · presence · inbound',
     desc: 'Voice positioning, monthly shoots, and a content system that generates qualified inbound leads.',
-    href: '/personal-brand',
+    href: '/work',
   },
   {
     idx: '05',
     name: 'Podcast Studio',
     sub: 'Recording · production · clips',
     desc: 'A full podcast pipeline: recording, editing, and the short-form clips that carry it across platforms.',
-    href: '/podcast-studio',
+    href: '/events',
   },
   {
     idx: '06',
