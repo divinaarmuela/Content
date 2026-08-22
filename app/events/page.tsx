@@ -8,6 +8,7 @@ import { archivo, sometype } from '../components/lama/fonts'
 import styles from './events.module.css'
 import { media } from '../lib/asset'
 import InviteForm from './InviteForm'
+import FloatingCta from './FloatingCta'
 
 const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
 
@@ -167,13 +168,16 @@ export default function EventsPage() {
             <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small and curated, so entry is by request. Tell us a little about what you do and we{'’'}ll be in touch.</p>
           </Reveal>
           <Reveal gate={false} delay={240}>
-            <InviteForm />
+            <div id="invite-form">
+              <InviteForm />
+            </div>
           </Reveal>
         </div>
       </section>
 
       <LamaContact gate={false} />
       <LamaFooter vol="The Room · by invitation" />
+      <FloatingCta />
     </div>
   )
 }
