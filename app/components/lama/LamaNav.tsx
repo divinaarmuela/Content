@@ -56,7 +56,17 @@ export default function LamaNav({ gate = true }: {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
           </Link>
-          <span className="font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream">{display}</span>
+          {/* the scroll-spy label reads "BOOK A CALL" over the contact section —
+              people click it expecting exactly that, so let it deliver */}
+          <button
+            onClick={() => {
+              if (/book/i.test(title)) { window.open(CALENDLY, '_blank', 'noopener'); return }
+              document.querySelector<HTMLElement>(`[data-lama-title="${title}"]`)?.scrollIntoView({ behavior: 'smooth' })
+            }}
+            className="cursor-pointer appearance-none border-0 bg-transparent p-0 font-lamam text-[11px] uppercase tracking-widest [word-spacing:0.45em] text-cream"
+          >
+            {display}
+          </button>
           <button
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
