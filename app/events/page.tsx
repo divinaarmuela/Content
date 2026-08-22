@@ -62,6 +62,12 @@ export default function EventsPage() {
           <Reveal gate={false} delay={360}>
             <p style={{ maxWidth: 600, fontSize: 'clamp(1.05rem, 1.5vw, 1.25rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.7)', margin: 0 }}>Small, intentional gatherings for founders, marketers, and builders who{'’'}d rather ask a good question than deliver a good pitch.</p>
           </Reveal>
+          <Reveal gate={false} delay={480}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 34 }}>
+              <a href="#invite-form" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0B0B0B', background: '#FFFFFF', borderRadius: 999, padding: '14px 24px', textDecoration: 'none' }}>Request an invite</a>
+              <a href="#upcoming" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 999, padding: '13px 24px', textDecoration: 'none' }}>See upcoming rooms</a>
+            </div>
+          </Reveal>
         </div>
       </header>
 

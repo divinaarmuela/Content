@@ -14,7 +14,7 @@ export default function FloatingCta() {
 
   useEffect(() => {
     const onScroll = () => {
-      const pastHero = window.scrollY > window.innerHeight * 0.7
+      const pastHero = window.scrollY > 40
       const form = document.getElementById('invite-form')
       const formVisible = form
         ? form.getBoundingClientRect().top < window.innerHeight * 0.85
