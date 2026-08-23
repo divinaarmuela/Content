@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +22,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Plus, CalendarDays, CheckSquare, Flag, Trash2 } from 'lucide-react'
+import { Plus, CalendarDays, CheckSquare, Flag, Trash2, ChevronDown } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { useProductionLive } from './useProductionLive'
 import { ViewSwitch } from './shoot-ui'
@@ -335,12 +338,19 @@ export default function ProductionPage() {
               <CheckSquare className="h-4 w-4" /> {selectMode ? 'Done' : 'Select'}
             </Button>
           )}
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/production/shoots"><Plus className="h-4 w-4" /> Plan shoot</Link>
-          </Button>
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <Plus className="h-4 w-4" /> New item
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setNewOpen(true)}>
+                <Plus className="h-4 w-4" /> Content item
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/production/shoots"><CalendarDays className="h-4 w-4" /> Plan a shoot</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
