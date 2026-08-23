@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if ('response' in g) return g.response
     const { data, error } = await supabase
       .from('batch_comments')
-      .select('id, created_at, body, author_id, team_users(name, role)')
+      .select('id, created_at, body, author_id, team_users!batch_comments_author_id_fkey(name, role)')
       .eq('batch_id', id)
       .order('created_at', { ascending: true })
       .limit(200)
@@ -50,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data, error } = await supabase
       .from('batch_comments')
       .insert({ batch_id: id, author_id: user.id, body })
-      .select('id, created_at, body, author_id, team_users(name, role)')
+      .select('id, created_at, body, author_id, team_users!batch_comments_author_id_fkey(name, role)')
       .single()
     if (error) {
       return NextResponse.json({ error: 'Comments need supabase/portal_comments.sql run first' }, { status: 503 })

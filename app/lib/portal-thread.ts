@@ -82,7 +82,8 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
           .eq('item_id', item.id).order('version_number', { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from('item_comments')
-      .select('id, created_at, body, team_users(name, role)')
+      // two FKs point at team_users (author, assignee) — name the author one
+      .select('id, created_at, body, team_users!item_comments_author_id_fkey(name, role)')
       .eq('item_id', item.id).eq('visibility', 'client')
       .order('created_at', { ascending: true })
       .limit(200),
@@ -120,7 +121,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
 
   // thread degrades to empty until the batch_comments migration runs
   const commentsRes = await supabase.from('batch_comments')
-    .select('id, created_at, body, team_users(name, role)')
+    .select('id, created_at, body, team_users!batch_comments_author_id_fkey(name, role)')
     .eq('batch_id', b.id)
     .order('created_at', { ascending: true })
     .limit(200)
