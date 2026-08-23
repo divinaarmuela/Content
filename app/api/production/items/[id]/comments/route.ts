@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
+import { isValidOwner } from '../../../../../lib/work-kinds-core'
 import { logActivity } from '../../../../../lib/workflow'
-import { notify, renderEmail } from '../../../../../lib/mailer'
+import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { announceItemChange } from '../../../../../lib/production-live'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -18,7 +19,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json()
-    if (!body.body?.trim()) return NextResponse.json({ error: 'Comment text is required' }, { status: 400 })
+    const text = String(body.body ?? '').trim().slice(0, 5000)
+    if (!text) return NextResponse.json({ error: 'Comment text is required' }, { status: 400 })
+
+    // a reply's parent must belong to THIS item — never graft across items
+    let parentId: string | null = null
+    if (body.parent_id) {
+      const { data: parent } = await supabase
+        .from('item_comments').select('id').eq('id', body.parent_id).eq('item_id', id).maybeSingle()
+      if (!parent) return NextResponse.json({ error: 'That comment is not on this item' }, { status: 400 })
+      parentId = parent.id
+    }
+    // an assignee must be an active, non-client team member (clients cannot assign)
+    let assignedTo: string | null = null
+    if (user.role !== 'client' && body.assigned_to) {
+      const { data: cand } = await supabase
+        .from('team_users').select('role, active_status').eq('id', body.assigned_to).maybeSingle()
+      if (!isValidOwner(cand)) return NextResponse.json({ error: 'That assignee is not a valid team member' }, { status: 400 })
+      assignedTo = String(body.assigned_to)
+    }
+    const ts = Number(body.video_timestamp_sec)
+    const videoTs = Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
 
     let visibility: 'internal' | 'client'
     if (user.role === 'client') visibility = 'client'
@@ -29,12 +50,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .from('item_comments')
       .insert({
         item_id: id,
-        parent_id: body.parent_id ?? null,
+        parent_id: parentId,
         author_id: user.id,
         visibility,
-        body: String(body.body).trim(),
-        video_timestamp_sec: body.video_timestamp_sec ?? null,
-        assigned_to: user.role === 'client' ? null : body.assigned_to ?? null,
+        body: text,
+        video_timestamp_sec: videoTs,
+        assigned_to: assignedTo,
       })
       .select()
       .single()
@@ -76,7 +97,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           subject: `Client comment on ${item.title}`,
           bodyHtml: renderEmail(
             `Client comment on ${item.title}`,
-            `<p>${String(body.body).trim().slice(0, 500)}</p><p style="color:#a1a1aa;font-size:12px;">Review it and assign an editor task if changes are needed — the editor has not been notified.</p>`,
+            `<p>${escapeHtml(text.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">Review it and assign an editor task if changes are needed — the editor has not been notified.</p>`,
             'Open item',
             `${DASHBOARD_URL}/dashboard/production/${id}`
           ),
@@ -101,7 +122,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           subject: `Task on ${item.title}`,
           bodyHtml: renderEmail(
             `Task on ${item.title}`,
-            `<p>${String(body.body).trim().slice(0, 500)}</p>`,
+            `<p>${escapeHtml(text.slice(0, 500))}</p>`,
             'Open item',
             `${DASHBOARD_URL}/dashboard/production/${id}`
           ),

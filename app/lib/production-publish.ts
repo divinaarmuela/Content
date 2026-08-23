@@ -196,14 +196,25 @@ export async function recordPublishOnItem(
     if (permalink) patch.live_url = permalink
 
     await supabase.from('schedule_entries').update(patch).eq('item_id', contentItemId)
+    // the post is already live on the platform, so record it — but capture the
+    // prior status so the audit trail has the single most consequential
+    // transition (every other status change writes a workflow_activity row)
+    const { data: before } = await supabase
+      .from('content_items').select('status, client_id').eq('id', contentItemId).maybeSingle()
     const { data: updated } = await supabase
       .from('content_items')
       .update({ status: 'published', updated_at: new Date().toISOString() })
       .eq('id', contentItemId)
       .select('client_id')
       .maybeSingle()
-    // open boards must hear about it, not wait for the 60s poll
     if (updated) {
+      await supabase.from('workflow_activity').insert({
+        actor_id: null, client_id: updated.client_id,
+        entity_type: 'content_item', entity_id: contentItemId,
+        action: 'status_change', old_value: before?.status ?? null, new_value: 'published',
+        detail: 'auto-published to connected account',
+      })
+      // open boards must hear about it, not wait for the 60s poll
       announceItemChange({ item_id: contentItemId, client_id: updated.client_id, status: 'published', kind: 'transition' })
     }
   } catch (e) {

@@ -1,6 +1,6 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
-import { notify, renderEmail } from './mailer'
+import { notify, renderEmail, escapeHtml } from './mailer'
 import type { TeamUser } from './authz'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -49,6 +49,7 @@ export async function notifyManagersOfComment(opts: {
   for (const m of managers) {
     await notify({
       actorName: opts.speaker,
+      actorEmail: 'portal+client@mdmmarketing.com.au', // forces no-reply From, never a name-derived alias
       eventType: 'client_comment',
       entityType: 'portal_comment',
       entityId: `${opts.dashboardPath}#${Date.now()}`,
@@ -57,7 +58,7 @@ export async function notifyManagersOfComment(opts: {
       subject: `Client comment on ${opts.subjectTitle}`,
       bodyHtml: renderEmail(
         `Client comment on ${opts.subjectTitle}`,
-        `<p>${opts.body.slice(0, 500)}</p><p style="color:#a1a1aa;font-size:12px;">From ${opts.speaker} on the client portal.</p>`,
+        `<p>${escapeHtml(opts.body.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">From ${escapeHtml(opts.speaker)} on the client portal.</p>`,
         'Open it',
         `${DASHBOARD_URL}${opts.dashboardPath}`
       ),

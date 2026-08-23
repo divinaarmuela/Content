@@ -15,6 +15,20 @@ export async function accessibleClientIds(user: TeamUser): Promise<string[] | nu
   return (data ?? []).map(r => r.client_id)
 }
 
+/** Client ids for SHOOT/batch access. Unlike items, batches have no status
+ *  gate, so a scheduler must be scoped by assignment here — returning null
+ *  (unrestricted) for schedulers would expose every client's unreleased
+ *  concepts. Only super_admin is unrestricted. */
+export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
+  if (user.role === 'super_admin') return null
+  if (user.role === 'client') return user.client_id ? [user.client_id] : []
+  const { data } = await supabase
+    .from('team_user_clients')
+    .select('client_id')
+    .eq('team_user_id', user.id)
+  return (data ?? []).map(r => r.client_id)
+}
+
 /** Assert this user may see this item at all; returns the item row. */
 export async function loadItemForUser(user: TeamUser, itemId: string) {
   const { data: item, error } = await supabase

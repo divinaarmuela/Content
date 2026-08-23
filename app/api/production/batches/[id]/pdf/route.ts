@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
-import { accessibleClientIds } from '../../../../../lib/production-access'
+import { batchClientIds } from '../../../../../lib/production-access'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../../../lib/batch-brief-core'
 import { renderBriefPdf } from '../../../../../lib/brief-pdf'
 
@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .eq('id', id)
       .maybeSingle()
     if (!batch) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    const ids = await accessibleClientIds(user)
+    const ids = await batchClientIds(user)
     if (ids !== null && !ids.includes(batch.client_id)) {
       return NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 })
     }

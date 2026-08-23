@@ -127,6 +127,12 @@ export async function sendSystemEmail(input: {
   })
 }
 
+/** Escape user text before it goes into an email HTML body. */
+export function escapeHtml(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>')
+}
+
 /** Shared email chrome matching the brand. */
 export function renderEmail(title: string, bodyHtml: string, ctaLabel?: string, ctaUrl?: string): string {
   return `

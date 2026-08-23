@@ -1,6 +1,6 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
-import { notify, renderEmail } from './mailer'
+import { notify, renderEmail, escapeHtml } from './mailer'
 import { AuthzError, type TeamUser } from './authz'
 import { announceItemChange } from './production-live'
 import {
@@ -143,11 +143,11 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       subject: `New job: ${item.title}`,
       bodyHtml: renderEmail(
         `New job: ${item.title}`,
-        `<p><strong>${item.title}</strong> (${item.content_type}) has been assigned to you by ${actor.name || actor.email}.</p>` +
+        `<p><strong>${escapeHtml(item.title)}</strong> (${escapeHtml(item.content_type)}) has been assigned to you by ${escapeHtml(actor.name || actor.email)}.</p>` +
         (item.brief ? `<p><strong>Brief:</strong><br>${String(item.brief).slice(0, 2000).replace(/\n/g, '<br>')}</p>` : '') +
-        (item.raw_assets_url ? `<p><strong>Raw assets folder:</strong> <a href="${item.raw_assets_url}">${item.raw_assets_url}</a></p>` : '') +
+        (item.raw_assets_url ? `<p><strong>Raw assets folder:</strong> <a href="${escapeHtml(item.raw_assets_url)}">${escapeHtml(item.raw_assets_url)}</a></p>` : '') +
         ((item.raw_assets?.length ?? 0) > 0
-          ? `<p><strong>Files:</strong><br>${item.raw_assets!.slice(0, 20).map(a => `<a href="${a.url}">${a.name || a.url}</a>`).join('<br>')}</p>`
+          ? `<p><strong>Files:</strong><br>${item.raw_assets!.slice(0, 20).map(a => `<a href="${escapeHtml(a.url)}">${escapeHtml(a.name || a.url)}</a>`).join('<br>')}</p>`
           : '') +
         (item.due_date ? `<p><strong>Due:</strong> ${item.due_date}</p>` : ''),
         'Open the job',
@@ -197,7 +197,7 @@ export function notifyBatchTransition(
           subject: `${label}: ${batch.title}`,
           bodyHtml: renderEmail(
             `${label}: ${batch.title}`,
-            `<p><strong>${batch.title}</strong> — ${label.toLowerCase()} by ${actor.name || actor.email}.</p>` +
+            `<p><strong>${escapeHtml(batch.title)}</strong> — ${label.toLowerCase()} by ${escapeHtml(actor.name || actor.email)}.</p>` +
             (when && to === 'locked' ? `<p><strong>Shoot date:</strong> ${when}</p>` : ''),
             'Open the brief',
             `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`

@@ -9,6 +9,11 @@ import { announceItemChange } from '../../../../../lib/production-live'
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireRole('scheduler')
+    // the role ladder admits editors via 'scheduler'; publishing to a client's
+    // live accounts is scheduler/super-admin only
+    if (!['scheduler', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    }
     const { id } = await params
     await loadItemForUser(user, id) // client scoping
     return NextResponse.json(await planItemPublish(id))
@@ -25,6 +30,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireRole('scheduler')
+    if (!['scheduler', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    }
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json().catch(() => ({}))

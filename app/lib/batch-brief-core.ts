@@ -27,6 +27,11 @@ export const BATCH_TRANSITIONS: Partial<Record<BatchStatus, Partial<Record<Batch
   shot: {
     wrapped: { roles: ['account_manager'], label: 'Wrap shoot' },
   },
+  // a shoot wrapped by mistake must be recoverable — without this edge a
+  // mis-click freezes it forever (no route can move it, no items can be filed)
+  wrapped: {
+    shot: { roles: ['account_manager'], label: 'Reopen shoot' },
+  },
 }
 
 export type BatchTransitionCheck =
@@ -179,8 +184,10 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 
 export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
   if (!Array.isArray(raw)) return []
+  // hard input bound before any per-item work — a giant payload can't OOM us
+  const input = raw.length > CANVAS_MAX_CARDS * 4 ? raw.slice(0, CANVAS_MAX_CARDS * 4) : raw
   const byId = new Map<string, CanvasCard>()
-  for (const item of raw) {
+  for (const item of input) {
     if (!item || typeof item !== 'object') continue
     const r = item as Record<string, unknown>
     const kind = String(r.kind ?? '')
@@ -267,7 +274,7 @@ export function seedCardsFromReferences(refs: ReferenceMedia[]): CanvasCard[] {
     const col = colHeights.indexOf(Math.min(...colHeights))
     const estHeight = ref.kind === 'image' ? 240 : 64
     cards.push({
-      id: `seed-${ref.url}`.slice(0, 40).replace(/[^\w-]/g, '-').slice(0, 40) || `seed-${i}`,
+      id: `seed-${i}-${ref.url.slice(-24).replace(/[^\w-]/g, '-')}`,
       kind: ref.kind === 'image' ? 'image' : 'link',
       x: col * COL_W,
       y: colHeights[col],

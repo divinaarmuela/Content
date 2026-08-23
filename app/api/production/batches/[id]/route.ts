@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, roleSatisfies, authzErrorResponse } from '../../../../lib/authz'
-import { accessibleClientIds } from '../../../../lib/production-access'
+import { batchClientIds } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import {
@@ -16,8 +16,9 @@ async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: stri
     .eq('id', id)
     .maybeSingle()
   if (!batch) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
-  const ids = await accessibleClientIds(user)
-  if (ids !== null && !ids.includes(batch.client_id)) {
+  const ids = await batchClientIds(user)
+  // ownership grants visibility too — the editor who created the shoot keeps it
+  if (ids !== null && !ids.includes(batch.client_id) && batch.owner_id !== user.id) {
     return { response: NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 }) }
   }
   return { batch }
@@ -133,7 +134,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (batch.status !== 'brief') {
         return NextResponse.json({ error: 'The date is locked — use "Change date" (account managers)' }, { status: 409 })
       }
-      patch.shoot_date = body.shoot_date || null
+      const d = body.shoot_date ? String(body.shoot_date) : ''
+      if (d) {
+        // a bad or out-of-range date reaches the year check-constraint and 500s
+        // when locking; validate it here where we can give a real message
+        const t = new Date(`${d}T00:00:00`)
+        const yr = t.getUTCFullYear()
+        if (Number.isNaN(t.getTime()) || yr < 2024 || yr > 2100) {
+          return NextResponse.json({ error: 'Enter a valid shoot date' }, { status: 422 })
+        }
+      }
+      patch.shoot_date = d || null
     }
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
@@ -157,9 +168,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
 
-    // any shoot with no items can go — a shoot that produced work cannot
-    const { count } = await supabase.from('content_items')
+    // only an in-planning shoot is deletable; once the date is locked it is a
+    // commitment (calendar, portal), so it gets wrapped, not deleted
+    if (loaded.batch.status !== 'brief') {
+      return NextResponse.json({ error: 'Only a shoot still in planning can be deleted — wrap it instead' }, { status: 409 })
+    }
+    // any shoot with no items can go — a shoot that produced work cannot. Read
+    // the error too: a failed count must NOT be treated as "zero items" and
+    // silently orphan every item to batch_id = null
+    const { count, error: countErr } = await supabase.from('content_items')
       .select('id', { count: 'exact', head: true }).eq('batch_id', id)
+    if (countErr) throw new Error(countErr.message)
     if ((count ?? 0) > 0) {
       return NextResponse.json({ error: 'This shoot has content items — wrap it instead of deleting' }, { status: 409 })
     }

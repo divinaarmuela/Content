@@ -10,6 +10,9 @@ import { announceItemChange } from '../../../../../lib/production-live'
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireRole('scheduler')
+    if (!['scheduler', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only a scheduler can schedule' }, { status: 403 })
+    }
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json()

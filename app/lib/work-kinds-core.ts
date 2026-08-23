@@ -34,11 +34,17 @@ export type KindInput = {
   color: string
 }
 
+/** System kinds that a user must not create or rename onto. */
+export const RESERVED_KIND_SLUGS = new Set(['shoot_brief'])
+
 export function validateKindInput(raw: unknown): { ok: true; value: KindInput } | { ok: false; errors: string[] } {
   const r = (raw ?? {}) as Record<string, unknown>
   const errors: string[] = []
   const slug = String(r.slug ?? '').trim().toLowerCase()
   if (!/^[a-z0-9_-]{1,40}$/.test(slug)) errors.push('Slug must be 1–40 of a–z, 0–9, - or _')
+  // 'shoot_brief' is a system kind with a fixed uuid and a one-per-shoot index;
+  // a hand-made kind squatting the slug would silently break that invariant
+  else if (RESERVED_KIND_SLUGS.has(slug)) errors.push(`"${slug}" is a reserved work type`)
   const name = String(r.name ?? '').trim()
   if (!name || name.length > 80) errors.push('Name must be 1–80 characters')
   const roles = Array.isArray(r.default_roles) ? r.default_roles.map(x => String(x)) : []

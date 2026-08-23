@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
-import { notify, renderEmail } from '../../../lib/mailer'
+import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceItemChange } from '../../../lib/production-live'
 import type { TeamUser } from '../../../lib/authz'
 
@@ -53,6 +53,7 @@ async function notifyManagers(clientId: string, itemId: string, itemTitle: strin
   for (const m of managers) {
     await notify({
       actorName: clientName,
+      actorEmail: 'portal+client@mdmmarketing.com.au',
       eventType: 'client_comment',
       entityType: 'item_comment',
       entityId: `${itemId}#${Date.now()}`,
@@ -61,7 +62,7 @@ async function notifyManagers(clientId: string, itemId: string, itemTitle: strin
       subject: `Client comment on ${itemTitle}`,
       bodyHtml: renderEmail(
         `Client comment on ${itemTitle}`,
-        `<p>${body.slice(0, 500)}</p><p style="color:#a1a1aa;font-size:12px;">From ${clientName}'s portal. Review it and assign an editor task if changes are needed.</p>`,
+        `<p>${escapeHtml(body.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">From ${escapeHtml(clientName)}'s portal. Review it and assign an editor task if changes are needed.</p>`,
         'Open the item',
         `${DASHBOARD_URL}/dashboard/production/${itemId}`
       ),
@@ -144,6 +145,7 @@ export async function POST(req: Request) {
             for (const s of schedulers ?? []) {
               await notify({
                 actorName: speaker,
+                actorEmail: 'portal+client@mdmmarketing.com.au',
                 eventType: 'approval_note',
                 entityType: 'content_item',
                 entityId: `${item.id}#note`,
@@ -152,7 +154,7 @@ export async function POST(req: Request) {
                 subject: `Approved with a note: ${item.title}`,
                 bodyHtml: renderEmail(
                   `Approved with a note: ${item.title}`,
-                  `<p><strong>${item.title}</strong> was approved by ${speaker} with this note — it may say when they want it posted:</p><p>“${comment.slice(0, 500)}”</p>`,
+                  `<p><strong>${escapeHtml(item.title)}</strong> was approved by ${escapeHtml(speaker)} with this note — it may say when they want it posted:</p><p>“${escapeHtml(comment.slice(0, 500))}”</p>`,
                   'Open the item',
                   `${DASHBOARD_URL}/dashboard/production/${item.id}`
                 ),
@@ -171,7 +173,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Something went wrong'
-    const status = /just updated|not allowed|cannot/i.test(message) ? 409 : 500
-    return NextResponse.json({ error: message }, { status })
+    // surface the transition's own safe copy (concurrent action) as 409;
+    // never leak a raw DB/Postgres error string to the public caller
+    const conflict = /just updated|not allowed|cannot/i.test(message)
+    if (!conflict) console.error('portal act error:', e)
+    return NextResponse.json(
+      { error: conflict ? message : 'Something went wrong — try again' },
+      { status: conflict ? 409 : 500 },
+    )
   }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { logActivity } from '../../../../lib/workflow'
-import { ASSIGNABLE_ROLES, KIND_COLORS } from '../../../../lib/work-kinds-core'
+import { ASSIGNABLE_ROLES, KIND_COLORS, RESERVED_KIND_SLUGS } from '../../../../lib/work-kinds-core'
 
 /** Edit or archive a work type. Slug is immutable; kinds are archived
  *  (active=false), never deleted — old items keep their label. */
@@ -11,6 +11,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const user = await requireRole('account_manager')
     const { id } = await params
     const body = await req.json()
+
+    // the fixed system kind must not be renamed or archived — its slug is
+    // load-bearing (one-brief-per-shoot index, item-gate branch)
+    const { data: existing } = await supabase
+      .from('work_kinds').select('slug').eq('id', id).maybeSingle()
+    if (!existing) return NextResponse.json({ error: 'Work type not found' }, { status: 404 })
+    if (RESERVED_KIND_SLUGS.has(existing.slug) && ('name' in body || 'active' in body)) {
+      return NextResponse.json({ error: 'This is a system work type — it cannot be renamed or archived' }, { status: 422 })
+    }
 
     const patch: Record<string, unknown> = {}
     if ('name' in body) {

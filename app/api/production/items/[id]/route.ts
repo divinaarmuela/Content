@@ -81,6 +81,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const keys = Object.keys(body ?? {})
     const captionOnly = keys.length === 1 && keys[0] === 'caption'
     const user = captionOnly ? await requireRole('scheduler') : await requireRole('account_manager')
+    // 'scheduler' as a floor admits editors — the caption IS the published post
+    // text, so restrict caption edits to scheduler/AM/super, not editors
+    if (captionOnly && !['scheduler', 'account_manager', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Editors cannot edit the caption' }, { status: 403 })
+    }
     const { id } = await params
     await loadItemForUser(user, id)
 
@@ -136,6 +141,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const user = await requireRole('account_manager')
     const { id } = await params
     const item = await loadItemForUser(user, id)
+
+    // publish_jobs has NO fk to content_items — cancel any queued/publishing job
+    // FIRST, or the cron would publish a deleted item to the client's live account
+    await supabase.from('publish_jobs')
+      .update({ status: 'cancelled' })
+      .eq('content_item_id', id)
+      .in('status', ['queued', 'publishing'])
 
     for (const table of ['schedule_entries', 'item_comments', 'asset_versions', 'approvals'] as const) {
       await supabase.from(table).delete().eq('item_id', id)

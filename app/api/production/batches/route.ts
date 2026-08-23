@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
-import { accessibleClientIds } from '../../../lib/production-access'
+import { batchClientIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
 import {
@@ -17,7 +17,7 @@ export async function GET() {
       .select('*, clients(name), content_items(count)')
       .order('created_at', { ascending: false })
       .limit(200)
-    const clientIds = await accessibleClientIds(user)
+    const clientIds = await batchClientIds(user)
     if (clientIds !== null) {
       if (clientIds.length === 0) return NextResponse.json([])
       q = q.in('client_id', clientIds)
@@ -40,24 +40,41 @@ export async function POST(req: Request) {
     if (!body.client_id || !body.title) {
       return NextResponse.json({ error: 'client_id and title are required' }, { status: 400 })
     }
-    const clientIds = await accessibleClientIds(user)
+    const clientIds = await batchClientIds(user)
     if (clientIds !== null && !clientIds.includes(body.client_id)) {
       return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
     }
+    // validate the date and DERIVE month/year from it, rather than trusting the
+    // body — a body month/year out of the check-constraint range would 500
+    let shootDate: string | null = null
+    let month: number | null = body.month ? Number(body.month) : null
+    let year: number | null = body.year ? Number(body.year) : null
+    if (body.shoot_date) {
+      const t = new Date(`${String(body.shoot_date)}T00:00:00`)
+      const yr = t.getUTCFullYear()
+      if (Number.isNaN(t.getTime()) || yr < 2024 || yr > 2100) {
+        return NextResponse.json({ error: 'Enter a valid shoot date' }, { status: 422 })
+      }
+      shootDate = String(body.shoot_date)
+      month = t.getUTCMonth() + 1
+      year = yr
+    }
+    if (month !== null && (!Number.isInteger(month) || month < 1 || month > 12)) month = null
+    if (year !== null && (!Number.isInteger(year) || year < 2024 || year > 2100)) year = null
     const { data, error } = await supabase
       .from('batches')
       .insert({
         client_id: body.client_id,
         title: String(body.title).slice(0, 120),
-        description: body.description ?? null,
+        description: body.description ? String(body.description).slice(0, 2000) : null,
         concept: body.concept ? String(body.concept).slice(0, 8000) : null,
         location: body.location ? String(body.location).slice(0, 300) : null,
-        shoot_date: body.shoot_date ?? null,
+        shoot_date: shootDate,
         shot_list: sanitiseShotList(body.shot_list),
         planned_deliverables: sanitisePlannedDeliverables(body.planned_deliverables),
         reference_media: sanitiseReferenceMedia(body.reference_media),
-        month: body.month ?? null,
-        year: body.year ?? null,
+        month,
+        year,
         owner_id: user.id,
       })
       .select()

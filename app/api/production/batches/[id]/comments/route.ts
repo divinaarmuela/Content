@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
-import { accessibleClientIds } from '../../../../../lib/production-access'
+import { batchClientIds } from '../../../../../lib/production-access'
 
 /**
  * The shoot's comment thread, team side — the same rows the client reads
@@ -12,7 +12,7 @@ async function guard(user: Awaited<ReturnType<typeof requireRole>>, id: string) 
   const { data: batch } = await supabase
     .from('batches').select('id, client_id').eq('id', id).maybeSingle()
   if (!batch) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
-  const ids = await accessibleClientIds(user)
+  const ids = await batchClientIds(user)
   if (ids !== null && !ids.includes(batch.client_id)) {
     return { response: NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 }) }
   }
