@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -141,7 +142,14 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-base font-semibold" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>{item.title}</p>
+            {token ? (
+              <Link href={`/portal/${token}/item/${item.id}`} className="text-base font-semibold underline-offset-4 hover:underline"
+                style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
+                {item.title}
+              </Link>
+            ) : (
+              <p className="text-base font-semibold" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>{item.title}</p>
+            )}
             <p className="font-mono text-[10px] uppercase tracking-wider opacity-50">{item.content_type}</p>
           </div>
           {item.drive_url && (
@@ -239,7 +247,7 @@ export function ReviewCard({ item, token }: { item: PortalItem; token?: string }
 
 /** A piece as a media card — the work stays visible at every stage, not
  *  just while it's being reviewed. No preview yet → a quiet dark slate. */
-export function PortalItemCard({ item }: { item: PortalItem }) {
+export function PortalItemCard({ item, token }: { item: PortalItem; token?: string }) {
   return (
     <div className="group overflow-hidden rounded-xl" style={surface}>
       <div className="relative aspect-video w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
@@ -260,7 +268,13 @@ export function PortalItemCard({ item }: { item: PortalItem }) {
       </div>
       <div className="flex flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="truncate text-sm font-medium">{item.title}</p>
+          {token ? (
+            <Link href={`/portal/${token}/item/${item.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
+              {item.title}
+            </Link>
+          ) : (
+            <p className="truncate text-sm font-medium">{item.title}</p>
+          )}
           <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-50">{item.status_label}</span>
         </div>
         {(item.schedule.length > 0) && (
@@ -293,8 +307,7 @@ export function PortalSection({ title, items, empty, token }: {
       <SectionHeading count={items.length}>{title}</SectionHeading>
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
-        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} />)}</div>}
-      {void token}
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} token={token} />)}</div>}
     </div>
   )
 }

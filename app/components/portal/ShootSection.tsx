@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { Calendar, Check, ChevronDown, MapPin } from 'lucide-react'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
@@ -15,19 +16,19 @@ const dateLabel = (d: string | null) =>
  * board. The board keeps its own light look inside the portal, framed like
  * a piece of work rather than restyled.
  */
-export default function ShootSection({ shoots }: { shoots: PortalShoot[] }) {
+export default function ShootSection({ shoots, clientName, token }: { shoots: PortalShoot[]; clientName?: string; token?: string }) {
   if (shoots.length === 0) return null
   return (
     <section className="flex flex-col gap-6">
       <SectionHeading count={shoots.length}>SHOOT PLANS</SectionHeading>
       <div className="flex flex-col gap-10">
-        {shoots.map(s => <ShootCard key={s.id} shoot={s} />)}
+        {shoots.map(s => <ShootCard key={s.id} shoot={s} clientName={clientName} token={token} />)}
       </div>
     </section>
   )
 }
 
-function ShootCard({ shoot }: { shoot: PortalShoot }) {
+function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientName?: string; token?: string }) {
   const [boardOpen, setBoardOpen] = useState(false)
   const done = shoot.shot_list.filter(r => r.done).length
 
@@ -37,9 +38,17 @@ function ShootCard({ shoot }: { shoot: PortalShoot }) {
       style={{ borderColor: 'var(--p-border)', background: 'var(--p-surface)' }}
     >
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h3 className="text-lg font-medium tracking-tight" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
-          {shoot.title}
-        </h3>
+        {token ? (
+          <Link href={`/portal/${token}/shoot/${shoot.id}`}
+            className="text-lg font-medium tracking-tight underline-offset-4 hover:underline"
+            style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
+            {shoot.title}
+          </Link>
+        ) : (
+          <h3 className="text-lg font-medium tracking-tight" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
+            {shoot.title}
+          </h3>
+        )}
         <span
           className="px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em]"
           style={{ fontFamily: 'var(--p-mono-font, inherit)', background: 'var(--p-accent)', color: 'var(--p-accent-ink)' }}
@@ -99,11 +108,14 @@ function ShootCard({ shoot }: { shoot: PortalShoot }) {
             {boardOpen ? 'Hide the planning board' : `View the planning board · ${shoot.canvas_cards.length} cards`}
           </button>
           {boardOpen && (
-            <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--p-border)' }}>
+            /* the `dark` class pins the canvas to its dark palette so it sits
+               naturally in the portal's ink theme — zoom controls included */
+            <div className="dark overflow-hidden rounded-xl border" style={{ borderColor: 'var(--p-border)' }}>
               <BriefCanvas
                 cards={shoot.canvas_cards}
                 references={[]}
                 canEdit={false}
+                clientName={clientName}
                 onOp={async () => false}
               />
             </div>

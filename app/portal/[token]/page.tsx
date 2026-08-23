@@ -126,13 +126,13 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
 
       <main className="flex w-full flex-col gap-16 px-6 py-14 sm:px-10">
         <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} /></Reveal>
-        <Reveal gate={false}><ShootSection shoots={data.shoots} /></Reveal>
+        <Reveal gate={false}><ShootSection shoots={data.shoots} clientName={data.client.name} token={token} /></Reveal>
         <Reveal gate={false}><CommitmentCards data={data} /></Reveal>
         <div className="grid gap-12 lg:grid-cols-2">
-          <Reveal gate={false}><PortalSection title="IN PRODUCTION" items={data.in_production} empty="Nothing in production right now." /></Reveal>
-          <Reveal gate={false} delay={120}><PortalSection title="APPROVED & SCHEDULED" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." /></Reveal>
+          <Reveal gate={false}><PortalSection title="IN PRODUCTION" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
+          <Reveal gate={false} delay={120}><PortalSection title="APPROVED & SCHEDULED" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." token={token} /></Reveal>
         </div>
-        <Reveal gate={false}><PortalSection title="PUBLISHED" items={data.published} empty="Published posts appear here with live links." /></Reveal>
+        <Reveal gate={false}><PortalSection title="PUBLISHED" items={data.published} empty="Published posts appear here with live links." token={token} /></Reveal>
       </main>
 
       <footer className="px-6 pb-10 sm:px-10">

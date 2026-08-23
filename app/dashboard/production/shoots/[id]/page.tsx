@@ -23,6 +23,7 @@ import {
 import { useProductionLive } from '../../useProductionLive'
 import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
+import BriefComments from './BriefComments'
 import {
   availableBatchTransitions, sanitiseCanvasCards,
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
@@ -482,6 +483,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               </Button>
             </CardContent>
           </Card>
+
+          <BriefComments batchId={batch.id} />
         </div>
       </div>
 
