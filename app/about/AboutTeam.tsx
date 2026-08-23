@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import styles from './about.module.css'
 
 const MONO = 'var(--font-space-mono), monospace'
@@ -61,38 +61,22 @@ const DEPTS: Dept[] = [
 ]
 
 export default function AboutTeam() {
-  const [open, setOpen] = useState(0)
-  // Opening one department closes another that may sit above it; the collapse
-  // changes the page height above the clicked header and the viewport jumps.
-  // Remember where the clicked header was and restore it after the re-render.
-  const clicked = useRef<{ el: HTMLButtonElement; top: number } | null>(null)
+  // Departments open independently — one-at-a-time meant a click could also
+  // collapse a section ABOVE it, shifting the page and forcing a scroll jump.
+  const [open, setOpen] = useState<number[]>([0])
 
-  const toggle = (i: number, isOpen: boolean, e: React.MouseEvent<HTMLButtonElement>) => {
-    clicked.current = { el: e.currentTarget, top: e.currentTarget.getBoundingClientRect().top }
-    setOpen(isOpen ? -1 : i)
+  const toggle = (i: number, isOpen: boolean) => {
+    setOpen(prev => (isOpen ? prev.filter(x => x !== i) : [...prev, i]))
   }
-
-  useLayoutEffect(() => {
-    const c = clicked.current
-    if (!c) return
-    clicked.current = null
-    const delta = c.el.getBoundingClientRect().top - c.top
-    if (delta === 0) return
-    // Lenis (active on non-Mac platforms) re-asserts its own scroll position
-    // every frame, so plain scrollBy gets overridden — go through it instead.
-    const lenis = (window as { __lenis?: { scrollTo: (y: number, o?: { immediate?: boolean }) => void } }).__lenis
-    if (lenis) lenis.scrollTo(window.scrollY + delta, { immediate: true })
-    else window.scrollBy(0, delta)
-  }, [open])
 
   return (
     <div style={{ borderTop: '1px solid rgba(255,255,255,0.28)' }}>
       {DEPTS.map((dept, i) => {
-        const isOpen = open === i
+        const isOpen = open.includes(i)
         return (
           <div key={dept.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
             <button
-              onClick={e => toggle(i, isOpen, e)}
+              onClick={() => toggle(i, isOpen)}
               className={styles.deptBtn}
               aria-expanded={isOpen}
             >
