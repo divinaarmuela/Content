@@ -219,7 +219,7 @@ export default function ShootsPage() {
                     deliverables > 0 && `${deliverables} deliverables`,
                     itemCount > 0 && `${itemCount} item${itemCount === 1 ? '' : 's'} in production`,
                   ].filter(Boolean).join(' · ')
-                  const canDelete = isManager && (s.status ?? 'shot') === 'brief' && itemCount === 0
+                  const canDelete = isManager && itemCount === 0
                   return (
                     <div key={s.id} className="group/shoot relative">
                     <Link href={`/dashboard/production/shoots/${s.id}`}>
@@ -292,8 +292,8 @@ export default function ShootsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the shoot plan and its board. Only a shoot still in planning
-              with no content items can be deleted — a shoot that produced work is wrapped instead.
+              This removes the shoot plan and its board. A shoot that produced no
+              content items can be deleted at any stage; one with items is wrapped instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

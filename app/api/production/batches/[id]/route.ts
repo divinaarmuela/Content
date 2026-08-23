@@ -168,12 +168,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
 
-    // only an in-planning shoot is deletable; once the date is locked it is a
-    // commitment (calendar, portal), so it gets wrapped, not deleted
-    if (loaded.batch.status !== 'brief') {
-      return NextResponse.json({ error: 'Only a shoot still in planning can be deleted — wrap it instead' }, { status: 409 })
-    }
-    // any shoot with no items can go — a shoot that produced work cannot. Read
+    // a shoot that produced NO items can always be deleted (nothing to orphan);
+    // one that produced work must be wrapped instead. Read
     // the error too: a failed count must NOT be treated as "zero items" and
     // silently orphan every item to batch_id = null
     const { count, error: countErr } = await supabase.from('content_items')
