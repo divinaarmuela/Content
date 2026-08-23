@@ -149,6 +149,12 @@ export async function GET() {
     const needsReview = items
       .filter(i => ['internal_review', 'client_review', 'client_changes_requested'].includes(i.status))
       .slice(0, 8)
+    // managers get assigned work too (a graphics or copy task can land on
+    // anyone) — surface it, soonest due first, or it silently rots
+    const myTasks = items
+      .filter(i => i.owner_id === user.id
+        && !['approved_for_scheduling', 'scheduled', 'published'].includes(i.status))
+      .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
     return NextResponse.json({
       role: user.role,
       name: user.name,
@@ -159,6 +165,8 @@ export async function GET() {
         awaiting_client: (pipeline.client_review ?? 0) + (pipeline.client_changes_requested ?? 0),
         revisions_open: pipeline.revision_required ?? 0,
         needs_review: needsReview,
+        my_tasks: myTasks.slice(0, 8),
+        my_tasks_count: myTasks.length,
         ...(mayLeads
           ? {
               leads_total: leads.length,

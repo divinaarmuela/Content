@@ -49,6 +49,8 @@ type Overview = {
     awaiting_client: number
     revisions_open: number
     needs_review: ItemLite[]
+    my_tasks?: ItemLite[]
+    my_tasks_count?: number
     /** absent for managers without a Leads grant */
     leads_total?: number
     leads_week?: number
@@ -268,6 +270,10 @@ export default function OverviewPage() {
               : <Stat label="Revisions open" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
           </div>
           <Pipeline pipeline={data.pipeline} />
+          {(data.manager.my_tasks?.length ?? 0) > 0 && (
+            <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
+              empty="" actionHref="/dashboard/production" actionLabel="Open board" />
+          )}
           <div className={data.manager.latest_leads ? "grid gap-4 lg:grid-cols-[1.5fr_1fr]" : "grid gap-4"}>
             <ItemList title="Waiting on review" icon={ClipboardList} items={data.manager.needs_review}
               empty="Nothing in review — the funnel is clear." actionHref="/dashboard/production" actionLabel="Open board" />
