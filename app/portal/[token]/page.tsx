@@ -10,6 +10,7 @@ import PortalShell from '../../components/portal/PortalShell'
 import {
   CommitmentCards, PortalSection, ReviewSection,
 } from '../../components/portal/PortalSections'
+import ShootSection from '../../components/portal/ShootSection'
 
 export const metadata: Metadata = {
   title: 'Your content — MD Media',
@@ -125,6 +126,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
 
       <main className="flex w-full flex-col gap-16 px-6 py-14 sm:px-10">
         <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} /></Reveal>
+        <Reveal gate={false}><ShootSection shoots={data.shoots} /></Reveal>
         <Reveal gate={false}><CommitmentCards data={data} /></Reveal>
         <div className="grid gap-12 lg:grid-cols-2">
           <Reveal gate={false}><PortalSection title="IN PRODUCTION" items={data.in_production} empty="Nothing in production right now." /></Reveal>

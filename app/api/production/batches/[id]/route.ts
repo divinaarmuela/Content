@@ -120,6 +120,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       patch.owner_id = body.owner_id || null
     }
+    if ('shared_with_client' in body) {
+      // showing a shoot plan on the client portal is an AM call
+      if (!roleSatisfies(user.role, 'account_manager')) {
+        return NextResponse.json({ error: 'Only an account manager can share a shoot with the client' }, { status: 403 })
+      }
+      patch.shared_with_client = body.shared_with_client === true
+    }
     if ('shoot_date' in body) {
       // freely editable while still a plan; once locked, the date is a
       // commitment and moves only through change_date above

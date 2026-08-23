@@ -1,6 +1,10 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
+import {
+  sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
+  type CanvasCard, type ShotRow,
+} from './batch-brief-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -21,6 +25,25 @@ export type PortalItem = {
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
 }
 
+export type PortalShoot = {
+  id: string
+  title: string
+  status_label: string
+  shoot_date: string | null
+  location: string | null
+  planned_deliverables: { type: string; qty: number }[]
+  shot_list: ShotRow[]
+  canvas_cards: CanvasCard[]
+}
+
+/** What a shoot's internal status means to the client reading their portal. */
+const SHOOT_LABELS: Record<string, string> = {
+  brief: 'In planning',
+  locked: 'Shoot booked',
+  shot: 'Shot',
+  wrapped: 'Wrapped',
+}
+
 export type PortalData = {
   client: { id: string; name: string }
   /** the client's scanned brand profile — the portal dresses in it */
@@ -34,6 +57,7 @@ export type PortalData = {
   approved: PortalItem[]
   scheduled: PortalItem[]
   published: PortalItem[]
+  shoots: PortalShoot[]
 }
 
 export async function getPortalData(clientId: string): Promise<PortalData | null> {
@@ -41,7 +65,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const month = now.getMonth() + 1
   const year = now.getFullYear()
 
-  const [clientRes, itemsRes, commitmentRes, brandRes] = await Promise.all([
+  const [clientRes, itemsRes, commitmentRes, brandRes, shootsRes] = await Promise.all([
     supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
     supabase
       .from('content_items')
@@ -57,6 +81,14 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .eq('year', year)
       .maybeSingle(),
     supabase.from('client_brand').select('profile').eq('client_id', clientId).maybeSingle(),
+    // shoots an AM chose to share; errors (column not migrated yet) degrade to none
+    supabase
+      .from('batches')
+      .select('id, title, status, shoot_date, location, planned_deliverables, shot_list, canvas_cards')
+      .eq('client_id', clientId)
+      .eq('shared_with_client', true)
+      .order('shoot_date', { ascending: false, nullsFirst: false })
+      .limit(6),
   ])
   if (!clientRes.data) return null
   const items = itemsRes.data ?? []
@@ -129,6 +161,17 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       }
     : null
 
+  const shoots: PortalShoot[] = (shootsRes.error ? [] : shootsRes.data ?? []).map(b => ({
+    id: b.id,
+    title: b.title,
+    status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
+    shoot_date: b.shoot_date ?? null,
+    location: b.location ?? null,
+    planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
+    shot_list: sanitiseShotList(b.shot_list),
+    canvas_cards: sanitiseCanvasCards(b.canvas_cards),
+  }))
+
   return {
     client: clientRes.data,
     brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
@@ -138,6 +181,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     approved: bucket(['approved_for_scheduling']),
     scheduled: bucket(['scheduled']),
     published: bucket(['published']),
+    shoots,
   }
 }
 
