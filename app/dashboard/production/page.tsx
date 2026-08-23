@@ -416,7 +416,7 @@ export default function ProductionPage() {
 
       {items === null ? (
         <div className="flex gap-3 overflow-x-hidden">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 w-64 shrink-0" />)}
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
         </div>
       ) : (
         <div className="w-full overflow-x-auto">
@@ -424,7 +424,7 @@ export default function ProductionPage() {
             {COLUMNS.map(col => {
               const colItems = visible.filter(i => col.statuses.includes(i.status))
               return (
-                <div key={col.key} className="min-w-64 flex-1">
+                <div key={col.key} className="min-w-44 flex-1">
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <span className={`h-2 w-2 rounded-full ${col.tint}`} />
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{col.title}</span>
