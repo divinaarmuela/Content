@@ -335,7 +335,7 @@ export default function ProductionPage() {
           {isManager && (
             <Button variant={selectMode ? 'default' : 'outline'} size="sm"
               onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
-              <CheckSquare className="h-4 w-4" /> {selectMode ? 'Done' : 'Select'}
+              <CheckSquare className="h-4 w-4" /> {selectMode ? 'Cancel' : 'Select to delete'}
             </Button>
           )}
           <DropdownMenu>
