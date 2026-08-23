@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -17,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, Lock, MapPin, Plus, Trash2, X,
+  ArrowLeft, Camera, Check, Lock, MapPin, Plus, Trash2, X, FileDown,
 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
 import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
@@ -35,6 +36,7 @@ type Batch = {
   canvas_cards?: CanvasCard[]
   planned_deliverables: { type: string; qty: number }[]
   locked_at: string | null; shot_at: string | null
+  shared_with_client?: boolean
   month: number | null; year: number | null
   clients: { name: string } | null
 }
@@ -451,6 +453,33 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex flex-col gap-3 p-4">
+              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Client portal</p>
+              {isManager ? (
+                <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <Switch
+                    checked={batch.shared_with_client ?? false}
+                    onCheckedChange={async v => {
+                      const ok = await patch('shared_with_client', v)
+                      if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
+                    }}
+                  />
+                  Show this shoot plan on the client portal
+                </label>
+              ) : (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {batch.shared_with_client ? 'Visible on the client portal.' : 'Not shared with the client. An account manager can share it.'}
+                </p>
+              )}
+              <Button size="sm" variant="outline" className="w-fit" asChild>
+                <a href={`/api/production/batches/${batch.id}/pdf`} download>
+                  <FileDown className="h-3.5 w-3.5" /> Download brief PDF
+                </a>
+              </Button>
             </CardContent>
           </Card>
         </div>
