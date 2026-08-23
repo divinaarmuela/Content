@@ -144,9 +144,14 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 
 /* ── the brief canvas: freeform cards on a pan/zoom board ── */
 
-export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup'] as const
-export const MOCKUP_PLATFORMS = ['ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin'] as const
-export const CANVAS_NOTE_COLORS = ['paper', 'yellow', 'pink', 'blue', 'green', 'purple'] as const
+export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo'] as const
+export const MOCKUP_PLATFORMS = [
+  'ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin',
+  'youtube', 'yt_short', 'tiktok', 'facebook',
+] as const
+export const CANVAS_NOTE_COLORS = [
+  'paper', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'ink',
+] as const
 const CANVAS_BOUND = 20_000
 const CANVAS_MAX_CARDS = 200
 
@@ -166,6 +171,8 @@ export type CanvasCard = {
   to?: string
   /** mockup frame — which platform chrome wraps the image */
   platform?: (typeof MOCKUP_PLATFORMS)[number]
+  /** todo card — its checklist rows */
+  items?: { id: string; text: string; done: boolean }[]
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -200,6 +207,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...(kind === 'note' || kind === 'label'
         ? { text: String(r.text ?? '').slice(0, kind === 'label' ? 120 : 4000) }
         : {}),
+      ...(kind === 'mockup' && r.text ? { text: String(r.text).slice(0, 500) } : {}),
       ...(kind === 'image' || kind === 'link' ? { url } : {}),
       ...(kind === 'mockup' && url.startsWith('https://') ? { url } : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
@@ -208,6 +216,18 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
+      ...(kind === 'todo'
+        ? {
+            items: (Array.isArray(r.items) ? r.items : [])
+              .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
+              .map(t => ({
+                id: String(t.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10),
+                text: String(t.text ?? '').slice(0, 200),
+                done: t.done === true,
+              }))
+              .slice(0, 30),
+          }
+        : {}),
     }
     byId.set(card.id, card) // dedupe by id, keep-last
   }

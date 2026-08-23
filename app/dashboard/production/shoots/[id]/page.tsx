@@ -151,7 +151,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
   if (!batch) {
     return (
-      <div className="mx-auto flex max-w-5xl flex-col gap-4">
+      <div className="flex flex-col gap-4">
         <Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" />
       </div>
     )
@@ -165,7 +165,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const progressFor = (type: string) => (progress ?? []).find(p => p.type === type)
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <Link href="/dashboard/production/shoots"
         className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
         <ArrowLeft className="h-3.5 w-3.5" /> Shoots
@@ -468,6 +468,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           cards={canvasCards}
           references={canvasRefs}
           canEdit={canEdit}
+          clientName={batch.clients?.name}
           onOp={async (op: CanvasOp) => {
             const res = await fetch(`/api/production/batches/${id}`, {
               method: 'PATCH',

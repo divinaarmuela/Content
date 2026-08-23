@@ -286,7 +286,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:px-8">
+        <main className="w-full p-4 sm:p-6 xl:px-8">
           {resolving ? (
             <div className="flex flex-col gap-3">
               <Skeleton className="h-8 w-56" />

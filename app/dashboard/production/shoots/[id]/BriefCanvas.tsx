@@ -6,8 +6,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
-  ExternalLink, ImagePlus, Link2, Maximize2, Minimize2, Minus, MoveUpRight, Plus,
-  Scan, Smartphone, StickyNote, Trash2, Type,
+  ExternalLink, ImagePlus, Link2, ListTodo, Maximize2, Minimize2, Minus, MoveUpRight,
+  Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
@@ -21,6 +21,22 @@ export type CanvasOp = { upsert?: CanvasCard[]; remove?: string[] }
 
 const mint = () => Math.random().toString(36).slice(2, 10)
 const clampScale = (s: number) => Math.min(2, Math.max(0.25, s))
+/** cards settle onto an 8px grid on drop, so layouts line up without effort */
+const snap = (n: number) => Math.round(n / 8) * 8
+
+/** the "add a post" menu, grouped the way people think — by platform */
+const MOCKUP_MENU: { group: string; items: { pf: NonNullable<CanvasCard['platform']>; label: string; w: number }[] }[] = [
+  { group: 'Instagram', items: [
+    { pf: 'ig_post', label: 'Post', w: 280 }, { pf: 'ig_carousel', label: 'Carousel', w: 280 },
+    { pf: 'ig_reel', label: 'Reel', w: 200 }, { pf: 'ig_story', label: 'Story', w: 200 },
+  ] },
+  { group: 'YouTube', items: [
+    { pf: 'youtube', label: 'Video', w: 300 }, { pf: 'yt_short', label: 'Short', w: 200 },
+  ] },
+  { group: 'TikTok', items: [{ pf: 'tiktok', label: 'Video', w: 200 }] },
+  { group: 'LinkedIn', items: [{ pf: 'linkedin', label: 'Post', w: 280 }] },
+  { group: 'Facebook', items: [{ pf: 'facebook', label: 'Post', w: 280 }] },
+]
 
 /**
  * The board: a Milanote-style freeform canvas. Hand-rolled DOM cards on one
@@ -30,11 +46,12 @@ const clampScale = (s: number) => Math.min(2, Math.max(0.25, s))
  * hundred cards pan at 60fps without a single re-render.
  */
 export default function BriefCanvas({
-  cards: savedCards, references, canEdit, onOp,
+  cards: savedCards, references, canEdit, clientName, onOp,
 }: {
   cards: CanvasCard[]
   references: ReferenceMedia[]
   canEdit: boolean
+  clientName?: string
   onOp: (op: CanvasOp) => Promise<boolean>
 }) {
   // seed: an empty board with existing reference images shows them laid out;
@@ -97,8 +114,37 @@ export default function BriefCanvas({
     forceRender(n => n + 1)
   }, [])
 
+  // undo: every persisted change records its inverse; Ctrl+Z replays them.
+  // cardsRef lags one render behind setCards, which is exactly the "before"
+  // state at the moment a handler calls persist() after upsertLocal()
+  const cardsRef = useRef(cards)
+  useEffect(() => { cardsRef.current = cards }, [cards])
+  const historyRef = useRef<CanvasOp[]>([])
+
   /** Persist one changed card (plus the whole seed set the first time). */
-  const persist = useCallback((changed: CanvasCard[], removed: string[] = []) => {
+  const persist = useCallback((changed: CanvasCard[], removed: string[] = [], record = true) => {
+    if (record && !seedPendingRef.current) {
+      const before = cardsRef.current
+      const restore = new Map<string, CanvasCard>()
+      const drop: string[] = []
+      for (const c of changed) {
+        const prev = before.find(x => x.id === c.id)
+        if (prev) restore.set(prev.id, prev)
+        else drop.push(c.id)
+      }
+      for (const id of removed) {
+        // a deleted card takes its arrows with it server-side — restore those too
+        for (const prev of before) {
+          if (prev.id === id || (prev.kind === 'arrow' && (prev.from === id || prev.to === id))) restore.set(prev.id, prev)
+        }
+      }
+      if (restore.size || drop.length) {
+        historyRef.current = [...historyRef.current.slice(-49), {
+          ...(restore.size ? { upsert: [...restore.values()] } : {}),
+          ...(drop.length ? { remove: drop } : {}),
+        }]
+      }
+    }
     const upsert = seedPendingRef.current
       ? [...cards.filter(c => !changed.some(u => u.id === c.id)), ...changed]
       : changed
@@ -107,6 +153,20 @@ export default function BriefCanvas({
     void onOp({ ...(upsert.length ? { upsert } : {}), ...(removed.length ? { remove: removed } : {}) })
       .finally(() => { pendingOpsRef.current = Math.max(0, pendingOpsRef.current - 1) })
   }, [cards, onOp])
+
+  /** Ctrl+Z: pop the last inverse op, apply it locally, persist unrecorded. */
+  const undo = useCallback(() => {
+    const op = historyRef.current.pop()
+    if (!op) return
+    setCards(prev => {
+      const ups = op.upsert ?? []
+      const gone = new Set([...(op.remove ?? []), ...ups.map(u => u.id)])
+      return [...prev.filter(c => !gone.has(c.id)), ...ups]
+    })
+    setSelected(null)
+    pendingOpsRef.current += 1
+    void onOp(op).finally(() => { pendingOpsRef.current = Math.max(0, pendingOpsRef.current - 1) })
+  }, [onOp])
 
   const upsertLocal = useCallback((card: CanvasCard) => {
     setCards(prev => {
@@ -198,6 +258,25 @@ export default function BriefCanvas({
 
   /* ── card dragging: raw pointer events, 4px threshold, rAF paint ── */
   const dragState = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number; moved: boolean; el: HTMLElement | null } | null>(null)
+  /* ── corner resize: width only — height follows content ── */
+  const resizeState = useRef<{ id: string; startX: number; ow: number; live: number } | null>(null)
+  /* ── Milanote-style line drag: pull from a card's dot onto another card ── */
+  const lineDrag = useRef<{ from: string } | null>(null)
+  const draftLineRef = useRef<SVGLineElement>(null)
+
+  const toWorld = (clientX: number, clientY: number) => {
+    const rect = viewportRef.current!.getBoundingClientRect()
+    const cam = camRef.current
+    return { x: (clientX - rect.left - cam.x) / cam.s, y: (clientY - rect.top - cam.y) / cam.s }
+  }
+
+  const connectCards = (from: string, to: string) => {
+    if (from === to) return
+    const arrow: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, from, to }
+    upsertLocal(arrow)
+    persist([arrow])
+    setSelected(arrow.id)
+  }
 
   const onCardPointerDown = (e: React.PointerEvent, card: CanvasCard) => {
     if (viewOnly || editing === card.id) return
@@ -247,8 +326,8 @@ export default function BriefCanvas({
     const s = camRef.current.s
     const next: CanvasCard = {
       ...card,
-      x: Math.round(d.ox + (e.clientX - d.startX) / s),
-      y: Math.round(d.oy + (e.clientY - d.startY) / s),
+      x: snap(d.ox + (e.clientX - d.startX) / s),
+      y: snap(d.oy + (e.clientY - d.startY) / s),
       z: Math.max(0, ...cards.map(c => c.z)) + 1,
     }
     upsertLocal(next)
@@ -324,7 +403,7 @@ export default function BriefCanvas({
   const commitText = (card: CanvasCard, text: string) => {
     setEditing(null)
     interactingRef.current = false
-    const trimmed = text.slice(0, card.kind === 'label' ? 120 : 4000)
+    const trimmed = text.slice(0, card.kind === 'label' ? 120 : card.kind === 'mockup' ? 500 : 4000)
     if (trimmed === (card.text ?? '')) return
     const next = { ...card, text: trimmed }
     upsertLocal(next)
@@ -380,6 +459,9 @@ export default function BriefCanvas({
         return
       }
       if (viewOnly) return
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault(); undo(); return
+      }
       const card = cards.find(c => c.id === selected)
       if (e.key.toLowerCase() === 'n') { addCard({ kind: 'note', text: '', color: 'yellow' }); return }
       if (e.key.toLowerCase() === 'f') { setFullscreen(v => !v); return }
@@ -389,7 +471,7 @@ export default function BriefCanvas({
       if (!card) return
       if (e.key === 'Delete' || e.key === 'Backspace') { removeCard(card); return }
       if (e.key === 'Enter' || e.key === 'F2') {
-        if (card.kind === 'note' || card.kind === 'label') setEditing(card.id)
+        if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup') setEditing(card.id)
         return
       }
       const step = e.shiftKey ? 1 : 10
@@ -458,11 +540,24 @@ export default function BriefCanvas({
           <svg className="absolute left-0 top-0" width={1} height={1}
             style={{ overflow: 'visible', maxWidth: 'none' }} aria-hidden>
             <defs>
-              <marker id="brief-arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
-                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" className="fill-zinc-400 dark:fill-zinc-500" />
+              {/* open chevron, not a filled triangle — reads finer at any zoom */}
+              <marker id="brief-arrowhead" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M2,1.5 L8.5,5 L2,8.5" fill="none" strokeWidth="1.4"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  className="stroke-zinc-400 dark:stroke-zinc-500" />
+              </marker>
+              <marker id="brief-arrowhead-sel" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M2,1.5 L8.5,5 L2,8.5" fill="none" strokeWidth="1.4"
+                  strokeLinecap="round" strokeLinejoin="round" className="stroke-blue-500" />
               </marker>
             </defs>
+            {/* the line being dragged out — driven by raw DOM, no re-renders */}
+            <line ref={draftLineRef} x1={0} y1={0} x2={0} y2={0} visibility="hidden"
+              className="stroke-blue-500" strokeWidth={1.5} strokeDasharray="4 3"
+              strokeLinecap="round" markerEnd="url(#brief-arrowhead-sel)"
+              style={{ pointerEvents: 'none' }} />
             {ordered.filter(c => c.kind === 'arrow').map(arrow => {
               const fromCard = cards.find(c => c.id === arrow.from)
               const toCard = cards.find(c => c.id === arrow.to)
@@ -479,8 +574,9 @@ export default function BriefCanvas({
                     onClick={e => { e.stopPropagation(); setSelected(arrow.id) }} />
                   <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
                     className={isSel ? 'stroke-blue-500' : 'stroke-zinc-400 dark:stroke-zinc-500'}
-                    strokeWidth={isSel ? 2.5 : 1.5}
-                    markerEnd="url(#brief-arrowhead)"
+                    strokeWidth={isSel ? 1.75 : 1.25}
+                    strokeLinecap="round"
+                    markerEnd={isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'}
                     style={{ pointerEvents: 'none' }} />
                 </g>
               )
@@ -505,12 +601,8 @@ export default function BriefCanvas({
                 if (viewOnly) { setSheetCard(card); return }
                 if (connectFrom === '') { setConnectFrom(card.id); return }
                 if (connectFrom && connectFrom !== card.id) {
-                  const arrow: CanvasCard = {
-                    id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0,
-                    from: connectFrom, to: card.id,
-                  }
-                  upsertLocal(arrow); persist([arrow])
-                  setConnectFrom(null); setSelected(arrow.id)
+                  connectCards(connectFrom, card.id)
+                  setConnectFrom(null)
                   return
                 }
                 if (card.kind === 'link' && (e.ctrlKey || e.metaKey) && card.url) window.open(card.url, '_blank')
@@ -518,7 +610,7 @@ export default function BriefCanvas({
               }}
               onDoubleClick={e => {
                 e.stopPropagation()
-                if (!viewOnly && (card.kind === 'note' || card.kind === 'label')) {
+                if (!viewOnly && (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup')) {
                   interactingRef.current = true
                   setEditing(card.id)
                 }
@@ -529,8 +621,70 @@ export default function BriefCanvas({
                 card={card}
                 selected={selected === card.id}
                 editing={editing === card.id}
+                clientName={clientName}
                 onCommitText={text => commitText(card, text)}
+                onUpdate={viewOnly ? undefined : next => { upsertLocal(next); persist([next]) }}
               />
+              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
+                <div
+                  className="absolute -right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-blue-500 bg-white shadow dark:bg-zinc-950"
+                  title="Drag onto another card to connect"
+                  onPointerDown={e => {
+                    e.stopPropagation()
+                    interactingRef.current = true
+                    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                    lineDrag.current = { from: card.id }
+                    const { cx, cy } = centreOf(card)
+                    const line = draftLineRef.current
+                    if (line) {
+                      line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy))
+                      line.setAttribute('x2', String(cx)); line.setAttribute('y2', String(cy))
+                      line.setAttribute('visibility', 'visible')
+                    }
+                  }}
+                  onPointerMove={e => {
+                    if (!lineDrag.current || lineDrag.current.from !== card.id) return
+                    const p = toWorld(e.clientX, e.clientY)
+                    draftLineRef.current?.setAttribute('x2', String(p.x))
+                    draftLineRef.current?.setAttribute('y2', String(p.y))
+                  }}
+                  onPointerUp={e => {
+                    if (!lineDrag.current || lineDrag.current.from !== card.id) return
+                    lineDrag.current = null
+                    interactingRef.current = false
+                    draftLineRef.current?.setAttribute('visibility', 'hidden')
+                    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cid]') as HTMLElement | null
+                    const to = hit?.getAttribute('data-cid')
+                    if (to && to !== card.id) connectCards(card.id, to)
+                  }}
+                />
+              )}
+              {selected === card.id && !viewOnly && !editing && card.kind !== 'label' && card.kind !== 'arrow' && (
+                <div
+                  className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-blue-500 shadow dark:border-zinc-950"
+                  onPointerDown={e => {
+                    e.stopPropagation()
+                    interactingRef.current = true
+                    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                    resizeState.current = { id: card.id, startX: e.clientX, ow: card.w, live: card.w }
+                  }}
+                  onPointerMove={e => {
+                    const r = resizeState.current
+                    if (!r || r.id !== card.id) return
+                    const w = Math.min(1200, Math.max(120, Math.round(r.ow + (e.clientX - r.startX) / camRef.current.s)))
+                    if (w === r.live) return
+                    r.live = w
+                    upsertLocal({ ...card, w })
+                  }}
+                  onPointerUp={() => {
+                    const r = resizeState.current
+                    if (!r || r.id !== card.id) return
+                    resizeState.current = null
+                    interactingRef.current = false
+                    if (r.live !== r.ow) persist([{ ...card, w: r.live }])
+                  }}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -545,7 +699,7 @@ export default function BriefCanvas({
             </p>
             {!viewOnly && (
               <p className="font-mono text-[10.5px] uppercase tracking-wider text-zinc-300 dark:text-zinc-600">
-                N note · drag to pan · Ctrl+scroll to zoom
+                N note · drag to pan · Ctrl+scroll to zoom · Ctrl+Z undo
               </p>
             )}
           </div>
@@ -583,27 +737,38 @@ export default function BriefCanvas({
               onClick={() => addCard({ kind: 'label', text: '' })}>
               <Type className="h-3.5 w-3.5" /> Label
             </Button>
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+              onClick={() => addCard({ kind: 'todo', w: 224, items: [{ id: mint(), text: 'New task', done: false }] })}>
+              <ListTodo className="h-3.5 w-3.5" /> To-do
+            </Button>
             <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs"
               onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
               <MoveUpRight className="h-3.5 w-3.5" /> Arrow
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs"
               onClick={() => setMockupMenu(v => !v)}>
-              <Smartphone className="h-3.5 w-3.5" /> Preview
+              <Smartphone className="h-3.5 w-3.5" /> Post
+            </Button>
+            <span className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={undo}
+              aria-label="Undo" title="Undo (Ctrl+Z)">
+              <Undo2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         )}
         {mockupMenu && (
-          <div className="absolute left-3 top-14 z-10 flex flex-col gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-md dark:border-zinc-800 dark:bg-zinc-900">
-            {([['ig_post', 'Instagram post'], ['ig_carousel', 'Instagram carousel'], ['ig_reel', 'Instagram reel'], ['ig_story', 'Instagram story'], ['linkedin', 'LinkedIn post']] as const).map(([pf, label]) => (
-              <button key={pf} type="button"
-                className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                onClick={() => {
-                  addCard({ kind: 'mockup', platform: pf, w: pf === 'ig_story' || pf === 'ig_reel' ? 200 : 280 })
-                  setMockupMenu(false)
-                }}>
-                {label}
-              </button>
+          <div className="absolute left-3 top-14 z-10 grid w-64 grid-cols-2 gap-x-2 gap-y-0.5 rounded-lg border border-zinc-200 bg-white p-2 shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+            {MOCKUP_MENU.map(({ group, items }) => (
+              <div key={group} className="flex flex-col gap-0.5">
+                <span className="px-2 pt-1.5 font-mono text-[9.5px] uppercase tracking-wider text-zinc-400">{group}</span>
+                {items.map(({ pf, label, w }) => (
+                  <button key={pf} type="button"
+                    className="rounded px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    onClick={() => { addCard({ kind: 'mockup', platform: pf, w }); setMockupMenu(false) }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}
@@ -694,11 +859,26 @@ export default function BriefCanvas({
         <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="text-sm">
-              {sheetCard?.kind === 'note' ? 'Note' : sheetCard?.name || sheetCard?.kind}
+              {sheetCard?.kind === 'note' ? 'Note'
+                : sheetCard?.kind === 'todo' ? (sheetCard.name || 'To-do')
+                : sheetCard?.name || sheetCard?.kind}
             </SheetTitle>
           </SheetHeader>
           {sheetCard?.kind === 'note' && (
             <p className="whitespace-pre-wrap p-1 text-sm leading-relaxed">{sheetCard.text}</p>
+          )}
+          {sheetCard?.kind === 'todo' && (
+            <div className="flex flex-col gap-1.5 p-1">
+              {(sheetCard.items ?? []).map(t => (
+                <span key={t.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={t.done} readOnly disabled className="h-4 w-4 accent-blue-600" />
+                  <span className={t.done ? 'text-zinc-400 line-through' : ''}>{t.text}</span>
+                </span>
+              ))}
+              {(sheetCard.items ?? []).length === 0 && (
+                <span className="text-sm text-zinc-400">Nothing to do yet.</span>
+              )}
+            </div>
           )}
           {sheetCard?.kind === 'image' && sheetCard.url && (
             <div className="flex flex-col gap-2">

@@ -172,6 +172,41 @@ describe('mockup cards', () => {
     expect(cards[0].url).toBe('https://cdn.co/v.jpg')
     expect(cards[1].url).toBeUndefined()
   })
+
+  it('accepts the newer platforms', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards(
+      ['youtube', 'yt_short', 'tiktok', 'facebook'].map((platform, i) =>
+        ({ id: `p${i}`, kind: 'mockup', x: 0, y: 0, platform })),
+    )
+    expect(cards.map(c => c.platform)).toEqual(['youtube', 'yt_short', 'tiktok', 'facebook'])
+  })
+})
+
+describe('todo cards', () => {
+  it('sanitises rows: caps, coerces, and mints missing ids', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const [card] = sanitiseCanvasCards([{
+      id: 't1', kind: 'todo', x: 0, y: 0,
+      items: [
+        { id: 'a', text: 'shoot the hero image', done: true },
+        { text: 'x'.repeat(500), done: 'yes' }, // no id, over-long, truthy-but-not-true
+        ...Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, text: `t${i}`, done: false })),
+      ],
+    }])
+    expect(card.kind).toBe('todo')
+    expect(card.items).toHaveLength(30)
+    expect(card.items?.[0]).toEqual({ id: 'a', text: 'shoot the hero image', done: true })
+    expect(card.items?.[1].id).toBeTruthy()
+    expect(card.items?.[1].text).toHaveLength(200)
+    expect(card.items?.[1].done).toBe(false)
+  })
+
+  it('a todo without items still stands, with an empty list', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const [card] = sanitiseCanvasCards([{ id: 't2', kind: 'todo', x: 0, y: 0 }])
+    expect(card).toMatchObject({ kind: 'todo', items: [] })
+  })
 })
 
 describe('canvas arrows', () => {

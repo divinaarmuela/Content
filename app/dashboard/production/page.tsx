@@ -13,10 +13,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Plus, CalendarDays, Flag } from 'lucide-react'
+import { Plus, CalendarDays, CheckSquare, Flag, Trash2 } from 'lucide-react'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { useProductionLive } from './useProductionLive'
 import { ViewSwitch } from './shoot-ui'
@@ -75,6 +78,19 @@ const KIND_CHIP: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
   rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400',
+}
+
+/** Card face per work kind — a coloured edge and a faint wash, so a column
+ *  full of mixed work reads at a glance instead of as plain white cards. */
+const KIND_CARD: Record<string, string> = {
+  zinc: '',
+  pink: 'border-l-2 border-l-pink-400 bg-pink-50/40 dark:bg-pink-950/20',
+  sky: 'border-l-2 border-l-sky-400 bg-sky-50/40 dark:bg-sky-950/20',
+  indigo: 'border-l-2 border-l-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20',
+  violet: 'border-l-2 border-l-violet-400 bg-violet-50/40 dark:bg-violet-950/20',
+  emerald: 'border-l-2 border-l-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/20',
+  amber: 'border-l-2 border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/20',
+  rose: 'border-l-2 border-l-rose-400 bg-rose-50/40 dark:bg-rose-950/20',
 }
 
 export default function ProductionPage() {
@@ -199,6 +215,37 @@ export default function ProductionPage() {
     .filter(i => clientFilter === 'all' || i.client_id === clientFilter)
     .filter(i => batchFilter === 'all' || i.batch_id === batchFilter)
 
+  /* ── bulk select + delete: tick cards on the board instead of opening each ── */
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const toggleSelected = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const exitSelect = () => { setSelectMode(false); setSelectedIds(new Set()) }
+  const bulkDelete = async () => {
+    setBulkBusy(true)
+    try {
+      const ids = [...selectedIds]
+      const results = await Promise.allSettled(ids.map(async id => {
+        const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed')
+      }))
+      const failed = results.filter(r => r.status === 'rejected').length
+      const deleted = ids.length - failed
+      if (failed === 0) toast.success(deleted === 1 ? 'Item deleted' : `${deleted} items deleted`)
+      else toast.error(`Deleted ${deleted}, but ${failed} failed — the board shows what remains`)
+      setBulkOpen(false)
+      exitSelect()
+      void load()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
     if (isBriefKind && draft.deliverables.length === 0) {
@@ -282,6 +329,12 @@ export default function ProductionPage() {
               {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          {isManager && (
+            <Button variant={selectMode ? 'default' : 'outline'} size="sm"
+              onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
+              <CheckSquare className="h-4 w-4" /> {selectMode ? 'Done' : 'Select'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/production/shoots"><Plus className="h-4 w-4" /> Plan shoot</Link>
           </Button>
@@ -356,12 +409,12 @@ export default function ProductionPage() {
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 w-64 shrink-0" />)}
         </div>
       ) : (
-        <ScrollArea className="w-full">
-          <div className="flex w-max gap-3 pb-3">
+        <div className="w-full overflow-x-auto">
+          <div className="flex gap-3 pb-3">
             {COLUMNS.map(col => {
               const colItems = visible.filter(i => col.statuses.includes(i.status))
               return (
-                <div key={col.key} className="w-64 shrink-0">
+                <div key={col.key} className="min-w-64 flex-1">
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <span className={`h-2 w-2 rounded-full ${col.tint}`} />
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{col.title}</span>
@@ -369,10 +422,19 @@ export default function ProductionPage() {
                   </div>
                   <div className="flex min-h-24 flex-col gap-2">
                     {colItems.map(item => (
-                      <Link key={item.id} href={`/dashboard/production/${item.id}`} className="block">
-                        <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${item.work_kinds?.slug === 'shoot_brief' ? 'border-l-2 border-l-sky-400' : ''}`}>
+                      <Link key={item.id} href={`/dashboard/production/${item.id}`} className="block"
+                        onClick={e => { if (selectMode) { e.preventDefault(); toggleSelected(item.id) } }}>
+                        <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${
+                          item.work_kinds?.slug === 'shoot_brief'
+                            ? 'border-l-2 border-l-sky-400 bg-sky-50/40 dark:bg-sky-950/20'
+                            : KIND_CARD[item.work_kinds?.color ?? 'zinc'] ?? ''
+                        } ${selectMode && selectedIds.has(item.id) ? 'ring-2 ring-inset ring-blue-500' : ''}`}>
                           <CardContent className="flex flex-col gap-1.5 p-3">
                             <div className="flex items-start justify-between gap-2">
+                              {selectMode && (
+                                <input type="checkbox" checked={selectedIds.has(item.id)} readOnly
+                                  className="pointer-events-none mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
+                              )}
                               <span className="text-sm font-medium leading-snug">{item.title}</span>
                               <Flag className={`mt-0.5 h-3 w-3 shrink-0 ${PRIORITY_TINT[item.priority] ?? ''}`} />
                             </div>
@@ -433,11 +495,49 @@ export default function ProductionPage() {
               )
             })}
           </div>
-          {/* without an explicit horizontal bar, Radix suppresses the native
-              scrollbar and columns past the viewport are unreachable */}
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        </div>
       )}
+
+      {/* select-mode action bar */}
+      {selectMode && (
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-zinc-200 bg-white/95 px-4 py-2 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+          <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+            {selectedIds.size} selected
+          </span>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+            onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>
+            Select all
+          </Button>
+          <Button size="sm" variant="destructive" className="h-7 gap-1.5 px-3 text-xs"
+            disabled={selectedIds.size === 0} onClick={() => setBulkOpen(true)}>
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitSelect}>Cancel</Button>
+        </div>
+      )}
+
+      {/* bulk delete confirm */}
+      <AlertDialog open={bulkOpen} onOpenChange={o => !bulkBusy && setBulkOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size === 1 ? 'this item' : `these ${selectedIds.size} items`}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Each item goes with its versions, comments, approvals, and schedule
+              entries. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700"
+              disabled={bulkBusy}
+              onClick={e => { e.preventDefault(); void bulkDelete() }}>
+              {bulkBusy ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* New item dialog */}
       <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
