@@ -33,9 +33,9 @@ const DEPTS: Dept[] = [
     name: 'Account Managers & Strategists',
     members: [
       { name: 'Manal', role: 'Senior Account Manager', img: '/team/manal.jpg' },
-      { name: 'Karly', role: 'Social Media Strategist', img: '/team/karly.jpg' },
-      { name: 'Renee', role: 'Social Media Strategist', img: '/team/renee.jpg' },
-      { name: 'Raven', role: 'Social Media Strategist', img: '/team/raven.jpg' },
+      { name: 'Karly', role: 'Account Manager & Social Media Strategist', img: '/team/karly.jpg' },
+      { name: 'Renee', role: 'Account Manager & Social Media Strategist', img: '/team/renee.jpg' },
+      { name: 'Raven', role: 'Account Manager & Social Media Strategist', img: '/team/raven.jpg' },
     ],
   },
   {
