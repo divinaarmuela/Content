@@ -15,7 +15,11 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Camera, Plus, Search } from 'lucide-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Camera, Plus, Search, Trash2 } from 'lucide-react'
 import { useProductionLive } from '../useProductionLive'
 import { ViewSwitch } from '../shoot-ui'
 import type { BatchStatus } from '../../../lib/batch-brief-core'
@@ -97,6 +101,26 @@ export default function ShootsPage() {
   useProductionLive(useCallback(() => { void load() }, [load]))
 
   const canPlan = ['editor', 'account_manager', 'super_admin'].includes(role)
+  const isManager = ['account_manager', 'super_admin'].includes(role)
+  const [toDelete, setToDelete] = useState<Shoot | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
+
+  const remove = async () => {
+    if (!toDelete) return
+    setDelBusy(true)
+    try {
+      const res = await fetch(`/api/production/batches/${toDelete.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not delete the shoot')
+      toast.success('Shoot deleted')
+      setToDelete(null)
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete the shoot')
+    } finally {
+      setDelBusy(false)
+    }
+  }
 
   const create = async () => {
     if (!draft.client_id || !draft.title.trim()) { toast.error('Client and a working title are required'); return }
@@ -195,8 +219,10 @@ export default function ShootsPage() {
                     deliverables > 0 && `${deliverables} deliverables`,
                     itemCount > 0 && `${itemCount} item${itemCount === 1 ? '' : 's'} in production`,
                   ].filter(Boolean).join(' · ')
+                  const canDelete = isManager && (s.status ?? 'shot') === 'brief' && itemCount === 0
                   return (
-                    <Link key={s.id} href={`/dashboard/production/shoots/${s.id}`}>
+                    <div key={s.id} className="group/shoot relative">
+                    <Link href={`/dashboard/production/shoots/${s.id}`}>
                       <Card className="py-0 transition-shadow hover:shadow-md">
                         <CardContent className="flex flex-col gap-1.5 p-3">
                           <div className="flex items-center gap-2">
@@ -215,6 +241,17 @@ export default function ShootsPage() {
                         </CardContent>
                       </Card>
                     </Link>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        aria-label="Delete shoot"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); setToDelete(s) }}
+                        className="absolute right-2 top-2 hidden rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 group-hover/shoot:block dark:hover:bg-rose-950/40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    </div>
                   )
                 })}
               </div>
@@ -249,6 +286,26 @@ export default function ShootsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!toDelete} onOpenChange={o => !delBusy && !o && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the shoot plan and its board. Only a shoot still in planning
+              with no content items can be deleted — a shoot that produced work is wrapped instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={delBusy}>Keep it</AlertDialogCancel>
+            <AlertDialogAction disabled={delBusy}
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={e => { e.preventDefault(); void remove() }}>
+              {delBusy ? 'Deleting…' : 'Delete shoot'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
