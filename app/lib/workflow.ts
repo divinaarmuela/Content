@@ -323,6 +323,9 @@ export async function performTransition(
      *  active managing roles) instead of everyone assigned. */
     reviewerIds?: string[]
     schedulerIds?: string[]
+    /** A note travelling with the transition (e.g. what to revise) — shown
+     *  in the team's notification emails, never the client's. */
+    note?: string
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -477,7 +480,10 @@ export async function performTransition(
             subject,
             isClientFacing && audience === 'client_users'
               ? `<p><strong>${item.title}</strong> is ready for your review.</p>`
-              : `<p><strong>${item.title}</strong> moved from “${from.replace(/_/g, ' ')}” to “${to.replace(/_/g, ' ')}” by ${actor.name || actor.email}.</p>`,
+              : `<p><strong>${item.title}</strong> moved from “${from.replace(/_/g, ' ')}” to “${to.replace(/_/g, ' ')}” by ${actor.name || actor.email}.</p>` +
+                (opts?.note?.trim() && audience !== 'client_users'
+                  ? `<p><strong>Note:</strong><br>${escapeHtml(opts.note.trim()).replace(/\n/g, '<br>')}</p>`
+                  : ''),
             // a client account cannot open the team dashboard — send them to
             // their portal; the team gets the item itself
             audience === 'client_users' ? 'Open your portal' : 'Open the item',

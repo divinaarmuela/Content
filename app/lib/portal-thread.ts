@@ -141,6 +141,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
       shot_list: sanitiseShotList(b.shot_list),
       canvas_cards: (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
+      details_shared: true, // this page only exists for shared shoots
     },
     comments: ((commentsRes.error ? [] : commentsRes.data ?? []) as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow

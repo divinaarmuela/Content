@@ -23,10 +23,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const schedulerIds = user.role !== 'client' && Array.isArray(body.scheduler_ids)
       ? body.scheduler_ids.map((v: unknown) => String(v)).filter(Boolean).slice(0, 20)
       : undefined
+    const note = String(body.note ?? '').trim().slice(0, 2000)
     const updated = await performTransition(user, item, to, {
       reviewerIds: Array.isArray(body.notify_ids) ? body.notify_ids : undefined,
       schedulerIds,
+      note: note || undefined,
     })
+    // the note also lands in the item's own thread, so whoever picks the
+    // work up reads it in place — best-effort, never fails the transition
+    if (note) {
+      await supabase.from('item_comments')
+        .insert({ item_id: id, author_id: user.id, visibility: 'internal', body: note })
+        .then(() => {}, () => {})
+    }
     // an approve-with-picker is also an assignment: the chosen schedulers'
     // dashboards show this item, others' stay clear
     if (to === 'approved_for_scheduling' && schedulerIds?.length) {

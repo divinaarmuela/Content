@@ -107,6 +107,9 @@ export default function ItemDetailPage() {
   // "Submit for review" reviewer picker — the editor chooses who is asked
   const [reviewPick, setReviewPick] = useState<{ to: ItemStatus; label: string } | null>(null)
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
+  /** "what needs to change" — asked when requesting revisions */
+  const [revisionAsk, setRevisionAsk] = useState<{ to: ItemStatus; label: string } | null>(null)
+  const [revisionNote, setRevisionNote] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(new Set())
 
   // type-to-confirm for deletion — a destructive click must be deliberate
@@ -148,9 +151,13 @@ export default function ItemDetailPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load people')
       const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
-      const list: Reviewer[] = (json.eligible ?? []).map((u: { id: string; name: string; email: string; role: string }) => ({
-        ...u, assigned: assignedIds.has(u.id),
-      }))
+      // this client's own managers + super admins only — an AM who doesn't
+      // manage this client never appears in its pickers
+      const list: Reviewer[] = (json.eligible ?? [])
+        .filter((u: { id: string; role: string }) => u.role === 'super_admin' || assignedIds.has(u.id))
+        .map((u: { id: string; name: string; email: string; role: string }) => ({
+          ...u, assigned: assignedIds.has(u.id),
+        }))
       list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
       setPubPeople(list)
       setPubChosen(new Set(list.filter(r => r.assigned).map(r => r.id)))
@@ -283,7 +290,7 @@ export default function ItemDetailPage() {
 
   const latest = detail.versions[0]
 
-  const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[], schedulerIds?: string[]) => {
+  const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[], schedulerIds?: string[], note?: string) => {
     setBusy(to)
     try {
       const res = await fetch(`/api/production/items/${id}/transition`, {
@@ -293,6 +300,7 @@ export default function ItemDetailPage() {
           to,
           ...(notifyIds?.length ? { notify_ids: notifyIds } : {}),
           ...(schedulerIds?.length ? { scheduler_ids: schedulerIds } : {}),
+          ...(note?.trim() ? { note: note.trim() } : {}),
         }),
       })
       const json = await res.json()
@@ -300,6 +308,7 @@ export default function ItemDetailPage() {
       toast.success(label)
       setReviewPick(null)
       setSchedPick(null)
+      setRevisionAsk(null)
       load()
     } catch (e) {
       // a dropped RESPONSE is not a failed request — check before alarming
@@ -346,9 +355,13 @@ export default function ItemDetailPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load reviewers')
       const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
-      const list: Reviewer[] = (json.eligible ?? []).map((u: { id: string; name: string; email: string; role: string }) => ({
-        ...u, assigned: assignedIds.has(u.id),
-      }))
+      // reviewers are THIS client's assigned account managers + super admins —
+      // never the whole managing roster
+      const list: Reviewer[] = (json.eligible ?? [])
+        .filter((u: { id: string; role: string }) => u.role === 'super_admin' || assignedIds.has(u.id))
+        .map((u: { id: string; name: string; email: string; role: string }) => ({
+          ...u, assigned: assignedIds.has(u.id),
+        }))
       // assigned managers first, then the rest alphabetically
       list.sort((a, b) => Number(b.assigned) - Number(a.assigned) || (a.name || a.email).localeCompare(b.name || b.email))
       setReviewers(list)
@@ -608,10 +621,14 @@ export default function ItemDetailPage() {
                 onClick={() =>
                   (t.to === 'internal_review' || t.to === 'revision_complete')
                     ? openReviewerPick(t)
-                    // approving never auto-picks schedulers anymore — it's a
-                    // plain transition; 'Hand to a scheduler' below is the
-                    // one deliberate place a human chooses who's notified
-                    : doTransition(t.to, t.label)
+                    // asking for changes deserves a WHY — the note rides the
+                    // transition into the thread and the assignee's email
+                    : (t.to === 'revision_required' || t.to === 'client_changes_requested')
+                      ? (setRevisionAsk(t), setRevisionNote(''))
+                      // approving never auto-picks schedulers anymore — it's a
+                      // plain transition; 'Hand to a scheduler' below is the
+                      // one deliberate place a human chooses who's notified
+                      : doTransition(t.to, t.label)
                 }
               >
                 {busy === t.to ? 'Working…' : t.label}
@@ -1173,6 +1190,38 @@ export default function ItemDetailPage() {
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
               {busy !== null ? 'Working…' : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}` : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* what needs to change? — the note rides the revision request */}
+      <Dialog open={revisionAsk !== null} onOpenChange={o => !o && busy === null && setRevisionAsk(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{revisionAsk?.label ?? 'Request revisions'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Say what needs to change — it lands in the item&rsquo;s thread and the
+              assignee&rsquo;s email.
+            </p>
+            <textarea
+              value={revisionNote}
+              onChange={e => setRevisionNote(e.target.value)}
+              rows={4}
+              autoFocus
+              placeholder="What should be different in the next version?"
+              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevisionAsk(null)} disabled={busy !== null}>Cancel</Button>
+            <Button
+              disabled={busy !== null}
+              onClick={() => revisionAsk && doTransition(revisionAsk.to, revisionAsk.label, undefined, undefined, revisionNote)}
+            >
+              {busy !== null ? 'Working…' : revisionAsk?.label ?? 'Request revisions'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -38,7 +38,7 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
       style={{ borderColor: 'var(--p-border)', background: 'var(--p-surface)' }}
     >
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        {token ? (
+        {token && shoot.details_shared ? (
           <Link href={`/portal/${token}/shoot/${shoot.id}`}
             className="text-lg font-medium tracking-tight underline-offset-4 hover:underline"
             style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
@@ -65,7 +65,7 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
         <p className="whitespace-pre-wrap text-sm leading-relaxed opacity-90">{shoot.concept}</p>
       )}
 
-      {token && (
+      {token && shoot.details_shared && (
         <a
           href={`/api/portal/shoot-pdf?token=${encodeURIComponent(token)}&id=${shoot.id}`}
           className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"

@@ -36,6 +36,9 @@ export type PortalShoot = {
   planned_deliverables: { type: string; qty: number }[]
   shot_list: ShotRow[]
   canvas_cards: CanvasCard[]
+  /** false = a booked shoot whose PLAN was not shared: the client sees that
+   *  it's happening (status, date, location) but none of the working detail */
+  details_shared: boolean
 }
 
 /** What a shoot's internal status means to the client reading their portal. */
@@ -83,12 +86,14 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .eq('year', year)
       .maybeSingle(),
     supabase.from('client_brand').select('profile').eq('client_id', clientId).maybeSingle(),
-    // shoots an AM chose to share; errors (column not migrated yet) degrade to none
+    // shoots an AM chose to share — plus any BOOKED shoot: a client should
+    // always know their shoot is locked in (date, location), even before the
+    // working plan is shared. Errors (column not migrated) degrade to none.
     supabase
       .from('batches')
-      .select('id, title, status, shoot_date, location, concept, board_name, share_board, planned_deliverables, shot_list, canvas_cards')
+      .select('id, title, status, shoot_date, location, concept, board_name, share_board, shared_with_client, planned_deliverables, shot_list, canvas_cards')
       .eq('client_id', clientId)
-      .eq('shared_with_client', true)
+      .or('shared_with_client.eq.true,status.in.(locked,shot)')
       .order('shoot_date', { ascending: false, nullsFirst: false })
       .limit(6),
   ])
@@ -166,20 +171,25 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       }
     : null
 
-  const shoots: PortalShoot[] = (shootsRes.error ? [] : shootsRes.data ?? []).map(b => ({
-    id: b.id,
-    title: b.title,
-    status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
-    shoot_date: b.shoot_date ?? null,
-    location: b.location ?? null,
-    concept: b.concept ?? null,
-    board_name: b.board_name ?? null,
-    planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
-    shot_list: sanitiseShotList(b.shot_list),
-    // the board is its own share decision; rows predating the migration
-    // (share_board undefined) keep the old behaviour of following the brief
-    canvas_cards: (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
-  }))
+  const shoots: PortalShoot[] = (shootsRes.error ? [] : shootsRes.data ?? []).map(b => {
+    const shared = b.shared_with_client === true
+    return {
+      id: b.id,
+      title: b.title,
+      status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
+      shoot_date: b.shoot_date ?? null,
+      location: b.location ?? null,
+      // an unshared booked shoot shows the fact, never the working detail
+      concept: shared ? b.concept ?? null : null,
+      board_name: shared ? b.board_name ?? null : null,
+      planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
+      shot_list: shared ? sanitiseShotList(b.shot_list) : [],
+      // the board is its own share decision; rows predating the migration
+      // (share_board undefined) keep the old behaviour of following the brief
+      canvas_cards: shared && (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
+      details_shared: shared,
+    }
+  })
 
   return {
     client: clientRes.data,
