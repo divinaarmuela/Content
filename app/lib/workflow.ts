@@ -33,6 +33,8 @@ export type ContentItem = {
   brief_url?: string | null
   brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
+  /** schedulers this item was explicitly handed to (handoff route) */
+  scheduler_ids?: string[] | null
 }
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -91,6 +93,16 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
     case 'schedulers': {
       const { data } = await supabase.from('team_users')
         .select('id, email, name').eq('role', 'scheduler').eq('active_status', true)
+      return data ?? []
+    }
+    case 'assigned_schedulers': {
+      // only the people this item was explicitly handed to — never the whole
+      // scheduling team. No handoff yet → nobody.
+      const ids = (Array.isArray(item.scheduler_ids) ? item.scheduler_ids : [])
+        .filter((x): x is string => typeof x === 'string').slice(0, 20)
+      if (ids.length === 0) return []
+      const { data } = await supabase.from('team_users')
+        .select('id, email, name').in('id', ids).eq('active_status', true)
       return data ?? []
     }
     case 'client_users': {

@@ -176,10 +176,21 @@ export type NotifyInput = {
   actorClerkId?: string | null
 }
 
-export type NotifyResult = 'sent' | 'duplicate' | 'failed'
+export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'
 
 /** Queue-and-send with the exactly-once guarantee described above. */
 export async function notify(input: NotifyInput): Promise<NotifyResult> {
+  // the Settings → "email notifications" toggle is a promise, not decoration:
+  // a recipient who switched email off gets nothing, checked here so every
+  // notification path honours it. Only an explicit false mutes — no row, no
+  // prefs, or a lookup error all fail open to sending.
+  if (input.recipientId) {
+    const { data: prefRow } = await supabase
+      .from('team_users').select('notification_prefs').eq('id', input.recipientId).maybeSingle()
+    const prefs = prefRow?.notification_prefs as { email?: boolean } | null | undefined
+    if (prefs?.email === false) return 'muted'
+  }
+
   const dedupe_key = buildDedupeKey(input.eventType, input.entityType, input.entityId, input.recipientEmail)
 
   // 1. claim the dedupe key. `ignoreDuplicates` → conflict returns no row.

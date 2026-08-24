@@ -109,4 +109,20 @@ describe('notification routing — the gatekeeper rule', () => {
       }
     }
   })
+  it('the whole scheduling team is never blasted — only assigned schedulers', () => {
+    for (const audiences of Object.values(TRANSITION_NOTIFICATIONS)) {
+      expect(audiences).not.toContain('schedulers')
+    }
+  })
+  it('every notified transition exists in the funnel', () => {
+    for (const key of Object.keys(TRANSITION_NOTIFICATIONS)) {
+      const [from, to] = key.split('>') as [ItemStatus, ItemStatus]
+      expect(TRANSITIONS[from]?.[to], `${key} notifies but is not a legal transition`).toBeDefined()
+    }
+  })
+  it("the owner hears about their item's client-facing moments", () => {
+    expect(TRANSITION_NOTIFICATIONS['internal_review>client_review']).toContain('owner_editor')
+    expect(TRANSITION_NOTIFICATIONS['client_review>approved_for_scheduling']).toContain('owner_editor')
+    expect(TRANSITION_NOTIFICATIONS['scheduled>published']).toContain('owner_editor')
+  })
 })

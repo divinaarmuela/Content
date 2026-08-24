@@ -112,20 +112,26 @@ export function versionSatisfiesSubmission(v: { file_url?: string; drive_url?: s
 
 /** Notification fan-out per transition (doc 1 §10 trigger map). The server
  *  resolves audiences to concrete people. */
-export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users'
+export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers'
 export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatus}`, Audience[]>> = {
+  // 'owner_editor' is the item's OWNER whatever their role (anyone can carry a
+  // task) — every move an item makes reaches the person assigned to it, and
+  // never anyone merely of the same role. The actor is always skipped, so an
+  // owner acting on their own item is not self-notified.
   'draft_uploaded>internal_review': ['account_managers'],
   'internal_review>revision_required': ['owner_editor'],
   'revision_required>revision_complete': ['account_managers'],
   'revision_complete>revision_required': ['owner_editor'],
-  'internal_review>client_review': ['client_users', 'account_managers'],
-  'revision_complete>client_review': ['client_users', 'account_managers'],
+  'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],
+  'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
   'client_changes_requested>revision_required': ['owner_editor'],
-  // approving never blasts every scheduler — a human explicitly hands it to
-  // one via the 'Hand to a scheduler' action (handoff route), so nobody on
-  // the scheduling team gets spammed the instant a client clicks Approve
-  'client_review>approved_for_scheduling': ['account_managers'],
-  'approved_for_scheduling>scheduled': ['account_managers'],
-  'scheduled>published': ['account_managers'],
+  // approving never blasts every scheduler — 'assigned_schedulers' is only the
+  // people already on THIS item's scheduler_ids (set by the explicit 'Hand to
+  // a scheduler' action); with none assigned, no scheduler hears anything
+  'client_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'internal_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'revision_complete>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'approved_for_scheduling>scheduled': ['account_managers', 'owner_editor'],
+  'scheduled>published': ['account_managers', 'owner_editor', 'assigned_schedulers'],
 }
