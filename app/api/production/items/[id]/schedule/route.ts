@@ -32,6 +32,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         patch.published_at = new Date().toISOString()
       }
     }
+    // posted natively in the platform's own app (Stories, no link) — mark it
+    // published without demanding a URL. A published entry with no live_url
+    // reads as an in-app post everywhere.
+    if (body.mark_posted === true) {
+      patch.publish_status = 'published'
+      patch.published_at = new Date().toISOString()
+    }
 
     const { data, error } = await supabase
       .from('schedule_entries')

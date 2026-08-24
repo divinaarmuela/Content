@@ -454,7 +454,7 @@ export default function ItemDetailPage() {
     }
   }
 
-  const saveSchedule = async (withLive: boolean) => {
+  const saveSchedule = async (mode: 'date' | 'live' | 'posted') => {
     setBusy('schedule')
     try {
       const res = await fetch(`/api/production/items/${id}/schedule`, {
@@ -463,11 +463,12 @@ export default function ItemDetailPage() {
         body: JSON.stringify({
           platform: schedDraft.platform,
           ...(schedDraft.scheduled_at ? { scheduled_at: new Date(schedDraft.scheduled_at).toISOString() } : {}),
-          ...(withLive && schedDraft.live_url ? { live_url: schedDraft.live_url } : {}),
+          ...(mode === 'live' && schedDraft.live_url ? { live_url: schedDraft.live_url } : {}),
+          ...(mode === 'posted' ? { mark_posted: true } : {}),
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
-      toast.success(withLive ? 'Live link saved' : 'Schedule saved')
+      toast.success(mode === 'live' ? 'Live link saved' : mode === 'posted' ? 'Marked posted in-app' : 'Schedule saved')
       setSchedDraft(d => ({ ...d, live_url: '' }))
       load()
     } catch (e) {
@@ -1023,7 +1024,9 @@ export default function ItemDetailPage() {
                     <span className="ml-auto">
                       {s.live_url
                         ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
-                        : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{s.publish_status}</span>}
+                        : s.publish_status === 'published'
+                          ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">posted in-app</span>
+                          : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{s.publish_status}</span>}
                     </span>
                   </div>
                 ))}
@@ -1042,9 +1045,12 @@ export default function ItemDetailPage() {
                     <div className="flex gap-2">
                       <Input value={schedDraft.live_url} placeholder="Live URL once posted"
                         onChange={e => setSchedDraft(d => ({ ...d, live_url: e.target.value }))} />
-                      <Button size="sm" variant="outline" disabled={busy === 'schedule'} onClick={() => saveSchedule(false)}>Set date</Button>
-                      <Button size="sm" disabled={busy === 'schedule' || !schedDraft.live_url} onClick={() => saveSchedule(true)}>Save live</Button>
+                      <Button size="sm" variant="outline" disabled={busy === 'schedule'} onClick={() => saveSchedule('date')}>Set date</Button>
+                      <Button size="sm" disabled={busy === 'schedule' || !schedDraft.live_url} onClick={() => saveSchedule('live')}>Save live</Button>
                     </div>
+                    <Button size="sm" variant="outline" className="w-fit" disabled={busy === 'schedule'} onClick={() => saveSchedule('posted')}>
+                      Mark posted in-app (Story / no link)
+                    </Button>
 
                     {/* connected publishing: post through the client's linked
                         social accounts instead of copying files by hand */}

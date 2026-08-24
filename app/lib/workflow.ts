@@ -365,12 +365,15 @@ export async function performTransition(
     if (!count) throw new AuthzError('Add at least one platform with a date/time before marking scheduled', 400)
   }
   if (check.rule.requires === 'live_url') {
+    // a platform is "published" once it has a live link OR was marked posted
+    // in-app (publish_status flips to 'published' either way) — Stories have
+    // no link, so requiring a URL would strand them
     const { count } = await supabase
       .from('schedule_entries')
       .select('id', { count: 'exact', head: true })
       .eq('item_id', item.id)
-      .not('live_url', 'is', null)
-    if (!count) throw new AuthzError('Add the live URL before marking published', 400)
+      .eq('publish_status', 'published')
+    if (!count) throw new AuthzError('Add a live link, or mark a platform posted in-app, before publishing', 400)
   }
 
   // optimistic concurrency — the race-condition guard
