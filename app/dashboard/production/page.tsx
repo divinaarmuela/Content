@@ -114,6 +114,12 @@ export default function ProductionPage() {
   })
   const assetFileRef = useRef<HTMLInputElement>(null)
   const [assetBusy, setAssetBusy] = useState(false)
+  // AI work-kind suggestion: fires ~1s after the title/brief stops changing;
+  // only a hint — applying it is always the human's click
+  const [kindHint, setKindHint] = useState<
+    { match: 'existing'; kind_id: string; name: string } | { match: 'new'; name: string; color: string } | null
+  >(null)
+  const kindTouchedRef = useRef(false)
   const onAssetFiles = async (files: FileList | null) => {
     if (!files?.length) return
     setAssetBusy(true)
@@ -131,6 +137,24 @@ export default function ProductionPage() {
       if (assetFileRef.current) assetFileRef.current.value = ''
     }
   }
+  useEffect(() => {
+    if (!newOpen || kindTouchedRef.current) return
+    const title = draft.title.trim()
+    const brief = draft.brief.trim()
+    if (title.length < 4 && brief.length < 12) { setKindHint(null); return }
+    const t = window.setTimeout(() => {
+      void fetch('/api/production/work-kinds/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, brief }),
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(j => setKindHint(j?.suggestion ?? null))
+        .catch(() => setKindHint(null))
+    }, 900)
+    return () => window.clearTimeout(t)
+  }, [newOpen, draft.title, draft.brief])
+
   // managers assign the job to an editor at creation; the editor gets the
   // job-pack email (brief + raw assets + due date)
   const { can } = useRole()
@@ -556,7 +580,7 @@ export default function ProductionPage() {
       </AlertDialog>
 
       {/* New item dialog */}
-      <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
+      <Dialog open={newOpen} onOpenChange={o => { if (newBusy) return; setNewOpen(o); kindTouchedRef.current = false; setKindHint(null) }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>{isBriefKind ? 'New shoot brief' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle></DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -634,13 +658,43 @@ export default function ProductionPage() {
             {kinds.length > 0 && (
               <div className="grid gap-1.5">
                 <Label>Work type</Label>
-                <Select value={draft.work_kind_id || 'default'} onValueChange={v => setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' }))}>
+                <Select value={draft.work_kind_id || 'default'}
+                  onValueChange={v => { kindTouchedRef.current = true; setKindHint(null); setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' })) }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">{kinds[0]?.name ?? 'Video edit'}</SelectItem>
                     {kinds.slice(1).map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || kinds[0]?.id) && (
+                  <button type="button"
+                    className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                    onClick={() => { kindTouchedRef.current = true; setDraft(d => ({ ...d, work_kind_id: kindHint.kind_id })); setKindHint(null) }}>
+                    ✦ Looks like <span className="font-semibold">{kindHint.name}</span> — click to use
+                  </button>
+                )}
+                {kindHint && kindHint.match === 'new' && isManager && (
+                  <button type="button"
+                    className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                    onClick={async () => {
+                      const hint = kindHint
+                      setKindHint(null)
+                      kindTouchedRef.current = true
+                      const slug = hint.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+                      const res = await fetch('/api/production/work-kinds', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ slug, name: hint.name, color: hint.color, default_roles: [], uses_media: true }),
+                      })
+                      const j = await res.json().catch(() => null)
+                      if (!res.ok) { toast.error(j?.error ?? 'Could not create the work type'); return }
+                      setKinds(ks => [...ks, j])
+                      setDraft(d => ({ ...d, work_kind_id: j.id }))
+                      toast.success(`New work type "${hint.name}" created`)
+                    }}>
+                    ✦ New type? Create <span className="font-semibold">{kindHint.name}</span> and use it
+                  </button>
+                )}
               </div>
             )}
             {isManager && (
