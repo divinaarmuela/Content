@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useGesture } from '@use-gesture/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -264,9 +264,20 @@ export default function BriefCanvas({
   )
 
   /* ── card dragging: raw pointer events, 4px threshold, rAF paint ── */
-  const dragState = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number; moved: boolean; el: HTMLElement | null } | null>(null)
+  const dragState = useRef<{
+    id: string; startX: number; startY: number; ox: number; oy: number
+    moved: boolean; el: HTMLElement | null
+    /** measured once at pointerdown — reading it per move forced a reflow */
+    half: { w: number; h: number }
+    /** the arrow endpoints this card owns, resolved once at pointerdown */
+    ends: { line: SVGLineElement; end: 'from' | 'to' }[]
+    raf: number; nx: number; ny: number
+  } | null>(null)
   /* ── corner resize: width only — height follows content ── */
-  const resizeState = useRef<{ id: string; startX: number; ow: number; live: number } | null>(null)
+  const resizeState = useRef<{
+    id: string; startX: number; ow: number; live: number
+    el: HTMLElement | null; raf: number
+  } | null>(null)
   /* ── Milanote-style line drag: pull from a card's dot onto another card ── */
   const lineDrag = useRef<{ from: string } | null>(null)
   const draftLineRef = useRef<SVGLineElement>(null)
@@ -290,9 +301,57 @@ export default function BriefCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     const el = (e.currentTarget as HTMLElement)
-    dragState.current = { id: card.id, startX: e.clientX, startY: e.clientY, ox: card.x, oy: card.y, moved: false, el }
+    // EVERYTHING the drag loop needs is measured and looked up ONCE, here.
+    // Doing it per pointermove (a DOM query + offsetWidth/offsetHeight, which
+    // force synchronous layout) was the board's lag: pointer events outrun
+    // frames, so every move paid for a reflow the browser had to redo.
+    const half = { w: (el.offsetWidth || card.w) / 2, h: el.offsetHeight / 2 || 50 }
+    const ends: { line: SVGLineElement; end: 'from' | 'to' }[] = []
+    for (const c of cards) {
+      if (c.kind !== 'arrow' || (c.from !== card.id && c.to !== card.id)) continue
+      const g = viewportRef.current?.querySelector(`[data-arrow="${c.id}"]`)
+      if (!g) continue
+      for (const line of Array.from(g.querySelectorAll('line'))) {
+        if (c.from === card.id) ends.push({ line, end: 'from' })
+        if (c.to === card.id) ends.push({ line, end: 'to' })
+      }
+    }
+    dragState.current = {
+      id: card.id, startX: e.clientX, startY: e.clientY,
+      ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
+    }
     el.setPointerCapture(e.pointerId)
   }
+
+  /** One visual update per FRAME, from whatever the latest pointer position
+   *  was — a high-rate mouse can fire several moves between two frames. */
+  const paintDrag = () => {
+    const d = dragState.current
+    if (!d) return
+    d.raf = 0
+    if (d.el) d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
+    const cx = d.nx + d.half.w
+    const cy = d.ny + d.half.h
+    for (const { line, end } of d.ends) {
+      if (end === 'from') { line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy)) }
+      else { line.setAttribute('x2', String(cx)); line.setAttribute('y2', String(cy)) }
+    }
+  }
+
+  // A drag moves the card by writing transform straight to the DOM, but React
+  // owns that same inline style and re-applies the card's SAVED position on
+  // any re-render — a parent poll, a realtime ping, a camera commit. That is
+  // the card "running away from the cursor": it snapped home every render and
+  // the next frame dragged it back. Re-assert the live drag after each commit.
+  useLayoutEffect(() => {
+    const d = dragState.current
+    if (!d?.moved || !d.el) return
+    d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
+    d.el.style.zIndex = '9999'
+    const r = resizeState.current
+    if (r?.el) r.el.style.width = `${r.live}px`
+  })
+
   const onCardPointerMove = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
     if (!d || d.id !== card.id) return
@@ -302,32 +361,22 @@ export default function BriefCanvas({
     if (!d.moved) {
       d.moved = true
       interactingRef.current = true
-      // bump to front
-      const maxZ = Math.max(0, ...cards.map(c => c.z))
-      upsertLocal({ ...card, z: maxZ + 1 })
-      if (d.el) d.el.style.willChange = 'transform'
+      // bump to front visually — committing z through React here would
+      // re-render every card at the exact moment the drag begins
+      if (d.el) { d.el.style.willChange = 'transform'; d.el.style.zIndex = '9999' }
     }
     const s = camRef.current.s
-    const nx = d.ox + dx / s
-    const ny = d.oy + dy / s
-    if (d.el) d.el.style.transform = `translate(${nx}px, ${ny}px)`
-    // arrows follow their card through the drag, not after it
-    const { cx, cy } = centreOf(card, nx, ny)
-    for (const c of cards) {
-      if (c.kind !== 'arrow' || (c.from !== card.id && c.to !== card.id)) continue
-      const g = viewportRef.current?.querySelector(`[data-arrow="${c.id}"]`)
-      if (!g) continue
-      for (const line of Array.from(g.querySelectorAll('line'))) {
-        if (c.from === card.id) { line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy)) }
-        if (c.to === card.id) { line.setAttribute('x2', String(cx)); line.setAttribute('y2', String(cy)) }
-      }
-    }
+    d.nx = d.ox + dx / s
+    d.ny = d.oy + dy / s
+    if (!d.raf) d.raf = requestAnimationFrame(paintDrag)
   }
+
   const onCardPointerUp = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
     if (!d || d.id !== card.id) return
     dragState.current = null
-    if (d.el) d.el.style.willChange = ''
+    if (d.raf) cancelAnimationFrame(d.raf)
+    if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = '' }
     interactingRef.current = false
     if (!d.moved) { setSelected(card.id); return }
     const s = camRef.current.s
@@ -426,6 +475,39 @@ export default function BriefCanvas({
     const next = { ...card, text: trimmed }
     upsertLocal(next)
     persist([next])
+  }
+
+  /**
+   * Per-card callbacks that keep their identity between renders.
+   *
+   * CanvasCardView is React.memo'd, but inline `onCommitText={t => …}` props
+   * minted a new function every render — so the memo never held and all two
+   * hundred cards re-rendered whenever anything moved. These close over the
+   * card ID only and read the live handlers from a ref, so they are created
+   * once per card and stay referentially equal.
+   */
+  const liveRef = useRef({ cards, commitText, upsertLocal, persist })
+  liveRef.current = { cards, commitText, upsertLocal, persist }
+  const cbCache = useRef(new Map<string, {
+    onCommitText: (text: string) => void
+    onUpdate: (next: CanvasCard) => void
+  }>())
+  const cardCallbacks = (id: string) => {
+    let entry = cbCache.current.get(id)
+    if (!entry) {
+      entry = {
+        onCommitText: (text: string) => {
+          const c = liveRef.current.cards.find(x => x.id === id)
+          if (c) liveRef.current.commitText(c, text)
+        },
+        onUpdate: (next: CanvasCard) => {
+          liveRef.current.upsertLocal(next)
+          liveRef.current.persist([next])
+        },
+      }
+      cbCache.current.set(id, entry)
+    }
+    return entry
   }
 
   /* ── fit + zoom controls ── */
@@ -640,8 +722,8 @@ export default function BriefCanvas({
                 selected={selected === card.id}
                 editing={editing === card.id}
                 clientName={clientName}
-                onCommitText={text => commitText(card, text)}
-                onUpdate={viewOnly ? undefined : next => { upsertLocal(next); persist([next]) }}
+                onCommitText={cardCallbacks(card.id).onCommitText}
+                onUpdate={viewOnly ? undefined : cardCallbacks(card.id).onUpdate}
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div
@@ -684,7 +766,10 @@ export default function BriefCanvas({
                     e.stopPropagation()
                     interactingRef.current = true
                     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                    resizeState.current = { id: card.id, startX: e.clientX, ow: card.w, live: card.w }
+                    // the width lives on the card's own box (the positioned
+                    // wrapper is zero-width), so grab it once to write to
+                    const box = (e.currentTarget.parentElement?.firstElementChild ?? null) as HTMLElement | null
+                    resizeState.current = { id: card.id, startX: e.clientX, ow: card.w, live: card.w, el: box, raf: 0 }
                   }}
                   onPointerMove={e => {
                     const r = resizeState.current
@@ -692,14 +777,25 @@ export default function BriefCanvas({
                     const w = Math.min(1200, Math.max(120, Math.round(r.ow + (e.clientX - r.startX) / camRef.current.s)))
                     if (w === r.live) return
                     r.live = w
-                    upsertLocal({ ...card, w })
+                    // width straight to the DOM, one write per frame: routing
+                    // it through React re-rendered every card on the board on
+                    // every pixel of the drag, which is what made it crawl
+                    if (!r.raf) {
+                      r.raf = requestAnimationFrame(() => {
+                        const cur = resizeState.current
+                        if (!cur) return
+                        cur.raf = 0
+                        if (cur.el) cur.el.style.width = `${cur.live}px`
+                      })
+                    }
                   }}
                   onPointerUp={() => {
                     const r = resizeState.current
                     if (!r || r.id !== card.id) return
+                    if (r.raf) cancelAnimationFrame(r.raf)
                     resizeState.current = null
                     interactingRef.current = false
-                    if (r.live !== r.ow) persist([{ ...card, w: r.live }])
+                    if (r.live !== r.ow) { upsertLocal({ ...card, w: r.live }); persist([{ ...card, w: r.live }]) }
                   }}
                 />
               )}
