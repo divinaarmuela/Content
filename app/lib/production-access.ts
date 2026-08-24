@@ -2,6 +2,7 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, type TeamUser } from './authz'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, type ItemStatus } from './workflow-core'
+import { visibleComments } from './comment-access-core'
 
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
 export async function accessibleClientIds(user: TeamUser): Promise<string[] | null> {
@@ -101,40 +102,30 @@ export function shapeItemDetail(
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
         : [],
-      comments: comments.filter(c => c.visibility === 'client'),
+      comments: visibleComments(user.role, user.id, comments),
     }
   }
 
   if (user.role === 'scheduler') {
     const latest = versions[0]
-    // schedulers stay out of revision loops (doc 1 §3) — but the thread
-    // BETWEEN them and whoever handed them the job is theirs to read: their
-    // own notes, their assignor's, and anything explicitly assigned to them
-    const assigner = (item as { assigned_by?: string | null }).assigned_by ?? null
-    const theirs = new Set([user.id, ...(assigner ? [assigner] : [])])
+    // schedulers stay out of revision loops (doc 1 §3) — they read only the
+    // conversations they are actually in; visibleComments decides which
     return {
       ...itemPublic,
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
         : [],
-      comments: comments.filter(c =>
-        c.visibility === 'internal'
-        && ((c.author_id !== null && theirs.has(c.author_id)) || c.assigned_to === user.id)),
+      comments: visibleComments(user.role, user.id, comments),
     }
   }
 
   if (user.role === 'editor') {
-    // full versions, but the thread narrows to the editor's own lane: what
-    // they wrote, what their assignor wrote, and anything tagged to them.
-    // Managers speak to an editor by tagging them — never by broadcast.
-    const assigner = (item as { assigned_by?: string | null }).assigned_by ?? null
-    const theirs = new Set([user.id, ...(assigner ? [assigner] : [])])
+    // full versions, but the thread narrows to the editor's own lane: a
+    // manager reaches them by TAGGING them, never by broadcast
     return {
       ...item,
       versions,
-      comments: comments.filter(c =>
-        c.visibility === 'internal'
-        && ((c.author_id !== null && theirs.has(c.author_id)) || c.assigned_to === user.id)),
+      comments: visibleComments(user.role, user.id, comments),
     }
   }
 

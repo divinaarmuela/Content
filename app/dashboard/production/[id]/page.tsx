@@ -1017,14 +1017,16 @@ export default function ItemDetailPage() {
                       </label>
                     )}
                     {/* spec: "AM assigns editor task" — an internal comment
-                        with an assignee emails that editor as a task */}
+                        with an assignee emails that editor as a task. It is
+                        also the ONLY way the comment reaches them: untagged
+                        internal notes stay between managers. */}
                     {(role === 'account_manager' || role === 'super_admin') && commentVisibility === 'internal' && (
                       <Select value={commentAssignee || 'none'} onValueChange={v => setCommentAssignee(v === 'none' ? '' : v ?? '')}>
-                        <SelectTrigger className="h-8 w-40 bg-white text-xs dark:bg-zinc-900">
-                          <SelectValue placeholder="Assign as task" />
+                        <SelectTrigger className="h-8 w-44 bg-white text-xs dark:bg-zinc-900">
+                          <SelectValue placeholder="Tag someone" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">No assignee</SelectItem>
+                          <SelectItem value="none">Managers only</SelectItem>
                           {/* the people already on the job come first — they're
                               the natural suggestions for "this is for you" */}
                           {(() => {
@@ -1043,6 +1045,13 @@ export default function ItemDetailPage() {
                       <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
                     </Button>
                   </div>
+                  {(role === 'account_manager' || role === 'super_admin') && commentVisibility === 'internal' && (
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                      {commentAssignee
+                        ? 'They’ll be emailed and will see this on the card.'
+                        : 'Only managers see this. Tag someone to reach the person doing the work.'}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
