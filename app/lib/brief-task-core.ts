@@ -47,6 +47,7 @@ const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   'revision_complete>approved_for_scheduling': { label: 'Approve the plan', roles: ['account_manager'] },
   'client_review>client_changes_requested': { label: 'Client wants changes', roles: ['client', 'account_manager'] },
   'client_changes_requested>revision_required': { label: 'Send back for changes', roles: ['account_manager'] },
+  'client_changes_requested>client_review': { label: 'Share the updated plan with the client', roles: ['account_manager'] },
   // booking = the date is locked on the shoot; an AM makes the call
   'approved_for_scheduling>scheduled': { label: 'Mark shoot booked', roles: ['account_manager'], requires: 'batch_locked' },
   // a brief never "publishes" — booked is its end state, for everyone

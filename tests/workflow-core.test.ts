@@ -120,6 +120,11 @@ describe('notification routing — the gatekeeper rule', () => {
       expect(TRANSITIONS[from]?.[to], `${key} notifies but is not a legal transition`).toBeDefined()
     }
   })
+  it('a manager can fix small client changes and resend directly', () => {
+    expect(checkTransition('account_manager', 'client_changes_requested', 'client_review').ok).toBe(true)
+    expect(checkTransition('editor', 'client_changes_requested', 'client_review').ok).toBe(false)
+    expect(checkTransition('client', 'client_changes_requested', 'client_review').ok).toBe(false)
+  })
   it("the owner hears about their item's client-facing moments", () => {
     expect(TRANSITION_NOTIFICATIONS['internal_review>client_review']).toContain('owner_editor')
     expect(TRANSITION_NOTIFICATIONS['client_review>approved_for_scheduling']).toContain('owner_editor')

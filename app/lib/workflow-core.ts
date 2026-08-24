@@ -48,6 +48,9 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
   },
   client_changes_requested: {
     revision_required: { roles: ['account_manager'], label: 'Assign changes to editor' },
+    // the small-fix path: the manager corrected it on the spot — straight
+    // back to the client, no assignment ceremony for a one-word change
+    client_review: { roles: ['account_manager'], label: 'Fixed — send back to client' },
   },
   approved_for_scheduling: {
     scheduled: { roles: ['scheduler'], requires: 'schedule_entry', label: 'Mark scheduled' },
@@ -126,6 +129,7 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
   'client_changes_requested>revision_required': ['owner_editor'],
+  'client_changes_requested>client_review': ['client_users', 'account_managers', 'owner_editor'],
   // approving never blasts every scheduler — 'assigned_schedulers' is only the
   // people already on THIS item's scheduler_ids (set by the explicit 'Hand to
   // a scheduler' action); with none assigned, no scheduler hears anything
