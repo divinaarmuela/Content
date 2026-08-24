@@ -16,6 +16,7 @@ type Agreement = {
   deliverable_lines: DeliverableLine[]
   services: RetainedService[]
   notes: string | null
+  start_date?: string | null
   updated_at?: string
 }
 
@@ -57,6 +58,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
         deliverable_lines: next.deliverable_lines ?? agreement?.deliverable_lines ?? [],
         services: next.services ?? agreement?.services ?? [],
         notes: next.notes !== undefined ? next.notes : agreement?.notes ?? '',
+        start_date: next.start_date !== undefined ? next.start_date : agreement?.start_date ?? null,
       }
       const res = await fetch(`/api/clients/${id}/agreement`, {
         method: 'PUT',
@@ -127,11 +129,23 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
     <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">
-          <div>
-            <h3 className="text-sm font-semibold">Monthly deliverables</h3>
-            <p className="mt-0.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-              Default quantities per month. Individual months can be adjusted from the production board.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Monthly deliverables</h3>
+              <p className="mt-0.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                Default quantities per month. Individual months can be adjusted from the production board.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              Agreement start
+              {canManage ? (
+                <Input type="date" key={agreement.start_date ?? ''} defaultValue={agreement.start_date ?? ''}
+                  disabled={busy} className="h-8 w-36 font-mono text-xs"
+                  onBlur={e => { if (e.target.value !== (agreement.start_date ?? '')) void save({ start_date: e.target.value || null }) }} />
+              ) : (
+                <span className="font-mono">{agreement.start_date ?? '—'}</span>
+              )}
+            </label>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {CONTENT_TYPES.map(type => {

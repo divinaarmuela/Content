@@ -132,10 +132,37 @@ export function paceStatus(
   if (quota <= 0) return 'met'
   if (delivered >= quota) return 'met'
   const frac = Math.min(1, Math.max(0, dayOfMonth / Math.max(1, daysInMonth)))
-  const expected = quota * frac
+  // whole items only: nobody owes 0.3 of a reel on day 1 — a fractional
+  // expectation made every client read "behind" the moment a month began
+  const expected = Math.floor(quota * frac)
   if (expected <= 0) return 'on_track'          // start of month — nothing due yet
   if (delivered >= expected) return 'on_track'
   return delivered >= expected * 0.75 ? 'tight' : 'behind'
+}
+
+/**
+ * The slice of a month the agreement was actually live for — what pacing
+ * should measure against. A client signed on the 20th owes work across the
+ * remaining days, not the whole month; one whose agreement starts after this
+ * month owes nothing yet (null). No/invalid start date = live all month.
+ */
+export function agreementMonthWindow(
+  startDate: string | null | undefined,
+  month: number,
+  year: number,
+  today: { day: number; daysInMonth: number },
+): { dayOfMonth: number; daysInMonth: number } | null {
+  const full = { dayOfMonth: today.day, daysInMonth: today.daysInMonth }
+  if (!startDate) return full
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(startDate))
+  if (!m) return full
+  const [sy, sm, sd] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  if (sy > year || (sy === year && sm > month)) return null       // not started yet
+  if (sy < year || sm < month) return full                        // started earlier
+  // starts inside this month: the window runs from the start day to month end
+  const windowDays = Math.max(1, today.daysInMonth - (sd - 1))
+  const elapsed = Math.max(0, Math.min(windowDays, today.day - sd + 1))
+  return { dayOfMonth: elapsed, daysInMonth: windowDays }
 }
 
 export type MonthlyProgress = EffectiveQuota & { planned: number; delivered: number }

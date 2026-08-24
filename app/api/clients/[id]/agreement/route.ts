@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const { data } = await supabase
       .from('client_agreements')
-      .select('deliverable_lines, services, notes, updated_at, updated_by')
+      .select('deliverable_lines, services, notes, start_date, updated_at, updated_by')
       .eq('client_id', id)
       .maybeSingle()
 
@@ -53,6 +53,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if ('error' in lines) return NextResponse.json({ error: lines.error }, { status: 422 })
     const services = normaliseServices(body.services)
     if ('error' in services) return NextResponse.json({ error: services.error }, { status: 422 })
+    // start date anchors at-risk pacing — a plain date or nothing
+    const rawStart = String(body.start_date ?? '').trim()
+    if (rawStart && !/^\d{4}-\d{2}-\d{2}$/.test(rawStart)) {
+      return NextResponse.json({ error: 'Start date must be a date (YYYY-MM-DD)' }, { status: 422 })
+    }
 
     const { data, error } = await supabase
       .from('client_agreements')
@@ -60,6 +65,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         client_id: id,
         deliverable_lines: lines.lines,
         services: services.services,
+        start_date: rawStart || null,
         notes: String(body.notes ?? '').slice(0, 4000) || null,
         updated_by: user.id,
         updated_at: new Date().toISOString(),

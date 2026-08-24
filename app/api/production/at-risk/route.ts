@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import {
-  computeMonthlyProgress, effectiveQuotas, normaliseDeliverableLines, paceStatus,
+  agreementMonthWindow, computeMonthlyProgress, effectiveQuotas, normaliseDeliverableLines, paceStatus,
   type PaceStatus,
 } from '../../../lib/agreement-core'
 
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
     // bulk-fetch everything once, then group in memory (no N+1)
     const [{ data: agreements }, { data: commitments }, { data: items }, { data: batches }] = await Promise.all([
-      supabase.from('client_agreements').select('client_id, deliverable_lines').in('client_id', clientIds),
+      supabase.from('client_agreements').select('client_id, deliverable_lines, start_date').in('client_id', clientIds),
       supabase.from('monthly_commitments').select('*').in('client_id', clientIds).eq('month', month).eq('year', year),
       supabase.from('content_items')
         .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug)')
@@ -57,12 +57,22 @@ export async function GET(req: Request) {
       if (quotas.length === 0) {
         return { id: client.id, name: client.name, has_agreement: false, worst: 'met' as PaceStatus, lines: [] }
       }
+      // pacing runs on the agreement's own clock: signed mid-month, the
+      // client is measured over the days the deal was live; not started
+      // yet, they owe nothing and never show as at risk
+      const window = agreementMonthWindow(
+        (agByClient.get(client.id) as { start_date?: string | null } | undefined)?.start_date,
+        month, year, { day: dayOfMonth, daysInMonth },
+      )
+      if (window === null) {
+        return { id: client.id, name: client.name, has_agreement: true, not_started: true, worst: 'met' as PaceStatus, lines: [] }
+      }
       const clientItems = (itemsByClient.get(client.id) ?? []).filter(i =>
         ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
       const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
       const withPace = progress.map(p => ({
         type: p.type, label: p.label, quota: p.quota, delivered: p.delivered, planned: p.planned,
-        pace: paceStatus(p.delivered, p.quota, dayOfMonth, daysInMonth),
+        pace: paceStatus(p.delivered, p.quota, window.dayOfMonth, window.daysInMonth),
       }))
       const worst = withPace.reduce<PaceStatus>((w, p) => (RANK[p.pace] < RANK[w] ? p.pace : w), 'met')
       return { id: client.id, name: client.name, has_agreement: true, worst, lines: withPace }

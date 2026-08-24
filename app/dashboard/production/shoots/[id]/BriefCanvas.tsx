@@ -234,8 +234,9 @@ export default function BriefCanvas({
       },
       onPinchEnd: () => commitCamera(),
       onDrag: ({ event, delta: [dx, dy], target }) => {
-        // background drag pans; card drags are handled on the cards themselves
-        if ((target as HTMLElement).closest?.('[data-card]')) return
+        // background drag pans; card drags are handled on the cards themselves,
+        // and toolbar buttons are UI, not background
+        if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
         if (event.type.startsWith('pointer')) {
           camRef.current.x += dx
           camRef.current.y += dy
@@ -243,7 +244,10 @@ export default function BriefCanvas({
         }
       },
       onDragEnd: ({ target }) => {
-        if ((target as HTMLElement).closest?.('[data-card]')) return
+        // a press on a toolbar button registers here as a zero-length "drag" —
+        // deselecting unmounted the mini toolbar between pointerup and click,
+        // so the browser never fired the click and "Add image" did nothing
+        if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
         commitCamera()
         setSelected(null)
       },

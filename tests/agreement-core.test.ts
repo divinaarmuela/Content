@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  computeMonthlyProgress, effectiveQuotas, monthOfItem,
+  agreementMonthWindow, computeMonthlyProgress, effectiveQuotas, monthOfItem,
   normaliseDeliverableLines, normaliseServices, paceStatus,
 } from '../app/lib/agreement-core'
 
@@ -121,5 +121,33 @@ describe('paceStatus', () => {
   })
   it('does not cry behind at the very start of the month', () => {
     expect(paceStatus(0, 10, 0, 30)).toBe('on_track')
+  })
+})
+
+describe('agreementMonthWindow', () => {
+  const sept = { day: 20, daysInMonth: 30 }
+  it('no start date (or garbage) = live all month', () => {
+    expect(agreementMonthWindow(null, 9, 2026, sept)).toEqual({ dayOfMonth: 20, daysInMonth: 30 })
+    expect(agreementMonthWindow('soon', 9, 2026, sept)).toEqual({ dayOfMonth: 20, daysInMonth: 30 })
+  })
+  it('started in an earlier month = live all month', () => {
+    expect(agreementMonthWindow('2026-08-15', 9, 2026, sept)).toEqual({ dayOfMonth: 20, daysInMonth: 30 })
+    expect(agreementMonthWindow('2025-12-01', 9, 2026, sept)).toEqual({ dayOfMonth: 20, daysInMonth: 30 })
+  })
+  it('starts after this month = null, nothing owed', () => {
+    expect(agreementMonthWindow('2026-10-01', 9, 2026, sept)).toBeNull()
+    expect(agreementMonthWindow('2027-01-01', 9, 2026, sept)).toBeNull()
+  })
+  it('signed mid-month: measured over the remaining days only', () => {
+    // signed the 16th of a 30-day month, today the 20th → 5 of 15 days elapsed
+    expect(agreementMonthWindow('2026-09-16', 9, 2026, sept)).toEqual({ dayOfMonth: 5, daysInMonth: 15 })
+    // signed today → 1 elapsed day of the 11 remaining, never negative
+    expect(agreementMonthWindow('2026-09-20', 9, 2026, sept)).toEqual({ dayOfMonth: 1, daysInMonth: 11 })
+    // signed later this month but not yet reached → 0 elapsed
+    expect(agreementMonthWindow('2026-09-25', 9, 2026, sept)).toEqual({ dayOfMonth: 0, daysInMonth: 6 })
+  })
+  it('the signing day itself is never behind', () => {
+    const w = agreementMonthWindow('2026-09-20', 9, 2026, sept)!
+    expect(paceStatus(0, 10, w.dayOfMonth, w.daysInMonth)).toBe('on_track')
   })
 })
