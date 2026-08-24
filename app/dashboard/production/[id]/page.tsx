@@ -608,9 +608,10 @@ export default function ItemDetailPage() {
                 onClick={() =>
                   (t.to === 'internal_review' || t.to === 'revision_complete')
                     ? openReviewerPick(t)
-                    : (t.to === 'approved_for_scheduling' && schedulers.length > 0)
-                      ? (setSchedPick(t), setSchedChosen(new Set(schedulers.filter(s => s.role === 'scheduler').map(s => s.id))))
-                      : doTransition(t.to, t.label)
+                    // approving never auto-picks schedulers anymore — it's a
+                    // plain transition; 'Hand to a scheduler' below is the
+                    // one deliberate place a human chooses who's notified
+                    : doTransition(t.to, t.label)
                 }
               >
                 {busy === t.to ? 'Working…' : t.label}

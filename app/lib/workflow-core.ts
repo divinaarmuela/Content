@@ -122,9 +122,10 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'revision_complete>client_review': ['client_users', 'account_managers'],
   'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
   'client_changes_requested>revision_required': ['owner_editor'],
-  'client_review>approved_for_scheduling': ['account_managers', 'schedulers'],
-  'internal_review>approved_for_scheduling': ['schedulers'],
-  'revision_complete>approved_for_scheduling': ['schedulers'],
+  // approving never blasts every scheduler — a human explicitly hands it to
+  // one via the 'Hand to a scheduler' action (handoff route), so nobody on
+  // the scheduling team gets spammed the instant a client clicks Approve
+  'client_review>approved_for_scheduling': ['account_managers'],
   'approved_for_scheduling>scheduled': ['account_managers'],
   'scheduled>published': ['account_managers'],
 }
