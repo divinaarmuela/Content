@@ -65,6 +65,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       managers,
       schedule: scheduleRes.data ?? [],
       viewer_role: user.role,
+      // the pickers need to know who is looking: you are never emailed about
+      // your own action, so offering yourself as a reviewer is a silent no-op
+      viewer_id: user.id,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

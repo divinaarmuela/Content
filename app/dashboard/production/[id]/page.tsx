@@ -57,6 +57,7 @@ type Detail = {
   owner_id: string | null
   assigned_by?: string | null
   scheduler_ids?: string[] | null
+  viewer_id?: string
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
@@ -187,9 +188,10 @@ export default function ItemDetailPage() {
       if (!res.ok) throw new Error(json.error ?? 'Could not load people')
       const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
       // this client's own managers + super admins only — an AM who doesn't
-      // manage this client never appears in its pickers
+      // manage this client never appears in its pickers, and neither do you
       const list: Reviewer[] = (json.eligible ?? [])
-        .filter((u: { id: string; role: string }) => u.role === 'super_admin' || assignedIds.has(u.id))
+        .filter((u: { id: string; role: string }) =>
+          u.id !== detail!.viewer_id && (u.role === 'super_admin' || assignedIds.has(u.id)))
         .map((u: { id: string; name: string; email: string; role: string }) => ({
           ...u, assigned: assignedIds.has(u.id),
         }))
@@ -385,10 +387,12 @@ export default function ItemDetailPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load reviewers')
       const assignedIds = new Set<string>((json.managers ?? []).map((m: { team_user_id: string }) => m.team_user_id))
-      // reviewers are THIS client's assigned account managers + super admins —
-      // never the whole managing roster
+      // reviewers are THIS client's assigned account managers + super admins,
+      // never the whole managing roster — and never YOU: nobody is emailed
+      // about their own action, so picking yourself sends nothing at all
       const list: Reviewer[] = (json.eligible ?? [])
-        .filter((u: { id: string; role: string }) => u.role === 'super_admin' || assignedIds.has(u.id))
+        .filter((u: { id: string; role: string }) =>
+          u.id !== detail!.viewer_id && (u.role === 'super_admin' || assignedIds.has(u.id)))
         .map((u: { id: string; name: string; email: string; role: string }) => ({
           ...u, assigned: assignedIds.has(u.id),
         }))
@@ -1220,7 +1224,7 @@ export default function ItemDetailPage() {
             )}
             {reviewers?.length === 0 && (
               <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
-                No managers found — it will go to this client&rsquo;s assigned managers.
+                Nobody else to notify on this client — the move is still recorded.
               </p>
             )}
             {(reviewers ?? []).map(r => (
