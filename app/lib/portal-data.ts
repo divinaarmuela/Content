@@ -71,7 +71,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
     supabase
       .from('content_items')
-      .select('id, title, content_type, status, updated_at')
+      .select('id, title, content_type, status, updated_at, work_kinds(slug)')
       .eq('client_id', clientId)
       .order('updated_at', { ascending: false })
       .limit(300),
@@ -93,7 +93,10 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .limit(6),
   ])
   if (!clientRes.data) return null
-  const items = itemsRes.data ?? []
+  // a shoot BRIEF is internal planning work riding the item pipeline — the
+  // client sees the shoot in SHOOT PLANS, never as a mystery "other" card
+  const items = (itemsRes.data ?? []).filter(i =>
+    ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
 
   const ids = items.map(i => i.id)
   const [versionsRes, scheduleRes] = await Promise.all([

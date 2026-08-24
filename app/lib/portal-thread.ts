@@ -69,10 +69,12 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   if (!client) return null
   const { data: item } = await supabase
     .from('content_items')
-    .select('id, title, content_type, status')
+    .select('id, title, content_type, status, work_kinds(slug)')
     .eq('id', itemId).eq('client_id', client.id)
     .maybeSingle()
-  if (!item) return null
+  // an internal brief task is not a client-facing item — same rule as the
+  // portal overview: the shoot itself lives in SHOOT PLANS
+  if (!item || (item.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief') return null
 
   const status = item.status as ItemStatus
   const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
