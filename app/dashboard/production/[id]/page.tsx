@@ -83,13 +83,44 @@ const STATUS_TINT: Record<string, string> = {
 
 const PLATFORMS = ['instagram', 'tiktok', 'facebook', 'linkedin', 'youtube']
 
-function Media({ src, className }: { src: string; className?: string }) {
+/** Pixel size of a local image/video file, measured before it ever leaves
+ *  the browser. Resolves null for anything unmeasurable — never throws. */
+function measureFile(file: File): Promise<{ w: number; h: number } | null> {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file)
+    const done = (d: { w: number; h: number } | null) => { URL.revokeObjectURL(url); resolve(d) }
+    if (file.type.startsWith('video/')) {
+      const v = document.createElement('video')
+      v.onloadedmetadata = () => done({ w: v.videoWidth, h: v.videoHeight })
+      v.onerror = () => done(null)
+      v.src = url
+    } else if (file.type.startsWith('image/')) {
+      const img = new Image()
+      img.onload = () => done({ w: img.naturalWidth, h: img.naturalHeight })
+      img.onerror = () => done(null)
+      img.src = url
+    } else done(null)
+  })
+}
+
+function Media({ src, className, onDims }: {
+  src: string
+  className?: string
+  /** reports the media's true pixel size once loaded — 1080 × 1350 etc. */
+  onDims?: (d: { w: number; h: number }) => void
+}) {
   if (!src) return null
   if (/\.(mp4|webm|mov)(\?|$)/i.test(src)) {
-    return <video src={src} controls playsInline className={className} />
+    return (
+      <video src={src} controls playsInline className={className}
+        onLoadedMetadata={e => onDims?.({ w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })} />
+    )
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className={className} />
+  return (
+    <img src={src} alt="" className={className}
+      onLoad={e => onDims?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
+  )
 }
 
 export default function ItemDetailPage() {
@@ -100,6 +131,9 @@ export default function ItemDetailPage() {
 
   const [verDraft, setVerDraft] = useState({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
   const [uploading, setUploading] = useState(false)
+  /** measured pixel size of the latest preview / freshly-uploaded file */
+  const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null)
+  const [draftDims, setDraftDims] = useState<{ w: number; h: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [commentDraft, setCommentDraft] = useState('')
@@ -383,6 +417,10 @@ export default function ItemDetailPage() {
       // Straight to R2 rather than through our API: this is where shoot
       // deliverables land, and a serverless request body caps at ~4.5MB on
       // Vercel — every real cut would have been rejected.
+      // measure locally while it uploads — the "1080 × 1350" badge needs no
+      // round-trip to the stored file
+      setDraftDims(null)
+      void measureFile(file).then(setDraftDims)
       const { url } = await uploadMedia(file, { purpose: 'production' })
       setVerDraft(d => ({ ...d, file_url: url }))
       toast.success('File uploaded — add links, then save the version')
@@ -666,9 +704,17 @@ export default function ItemDetailPage() {
       {/* Latest preview */}
       {latest && (latest.file_url || latest.drive_url) && (
         <Card className="overflow-hidden py-0">
-          {latest.file_url && <Media src={latest.file_url} className="max-h-[420px] w-full bg-zinc-950 object-contain" />}
+          {latest.file_url && (
+            <Media key={latest.file_url} src={latest.file_url}
+              className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
+          )}
           <CardContent className="flex flex-wrap items-center gap-3 p-3">
             <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">v{latest.version_number} · latest</span>
+            {previewDims && previewDims.w > 0 && (
+              <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {previewDims.w} × {previewDims.h}
+              </span>
+            )}
             {latest.drive_url && (
               <a href={latest.drive_url} target="_blank" rel="noreferrer noopener" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
                 Open in Drive
@@ -894,7 +940,11 @@ export default function ItemDetailPage() {
                     <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
                       <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : verDraft.file_url ? 'Replace file' : 'Upload file'}
                     </Button>
-                    {verDraft.file_url && <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">file ready ✓</span>}
+                    {verDraft.file_url && (
+                      <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+                        file ready ✓{draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
+                      </span>
+                    )}
                     {/* sr-only, not hidden: display:none file inputs can silently
                         refuse a programmatic .click() — same bug as the board's */}
                     <input ref={fileRef} type="file" accept="image/*,video/*" className="sr-only"
