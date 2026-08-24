@@ -149,29 +149,36 @@ function AtRiskThisMonth() {
       .catch(() => setRows([]))
   }, [])
   if (rows === null) return <Skeleton className="h-24 w-full" />
-  const atRisk = rows.filter(c => c.has_agreement && (c.worst === 'behind' || c.worst === 'tight'))
+  // every client still OWING something this month — not only the ones behind
+  // pace. The dot carries urgency; the numbers carry what's left to deliver.
+  const owing = rows.filter(c => c.has_agreement && c.lines.some(l => l.delivered < l.quota))
   return (
     <Card>
       <CardHeader className="flex-row items-center">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <TrendingUp className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> At risk this month
+          <TrendingUp className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Agreement gaps this month
         </CardTitle>
         <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400">
           {new Date().toLocaleDateString('en-AU', { month: 'long' })}
         </span>
       </CardHeader>
       <CardContent className="flex flex-col gap-1 pt-0">
-        {atRisk.length === 0 ? (
+        {owing.length === 0 ? (
           <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            Every client with an agreement is on pace. Nice.
+            Every agreement is fully delivered this month. Nice.
           </p>
-        ) : atRisk.map(c => (
-          <Link key={c.id} href={`/dashboard/clients`} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+        ) : owing.map(c => (
+          <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
             <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-zinc-400'}`} />
             <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
             <span className="ml-auto flex flex-wrap justify-end gap-1.5">
-              {c.lines.filter(l => l.pace === 'behind' || l.pace === 'tight').map(l => (
-                <span key={l.type} className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+              {c.lines.filter(l => l.delivered < l.quota).map(l => (
+                <span key={l.type}
+                  className={`font-mono text-[11px] tabular-nums ${
+                    l.pace === 'behind' ? 'text-red-500 dark:text-red-400'
+                      : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-zinc-500 dark:text-zinc-400'
+                  }`}>
                   {l.label} {l.delivered}/{l.quota}
                 </span>
               ))}
