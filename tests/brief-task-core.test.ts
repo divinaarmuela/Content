@@ -80,3 +80,18 @@ describe('canCreateItemsUnder with the shoot_brief kind', () => {
     expect(canCreateItemsUnder(null, 'account_manager')).toBe(false)
   })
 })
+
+describe('plan-shaped wording on client-facing edges', () => {
+  it('sharing and approving speak about the PLAN, not scheduling', () => {
+    const share = checkBriefTaskTransition('account_manager', 'internal_review', 'client_review')
+    expect(share.ok && share.rule.label).toBe('Share the plan with the client')
+    const approve = checkBriefTaskTransition('client', 'client_review', 'approved_for_scheduling')
+    expect(approve.ok && approve.rule.label).toBe('Plan approved — ready to book')
+    const bypass = checkBriefTaskTransition('account_manager', 'internal_review', 'approved_for_scheduling')
+    expect(bypass.ok && bypass.rule.label).toBe('Approve the plan')
+  })
+  it('override edges keep their base role gates', () => {
+    expect(checkBriefTaskTransition('editor', 'internal_review', 'client_review').ok).toBe(false)
+    expect(checkBriefTaskTransition('scheduler', 'client_review', 'approved_for_scheduling').ok).toBe(false)
+  })
+})
