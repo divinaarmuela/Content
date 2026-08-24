@@ -18,12 +18,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, MapPin, Plus, Trash2, X, FileDown,
+  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, Plus, Trash2, X, FileDown,
 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
 import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import BriefComments from './BriefComments'
+import LocationSearch from './LocationSearch'
 import {
   availableBatchTransitions, sanitiseCanvasCards,
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
@@ -384,12 +385,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               )}
               <div className="grid gap-1.5">
                 <label className="text-xs text-zinc-500">Location</label>
-                <div className="relative">
-                  <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-                  <Input key={batch.location ?? ''} defaultValue={batch.location ?? ''} disabled={!canEdit}
-                    placeholder={'Studio, address, or "TBC"'} className="pl-8 text-sm"
-                    onBlur={e => { if (e.target.value !== (batch.location ?? '')) void patch('location', e.target.value, true) }} />
-                </div>
+                <LocationSearch
+                  value={batch.location ?? ''}
+                  disabled={!canEdit}
+                  onSave={v => void patch('location', v, true)}
+                />
               </div>
               {batch.month && batch.year && (
                 <p className="font-mono text-[11px] text-zinc-400">
@@ -508,7 +508,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <label className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${batch.shared_with_client ? '' : 'opacity-50'}`}>
                     <Switch
-                      checked={(batch.share_board ?? batch.shared_with_client) ?? false}
+                      // nothing reaches the portal while the plan itself is off —
+                      // showing a lit board toggle then reads as "still shared"
+                      checked={batch.shared_with_client ? (batch.share_board ?? true) : false}
                       disabled={!batch.shared_with_client}
                       onCheckedChange={async v => {
                         const ok = await patch('share_board', v)
