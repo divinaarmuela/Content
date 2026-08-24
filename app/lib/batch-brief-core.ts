@@ -176,6 +176,8 @@ export type CanvasCard = {
   to?: string
   /** mockup frame — which platform chrome wraps the image */
   platform?: (typeof MOCKUP_PLATFORMS)[number]
+  /** carousel mockup — every slide, in order (url stays = slide 1) */
+  urls?: string[]
   /** todo card — its checklist rows */
   items?: { id: string; text: string; done: boolean }[]
 }
@@ -217,6 +219,15 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...(kind === 'mockup' && r.text ? { text: String(r.text).slice(0, 500) } : {}),
       ...(kind === 'image' || kind === 'link' ? { url } : {}),
       ...(kind === 'mockup' && url.startsWith('https://') ? { url } : {}),
+      ...(kind === 'mockup' && Array.isArray(r.urls)
+        ? (() => {
+            const urls = r.urls
+              .map(u => String(u ?? '').slice(0, 2000))
+              .filter(u => u.startsWith('https://'))
+              .slice(0, 10)
+            return urls.length > 0 ? { urls } : {}
+          })()
+        : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }

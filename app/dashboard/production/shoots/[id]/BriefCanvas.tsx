@@ -181,7 +181,10 @@ export default function BriefCanvas({
   const centreOf = useCallback((c: CanvasCard, liveX?: number, liveY?: number) => {
     const el = viewportRef.current?.querySelector(`[data-cid="${c.id}"]`) as HTMLElement | null
     const h = el?.offsetHeight ?? 100
-    return { cx: (liveX ?? c.x) + c.w / 2, cy: (liveY ?? c.y) + h / 2 }
+    // measured width, not stored: a label shrink-wraps its text and ignores
+    // c.w entirely, so arrows anchored on c.w/2 floated off resized labels
+    const w = el?.offsetWidth || c.w
+    return { cx: (liveX ?? c.x) + w / 2, cy: (liveY ?? c.y) + h / 2 }
   }, [])
 
   // arrow endpoints need measured heights — nudge one re-render after the
@@ -368,12 +371,23 @@ export default function BriefCanvas({
     mockupTargetRef.current = null
     if (target) {
       const card = cards.find(c => c.id === target)
-      const file = files[0]
-      if (card && file) {
+      if (card && files.length > 0) {
         try {
-          const { url } = await uploadMedia(file, { purpose: 'production' })
-          const next = { ...card, url }
-          upsertLocal(next); persist([next])
+          if (card.platform === 'ig_carousel') {
+            // every selected file becomes a slide, appended in order
+            const uploaded: string[] = []
+            for (const file of Array.from(files).slice(0, 10)) {
+              const { url } = await uploadMedia(file, { purpose: 'production' })
+              uploaded.push(url)
+            }
+            const urls = [...(card.urls ?? (card.url ? [card.url] : [])), ...uploaded].slice(0, 10)
+            const next = { ...card, url: urls[0], urls }
+            upsertLocal(next); persist([next])
+          } else {
+            const { url } = await uploadMedia(files[0], { purpose: 'production' })
+            const next = { ...card, url }
+            upsertLocal(next); persist([next])
+          }
         } catch (e) {
           toast.error(e instanceof Error ? e.message : 'Upload failed')
         } finally {
@@ -808,7 +822,10 @@ export default function BriefCanvas({
             {selectedCard.kind === 'mockup' && (
               <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
                 onClick={() => { mockupTargetRef.current = selectedCard.id; fileRef.current?.click() }}>
-                <ImagePlus className="h-3.5 w-3.5" /> {selectedCard.url ? 'Swap image' : 'Add image'}
+                <ImagePlus className="h-3.5 w-3.5" />
+                {selectedCard.platform === 'ig_carousel'
+                  ? (selectedCard.url ? 'Add slides' : 'Add images')
+                  : (selectedCard.url ? 'Swap image' : 'Add image')}
               </Button>
             )}
             {selectedCard.kind !== 'arrow' && (

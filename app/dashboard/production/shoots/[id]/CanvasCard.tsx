@@ -35,6 +35,8 @@ function CanvasCardInner({
   /** whole-card change (todo rows etc.) — absent means read-only */
   onUpdate?: (next: Card) => void
 }) {
+  // carousel mockups page through their slides — per-card, view-only state
+  const [slide, setSlide] = React.useState(0)
   if (card.kind === 'todo') {
     const items = card.items ?? []
     const done = items.filter(t => t.done).length
@@ -298,17 +300,47 @@ function CanvasCardInner({
           <MoreHorizontal className="ml-auto h-3.5 w-3.5 text-zinc-400" />
         </div>
         <div className="relative bg-zinc-100 dark:bg-zinc-800" style={{ aspectRatio: '1 / 1' }}>
-          {img}
-          {platform === 'ig_carousel' && (
-            <>
-              <span className="absolute right-2 top-2 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] text-white">1/5</span>
-              <div className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1">
-                {[0, 1, 2, 3, 4].map(i => (
-                  <span key={i} className={`h-1 w-1 rounded-full ${i === 0 ? 'bg-sky-500' : 'bg-white/60'}`} />
-                ))}
-              </div>
-            </>
-          )}
+          {platform === 'ig_carousel' ? (() => {
+            const slides = card.urls?.length ? card.urls : card.url ? [card.url] : []
+            const count = Math.max(1, slides.length)
+            const idx = Math.min(slide, count - 1)
+            const src = slides[idx]
+            const step = (d: number) => setSlide((idx + d + count) % count)
+            return (
+              <>
+                {src ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={src} alt={`slide ${idx + 1}`} loading="lazy" decoding="async" draggable={false}
+                    className="h-full w-full select-none object-cover" />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-zinc-400">
+                    <ImagePlus className="h-5 w-5" />
+                    <span className="text-[10px]">Select, then add the images</span>
+                  </div>
+                )}
+                {slides.length > 1 && (
+                  <>
+                    <button type="button" aria-label="Previous slide"
+                      className="absolute left-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white"
+                      onPointerDown={e => e.stopPropagation()}
+                      onClick={e => { e.stopPropagation(); step(-1) }}>‹</button>
+                    <button type="button" aria-label="Next slide"
+                      className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white"
+                      onPointerDown={e => e.stopPropagation()}
+                      onClick={e => { e.stopPropagation(); step(1) }}>›</button>
+                  </>
+                )}
+                <span className="absolute right-2 top-2 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] text-white">
+                  {idx + 1}/{count}
+                </span>
+                <div className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1">
+                  {Array.from({ length: count }, (_, i) => (
+                    <span key={i} className={`h-1 w-1 rounded-full ${i === idx ? 'bg-sky-500' : 'bg-white/60'}`} />
+                  ))}
+                </div>
+              </>
+            )
+          })() : img}
         </div>
         <div className="flex items-center gap-3 px-2.5 py-2 text-zinc-700 dark:text-zinc-300">
           <Heart className="h-4 w-4" /><MessageCircle className="h-4 w-4" /><Send className="h-4 w-4" />
