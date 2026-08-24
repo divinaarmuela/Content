@@ -371,6 +371,38 @@ export default function BriefCanvas({
     if (!d.raf) d.raf = requestAnimationFrame(paintDrag)
   }
 
+  /** Let go of a drag WITHOUT saving — the inline styles are cleared so the
+   *  card falls back to its committed position on the next paint. */
+  const abortDrag = useCallback(() => {
+    const d = dragState.current
+    if (d) {
+      dragState.current = null
+      if (d.raf) cancelAnimationFrame(d.raf)
+      if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = `translate(${d.ox}px, ${d.oy}px)` }
+    }
+    const r = resizeState.current
+    if (r) {
+      resizeState.current = null
+      if (r.raf) cancelAnimationFrame(r.raf)
+      if (r.el) r.el.style.width = `${r.ow}px`
+    }
+    if (d || r) { interactingRef.current = false; forceRender(n => n + 1) }
+  }, [])
+
+  // A drag that never gets its pointerup — the browser taking over the
+  // gesture, a lost pointer capture, the tab going away mid-move — used to
+  // leave the card pinned to the abandoned position on every later render.
+  // Anything that ends a pointer anywhere ends the drag here too.
+  useEffect(() => {
+    const onCancel = () => abortDrag()
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('blur', onCancel)
+    return () => {
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('blur', onCancel)
+    }
+  }, [abortDrag])
+
   const onCardPointerUp = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
     if (!d || d.id !== card.id) return
