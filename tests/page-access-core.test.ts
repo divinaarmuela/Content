@@ -63,19 +63,26 @@ const NAV = [
 const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
 
 describe('defaultAllows — the ladder as it always was', () => {
-  it('keeps an editor on the overview and production board only', () => {
+  it('keeps an editor on their own pages and the production board only', () => {
     expect(defaultAllows('editor', '/dashboard')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/production')).toBe(true)
-    for (const href of ['/dashboard/leads', '/dashboard/settings', '/dashboard/scheduler']) {
+    for (const href of ['/dashboard/leads', '/dashboard/clients', '/dashboard/scheduler']) {
       expect(defaultAllows('editor', href)).toBe(false)
     }
   })
 
-  it('keeps a scheduler on the overview, scheduler and calendar only', () => {
+  it('keeps a scheduler on their own pages, scheduler, calendar and social', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/calendar')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/production')).toBe(false)
+  })
+
+  it('every team role gets Notifications and Settings — their own feed and prefs', () => {
+    for (const role of TEAM_ROLES) {
+      expect(defaultAllows(role, '/dashboard/notifications')).toBe(true)
+      expect(defaultAllows(role, '/dashboard/settings')).toBe(true)
+    }
   })
 
   it('every team role sees the overview — it shapes itself to the role', () => {
@@ -114,7 +121,7 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
   it('grants one page without granting the neighbours', () => {
     const granted = ['/dashboard/leads']
     expect(canSeePage('editor', '/dashboard/clients', granted)).toBe(false)
-    expect(canSeePage('editor', '/dashboard/settings', granted)).toBe(false)
+    expect(canSeePage('editor', '/dashboard/reports', granted)).toBe(false)
   })
 
   it('cannot take away what the ladder already gave', () => {
@@ -136,11 +143,11 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 describe('visiblePages', () => {
   it('filters to what the person may see and preserves nav order', () => {
     const seen = visiblePages('editor', NAV, ['/dashboard/leads'])
-    expect(seen.map(s => s.href)).toEqual(['/dashboard', '/dashboard/leads', '/dashboard/production'])
+    expect(seen.map(s => s.href)).toEqual(['/dashboard', '/dashboard/leads', '/dashboard/production', '/dashboard/settings'])
   })
 
-  it('an editor with no grants still sees only overview and production', () => {
-    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual(['/dashboard', '/dashboard/production'])
+  it('an editor with no grants sees only their own pages and production', () => {
+    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual(['/dashboard', '/dashboard/production', '/dashboard/settings'])
   })
 
   it('an unresolved role sees nothing, grants or not', () => {
@@ -150,8 +157,8 @@ describe('visiblePages', () => {
   it('two people with the same role can differ', () => {
     const manal = visiblePages('editor', NAV, ['/dashboard/leads'])
     const other = visiblePages('editor', NAV, [])
-    expect(manal.length).toBe(3)
-    expect(other.length).toBe(2)
+    expect(manal.length).toBe(4)
+    expect(other.length).toBe(3)
   })
 })
 

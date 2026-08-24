@@ -59,12 +59,14 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
   if (role === 'client') return false
-  // every team role gets the Overview — it shapes itself to the role
-  if (role === 'editor') return ['/dashboard', '/dashboard/production'].includes(href)
+  // every team role gets the Overview, their own Notifications feed, and
+  // Settings (their profile and notification preferences live there)
+  const personal = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
+  if (role === 'editor') return [...personal, '/dashboard/production'].includes(href)
   // schedulers run the client channels day-to-day: queue, calendar, and the
   // social area itself (channels, inbox, analytics) — that is where they post
   if (role === 'scheduler') {
-    return ['/dashboard', '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social'].includes(href)
+    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social'].includes(href)
   }
   // account managers run client delivery, not business development — the
   // lead funnel and audience lists stay out of their default world
