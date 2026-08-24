@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
 } from 'lucide-react'
 import { useRole } from './useRole'
 import UploadTray from './UploadTray'
@@ -55,6 +55,7 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   { href: '/dashboard/production', label: 'Production',       icon: Kanban },
+  { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
 ]
 
@@ -72,6 +73,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/audience':      'Audience',
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Production',
+  '/dashboard/bookings':      'Bookings',
   '/dashboard/production/shoots': 'Shoots',
   '/dashboard/scheduler':     'Scheduler',
   '/dashboard/calendar':      'Calendar',
