@@ -128,14 +128,20 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
     const range = doc.bufferedPageRange()
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i)
+      // the footer sits INSIDE the bottom margin — pdfkit treats any text
+      // past the margin as overflow and silently appends a blank page per
+      // footer line. Zero the margin while stamping, and never line-break.
+      const savedBottom = doc.page.margins.bottom
+      doc.page.margins.bottom = 0
       doc.fillColor(FAINT).font('Courier').fontSize(7)
         .text(
           `MD MEDIA · SHOOT BRIEF · ${new Date().toLocaleDateString('en-AU')}`,
-          PAGE.margin, PAGE.height - 34, { width: contentW },
+          PAGE.margin, PAGE.height - 34, { width: contentW, lineBreak: false },
         )
       doc.text(`${i - range.start + 1} / ${range.count}`, PAGE.margin, PAGE.height - 34, {
-        width: contentW, align: 'right',
+        width: contentW, align: 'right', lineBreak: false,
       })
+      doc.page.margins.bottom = savedBottom
     }
     doc.end()
   })
