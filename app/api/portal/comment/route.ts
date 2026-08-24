@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '../../../lib/workflow'
-import { announceItemChange } from '../../../lib/production-live'
+import { announceItemChange, announceBatchChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 
 /**
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         clientId: client.id, speaker, subjectTitle: batch.title, body: text,
         dashboardPath: `/dashboard/production/shoots/${batch.id}`,
       }).catch(e => console.error('portal comment notify error:', e))
+      announceBatchChange({ batch_id: batch.id, client_id: client.id, status: 'brief', kind: 'updated' })
       return NextResponse.json({ ok: true })
     }
 

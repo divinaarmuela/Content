@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Send } from 'lucide-react'
+import { useProductionLive, type ProductionChange } from '../../useProductionLive'
 
 type Row = {
   id: string
@@ -32,6 +33,13 @@ export default function BriefComments({ batchId }: { batchId: string }) {
     else setRows([])
   }, [batchId])
   useEffect(() => { void load() }, [load])
+
+  // both the team-side POST and the client's portal POST announce a change
+  // tagged `batch:${batchId}` — refetch only when this thread is the one that moved
+  const onLive = useCallback((change?: ProductionChange) => {
+    if (!change || change.item_id === `batch:${batchId}`) void load()
+  }, [batchId, load])
+  useProductionLive(onLive)
 
   const send = async () => {
     if (!draft.trim() || sending) return

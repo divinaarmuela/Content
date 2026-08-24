@@ -55,9 +55,21 @@ export async function GET(req: Request) {
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
+    // a scheduler sees an unclaimed approved item (anyone can pick it up) or
+    // one explicitly handed to them — never someone else's private handoff.
+    // 'Hand to a scheduler' notified specific people but never actually
+    // restricted the queue until now.
+    const scoped = user.role === 'scheduler'
+      ? (data ?? []).filter(r => {
+          if (r.owner_id === user.id) return true
+          const ids = Array.isArray(r.scheduler_ids) ? r.scheduler_ids as string[] : []
+          return ids.length === 0 || ids.includes(user.id)
+        })
+      : (data ?? [])
+
     const rows = user.role === 'client'
       ? (data ?? []).map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] }))
-      : data
+      : scoped
     return NextResponse.json(rows)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

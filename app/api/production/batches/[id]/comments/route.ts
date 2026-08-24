@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { batchClientIds } from '../../../../../lib/production-access'
+import { announceBatchChange } from '../../../../../lib/production-live'
 
 /**
  * The shoot's comment thread, team side — the same rows the client reads
@@ -55,6 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (error) {
       return NextResponse.json({ error: 'Comments need supabase/portal_comments.sql run first' }, { status: 503 })
     }
+    announceBatchChange({ batch_id: id, client_id: g.batch.client_id, status: 'brief', kind: 'updated' })
     return NextResponse.json({ comment: data })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
