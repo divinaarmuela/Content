@@ -58,10 +58,11 @@ export default function PortalShell({ className = '', children }: {
         type="button"
         onClick={flip}
         aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="fixed bottom-4 left-4 z-40 flex h-10 w-10 items-center justify-center rounded-full backdrop-blur transition-opacity hover:opacity-100"
-        style={{ background: 'var(--p-surface)', border: '1px solid var(--p-border)', color: 'var(--p-ink)', opacity: 0.85 }}
+        className="fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-[11px] uppercase tracking-[0.14em] shadow-lg backdrop-blur transition-transform hover:scale-105"
+        style={{ background: 'var(--p-accent)', color: 'var(--p-accent-ink)', fontFamily: 'var(--p-mono-font, inherit)' }}
       >
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
       </button>
     </div>
   )
