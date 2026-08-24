@@ -32,12 +32,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
 
-    const [{ data: items }, { data: lockedBy }, { data: proposal }] = await Promise.all([
+    const [{ data: items }, { data: lockedBy }, { data: editedBy }, { data: proposal }] = await Promise.all([
       supabase.from('content_items')
         .select('id, title, status, content_type, work_kinds(slug)')
         .eq('batch_id', id).order('created_at', { ascending: true }).limit(100),
       loaded.batch.locked_by
         ? supabase.from('team_users').select('name, email').eq('id', loaded.batch.locked_by).maybeSingle()
+        : Promise.resolve({ data: null }),
+      // last_edited_by only exists after brief_edits.sql — guard on its presence
+      loaded.batch.last_edited_by
+        ? supabase.from('team_users').select('name, email').eq('id', loaded.batch.last_edited_by).maybeSingle()
         : Promise.resolve({ data: null }),
       loaded.batch.proposal_id
         ? supabase.from('shoot_proposals').select('id, status').eq('id', loaded.batch.proposal_id).maybeSingle()
@@ -47,6 +51,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       batch: loaded.batch,
       items: items ?? [],
       locked_by_name: lockedBy?.name ?? lockedBy?.email ?? null,
+      last_edited_by_name: editedBy?.name ?? editedBy?.email ?? null,
+      last_edited_at: loaded.batch.last_edited_at ?? null,
       proposal: proposal ?? null,
       viewer_role: user.role,
     })
@@ -152,6 +158,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data, error } = await supabase.from('batches').update(patch).eq('id', id).select().single()
     if (error) throw new Error(error.message)
+    // stamp who last edited — best-effort so it degrades cleanly before the
+    // brief_edits.sql migration adds the columns (a missing-column error here
+    // must never fail the edit the user just made)
+    await supabase.from('batches')
+      .update({ last_edited_by: user.id, last_edited_at: new Date().toISOString() })
+      .eq('id', id)
+      .then(() => {}, () => {})
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status, kind: 'updated' })
     return NextResponse.json(data)
   } catch (e) {

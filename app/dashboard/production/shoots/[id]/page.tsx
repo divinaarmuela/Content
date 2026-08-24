@@ -46,6 +46,16 @@ type Progress = { type: string; label: string; quota: number; planned: number; d
 
 const CONTENT_TYPE_OPTIONS = Object.entries(TYPE_LABELS) as [ContentType, string][]
 
+function timeAgo(iso: string): string {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (s < 45) return 'just now'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
 function longDate(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : null
 }
@@ -67,6 +77,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [batch, setBatch] = useState<Batch | null>(null)
   const [items, setItems] = useState<ItemLite[]>([])
   const [lockedByName, setLockedByName] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [lastEdited, setLastEdited] = useState<{ name: string | null; at: string | null }>({ name: null, at: null })
   const [role, setRole] = useState<string>('')
   const [progress, setProgress] = useState<Progress[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -86,6 +98,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     setBatch(json.batch)
     setItems(json.items ?? [])
     setLockedByName(json.locked_by_name ?? null)
+    setLastEdited({ name: json.last_edited_by_name ?? null, at: json.last_edited_at ?? null })
     setRole(json.viewer_role ?? '')
     // monthly context for the deliverable captions
     if (json.batch?.client_id) {
@@ -111,19 +124,24 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
   /** Field-level save: send ONLY what changed. */
   const patch = async (field: string, value: unknown, quiet = false) => {
+    setSaveState('saving')
     const res = await fetch(`/api/production/batches/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [field]: value }),
     })
     if (!res.ok) {
+      setSaveState('idle')
       toast.error((await res.json()).error ?? 'Could not save')
       void load()
       return false
     }
     const json = await res.json()
     setBatch(b => (b ? { ...b, ...json } : b))
-    if (!quiet) return true
+    setLastEdited({ name: 'you', at: new Date().toISOString() })
+    setSaveState('saved')
+    window.setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 2000)
+    void quiet
     return true
   }
 
@@ -202,8 +220,20 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             onClick={() => setDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /></Button>
         )}
       </div>
-      <p className="-mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-zinc-500 dark:text-zinc-400">
         <Link href="/dashboard/clients" className="underline decoration-dotted">{batch.clients?.name}</Link>
+        {canEdit && (
+          <span className="font-mono text-[11px] uppercase tracking-wider">
+            {saveState === 'saving' ? <span className="text-zinc-400">· Saving…</span>
+              : saveState === 'saved' ? <span className="text-emerald-600 dark:text-emerald-400">· Saved ✓</span>
+              : <span className="text-zinc-400">· Autosaves</span>}
+          </span>
+        )}
+        {lastEdited.name && lastEdited.at && (
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+            · Last edited by {lastEdited.name} {timeAgo(lastEdited.at)}
+          </span>
+        )}
       </p>
 
       {isManager && batch.status === 'brief' && !briefTask && (

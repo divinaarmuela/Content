@@ -851,7 +851,10 @@ export default function BriefCanvas({
         </div>
       </div>
 
-      <input ref={fileRef} type="file" multiple accept="image/*" className="hidden"
+      {/* visually hidden but PRESENT — a display:none file input often refuses
+          to open the OS picker on a programmatic .click(); sr-only keeps it
+          clickable so the toolbar Image + mockup "Add image" both work */}
+      <input ref={fileRef} type="file" multiple accept="image/*" className="sr-only"
         onChange={e => e.target.files?.length && void addImages(e.target.files)} />
 
       {/* mobile / read-only card viewer */}
