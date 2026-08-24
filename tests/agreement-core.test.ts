@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeMonthlyProgress, effectiveQuotas, monthOfItem,
-  normaliseDeliverableLines, normaliseServices,
+  normaliseDeliverableLines, normaliseServices, paceStatus,
 } from '../app/lib/agreement-core'
 
 describe('normaliseDeliverableLines', () => {
@@ -103,5 +103,23 @@ describe('computeMonthlyProgress', () => {
       { type: 'static', label: 'Graphics', quota: 20, planned: 1, delivered: 1 },
       { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1 },
     ])
+  })
+})
+
+describe('paceStatus', () => {
+  it('is met once the whole quota is delivered', () => {
+    expect(paceStatus(10, 10, 15, 30)).toBe('met')
+    expect(paceStatus(11, 10, 15, 30)).toBe('met')
+    expect(paceStatus(0, 0, 15, 30)).toBe('met') // nothing promised
+  })
+  it('flags behind vs on-track against the linear burn-down', () => {
+    // day 15/30 → expected 5 of 10
+    expect(paceStatus(6, 10, 15, 30)).toBe('on_track')
+    expect(paceStatus(5, 10, 15, 30)).toBe('on_track')
+    expect(paceStatus(4, 10, 15, 30)).toBe('tight')   // >=75% of expected 5
+    expect(paceStatus(2, 10, 15, 30)).toBe('behind')  // <75% of expected
+  })
+  it('does not cry behind at the very start of the month', () => {
+    expect(paceStatus(0, 10, 0, 30)).toBe('on_track')
   })
 })

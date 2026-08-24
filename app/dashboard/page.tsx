@@ -132,6 +132,57 @@ function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: 
   )
 }
 
+type AtRiskLine = { type: string; label: string; quota: number; delivered: number; pace: string }
+type AtRiskClient = { id: string; name: string; has_agreement: boolean; worst: string; lines: AtRiskLine[] }
+
+const PACE_DOT: Record<string, string> = {
+  behind: 'bg-rose-500', tight: 'bg-amber-500', on_track: 'bg-emerald-500', met: 'bg-emerald-600',
+}
+
+/** Cross-client "who's behind this month" — pull becomes push. */
+function AtRiskThisMonth() {
+  const [rows, setRows] = useState<AtRiskClient[] | null>(null)
+  useEffect(() => {
+    fetch('/api/production/at-risk')
+      .then(r => (r.ok ? r.json() : { clients: [] }))
+      .then(j => setRows(j.clients ?? []))
+      .catch(() => setRows([]))
+  }, [])
+  if (rows === null) return <Skeleton className="h-24 w-full" />
+  const atRisk = rows.filter(c => c.has_agreement && (c.worst === 'behind' || c.worst === 'tight'))
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <TrendingUp className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> At risk this month
+        </CardTitle>
+        <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+          {new Date().toLocaleDateString('en-AU', { month: 'long' })}
+        </span>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1 pt-0">
+        {atRisk.length === 0 ? (
+          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
+            Every client with an agreement is on pace. Nice.
+          </p>
+        ) : atRisk.map(c => (
+          <Link key={c.id} href={`/dashboard/clients`} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-zinc-400'}`} />
+            <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
+            <span className="ml-auto flex flex-wrap justify-end gap-1.5">
+              {c.lines.filter(l => l.pace === 'behind' || l.pace === 'tight').map(l => (
+                <span key={l.type} className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                  {l.label} {l.delivered}/{l.quota}
+                </span>
+              ))}
+            </span>
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 /** The production funnel at a glance — draft → review → approval → published. */
 function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }) {
   const STAGES: { key: string; label: string; tint: string }[] = [
@@ -270,6 +321,7 @@ export default function OverviewPage() {
               : <Stat label="Revisions open" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
           </div>
           <Pipeline pipeline={data.pipeline} />
+          <AtRiskThisMonth />
           {(data.manager.my_tasks?.length ?? 0) > 0 && (
             <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
               empty="" actionHref="/dashboard/production" actionLabel="Open board" />

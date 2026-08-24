@@ -121,6 +121,23 @@ export function monthOfItem(
 /** Delivered = past the client's approval; planned = exists at all. */
 const DELIVERED_STATUSES = new Set(['approved_for_scheduling', 'scheduled', 'published'])
 
+export type PaceStatus = 'met' | 'on_track' | 'tight' | 'behind'
+
+/** Is this line keeping pace for the month? Compares what's delivered against
+ *  what a linear burn-down would expect by this day. `met` once the whole
+ *  quota is delivered; `behind` when well under the expected line. Pure. */
+export function paceStatus(
+  delivered: number, quota: number, dayOfMonth: number, daysInMonth: number,
+): PaceStatus {
+  if (quota <= 0) return 'met'
+  if (delivered >= quota) return 'met'
+  const frac = Math.min(1, Math.max(0, dayOfMonth / Math.max(1, daysInMonth)))
+  const expected = quota * frac
+  if (expected <= 0) return 'on_track'          // start of month — nothing due yet
+  if (delivered >= expected) return 'on_track'
+  return delivered >= expected * 0.75 ? 'tight' : 'behind'
+}
+
 export type MonthlyProgress = EffectiveQuota & { planned: number; delivered: number }
 
 export function computeMonthlyProgress(
