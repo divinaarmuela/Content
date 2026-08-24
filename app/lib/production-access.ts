@@ -107,12 +107,19 @@ export function shapeItemDetail(
 
   if (user.role === 'scheduler') {
     const latest = versions[0]
+    // schedulers stay out of revision loops (doc 1 §3) — but the thread
+    // BETWEEN them and whoever handed them the job is theirs to read: their
+    // own notes, their assignor's, and anything explicitly assigned to them
+    const assigner = (item as { assigned_by?: string | null }).assigned_by ?? null
+    const theirs = new Set([user.id, ...(assigner ? [assigner] : [])])
     return {
       ...itemPublic,
       versions: latest
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
         : [],
-      comments: [], // schedulers stay out of revision loops (doc 1 §3)
+      comments: comments.filter(c =>
+        c.visibility === 'internal'
+        && ((c.author_id !== null && theirs.has(c.author_id)) || c.assigned_to === user.id)),
     }
   }
 
