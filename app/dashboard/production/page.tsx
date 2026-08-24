@@ -423,11 +423,17 @@ export default function ProductionPage() {
           <div className="flex gap-3 pb-3">
             {COLUMNS.map(col => {
               const colItems = visible.filter(i => col.statuses.includes(i.status))
+              // a booked shoot brief reuses 'scheduled' (same pipeline, different
+              // meaning) — the lane header must not read as "scheduled to post"
+              // when it's actually holding a booked shoot
+              const hasBrief = col.key === 'scheduled' && colItems.some(i => i.work_kinds?.slug === 'shoot_brief')
               return (
                 <div key={col.key} className="min-w-44 flex-1">
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <span className={`h-2 w-2 rounded-full ${col.tint}`} />
-                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{col.title}</span>
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                      {hasBrief ? 'Scheduled · Shoot booked' : col.title}
+                    </span>
                     <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
                   </div>
                   <div className="flex min-h-24 flex-col gap-2">

@@ -24,6 +24,7 @@ type Item = {
   caption: string | null
   current_version_number: number
   clients: { name: string } | null
+  work_kinds?: { slug?: string } | null
 }
 
 const LANES = [
@@ -50,7 +51,10 @@ export default function SchedulerPage() {
       const res = await fetch('/api/production/items')
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load queue')
       const all: Item[] = await res.json()
-      const queue = all.filter(i => LANES.some(l => l.key === i.status))
+      // a shoot brief rides this same status pipeline (relabelled "Shoot
+      // booked" elsewhere) but there is nothing for a scheduler to schedule —
+      // it never belongs in this queue
+      const queue = all.filter(i => LANES.some(l => l.key === i.status) && i.work_kinds?.slug !== 'shoot_brief')
       setItems(queue)
       // fetch schedule entries for scheduled/published rows (small N, parallel)
       const withSchedule = queue.filter(i => i.status !== 'approved_for_scheduling').slice(0, 40)
