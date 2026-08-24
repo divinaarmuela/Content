@@ -123,10 +123,21 @@ export function shapeItemDetail(
     }
   }
 
-  // editor / AM / super_admin: full versions; editors never see client comments
-  return {
-    ...item,
-    versions,
-    comments: user.role === 'editor' ? comments.filter(c => c.visibility === 'internal') : comments,
+  if (user.role === 'editor') {
+    // full versions, but the thread narrows to the editor's own lane: what
+    // they wrote, what their assignor wrote, and anything tagged to them.
+    // Managers speak to an editor by tagging them — never by broadcast.
+    const assigner = (item as { assigned_by?: string | null }).assigned_by ?? null
+    const theirs = new Set([user.id, ...(assigner ? [assigner] : [])])
+    return {
+      ...item,
+      versions,
+      comments: comments.filter(c =>
+        c.visibility === 'internal'
+        && ((c.author_id !== null && theirs.has(c.author_id)) || c.assigned_to === user.id)),
+    }
   }
+
+  // AM / super_admin: the whole record — every comment, every version
+  return { ...item, versions, comments }
 }

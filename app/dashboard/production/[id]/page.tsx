@@ -56,6 +56,7 @@ type Detail = {
   id: string; title: string; client_id: string; client_name: string | null
   owner_id: string | null
   assigned_by?: string | null
+  scheduler_ids?: string[] | null
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
@@ -1024,9 +1025,17 @@ export default function ItemDetailPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No assignee</SelectItem>
-                          {editors.map(e => (
-                            <SelectItem key={e.id} value={e.id}>{e.name || e.email}</SelectItem>
-                          ))}
+                          {/* the people already on the job come first — they're
+                              the natural suggestions for "this is for you" */}
+                          {(() => {
+                            const onJob = new Set([detail.owner_id, ...(detail.scheduler_ids ?? [])].filter(Boolean))
+                            return [...editors].sort((a, b) => Number(onJob.has(b.id)) - Number(onJob.has(a.id)))
+                              .map(e => (
+                                <SelectItem key={e.id} value={e.id}>
+                                  {e.name || e.email}{onJob.has(e.id) ? ' · on this job' : ''}
+                                </SelectItem>
+                              ))
+                          })()}
                         </SelectContent>
                       </Select>
                     )}

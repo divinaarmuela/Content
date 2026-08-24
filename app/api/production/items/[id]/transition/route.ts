@@ -29,11 +29,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       schedulerIds,
       note: note || undefined,
     })
-    // the note also lands in the item's own thread, so whoever picks the
-    // work up reads it in place — best-effort, never fails the transition
+    // the note also lands in the item's own thread, tagged to the owner so
+    // it stays visible in their narrowed view even when the requester isn't
+    // their assignor — best-effort, never fails the transition
     if (note) {
       await supabase.from('item_comments')
-        .insert({ item_id: id, author_id: user.id, visibility: 'internal', body: note })
+        .insert({ item_id: id, author_id: user.id, visibility: 'internal', body: note, assigned_to: item.owner_id ?? null })
         .then(() => {}, () => {})
     }
     // an approve-with-picker is also an assignment: the chosen schedulers'
