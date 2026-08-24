@@ -35,7 +35,7 @@ import {
 
 } from '../../../lib/workflow-core'
 import {
-  checkBriefTaskTransition, itemStatusLabel, SHOOT_BRIEF_SLUG,
+  availableBriefTaskTransitions, itemStatusLabel, SHOOT_BRIEF_SLUG,
 } from '../../../lib/brief-task-core'
 import type { Role } from '../../../lib/identity-core'
 
@@ -309,18 +309,13 @@ export default function ItemDetailPage() {
   const canAddVersion = ['editor', 'account_manager', 'super_admin'].includes(role)
   const canComment = role !== 'scheduler'
   const canSchedule = ['scheduler', 'super_admin'].includes(role)
-  const rawTransitions = availableTransitions(role, detail.status)
   const isBrief = detail.work_kind?.slug === SHOOT_BRIEF_SLUG
-  // a brief task wears its own words and drops edges that make no sense for
-  // it (a booked shoot never "publishes")
+  // a brief task wears its own words, drops edges that make no sense for it
+  // (a booked shoot never "publishes"), and judges roles by its OWN rules —
+  // filtering through the base pipeline's roles first hid brief-legal buttons
   const transitions = isBrief
-    ? rawTransitions
-        .map(t => {
-          const c = checkBriefTaskTransition(role as never, detail.status, t.to)
-          return c.ok ? { ...t, label: c.rule.label } : null
-        })
-        .filter((t): t is NonNullable<typeof t> => t !== null)
-    : rawTransitions
+    ? availableBriefTaskTransitions(role as never, detail.status)
+    : availableTransitions(role, detail.status)
 
   const latest = detail.versions[0]
 

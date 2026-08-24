@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  briefSatisfiesSubmission, checkBriefTaskTransition, itemStatusLabel,
+  availableBriefTaskTransitions, briefSatisfiesSubmission, checkBriefTaskTransition, itemStatusLabel,
 } from '../app/lib/brief-task-core'
 import { checkTransition, type ItemStatus } from '../app/lib/workflow-core'
 import { canCreateItemsUnder } from '../app/lib/batch-brief-core'
@@ -93,5 +93,19 @@ describe('plan-shaped wording on client-facing edges', () => {
   it('override edges keep their base role gates', () => {
     expect(checkBriefTaskTransition('editor', 'internal_review', 'client_review').ok).toBe(false)
     expect(checkBriefTaskTransition('scheduler', 'client_review', 'approved_for_scheduling').ok).toBe(false)
+  })
+})
+
+describe('availableBriefTaskTransitions — buttons come from brief rules, not base roles', () => {
+  it('an account manager sees "Mark revisions done" on a brief', () => {
+    const ts = availableBriefTaskTransitions('account_manager', 'revision_required')
+    expect(ts.map(t => t.to)).toContain('revision_complete')
+    expect(ts.find(t => t.to === 'revision_complete')?.label).toBe('Mark revisions done')
+  })
+  it('a scheduler still sees nothing on a brief in revisions', () => {
+    expect(availableBriefTaskTransitions('scheduler', 'revision_required')).toEqual([])
+  })
+  it('a booked brief never offers "publish"', () => {
+    expect(availableBriefTaskTransitions('super_admin', 'scheduled').map(t => t.to)).not.toContain('published')
   })
 })

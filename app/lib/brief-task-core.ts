@@ -70,6 +70,22 @@ export function checkBriefTaskTransition(role: Role, from: ItemStatus, to: ItemS
   return { ok: true, rule: { ...exists, label: override.label, roles: override.roles }, requires: override.requires }
 }
 
+/** Buttons for a brief task — from the FULL set of outgoing edges, judged by
+ *  the brief's own rules. Deriving from availableTransitions() first silently
+ *  dropped every edge whose base roles differ (an account manager could never
+ *  see "Mark revisions done" because the base edge is editors-only). */
+export function availableBriefTaskTransitions(
+  role: Role, from: ItemStatus,
+): { to: ItemStatus; label: string }[] {
+  const outs = TRANSITIONS[from] ?? {}
+  return (Object.keys(outs) as ItemStatus[])
+    .map(to => {
+      const c = checkBriefTaskTransition(role, from, to)
+      return c.ok ? { to, label: c.rule.label } : null
+    })
+    .filter((t): t is NonNullable<typeof t> => t !== null)
+}
+
 /** A brief may go to review once it has SOMETHING to review: an external
  *  link, or real content on our brief page. */
 export function briefSatisfiesSubmission(
