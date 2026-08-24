@@ -47,8 +47,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         ? supabase.from('shoot_proposals').select('id, status').eq('id', loaded.batch.proposal_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ])
+    // the client's portal link, for the "Copy portal link" button — an AM
+    // shares it deliberately; the token never reaches editor/scheduler payloads
+    const { data: tokenRow } = roleSatisfies(user.role, 'account_manager')
+      ? await supabase.from('clients').select('share_token').eq('id', loaded.batch.client_id).maybeSingle()
+      : { data: null }
+
     return NextResponse.json({
       batch: loaded.batch,
+      portal_token: tokenRow?.share_token ?? null,
       items: items ?? [],
       locked_by_name: lockedBy?.name ?? lockedBy?.email ?? null,
       last_edited_by_name: editedBy?.name ?? editedBy?.email ?? null,
@@ -133,6 +140,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: 'Only an account manager can share a shoot with the client' }, { status: 403 })
       }
       patch.shared_with_client = body.shared_with_client === true
+    }
+    if ('share_board' in body) {
+      // the working board is shared separately from the brief — an AM call too
+      if (!roleSatisfies(user.role, 'account_manager')) {
+        return NextResponse.json({ error: 'Only an account manager can share the board with the client' }, { status: 403 })
+      }
+      patch.share_board = body.share_board === true
+    }
+    if ('board_name' in body) {
+      patch.board_name = String(body.board_name ?? '').trim().slice(0, 80) || null
     }
     if ('shoot_date' in body) {
       // freely editable while still a plan; once locked, the date is a

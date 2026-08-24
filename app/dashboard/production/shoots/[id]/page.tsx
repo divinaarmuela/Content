@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, Lock, MapPin, Plus, Trash2, X, FileDown,
+  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, MapPin, Plus, Trash2, X, FileDown,
 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
 import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
@@ -38,6 +38,8 @@ type Batch = {
   planned_deliverables: { type: string; qty: number }[]
   locked_at: string | null; shot_at: string | null
   shared_with_client?: boolean
+  share_board?: boolean | null
+  board_name?: string | null
   month: number | null; year: number | null
   clients: { name: string } | null
 }
@@ -86,6 +88,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [dateOpen, setDateOpen] = useState(false)
   const [dateDraft, setDateDraft] = useState({ shoot_date: '', reason: '' })
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [portalToken, setPortalToken] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/production/batches/${id}`)
@@ -100,6 +103,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     setLockedByName(json.locked_by_name ?? null)
     setLastEdited({ name: json.last_edited_by_name ?? null, at: json.last_edited_at ?? null })
     setRole(json.viewer_role ?? '')
+    setPortalToken(json.portal_token ?? null)
     // monthly context for the deliverable captions
     if (json.batch?.client_id) {
       const m = json.batch.month ?? (json.batch.shoot_date ? new Date(json.batch.shoot_date).getUTCMonth() + 1 : null)
@@ -491,26 +495,51 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             <CardContent className="flex flex-col gap-3 p-4">
               <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Client portal</p>
               {isManager ? (
-                <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  <Switch
-                    checked={batch.shared_with_client ?? false}
-                    onCheckedChange={async v => {
-                      const ok = await patch('shared_with_client', v)
-                      if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
-                    }}
-                  />
-                  Show this shoot plan on the client portal
-                </label>
+                <>
+                  <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    <Switch
+                      checked={batch.shared_with_client ?? false}
+                      onCheckedChange={async v => {
+                        const ok = await patch('shared_with_client', v)
+                        if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
+                      }}
+                    />
+                    Show this shoot plan on the client portal
+                  </label>
+                  <label className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${batch.shared_with_client ? '' : 'opacity-50'}`}>
+                    <Switch
+                      checked={(batch.share_board ?? batch.shared_with_client) ?? false}
+                      disabled={!batch.shared_with_client}
+                      onCheckedChange={async v => {
+                        const ok = await patch('share_board', v)
+                        if (ok) toast.success(v ? 'Board is visible to the client' : 'Board hidden — the client sees the brief only')
+                      }}
+                    />
+                    Also show the planning board
+                  </label>
+                </>
               ) : (
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   {batch.shared_with_client ? 'Visible on the client portal.' : 'Not shared with the client. An account manager can share it.'}
                 </p>
               )}
-              <Button size="sm" variant="outline" className="w-fit" asChild>
-                <a href={`/api/production/batches/${batch.id}/pdf`} download>
-                  <FileDown className="h-3.5 w-3.5" /> Download brief PDF
-                </a>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="w-fit" asChild>
+                  <a href={`/api/production/batches/${batch.id}/pdf`} download>
+                    <FileDown className="h-3.5 w-3.5" /> Download brief PDF
+                  </a>
+                </Button>
+                {portalToken && (
+                  <Button size="sm" variant="outline" className="w-fit"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(`${window.location.origin}/portal/${portalToken}`)
+                        .then(() => toast.success('Client portal link copied'))
+                        .catch(() => toast.error('Could not copy — copy it from the Clients page'))
+                    }}>
+                    <LinkIcon className="h-3.5 w-3.5" /> Copy client portal link
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -522,6 +551,21 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-3">
           <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Board</p>
+          {canEdit ? (
+            <input
+              key={batch.board_name ?? ''}
+              defaultValue={batch.board_name ?? ''}
+              placeholder="Name this board…"
+              maxLength={80}
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+              onBlur={e => {
+                const v = e.target.value.trim()
+                if (v !== (batch.board_name ?? '')) void patch('board_name', v)
+              }}
+            />
+          ) : (
+            batch.board_name && <span className="text-sm font-medium">{batch.board_name}</span>
+          )}
           <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
             {(batch.canvas_cards ?? []).length === 1 ? '1 card' : `${(batch.canvas_cards ?? []).length} cards`}
           </span>

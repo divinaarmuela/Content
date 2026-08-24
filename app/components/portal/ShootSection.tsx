@@ -119,7 +119,9 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
             style={{ fontFamily: 'var(--p-mono-font, inherit)' }}
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${boardOpen ? 'rotate-180' : ''}`} />
-            {boardOpen ? 'Hide the planning board' : `View the planning board · ${shoot.canvas_cards.length} cards`}
+            {boardOpen
+              ? `Hide ${shoot.board_name || 'the planning board'}`
+              : `View ${shoot.board_name || 'the planning board'} · ${shoot.canvas_cards.length} cards`}
           </button>
           {boardOpen && (
             /* the `dark` class pins the canvas to its dark palette so it sits
