@@ -450,13 +450,20 @@ export default function ProductionPage() {
               // a booked shoot brief reuses 'scheduled' (same pipeline, different
               // meaning) — the lane header must not read as "scheduled to post"
               // when it's actually holding a booked shoot
-              const hasBrief = col.key === 'scheduled' && colItems.some(i => i.work_kinds?.slug === 'shoot_brief')
+              // 'approved' is likewise approved_for_scheduling under the hood —
+              // for a brief that means "the plan is signed off, book the date",
+              // never "a scheduler has it"
+              const briefsHere = colItems.some(i => i.work_kinds?.slug === 'shoot_brief')
+              const hasBrief = col.key === 'scheduled' && briefsHere
+              const briefApproved = col.key === 'approved' && briefsHere
               return (
                 <div key={col.key} className="min-w-44 flex-1">
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <span className={`h-2 w-2 rounded-full ${col.tint}`} />
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                      {hasBrief ? 'Scheduled · Shoot booked' : col.title}
+                      {hasBrief ? 'Scheduled · Shoot booked'
+                        : briefApproved ? 'Approved · Ready to book'
+                        : col.title}
                     </span>
                     <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
                   </div>

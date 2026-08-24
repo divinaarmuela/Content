@@ -61,7 +61,13 @@ export async function GET(req: Request) {
     // restricted the queue until now.
     const scoped = user.role === 'scheduler'
       ? (data ?? []).filter(r => {
+          // a shoot BRIEF is never scheduling work — booking a shoot is an
+          // account manager's call. Excluding it in the two scheduler pages
+          // left it one new surface away from reappearing; the API is the
+          // place that guarantees it. Owning one is the only way to see it.
+          const slug = (r.work_kinds as { slug?: string } | null)?.slug ?? ''
           if (r.owner_id === user.id) return true
+          if (slug === 'shoot_brief') return false
           const ids = Array.isArray(r.scheduler_ids) ? r.scheduler_ids as string[] : []
           return ids.length === 0 || ids.includes(user.id)
         })
