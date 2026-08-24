@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Calendar, Check, ChevronDown, FileDown, MapPin } from 'lucide-react'
+import { Calendar, Check, ChevronDown, FileDown, MapPin, MessageCircle } from 'lucide-react'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
 import type { PortalShoot } from '../../lib/portal-data'
@@ -135,6 +135,13 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
                 onOp={async () => false}
               />
             </div>
+          )}
+          {boardOpen && token && (
+            <Link href={`/portal/${token}/shoot/${shoot.id}`}
+              className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] underline-offset-4 hover:underline"
+              style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
+              <MessageCircle className="h-3.5 w-3.5" /> Thoughts on this plan? Leave a comment →
+            </Link>
           )}
         </div>
       )}
