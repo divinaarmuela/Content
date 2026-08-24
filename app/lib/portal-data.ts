@@ -31,6 +31,7 @@ export type PortalShoot = {
   status_label: string
   shoot_date: string | null
   location: string | null
+  concept: string | null
   planned_deliverables: { type: string; qty: number }[]
   shot_list: ShotRow[]
   canvas_cards: CanvasCard[]
@@ -84,7 +85,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // shoots an AM chose to share; errors (column not migrated yet) degrade to none
     supabase
       .from('batches')
-      .select('id, title, status, shoot_date, location, planned_deliverables, shot_list, canvas_cards')
+      .select('id, title, status, shoot_date, location, concept, planned_deliverables, shot_list, canvas_cards')
       .eq('client_id', clientId)
       .eq('shared_with_client', true)
       .order('shoot_date', { ascending: false, nullsFirst: false })
@@ -167,6 +168,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
     shoot_date: b.shoot_date ?? null,
     location: b.location ?? null,
+    concept: b.concept ?? null,
     planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
     shot_list: sanitiseShotList(b.shot_list),
     canvas_cards: sanitiseCanvasCards(b.canvas_cards),

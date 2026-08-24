@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Calendar, Check, ChevronDown, MapPin } from 'lucide-react'
+import { Calendar, Check, ChevronDown, FileDown, MapPin } from 'lucide-react'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
 import type { PortalShoot } from '../../lib/portal-data'
@@ -60,6 +60,20 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
           {shoot.location && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {shoot.location}</span>}
         </span>
       </div>
+
+      {shoot.concept && (
+        <p className="whitespace-pre-wrap text-sm leading-relaxed opacity-90">{shoot.concept}</p>
+      )}
+
+      {token && (
+        <a
+          href={`/api/portal/shoot-pdf?token=${encodeURIComponent(token)}&id=${shoot.id}`}
+          className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
+          style={{ fontFamily: 'var(--p-mono-font, inherit)' }}
+        >
+          <FileDown className="h-3.5 w-3.5" /> Download brief PDF
+        </a>
+      )}
 
       {shoot.planned_deliverables.length > 0 && (
         <div className="flex flex-wrap gap-2">

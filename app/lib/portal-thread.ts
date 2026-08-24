@@ -113,7 +113,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
   if (!client) return null
   const { data: b } = await supabase
     .from('batches')
-    .select('id, title, status, shoot_date, location, planned_deliverables, shot_list, canvas_cards, shared_with_client')
+    .select('id, title, status, shoot_date, location, concept, planned_deliverables, shot_list, canvas_cards, shared_with_client')
     .eq('id', batchId).eq('client_id', client.id)
     .maybeSingle()
   // an unshared shoot is simply not there, as far as the client can tell
@@ -134,6 +134,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
       shoot_date: b.shoot_date ?? null,
       location: b.location ?? null,
+      concept: b.concept ?? null,
       planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
       shot_list: sanitiseShotList(b.shot_list),
       canvas_cards: sanitiseCanvasCards(b.canvas_cards),
