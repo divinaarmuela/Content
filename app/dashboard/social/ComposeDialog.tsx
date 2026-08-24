@@ -59,10 +59,25 @@ export default function ComposeDialog({
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // link the post to the production item it delivers — that's what makes it
+  // count toward the client's agreement when it goes live
+  const [linkItemId, setLinkItemId] = useState('')
+  const [linkable, setLinkable] = useState<{ id: string; title: string; content_type: string; status: string }[]>([])
 
   useEffect(() => { if (defaultClientId) setClientId(defaultClientId) }, [defaultClientId])
-  useEffect(() => { setSelected([]) }, [clientId])
+  useEffect(() => { setSelected([]); setLinkItemId('') }, [clientId])
   useEffect(() => { if (open) setStep(0) }, [open])
+
+  useEffect(() => {
+    if (!open || !clientId) { setLinkable([]); return }
+    void fetch(`/api/production/items?client_id=${clientId}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: { id: string; title: string; content_type: string; status: string; work_kinds?: { slug?: string } | null }[]) =>
+        setLinkable((Array.isArray(rows) ? rows : [])
+          .filter(r => ['approved_for_scheduling', 'scheduled'].includes(r.status) && r.work_kinds?.slug !== 'shoot_brief')
+          .map(({ id, title, content_type, status }) => ({ id, title, content_type, status }))))
+      .catch(() => setLinkable([]))
+  }, [open, clientId])
 
   const available = accounts.filter(a => a.active && a.client_id === clientId)
   const chosen = available.filter(a => selected.includes(a.id))
@@ -100,6 +115,7 @@ export default function ComposeDialog({
   const reset = () => {
     setSelected([]); setCaption(''); setMedia([]); setWhen('')
     setKind('auto'); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
+    setLinkItemId('')
     setStep(0)
   }
 
@@ -131,6 +147,7 @@ export default function ComposeDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId,
+          ...(linkItemId ? { contentItemId: linkItemId } : {}),
           caption: captionIgnored ? '' : caption,
           media,
           targets: chosen.map(a => ({
@@ -260,6 +277,27 @@ export default function ComposeDialog({
                   </div>
                 )}
               </div>
+
+              {clientId && linkable.length > 0 && (
+                <div className="grid gap-1.5">
+                  <Label>Production item <span className="font-normal text-zinc-400">(optional)</span></Label>
+                  <Select value={linkItemId || 'none'} onValueChange={v => setLinkItemId(v === 'none' ? '' : v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not a planned deliverable</SelectItem>
+                      {linkable.map(i => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.title} · {i.content_type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Link the approved item this post delivers — when it goes live, the
+                    item is marked published and counts toward the client&rsquo;s agreement.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -316,7 +354,9 @@ export default function ComposeDialog({
                       </button>
                     </div>
                   ))}
-                  <Input ref={fileRef} type="file" multiple accept="image/*,video/*" className="hidden"
+                  {/* sr-only, not hidden: display:none file inputs can silently
+                      refuse a programmatic .click() */}
+                  <Input ref={fileRef} type="file" multiple accept="image/*,video/*" className="sr-only"
                     onChange={e => e.target.files && upload(e.target.files)} />
                   <Button type="button" variant="outline" size="sm"
                     onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -411,6 +451,13 @@ export default function ComposeDialog({
 
                 <dt className="text-zinc-500 dark:text-zinc-400">Type</dt>
                 <dd>{kind === 'auto' ? (isReel ? 'Reel (automatic)' : 'Automatic') : kind}</dd>
+
+                {linkItemId && (
+                  <>
+                    <dt className="text-zinc-500 dark:text-zinc-400">Delivers</dt>
+                    <dd className="truncate">{linkable.find(i => i.id === linkItemId)?.title ?? '—'}</dd>
+                  </>
+                )}
 
                 <dt className="text-zinc-500 dark:text-zinc-400">Media</dt>
                 <dd>{media.length === 0 ? 'None' : `${media.length} item${media.length === 1 ? '' : 's'}`}</dd>
