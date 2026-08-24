@@ -878,7 +878,9 @@ export default function ItemDetailPage() {
                       <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : verDraft.file_url ? 'Replace file' : 'Upload file'}
                     </Button>
                     {verDraft.file_url && <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">file ready ✓</span>}
-                    <input ref={fileRef} type="file" accept="image/*,video/*" hidden
+                    {/* sr-only, not hidden: display:none file inputs can silently
+                        refuse a programmatic .click() — same bug as the board's */}
+                    <input ref={fileRef} type="file" accept="image/*,video/*" className="sr-only"
                       onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
                   </div>
                   <div className="grid gap-1.5">
