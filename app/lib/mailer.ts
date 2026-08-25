@@ -21,6 +21,9 @@ import { actorAlias, replyToFor } from './mailer-core'
 
 const FROM_DOMAIN = () => (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
 
+/** Automated mail speaks as the company, not as a person's mailbox. */
+export const noReplyAddress = () => `no-reply@${FROM_DOMAIN()}`
+
 /**
  * Hard test-mode kill-switch. When EMAIL_TEST_ONLY=1 (set by the E2E harness,
  * never in production env), any recipient whose address does not end in
@@ -174,6 +177,9 @@ export type NotifyInput = {
   actorEmail?: string | null
   /** kept for call-site compatibility; unused since the Gmail path was removed */
   actorClerkId?: string | null
+  /** Override where replies go. A no-reply sender still wants a human
+   *  address behind it, or a customer's reply vanishes. */
+  replyTo?: string | null
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'
@@ -247,10 +253,11 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     const alias = isPortalActor
       ? `no-reply@${domain}`
       : actorAlias(domain, input.actorName, input.actorEmail) ?? `no-reply@${domain}`
-    const replyTo = isPortalActor
-      ? process.env.GMAIL_USER
-      : replyToFor(input.actorEmail, alias)
-        ?? (!input.actorEmail ? process.env.GMAIL_USER : undefined)
+    const replyTo = input.replyTo?.trim()
+      || (isPortalActor
+        ? process.env.GMAIL_USER
+        : replyToFor(input.actorEmail, alias)
+          ?? (!input.actorEmail ? process.env.GMAIL_USER : undefined))
     await smtp2goSend({
       from: `${displayName(input.actorName)} <${alias}>`,
       to: [input.recipientEmail],

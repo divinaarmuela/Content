@@ -1,6 +1,6 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
-import { notify, renderEmail, escapeHtml } from './mailer'
+import { notify, renderEmail, escapeHtml, noReplyAddress } from './mailer'
 import type { PublicService, PublicResource } from './booking'
 
 /**
@@ -62,6 +62,10 @@ export async function notifyNewBooking(input: {
   // ── the customer ──
   await notify({
     actorName: 'MD Media',
+    // automated mail sends as no-reply@, never out of someone's mailbox;
+    // replies still reach a human via the shared inbox
+    actorEmail: noReplyAddress(),
+    replyTo: 'contact@mdmmarketing.com.au',
     eventType: 'booking_confirmed',
     entityType: 'booking',
     entityId: `${booking.id}#customer`,
@@ -89,6 +93,8 @@ export async function notifyNewBooking(input: {
   for (const to of recipients) {
     await notify({
       actorName: 'MD Media Bookings',
+      actorEmail: noReplyAddress(),
+      replyTo: booking.customer_email,
       eventType: 'booking_new_team',
       entityType: 'booking',
       entityId: `${booking.id}#${to}`,
@@ -156,6 +162,8 @@ export async function notifyBookingChanged(input: {
     const isCustomer = to === booking.customer_email
     await notify({
       actorName: 'MD Media Bookings',
+      actorEmail: noReplyAddress(),
+      replyTo: isCustomer ? 'contact@mdmmarketing.com.au' : booking.customer_email,
       eventType: cancelled ? 'booking_cancelled' : 'booking_moved',
       entityType: 'booking',
       entityId: `${booking.id}#${stamp}#${to}`,
