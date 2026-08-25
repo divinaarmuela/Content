@@ -32,3 +32,7 @@ create unique index if not exists bookings_checkout_ref_uidx
 alter table bookings add column if not exists public_ref text;
 create unique index if not exists bookings_public_ref_uidx
   on bookings (public_ref) where public_ref is not null;
+
+-- services group under a studio, exactly as they do on the current booking
+-- site (MD House Podcast Studio / MD House Creative Studio)
+alter table booking_services add column if not exists category text;

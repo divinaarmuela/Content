@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf,
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy,
 } from '../app/lib/booking-core'
 
 describe('openSlots', () => {
@@ -95,5 +95,49 @@ describe('timezone conversion — the DST trap', () => {
   it('weekdayOf matches the calendar', () => {
     expect(weekdayOf('2026-08-24')).toBe(1) // a Monday
     expect(weekdayOf('2026-08-23')).toBe(0) // Sunday
+  })
+})
+
+describe('parseServiceCopy — the real MD House listing', () => {
+  const copy = `WHATS INCLUDED:
+
+- Multi-cam video setup (Sony FX3 & Sony FX6 Cameras)
+- Dedicated team to manage the session
+- Photos & B-Roll videos
+- Up to 4x Shure SM7B Mics
+
+WHAT YOU RECEIVE:
+
+- RAW Synced episode
+- 24 Hour turnaround
+
+OPTIONAL ADD ONS:
+
+- Social Media Clips`
+
+  it('turns the listing into headings and bullet lists', () => {
+    const blocks = parseServiceCopy(copy)
+    const headings = blocks.filter(b => b.kind === 'heading').map(b => (b as { text: string }).text)
+    expect(headings).toEqual(['WHATS INCLUDED', 'WHAT YOU RECEIVE', 'OPTIONAL ADD ONS'])
+    const lists = blocks.filter(b => b.kind === 'bullets') as { items: string[] }[]
+    expect(lists).toHaveLength(3)
+    expect(lists[0].items[0]).toBe('Multi-cam video setup (Sony FX3 & Sony FX6 Cameras)')
+    expect(lists[2].items).toEqual(['Social Media Clips'])
+  })
+
+  it('keeps ordinary prose as prose', () => {
+    const blocks = parseServiceCopy('Ideal for brands, creators, and campaigns with support.')
+    expect(blocks).toEqual([{ kind: 'text', text: 'Ideal for brands, creators, and campaigns with support.' }])
+  })
+
+  it('does not mistake a normal sentence for a heading', () => {
+    const blocks = parseServiceCopy('The 8 hours include bump in and bump out time.')
+    expect(blocks[0].kind).toBe('text')
+  })
+
+  it('is safe on empty or missing copy', () => {
+    expect(parseServiceCopy(null)).toEqual([])
+    expect(parseServiceCopy('')).toEqual([])
+    expect(parseServiceCopy('   \n\n  ')).toEqual([])
   })
 })

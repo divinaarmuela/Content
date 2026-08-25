@@ -80,6 +80,7 @@ export async function POST(req: Request) {
         if ('price_cents' in body) patch.price_cents = Math.max(0, Math.round(Number(body.price_cents) || 0))
         if ('active' in body) patch.active = body.active !== false
         if ('location' in body) patch.location = String(body.location ?? '').trim().slice(0, 200) || null
+        if ('category' in body) patch.category = String(body.category ?? '').trim().slice(0, 120) || null
         if ('image_url' in body) {
           // uploaded media only — never an arbitrary URL pasted into the page
           const url = String(body.image_url ?? '').trim().slice(0, 2000)

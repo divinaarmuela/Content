@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ServiceCopy from '../../components/booking/ServiceCopy'
 
 /**
  * The customer's side of a booking: pick a day, pick a time, leave details.
@@ -17,7 +18,15 @@ type Service = {
   name: string; slug: string; description: string | null
   duration_min: number; price_cents: number; currency: string
   requires_payment: boolean
-  image_url: string | null; location: string | null
+  image_url: string | null; location: string | null; category: string | null
+}
+
+/** "90" -> "1 hr 30 min" */
+const durationLabel = (min: number) => {
+  const h = Math.floor(min / 60); const m = min % 60
+  if (h && m) return `${h} hr ${m} min`
+  if (h) return `${h} hr`
+  return `${m} min`
 }
 
 const dayLabel = (d: string) =>
@@ -60,7 +69,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
   )
 
   const price = service && service.price_cents > 0
-    ? `${service.currency} $${(service.price_cents / 100).toFixed(2)}`
+    ? `${service.currency === 'AUD' ? 'A$' : `${service.currency} $`}${(service.price_cents / 100).toFixed(2)}`
     : 'Free'
 
   const submit = async () => {
@@ -138,20 +147,29 @@ export default function BookingFlow({ slug }: { slug: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-3">
+      <header className="flex flex-col gap-4">
         {service.image_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={service.image_url} alt={service.name}
-            className="aspect-[16/9] w-full border object-cover"
-            style={{ borderColor: 'var(--bk-line)' }} />
+            className="aspect-[16/9] w-full object-cover" />
         )}
-        <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{service.name}</h1>
-        <p className="text-xs uppercase tracking-[0.16em]" style={{ opacity: 0.55 }}>
-          {service.duration_min} minutes · {price}
-          {service.location ? ` · ${service.location}` : ''}
-        </p>
+        <div className="flex flex-col gap-2">
+          {service.category && (
+            <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.5 }}>{service.category}</p>
+          )}
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{service.name}</h1>
+          <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.14em]"
+            style={{ opacity: 0.6 }}>
+            <span>{price}</span>
+            <span style={{ opacity: 0.5 }}>·</span>
+            <span>{durationLabel(service.duration_min)}</span>
+            {service.location && <><span style={{ opacity: 0.5 }}>·</span><span>{service.location}</span></>}
+          </p>
+        </div>
         {service.description && (
-          <p className="max-w-prose text-sm leading-relaxed" style={{ opacity: 0.8 }}>{service.description}</p>
+          <div className="border-t pt-4" style={{ borderColor: 'var(--bk-line)' }}>
+            <ServiceCopy copy={service.description} />
+          </div>
         )}
       </header>
 

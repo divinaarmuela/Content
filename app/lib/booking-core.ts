@@ -43,6 +43,45 @@ export function openSlots(input: SlotInput): number[] {
   return [...new Set(out)].sort((a, b) => a - b)
 }
 
+/* ── service copy: plain text in, readable sections out ───────────────────
+ * A booking description is not a paragraph — it is "WHAT'S INCLUDED", "WHAT
+ * YOU RECEIVE", "OPTIONAL ADD ONS", each with a list. Storing that as one
+ * editable text field keeps it easy to change; this turns it back into
+ * structure for the page, so nobody has to hand-write HTML.
+ */
+
+export type CopyBlock =
+  | { kind: 'heading'; text: string }
+  | { kind: 'bullets'; items: string[] }
+  | { kind: 'text'; text: string }
+
+/** A line in ALL CAPS (optionally ending in a colon) reads as a heading. */
+const isHeading = (line: string) =>
+  /^[A-Z0-9][A-Z0-9 &'/()-]{2,60}:?$/.test(line) && /[A-Z]{2}/.test(line)
+
+const isBullet = (line: string) => /^\s*[-•*]\s+/.test(line)
+
+/** Parse a service description into blocks. Never throws; unknown text
+ *  simply stays as a paragraph. */
+export function parseServiceCopy(raw: string | null | undefined): CopyBlock[] {
+  if (!raw) return []
+  const out: CopyBlock[] = []
+  let bullets: string[] = []
+  const flush = () => {
+    if (bullets.length) { out.push({ kind: 'bullets', items: bullets }); bullets = [] }
+  }
+  for (const rawLine of String(raw).split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) { flush(); continue }
+    if (isBullet(line)) { bullets.push(line.replace(/^\s*[-•*]\s+/, '')); continue }
+    flush()
+    if (isHeading(line)) out.push({ kind: 'heading', text: line.replace(/:$/, '') })
+    else out.push({ kind: 'text', text: line })
+  }
+  flush()
+  return out
+}
+
 /* ── timezone: local opening hours ⇄ real instants ────────────────────────
  * Availability is written in a resource's LOCAL wall-clock ("9:00 to 17:00"),
  * while a booking is a real instant (timestamptz). Melbourne moves between
