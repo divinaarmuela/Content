@@ -96,9 +96,12 @@ export async function POST(req: Request) {
     // metadata is ever lost in a replay
     await supabase.from('bookings').update({ checkout_ref: session.id }).eq('id', booking.id)
 
-    // the client secret is what mounts the embedded form; it is scoped to
-    // this one session and is safe to hand to the browser
-    return NextResponse.json({ client_secret: session.client_secret })
+    // the client secret mounts the form; the expiry lets the page count down
+    // and offer a way forward instead of leaving a dead form on screen
+    return NextResponse.json({
+      client_secret: session.client_secret,
+      expires_at: session.expires_at ?? null,
+    })
   } catch (e) {
     // Stripe's own error code is safe to surface (it names the rejected
     // parameter, not any secret) and is the difference between a fixable

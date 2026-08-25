@@ -5,6 +5,7 @@ import ServiceCopy from '../../components/booking/ServiceCopy'
 import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../../components/booking/CancellationPolicy'
 import SlotPicker from '../../components/booking/SlotPicker'
+import HoldTimer from '../../components/booking/HoldTimer'
 import { isUsablePhone } from '../../lib/booking-core'
 
 /**
@@ -51,7 +52,9 @@ export default function BookingFlow({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   /** set once the slot is held and Stripe is ready to take the money */
-  const [payment, setPayment] = useState<{ clientSecret: string; when: string; ref: string } | null>(null)
+  const [payment, setPayment] = useState<{ clientSecret: string; when: string; ref: string; expiresAt: number | null } | null>(null)
+  /** the hold ran out while they were away — offer a way forward, not a dead form */
+  const [expired, setExpired] = useState(false)
   const topRef = useRef<HTMLDivElement>(null)
 
   // a step change swaps the content under the reader's scroll position;
@@ -114,7 +117,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
         })
         const payJson = await pay.json()
         if (pay.ok && payJson.client_secret) {
-          setPayment({ clientSecret: payJson.client_secret, when: json.start_at, ref: json.ref })
+          setPayment({ clientSecret: payJson.client_secret, when: json.start_at, ref: json.ref, expiresAt: payJson.expires_at ?? null })
           return
         }
         setError(payJson.error ?? 'Could not start payment')
@@ -140,6 +143,26 @@ export default function BookingFlow({ slug }: { slug: string }) {
     )
   }
 
+  if (expired) {
+    return (
+      <div className="flex flex-col gap-4 border p-6" style={{ borderColor: 'var(--bk-line)' }}>
+        <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>Hold expired</p>
+        <h2 className="text-xl font-medium tracking-tight">That time was released</h2>
+        <p className="text-sm leading-relaxed" style={{ opacity: 0.75 }}>
+          We hold a slot for 30 minutes while you pay. Yours ran out, so it went
+          back on the calendar — you have not been charged. Pick another time and
+          we&rsquo;ll hold that one instead.
+        </p>
+        <button type="button"
+          onClick={() => { setExpired(false); setPayment(null); setPickedSlot(null); void load() }}
+          className="w-fit px-5 py-3 text-[11px] uppercase tracking-[0.16em]"
+          style={{ background: 'var(--bk-ink)', color: 'var(--bk-bg)' }}>
+          Pick another time
+        </button>
+      </div>
+    )
+  }
+
   if (payment) {
     return (
       <div ref={topRef} className="flex flex-col gap-5" style={{ scrollMarginTop: 24 }}>
@@ -151,9 +174,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
               weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit',
             })} · {price}
           </p>
-          <p className="mt-1 text-xs" style={{ opacity: 0.55 }}>
-            Your time is held for 30 minutes while you pay.
-          </p>
+          <HoldTimer expiresAt={payment.expiresAt} onExpired={() => setExpired(true)} />
         </div>
         <EmbeddedPayment
           clientSecret={payment.clientSecret}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import EmbeddedPayment from '../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../components/booking/CancellationPolicy'
 import SlotPicker from '../components/booking/SlotPicker'
+import HoldTimer from '../components/booking/HoldTimer'
 import { isUsablePhone } from '../lib/booking-core'
 
 /**
@@ -55,7 +56,8 @@ export default function EventBooking() {
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [payment, setPayment] = useState<{ clientSecret: string; ref: string; when: string } | null>(null)
+  const [payment, setPayment] = useState<{ clientSecret: string; ref: string; when: string; expiresAt: number | null } | null>(null)
+  const [expired, setExpired] = useState(false)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
 
@@ -108,7 +110,7 @@ export default function EventBooking() {
           body: JSON.stringify({ ref: json.ref }),
         })
         const pj = await pay.json()
-        if (pay.ok && pj.client_secret) { setPayment({ clientSecret: pj.client_secret, ref: json.ref, when: json.start_at }); return }
+        if (pay.ok && pj.client_secret) { setPayment({ clientSecret: pj.client_secret, ref: json.ref, when: json.start_at, expiresAt: pj.expires_at ?? null }); return }
         setError(pj.error ?? 'Could not start payment')
         return
       }
@@ -151,12 +153,30 @@ export default function EventBooking() {
     )
   }
 
+  if (expired) {
+    return (
+      <div style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
+        <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>HOLD EXPIRED</p>
+        <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>That seat was released</p>
+        <p style={{ marginTop: 10, color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+          We hold a seat for 30 minutes while you pay. Yours ran out, so it went back
+          on the calendar — you have not been charged. Pick another time below.
+        </p>
+        <button type="button"
+          onClick={() => { setExpired(false); setPayment(null); setPick(null); void load() }}
+          style={{ marginTop: 18, background: '#fff', color: '#000', border: 'none', padding: '13px 22px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', cursor: 'pointer' }}>
+          PICK ANOTHER TIME
+        </button>
+      </div>
+    )
+  }
+
   if (payment) {
     return (
       <div ref={topRef} style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
-        <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', marginBottom: 14 }}>
-          SEAT HELD FOR 30 MINUTES
-        </p>
+        <div style={{ fontFamily: MONO, marginBottom: 14 }}>
+          <HoldTimer expiresAt={payment.expiresAt} onExpired={() => setExpired(true)} tone="event" />
+        </div>
         <EmbeddedPayment
           clientSecret={payment.clientSecret}
           onComplete={() => { setDone({ ref: payment.ref, start_at: payment.when }); setPayment(null) }}
