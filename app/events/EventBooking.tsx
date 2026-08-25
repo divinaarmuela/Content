@@ -32,7 +32,15 @@ const field: React.CSSProperties = {
   color: '#fff', padding: '12px 14px', fontSize: '0.95rem', outline: 'none',
 }
 
-export default function EventBooking({ slug }: { slug: string }) {
+type Listed = {
+  name: string; slug: string; category: string | null
+  duration_min: number; price_cents: number; currency: string
+  image_url: string | null; location: string | null; teaser: string
+}
+
+export default function EventBooking() {
+  const [catalogue, setCatalogue] = useState<Listed[] | null>(null)
+  const [slug, setSlug] = useState<string | null>(null)
   const [service, setService] = useState<Service | null>(null)
   const [days, setDays] = useState<DaySlots[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,14 +52,21 @@ export default function EventBooking({ slug }: { slug: string }) {
   const [payment, setPayment] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
 
+  useEffect(() => {
+    void fetch('/api/booking/public/services')
+      .then(r => (r.ok ? r.json() : { services: [] }))
+      .then(j => setCatalogue(j.services ?? []))
+      .catch(() => setCatalogue([]))
+      .finally(() => setLoading(false))
+  }, [])
+
   const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/booking/public/slots?slug=${encodeURIComponent(slug)}&days=31`)
-      if (!res.ok) return
-      const json = await res.json()
-      setService(json.service)
-      setDays(json.availability ?? [])
-    } finally { setLoading(false) }
+    if (!slug) return
+    const res = await fetch(`/api/booking/public/slots?slug=${encodeURIComponent(slug)}&days=31`)
+    if (!res.ok) return
+    const json = await res.json()
+    setService(json.service)
+    setDays(json.availability ?? [])
   }, [slug])
   useEffect(() => { void load() }, [load])
 
@@ -86,15 +101,14 @@ export default function EventBooking({ slug }: { slug: string }) {
   }
 
   if (loading) {
-    return <p style={{ color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 12 }}>Loading dates…</p>
+    return <p style={{ color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 12 }}>Loading…</p>
   }
 
-  if (!service || days.length === 0) {
+  if (!catalogue || catalogue.length === 0) {
     return (
       <p style={{ color: 'rgba(255,255,255,0.6)', maxWidth: 520, margin: '0 auto', lineHeight: 1.6 }}>
-        No dates are open right now. Email{' '}
-        <a href="mailto:contact@mdmmarketing.com.au" style={{ color: '#fff' }}>contact@mdmmarketing.com.au</a>{' '}
-        and we&rsquo;ll tell you when the next room opens.
+        Nothing is open for booking right now. Email{' '}
+        <a href="mailto:contact@mdmmarketing.com.au" style={{ color: '#fff' }}>contact@mdmmarketing.com.au</a>.
       </p>
     )
   }
@@ -104,7 +118,7 @@ export default function EventBooking({ slug }: { slug: string }) {
       <div style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>YOU&rsquo;RE IN</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>
-          {service.name} — {new Date(done.start_at).toLocaleString('en-AU', {
+          {service?.name ?? "Your session"} — {new Date(done.start_at).toLocaleString('en-AU', {
             weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit',
           })}
         </p>
@@ -130,12 +144,78 @@ export default function EventBooking({ slug }: { slug: string }) {
     )
   }
 
+  // ── step 1: choose what to book ──
+  if (!slug || !service) {
+    const groups: { name: string; items: Listed[] }[] = []
+    for (const c of catalogue) {
+      const key = c.category?.trim() || 'Sessions'
+      const g = groups.find(x => x.name === key)
+      if (g) g.items.push(c); else groups.push({ name: key, items: [c] })
+    }
+    return (
+      <div style={{ maxWidth: 620, margin: '0 auto', textAlign: 'left' }}>
+        {groups.map(g => (
+          <div key={g.name} style={{ marginBottom: 36 }}>
+            <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 14 }}>
+              {g.name.toUpperCase()}
+            </p>
+            {g.items.map(c => (
+              <button key={c.slug} type="button" onClick={() => setSlug(c.slug)}
+                style={{
+                  display: 'flex', width: '100%', alignItems: 'center', gap: 18,
+                  background: 'transparent', border: 'none', borderTop: `1px solid ${line}`,
+                  color: '#fff', padding: '18px 0', cursor: 'pointer', textAlign: 'left',
+                }}>
+                {c.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.image_url} alt="" aria-hidden
+                    style={{ width: 92, height: 64, objectFit: 'contain', flexShrink: 0, background: 'rgba(255,255,255,0.04)' }} />
+                )}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: '1.02rem', lineHeight: 1.3 }}>{c.name}</span>
+                  {c.teaser && (
+                    <span style={{ display: 'block', marginTop: 4, fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.teaser}
+                    </span>
+                  )}
+                </span>
+                <span style={{ flexShrink: 0, textAlign: 'right' }}>
+                  <span style={{ display: 'block', fontSize: '1rem' }}>
+                    {c.price_cents > 0 ? `A$${(c.price_cents / 100).toLocaleString('en-AU', { maximumFractionDigits: 0 })}` : 'Free'}
+                  </span>
+                  <span style={{ display: 'block', fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.45)' }}>
+                    {c.duration_min >= 60 ? `${Math.floor(c.duration_min / 60)}H${c.duration_min % 60 ? ` ${c.duration_min % 60}M` : ''}` : `${c.duration_min}M`}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const price = service.price_cents > 0
     ? `A$${(service.price_cents / 100).toFixed(0)}`
     : 'Free'
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left' }}>
+      <button type="button"
+        onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null) }}
+        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
+        ← ALL SESSIONS
+      </button>
+      <p style={{ fontSize: '1.15rem', marginBottom: 6 }}>{service.name}</p>
+      <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', marginBottom: 26 }}>
+        {price} · {service.duration_min} MIN{service.location ? ` · ${service.location.toUpperCase()}` : ''}
+      </p>
+      {days.length === 0 && (
+        <p style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+          No times are open for this one right now. Email{' '}
+          <a href="mailto:contact@mdmmarketing.com.au" style={{ color: '#fff' }}>contact@mdmmarketing.com.au</a>.
+        </p>
+      )}
       <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>
         1 · PICK A DATE
       </p>

@@ -175,7 +175,7 @@ export default function EventsPage() {
           </Reveal>
           <Reveal gate={false} delay={240}>
             <div id="invite-form">
-              <EventBooking slug="the-room" />
+              <EventBooking />
             </div>
           </Reveal>
         </div>
