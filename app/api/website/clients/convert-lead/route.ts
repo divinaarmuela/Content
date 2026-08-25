@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     lead.need && `Needs: ${lead.need}`,
     lead.budget && `Budget: ${lead.budget}`,
     lead.timeline && `Timeline: ${lead.timeline}`,
-    `Converted from lead received ${new Date(lead.created_at).toLocaleDateString('en-AU')}`,
+    `Converted from lead received ${new Date(lead.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne' })}`,
   ].filter(Boolean).join('\n')
 
   const { data: client, error } = await supabase

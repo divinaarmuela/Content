@@ -191,7 +191,7 @@ export function notifyBatchTransition(
     }
     const label = to === 'locked' ? 'Shoot date locked' : to === 'shot' ? 'Shoot marked as shot' : `Shoot ${to}`
     const when = batch.shoot_date
-      ? new Date(batch.shoot_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+      ? new Date(batch.shoot_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'long', day: 'numeric', month: 'long' })
       : null
     for (const audience of audiences) {
       const people = await resolveAudience(audience, stub)

@@ -56,7 +56,10 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
 
     // ─── Facts row ───
     const dateLabel = data.shootDate
+      // the plain date is already local wall-clock; naming the zone keeps it
+      // from drifting a day when this renders on a UTC server
       ? new Date(`${data.shootDate}T00:00:00`).toLocaleDateString('en-AU', {
+          timeZone: 'Australia/Melbourne',
           weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
         })
       : 'To be confirmed'
@@ -135,7 +138,7 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       doc.page.margins.bottom = 0
       doc.fillColor(FAINT).font('Courier').fontSize(7)
         .text(
-          `MD MEDIA · SHOOT BRIEF · ${new Date().toLocaleDateString('en-AU')}`,
+          `MD MEDIA · SHOOT BRIEF · ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne' })}`,
           PAGE.margin, PAGE.height - 34, { width: contentW, lineBreak: false },
         )
       doc.text(`${i - range.start + 1} / ${range.count}`, PAGE.margin, PAGE.height - 34, {

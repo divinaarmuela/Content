@@ -87,7 +87,7 @@ export async function buildLeadsReportData(
     },
     byService,
     leads: leads.map(l => ({
-      date: new Date(l.created_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }),
+      date: new Date(l.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', day: '2-digit', month: 'short' }),
       name: `${l.fname} ${l.lname}`.trim(),
       business: l.biz ?? '',
       email: l.email,

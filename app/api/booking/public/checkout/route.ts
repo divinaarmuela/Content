@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     const { data: booking } = await supabase
       .from('bookings')
-      .select('id, service_id, start_at, status, payment_status, amount_cents, customer_email, customer_name, public_ref, checkout_ref')
+      .select('id, service_id, resource_id, start_at, status, payment_status, amount_cents, customer_email, customer_name, public_ref, checkout_ref')
       .eq('public_ref', ref).maybeSingle()
     if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (booking.status === 'cancelled') {
@@ -41,8 +41,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Nothing to pay' }, { status: 400 })
     }
 
-    const { data: service } = await supabase
-      .from('booking_services').select('name, currency').eq('id', booking.service_id).maybeSingle()
+    const [{ data: service }, { data: resource }] = await Promise.all([
+      supabase.from('booking_services').select('name, currency').eq('id', booking.service_id).maybeSingle(),
+      supabase.from('booking_resources').select('timezone').eq('id', booking.resource_id).maybeSingle(),
+    ])
+    // This runs on a server in UTC. Formatting a time without naming the zone
+    // showed an 11am Melbourne booking as "1:00 am" on Stripe's checkout —
+    // the one screen the customer stares at while deciding to pay.
+    const timeZone = resource?.timezone || 'Australia/Melbourne'
 
     const stripe = stripeClient()!
     const session = await stripe.checkout.sessions.create({
@@ -59,6 +65,7 @@ export async function POST(req: Request) {
           product_data: {
             name: service?.name ?? 'Booking',
             description: new Date(booking.start_at).toLocaleString('en-AU', {
+              timeZone,
               weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit',
             }),
           },
