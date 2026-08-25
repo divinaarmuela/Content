@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ServiceCopy from '../../components/booking/ServiceCopy'
+import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
 
 /**
  * The customer's side of a booking: pick a day, pick a time, leave details.
@@ -45,6 +46,8 @@ export default function BookingFlow({ slug }: { slug: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
+  /** set once the slot is held and Stripe is ready to take the money */
+  const [payment, setPayment] = useState<{ clientSecret: string; when: string } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,7 +92,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
         if (res.status === 409) { setPickedSlot(null); void load() }
         return
       }
-      // a paid service holds the slot as pending, then hands off to Stripe.
+      // a paid service holds the slot, then shows the payment form in place.
       // Confirmation comes from the webhook, never from the return page.
       if (json.requires_payment) {
         const pay = await fetch('/api/booking/public/checkout', {
@@ -98,7 +101,10 @@ export default function BookingFlow({ slug }: { slug: string }) {
           body: JSON.stringify({ ref: json.ref }),
         })
         const payJson = await pay.json()
-        if (pay.ok && payJson.url) { window.location.href = payJson.url; return }
+        if (pay.ok && payJson.client_secret) {
+          setPayment({ clientSecret: payJson.client_secret, when: json.start_at })
+          return
+        }
         setError(payJson.error ?? 'Could not start payment')
         return
       }
@@ -118,6 +124,26 @@ export default function BookingFlow({ slug }: { slug: string }) {
       <div className="py-16 text-center">
         <p className="text-lg">This booking link isn&rsquo;t available.</p>
         <p className="mt-2 text-sm opacity-60">It may have been switched off. Try mdmmarketing.com.au.</p>
+      </div>
+    )
+  }
+
+  if (payment) {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1">
+          <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.5 }}>Almost done</p>
+          <h2 className="text-2xl font-medium tracking-tight">{service.name}</h2>
+          <p className="text-sm" style={{ opacity: 0.7 }}>
+            {new Date(payment.when).toLocaleString('en-AU', {
+              weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit',
+            })} · {price}
+          </p>
+          <p className="mt-1 text-xs" style={{ opacity: 0.55 }}>
+            Your time is held for 30 minutes while you pay.
+          </p>
+        </div>
+        <EmbeddedPayment clientSecret={payment.clientSecret} />
       </div>
     )
   }

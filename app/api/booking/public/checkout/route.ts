@@ -64,14 +64,18 @@ export async function POST(req: Request) {
           },
         },
       }],
+      // embedded: the payment form renders INSIDE our booking page rather
+      // than sending the customer to a Stripe-hosted page. Stripe still owns
+      // the card fields (so PCI scope and 3-D Secure stay theirs) and dynamic
+      // payment methods — Apple Pay, Google Pay, Link — still apply.
+      ui_mode: 'embedded',
       // An unpaid booking HOLDS the slot, so an abandoned checkout must not
       // hold it all day. 30 minutes is Stripe's floor and plenty to finish
       // paying; on expiry the webhook releases the time for someone else.
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      // the webhook is the source of truth; these only steer the browser
-      // the customer comes back to the public site, never to the app host
-      success_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
-      cancel_url: publicUrl(`/book/manage/${booking.public_ref}`),
+      // where the browser lands afterwards; the webhook remains the source of
+      // truth for whether the money actually arrived
+      return_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
       metadata: { booking_id: booking.id, public_ref: booking.public_ref ?? '' },
     })
 
@@ -79,7 +83,9 @@ export async function POST(req: Request) {
     // metadata is ever lost in a replay
     await supabase.from('bookings').update({ checkout_ref: session.id }).eq('id', booking.id)
 
-    return NextResponse.json({ url: session.url })
+    // the client secret is what mounts the embedded form; it is scoped to
+    // this one session and is safe to hand to the browser
+    return NextResponse.json({ client_secret: session.client_secret })
   } catch (e) {
     console.error('booking checkout error:', e)
     return NextResponse.json({ error: 'Could not start payment — try again' }, { status: 500 })
