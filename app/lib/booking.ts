@@ -39,6 +39,22 @@ export type DaySlots = {
 
 const DEFAULTS = { lead_time_min: 120, horizon_days: 60 }
 
+/** Fill in anything a newer migration adds, so a half-migrated database
+ *  still serves a working booking page instead of a 404. */
+function withDefaults(row: Record<string, unknown>): PublicService {
+  const r = row as Partial<PublicService> & Record<string, unknown>
+  return {
+    ...(row as PublicService),
+    lead_time_min: typeof r.lead_time_min === 'number' ? r.lead_time_min : DEFAULTS.lead_time_min,
+    horizon_days: typeof r.horizon_days === 'number' ? r.horizon_days : DEFAULTS.horizon_days,
+    requires_payment: r.requires_payment === true,
+    image_url: (r.image_url as string | null) ?? null,
+    location: (r.location as string | null) ?? null,
+    category: (r.category as string | null) ?? null,
+    resource_id: (r.resource_id as string | null) ?? null,
+  }
+}
+
 /** The service behind a public slug, plus the resources that can deliver it.
  *  Returns null for anything inactive or unknown — a stranger cannot tell a
  *  disabled service from a made-up one. */
@@ -48,16 +64,15 @@ export async function loadPublicService(
   if (!/^[a-z0-9-]{1,60}$/.test(slug)) return null
   const { data: svc } = await supabase
     .from('booking_services')
-    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment, image_url, location, category')
+    // SELECT * on purpose: naming a column that a not-yet-run migration
+    // hasn't added makes Supabase fail the WHOLE query, and the page 404s
+    // rather than degrading. Nothing here is sensitive, and the public API
+    // strips ids before answering.
+    .select('*')
     .eq('slug', slug).eq('active', true).maybeSingle()
   if (!svc) return null
 
-  const service: PublicService = {
-    ...(svc as PublicService),
-    lead_time_min: (svc as { lead_time_min?: number }).lead_time_min ?? DEFAULTS.lead_time_min,
-    horizon_days: (svc as { horizon_days?: number }).horizon_days ?? DEFAULTS.horizon_days,
-    requires_payment: (svc as { requires_payment?: boolean }).requires_payment ?? false,
-  }
+  const service = withDefaults(svc)
 
   let q = supabase.from('booking_resources')
     .select('id, label, timezone').eq('active', true).order('created_at')
@@ -162,8 +177,12 @@ export async function availabilityFor(
 export async function listPublicServices(): Promise<PublicService[]> {
   const { data } = await supabase
     .from('booking_services')
-    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment, image_url, location, category')
+    // SELECT * on purpose: naming a column that a not-yet-run migration
+    // hasn't added makes Supabase fail the WHOLE query, and the page 404s
+    // rather than degrading. Nothing here is sensitive, and the public API
+    // strips ids before answering.
+    .select('*')
     .eq('active', true)
     .order('sort_order')
-  return (data ?? []) as PublicService[]
+  return (data ?? []).map(withDefaults)
 }
