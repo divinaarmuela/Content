@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { openSlots, minToLabel, labelToMin } from '../app/lib/booking-core'
+import {
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf,
+} from '../app/lib/booking-core'
 
 describe('openSlots', () => {
   it('tiles a window by duration and drops taken + past slots', () => {
@@ -44,5 +46,54 @@ describe('minToLabel / labelToMin round-trip', () => {
     expect(labelToMin('12:00 pm')).toBe(720)
     expect(labelToMin('10:30 pm')).toBe(1350)
     expect(labelToMin('nonsense')).toBeNull()
+  })
+})
+
+describe('timezone conversion — the DST trap', () => {
+  const MEL = 'Australia/Melbourne'
+
+  it('winter (AEST, UTC+10): 9am Melbourne is 23:00 UTC the day before', () => {
+    const d = zonedToUtc('2026-06-15', 9 * 60, MEL)!
+    expect(d.toISOString()).toBe('2026-06-14T23:00:00.000Z')
+  })
+
+  it('summer (AEDT, UTC+11): the same 9am is 22:00 UTC', () => {
+    const d = zonedToUtc('2026-12-15', 9 * 60, MEL)!
+    expect(d.toISOString()).toBe('2026-12-14T22:00:00.000Z')
+  })
+
+  it('a fixed offset would be an hour out — the two differ by exactly 1h', () => {
+    const winter = zonedToUtc('2026-06-15', 9 * 60, MEL)!
+    const summer = zonedToUtc('2026-12-15', 9 * 60, MEL)!
+    const winterUtcHour = winter.getUTCHours()
+    const summerUtcHour = summer.getUTCHours()
+    expect((winterUtcHour - summerUtcHour + 24) % 24).toBe(1)
+  })
+
+  it('round-trips a local time back to itself', () => {
+    for (const day of ['2026-06-15', '2026-12-15', '2026-10-04', '2026-04-05']) {
+      const utc = zonedToUtc(day, 14 * 60 + 30, MEL)!
+      const back = utcToZoned(utc, MEL)
+      expect(`${day} ${back.minutes}`).toBe(`${day} ${14 * 60 + 30}`)
+    }
+  })
+
+  it('handles the changeover days themselves', () => {
+    // DST ends 5 Apr 2026 (clocks back), starts 4 Oct 2026 (clocks forward).
+    // 10am on each is unambiguous and must survive the round trip.
+    for (const day of ['2026-04-05', '2026-10-04']) {
+      const utc = zonedToUtc(day, 10 * 60, MEL)!
+      expect(utcToZoned(utc, MEL)).toEqual({ day, minutes: 600 })
+    }
+  })
+
+  it('rejects a malformed day instead of inventing one', () => {
+    expect(zonedToUtc('not-a-day', 540, MEL)).toBeNull()
+    expect(weekdayOf('2026-13-99')).toBeNull()
+  })
+
+  it('weekdayOf matches the calendar', () => {
+    expect(weekdayOf('2026-08-24')).toBe(1) // a Monday
+    expect(weekdayOf('2026-08-23')).toBe(0) // Sunday
   })
 })
