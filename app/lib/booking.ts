@@ -82,6 +82,28 @@ export async function loadPublicService(
   return { service, resources: resources as PublicResource[] }
 }
 
+/**
+ * Release slots held by a checkout nobody finished.
+ *
+ * An unpaid booking holds its slot so two people cannot pay for the same
+ * time. Stripe expires an abandoned session and the webhook frees it — but
+ * that is a promise from another system, and if it ever fails to arrive the
+ * slot is held forever. This is the floor under that: any pending, unpaid
+ * hold older than the checkout window is dead, whatever Stripe said.
+ *
+ * Idempotent and safe to run on every availability read.
+ */
+async function releaseStaleHolds(): Promise<void> {
+  // Stripe's session expires at 30 min; 45 leaves room for a late webhook
+  const cutoff = new Date(Date.now() - 45 * 60_000).toISOString()
+  await supabase.from('bookings')
+    .update({ status: 'cancelled' })
+    .eq('status', 'pending')
+    .eq('payment_status', 'unpaid')
+    .lt('created_at', cutoff)
+    .then(() => {}, e => console.error('stale hold sweep failed:', e))
+}
+
 /** Add days to a plain YYYY-MM-DD without touching timezones. */
 function addDays(dayISO: string, n: number): string {
   return new Date(Date.parse(`${dayISO}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
@@ -103,6 +125,8 @@ export async function availabilityFor(
 ): Promise<DaySlots[]> {
   const span = Math.min(31, Math.max(1, Math.round(days)))
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDay)) return []
+  // abandoned checkouts stop blocking before we decide what is free
+  await releaseStaleHolds()
   const lastDay = addDays(fromDay, span - 1)
   const ids = resources.map(r => r.id)
 

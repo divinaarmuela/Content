@@ -64,6 +64,10 @@ export async function POST(req: Request) {
           },
         },
       }],
+      // An unpaid booking HOLDS the slot, so an abandoned checkout must not
+      // hold it all day. 30 minutes is Stripe's floor and plenty to finish
+      // paying; on expiry the webhook releases the time for someone else.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       // the webhook is the source of truth; these only steer the browser
       // the customer comes back to the public site, never to the app host
       success_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
