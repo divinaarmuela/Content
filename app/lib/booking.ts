@@ -97,10 +97,12 @@ export async function loadPublicService(
  * Idempotent and safe to run on every availability read.
  */
 async function releaseStaleHolds(): Promise<void> {
-  // The Stripe session is dead at 31 minutes, so a hold older than 35 is
-  // certainly abandoned — the extra 4 minutes only covers clock skew. Any
-  // longer just keeps a usable slot off the calendar for nothing.
-  const cutoff = new Date(Date.now() - 35 * 60_000).toISOString()
+  // Not a guess: the checkout session is created with a 31-minute life, so a
+  // hold older than that CANNOT still be paid — the card form is already
+  // dead. One extra minute covers clock skew between us and Stripe. Waiting
+  // longer just keeps a bookable slot off the calendar while someone who
+  // wants it is looking at it.
+  const cutoff = new Date(Date.now() - 32 * 60_000).toISOString()
   await supabase.from('bookings')
     .update({ status: 'cancelled' })
     .eq('status', 'pending')
