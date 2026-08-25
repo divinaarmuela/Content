@@ -79,6 +79,19 @@ export default function BookingFlow({ slug }: { slug: string }) {
         if (res.status === 409) { setPickedSlot(null); void load() }
         return
       }
+      // a paid service holds the slot as pending, then hands off to Stripe.
+      // Confirmation comes from the webhook, never from the return page.
+      if (json.requires_payment) {
+        const pay = await fetch('/api/booking/public/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: json.ref }),
+        })
+        const payJson = await pay.json()
+        if (pay.ok && payJson.url) { window.location.href = payJson.url; return }
+        setError(payJson.error ?? 'Could not start payment')
+        return
+      }
       setDone({ ref: json.ref, start_at: json.start_at })
     } catch {
       setError('Network problem — check your connection and try again')
