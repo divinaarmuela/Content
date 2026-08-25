@@ -180,6 +180,9 @@ export type NotifyInput = {
   /** Override where replies go. A no-reply sender still wants a human
    *  address behind it, or a customer's reply vanishes. */
   replyTo?: string | null
+  /** Record it for the in-app bell but send no email. For people who should
+   *  SEE something happened without their inbox filling up. */
+  bellOnly?: boolean
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'
@@ -241,6 +244,14 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     owned = reclaimed
   }
   const claimedId = owned.id
+
+  // bell-only: the row (which is what the notifications page reads) is
+  // enough — no email leaves the building for this recipient
+  if (input.bellOnly) {
+    await supabase.from('notification_log')
+      .update({ status: 'sent', channel: 'in_app' }).eq('id', claimedId)
+    return 'sent'
+  }
 
   // 2. we own the row — send as the actor (or the company when actorless)
   try {

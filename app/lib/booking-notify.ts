@@ -20,11 +20,13 @@ import { publicUrl, appUrl } from './site-urls'
  * Martin, and most super admins have no business being paged about a podcast
  * slot. This matches the grant-only access on /dashboard/bookings.
  */
-const WATCHERS = [
-  'contact@mdmmarketing.com.au',
-  'tech@mdmmarketing.com.au',
-  'hello@mdmmarketing.com.au',
-  'martin@mdmmarketing.com.au',
+const WATCHERS: { email: string; mail: boolean }[] = [
+  // these two run bookings day to day — they get the email
+  { email: 'contact@mdmmarketing.com.au', mail: true },
+  { email: 'tech@mdmmarketing.com.au', mail: true },
+  // these two watch the page and want the bell, not a full inbox
+  { email: 'hello@mdmmarketing.com.au', mail: false },
+  { email: 'martin@mdmmarketing.com.au', mail: false },
 ]
 
 export type BookingRow = {
@@ -85,12 +87,9 @@ export async function notifyNewBooking(input: {
   }).catch(e => console.error('booking customer mail:', e))
 
   // ── the team: the mailbox that owns the slot, plus the shared inbox ──
-  const recipients = [...new Set([
-    resource.id ? await resourceEmail(resource.id) : null,
-    ...WATCHERS,
-  ].filter((e): e is string => Boolean(e)))]
+  const recipients = watcherList(resource.id ? await resourceEmail(resource.id) : null)
 
-  for (const to of recipients) {
+  for (const { email: to, mail } of recipients) {
     await notify({
       actorName: 'MD Media Bookings',
       actorEmail: noReplyAddress(),
@@ -101,6 +100,7 @@ export async function notifyNewBooking(input: {
       // the id is what puts it in their notification bell, not just their inbox
       recipientId: await teamUserIdFor(to),
       recipientEmail: to,
+      bellOnly: !mail,
       subject: `New booking: ${service.name} — ${when}`,
       bodyHtml: renderEmail(
         `New booking: ${service.name}`,
@@ -116,6 +116,17 @@ export async function notifyNewBooking(input: {
       ),
     }).catch(e => console.error('booking team mail:', e))
   }
+}
+
+/** The watch list, with the studio's own mailbox folded in (it always gets
+ *  the email — it is the one turning up to the session). */
+function watcherList(resourceMailbox: string | null): { email: string; mail: boolean }[] {
+  const out = [...WATCHERS]
+  const extra = resourceMailbox?.trim().toLowerCase()
+  if (extra && !out.some(w => w.email.toLowerCase() === extra)) {
+    out.unshift({ email: extra, mail: true })
+  }
+  return out
 }
 
 async function resourceEmail(resourceId: string): Promise<string | null> {
@@ -155,10 +166,15 @@ export async function notifyBookingChanged(input: {
 
   const stamp = Date.now()
   const teamEmail = await resourceEmail(resource.id)
-  const everyone = [...new Set([booking.customer_email, teamEmail, ...WATCHERS]
-    .filter((e): e is string => Boolean(e)))]
+  const everyone = [
+    { email: booking.customer_email, mail: true },
+    ...watcherList(teamEmail),
+  ].filter(r => r.email !== booking.customer_email || r.mail)
 
-  for (const to of everyone) {
+  const seen = new Set<string>()
+  for (const { email: to, mail } of everyone) {
+    if (seen.has(to)) continue
+    seen.add(to)
     const isCustomer = to === booking.customer_email
     await notify({
       actorName: 'MD Media Bookings',
@@ -169,6 +185,7 @@ export async function notifyBookingChanged(input: {
       entityId: `${booking.id}#${stamp}#${to}`,
       recipientId: isCustomer ? null : await teamUserIdFor(to),
       recipientEmail: to,
+      bellOnly: !mail,
       subject: title,
       bodyHtml: renderEmail(
         title,
