@@ -8,15 +8,21 @@ export const metadata: Metadata = {
 }
 
 /**
- * The public booking surface. Self-contained ink palette in its own tokens
- * (--bk-*) so it never inherits the marketing site's element styles or the
- * dashboard's .dbx scope — a booking link is often opened on a phone, from
- * an email, by someone who has never seen either.
+ * The public booking surface.
+ *
+ * `dbx` is not decoration: globals.css styles the marketing site with bare
+ * element selectors, so Tailwind's preflight is scoped to that class rather
+ * than applied globally. Without it a <li> keeps its bullet and every <a>
+ * renders browser-blue, underlined, and purple once visited. The client
+ * portal wraps itself the same way, for the same reason.
+ *
+ * The ink palette lives in its own --bk-* tokens so nothing here depends on
+ * the marketing site's variables or the dashboard's theme.
  */
 export default function BookLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`${archivo.variable} ${sometype.variable} min-h-screen antialiased`}
+      className={`dbx bk-scope ${archivo.variable} ${sometype.variable} min-h-screen antialiased`}
       style={{
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({ '--bk-bg': '#0B0B0B', '--bk-ink': '#f9f4eb', '--bk-line': 'rgba(249,244,235,0.18)' } as any),
@@ -25,26 +31,27 @@ export default function BookLayout({ children }: { children: React.ReactNode }) 
         fontFamily: 'var(--font-archivo), system-ui, sans-serif',
       }}
     >
-      {/* The browser's default focus ring is bright blue, which reads as a
-          stray line against this palette. Keep a ring — losing it entirely
-          strands keyboard users — but paint it in the page's own ink, and
-          only for keyboard focus, never on a mouse click. */}
       <style>{`
+        /* Links take the page's ink, never the browser's blue/purple. */
+        .bk-scope a, .bk-scope a:visited, .bk-scope a:active { color: inherit; text-decoration: none; }
+        .bk-scope ul, .bk-scope ol { list-style: none; margin: 0; padding: 0; }
+        /* Keep a focus ring — losing it strands keyboard users — but paint
+           it in the page's own ink, and only for keyboard focus. */
         .bk-scope :focus { outline: none; }
-        .bk-scope :focus-visible {
-          outline: 1px solid var(--bk-ink);
-          outline-offset: 2px;
-        }
+        .bk-scope :focus-visible { outline: 1px solid var(--bk-ink); outline-offset: 2px; }
         .bk-scope input[type="date"]::-webkit-calendar-picker-indicator,
         .bk-scope input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); }
       `}</style>
-      <div className="bk-scope mx-auto w-full max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
-        <a href="https://www.mdmmarketing.com.au"
-          className="text-[11px] uppercase tracking-[0.22em] transition-opacity hover:opacity-60"
-          style={{ opacity: 0.5 }}>
+
+      <div className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
+        <a
+          href="https://www.mdmmarketing.com.au"
+          className="text-[11px] uppercase tracking-[0.22em] transition-opacity hover:opacity-100"
+          style={{ opacity: 0.5 }}
+        >
           MD Media
         </a>
-        <div className="mt-10">{children}</div>
+        <div className="mt-12">{children}</div>
       </div>
     </div>
   )
