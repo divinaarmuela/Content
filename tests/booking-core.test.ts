@@ -243,6 +243,39 @@ describe('overlapping durations — the double-booking hole', () => {
   })
 })
 
+describe('one room, two names — a shared space', () => {
+  // "MD House Podcast Studio" and "MD House Creative Studio" are the same
+  // room. Availability now gathers what is taken by SPACE, so a booking made
+  // under the other name arrives in this list; these cover what must then
+  // happen to it. (That the list is gathered per-space is exercised against
+  // the live API — it lives in the I/O layer, not here.)
+  const openAllDay = { windows: [{ start_min: 540, end_min: 1020 }] }   // 9:00–17:00
+
+  it('a shoot booked under the other name blocks the podcast at that hour', () => {
+    // Shoot & Go 9:00–11:00, asking for a 1-hour podcast
+    const free = openSlots({ ...openAllDay, durationMin: 60, taken: [{ start_min: 540, end_min: 660 }] })
+    expect(free).not.toContain(540)   // 9:00 — the case that got through live
+    expect(free).not.toContain(600)   // 10:00 — still inside the shoot
+    expect(free).toContain(660)       // 11:00, when the room frees up
+  })
+
+  it('a full day in the room leaves nothing bookable under any name', () => {
+    const free = openSlots({ ...openAllDay, durationMin: 60, taken: [{ start_min: 540, end_min: 1020 }] })
+    expect(free).toEqual([])
+  })
+
+  it('two sessions in one room still leave the gap between them', () => {
+    const free = openSlots({
+      ...openAllDay, durationMin: 60,
+      taken: [{ start_min: 540, end_min: 660 }, { start_min: 780, end_min: 900 }],
+    })
+    expect(free).toContain(660)       // 11:00–12:00 gap
+    expect(free).toContain(720)       // 12:00–13:00 gap
+    expect(free).not.toContain(780)   // 13:00 is the second session
+    expect(free).toContain(900)       // 15:00, after it ends
+  })
+})
+
 describe('policyFor — the cancellation windows', () => {
   const at = (hoursAway: number) => new Date(Date.now() + hoursAway * 3_600_000)
 

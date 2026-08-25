@@ -54,7 +54,7 @@ const money = (cents: number, currency: string) =>
 export async function notifyNewBooking(input: {
   booking: BookingRow
   service: PublicService
-  resource: PublicResource
+  resource: Pick<PublicResource, 'id' | 'label' | 'timezone'>
 }) {
   const { booking, service, resource } = input
   const when = whenLabel(booking.start_at, resource.timezone)
@@ -151,7 +151,7 @@ async function teamUserIdFor(email: string): Promise<string | null> {
 export async function notifyBookingChanged(input: {
   booking: BookingRow
   service: { name: string; duration_min: number }
-  resource: PublicResource
+  resource: Pick<PublicResource, 'id' | 'label' | 'timezone'>
   previousStart: string
   cancelled?: boolean
 }) {

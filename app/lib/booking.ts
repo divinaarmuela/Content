@@ -32,7 +32,28 @@ export type PublicService = {
   category: string | null
 }
 
-export type PublicResource = { id: string; label: string; timezone: string }
+/**
+ * A bookable resource, and the physical SPACE it occupies.
+ *
+ * "MD House Podcast Studio" and "MD House Creative Studio" are two names for
+ * one room. Two names is useful — it says what kind of session it is — but
+ * they cannot be booked at the same time, so they share a space. Availability
+ * and the database constraint both key on the space, never on the name.
+ *
+ * A resource with no space of its own is its own space, so a genuinely
+ * separate second room needs no special handling.
+ */
+export type PublicResource = { id: string; label: string; timezone: string; space_id: string }
+
+/** Resources are grouped by the room they physically are, not what they're called. */
+const spaceOf = (r: { id: string; space_id?: string | null }) => r.space_id ?? r.id
+
+const toResource = (row: Record<string, unknown>): PublicResource => ({
+  id: row.id as string,
+  label: row.label as string,
+  timezone: row.timezone as string,
+  space_id: (row.space_id as string | null) ?? (row.id as string),
+})
 
 export type DaySlots = {
   day: string
@@ -77,12 +98,14 @@ export async function loadPublicService(
 
   const service = withDefaults(svc)
 
+  // SELECT * for the same reason as above: space_id arrives in a migration,
+  // and naming it before that runs would 404 the whole booking page
   let q = supabase.from('booking_resources')
-    .select('id, label, timezone').eq('active', true).order('created_at')
+    .select('*').eq('active', true).order('created_at')
   if (service.resource_id) q = q.eq('id', service.resource_id)
   const { data: resources } = await q
   if (!resources || resources.length === 0) return null
-  return { service, resources: resources as PublicResource[] }
+  return { service, resources: resources.map(toResource) }
 }
 
 /**
@@ -137,12 +160,29 @@ export async function availabilityFor(
   const lastDay = addDays(fromDay, span - 1)
   const ids = resources.map(r => r.id)
 
+  /**
+   * Everything standing in the same ROOM, whatever it is called.
+   *
+   * This service's own opening hours and blackouts stay its own — they are
+   * its configuration. But the room's occupancy is shared: a 2-hour Shoot &
+   * Go on "Creative Studio" fills the same space a podcast wants at 10:00,
+   * so its booking has to be visible here or we would offer a taken room.
+   */
+  const spaces = new Set(resources.map(spaceOf))
+  const { data: allRes } = await supabase.from('booking_resources').select('*').eq('active', true)
+  const roommates = (allRes ?? []).map(toResource).filter(r => spaces.has(spaceOf(r)))
+  // never narrower than the resources we were handed
+  const occupancyIds = [...new Set([...ids, ...roommates.map(r => r.id)])]
+  const spaceById = new Map(roommates.map(r => [r.id, spaceOf(r)]))
+  // one timezone per space: it is one physical room, so it has one clock
+  const tzBySpace = new Map(resources.map(r => [spaceOf(r), r.timezone]))
+
   // one query each — never per-day, never per-resource
   const [{ data: hours }, { data: blackouts }, { data: taken }] = await Promise.all([
     supabase.from('booking_availability').select('resource_id, weekday, start_min, end_min').in('resource_id', ids),
     supabase.from('booking_blackouts').select('resource_id, day').in('resource_id', ids)
       .gte('day', fromDay).lte('day', lastDay),
-    supabase.from('bookings').select('resource_id, start_at, end_at').in('resource_id', ids)
+    supabase.from('bookings').select('resource_id, start_at, end_at').in('resource_id', occupancyIds)
       .neq('status', 'cancelled')
       // a day either side covers resources sitting in other timezones
       .gte('start_at', `${addDays(fromDay, -1)}T00:00:00Z`)
@@ -155,17 +195,20 @@ export async function availabilityFor(
   // service be offered right through the middle of it.
   const takenBy = new Map<string, { start_min: number; end_min: number }[]>()
   for (const b of taken ?? []) {
-    const res = resources.find(r => r.id === b.resource_id)
-    if (!res) continue
-    const startLocal = utcToZoned(new Date(b.start_at as string), res.timezone)
+    // keyed by SPACE: a booking made under the other name for this room
+    // still occupies it, and used to be skipped here entirely
+    const space = spaceById.get(b.resource_id as string)
+    const tz = space ? tzBySpace.get(space) : undefined
+    if (!space || !tz) continue
+    const startLocal = utcToZoned(new Date(b.start_at as string), tz)
     const endAt = b.end_at ? new Date(b.end_at as string) : null
-    const endLocal = endAt ? utcToZoned(endAt, res.timezone) : null
+    const endLocal = endAt ? utcToZoned(endAt, tz) : null
     // an end past midnight is clamped to the day so it still blocks the
     // evening it actually occupies
     const endMin = !endLocal
       ? startLocal.minutes + 60
       : endLocal.day === startLocal.day ? endLocal.minutes : 1440
-    const key = `${b.resource_id}:${startLocal.day}`
+    const key = `${space}:${startLocal.day}`
     takenBy.set(key, [
       ...(takenBy.get(key) ?? []),
       { start_min: startLocal.minutes, end_min: Math.max(startLocal.minutes + 1, endMin) },
@@ -194,7 +237,7 @@ export async function availabilityFor(
         windows,
         durationMin: service.duration_min,
         capacity: service.capacity,
-        taken: takenBy.get(`${res.id}:${day}`) ?? [],
+        taken: takenBy.get(`${spaceOf(res)}:${day}`) ?? [],
       })) {
         // lead time and horizon are real instants, not wall-clock guesses
         const at = zonedToUtc(day, min, res.timezone)
