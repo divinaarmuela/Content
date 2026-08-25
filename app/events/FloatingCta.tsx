@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 const MONO = 'var(--font-space-mono), monospace'
 
 /**
- * Floating "request an invite" pill for the events page. Appears after the
+ * Floating "secure your room" pill for the events page. Appears after the
  * hero scrolls away, hides again while the form itself is on screen — it
  * points at the form, so it shouldn't sit on top of it.
  */
@@ -54,7 +54,7 @@ export default function FloatingCta() {
         transition: 'opacity 0.25s ease, transform 0.25s ease',
       }}
     >
-      Request an invite ↓
+      Secure your room ↓
     </button>
   )
 }

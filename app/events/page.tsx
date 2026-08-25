@@ -18,10 +18,6 @@ const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
 const HERO_VIDEO = media('jason-hero.mp4')
 
 // Future CMS seam: this array becomes a Supabase fetch in the CMS pass.
-const upcoming = [
-  { date: 'Date TBA', title: 'The Room, No. 01', city: 'Melbourne', seats: 'Seats capped' },
-  { date: 'Date TBA', title: 'The Room, No. 02', city: 'Melbourne', seats: 'Seats capped' },
-]
 
 const manifesto = [
   'It’s for you if you’ve ever left a “networking” event feeling like everyone was selling and no one was listening.',
@@ -64,8 +60,8 @@ export default function EventsPage() {
           </Reveal>
           <Reveal gate={false} delay={480}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 34 }}>
-              <a href="#invite-form" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0B0B0B', background: '#FFFFFF', borderRadius: 999, padding: '14px 24px', textDecoration: 'none' }}>Request an invite</a>
-              <a href="#upcoming" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 999, padding: '13px 24px', textDecoration: 'none' }}>See upcoming rooms</a>
+              <a href="#invite-form" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0B0B0B', background: '#FFFFFF', borderRadius: 999, padding: '14px 24px', textDecoration: 'none' }}>Secure your room</a>
+              <a href="#invite-form" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 999, padding: '13px 24px', textDecoration: 'none' }}>See dates &amp; prices</a>
             </div>
           </Reveal>
         </div>
@@ -139,31 +135,6 @@ export default function EventsPage() {
       </section>
 
       {/* UPCOMING */}
-      <section id="upcoming" style={{ padding: 'clamp(70px, 11vh, 150px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.16)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 'clamp(20px, 3vh, 36px)' }}>
-          <h2 style={{ fontWeight: 500, fontSize: 'clamp(1.6rem, 3.4vw, 2.6rem)', letterSpacing: '-0.03em', margin: 0 }}>Upcoming rooms</h2>
-          <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>by invitation</span>
-        </div>
-
-        <Rule className="bg-white/25" />
-
-        {upcoming.map((room, i) => (
-          <Reveal key={room.title} gate={false} delay={i * 120}>
-            <a href="#join" className={styles.roomRow}>
-              <span className={styles.roomDate} style={{ fontFamily: MONO, fontSize: 12, color: ACCENT }}>{room.date}</span>
-              <h3 className={styles.roomTitle} style={{ fontWeight: 500, fontSize: 'clamp(1.3rem, 2.4vw, 2rem)', letterSpacing: '-0.02em', margin: 0 }}>{room.title}</h3>
-              <span className={styles.roomCity} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>{room.city}</span>
-              <div className={styles.roomEnd}>
-                <span style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>{room.seats}</span>
-                <span className={styles.roomArrow} style={{ fontSize: '1.2rem' }}>↗︎</span>
-              </div>
-            </a>
-          </Reveal>
-        ))}
-
-        <p style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '28px 0 0' }}>Dates, venues &amp; capacity announced to the invite list first</p>
-      </section>
-
       {/* JOIN */}
       <section id="join" style={{ scrollMarginTop: 70, position: 'relative', padding: 'clamp(100px, 16vh, 210px) clamp(20px, 4vw, 52px)', borderTop: '1px solid rgba(255,255,255,0.16)', textAlign: 'center' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
