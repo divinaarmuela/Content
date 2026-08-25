@@ -23,6 +23,8 @@ export type PublicService = {
   horizon_days: number
   requires_payment: boolean
   resource_id: string | null
+  /** seats per slot: 1 = private hire, >1 = an event */
+  capacity: number
   /** hero image + where it happens — a room sells better than a paragraph */
   image_url: string | null
   location: string | null
@@ -48,6 +50,7 @@ function withDefaults(row: Record<string, unknown>): PublicService {
     lead_time_min: typeof r.lead_time_min === 'number' ? r.lead_time_min : DEFAULTS.lead_time_min,
     horizon_days: typeof r.horizon_days === 'number' ? r.horizon_days : DEFAULTS.horizon_days,
     requires_payment: r.requires_payment === true,
+    capacity: typeof r.capacity === 'number' && r.capacity > 0 ? r.capacity : 1,
     image_url: (r.image_url as string | null) ?? null,
     location: (r.location as string | null) ?? null,
     category: (r.category as string | null) ?? null,
@@ -174,6 +177,7 @@ export async function availabilityFor(
       for (const min of openSlots({
         windows,
         durationMin: service.duration_min,
+        capacity: service.capacity,
         takenMins: takenBy.get(`${res.id}:${day}`) ?? [],
       })) {
         // lead time and horizon are real instants, not wall-clock guesses

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser,
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser, seatsLeft,
 } from '../app/lib/booking-core'
 
 describe('openSlots', () => {
@@ -177,5 +177,35 @@ WHAT YOU RECEIVE:
   it('is safe on nothing', () => {
     expect(serviceTeaser(null)).toBe('')
     expect(serviceTeaser('')).toBe('')
+  })
+})
+
+describe('seats — an event holds more than one person', () => {
+  const day = { windows: [{ start_min: 1080, end_min: 1200 }], durationMin: 120 } // 18:00–20:00
+
+  it('a private booking (capacity 1) closes as soon as it is taken', () => {
+    expect(openSlots({ ...day, takenMins: [] })).toEqual([1080])
+    expect(openSlots({ ...day, takenMins: [1080] })).toEqual([])
+  })
+
+  it('an event stays open until every seat is gone', () => {
+    const taken = [1080, 1080, 1080]
+    expect(openSlots({ ...day, capacity: 5, takenMins: taken })).toEqual([1080])
+    expect(openSlots({ ...day, capacity: 3, takenMins: taken })).toEqual([])
+  })
+
+  it('counts repeats as separate seats, not one booking', () => {
+    expect(seatsLeft([1080, 1080, 1080], 1080, 20)).toBe(17)
+    expect(seatsLeft([1080], 1080, 1)).toBe(0)
+    expect(seatsLeft([], 1080, 20)).toBe(20)
+  })
+
+  it('never reports negative seats if something oversold', () => {
+    expect(seatsLeft([1080, 1080, 1080], 1080, 2)).toBe(0)
+  })
+
+  it('seats at one time do not consume another time', () => {
+    const twoSlots = { windows: [{ start_min: 540, end_min: 780 }], durationMin: 120 }
+    expect(openSlots({ ...twoSlots, capacity: 2, takenMins: [540, 540] })).toEqual([660])
   })
 })

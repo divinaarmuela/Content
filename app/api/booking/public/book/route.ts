@@ -79,34 +79,50 @@ export async function POST(req: Request) {
 
     const needsPayment = service.requires_payment && service.price_cents > 0
     const ref = publicRef()
-    const { data: booking, error } = await supabase.from('bookings').insert({
-      service_id: service.id,
-      resource_id: resource.id,
-      start_at: startAt.toISOString(),
-      end_at: endAt.toISOString(),
-      customer_name: name,
-      customer_email: email,
-      customer_phone: phone || null,
-      notes: notes || null,
-      // an unpaid-but-required booking holds the slot only until it is paid
-      status: needsPayment ? 'pending' : 'confirmed',
-      payment_status: 'unpaid',
-      amount_cents: service.price_cents,
-      public_ref: ref,
-    }).select('id, start_at, end_at, public_ref').single()
 
-    if (error) {
-      // 23505 = the unique index did its job: someone else took this slot
-      if (/duplicate key|23505/.test(error.message)) {
-        return NextResponse.json({ error: 'That time was just booked — please pick another' }, { status: 409 })
-      }
-      if (/column .* does not exist|public_ref/.test(error.message)) {
+    // Claim a SEAT, don't count them. Capacity 1 behaves exactly as before;
+    // for an event, twenty people race for twenty seats and the unique index
+    // decides each one. Counting rows then inserting is the check-then-write
+    // race this codebase designs out.
+    const capacity = Math.max(1, service.capacity ?? 1)
+    let booking: { id: string; start_at: string; end_at: string; public_ref: string | null } | null = null
+    let lastError: string | null = null
+    for (let seat = 1; seat <= capacity; seat++) {
+      const { data, error } = await supabase.from('bookings').insert({
+        service_id: service.id,
+        resource_id: resource.id,
+        start_at: startAt.toISOString(),
+        end_at: endAt.toISOString(),
+        customer_name: name,
+        customer_email: email,
+        customer_phone: phone || null,
+        notes: notes || null,
+        // an unpaid-but-required booking holds the seat only until it is paid
+        status: needsPayment ? 'pending' : 'confirmed',
+        payment_status: 'unpaid',
+        amount_cents: service.price_cents,
+        public_ref: ref,
+        seat_no: seat,
+      }).select('id, start_at, end_at, public_ref').single()
+
+      if (!error) { booking = data; break }
+      lastError = error.message
+      // this seat is gone — try the next one
+      if (/duplicate key|23505/.test(error.message)) continue
+      break
+    }
+
+    if (!booking) {
+      if (lastError && /column .* does not exist|public_ref|seat_no/.test(lastError)) {
         return NextResponse.json(
-          { error: 'Bookings are not switched on yet — run supabase/booking_public.sql' },
+          { error: 'Bookings are not fully switched on yet — run the supabase/booking_*.sql migrations' },
           { status: 503 },
         )
       }
-      throw new Error(error.message)
+      if (lastError && /duplicate key|23505/.test(lastError)) {
+        return NextResponse.json({ error: 'That time just filled up — please pick another' }, { status: 409 })
+      }
+      throw new Error(lastError ?? 'Could not create the booking')
     }
 
     // every open bookings page hears about it immediately

@@ -7,7 +7,7 @@ import Rule from '../components/lama/Rule'
 import { archivo, sometype } from '../components/lama/fonts'
 import styles from './events.module.css'
 import { media } from '../lib/asset'
-import InviteForm from './InviteForm'
+import EventBooking from './EventBooking'
 import FloatingCta from './FloatingCta'
 
 const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
@@ -171,11 +171,11 @@ export default function EventsPage() {
             <Reveal gate={false} className="block"><span style={{ display: 'block', paddingBottom: '0.08em' }}>Sound like your kind of room?</span></Reveal>
           </h2>
           <Reveal gate={false} delay={120}>
-            <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small and curated, so entry is by request. Tell us a little about what you do and we{'’'}ll be in touch.</p>
+            <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small, so seats are limited. Pick a date and book yours below.</p>
           </Reveal>
           <Reveal gate={false} delay={240}>
             <div id="invite-form">
-              <InviteForm />
+              <EventBooking slug="the-room" />
             </div>
           </Reveal>
         </div>
