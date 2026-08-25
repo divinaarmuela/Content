@@ -44,17 +44,15 @@ export default function BookLayout({ children }: { children: React.ReactNode }) 
       `}</style>
 
       <div className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
-        {/* the real mark, same file the marketing nav uses — inverted,
-            because that logo is dark artwork on a dark page here */}
+        {/* The mark is already white-on-transparent with the blue slash —
+            drawn for a dark ground. Use it as-is; a filter breaks it. */}
         <a
           href="https://www.mdmmarketing.com.au"
-          className="inline-block transition-opacity hover:opacity-100"
-          style={{ opacity: 0.85 }}
+          className="inline-block transition-opacity hover:opacity-80"
           aria-label="MD Media"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/MDLogo-trim.png" alt="MD Media" className="h-6 w-auto"
-            style={{ filter: 'invert(1) brightness(1.6)' }} />
+          <img src="/MDLogo-trim.png" alt="MD Media" className="h-7 w-auto" />
         </a>
         <div className="mt-12">{children}</div>
       </div>
