@@ -13,7 +13,7 @@ import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 
-type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean }
+type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
 type Availability = { id: string; resource_id: string; weekday: number; start_min: number; end_min: number }
 type Booking = {
@@ -50,8 +50,11 @@ function ServiceImage({
           ? <img src={service.image_url} alt="" className="h-full w-full object-cover" />
           : busy ? <span className="text-[9px]">…</span> : <ImagePlus className="h-4 w-4" />}
       </button>
-      {/* sr-only, not hidden: a display:none input can refuse a scripted click */}
-      <input ref={ref} type="file" accept="image/*" className="sr-only"
+      {/* Invisible by inline style, not by a utility class: `sr-only` still
+          left "No file chosen" rendering here, and `display:none` can make a
+          scripted .click() refuse to open the picker. This does both jobs. */}
+      <input ref={ref} type="file" accept="image/*"
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
         onChange={async e => {
           const file = e.target.files?.[0]
           e.target.value = ''
@@ -65,6 +68,151 @@ function ServiceImage({
           } finally { setBusy(false) }
         }} />
     </>
+  )
+}
+
+/**
+ * One service, editable in place.
+ *
+ * Everything a customer sees lives here — which studio it belongs to, the
+ * copy, the price, the photo — because the page previously only let you
+ * create and delete, which meant fixing a typo was a delete-and-retype and
+ * setting a studio was impossible.
+ */
+function ServiceRow({ service, onSave, busy, studios }: {
+  service: Service
+  onSave: (p: Record<string, unknown>, ok: string) => Promise<boolean | undefined>
+  busy: boolean
+  studios: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState({
+    name: service.name,
+    category: service.category ?? '',
+    duration_min: String(service.duration_min),
+    price: (service.price_cents / 100).toString(),
+    description: service.description ?? '',
+    location: service.location ?? '',
+    requires_payment: service.requires_payment === true,
+    active: service.active,
+  })
+  const dirty =
+    draft.name !== service.name
+    || draft.category !== (service.category ?? '')
+    || Number(draft.duration_min) !== service.duration_min
+    || Math.round(Number(draft.price || 0) * 100) !== service.price_cents
+    || draft.description !== (service.description ?? '')
+    || draft.location !== (service.location ?? '')
+    || draft.requires_payment !== (service.requires_payment === true)
+    || draft.active !== service.active
+
+  const save = async () => {
+    const ok = await onSave({
+      action: 'update_service', id: service.id,
+      name: draft.name,
+      category: draft.category,
+      duration_min: Number(draft.duration_min),
+      price_cents: Math.round(Number(draft.price || 0) * 100),
+      description: draft.description,
+      location: draft.location,
+      requires_payment: draft.requires_payment,
+      active: draft.active,
+    }, 'Saved')
+    if (ok) setOpen(false)
+  }
+
+  return (
+    <div className="flex flex-col border-b border-zinc-100 last:border-0 dark:border-zinc-800">
+      <div className="flex flex-wrap items-center gap-3 py-2">
+        <ServiceImage service={service} onSave={onSave} />
+        <button type="button" onClick={() => setOpen(o => !o)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left">
+          <span className="truncate text-sm font-medium">{service.name}</span>
+          {service.category && (
+            <span className="hidden shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 sm:inline dark:bg-zinc-800">
+              {service.category}
+            </span>
+          )}
+          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{service.duration_min}m</span>
+          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(service.price_cents, service.currency)}</span>
+          {service.requires_payment && (
+            <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] uppercase text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">pays</span>
+          )}
+          {!service.active && <span className="shrink-0 rounded bg-zinc-100 px-1.5 text-[10px] uppercase text-zinc-500 dark:bg-zinc-800">hidden</span>}
+        </button>
+
+        <button className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          onClick={() => void copy(bookingUrl(service.slug), 'Booking link copied')}>
+          <LinkIcon className="h-3.5 w-3.5" /> Copy link
+        </button>
+        <a href={bookingUrl(service.slug)} target="_blank" rel="noreferrer noopener"
+          className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">Preview</a>
+        <Button size="sm" variant={open ? 'default' : 'outline'} className="h-7 text-xs"
+          onClick={() => setOpen(o => !o)}>
+          {open ? 'Close' : 'Edit'}
+        </Button>
+      </div>
+
+      {open && (
+        <div className="flex flex-col gap-3 pb-4 pl-1">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-xs text-zinc-500">Name
+              <Input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500">Studio
+              <Input list="booking-studios" placeholder="e.g. MD House Podcast Studio"
+                value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} />
+              <datalist id="booking-studios">
+                {studios.map(c => <option key={c} value={c} />)}
+              </datalist>
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500">Minutes
+              <Input type="number" min={5} value={draft.duration_min}
+                onChange={e => setDraft(d => ({ ...d, duration_min: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500">Price (AUD)
+              <Input type="number" min={0} step="0.01" value={draft.price}
+                onChange={e => setDraft(d => ({ ...d, price: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">Where it happens
+              <Input placeholder="Altona North, VIC" value={draft.location}
+                onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
+            </label>
+          </div>
+
+          <label className="grid gap-1 text-xs text-zinc-500">
+            What&rsquo;s included
+            <span className="text-[11px] text-zinc-400">
+              A line in CAPS becomes a heading; a line starting with &ldquo;-&rdquo; becomes a bullet.
+            </span>
+            <textarea rows={10} value={draft.description}
+              onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 font-mono text-xs leading-relaxed outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+          </label>
+
+          <div className="flex flex-wrap items-center gap-5">
+            <label className="flex items-center gap-2 text-xs text-zinc-500">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.requires_payment}
+                onChange={e => setDraft(d => ({ ...d, requires_payment: e.target.checked }))} />
+              Take payment when booking
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-500">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.active}
+                onChange={e => setDraft(d => ({ ...d, active: e.target.checked }))} />
+              Show on the public page
+            </label>
+            <Button size="sm" className="ml-auto" disabled={busy || !dirty} onClick={() => void save()}>
+              {dirty ? 'Save changes' : 'Saved'}
+            </Button>
+            <button className="text-zinc-400 hover:text-rose-600"
+              onClick={() => void onSave({ action: 'delete_service', id: service.id }, 'Service removed')}
+              aria-label="Delete service">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -141,22 +289,8 @@ export default function BookingsPage() {
         <Card><CardContent className="flex flex-col gap-2 p-4">
           {data.services.length === 0 && <p className="text-sm text-zinc-400">No services yet — add one below.</p>}
           {data.services.map(s => (
-            <div key={s.id} className="flex items-center gap-3 border-b border-zinc-100 py-2 last:border-0 dark:border-zinc-800">
-              <ServiceImage service={s} onSave={post} />
-              <span className="text-sm font-medium">{s.name}</span>
-              <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{s.duration_min}m</span>
-              <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(s.price_cents, s.currency)}</span>
-              {!s.active && <span className="rounded bg-zinc-100 px-1.5 text-[10px] uppercase text-zinc-500 dark:bg-zinc-800">archived</span>}
-              {/* the whole point of a booking type is the link you send people */}
-              <button
-                className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                onClick={() => void copy(bookingUrl(s.slug), 'Booking link copied')}>
-                <LinkIcon className="h-3.5 w-3.5" /> Copy link
-              </button>
-              <a href={`/book/${s.slug}`} target="_blank" rel="noreferrer noopener"
-                className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">Preview</a>
-              <button className="text-zinc-400 hover:text-rose-600" onClick={() => void post({ action: 'delete_service', id: s.id }, 'Service removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
+            <ServiceRow key={s.id} service={s} onSave={post} busy={busy}
+              studios={[...new Set(data.services.map(x => x.category).filter(Boolean) as string[])]} />
           ))}
           <div className="mt-1 flex flex-wrap gap-2">
             <Input value={svcDraft.name} placeholder="Service name (e.g. Podcast studio hour)" className="max-w-xs" onChange={e => setSvcDraft(d => ({ ...d, name: e.target.value }))} />
