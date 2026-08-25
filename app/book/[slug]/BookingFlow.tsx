@@ -149,9 +149,14 @@ export default function BookingFlow({ slug }: { slug: string }) {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-4">
         {service.image_url && (
+          /* No forced aspect ratio: object-cover on a 16:9 box crops whatever
+             shape the photo actually is, which is how a head ends up cut off.
+             The image keeps its own proportions, capped so a tall portrait
+             cannot take over the page. */
           // eslint-disable-next-line @next/next/no-img-element
           <img src={service.image_url} alt={service.name}
-            className="aspect-[16/9] w-full object-cover" />
+            className="w-full max-h-[540px] object-contain"
+            style={{ background: 'rgba(249,244,235,0.04)' }} />
         )}
         <div className="flex flex-col gap-2">
           {service.category && (

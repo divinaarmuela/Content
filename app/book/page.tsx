@@ -71,9 +71,12 @@ export default async function BookIndexPage() {
                     style={{ borderColor: 'var(--bk-line)', borderTopWidth: i === 0 ? 1 : 1 }}>
 
                     {s.image_url ? (
+                      /* contain, not cover: a thumbnail that crops is a
+                         thumbnail that decapitates people */
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={s.image_url} alt="" aria-hidden
-                        className="h-16 w-16 shrink-0 object-cover sm:h-20 sm:w-28" />
+                        className="h-16 w-16 shrink-0 object-contain sm:h-20 sm:w-28"
+                        style={{ background: 'rgba(249,244,235,0.04)' }} />
                     ) : (
                       <span aria-hidden className="hidden h-20 w-28 shrink-0 sm:block"
                         style={{ background: 'rgba(249,244,235,0.05)' }} />
