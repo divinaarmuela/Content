@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import ServiceCopy from '../../components/booking/ServiceCopy'
 import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../../components/booking/CancellationPolicy'
+import SlotPicker from '../../components/booking/SlotPicker'
 
 /**
  * The customer's side of a booking: pick a day, pick a time, leave details.
@@ -214,49 +215,23 @@ export default function BookingFlow({ slug }: { slug: string }) {
         </p>
       ) : (
         <>
-          {/* ── day ── */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>1 · Pick a day</h2>
-            <div className="flex flex-wrap gap-2">
-              {days.map(d => (
-                <button key={d.day} type="button"
-                  onClick={() => { setPickedDay(d.day); setPickedSlot(null) }}
-                  className="border px-3 py-2 text-xs transition-colors"
-                  style={d.day === pickedDay
-                    ? { borderColor: 'var(--bk-ink)', background: 'var(--bk-ink)', color: 'var(--bk-bg)' }
-                    : { borderColor: 'var(--bk-line)' }}>
-                  {dayLabel(d.day)}
-                  <span className="ml-1.5" style={{ opacity: 0.55 }}>{d.slots.length}</span>
-                </button>
-              ))}
-            </div>
+          {/* ── when ── */}
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>1 · Choose a time</h2>
+            <SlotPicker
+              days={days}
+              value={pickedDay && pickedSlot ? { day: pickedDay, slot: pickedSlot } : null}
+              onChange={v => { setPickedDay(v?.day ?? null); setPickedSlot(v?.slot ?? null) }}
+              ink="var(--bk-ink)"
+              line="var(--bk-line)"
+              accentInk="var(--bk-bg)"
+            />
           </section>
-
-          {/* ── time ── */}
-          {pickedDay && (
-            <section className="flex flex-col gap-3">
-              <h2 className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>
-                2 · Pick a time — {longDay(pickedDay)}
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {slotsForDay.map(s => (
-                  <button key={`${s.min}-${s.resource_id}`} type="button"
-                    onClick={() => setPickedSlot(s)}
-                    className="border px-3 py-2 font-mono text-xs transition-colors"
-                    style={pickedSlot?.min === s.min
-                      ? { borderColor: 'var(--bk-ink)', background: 'var(--bk-ink)', color: 'var(--bk-bg)' }
-                      : { borderColor: 'var(--bk-line)' }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* ── details ── */}
           {pickedSlot && (
             <section className="flex flex-col gap-3">
-              <h2 className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>3 · Your details</h2>
+              <h2 className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>2 · Your details</h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-xs" style={{ opacity: 0.8 }}>
                   Name
