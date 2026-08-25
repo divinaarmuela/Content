@@ -97,8 +97,10 @@ export async function loadPublicService(
  * Idempotent and safe to run on every availability read.
  */
 async function releaseStaleHolds(): Promise<void> {
-  // Stripe's session expires at 30 min; 45 leaves room for a late webhook
-  const cutoff = new Date(Date.now() - 45 * 60_000).toISOString()
+  // The Stripe session is dead at 31 minutes, so a hold older than 35 is
+  // certainly abandoned — the extra 4 minutes only covers clock skew. Any
+  // longer just keeps a usable slot off the calendar for nothing.
+  const cutoff = new Date(Date.now() - 35 * 60_000).toISOString()
   await supabase.from('bookings')
     .update({ status: 'cancelled' })
     .eq('status', 'pending')
