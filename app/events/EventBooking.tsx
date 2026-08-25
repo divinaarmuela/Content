@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import EmbeddedPayment from '../components/booking/EmbeddedPayment'
+import CancellationPolicy from '../components/booking/CancellationPolicy'
 
 /**
  * Booking for The Room, on the events page itself.
@@ -37,6 +38,7 @@ export default function EventBooking({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true)
   const [pick, setPick] = useState<{ day: string; slot: Slot } | null>(null)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '', company: '' })
+  const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [payment, setPayment] = useState<string | null>(null)
@@ -59,7 +61,7 @@ export default function EventBooking({ slug }: { slug: string }) {
     try {
       const res = await fetch('/api/booking/public/book', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, day: pick.day, min: pick.slot.min, ...form }),
+        body: JSON.stringify({ slug, day: pick.day, min: pick.slot.min, policy_agreed: agreed, ...form }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -177,14 +179,18 @@ export default function EventBooking({ slug }: { slug: string }) {
             onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
             style={{ position: 'absolute', left: -9999, width: 1, height: 1 }} />
 
+          <div style={{ marginTop: 24 }}>
+            <CancellationPolicy agreed={agreed} onAgreedChange={setAgreed} tone="event" />
+          </div>
+
           {error && <p style={{ color: '#ff8a8a', marginTop: 14, fontSize: '0.9rem' }}>{error}</p>}
 
           <button type="button" onClick={() => void submit()}
-            disabled={busy || !form.name.trim() || !form.email.trim()}
+            disabled={busy || !agreed || !form.name.trim() || !form.email.trim()}
             style={{
               marginTop: 20, background: '#fff', color: '#000', border: 'none',
               padding: '14px 26px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em',
-              cursor: busy ? 'default' : 'pointer', opacity: busy || !form.name.trim() || !form.email.trim() ? 0.4 : 1,
+              cursor: busy ? 'default' : 'pointer', opacity: busy || !agreed || !form.name.trim() || !form.email.trim() ? 0.4 : 1,
             }}>
             {busy ? 'HOLDING YOUR SEAT…' : `BOOK MY SEAT · ${price}`}
           </button>

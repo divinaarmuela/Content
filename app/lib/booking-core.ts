@@ -199,3 +199,71 @@ export function labelToMin(label: string): number | null {
   if (h > 23) return null
   return h * 60 + min
 }
+
+/* ── cancellation policy ──────────────────────────────────────────────────
+ * The windows carry money, so they are decided here — pure, tested, and used
+ * by both the page that explains them and the endpoint that enforces them.
+ * Two copies of this rule would eventually disagree, and the customer would
+ * be the one who found out.
+ */
+
+export const CANCELLATION_POLICY = {
+  /** free reschedule / full refund before this many hours */
+  freeHours: 24,
+  /** inside freeHours but before this, a fee applies */
+  feeHours: 2,
+  /** the fee, as a percentage of the booking */
+  feePercent: 20,
+  /** grace period for late arrival, in minutes */
+  graceMin: 15,
+} as const
+
+export type PolicyOutcome = {
+  /** may the customer still move it themselves? */
+  canReschedule: boolean
+  /** may the customer still cancel it themselves? */
+  canCancel: boolean
+  /** what they get back, as a percentage of what they paid */
+  refundPercent: number
+  /** plain-language reason, safe to show */
+  reason: string
+}
+
+/**
+ * What the policy allows for a booking starting at `startAt`, decided now.
+ *
+ *  • more than 24h away — reschedule freely, full refund
+ *  • 2–24h away        — no self-service reschedule; cancel costs 20%
+ *  • under 2h, or past — nothing self-service, nothing refunded
+ */
+export function policyFor(startAt: Date | string, now: Date = new Date()): PolicyOutcome {
+  const start = typeof startAt === 'string' ? new Date(startAt) : startAt
+  if (Number.isNaN(start.getTime())) {
+    return { canReschedule: false, canCancel: false, refundPercent: 0, reason: 'Unknown booking time' }
+  }
+  const hoursAway = (start.getTime() - now.getTime()) / 3_600_000
+  const { freeHours, feeHours, feePercent } = CANCELLATION_POLICY
+
+  if (hoursAway >= freeHours) {
+    return {
+      canReschedule: true, canCancel: true, refundPercent: 100,
+      reason: `More than ${freeHours} hours away — reschedule or cancel free of charge.`,
+    }
+  }
+  if (hoursAway >= feeHours) {
+    return {
+      canReschedule: false, canCancel: true, refundPercent: 100 - feePercent,
+      reason: `Within ${freeHours} hours — cancelling now refunds ${100 - feePercent}%, with a ${feePercent}% cancellation fee.`,
+    }
+  }
+  if (hoursAway > 0) {
+    return {
+      canReschedule: false, canCancel: false, refundPercent: 0,
+      reason: `Less than ${feeHours} hours away — this booking can no longer be changed or refunded.`,
+    }
+  }
+  return {
+    canReschedule: false, canCancel: false, refundPercent: 0,
+    reason: 'This booking has already taken place.',
+  }
+}

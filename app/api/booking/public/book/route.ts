@@ -41,6 +41,11 @@ export async function POST(req: Request) {
     const phone = String(body.phone ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 40)
     const notes = String(body.notes ?? '').trim().slice(0, 1000)
 
+    // the policy carries money, so agreement is required and recorded — a
+    // hand-made request cannot skip the tick the page shows
+    if (body.policy_agreed !== true) {
+      return NextResponse.json({ error: 'Please agree to the cancellation policy.' }, { status: 422 })
+    }
     if (!name) return NextResponse.json({ error: 'Your name is required' }, { status: 422 })
     if (!EMAIL.test(email)) return NextResponse.json({ error: 'Enter a valid email address' }, { status: 422 })
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(min)) {
@@ -103,6 +108,7 @@ export async function POST(req: Request) {
         amount_cents: service.price_cents,
         public_ref: ref,
         seat_no: seat,
+        policy_agreed_at: new Date().toISOString(),
       }).select('id, start_at, end_at, public_ref').single()
 
       if (!error) { booking = data; break }

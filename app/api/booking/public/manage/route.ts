@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { loadPublicService, availabilityFor, type PublicResource } from '../../../../lib/booking'
-import { zonedToUtc, utcToZoned } from '../../../../lib/booking-core'
+import { zonedToUtc, utcToZoned, policyFor } from '../../../../lib/booking-core'
 import { notifyBookingChanged } from '../../../../lib/booking-notify'
 import { announceBookingChange } from '../../../../lib/production-live'
 
@@ -61,6 +61,7 @@ export async function GET(req: Request) {
         min: local.minutes,
       },
       service: { name: svc.name, duration_min: svc.duration_min, slug: svc.slug },
+      policy: policyFor(booking.start_at),
       resource: { label: resource.label, timezone: resource.timezone },
       availability,
     })
@@ -82,12 +83,14 @@ export async function POST(req: Request) {
     if (booking.status === 'cancelled') {
       return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
     }
-    // a booking that has already happened is history, not something to move
-    if (new Date(booking.start_at).getTime() < Date.now()) {
-      return NextResponse.json({ error: 'That booking has already taken place' }, { status: 409 })
-    }
+    // the cancellation policy decides what is still allowed, and it is
+    // enforced here — the page explaining it is not a control
+    const policy = policyFor(booking.start_at)
 
     if (action === 'cancel') {
+      if (!policy.canCancel) {
+        return NextResponse.json({ error: policy.reason }, { status: 409 })
+      }
       // optimistic guard: only a live booking can be cancelled, exactly once
       const { data: done } = await supabase.from('bookings')
         .update({ status: 'cancelled' })
@@ -104,6 +107,9 @@ export async function POST(req: Request) {
     }
 
     if (action !== 'move') return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+    if (!policy.canReschedule) {
+      return NextResponse.json({ error: policy.reason }, { status: 409 })
+    }
 
     const day = String((body as { day?: unknown })?.day ?? '')
     const min = Number((body as { min?: unknown })?.min)

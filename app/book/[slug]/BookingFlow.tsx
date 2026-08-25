@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ServiceCopy from '../../components/booking/ServiceCopy'
 import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
+import CancellationPolicy from '../../components/booking/CancellationPolicy'
 
 /**
  * The customer's side of a booking: pick a day, pick a time, leave details.
@@ -43,6 +44,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
   const [pickedDay, setPickedDay] = useState<string | null>(null)
   const [pickedSlot, setPickedSlot] = useState<Slot | null>(null)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '', company: '' })
+  const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
@@ -83,7 +85,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
       const res = await fetch('/api/booking/public/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, day: pickedDay, min: pickedSlot.min, ...form }),
+        body: JSON.stringify({ slug, day: pickedDay, min: pickedSlot.min, policy_agreed: agreed, ...form }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -287,10 +289,12 @@ export default function BookingFlow({ slug }: { slug: string }) {
                 value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
                 style={{ position: 'absolute', left: '-9999px', width: 1, height: 1 }} />
 
+              <CancellationPolicy agreed={agreed} onAgreedChange={setAgreed} />
+
               {error && <p className="text-sm" style={{ color: '#f87171' }}>{error}</p>}
 
               <button type="button" onClick={() => void submit()}
-                disabled={busy || !form.name.trim() || !form.email.trim()}
+                disabled={busy || !agreed || !form.name.trim() || !form.email.trim()}
                 className="w-fit px-6 py-3 text-[11px] uppercase tracking-[0.16em] transition-opacity disabled:opacity-40"
                 style={{ background: 'var(--bk-ink)', color: 'var(--bk-bg)' }}>
                 {busy ? 'Booking…' : `Book ${dayLabel(pickedDay!)} at ${pickedSlot.label}`}

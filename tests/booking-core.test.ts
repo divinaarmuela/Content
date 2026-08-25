@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser, seatsLeft,
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser, seatsLeft, policyFor,
 } from '../app/lib/booking-core'
 
 describe('openSlots', () => {
@@ -207,5 +207,38 @@ describe('seats — an event holds more than one person', () => {
   it('seats at one time do not consume another time', () => {
     const twoSlots = { windows: [{ start_min: 540, end_min: 780 }], durationMin: 120 }
     expect(openSlots({ ...twoSlots, capacity: 2, takenMins: [540, 540] })).toEqual([660])
+  })
+})
+
+describe('policyFor — the cancellation windows', () => {
+  const at = (hoursAway: number) => new Date(Date.now() + hoursAway * 3_600_000)
+
+  it('more than 24h away: free reschedule, full refund', () => {
+    const p = policyFor(at(48))
+    expect(p).toMatchObject({ canReschedule: true, canCancel: true, refundPercent: 100 })
+  })
+
+  it('exactly on the 24h boundary still counts as free', () => {
+    expect(policyFor(at(24.001)).refundPercent).toBe(100)
+  })
+
+  it('between 2h and 24h: no self-reschedule, 80% back', () => {
+    const p = policyFor(at(6))
+    expect(p).toMatchObject({ canReschedule: false, canCancel: true, refundPercent: 80 })
+  })
+
+  it('under 2 hours: nothing changeable, nothing refunded', () => {
+    const p = policyFor(at(1))
+    expect(p).toMatchObject({ canReschedule: false, canCancel: false, refundPercent: 0 })
+  })
+
+  it('already happened: locked', () => {
+    const p = policyFor(at(-1))
+    expect(p.canCancel).toBe(false)
+    expect(p.reason).toMatch(/already taken place/)
+  })
+
+  it('a nonsense date never silently allows a refund', () => {
+    expect(policyFor('not-a-date').refundPercent).toBe(0)
   })
 })
