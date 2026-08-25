@@ -25,7 +25,20 @@ export default function BookLayout({ children }: { children: React.ReactNode }) 
         fontFamily: 'var(--font-archivo), system-ui, sans-serif',
       }}
     >
-      <div className="mx-auto w-full max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
+      {/* The browser's default focus ring is bright blue, which reads as a
+          stray line against this palette. Keep a ring — losing it entirely
+          strands keyboard users — but paint it in the page's own ink, and
+          only for keyboard focus, never on a mouse click. */}
+      <style>{`
+        .bk-scope :focus { outline: none; }
+        .bk-scope :focus-visible {
+          outline: 1px solid var(--bk-ink);
+          outline-offset: 2px;
+        }
+        .bk-scope input[type="date"]::-webkit-calendar-picker-indicator,
+        .bk-scope input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+      `}</style>
+      <div className="bk-scope mx-auto w-full max-w-2xl px-5 py-12 sm:px-8 sm:py-20">
         <a href="https://www.mdmmarketing.com.au"
           className="text-[11px] uppercase tracking-[0.22em] transition-opacity hover:opacity-60"
           style={{ opacity: 0.5 }}>
