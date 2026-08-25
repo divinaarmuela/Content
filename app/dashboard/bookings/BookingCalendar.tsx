@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import BookingDetails, { type BookingDetail } from './BookingDetails'
 
 /**
  * The month a booking sits in, not just the row it occupies.
@@ -13,14 +14,7 @@ import { Button } from '@/components/ui/button'
  * tech@'s week and hello@'s week are different weeks.
  */
 
-export type CalBooking = {
-  id: string
-  start_at: string
-  customer_name: string
-  status: string
-  booking_services: { name: string } | null
-  booking_resources: { label: string } | null
-}
+export type CalBooking = BookingDetail
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -28,12 +22,15 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const gridIndex = (jsDay: number) => (jsDay + 6) % 7
 
 const timeLabel = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
+  new Date(iso).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: 'numeric', minute: '2-digit' })
 
 export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }) {
   const today = new Date()
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() })
   const [resource, setResource] = useState<string>('all')
+  /** the booking opened out beneath the grid — clicking a day's chip shows
+   *  who it is and how to reach them, which the grid alone never did */
+  const [open, setOpen] = useState<string | null>(null)
 
   const resources = useMemo(
     () => [...new Set(bookings.map(b => b.booking_resources?.label).filter((l): l is string => Boolean(l)))].sort(),
@@ -136,9 +133,10 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                       // session — it must never look identical to one
                       const held = b.status === 'pending'
                       return (
-                        <div key={b.id}
+                        <button key={b.id} type="button"
+                          onClick={() => setOpen(o => (o === b.id ? null : b.id))}
                           title={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${b.booking_resources?.label ? ` · ${b.booking_resources.label}` : ''}${held ? ' · awaiting payment' : ''}`}
-                          className={`truncate rounded px-1 py-0.5 text-[10px] leading-tight ${
+                          className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight ${
                             held
                               ? 'border border-dashed border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                               : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
@@ -146,7 +144,7 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                           <span className="font-mono">{timeLabel(b.start_at)}</span>{' '}
                           {b.customer_name}
                           {held && <span className="ml-1 opacity-70">· holding</span>}
-                        </div>
+                        </button>
                       )
                     })}
                     {list.length > 4 && (
@@ -159,6 +157,11 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
           )
         })}
       </div>
+
+      {(() => {
+        const picked = bookings.find(b => b.id === open)
+        return picked ? <div className="mt-3"><BookingDetails booking={picked} /></div> : null
+      })()}
     </div>
   )
 }

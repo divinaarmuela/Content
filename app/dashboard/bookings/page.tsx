@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Trash2, Clock, DollarSign, Link as LinkIcon, ImagePlus } from 'lucide-react'
 import { minToLabel } from '../../lib/booking-core'
 import BookingCalendar from './BookingCalendar'
+import BookingDetails from './BookingDetails'
 import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
@@ -19,6 +20,7 @@ type Availability = { id: string; resource_id: string; weekday: number; start_mi
 type Blackout = { id: string; resource_id: string; day: string; reason: string | null }
 type Booking = {
   id: string; start_at: string; end_at: string; customer_name: string; customer_email: string
+  customer_phone?: string | null; notes?: string | null; public_ref?: string | null; currency?: string
   status: string; payment_status: string; amount_cents: number
   booking_services: { name: string } | null; booking_resources: { label: string } | null
 }
@@ -445,6 +447,8 @@ export default function BookingsPage() {
   /** the month grid answers "what does that week look like"; the list is the
    *  audit trail. Calendar first, because that is the question people ask. */
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  /** which booking is opened out to show contact details */
+  const [openBooking, setOpenBooking] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/booking/admin')
@@ -570,20 +574,31 @@ export default function BookingsPage() {
         <Card><CardContent className="flex flex-col gap-1 p-4">
           {data.bookings.length === 0 && <p className="text-sm text-zinc-400">No bookings yet.</p>}
           {data.bookings.map(b => (
-            <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-100 py-2 text-sm last:border-0 dark:border-zinc-800">
-              <span className="font-mono text-xs text-zinc-500">{new Date(b.start_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-              <span className="font-medium">{b.customer_name}</span>
-              <span className="text-zinc-500">{b.booking_services?.name} · {b.booking_resources?.label}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'}`}>{b.payment_status}</span>
-              {b.status === 'cancelled'
-                ? <span className="ml-auto text-xs text-zinc-400">cancelled</span>
-                : (
-                  <span className="ml-auto flex items-center gap-3">
-                    <MoveBooking booking={b} onSave={post} busy={busy} />
-                    <button className="text-xs text-rose-600 hover:underline"
-                      onClick={() => void post({ action: 'cancel_booking', id: b.id }, 'Booking cancelled')}>Cancel</button>
+            <div key={b.id} className="flex flex-col border-b border-zinc-100 py-2 last:border-0 dark:border-zinc-800">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                {/* the row opens: everything the studio needs to run the day —
+                    phone, email, what they told us — used to be collected and
+                    then never shown anywhere */}
+                <button type="button" onClick={() => setOpenBooking(o => o === b.id ? null : b.id)}
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left">
+                  <span className="font-mono text-xs text-zinc-500">
+                    {new Date(b.start_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                )}
+                  <span className="font-medium">{b.customer_name}</span>
+                  <span className="truncate text-zinc-500">{b.booking_services?.name} · {b.booking_resources?.label}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'}`}>{b.payment_status}</span>
+                </button>
+                {b.status === 'cancelled'
+                  ? <span className="ml-auto text-xs text-zinc-400">cancelled</span>
+                  : (
+                    <span className="ml-auto flex items-center gap-3">
+                      <MoveBooking booking={b} onSave={post} busy={busy} />
+                      <button className="text-xs text-rose-600 hover:underline"
+                        onClick={() => void post({ action: 'cancel_booking', id: b.id }, 'Booking cancelled')}>Cancel</button>
+                    </span>
+                  )}
+              </div>
+              {openBooking === b.id && <div className="mt-2"><BookingDetails booking={b} /></div>}
             </div>
           ))}
         </CardContent></Card>

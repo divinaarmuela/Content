@@ -61,7 +61,6 @@ export default function EventsPage() {
           <Reveal gate={false} delay={480}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 34 }}>
               <a href="#join" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#0B0B0B', background: '#FFFFFF', borderRadius: 999, padding: '14px 24px', textDecoration: 'none' }}>Secure your room</a>
-              <a href="#join" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 999, padding: '13px 24px', textDecoration: 'none' }}>See dates &amp; prices</a>
             </div>
           </Reveal>
         </div>
