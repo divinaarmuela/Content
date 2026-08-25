@@ -228,6 +228,56 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
   )
 }
 
+/**
+ * Move a booking from the dashboard.
+ *
+ * The customer is emailed the new time automatically — a reschedule nobody
+ * told them about is worse than no reschedule. The server refuses a slot
+ * someone else holds, so two people moving bookings at once cannot collide.
+ */
+function MoveBooking({ booking, onSave, busy }: {
+  booking: Booking
+  onSave: (p: Record<string, unknown>, ok: string) => Promise<boolean | undefined>
+  busy: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  // datetime-local wants local wall-clock, not an ISO instant
+  const local = (iso: string) => {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  const [when, setWhen] = useState(() => local(booking.start_at))
+
+  if (!open) {
+    return (
+      <button className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+        onClick={() => { setWhen(local(booking.start_at)); setOpen(true) }}>
+        Move
+      </button>
+    )
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <Input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
+        className="h-8 w-52 text-xs" />
+      <Button size="sm" className="h-8 text-xs" disabled={busy}
+        onClick={async () => {
+          const at = new Date(when)
+          if (Number.isNaN(at.getTime())) { toast.error('Pick a valid date and time'); return }
+          const ok = await onSave(
+            { action: 'reschedule_booking', id: booking.id, start_at: at.toISOString() },
+            'Moved — the customer has been emailed',
+          )
+          if (ok) setOpen(false)
+        }}>
+        Save
+      </Button>
+      <button className="text-xs text-zinc-400" onClick={() => setOpen(false)}>Cancel</button>
+    </span>
+  )
+}
+
 export default function BookingsPage() {
   const [data, setData] = useState<{
     needs_schema: boolean; services: Service[]; resources: Resource[]
@@ -367,7 +417,13 @@ export default function BookingsPage() {
               <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'}`}>{b.payment_status}</span>
               {b.status === 'cancelled'
                 ? <span className="ml-auto text-xs text-zinc-400">cancelled</span>
-                : <button className="ml-auto text-xs text-rose-600 hover:underline" onClick={() => void post({ action: 'cancel_booking', id: b.id }, 'Booking cancelled')}>Cancel</button>}
+                : (
+                  <span className="ml-auto flex items-center gap-3">
+                    <MoveBooking booking={b} onSave={post} busy={busy} />
+                    <button className="text-xs text-rose-600 hover:underline"
+                      onClick={() => void post({ action: 'cancel_booking', id: b.id }, 'Booking cancelled')}>Cancel</button>
+                  </span>
+                )}
             </div>
           ))}
         </CardContent></Card>

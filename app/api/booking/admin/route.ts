@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, AuthzError } from '../../../lib/authz'
+import { notifyBookingChanged } from '../../../lib/booking-notify'
 
 /**
  * Dashboard booking config + management — services, bookable resources,
@@ -21,6 +22,25 @@ async function requireBookingsAccess() {
     throw new AuthzError('Bookings is limited to the people who run it', 403)
   }
   return user
+}
+
+/** Tell the customer (and the team) that staff moved or cancelled it. */
+function notifyStaffChange(row: Record<string, unknown>, previousStart: string, cancelled: boolean) {
+  const svc = row.booking_services as { name?: string; duration_min?: number } | null
+  const res = row.booking_resources as { id?: string; label?: string; timezone?: string } | null
+  if (!svc || !res?.id) return
+  void notifyBookingChanged({
+    booking: {
+      id: String(row.id), start_at: String(row.start_at),
+      public_ref: (row.public_ref as string | null) ?? null,
+      customer_name: String(row.customer_name ?? ''),
+      customer_email: String(row.customer_email ?? ''),
+    },
+    service: { name: svc.name ?? 'Booking', duration_min: svc.duration_min ?? 60 },
+    resource: { id: res.id, label: res.label ?? 'Studio', timezone: res.timezone ?? 'Australia/Melbourne' },
+    previousStart,
+    cancelled,
+  }).catch(e => console.error('staff booking change notify:', e))
 }
 
 const slugify = (s: string) =>
@@ -167,11 +187,62 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true })
       }
       case 'cancel_booking': {
+        // optimistic guard: only a live booking cancels, and exactly once
         const { data, error } = await supabase.from('bookings')
-          .update({ status: 'cancelled' }).eq('id', body.id).select().single()
+          .update({ status: 'cancelled' })
+          .eq('id', body.id).neq('status', 'cancelled')
+          .select('*, booking_services(name, duration_min), booking_resources(id, label, timezone)')
+          .maybeSingle()
         if (error) throw new Error(error.message)
+        if (!data) return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
         void user
+        notifyStaffChange(data, data.start_at as string, true)
         return NextResponse.json({ booking: data })
+      }
+
+      /**
+       * Move a booking from the dashboard.
+       *
+       * Race safety is the same as everywhere else: an optimistic guard means
+       * only a still-live booking moves, and the unique seat index refuses a
+       * time that someone else already holds — never a read-then-write.
+       */
+      case 'reschedule_booking': {
+        const id = String(body.id ?? '')
+        const startISO = String(body.start_at ?? '')
+        const when = new Date(startISO)
+        if (!id || Number.isNaN(when.getTime())) {
+          return NextResponse.json({ error: 'Pick a new date and time' }, { status: 422 })
+        }
+
+        const { data: current } = await supabase.from('bookings')
+          .select('*, booking_services(name, duration_min), booking_resources(id, label, timezone)')
+          .eq('id', id).maybeSingle()
+        if (!current) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+        if (current.status === 'cancelled') {
+          return NextResponse.json({ error: 'That booking is cancelled' }, { status: 409 })
+        }
+
+        const previousStart = current.start_at as string
+        const mins = (current.booking_services as { duration_min?: number } | null)?.duration_min ?? 60
+        const endAt = new Date(when.getTime() + mins * 60_000)
+
+        const { data: moved, error } = await supabase.from('bookings')
+          .update({ start_at: when.toISOString(), end_at: endAt.toISOString() })
+          .eq('id', id).neq('status', 'cancelled')
+          .select('*, booking_services(name, duration_min), booking_resources(id, label, timezone)')
+          .maybeSingle()
+        if (error) {
+          if (/duplicate key|23505/.test(error.message)) {
+            return NextResponse.json({ error: 'That time is already taken' }, { status: 409 })
+          }
+          throw new Error(error.message)
+        }
+        if (!moved) return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
+
+        // the person who booked hears about it, not just the team
+        notifyStaffChange(moved, previousStart, false)
+        return NextResponse.json({ booking: moved })
       }
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
