@@ -55,7 +55,7 @@ export default function EventBooking() {
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [payment, setPayment] = useState<string | null>(null)
+  const [payment, setPayment] = useState<{ clientSecret: string; ref: string; when: string } | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
 
@@ -108,7 +108,7 @@ export default function EventBooking() {
           body: JSON.stringify({ ref: json.ref }),
         })
         const pj = await pay.json()
-        if (pay.ok && pj.client_secret) { setPayment(pj.client_secret); return }
+        if (pay.ok && pj.client_secret) { setPayment({ clientSecret: pj.client_secret, ref: json.ref, when: json.start_at }); return }
         setError(pj.error ?? 'Could not start payment')
         return
       }
@@ -157,7 +157,10 @@ export default function EventBooking() {
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', marginBottom: 14 }}>
           SEAT HELD FOR 30 MINUTES
         </p>
-        <EmbeddedPayment clientSecret={payment} />
+        <EmbeddedPayment
+          clientSecret={payment.clientSecret}
+          onComplete={() => { setDone({ ref: payment.ref, start_at: payment.when }); setPayment(null) }}
+        />
       </div>
     )
   }

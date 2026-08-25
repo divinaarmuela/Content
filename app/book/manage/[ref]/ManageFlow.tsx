@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 /**
  * A customer moving or cancelling their own booking, using the reference
@@ -30,6 +31,10 @@ export default function ManageFlow({ bookingRef }: { bookingRef: string }) {
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<'moved' | 'cancelled' | null>(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  // Stripe returns here after payment. Landing on a page headed "your
+  // booking" with cancel controls reads like an admin screen rather than
+  // "that worked" — so say the thing they came here to hear, first.
+  const justPaid = useSearchParams().get('paid') === '1'
 
   const load = useCallback(async () => {
     try {
@@ -75,8 +80,21 @@ export default function ManageFlow({ bookingRef }: { bookingRef: string }) {
 
   return (
     <div className="flex flex-col gap-8">
+      {justPaid && !cancelled && (
+        <div className="flex flex-col gap-2 border p-5" style={{ borderColor: 'var(--bk-line)' }}>
+          <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>Payment received</p>
+          <p className="text-2xl font-medium tracking-tight">You&rsquo;re booked in</p>
+          <p className="text-sm leading-relaxed" style={{ opacity: 0.75 }}>
+            A confirmation is on its way to your inbox. Keep this page — it&rsquo;s
+            where you can move or cancel your booking later.
+          </p>
+        </div>
+      )}
+
       <header className="flex flex-col gap-2">
-        <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>Your booking</p>
+        <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>
+          {justPaid ? 'The details' : 'Your booking'}
+        </p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">{data.service.name}</h1>
         <p className="text-sm" style={{ opacity: cancelled ? 0.5 : 1, textDecoration: cancelled ? 'line-through' : 'none' }}>
           {stamp(data.booking.start_at)} · with {data.resource.label}

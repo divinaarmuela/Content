@@ -51,7 +51,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   /** set once the slot is held and Stripe is ready to take the money */
-  const [payment, setPayment] = useState<{ clientSecret: string; when: string } | null>(null)
+  const [payment, setPayment] = useState<{ clientSecret: string; when: string; ref: string } | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
 
   // a step change swaps the content under the reader's scroll position;
@@ -114,7 +114,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
         })
         const payJson = await pay.json()
         if (pay.ok && payJson.client_secret) {
-          setPayment({ clientSecret: payJson.client_secret, when: json.start_at })
+          setPayment({ clientSecret: payJson.client_secret, when: json.start_at, ref: json.ref })
           return
         }
         setError(payJson.error ?? 'Could not start payment')
@@ -155,7 +155,16 @@ export default function BookingFlow({ slug }: { slug: string }) {
             Your time is held for 30 minutes while you pay.
           </p>
         </div>
-        <EmbeddedPayment clientSecret={payment.clientSecret} />
+        <EmbeddedPayment
+          clientSecret={payment.clientSecret}
+          onComplete={() => {
+            // Stripe says the payment is done; the webhook is what actually
+            // confirms the booking, but the customer should see the result
+            // here rather than be sent somewhere else to find it
+            setDone({ ref: payment.ref, start_at: payment.when })
+            setPayment(null)
+          }}
+        />
       </div>
     )
   }

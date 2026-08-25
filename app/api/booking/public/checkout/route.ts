@@ -85,9 +85,10 @@ export async function POST(req: Request) {
       // the request takes time to reach them — an exact 30 lands just under
       // the floor and the whole session is rejected.
       expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
-      // where the browser lands afterwards; the webhook remains the source of
-      // truth for whether the money actually arrived
-      return_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
+      // Confirm in place. Sending someone to another page after paying makes
+      // a finished booking feel unfinished, and dropped them on the manage
+      // screen — which reads like an admin console, not a receipt.
+      redirect_on_completion: 'never',
       metadata: { booking_id: booking.id, public_ref: booking.public_ref ?? '' },
     })
 

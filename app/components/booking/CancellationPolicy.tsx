@@ -45,6 +45,12 @@ export const POLICY_SECTIONS: { heading: string; body: string[] }[] = [
       `A ${graceMin}-minute grace period applies. Arrivals beyond this window may result in a shortened session, or be treated as a no-show, depending on studio availability.`,
     ],
   },
+  {
+    heading: 'Need something else',
+    body: [
+      'Anything outside these windows, or a change the page will not let you make — email contact@mdmmarketing.com.au and we will sort it out with you.',
+    ],
+  },
 ]
 
 export default function CancellationPolicy({
@@ -67,6 +73,10 @@ export default function CancellationPolicy({
         </p>
         <p className="text-sm leading-relaxed" style={{ opacity: 0.8, color: dim }}>
           Please reschedule or cancel at least {freeHours} hours before your session.
+          Anything else, email{' '}
+          <a href="mailto:contact@mdmmarketing.com.au" style={{ textDecoration: 'underline' }}>
+            contact@mdmmarketing.com.au
+          </a>.
         </p>
       </div>
 

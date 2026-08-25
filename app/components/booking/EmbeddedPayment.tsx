@@ -21,7 +21,9 @@ const PUBLISHABLE = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim()
 // created once per page load, not per render — loadStripe injects a script
 const stripePromise = PUBLISHABLE ? loadStripe(PUBLISHABLE) : null
 
-export default function EmbeddedPayment({ clientSecret }: { clientSecret: string }) {
+export default function EmbeddedPayment(
+  { clientSecret, onComplete }: { clientSecret: string; onComplete?: () => void },
+) {
   const box = useRef<HTMLDivElement>(null)
 
   /**
@@ -51,7 +53,7 @@ export default function EmbeddedPayment({ clientSecret }: { clientSecret: string
   }
   return (
     <div ref={box} className="overflow-hidden rounded-lg bg-white" style={{ scrollMarginTop: 88 }}>
-      <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
+      <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret, onComplete }}>
         <EmbeddedCheckout />
       </EmbeddedCheckoutProvider>
     </div>
