@@ -144,7 +144,25 @@ export default function EventsPage() {
             <p style={{ maxWidth: 540, margin: '0 auto 40px', fontSize: 'clamp(1.05rem, 1.5vw, 1.22rem)', lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>Rooms are kept small, so seats are limited. Pick a date and book yours below.</p>
           </Reveal>
           <Reveal gate={false} delay={240}>
-            <div id="invite-form">
+            {/* The same reset /book gets from its layout's .bk-scope.
+                globals.css styles the marketing site with bare element
+                selectors, so Tailwind's preflight is scoped away — which left
+                every <a> here browser-blue and every <button> wearing the
+                browser's own light button face, white text and all. The
+                booking components all paint themselves, so they only need the
+                browser's defaults out of the way. Scoped to this section so
+                nothing else on the events page shifts. */}
+            <style>{`
+              .ev-book a, .ev-book a:visited, .ev-book a:active { color: inherit; }
+              .ev-book button {
+                background: transparent; color: inherit; font: inherit;
+                -webkit-appearance: none; appearance: none;
+              }
+              .ev-book ul, .ev-book ol { list-style: none; margin: 0; padding: 0; }
+              /* iOS zooms the page when a focused field is under 16px */
+              .ev-book input, .ev-book textarea, .ev-book select { font-size: 16px; }
+            `}</style>
+            <div id="invite-form" className="ev-book">
               <EventBooking />
             </div>
           </Reveal>

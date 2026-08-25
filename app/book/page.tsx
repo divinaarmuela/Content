@@ -51,7 +51,7 @@ export default async function BookIndexPage() {
       {services.length === 0 ? (
         <p className="border p-6 text-sm" style={{ borderColor: 'var(--bk-line)', opacity: 0.75 }}>
           Nothing is open for booking right now. Email{' '}
-          <a href="mailto:contact@mdmmarketing.com.au" className="underline">contact@mdmmarketing.com.au</a>.
+          <a href="mailto:contact@mdmmarketing.com.au" className="underline text-inherit">contact@mdmmarketing.com.au</a>.
         </p>
       ) : groups.map((group, gi) => (
         <section key={group.name || gi} className="flex flex-col gap-6">
@@ -114,7 +114,7 @@ export default async function BookIndexPage() {
 
       <footer className="border-t pt-6 text-[11px] leading-relaxed" style={{ borderColor: 'var(--bk-line)', opacity: 0.45 }}>
         Questions before you book? Email{' '}
-        <a href="mailto:contact@mdmmarketing.com.au" className="underline">contact@mdmmarketing.com.au</a>.
+        <a href="mailto:contact@mdmmarketing.com.au" className="underline text-inherit">contact@mdmmarketing.com.au</a>.
       </footer>
     </div>
   )

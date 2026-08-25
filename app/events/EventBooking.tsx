@@ -26,6 +26,18 @@ type Service = {
 }
 
 const MONO = 'var(--font-space-mono), monospace'
+
+/**
+ * Widths that grow with the screen.
+ *
+ * These were fixed pixel widths, so on a large monitor the booking block sat
+ * at phone size inside a page whose headings run to 1180px — it read as an
+ * afterthought. min(100%, …) comes first so the clamp's floor can never
+ * overflow a narrow phone.
+ */
+const CATALOGUE_W = 'min(100%, clamp(620px, 62vw, 900px))'
+const FLOW_W = 'min(100%, clamp(560px, 54vw, 780px))'
+const CARD_W = 'min(100%, clamp(520px, 44vw, 660px))'
 const line = 'rgba(255,255,255,0.16)'
 
 const shortDay = (d: string) =>
@@ -134,7 +146,7 @@ export default function EventBooking() {
 
   if (!catalogue || catalogue.length === 0) {
     return (
-      <p style={{ color: 'rgba(255,255,255,0.6)', maxWidth: 520, margin: '0 auto', lineHeight: 1.6 }}>
+      <p style={{ color: 'rgba(255,255,255,0.6)', width: CARD_W, margin: '0 auto', lineHeight: 1.6 }}>
         Nothing is open for booking right now. Email{' '}
         <a href="mailto:contact@mdmmarketing.com.au" style={{ color: '#fff' }}>contact@mdmmarketing.com.au</a>.
       </p>
@@ -143,7 +155,7 @@ export default function EventBooking() {
 
   if (done) {
     return (
-      <div ref={topRef} style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left', scrollMarginTop: 90 }}>
+      <div ref={topRef} style={{ width: CARD_W, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left', scrollMarginTop: 90 }}>
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>YOU&rsquo;RE IN</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>
           {service?.name ?? "Your session"} — {new Date(done.start_at).toLocaleString('en-AU', {
@@ -163,7 +175,7 @@ export default function EventBooking() {
 
   if (expired) {
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
+      <div style={{ width: CARD_W, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>HOLD EXPIRED</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>That seat was released</p>
         <p style={{ marginTop: 10, color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', lineHeight: 1.6 }}>
@@ -181,7 +193,7 @@ export default function EventBooking() {
 
   if (payment) {
     return (
-      <div ref={topRef} style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
+      <div ref={topRef} style={{ width: FLOW_W, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
         <div style={{ fontFamily: MONO, marginBottom: 14 }}>
           <HoldTimer expiresAt={payment.expiresAt} onExpired={() => setExpired(true)} tone="event" />
         </div>
@@ -202,7 +214,7 @@ export default function EventBooking() {
       if (g) g.items.push(c); else groups.push({ name: key, items: [c] })
     }
     return (
-      <div style={{ maxWidth: 620, margin: '0 auto', textAlign: 'left' }}>
+      <div style={{ width: CATALOGUE_W, margin: '0 auto', textAlign: 'left' }}>
         {groups.map(g => (
           <div key={g.name} style={{ marginBottom: 36 }}>
             <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 14 }}>
@@ -249,7 +261,7 @@ export default function EventBooking() {
     : 'Free'
 
   return (
-    <div ref={topRef} style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
+    <div ref={topRef} style={{ width: FLOW_W, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
       <button type="button"
         onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null) }}
         style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
@@ -288,7 +300,7 @@ export default function EventBooking() {
           <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', margin: '32px 0 12px' }}>
             2 · YOUR DETAILS
           </p>
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             <input placeholder="Your name" value={form.name} style={field}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             <input placeholder="Email" type="email" value={form.email} style={field}
@@ -297,7 +309,7 @@ export default function EventBooking() {
               value={form.phone} style={field}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
             <textarea placeholder="What do you do? (optional)" rows={3} value={form.notes}
-              style={{ ...field, resize: 'vertical' }}
+              style={{ ...field, resize: 'vertical', gridColumn: '1 / -1' }}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
 

@@ -206,7 +206,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
         </p>
         <a href={`/book/manage/${done.ref}`}
           className="w-fit border px-4 py-2 text-[11px] uppercase tracking-[0.14em] transition-opacity hover:opacity-70"
-          style={{ borderColor: 'var(--bk-line)' }}>
+          style={{ borderColor: 'var(--bk-line)', color: 'var(--bk-ink)' }}>
           Move or cancel this booking
         </a>
       </div>
@@ -249,7 +249,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
       {days.length === 0 ? (
         <p className="border p-6 text-sm" style={{ borderColor: 'var(--bk-line)', opacity: 0.75 }}>
           No times are open at the moment. Email{' '}
-          <a href="mailto:contact@mdmmarketing.com.au" className="underline">contact@mdmmarketing.com.au</a>{' '}
+          <a href="mailto:contact@mdmmarketing.com.au" className="underline text-inherit">contact@mdmmarketing.com.au</a>{' '}
           and we&rsquo;ll find one.
         </p>
       ) : (

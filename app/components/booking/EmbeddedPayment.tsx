@@ -46,7 +46,7 @@ export default function EmbeddedPayment(
     return (
       <p className="border p-4 text-sm" style={{ borderColor: 'var(--bk-line)', opacity: 0.8 }}>
         Card payment isn&rsquo;t switched on yet. Email{' '}
-        <a href="mailto:contact@mdmmarketing.com.au" className="underline">contact@mdmmarketing.com.au</a>{' '}
+        <a href="mailto:contact@mdmmarketing.com.au" className="underline text-inherit">contact@mdmmarketing.com.au</a>{' '}
         and we&rsquo;ll take payment another way — your time is held.
       </p>
     )

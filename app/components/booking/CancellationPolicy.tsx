@@ -74,7 +74,11 @@ export default function CancellationPolicy({
         <p className="text-sm leading-relaxed" style={{ opacity: 0.8, color: dim }}>
           Please reschedule or cancel at least {freeHours} hours before your session.
           Anything else, email{' '}
-          <a href="mailto:contact@mdmmarketing.com.au" style={{ textDecoration: 'underline' }}>
+          <a href="mailto:contact@mdmmarketing.com.au"
+            // 'inherit', not a colour: outside .dbx there is no Tailwind
+            // preflight, so an unstyled <a> falls back to the browser's own
+            // link blue — which is what showed up on the events page
+            style={{ textDecoration: 'underline', color: 'inherit' }}>
             contact@mdmmarketing.com.au
           </a>.
         </p>
@@ -85,7 +89,15 @@ export default function CancellationPolicy({
           like a control */}
       <button type="button" onClick={() => setOpen(o => !o)}
         className="flex w-fit items-center gap-2 border px-3 py-2 text-[11px] uppercase tracking-[0.14em] transition-opacity hover:opacity-80"
-        style={{ borderColor: line, color: tone === 'event' ? '#ffffff' : 'var(--bk-ink)' }}>
+        style={{
+          borderColor: line,
+          color: tone === 'event' ? '#ffffff' : 'var(--bk-ink)',
+          // same trap: with no preflight the browser paints its own button
+          // face, which on the events page was a white box holding white text
+          background: 'transparent',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+        }}>
         <span aria-hidden style={{ display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
         {open ? 'Hide the full policy' : 'Read the full policy'}
       </button>
