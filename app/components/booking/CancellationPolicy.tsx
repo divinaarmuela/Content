@@ -71,16 +71,19 @@ export default function CancellationPolicy({
         <p className="text-[11px] uppercase tracking-[0.16em]" style={{ opacity: 0.55, color: dim }}>
           Cancellation policy
         </p>
+        {/* The windows themselves live behind "Read the full policy" and in
+            the line being agreed to — repeating them here restated the rules
+            before anyone had asked. What is useful at this point is a way to
+            ask a question. */}
         <p className="text-sm leading-relaxed" style={{ opacity: 0.8, color: dim }}>
-          Please reschedule or cancel at least {freeHours} hours before your session.
-          Anything else, email{' '}
+          Got a question about your session? Email{' '}
           <a href="mailto:contact@mdmmarketing.com.au"
             // 'inherit', not a colour: outside .dbx there is no Tailwind
             // preflight, so an unstyled <a> falls back to the browser's own
             // link blue — which is what showed up on the events page
             style={{ textDecoration: 'underline', color: 'inherit' }}>
             contact@mdmmarketing.com.au
-          </a>.
+          </a>{' '}and we&rsquo;ll sort it out with you.
         </p>
       </div>
 

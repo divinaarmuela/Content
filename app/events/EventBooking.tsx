@@ -38,6 +38,17 @@ const MONO = 'var(--font-space-mono), monospace'
 const CATALOGUE_W = 'min(100%, clamp(620px, 62vw, 900px))'
 const FLOW_W = 'min(100%, clamp(560px, 54vw, 780px))'
 const CARD_W = 'min(100%, clamp(520px, 44vw, 660px))'
+
+/**
+ * Type that grows with the screen.
+ *
+ * Everything here was fixed at phone sizes — a 1.15rem service title, 11px
+ * labels, 14px copy — sitting in a page whose headings run to 4.6rem. On a
+ * large monitor "What's included" read as fine print.
+ */
+const TITLE_S = 'clamp(1.15rem, 1.9vw, 1.9rem)'
+const LABEL_S = 'clamp(11px, 0.85vw, 13px)'
+const COPY_S = 'clamp(0.875rem, 1.05vw, 1.05rem)'
 const line = 'rgba(255,255,255,0.16)'
 
 const shortDay = (d: string) =>
@@ -156,7 +167,7 @@ export default function EventBooking() {
   if (done) {
     return (
       <div ref={topRef} style={{ width: CARD_W, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left', scrollMarginTop: 90 }}>
-        <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>YOU&rsquo;RE IN</p>
+        <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>YOU&rsquo;RE IN</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>
           {service?.name ?? "Your session"} — {new Date(done.start_at).toLocaleString('en-AU', {
             weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit',
@@ -166,7 +177,7 @@ export default function EventBooking() {
           Confirmation sent to {form.email}. Reference <span style={{ fontFamily: MONO }}>{done.ref}</span>.
         </p>
         <a href={`/book/manage/${done.ref}`}
-          style={{ display: 'inline-block', marginTop: 18, fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.4)' }}>
+          style={{ display: 'inline-block', marginTop: 18, fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.14em', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.4)' }}>
           CHANGE OR CANCEL
         </a>
       </div>
@@ -176,7 +187,7 @@ export default function EventBooking() {
   if (expired) {
     return (
       <div style={{ width: CARD_W, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
-        <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>HOLD EXPIRED</p>
+        <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>HOLD EXPIRED</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>That seat was released</p>
         <p style={{ marginTop: 10, color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', lineHeight: 1.6 }}>
           We hold a seat for 30 minutes while you pay. Yours ran out, so it went back
@@ -184,7 +195,7 @@ export default function EventBooking() {
         </p>
         <button type="button"
           onClick={() => { setExpired(false); setPayment(null); setPick(null); void load() }}
-          style={{ marginTop: 18, background: '#fff', color: '#000', border: 'none', padding: '13px 22px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', cursor: 'pointer' }}>
+          style={{ marginTop: 18, background: '#fff', color: '#000', border: 'none', padding: '13px 22px', fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', cursor: 'pointer' }}>
           PICK ANOTHER TIME
         </button>
       </div>
@@ -217,7 +228,7 @@ export default function EventBooking() {
       <div style={{ width: CATALOGUE_W, margin: '0 auto', textAlign: 'left' }}>
         {groups.map(g => (
           <div key={g.name} style={{ marginBottom: 36 }}>
-            <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 14 }}>
+            <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 14 }}>
               {g.name.toUpperCase()}
             </p>
             {g.items.map(c => (
@@ -233,15 +244,15 @@ export default function EventBooking() {
                     style={{ width: 92, height: 64, objectFit: 'contain', flexShrink: 0, background: 'rgba(255,255,255,0.04)' }} />
                 )}
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: '1.02rem', lineHeight: 1.3 }}>{c.name}</span>
+                  <span style={{ display: 'block', fontSize: 'clamp(1.02rem, 1.35vw, 1.35rem)', lineHeight: 1.3 }}>{c.name}</span>
                   {c.teaser && (
-                    <span style={{ display: 'block', marginTop: 4, fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'block', marginTop: 4, fontSize: 'clamp(0.82rem, 1vw, 0.98rem)', color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.teaser}
                     </span>
                   )}
                 </span>
                 <span style={{ flexShrink: 0, textAlign: 'right' }}>
-                  <span style={{ display: 'block', fontSize: '1rem' }}>
+                  <span style={{ display: 'block', fontSize: 'clamp(1rem, 1.25vw, 1.25rem)' }}>
                     {c.price_cents > 0 ? `A$${(c.price_cents / 100).toLocaleString('en-AU', { maximumFractionDigits: 0 })}` : 'Free'}
                   </span>
                   <span style={{ display: 'block', fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.45)' }}>
@@ -264,18 +275,18 @@ export default function EventBooking() {
     <div ref={topRef} style={{ width: FLOW_W, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
       <button type="button"
         onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null) }}
-        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
+        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
         ← ALL SESSIONS
       </button>
-      <p style={{ fontSize: '1.15rem', marginBottom: 6 }}>{service.name}</p>
-      <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', marginBottom: 26 }}>
+      <p style={{ fontSize: TITLE_S, marginBottom: 8, lineHeight: 1.2 }}>{service.name}</p>
+      <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', marginBottom: 26 }}>
         {price} · {service.duration_min} MIN{service.location ? ` · ${service.location.toUpperCase()}` : ''}
       </p>
       {/* what's included / what you receive — the same copy /book shows.
           Somebody deciding on a session needs this BEFORE the calendar, not
           after they have already picked a time. */}
       <div style={{ borderTop: `1px solid ${line}`, paddingTop: 20, marginBottom: 30 }}>
-        <ServiceCopy copy={service.description} headingFont={MONO} />
+        <ServiceCopy copy={service.description} headingFont={MONO} size={COPY_S} />
       </div>
       {days.length === 0 && (
         <p style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
@@ -283,7 +294,7 @@ export default function EventBooking() {
           <a href="mailto:contact@mdmmarketing.com.au" style={{ color: '#fff' }}>contact@mdmmarketing.com.au</a>.
         </p>
       )}
-      <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
+      <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
         1 · CHOOSE A TIME
       </p>
       <SlotPicker
@@ -297,7 +308,7 @@ export default function EventBooking() {
 
       {pick && (
         <>
-          <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', margin: '32px 0 12px' }}>
+          <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', margin: '32px 0 12px' }}>
             2 · YOUR DETAILS
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
@@ -328,7 +339,7 @@ export default function EventBooking() {
             disabled={busy || !agreed || !form.name.trim() || !form.email.trim() || !isUsablePhone(form.phone)}
             style={{
               marginTop: 20, background: '#fff', color: '#000', border: 'none',
-              padding: '14px 26px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em',
+              padding: '14px 26px', fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em',
               cursor: busy ? 'default' : 'pointer', opacity: busy || !agreed || !form.name.trim() || !form.email.trim() || !isUsablePhone(form.phone) ? 0.4 : 1,
             }}>
             {busy ? 'HOLDING YOUR SEAT…' : `BOOK MY SEAT · ${price}`}
