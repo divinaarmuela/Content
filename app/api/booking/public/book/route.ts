@@ -112,11 +112,18 @@ export async function POST(req: Request) {
     // every open bookings page hears about it immediately
     announceBookingChange({ booking_id: booking.id, kind: 'created' })
 
-    // fire-and-forget: a mail hiccup must never lose a confirmed booking
-    notifyNewBooking({
-      booking: { ...booking, customer_name: name, customer_email: email, customer_phone: phone, notes },
-      service, resource,
-    }).catch(e => console.error('booking notify error:', e))
+    // A booking that still needs paying is a HOLD, not a booking: it must not
+    // tell the customer they are booked in, or the team that a session is on
+    // the calendar. Its confirmation is sent by the Stripe webhook, once the
+    // money is actually there. Announcing here emailed everyone the moment
+    // someone reached the payment page, whether or not they ever paid.
+    if (!needsPayment) {
+      // fire-and-forget: a mail hiccup must never lose a confirmed booking
+      notifyNewBooking({
+        booking: { ...booking, customer_name: name, customer_email: email, customer_phone: phone, notes },
+        service, resource,
+      }).catch(e => console.error('booking notify error:', e))
+    }
 
     return NextResponse.json({
       ok: true,

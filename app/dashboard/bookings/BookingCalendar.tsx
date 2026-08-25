@@ -131,14 +131,24 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                     {day}
                   </span>
                   <div className="mt-1 flex flex-col gap-1">
-                    {list.slice(0, 4).map(b => (
-                      <div key={b.id}
-                        title={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${b.booking_resources?.label ? ` · ${b.booking_resources.label}` : ''}`}
-                        className="truncate rounded bg-emerald-50 px-1 py-0.5 text-[10px] leading-tight text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                        <span className="font-mono">{timeLabel(b.start_at)}</span>{' '}
-                        {b.customer_name}
-                      </div>
-                    ))}
+                    {list.slice(0, 4).map(b => {
+                      // an unpaid hold is somebody mid-checkout, not a booked
+                      // session — it must never look identical to one
+                      const held = b.status === 'pending'
+                      return (
+                        <div key={b.id}
+                          title={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${b.booking_resources?.label ? ` · ${b.booking_resources.label}` : ''}${held ? ' · awaiting payment' : ''}`}
+                          className={`truncate rounded px-1 py-0.5 text-[10px] leading-tight ${
+                            held
+                              ? 'border border-dashed border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                              : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                          }`}>
+                          <span className="font-mono">{timeLabel(b.start_at)}</span>{' '}
+                          {b.customer_name}
+                          {held && <span className="ml-1 opacity-70">· holding</span>}
+                        </div>
+                      )
+                    })}
                     {list.length > 4 && (
                       <span className="px-1 text-[10px] text-zinc-400">+{list.length - 4} more</span>
                     )}
