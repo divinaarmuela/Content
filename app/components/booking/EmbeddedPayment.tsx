@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js'
 
@@ -21,6 +22,24 @@ const PUBLISHABLE = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim()
 const stripePromise = PUBLISHABLE ? loadStripe(PUBLISHABLE) : null
 
 export default function EmbeddedPayment({ clientSecret }: { clientSecret: string }) {
+  const box = useRef<HTMLDivElement>(null)
+
+  /**
+   * Bring the card form into view once it EXISTS.
+   *
+   * Scrolling when the step changes aims at whatever is there at that
+   * instant — the heading — because Stripe's iframe has not mounted yet and
+   * has no height. On a phone that leaves you looking at a title with the
+   * form somewhere below, having to hunt for it. Two frames later the iframe
+   * is real, so that is when we move.
+   */
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 350)
+    return () => window.clearTimeout(t)
+  }, [clientSecret])
+
   if (!stripePromise) {
     return (
       <p className="border p-4 text-sm" style={{ borderColor: 'var(--bk-line)', opacity: 0.8 }}>
@@ -31,7 +50,7 @@ export default function EmbeddedPayment({ clientSecret }: { clientSecret: string
     )
   }
   return (
-    <div className="overflow-hidden rounded-lg bg-white">
+    <div ref={box} className="overflow-hidden rounded-lg bg-white" style={{ scrollMarginTop: 88 }}>
       <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
         <EmbeddedCheckout />
       </EmbeddedCheckoutProvider>

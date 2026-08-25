@@ -63,7 +63,9 @@ export default function EventBooking() {
   // phone you land halfway down whatever replaced it. Bring the section back
   // into view whenever the step changes.
   useEffect(() => {
-    if (payment || done || slug) {
+    // the payment step scrolls itself once Stripe's iframe is mounted —
+    // doing it here too would fight that and land on the heading
+    if (!payment && (done || slug)) {
       topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [payment, done, slug])

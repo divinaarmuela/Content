@@ -57,7 +57,8 @@ export default function BookingFlow({ slug }: { slug: string }) {
   // a step change swaps the content under the reader's scroll position;
   // without this you land mid-page on a phone
   useEffect(() => {
-    if (payment || done) topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // payment scrolls itself once the card form is really there
+    if (!payment && done) topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [payment, done])
 
   const load = useCallback(async () => {
