@@ -80,9 +80,13 @@ export default function CancellationPolicy({
         </p>
       </div>
 
+      {/* this was dim text on a dim ground and read as disabled — it is the
+          one control someone must actually use before agreeing, so it looks
+          like a control */}
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-fit text-[11px] uppercase tracking-[0.14em] underline underline-offset-4"
-        style={{ opacity: 0.65, color: dim }}>
+        className="flex w-fit items-center gap-2 border px-3 py-2 text-[11px] uppercase tracking-[0.14em] transition-opacity hover:opacity-80"
+        style={{ borderColor: line, color: tone === 'event' ? '#ffffff' : 'var(--bk-ink)' }}>
+        <span aria-hidden style={{ display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
         {open ? 'Hide the full policy' : 'Read the full policy'}
       </button>
 
@@ -106,7 +110,7 @@ export default function CancellationPolicy({
           className="mt-0.5 h-4 w-4 shrink-0"
           style={{ accentColor: tone === 'event' ? '#ffffff' : 'var(--bk-ink)' }}
         />
-        <span style={{ opacity: 0.85, color: dim }}>
+        <span style={{ color: tone === 'event' ? '#ffffff' : 'var(--bk-ink)' }}>
           I have read and agree to the cancellation policy of MD House.
         </span>
       </label>
