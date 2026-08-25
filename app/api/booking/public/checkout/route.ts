@@ -68,7 +68,9 @@ export async function POST(req: Request) {
       // than sending the customer to a Stripe-hosted page. Stripe still owns
       // the card fields (so PCI scope and 3-D Secure stay theirs) and dynamic
       // payment methods — Apple Pay, Google Pay, Link — still apply.
-      ui_mode: 'embedded',
+      // 'embedded_page' on this API version — the value was 'embedded' on
+      // older ones, and passing that is rejected outright
+      ui_mode: 'embedded_page',
       // An unpaid booking HOLDS the slot, so an abandoned checkout must not
       // hold it all day. 30 minutes is Stripe's floor and plenty to finish
       // paying; on expiry the webhook releases the time for someone else.
