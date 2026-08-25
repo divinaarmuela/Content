@@ -66,8 +66,18 @@ export async function POST(req: Request) {
         if (!name) return NextResponse.json({ error: 'Name the service' }, { status: 422 })
         const duration = Math.min(1440, Math.max(5, Math.round(Number(body.duration_min) || 30)))
         const price = Math.max(0, Math.round(Number(body.price_cents) || 0))
+        // a new service belongs at the END of the list. Left at the default
+        // 0 it sorts above everything, so it appeared at the top and read as
+        // if it had picked up some other row's details.
+        const { data: last } = await supabase.from('booking_services')
+          .select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+        const nextOrder = (last?.sort_order ?? 0) + 1
         const { data, error } = await supabase.from('booking_services')
-          .insert({ name, slug: slugify(body.slug || name), description: String(body.description ?? '').slice(0, 1000) || null, duration_min: duration, price_cents: price })
+          .insert({
+            name, slug: slugify(body.slug || name),
+            description: String(body.description ?? '').slice(0, 1000) || null,
+            duration_min: duration, price_cents: price, sort_order: nextOrder,
+          })
           .select().single()
         if (error) return NextResponse.json({ error: error.message.includes('duplicate') ? 'A service with that name/slug already exists' : 'Run supabase/booking.sql first' }, { status: 400 })
         return NextResponse.json({ service: data })
