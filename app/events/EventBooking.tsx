@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import EmbeddedPayment from '../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../components/booking/CancellationPolicy'
 import SlotPicker from '../components/booking/SlotPicker'
+import ServiceCopy from '../components/booking/ServiceCopy'
 import HoldTimer from '../components/booking/HoldTimer'
 import { isUsablePhone } from '../lib/booking-core'
 
@@ -121,7 +122,14 @@ export default function EventBooking() {
   }
 
   if (loading) {
-    return <p style={{ color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 12 }}>Loading…</p>
+    // hold the height the catalogue will need. A one-line placeholder makes
+    // the whole section collapse, so anything scrolling to it lands in the
+    // wrong place and then gets shoved as the real content arrives.
+    return (
+      <div style={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 12 }}>Loading…</p>
+      </div>
+    )
   }
 
   if (!catalogue || catalogue.length === 0) {
@@ -251,6 +259,12 @@ export default function EventBooking() {
       <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', marginBottom: 26 }}>
         {price} · {service.duration_min} MIN{service.location ? ` · ${service.location.toUpperCase()}` : ''}
       </p>
+      {/* what's included / what you receive — the same copy /book shows.
+          Somebody deciding on a session needs this BEFORE the calendar, not
+          after they have already picked a time. */}
+      <div style={{ borderTop: `1px solid ${line}`, paddingTop: 20, marginBottom: 30 }}>
+        <ServiceCopy copy={service.description} headingFont={MONO} />
+      </div>
       {days.length === 0 && (
         <p style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
           No times are open for this one right now. Email{' '}
