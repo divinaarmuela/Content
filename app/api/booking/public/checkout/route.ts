@@ -72,7 +72,10 @@ export async function POST(req: Request) {
       // An unpaid booking HOLDS the slot, so an abandoned checkout must not
       // hold it all day. 30 minutes is Stripe's floor and plenty to finish
       // paying; on expiry the webhook releases the time for someone else.
-      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      // 31, not 30: Stripe requires "at least 30 minutes in the future", and
+      // the request takes time to reach them — an exact 30 lands just under
+      // the floor and the whole session is rejected.
+      expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
       // where the browser lands afterwards; the webhook remains the source of
       // truth for whether the money actually arrived
       return_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
@@ -87,7 +90,14 @@ export async function POST(req: Request) {
     // this one session and is safe to hand to the browser
     return NextResponse.json({ client_secret: session.client_secret })
   } catch (e) {
-    console.error('booking checkout error:', e)
-    return NextResponse.json({ error: 'Could not start payment — try again' }, { status: 500 })
+    // Stripe's own error code is safe to surface (it names the rejected
+    // parameter, not any secret) and is the difference between a fixable
+    // report and "it doesn't work"
+    const err = e as { code?: string; param?: string; type?: string; message?: string }
+    console.error('booking checkout error:', err?.type, err?.code, err?.param, err?.message)
+    return NextResponse.json({
+      error: 'Could not start payment — try again',
+      ...(err?.code || err?.param ? { detail: [err.type, err.code, err.param].filter(Boolean).join(' / ') } : {}),
+    }, { status: 500 })
   }
 }
