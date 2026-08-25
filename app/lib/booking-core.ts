@@ -82,6 +82,27 @@ export function parseServiceCopy(raw: string | null | undefined): CopyBlock[] {
   return out
 }
 
+/**
+ * One line that says what this is, for a list of services.
+ *
+ * The full copy is three headed sections; printing all of it against every
+ * row turns the index into the same paragraph nine times. Prefer real prose,
+ * fall back to the first couple of inclusions, never a heading on its own.
+ */
+export function serviceTeaser(raw: string | null | undefined, max = 120): string {
+  const blocks = parseServiceCopy(raw)
+  const prose = blocks.find(b => b.kind === 'text')
+  let line = prose && prose.kind === 'text' ? prose.text : ''
+  if (!line) {
+    const first = blocks.find(b => b.kind === 'bullets')
+    if (first && first.kind === 'bullets') line = first.items.slice(0, 2).join(' · ')
+  }
+  if (line.length <= max) return line
+  // cut on a word, not mid-syllable
+  const cut = line.slice(0, max)
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : max).trimEnd()}…`
+}
+
 /* ── timezone: local opening hours ⇄ real instants ────────────────────────
  * Availability is written in a resource's LOCAL wall-clock ("9:00 to 17:00"),
  * while a booking is a real instant (timestamptz). Melbourne moves between

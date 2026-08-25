@@ -11,6 +11,7 @@ import { minToLabel } from '../../lib/booking-core'
 import BookingCalendar from './BookingCalendar'
 import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
+import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
@@ -22,6 +23,11 @@ type Booking = {
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Share links always point at the PUBLIC site — app.* is the staff login,
+ *  and window.location.origin here would hand out exactly that. */
+const copy = (url: string, ok: string) =>
+  navigator.clipboard.writeText(url).then(() => toast.success(ok)).catch(() => toast.error(url))
 const money = (c: number, cur = 'AUD') => c === 0 ? 'Free' : new Intl.NumberFormat('en-AU', { style: 'currency', currency: cur }).format(c / 100)
 
 /** The service's photo — what a customer actually sees first on the booking
@@ -107,8 +113,18 @@ export default function BookingsPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Bookings</h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Services people can book, who&rsquo;s available, and every appointment. The public page and the shareable link both run off this.
+          Services people can book, when you&rsquo;re open, and every appointment.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline"
+            onClick={() => void copy(bookingIndexUrl(), 'Booking link copied — this one shows everything')}>
+            <LinkIcon className="h-3.5 w-3.5" /> Copy the booking link
+          </Button>
+          <a href={bookingIndexUrl()} target="_blank" rel="noreferrer noopener"
+            className="text-xs text-zinc-400 underline-offset-4 hover:underline">
+            {bookingIndexUrl().replace(/^https:\/\//, '')}
+          </a>
+        </div>
       </div>
 
       {data.needs_schema && (
@@ -134,12 +150,7 @@ export default function BookingsPage() {
               {/* the whole point of a booking type is the link you send people */}
               <button
                 className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                onClick={() => {
-                  const url = `${window.location.origin}/book/${s.slug}`
-                  void navigator.clipboard.writeText(url)
-                    .then(() => toast.success('Booking link copied'))
-                    .catch(() => toast.error(url))
-                }}>
+                onClick={() => void copy(bookingUrl(s.slug), 'Booking link copied')}>
                 <LinkIcon className="h-3.5 w-3.5" /> Copy link
               </button>
               <a href={`/book/${s.slug}`} target="_blank" rel="noreferrer noopener"

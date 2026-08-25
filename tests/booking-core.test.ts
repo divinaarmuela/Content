@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy,
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser,
 } from '../app/lib/booking-core'
 
 describe('openSlots', () => {
@@ -139,5 +139,43 @@ OPTIONAL ADD ONS:
     expect(parseServiceCopy(null)).toEqual([])
     expect(parseServiceCopy('')).toEqual([])
     expect(parseServiceCopy('   \n\n  ')).toEqual([])
+  })
+})
+
+describe('serviceTeaser — one line for a list, not the whole brochure', () => {
+  const podcast = `WHATS INCLUDED:
+
+- Multi-cam video setup (Sony FX3 & Sony FX6 Cameras)
+- Dedicated team to manage the session
+
+WHAT YOU RECEIVE:
+
+- RAW Synced episode`
+
+  it('uses the first inclusions when there is no prose', () => {
+    expect(serviceTeaser(podcast))
+      .toBe('Multi-cam video setup (Sony FX3 & Sony FX6 Cameras) · Dedicated team to manage the session')
+  })
+
+  it('prefers real prose over bullets', () => {
+    expect(serviceTeaser('Ideal for brands, creators, and campaigns with support.\n\n- bump in included'))
+      .toBe('Ideal for brands, creators, and campaigns with support.')
+  })
+
+  it('never returns a bare heading', () => {
+    expect(serviceTeaser('WHATS INCLUDED:')).toBe('')
+  })
+
+  it('truncates on a word boundary', () => {
+    const long = 'a'.repeat(10) + ' ' + 'word '.repeat(60)
+    const t = serviceTeaser(long, 50)
+    expect(t.length).toBeLessThanOrEqual(51)
+    expect(t.endsWith('…')).toBe(true)
+    expect(t).not.toMatch(/\s…$/)
+  })
+
+  it('is safe on nothing', () => {
+    expect(serviceTeaser(null)).toBe('')
+    expect(serviceTeaser('')).toBe('')
   })
 })

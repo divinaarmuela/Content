@@ -12,7 +12,7 @@ import type { PublicService, PublicResource } from './booking'
  * inbox that watches all of them.
  */
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mdmmarketing.com.au'
+import { publicUrl, appUrl } from './site-urls'
 /**
  * Who watches every booking, whoever it is with.
  *
@@ -56,7 +56,8 @@ export async function notifyNewBooking(input: {
 }) {
   const { booking, service, resource } = input
   const when = whenLabel(booking.start_at, resource.timezone)
-  const manageUrl = booking.public_ref ? `${APP_URL}/book/manage/${booking.public_ref}` : null
+  // a customer's link is the PUBLIC site — app.* is where staff sign in
+  const manageUrl = booking.public_ref ? publicUrl(`/book/manage/${booking.public_ref}`) : null
 
   // ── the customer ──
   await notify({
@@ -105,7 +106,7 @@ export async function notifyNewBooking(input: {
         `<br><strong>Cost:</strong> ${escapeHtml(money(service.price_cents, service.currency))}</p>` +
         (booking.notes ? `<p><strong>Their notes:</strong><br>${escapeHtml(booking.notes).replace(/\n/g, '<br>')}</p>` : ''),
         'Open the bookings page',
-        `${APP_URL}/dashboard/bookings`,
+        appUrl('/dashboard/bookings'),
       ),
     }).catch(e => console.error('booking team mail:', e))
   }
@@ -165,7 +166,7 @@ export async function notifyBookingChanged(input: {
         title,
         (isCustomer ? '' : `<p><strong>${escapeHtml(booking.customer_name)}</strong> (${escapeHtml(booking.customer_email)}):</p>`) + detail,
         isCustomer ? undefined : 'Open the bookings page',
-        isCustomer ? undefined : `${APP_URL}/dashboard/bookings`,
+        isCustomer ? undefined : appUrl('/dashboard/bookings'),
       ),
     }).catch(e => console.error('booking change mail:', e))
   }

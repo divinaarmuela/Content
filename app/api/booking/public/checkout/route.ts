@@ -11,7 +11,7 @@ import { stripeClient, stripeReady } from '../../../../lib/stripe'
  * close the tab before any return page loads.
  */
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mdmmarketing.com.au'
+import { publicUrl } from '../../../../lib/site-urls'
 const REF = /^[0-9a-f]{18}$/
 
 export async function POST(req: Request) {
@@ -65,8 +65,9 @@ export async function POST(req: Request) {
         },
       }],
       // the webhook is the source of truth; these only steer the browser
-      success_url: `${APP_URL}/book/manage/${booking.public_ref}?paid=1`,
-      cancel_url: `${APP_URL}/book/manage/${booking.public_ref}`,
+      // the customer comes back to the public site, never to the app host
+      success_url: publicUrl(`/book/manage/${booking.public_ref}?paid=1`),
+      cancel_url: publicUrl(`/book/manage/${booking.public_ref}`),
       metadata: { booking_id: booking.id, public_ref: booking.public_ref ?? '' },
     })
 
