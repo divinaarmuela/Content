@@ -153,14 +153,23 @@ export default function EventsPage() {
                 browser's defaults out of the way. Scoped to this section so
                 nothing else on the events page shifts. */}
             <style>{`
-              .ev-book a, .ev-book a:visited, .ev-book a:active { color: inherit; }
-              .ev-book button {
-                background: transparent; color: inherit; font: inherit;
-                -webkit-appearance: none; appearance: none;
+              /* :where() everywhere, so the whole reset has ZERO specificity
+                 and any class on a component beats it — the same reason the
+                 dashboard's preflight is wrapped this way. Written without it
+                 first, and '.ev-book button' promptly out-ranked the policy
+                 button's own text-[11px], blowing its label up to body size. */
+              :where(.ev-book) :where(a, a:visited, a:active) { color: inherit; }
+              :where(.ev-book) :where(button) {
+                background: transparent;
+                color: inherit;
+                /* family only — 'font' shorthand would take font-size with it */
+                font-family: inherit;
+                -webkit-appearance: none;
+                appearance: none;
               }
-              .ev-book ul, .ev-book ol { list-style: none; margin: 0; padding: 0; }
+              :where(.ev-book) :where(ul, ol) { list-style: none; margin: 0; padding: 0; }
               /* iOS zooms the page when a focused field is under 16px */
-              .ev-book input, .ev-book textarea, .ev-book select { font-size: 16px; }
+              :where(.ev-book) :where(input, textarea, select) { font-size: 16px; }
             `}</style>
             <div id="invite-form" className="ev-book">
               <EventBooking />
