@@ -14,10 +14,23 @@ import Stripe from 'stripe'
 
 let cached: Stripe | null | undefined
 
+/**
+ * The API version is PINNED, not inherited.
+ *
+ * Without this the SDK follows the account's default version — and this
+ * account still defaults to 2020-03-02, which predates embedded Checkout
+ * entirely. Every session was rejected with "invalid parameter: ui_mode".
+ * Pinning also means a change to the account default cannot silently alter
+ * how this code behaves.
+ */
+const API_VERSION = '2026-07-29.dahlia'
+
 export function stripeClient(): Stripe | null {
   if (cached !== undefined) return cached
   const key = process.env.STRIPE_SECRET_KEY?.trim()
-  cached = key ? new Stripe(key) : null
+  cached = key
+    ? new Stripe(key, { apiVersion: API_VERSION as Stripe.StripeConfig['apiVersion'] })
+    : null
   return cached
 }
 
