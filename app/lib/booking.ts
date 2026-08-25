@@ -163,10 +163,14 @@ export async function availabilityFor(
   /**
    * Everything standing in the same ROOM, whatever it is called.
    *
-   * This service's own opening hours and blackouts stay its own — they are
-   * its configuration. But the room's occupancy is shared: a 2-hour Shoot &
-   * Go on "Creative Studio" fills the same space a podcast wants at 10:00,
-   * so its booking has to be visible here or we would offer a taken room.
+   * Opening hours stay per-resource — they are not "when is the room open"
+   * but "when do we offer THIS kind of session", so podcasts until 5 and
+   * shoots until 9 is a legitimate setup.
+   *
+   * Occupancy and closures are the room's, though. A 2-hour Shoot & Go on
+   * "Creative Studio" fills the space a podcast wants at 10:00, and a day
+   * closed for a public holiday is closed no matter what the booking is
+   * called. Both are gathered per SPACE.
    */
   const spaces = new Set(resources.map(spaceOf))
   const { data: allRes } = await supabase.from('booking_resources').select('*').eq('active', true)
@@ -180,7 +184,7 @@ export async function availabilityFor(
   // one query each — never per-day, never per-resource
   const [{ data: hours }, { data: blackouts }, { data: taken }] = await Promise.all([
     supabase.from('booking_availability').select('resource_id, weekday, start_min, end_min').in('resource_id', ids),
-    supabase.from('booking_blackouts').select('resource_id, day').in('resource_id', ids)
+    supabase.from('booking_blackouts').select('resource_id, day').in('resource_id', occupancyIds)
       .gte('day', fromDay).lte('day', lastDay),
     supabase.from('bookings').select('resource_id, start_at, end_at').in('resource_id', occupancyIds)
       .neq('status', 'cancelled')
@@ -189,7 +193,15 @@ export async function availabilityFor(
       .lte('start_at', `${addDays(lastDay, 2)}T00:00:00Z`),
   ])
 
-  const blocked = new Set((blackouts ?? []).map(b => `${b.resource_id}:${b.day}`))
+  // keyed by SPACE: closing the room under one of its names closes the room
+  const blocked = new Set(
+    (blackouts ?? [])
+      .map(b => {
+        const space = spaceById.get(b.resource_id as string)
+        return space ? `${space}:${b.day}` : null
+      })
+      .filter((k): k is string => k !== null),
+  )
   // What is taken, as local minute SPANS. A 2-hour session booked at 10:00
   // occupies 11:00 as well — carrying only its start time let a 1-hour
   // service be offered right through the middle of it.
@@ -227,7 +239,7 @@ export async function availabilityFor(
     const bySlot = new Map<number, string>()   // minute → first free resource
 
     for (const res of resources) {
-      if (blocked.has(`${res.id}:${day}`)) continue
+      if (blocked.has(`${spaceOf(res)}:${day}`)) continue
       const windows = (hours ?? [])
         .filter(h => h.resource_id === res.id && h.weekday === wd)
         .map(h => ({ start_min: h.start_min as number, end_min: h.end_min as number }))

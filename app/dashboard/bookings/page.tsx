@@ -14,8 +14,9 @@ import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null; horizon_days?: number; lead_time_min?: number; capacity?: number }
-type Resource = { id: string; label: string; email: string | null; active: boolean }
+type Resource = { id: string; label: string; email: string | null; active: boolean; space_id?: string | null }
 type Availability = { id: string; resource_id: string; weekday: number; start_min: number; end_min: number }
+type Blackout = { id: string; resource_id: string; day: string; reason: string | null }
 type Booking = {
   id: string; start_at: string; end_at: string; customer_name: string; customer_email: string
   status: string; payment_status: string; amount_cents: number
@@ -305,10 +306,138 @@ function MoveBooking({ booking, onSave, busy }: {
   )
 }
 
+/** Two names for one room are one entry here: closing it closes the room. */
+const roomOf = (r: Resource) => r.space_id ?? r.id
+
+/**
+ * Days the room is shut — a public holiday, a renovation, a day already
+ * promised to someone privately.
+ *
+ * A closure belongs to the ROOM, not to what a booking is called. Closing
+ * "Podcast Studio" while "Creative Studio" stayed open would sell a room you
+ * had shut, so every name sharing the space is closed together and reopened
+ * together.
+ *
+ * Existing bookings are left alone: closing a day stops NEW bookings, it
+ * does not cancel anyone. If there are already bookings on that day the row
+ * says so, because that is a phone call, not a database change.
+ */
+function ClosedDays({ resources, blackouts, bookings, onSave, busy }: {
+  resources: Resource[]
+  blackouts: Blackout[]
+  bookings: Booking[]
+  onSave: (payload: Record<string, unknown>, ok: string) => Promise<boolean>
+  busy: boolean
+}) {
+  const [day, setDay] = useState('')
+  const [reason, setReason] = useState('')
+
+  const active = resources.filter(r => r.active)
+  // one row per room; a room wearing several names shows all of them
+  const rooms = [...new Map(active.map(r => [roomOf(r), r])).values()].map(rep => ({
+    id: rep.id,
+    key: roomOf(rep),
+    names: active.filter(r => roomOf(r) === roomOf(rep)).map(r => r.label),
+    memberIds: active.filter(r => roomOf(r) === roomOf(rep)).map(r => r.id),
+  }))
+  const [roomKey, setRoomKey] = useState<string | null>(null)
+  const room = rooms.find(r => r.key === roomKey) ?? rooms[0]
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
+
+  // a closure on any name in the room is one closed day
+  const closed = [...new Map(
+    blackouts
+      .filter(b => b.day >= today)
+      .map(b => {
+        const res = active.find(r => r.id === b.resource_id)
+        const key = `${res ? roomOf(res) : b.resource_id}:${b.day}`
+        return [key, { key, day: b.day, reason: b.reason, roomId: res ? roomOf(res) : b.resource_id }]
+      }),
+  ).values()].sort((a, b) => a.day.localeCompare(b.day))
+
+  const idsFor = (roomId: string, d: string) =>
+    blackouts.filter(b => b.day === d && active.some(r => r.id === b.resource_id && roomOf(r) === roomId)).map(b => b.id)
+
+  const bookingsOn = (d: string) =>
+    bookings.filter(b => b.status !== 'cancelled'
+      && new Date(b.start_at).toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' }) === d).length
+
+  const nameOf = (roomId: string) => {
+    const r = rooms.find(x => x.key === roomId)
+    return r ? r.names.join(' / ') : 'Studio'
+  }
+
+  const longDay = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', {
+      timeZone: 'Australia/Melbourne', weekday: 'long', day: 'numeric', month: 'long',
+    })
+
+  return (
+    <section className="flex flex-col gap-2">
+      <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Closed days</p>
+      <Card><CardContent className="flex flex-col gap-3 p-4">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Shut the studio for a date — a public holiday, a shoot day, anything you don&rsquo;t want booked.
+          It disappears from every booking page straight away.
+        </p>
+
+        {closed.length === 0 ? (
+          <p className="text-sm text-zinc-400">Nothing closed coming up.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
+            {closed.map(c => {
+              const n = bookingsOn(c.day)
+              return (
+                <div key={c.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                  <span className="text-sm font-medium">{longDay(c.day)}</span>
+                  {rooms.length > 1 && <span className="text-xs text-zinc-400">{nameOf(c.roomId)}</span>}
+                  {c.reason && <span className="text-xs text-zinc-500 dark:text-zinc-400">{c.reason}</span>}
+                  {n > 0 && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      {n} booking{n > 1 ? 's' : ''} already on this day
+                    </span>
+                  )}
+                  <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" disabled={busy}
+                    onClick={() => void onSave({ action: 'remove_blackout', ids: idsFor(c.roomId, c.day) }, 'Open again')}>
+                    <Trash2 className="h-3.5 w-3.5" /> Reopen
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <Input type="date" value={day} min={today} className="w-44" onChange={e => setDay(e.target.value)} />
+          {rooms.length > 1 && (
+            <select value={room?.key ?? ''} onChange={e => setRoomKey(e.target.value)}
+              className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800">
+              {rooms.map(r => <option key={r.key} value={r.key}>{r.names.join(' / ')}</option>)}
+            </select>
+          )}
+          <Input value={reason} placeholder="Reason (optional) — e.g. public holiday" className="max-w-xs"
+            onChange={e => setReason(e.target.value)} />
+          <Button size="sm" disabled={busy || !day || !room} onClick={async () => {
+            if (await onSave({ action: 'add_blackout', resource_id: room?.id, day, reason }, 'Closed — it is off the booking pages')) {
+              setDay(''); setReason('')
+            }
+          }}><Plus className="h-3.5 w-3.5" /> Close this day</Button>
+        </div>
+        {room && room.names.length > 1 && (
+          <p className="text-xs text-zinc-400">
+            {room.names.join(' and ')} are the same room, so closing it closes all of them.
+          </p>
+        )}
+      </CardContent></Card>
+    </section>
+  )
+}
+
 export default function BookingsPage() {
   const [data, setData] = useState<{
     needs_schema: boolean; services: Service[]; resources: Resource[]
-    availability: Availability[]; blackouts: unknown[]; bookings: Booking[]
+    availability: Availability[]; blackouts: Blackout[]; bookings: Booking[]
   } | null>(null)
   const [svcDraft, setSvcDraft] = useState({ name: '', duration_min: '60', price: '' })
   const [resDraft, setResDraft] = useState({ label: '', email: '' })
@@ -410,6 +539,10 @@ export default function BookingsPage() {
           </div>
         </CardContent></Card>
       </section>
+
+      {/* ── Closed days ── */}
+      <ClosedDays resources={data.resources} blackouts={data.blackouts}
+        bookings={data.bookings} onSave={post} busy={busy} />
 
       {/* ── Bookings ── */}
       <section className="flex flex-col gap-2">

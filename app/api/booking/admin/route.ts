@@ -186,13 +186,26 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, count: rows.length })
       }
       case 'add_blackout': {
+        const day = String(body.day ?? '')
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('Pick a date')
+        const resourceId = String(body.resource_id ?? '')
+        if (!resourceId) throw new Error('Pick a room')
+        // Closing the same day twice is not an error and must not leave two
+        // rows: replace rather than insert. Two people doing it at once land
+        // on the same result, so there is nothing to race over.
+        await supabase.from('booking_blackouts').delete().eq('resource_id', resourceId).eq('day', day)
         const { error } = await supabase.from('booking_blackouts')
-          .insert({ resource_id: body.resource_id, day: body.day, reason: String(body.reason ?? '').slice(0, 200) || null })
+          .insert({ resource_id: resourceId, day, reason: String(body.reason ?? '').trim().slice(0, 200) || null })
         if (error) throw new Error(error.message)
         return NextResponse.json({ ok: true })
       }
       case 'remove_blackout': {
-        const { error } = await supabase.from('booking_blackouts').delete().eq('id', body.id)
+        // a room can hold several names, so re-opening a day may clear more
+        // than one row — the caller sends every id it is undoing
+        const ids = Array.isArray(body.ids) ? body.ids.map(String) : [String(body.id ?? '')]
+        const clean = ids.filter(Boolean)
+        if (clean.length === 0) throw new Error('Nothing to reopen')
+        const { error } = await supabase.from('booking_blackouts').delete().in('id', clean)
         if (error) throw new Error(error.message)
         return NextResponse.json({ ok: true })
       }
