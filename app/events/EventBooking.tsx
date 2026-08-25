@@ -30,9 +30,11 @@ const shortDay = (d: string) =>
 const longDay = (d: string) =>
   new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
 
+// 16px exactly: iOS Safari zooms the whole page when a focused input is
+// smaller than that, which throws the layout around mid-booking
 const field: React.CSSProperties = {
   width: '100%', background: 'transparent', border: `1px solid ${line}`,
-  color: '#fff', padding: '12px 14px', fontSize: '0.95rem', outline: 'none',
+  color: '#fff', padding: '13px 14px', fontSize: '16px', outline: 'none',
 }
 
 type Listed = {

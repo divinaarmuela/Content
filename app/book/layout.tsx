@@ -35,6 +35,8 @@ export default function BookLayout({ children }: { children: React.ReactNode }) 
         /* Links take the page's ink, never the browser's blue/purple. */
         .bk-scope a, .bk-scope a:visited, .bk-scope a:active { color: inherit; text-decoration: none; }
         .bk-scope ul, .bk-scope ol { list-style: none; margin: 0; padding: 0; }
+        /* iOS zooms the page when a focused field is under 16px */
+        .bk-scope input, .bk-scope textarea, .bk-scope select { font-size: 16px; }
         /* Keep a focus ring — losing it strands keyboard users — but paint
            it in the page's own ink, and only for keyboard focus. */
         .bk-scope :focus { outline: none; }

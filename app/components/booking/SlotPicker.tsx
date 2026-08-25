@@ -75,7 +75,9 @@ export default function SlotPicker({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 28, gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)', alignItems: 'start' }}>
+    // auto-fit rather than two fixed columns: on a phone the times drop
+    // below the month instead of being squeezed beside it
+    <div style={{ display: 'grid', gap: 28, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', alignItems: 'start' }}>
       {/* ── the month ── */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
