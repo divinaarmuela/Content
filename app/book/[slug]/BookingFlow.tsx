@@ -17,6 +17,7 @@ type Service = {
   name: string; slug: string; description: string | null
   duration_min: number; price_cents: number; currency: string
   requires_payment: boolean
+  image_url: string | null; location: string | null
 }
 
 const dayLabel = (d: string) =>
@@ -137,13 +138,20 @@ export default function BookingFlow({ slug }: { slug: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-3">
+        {service.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={service.image_url} alt={service.name}
+            className="aspect-[16/9] w-full border object-cover"
+            style={{ borderColor: 'var(--bk-line)' }} />
+        )}
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{service.name}</h1>
         <p className="text-xs uppercase tracking-[0.16em]" style={{ opacity: 0.55 }}>
           {service.duration_min} minutes · {price}
+          {service.location ? ` · ${service.location}` : ''}
         </p>
         {service.description && (
-          <p className="mt-1 max-w-prose text-sm leading-relaxed" style={{ opacity: 0.8 }}>{service.description}</p>
+          <p className="max-w-prose text-sm leading-relaxed" style={{ opacity: 0.8 }}>{service.description}</p>
         )}
       </header>
 

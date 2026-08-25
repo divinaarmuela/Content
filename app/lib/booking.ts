@@ -23,6 +23,9 @@ export type PublicService = {
   horizon_days: number
   requires_payment: boolean
   resource_id: string | null
+  /** hero image + where it happens — a room sells better than a paragraph */
+  image_url: string | null
+  location: string | null
 }
 
 export type PublicResource = { id: string; label: string; timezone: string }
@@ -43,7 +46,7 @@ export async function loadPublicService(
   if (!/^[a-z0-9-]{1,60}$/.test(slug)) return null
   const { data: svc } = await supabase
     .from('booking_services')
-    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment')
+    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment, image_url, location')
     .eq('slug', slug).eq('active', true).maybeSingle()
   if (!svc) return null
 
@@ -157,7 +160,7 @@ export async function availabilityFor(
 export async function listPublicServices(): Promise<PublicService[]> {
   const { data } = await supabase
     .from('booking_services')
-    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment')
+    .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment, image_url, location')
     .eq('active', true)
     .order('sort_order')
   return (data ?? []) as PublicService[]

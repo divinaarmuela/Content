@@ -17,6 +17,11 @@ alter table booking_services add column if not exists lead_time_min int not null
 alter table booking_services add column if not exists horizon_days  int not null default 60;
 alter table booking_services add column if not exists requires_payment boolean not null default false;
 
+-- a booking page with no picture of the room sells nothing — a hero image
+-- per service, plus the address people actually need to turn up to
+alter table booking_services add column if not exists image_url text;
+alter table booking_services add column if not exists location text;
+
 -- match a Stripe Checkout Session back to its booking (webhook fulfilment)
 alter table bookings add column if not exists checkout_ref text;
 create unique index if not exists bookings_checkout_ref_uidx

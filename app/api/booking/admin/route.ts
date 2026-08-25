@@ -66,6 +66,18 @@ export async function POST(req: Request) {
         if ('duration_min' in body) patch.duration_min = Math.min(1440, Math.max(5, Math.round(Number(body.duration_min) || 30)))
         if ('price_cents' in body) patch.price_cents = Math.max(0, Math.round(Number(body.price_cents) || 0))
         if ('active' in body) patch.active = body.active !== false
+        if ('location' in body) patch.location = String(body.location ?? '').trim().slice(0, 200) || null
+        if ('image_url' in body) {
+          // uploaded media only — never an arbitrary URL pasted into the page
+          const url = String(body.image_url ?? '').trim().slice(0, 2000)
+          if (url && !url.startsWith('https://')) {
+            return NextResponse.json({ error: 'Image must be an uploaded file' }, { status: 422 })
+          }
+          patch.image_url = url || null
+        }
+        // which mailbox delivers it — null means the first free one takes it
+        if ('resource_id' in body) patch.resource_id = body.resource_id || null
+        if ('requires_payment' in body) patch.requires_payment = body.requires_payment === true
         if (!Object.keys(patch).length) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
         const { data, error } = await supabase.from('booking_services').update(patch).eq('id', body.id).select().single()
         if (error) throw new Error(error.message)

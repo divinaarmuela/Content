@@ -25,16 +25,23 @@ export default async function BookIndexPage() {
           {services.map(s => (
             <li key={s.id}>
               <Link href={`/book/${s.slug}`}
-                className="flex flex-col gap-1 border p-5 transition-opacity hover:opacity-75"
+                className="flex flex-col gap-1 border transition-opacity hover:opacity-75"
                 style={{ borderColor: 'var(--bk-line)' }}>
+                {s.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.image_url} alt={s.name} className="aspect-[21/9] w-full object-cover" />
+                )}
+                <span className="flex flex-col gap-1 p-5">
                 <span className="text-lg font-medium tracking-tight">{s.name}</span>
                 <span className="text-[11px] uppercase tracking-[0.16em]" style={{ opacity: 0.55 }}>
                   {s.duration_min} minutes
                   {s.price_cents > 0 ? ` · ${s.currency} $${(s.price_cents / 100).toFixed(2)}` : ' · Free'}
+                  {s.location ? ` · ${s.location}` : ''}
                 </span>
                 {s.description && (
                   <span className="mt-1 text-sm leading-relaxed" style={{ opacity: 0.8 }}>{s.description}</span>
                 )}
+                </span>
               </Link>
             </li>
           ))}

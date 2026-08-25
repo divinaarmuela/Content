@@ -1,16 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, Clock, DollarSign, Link as LinkIcon } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Link as LinkIcon, ImagePlus } from 'lucide-react'
 import { minToLabel } from '../../lib/booking-core'
 import BookingCalendar from './BookingCalendar'
+import { uploadMedia } from '../uploadMedia'
 
-type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null }
+type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
 type Availability = { id: string; resource_id: string; weekday: number; start_min: number; end_min: number }
 type Booking = {
@@ -21,6 +22,44 @@ type Booking = {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const money = (c: number, cur = 'AUD') => c === 0 ? 'Free' : new Intl.NumberFormat('en-AU', { style: 'currency', currency: cur }).format(c / 100)
+
+/** The service's photo — what a customer actually sees first on the booking
+ *  page. Uploads straight to R2, same path as every other media upload. */
+function ServiceImage({
+  service, onSave,
+}: {
+  service: Service
+  onSave: (payload: Record<string, unknown>, ok: string) => Promise<boolean | undefined>
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  return (
+    <>
+      <button type="button" onClick={() => ref.current?.click()} disabled={busy}
+        title={service.image_url ? 'Change photo' : 'Add a photo'}
+        className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900">
+        {service.image_url
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={service.image_url} alt="" className="h-full w-full object-cover" />
+          : busy ? <span className="text-[9px]">…</span> : <ImagePlus className="h-4 w-4" />}
+      </button>
+      {/* sr-only, not hidden: a display:none input can refuse a scripted click */}
+      <input ref={ref} type="file" accept="image/*" className="sr-only"
+        onChange={async e => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (!file) return
+          setBusy(true)
+          try {
+            const { url } = await uploadMedia(file, { purpose: 'production' })
+            await onSave({ action: 'update_service', id: service.id, image_url: url }, 'Photo updated')
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Upload failed')
+          } finally { setBusy(false) }
+        }} />
+    </>
+  )
+}
 
 export default function BookingsPage() {
   const [data, setData] = useState<{
@@ -84,6 +123,7 @@ export default function BookingsPage() {
           {data.services.length === 0 && <p className="text-sm text-zinc-400">No services yet — add one below.</p>}
           {data.services.map(s => (
             <div key={s.id} className="flex items-center gap-3 border-b border-zinc-100 py-2 last:border-0 dark:border-zinc-800">
+              <ServiceImage service={s} onSave={post} />
               <span className="text-sm font-medium">{s.name}</span>
               <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{s.duration_min}m</span>
               <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(s.price_cents, s.currency)}</span>
