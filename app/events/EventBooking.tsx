@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import EmbeddedPayment from '../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../components/booking/CancellationPolicy'
 import SlotPicker from '../components/booking/SlotPicker'
@@ -57,6 +57,16 @@ export default function EventBooking() {
   const [error, setError] = useState<string | null>(null)
   const [payment, setPayment] = useState<string | null>(null)
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
+  const topRef = useRef<HTMLDivElement>(null)
+
+  // Changing step swaps the content but keeps the scroll position, so on a
+  // phone you land halfway down whatever replaced it. Bring the section back
+  // into view whenever the step changes.
+  useEffect(() => {
+    if (payment || done || slug) {
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [payment, done, slug])
 
   useEffect(() => {
     void fetch('/api/booking/public/services')
@@ -121,7 +131,7 @@ export default function EventBooking() {
 
   if (done) {
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left' }}>
+      <div ref={topRef} style={{ maxWidth: 520, margin: '0 auto', border: `1px solid ${line}`, padding: 28, textAlign: 'left', scrollMarginTop: 90 }}>
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>YOU&rsquo;RE IN</p>
         <p style={{ marginTop: 12, fontSize: '1.05rem', lineHeight: 1.5 }}>
           {service?.name ?? "Your session"} — {new Date(done.start_at).toLocaleString('en-AU', {
@@ -141,7 +151,7 @@ export default function EventBooking() {
 
   if (payment) {
     return (
-      <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left' }}>
+      <div ref={topRef} style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
         <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', marginBottom: 14 }}>
           SEAT HELD FOR 30 MINUTES
         </p>
@@ -206,7 +216,7 @@ export default function EventBooking() {
     : 'Free'
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left' }}>
+    <div ref={topRef} style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
       <button type="button"
         onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null) }}
         style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>

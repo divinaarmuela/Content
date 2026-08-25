@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ServiceCopy from '../../components/booking/ServiceCopy'
 import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../../components/booking/CancellationPolicy'
@@ -52,6 +52,13 @@ export default function BookingFlow({ slug }: { slug: string }) {
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   /** set once the slot is held and Stripe is ready to take the money */
   const [payment, setPayment] = useState<{ clientSecret: string; when: string } | null>(null)
+  const topRef = useRef<HTMLDivElement>(null)
+
+  // a step change swaps the content under the reader's scroll position;
+  // without this you land mid-page on a phone
+  useEffect(() => {
+    if (payment || done) topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [payment, done])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -134,7 +141,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
 
   if (payment) {
     return (
-      <div className="flex flex-col gap-5">
+      <div ref={topRef} className="flex flex-col gap-5" style={{ scrollMarginTop: 24 }}>
         <div className="flex flex-col gap-1">
           <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.5 }}>Almost done</p>
           <h2 className="text-2xl font-medium tracking-tight">{service.name}</h2>
@@ -154,7 +161,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
 
   if (done) {
     return (
-      <div className="flex flex-col gap-4 border p-6" style={{ borderColor: 'var(--bk-line)' }}>
+      <div ref={topRef} className="flex flex-col gap-4 border p-6" style={{ borderColor: 'var(--bk-line)', scrollMarginTop: 24 }}>
         <p className="text-xs uppercase tracking-[0.18em]" style={{ opacity: 0.55 }}>Confirmed</p>
         <h2 className="text-2xl font-medium tracking-tight">You&rsquo;re booked in</h2>
         <p className="text-sm leading-relaxed">
