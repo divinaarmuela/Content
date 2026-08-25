@@ -53,6 +53,17 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
 const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 
 /**
+ * Pages nobody holds by role — not even a super admin.
+ *
+ * The ladder answers "what does this ROLE do". Some pages instead belong to
+ * a named handful of people (bookings is the shared mailboxes: contact@,
+ * tech@, hello@, plus Martin), and squeezing that into a role would either
+ * hand it to every super admin or invent a role for four people. So it is
+ * granted per person, and the default for everyone is no.
+ */
+export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
+
+/**
  * The default ladder, mirroring what the sidebar has always done: editors
  * live on the production board, schedulers on the scheduler and calendar,
  * clients get nothing, and account managers and above see everything.
@@ -60,6 +71,8 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
   if (role === 'client') return false
+  // a grant-only page is never default, however senior the role
+  if (GRANT_ONLY_PAGES.has(href)) return false
   // every team role gets the Overview, their own Notifications feed, and
   // Settings (their profile and notification preferences live there)
   const personal = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']

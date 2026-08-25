@@ -23,6 +23,21 @@ export function announceItemChange(args: {
 
 /** Same contract for shoot briefs: open shoot lists and brief pages refetch
  *  on the hint. Rides the production channel — its listeners blanket-reload. */
+/** A booking appeared, moved, or was cancelled — every open bookings page
+ *  refreshes itself. Rides the same channel as production changes; the
+ *  `booking:` prefix keeps it distinguishable from an item id. */
+export function announceBookingChange(args: { booking_id: string; kind: string }) {
+  void inngest.realtime
+    .publish(productionChannel.changed, {
+      item_id: `booking:${args.booking_id}`,
+      client_id: 'booking',
+      status: args.kind,
+      kind: 'updated' as const,
+      ts: Date.now(),
+    })
+    .catch(e => console.error('booking realtime publish failed:', e))
+}
+
 export function announceBatchChange(args: {
   batch_id: string
   client_id: string

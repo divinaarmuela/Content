@@ -1,21 +1,34 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { requireRole, authzErrorResponse } from '../../../lib/authz'
+import { requireRole, authzErrorResponse, AuthzError } from '../../../lib/authz'
 
 /**
- * Dashboard booking config + management — services, bookable resources
- * (tech@/hello@/contact@), weekly availability, blackout days, and the
- * booking list. Account-manager+. One route: GET returns everything,
- * POST carries an `action`. Everything degrades to empty until
- * supabase/booking.sql has run.
+ * Dashboard booking config + management — services, bookable resources,
+ * weekly availability, blackout days, and the booking list. One route: GET
+ * returns everything, POST carries an `action`. Everything degrades to empty
+ * until supabase/booking.sql has run.
+ *
+ * Access is a NAMED list, not a role: the shared mailboxes and Martin own
+ * bookings, so /dashboard/bookings is a grant-only page. Hiding the nav item
+ * is presentation — this is where it is actually enforced.
  */
+
+async function requireBookingsAccess() {
+  const user = await requireRole('account_manager')
+  const { data } = await supabase.from('user_page_access')
+    .select('hidden').eq('team_user_id', user.id).eq('href', '/dashboard/bookings').maybeSingle()
+  if (!data || data.hidden) {
+    throw new AuthzError('Bookings is limited to the people who run it', 403)
+  }
+  return user
+}
 
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'service'
 
 export async function GET() {
   try {
-    await requireRole('account_manager')
+    await requireBookingsAccess()
     const [services, resources, availability, blackouts, bookings] = await Promise.all([
       supabase.from('booking_services').select('*').order('sort_order').order('name'),
       supabase.from('booking_resources').select('*').order('label'),
@@ -43,7 +56,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const user = await requireRole('account_manager')
+    const user = await requireBookingsAccess()
     const body = await req.json()
     const action = String(body.action ?? '')
 

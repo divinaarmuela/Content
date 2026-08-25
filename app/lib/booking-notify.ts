@@ -13,8 +13,19 @@ import type { PublicService, PublicResource } from './booking'
  */
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mdmmarketing.com.au'
-/** The shared inbox that sees every booking, whoever it is with. */
-const WATCH_INBOX = 'contact@mdmmarketing.com.au'
+/**
+ * Who watches every booking, whoever it is with.
+ *
+ * A named list, not a role: bookings belong to the shared mailboxes and to
+ * Martin, and most super admins have no business being paged about a podcast
+ * slot. This matches the grant-only access on /dashboard/bookings.
+ */
+const WATCHERS = [
+  'contact@mdmmarketing.com.au',
+  'tech@mdmmarketing.com.au',
+  'hello@mdmmarketing.com.au',
+  'martin@mdmmarketing.com.au',
+]
 
 export type BookingRow = {
   id: string
@@ -69,8 +80,10 @@ export async function notifyNewBooking(input: {
   }).catch(e => console.error('booking customer mail:', e))
 
   // ── the team: the mailbox that owns the slot, plus the shared inbox ──
-  const recipients = [...new Set([resource.id ? await resourceEmail(resource.id) : null, WATCH_INBOX]
-    .filter((e): e is string => Boolean(e)))]
+  const recipients = [...new Set([
+    resource.id ? await resourceEmail(resource.id) : null,
+    ...WATCHERS,
+  ].filter((e): e is string => Boolean(e)))]
 
   for (const to of recipients) {
     await notify({
@@ -78,6 +91,8 @@ export async function notifyNewBooking(input: {
       eventType: 'booking_new_team',
       entityType: 'booking',
       entityId: `${booking.id}#${to}`,
+      // the id is what puts it in their notification bell, not just their inbox
+      recipientId: await teamUserIdFor(to),
       recipientEmail: to,
       subject: `New booking: ${service.name} — ${when}`,
       bodyHtml: renderEmail(
@@ -101,6 +116,19 @@ async function resourceEmail(resourceId: string): Promise<string | null> {
   return data?.email ?? null
 }
 
+/**
+ * The team_user behind a mailbox, so the in-app bell shows the booking too.
+ *
+ * The notifications page reads notification_log by recipient_id — an email
+ * with no id lands in the inbox but never in the bell, which is exactly the
+ * kind of "I never saw it" gap bookings cannot afford.
+ */
+async function teamUserIdFor(email: string): Promise<string | null> {
+  const { data } = await supabase.from('team_users')
+    .select('id').ilike('email', email).eq('active_status', true).maybeSingle()
+  return data?.id ?? null
+}
+
 /** The customer moved their own booking — tell them and the team. */
 export async function notifyBookingChanged(input: {
   booking: BookingRow
@@ -120,7 +148,7 @@ export async function notifyBookingChanged(input: {
 
   const stamp = Date.now()
   const teamEmail = await resourceEmail(resource.id)
-  const everyone = [...new Set([booking.customer_email, teamEmail, WATCH_INBOX]
+  const everyone = [...new Set([booking.customer_email, teamEmail, ...WATCHERS]
     .filter((e): e is string => Boolean(e)))]
 
   for (const to of everyone) {
@@ -130,6 +158,7 @@ export async function notifyBookingChanged(input: {
       eventType: cancelled ? 'booking_cancelled' : 'booking_moved',
       entityType: 'booking',
       entityId: `${booking.id}#${stamp}#${to}`,
+      recipientId: isCustomer ? null : await teamUserIdFor(to),
       recipientEmail: to,
       subject: title,
       bodyHtml: renderEmail(

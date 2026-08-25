@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { loadPublicService, availabilityFor } from '../../../../lib/booking'
 import { zonedToUtc } from '../../../../lib/booking-core'
 import { notifyNewBooking } from '../../../../lib/booking-notify'
+import { announceBookingChange } from '../../../../lib/production-live'
 
 /**
  * PUBLIC, unauthenticated: take a booking.
@@ -107,6 +108,9 @@ export async function POST(req: Request) {
       }
       throw new Error(error.message)
     }
+
+    // every open bookings page hears about it immediately
+    announceBookingChange({ booking_id: booking.id, kind: 'created' })
 
     // fire-and-forget: a mail hiccup must never lose a confirmed booking
     notifyNewBooking({

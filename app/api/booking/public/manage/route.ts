@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { loadPublicService, availabilityFor, type PublicResource } from '../../../../lib/booking'
 import { zonedToUtc, utcToZoned } from '../../../../lib/booking-core'
 import { notifyBookingChanged } from '../../../../lib/booking-notify'
+import { announceBookingChange } from '../../../../lib/production-live'
 
 /**
  * PUBLIC: a customer managing their own booking.
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
         .select('id').maybeSingle()
       if (!done) return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
 
+      announceBookingChange({ booking_id: booking.id, kind: 'cancelled' })
       notifyBookingChanged({
         booking: { ...booking, public_ref: booking.public_ref },
         service: svc, resource, previousStart: booking.start_at, cancelled: true,
@@ -136,6 +138,7 @@ export async function POST(req: Request) {
     }
     if (!moved) return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
 
+    announceBookingChange({ booking_id: booking.id, kind: 'moved' })
     notifyBookingChanged({
       booking: { ...booking, start_at: moved.start_at, public_ref: moved.public_ref },
       service: svc, resource, previousStart,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  GRANTABLE_PAGES, canSeePage, canSeeSubpage, defaultAllows, isGrantablePage,
-  normaliseGrantedPages, subpageKey, visiblePages,
+  GRANTABLE_PAGES, GRANT_ONLY_PAGES, canSeePage, canSeeSubpage, defaultAllows,
+  isGrantablePage, normaliseGrantedPages, subpageKey, visiblePages,
 } from '../app/lib/page-access-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -89,8 +89,9 @@ describe('defaultAllows — the ladder as it always was', () => {
     for (const role of TEAM_ROLES) expect(defaultAllows(role, '/dashboard')).toBe(true)
   })
 
-  it('gives super admins every page', () => {
+  it('gives super admins every page except the grant-only ones', () => {
     for (const { href } of GRANTABLE_PAGES) {
+      if (GRANT_ONLY_PAGES.has(href)) continue
       expect(defaultAllows('super_admin', href)).toBe(true)
     }
   })
@@ -99,7 +100,7 @@ describe('defaultAllows — the ladder as it always was', () => {
     const excluded = ['/dashboard/leads', '/dashboard/audience', '/dashboard/reports']
     for (const href of excluded) expect(defaultAllows('account_manager', href)).toBe(false)
     for (const { href } of GRANTABLE_PAGES) {
-      if (excluded.includes(href)) continue
+      if (excluded.includes(href) || GRANT_ONLY_PAGES.has(href)) continue
       expect(defaultAllows('account_manager', href)).toBe(true)
     }
     // and a grant can still open them for a specific person
@@ -135,8 +136,10 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
     expect(canSeePage(null, '/dashboard/leads', ['/dashboard/leads'])).toBe(false)
   })
 
-  it('a super admin sees everything with no grants at all', () => {
-    for (const { href } of GRANTABLE_PAGES) expect(canSeePage('super_admin', href, [])).toBe(true)
+  it('a super admin sees everything with no grants, bar the grant-only pages', () => {
+    for (const { href } of GRANTABLE_PAGES) {
+      expect(canSeePage('super_admin', href, [])).toBe(!GRANT_ONLY_PAGES.has(href))
+    }
   })
 })
 
@@ -202,5 +205,24 @@ describe('normaliseGrantedPages', () => {
         expect(canSeePage(role, href, cleaned)).toBe(true)
       }
     }
+  })
+})
+
+describe('grant-only pages — a named handful, not a role', () => {
+  const BOOKINGS = '/dashboard/bookings'
+  it('nobody gets it by role, super admin included', () => {
+    for (const role of TEAM_ROLES) expect(defaultAllows(role, BOOKINGS)).toBe(false)
+    expect(defaultAllows('client', BOOKINGS)).toBe(false)
+  })
+  it('a grant opens it, for a super admin too', () => {
+    expect(canSeePage('super_admin', BOOKINGS, [])).toBe(false)
+    expect(canSeePage('super_admin', BOOKINGS, [BOOKINGS])).toBe(true)
+    expect(canSeePage('account_manager', BOOKINGS, [BOOKINGS])).toBe(true)
+  })
+  it('still never reaches a client', () => {
+    expect(canSeePage('client', BOOKINGS, [BOOKINGS])).toBe(false)
+  })
+  it('the grant survives normalisation (it is not a default)', () => {
+    expect(normaliseGrantedPages([BOOKINGS], 'super_admin')).toEqual([BOOKINGS])
   })
 })

@@ -10,6 +10,7 @@ import { Plus, Trash2, Clock, DollarSign, Link as LinkIcon, ImagePlus } from 'lu
 import { minToLabel } from '../../lib/booking-core'
 import BookingCalendar from './BookingCalendar'
 import { uploadMedia } from '../uploadMedia'
+import { useProductionLive } from '../production/useProductionLive'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
@@ -79,6 +80,8 @@ export default function BookingsPage() {
     else setData({ needs_schema: true, services: [], resources: [], availability: [], blackouts: [], bookings: [] })
   }, [])
   useEffect(() => { void load() }, [load])
+  // a booking taken on the public page shows up here without a refresh
+  useProductionLive(load)
 
   const post = async (payload: Record<string, unknown>, ok: string) => {
     setBusy(true)
@@ -157,7 +160,7 @@ export default function BookingsPage() {
 
       {/* ── Resources + availability ── */}
       <section className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Who&rsquo;s bookable · availability</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Opening hours</p>
         <Card><CardContent className="flex flex-col gap-4 p-4">
           {data.resources.length === 0 && <p className="text-sm text-zinc-400">Add a bookable person or mailbox (e.g. tech@, hello@, contact@).</p>}
           {data.resources.map(r => (
@@ -220,45 +223,76 @@ function ResourceRow({ resource, availability, onSave, busy }: {
   resource: Resource; availability: Availability[]
   onSave: (p: Record<string, unknown>, ok: string) => Promise<boolean>; busy: boolean
 }) {
-  // one simple start/end per weekday (the common case); blank = closed
+  /** One row per weekday: on/off plus a real time picker. Free-text "9:00"
+   *  boxes read as ambiguous (9am or 9pm?) and had to be typed twice a day —
+   *  <input type="time"> is unambiguous and takes one click. */
+  const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+  const toMin = (v: string) => {
+    const [h, m] = v.split(':').map(Number)
+    return Number.isFinite(h) ? h * 60 + (m || 0) : null
+  }
   const [grid, setGrid] = useState(() => DAYS.map((_, wd) => {
     const a = availability.find(x => x.weekday === wd)
-    return { on: !!a, start: a ? minToLabel(a.start_min).replace(/ (am|pm)/, '') : '9:00', end: a ? minToLabel(a.end_min).replace(/ (am|pm)/, '') : '17:00' }
+    return { on: !!a, start: a ? hhmm(a.start_min) : '09:00', end: a ? hhmm(a.end_min) : '17:00' }
   }))
+  const [dirty, setDirty] = useState(false)
+  const edit = (wd: number, patch: Partial<{ on: boolean; start: string; end: string }>) => {
+    setDirty(true)
+    setGrid(gr => gr.map((x, i) => (i === wd ? { ...x, ...patch } : x)))
+  }
 
   const save = async () => {
     const windows = grid.map((g, wd) => {
       if (!g.on) return null
-      const [sh, sm] = g.start.split(':').map(Number)
-      const [eh, em] = g.end.split(':').map(Number)
-      return { weekday: wd, start_min: sh * 60 + (sm || 0), end_min: eh * 60 + (em || 0) }
+      const s = toMin(g.start); const e = toMin(g.end)
+      if (s === null || e === null || e <= s) return null
+      return { weekday: wd, start_min: s, end_min: e }
     }).filter(Boolean)
-    await onSave({ action: 'set_availability', resource_id: resource.id, windows }, `${resource.label} hours saved`)
+    if (await onSave({ action: 'set_availability', resource_id: resource.id, windows }, 'Hours saved')) {
+      setDirty(false)
+    }
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{resource.label}</span>
         {resource.email && <span className="text-xs text-zinc-400">{resource.email}</span>}
-        <button className="ml-auto text-zinc-400 hover:text-rose-600" onClick={() => void onSave({ action: 'delete_resource', id: resource.id }, 'Resource removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs text-zinc-500"
+          onClick={() => { setDirty(true); setGrid(DAYS.map((_, wd) => ({ on: wd >= 1 && wd <= 5, start: '09:00', end: '17:00' }))) }}>
+          Weekdays 9–5
+        </Button>
+        <button className="ml-auto text-zinc-400 hover:text-rose-600" onClick={() => void onSave({ action: 'delete_resource', id: resource.id }, 'Removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
-      <div className="flex flex-wrap gap-2">
+
+      <div className="flex flex-col gap-1">
         {grid.map((g, wd) => (
-          <label key={wd} className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${g.on ? 'border-zinc-300 dark:border-zinc-600' : 'border-zinc-100 opacity-50 dark:border-zinc-800'}`}>
-            <input type="checkbox" checked={g.on} onChange={e => setGrid(gr => gr.map((x, i) => i === wd ? { ...x, on: e.target.checked } : x))} />
-            <span className="w-8 font-medium">{DAYS[wd]}</span>
-            {g.on && (
+          <div key={wd} className="flex items-center gap-3 text-sm">
+            <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2">
+              <input type="checkbox" checked={g.on} className="h-3.5 w-3.5 accent-blue-600"
+                onChange={e => edit(wd, { on: e.target.checked })} />
+              <span className={g.on ? '' : 'text-zinc-400'}>{DAYS[wd]}</span>
+            </label>
+            {g.on ? (
               <>
-                <input value={g.start} className="w-14 bg-transparent font-mono outline-none" onChange={e => setGrid(gr => gr.map((x, i) => i === wd ? { ...x, start: e.target.value } : x))} />
-                <span>–</span>
-                <input value={g.end} className="w-14 bg-transparent font-mono outline-none" onChange={e => setGrid(gr => gr.map((x, i) => i === wd ? { ...x, end: e.target.value } : x))} />
+                <input type="time" value={g.start} step={900}
+                  onChange={e => edit(wd, { start: e.target.value })}
+                  className="rounded border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs dark:border-zinc-700" />
+                <span className="text-zinc-400">to</span>
+                <input type="time" value={g.end} step={900}
+                  onChange={e => edit(wd, { end: e.target.value })}
+                  className="rounded border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs dark:border-zinc-700" />
               </>
+            ) : (
+              <span className="text-xs text-zinc-400">Closed</span>
             )}
-          </label>
+          </div>
         ))}
       </div>
-      <Button size="sm" variant="outline" className="w-fit" disabled={busy} onClick={() => void save()}>Save hours</Button>
+
+      <Button size="sm" className="w-fit" disabled={busy || !dirty} onClick={() => void save()}>
+        {dirty ? 'Save hours' : 'Saved'}
+      </Button>
     </div>
   )
 }
