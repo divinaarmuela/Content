@@ -79,11 +79,12 @@ function ServiceImage({
  * create and delete, which meant fixing a typo was a delete-and-retype and
  * setting a studio was impossible.
  */
-function ServiceRow({ service, onSave, busy, studios }: {
+function ServiceRow({ service, onSave, busy, studios, resources }: {
   service: Service
   onSave: (p: Record<string, unknown>, ok: string) => Promise<boolean | undefined>
   busy: boolean
   studios: string[]
+  resources: Resource[]
 }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState({
@@ -95,6 +96,7 @@ function ServiceRow({ service, onSave, busy, studios }: {
     location: service.location ?? '',
     requires_payment: service.requires_payment === true,
     active: service.active,
+    resource_id: service.resource_id ?? (resources[0]?.id ?? ''),
   })
   const dirty =
     draft.name !== service.name
@@ -105,6 +107,7 @@ function ServiceRow({ service, onSave, busy, studios }: {
     || draft.location !== (service.location ?? '')
     || draft.requires_payment !== (service.requires_payment === true)
     || draft.active !== service.active
+    || draft.resource_id !== (service.resource_id ?? (resources[0]?.id ?? ''))
 
   const save = async () => {
     const ok = await onSave({
@@ -117,6 +120,7 @@ function ServiceRow({ service, onSave, busy, studios }: {
       location: draft.location,
       requires_payment: draft.requires_payment,
       active: draft.active,
+      resource_id: draft.resource_id || null,
     }, 'Saved')
     if (ok) setOpen(false)
   }
@@ -159,12 +163,23 @@ function ServiceRow({ service, onSave, busy, studios }: {
             <label className="grid gap-1 text-xs text-zinc-500">Name
               <Input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">Studio
+            <label className="grid gap-1 text-xs text-zinc-500">Group it under
               <Input list="booking-studios" placeholder="e.g. MD House Podcast Studio"
                 value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} />
               <datalist id="booking-studios">
                 {studios.map(c => <option key={c} value={c} />)}
               </datalist>
+            </label>
+            {/* Which calendar it consumes. Two services on the SAME room must
+                share a resource or they will double-book it; two services in
+                different rooms must not, or one blocks the other. */}
+            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">
+              Which room/calendar it books
+              <select value={draft.resource_id}
+                onChange={e => setDraft(d => ({ ...d, resource_id: e.target.value }))}
+                className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800">
+                {resources.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
             </label>
             <label className="grid gap-1 text-xs text-zinc-500">Minutes
               <Input type="number" min={5} value={draft.duration_min}
@@ -290,6 +305,7 @@ export default function BookingsPage() {
           {data.services.length === 0 && <p className="text-sm text-zinc-400">No services yet — add one below.</p>}
           {data.services.map(s => (
             <ServiceRow key={s.id} service={s} onSave={post} busy={busy}
+              resources={data.resources}
               studios={[...new Set(data.services.map(x => x.category).filter(Boolean) as string[])]} />
           ))}
           <div className="mt-1 flex flex-wrap gap-2">
