@@ -24,6 +24,8 @@ type Service = {
 const MONO = 'var(--font-space-mono), monospace'
 const line = 'rgba(255,255,255,0.16)'
 
+const shortDay = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 const longDay = (d: string) =>
   new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -44,6 +46,7 @@ export default function EventBooking() {
   const [service, setService] = useState<Service | null>(null)
   const [days, setDays] = useState<DaySlots[]>([])
   const [loading, setLoading] = useState(true)
+  const [pickedDay, setPickedDay] = useState<string | null>(null)
   const [pick, setPick] = useState<{ day: string; slot: Slot } | null>(null)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '', company: '' })
   const [agreed, setAgreed] = useState(false)
@@ -202,7 +205,7 @@ export default function EventBooking() {
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'left' }}>
       <button type="button"
-        onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null) }}
+        onClick={() => { setSlug(null); setService(null); setDays([]); setPick(null); setPickedDay(null) }}
         style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
         ← ALL SESSIONS
       </button>
@@ -217,30 +220,58 @@ export default function EventBooking() {
         </p>
       )}
       <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>
-        1 · PICK A DATE
+        1 · PICK A DAY
       </p>
+      {/* days first, then that day's times — listing every slot for a month
+          at once was 250 buttons and nobody could find anything */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {days.flatMap(d => d.slots.map(s => {
-          const on = pick?.day === d.day && pick?.slot.min === s.min
+        {days.map(d => {
+          const on = pickedDay === d.day
           return (
-            <button key={`${d.day}-${s.min}`} type="button"
-              onClick={() => setPick({ day: d.day, slot: s })}
+            <button key={d.day} type="button"
+              onClick={() => { setPickedDay(d.day); setPick(null) }}
               style={{
                 border: `1px solid ${on ? '#fff' : line}`,
                 background: on ? '#fff' : 'transparent',
                 color: on ? '#000' : '#fff',
-                padding: '10px 14px', fontSize: '0.85rem', cursor: 'pointer',
+                padding: '9px 13px', fontSize: '0.82rem', cursor: 'pointer',
               }}>
-              {longDay(d.day)} · {s.label}
+              {shortDay(d.day)}
+              <span style={{ opacity: 0.55, marginLeft: 6 }}>{d.slots.length}</span>
             </button>
           )
-        }))}
+        })}
       </div>
+
+      {pickedDay && (
+        <>
+          <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', margin: '32px 0 12px' }}>
+            2 · PICK A TIME — {longDay(pickedDay).toUpperCase()}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {(days.find(d => d.day === pickedDay)?.slots ?? []).map(s => {
+              const on = pick?.slot.min === s.min && pick?.day === pickedDay
+              return (
+                <button key={s.min} type="button"
+                  onClick={() => setPick({ day: pickedDay, slot: s })}
+                  style={{
+                    border: `1px solid ${on ? '#fff' : line}`,
+                    background: on ? '#fff' : 'transparent',
+                    color: on ? '#000' : '#fff',
+                    padding: '10px 16px', fontSize: '0.85rem', fontFamily: MONO, cursor: 'pointer',
+                  }}>
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       {pick && (
         <>
           <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)', margin: '32px 0 12px' }}>
-            2 · YOUR DETAILS
+            3 · YOUR DETAILS
           </p>
           <div style={{ display: 'grid', gap: 12 }}>
             <input placeholder="Your name" value={form.name} style={field}
