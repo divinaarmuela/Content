@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import EmbeddedPayment from '../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../components/booking/CancellationPolicy'
 import SlotPicker from '../components/booking/SlotPicker'
+import { isUsablePhone } from '../lib/booking-core'
 
 /**
  * Booking for The Room, on the events page itself.
@@ -243,7 +244,8 @@ export default function EventBooking() {
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             <input placeholder="Email" type="email" value={form.email} style={field}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-            <input placeholder="Phone (optional)" value={form.phone} style={field}
+            <input placeholder="Phone" type="tel" inputMode="tel" autoComplete="tel"
+              value={form.phone} style={field}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
             <textarea placeholder="What do you do? (optional)" rows={3} value={form.notes}
               style={{ ...field, resize: 'vertical' }}
@@ -262,11 +264,11 @@ export default function EventBooking() {
           {error && <p style={{ color: '#ff8a8a', marginTop: 14, fontSize: '0.9rem' }}>{error}</p>}
 
           <button type="button" onClick={() => void submit()}
-            disabled={busy || !agreed || !form.name.trim() || !form.email.trim()}
+            disabled={busy || !agreed || !form.name.trim() || !form.email.trim() || !isUsablePhone(form.phone)}
             style={{
               marginTop: 20, background: '#fff', color: '#000', border: 'none',
               padding: '14px 26px', fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em',
-              cursor: busy ? 'default' : 'pointer', opacity: busy || !agreed || !form.name.trim() || !form.email.trim() ? 0.4 : 1,
+              cursor: busy ? 'default' : 'pointer', opacity: busy || !agreed || !form.name.trim() || !form.email.trim() || !isUsablePhone(form.phone) ? 0.4 : 1,
             }}>
             {busy ? 'HOLDING YOUR SEAT…' : `BOOK MY SEAT · ${price}`}
           </button>

@@ -267,3 +267,18 @@ export function policyFor(startAt: Date | string, now: Date = new Date()): Polic
     reason: 'This booking has already taken place.',
   }
 }
+
+/**
+ * Is this a usable phone number?
+ *
+ * Deliberately forgiving about shape — people write +61 4xx, 04xx xxx xxx,
+ * (03) 9xxx xxxx — and strict only about there being enough digits to
+ * actually call. Rejecting a real number because of a bracket loses a
+ * booking; accepting "12" gains nothing.
+ */
+export function isUsablePhone(raw: string | null | undefined): boolean {
+  const digits = String(raw ?? '').replace(/\D/g, '')
+  if (digits.length < 8 || digits.length > 15) return false
+  // a run of one repeated digit is a placeholder, not a phone number
+  return !/^(\d)\1+$/.test(digits)
+}

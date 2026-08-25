@@ -5,6 +5,7 @@ import ServiceCopy from '../../components/booking/ServiceCopy'
 import EmbeddedPayment from '../../components/booking/EmbeddedPayment'
 import CancellationPolicy from '../../components/booking/CancellationPolicy'
 import SlotPicker from '../../components/booking/SlotPicker'
+import { isUsablePhone } from '../../lib/booking-core'
 
 /**
  * The customer's side of a booking: pick a day, pick a time, leave details.
@@ -246,8 +247,9 @@ export default function BookingFlow({ slug }: { slug: string }) {
                     style={{ borderColor: 'var(--bk-line)' }} autoComplete="email" />
                 </label>
                 <label className="flex flex-col gap-1 text-xs sm:col-span-2" style={{ opacity: 0.8 }}>
-                  Phone <span style={{ opacity: 0.6 }}>(optional)</span>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  Phone
+                  <input type="tel" inputMode="tel" value={form.phone}
+                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     className="border bg-transparent px-3 py-2 text-sm outline-none"
                     style={{ borderColor: 'var(--bk-line)' }} autoComplete="tel" />
                 </label>
@@ -269,7 +271,7 @@ export default function BookingFlow({ slug }: { slug: string }) {
               {error && <p className="text-sm" style={{ color: '#f87171' }}>{error}</p>}
 
               <button type="button" onClick={() => void submit()}
-                disabled={busy || !agreed || !form.name.trim() || !form.email.trim()}
+                disabled={busy || !agreed || !form.name.trim() || !form.email.trim() || !isUsablePhone(form.phone)}
                 className="w-fit px-6 py-3 text-[11px] uppercase tracking-[0.16em] transition-opacity disabled:opacity-40"
                 style={{ background: 'var(--bk-ink)', color: 'var(--bk-bg)' }}>
                 {busy ? 'Booking…' : `Book ${dayLabel(pickedDay!)} at ${pickedSlot.label}`}

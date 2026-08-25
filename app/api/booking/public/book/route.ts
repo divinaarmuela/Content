@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { loadPublicService, availabilityFor } from '../../../../lib/booking'
-import { zonedToUtc } from '../../../../lib/booking-core'
+import { zonedToUtc, isUsablePhone } from '../../../../lib/booking-core'
 import { notifyNewBooking } from '../../../../lib/booking-notify'
 import { announceBookingChange } from '../../../../lib/production-live'
 
@@ -48,6 +48,10 @@ export async function POST(req: Request) {
     }
     if (!name) return NextResponse.json({ error: 'Your name is required' }, { status: 422 })
     if (!EMAIL.test(email)) return NextResponse.json({ error: 'Enter a valid email address' }, { status: 422 })
+    // a studio needs to reach the person on the day — phone is not optional
+    if (!isUsablePhone(phone)) {
+      return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 422 })
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(min)) {
       return NextResponse.json({ error: 'Pick a time' }, { status: 422 })
     }
@@ -100,7 +104,7 @@ export async function POST(req: Request) {
         end_at: endAt.toISOString(),
         customer_name: name,
         customer_email: email,
-        customer_phone: phone || null,
+        customer_phone: phone,
         notes: notes || null,
         // an unpaid-but-required booking holds the seat only until it is paid
         status: needsPayment ? 'pending' : 'confirmed',

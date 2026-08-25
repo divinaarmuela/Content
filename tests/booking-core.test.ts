@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser, seatsLeft, policyFor,
+  openSlots, minToLabel, labelToMin, zonedToUtc, utcToZoned, weekdayOf, parseServiceCopy, serviceTeaser, seatsLeft, policyFor, isUsablePhone,
 } from '../app/lib/booking-core'
 
 describe('openSlots', () => {
@@ -240,5 +240,22 @@ describe('policyFor — the cancellation windows', () => {
 
   it('a nonsense date never silently allows a refund', () => {
     expect(policyFor('not-a-date').refundPercent).toBe(0)
+  })
+})
+
+describe('isUsablePhone', () => {
+  it('accepts how Australians actually write numbers', () => {
+    for (const p of ['0412 345 678', '+61 412 345 678', '(03) 9123 4567', '03-9123-4567', '0391234567']) {
+      expect(isUsablePhone(p)).toBe(true)
+    }
+  })
+  it('rejects too short, too long, and obvious placeholders', () => {
+    for (const p of ['', '12345', '1234567', '0000000000', '1111111111', '1'.repeat(20)]) {
+      expect(isUsablePhone(p)).toBe(false)
+    }
+  })
+  it('rejects nothing at all', () => {
+    expect(isUsablePhone(null)).toBe(false)
+    expect(isUsablePhone(undefined)).toBe(false)
   })
 })
