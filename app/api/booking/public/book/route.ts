@@ -118,7 +118,7 @@ export async function POST(req: Request) {
       if (!error) { booking = data; break }
       lastError = error.message
       // this seat is gone — try the next one
-      if (/duplicate key|23505/.test(error.message)) continue
+      if (/duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(error.message)) continue
       break
     }
 
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
           { status: 503 },
         )
       }
-      if (lastError && /duplicate key|23505/.test(lastError)) {
+      if (lastError && /duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(lastError)) {
         return NextResponse.json({ error: 'That time just filled up — please pick another' }, { status: 409 })
       }
       throw new Error(lastError ?? 'Could not create the booking')

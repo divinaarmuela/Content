@@ -137,7 +137,7 @@ export async function POST(req: Request) {
       .eq('id', booking.id).neq('status', 'cancelled')
       .select('id, start_at, public_ref').maybeSingle()
     if (error) {
-      if (/duplicate key|23505/.test(error.message)) {
+      if (/duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(error.message)) {
         return NextResponse.json({ error: 'That time was just taken — pick another' }, { status: 409 })
       }
       throw new Error(error.message)

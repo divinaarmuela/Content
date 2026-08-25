@@ -9,7 +9,7 @@ describe('openSlots', () => {
     const slots = openSlots({
       windows: [{ start_min: 540, end_min: 660 }],
       durationMin: 30,
-      takenMins: [600],           // 10:00 taken
+      taken: [{ start_min: 600, end_min: 630 }],  // 10:00–10:30 taken
       nowMin: 555,                // it's 9:15 → 9:00 slot is gone
     })
     // candidates 540,570,600,630 → drop 540 (past), 600 (taken) → 570,630
@@ -18,21 +18,21 @@ describe('openSlots', () => {
 
   it('a slot must fit fully inside the window', () => {
     // 9:00–9:50, 30-min: only 9:00 and 9:20... 9:20+30=9:50 fits; 9:30 would end 10:00 > window
-    const slots = openSlots({ windows: [{ start_min: 540, end_min: 590 }], durationMin: 30, stepMin: 20, takenMins: [] })
+    const slots = openSlots({ windows: [{ start_min: 540, end_min: 590 }], durationMin: 30, stepMin: 20, taken: [] })
     expect(slots).toEqual([540, 560])
   })
 
   it('merges multiple windows and dedupes/sorts', () => {
     const slots = openSlots({
       windows: [{ start_min: 600, end_min: 660 }, { start_min: 540, end_min: 600 }],
-      durationMin: 60, takenMins: [],
+      durationMin: 60, taken: [],
     })
     expect(slots).toEqual([540, 600])
   })
 
   it('rejects bad rows and zero/negative durations', () => {
-    expect(openSlots({ windows: [{ start_min: 660, end_min: 540 }], durationMin: 30, takenMins: [] })).toEqual([])
-    expect(openSlots({ windows: [{ start_min: 540, end_min: 660 }], durationMin: 0, takenMins: [] })).toEqual([])
+    expect(openSlots({ windows: [{ start_min: 660, end_min: 540 }], durationMin: 30, taken: [] })).toEqual([])
+    expect(openSlots({ windows: [{ start_min: 540, end_min: 660 }], durationMin: 0, taken: [] })).toEqual([])
   })
 })
 
@@ -182,31 +182,64 @@ WHAT YOU RECEIVE:
 
 describe('seats — an event holds more than one person', () => {
   const day = { windows: [{ start_min: 1080, end_min: 1200 }], durationMin: 120 } // 18:00–20:00
+  const seat = (start: number) => ({ start_min: start, end_min: start + 120 })
 
   it('a private booking (capacity 1) closes as soon as it is taken', () => {
-    expect(openSlots({ ...day, takenMins: [] })).toEqual([1080])
-    expect(openSlots({ ...day, takenMins: [1080] })).toEqual([])
+    expect(openSlots({ ...day, taken: [] })).toEqual([1080])
+    expect(openSlots({ ...day, taken: [seat(1080)] })).toEqual([])
   })
 
   it('an event stays open until every seat is gone', () => {
-    const taken = [1080, 1080, 1080]
-    expect(openSlots({ ...day, capacity: 5, takenMins: taken })).toEqual([1080])
-    expect(openSlots({ ...day, capacity: 3, takenMins: taken })).toEqual([])
+    const taken = [seat(1080), seat(1080), seat(1080)]
+    expect(openSlots({ ...day, capacity: 5, taken })).toEqual([1080])
+    expect(openSlots({ ...day, capacity: 3, taken })).toEqual([])
   })
 
-  it('counts repeats as separate seats, not one booking', () => {
-    expect(seatsLeft([1080, 1080, 1080], 1080, 20)).toBe(17)
-    expect(seatsLeft([1080], 1080, 1)).toBe(0)
-    expect(seatsLeft([], 1080, 20)).toBe(20)
+  it('counts each booking as its own seat', () => {
+    expect(seatsLeft([seat(1080), seat(1080), seat(1080)], 1080, 120, 20)).toBe(17)
+    expect(seatsLeft([seat(1080)], 1080, 120, 1)).toBe(0)
+    expect(seatsLeft([], 1080, 120, 20)).toBe(20)
   })
 
   it('never reports negative seats if something oversold', () => {
-    expect(seatsLeft([1080, 1080, 1080], 1080, 2)).toBe(0)
+    expect(seatsLeft([seat(1080), seat(1080), seat(1080)], 1080, 120, 2)).toBe(0)
   })
 
   it('seats at one time do not consume another time', () => {
     const twoSlots = { windows: [{ start_min: 540, end_min: 780 }], durationMin: 120 }
-    expect(openSlots({ ...twoSlots, capacity: 2, takenMins: [540, 540] })).toEqual([660])
+    expect(openSlots({ ...twoSlots, capacity: 2, taken: [seat(540), seat(540)] })).toEqual([660])
+  })
+})
+
+describe('overlapping durations — the double-booking hole', () => {
+  const openAllDay = { windows: [{ start_min: 540, end_min: 1020 }] }   // 9:00–17:00
+
+  it('a 2-hour session blocks every hour it actually runs through', () => {
+    // booked 10:00–12:00; 11:00 sits INSIDE it and must not be offered
+    const free = openSlots({ ...openAllDay, durationMin: 60, taken: [{ start_min: 600, end_min: 720 }] })
+    expect(free).not.toContain(660)   // 11:00
+    expect(free).not.toContain(600)   // 10:00
+    expect(free).toContain(540)       // 9:00 is still fine
+    expect(free).toContain(720)       // 12:00, the moment it ends, is free
+  })
+
+  it('a short booking blocks a long session that would swallow it', () => {
+    // a 1-hour booking at 11:00–12:00 must stop a 2-hour session that would
+    // run 11:00–13:00 straight through it
+    const free = openSlots({ ...openAllDay, durationMin: 120, taken: [{ start_min: 660, end_min: 720 }] })
+    expect(free).not.toContain(660)
+    expect(free).toContain(540)   // 9:00–11:00 ends as the booking starts
+    expect(free).toContain(780)   // 13:00 is clear
+  })
+
+  it('back-to-back is allowed — half-open, not touching', () => {
+    const free = openSlots({ ...openAllDay, durationMin: 60, taken: [{ start_min: 540, end_min: 600 }] })
+    expect(free).toContain(600)       // starts exactly as the other ends
+  })
+
+  it('ignores a malformed span rather than blocking the whole day', () => {
+    const free = openSlots({ ...openAllDay, durationMin: 60, taken: [{ start_min: 600, end_min: 600 }] })
+    expect(free).toContain(600)
   })
 })
 

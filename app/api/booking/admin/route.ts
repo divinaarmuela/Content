@@ -243,7 +243,7 @@ export async function POST(req: Request) {
           .select('*, booking_services(name, duration_min), booking_resources(id, label, timezone)')
           .maybeSingle()
         if (error) {
-          if (/duplicate key|23505/.test(error.message)) {
+          if (/duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(error.message)) {
             return NextResponse.json({ error: 'That time is already taken' }, { status: 409 })
           }
           throw new Error(error.message)

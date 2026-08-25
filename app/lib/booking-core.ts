@@ -12,9 +12,10 @@ export type SlotInput = {
   durationMin: number
   /** step between candidate starts (default = duration) */
   stepMin?: number
-  /** start-times already taken, as minutes-from-midnight (local). Repeats
-   *  matter: each entry is one seat gone from that slot. */
-  takenMins: number[]
+  /** what is already booked, as local minute SPANS. Spans, not start times:
+   *  a 2-hour session booked at 10:00 occupies 11:00 too, and matching on
+   *  start times alone happily offered that hour to someone else. */
+  taken: { start_min: number; end_min: number }[]
   /** how many people fit in one slot. 1 = private booking, >1 = an event */
   capacity?: number
   /** if the day is today, minutes-from-midnight now (slots before it are gone) */
@@ -30,15 +31,11 @@ export function openSlots(input: SlotInput): number[] {
   const duration = clampMin(input.durationMin)
   if (!duration || duration <= 0) return []
   const step = clampMin(input.stepMin) || duration
-  // seats gone per start-time — a private booking fills at one, an event
-  // stays open until every seat is claimed
+  // a private booking fills at one; an event stays open until every seat goes
   const capacity = Math.max(1, Math.round(input.capacity ?? 1))
-  const taken = new Map<number, number>()
-  for (const m of input.takenMins) {
-    const min = clampMin(m)
-    if (min === null) continue
-    taken.set(min, (taken.get(min) ?? 0) + 1)
-  }
+  const spans = (input.taken ?? [])
+    .map(t => ({ s: clampMin(t.start_min), e: clampMin(t.end_min) }))
+    .filter((t): t is { s: number; e: number } => t.s !== null && t.e !== null && t.e > t.s)
   const floor = input.nowMin ?? -1
   const out: number[] = []
   for (const w of input.windows) {
@@ -46,8 +43,12 @@ export function openSlots(input: SlotInput): number[] {
     const we = clampMin(w.end_min)
     if (ws === null || we === null || we <= ws) continue
     for (let t = ws; t + duration <= we; t += step) {
-      if (t <= floor) continue                       // no slots in the past today
-      if ((taken.get(t) ?? 0) >= capacity) continue  // every seat is gone
+      if (t <= floor) continue                    // no slots in the past today
+      // OVERLAP, not equality: half-open [start, end) so a session ending at
+      // 11:00 leaves 11:00 free, while one running through it does not
+      const tEnd = t + duration
+      const clashes = spans.filter(sp => t < sp.e && sp.s < tEnd).length
+      if (clashes >= capacity) continue
       out.push(t)
     }
   }
@@ -55,9 +56,12 @@ export function openSlots(input: SlotInput): number[] {
 }
 
 /** Seats still free at a start-time — for "3 of 20 left" on an event. */
-export function seatsLeft(takenMins: number[], min: number, capacity: number): number {
+export function seatsLeft(
+  taken: { start_min: number; end_min: number }[], min: number, durationMin: number, capacity: number,
+): number {
   const cap = Math.max(1, Math.round(capacity || 1))
-  const gone = takenMins.filter(m => m === min).length
+  const end = min + Math.max(1, durationMin)
+  const gone = taken.filter(t => min < t.end_min && t.start_min < end).length
   return Math.max(0, cap - gone)
 }
 

@@ -142,7 +142,7 @@ export async function availabilityFor(
     supabase.from('booking_availability').select('resource_id, weekday, start_min, end_min').in('resource_id', ids),
     supabase.from('booking_blackouts').select('resource_id, day').in('resource_id', ids)
       .gte('day', fromDay).lte('day', lastDay),
-    supabase.from('bookings').select('resource_id, start_at').in('resource_id', ids)
+    supabase.from('bookings').select('resource_id, start_at, end_at').in('resource_id', ids)
       .neq('status', 'cancelled')
       // a day either side covers resources sitting in other timezones
       .gte('start_at', `${addDays(fromDay, -1)}T00:00:00Z`)
@@ -150,14 +150,26 @@ export async function availabilityFor(
   ])
 
   const blocked = new Set((blackouts ?? []).map(b => `${b.resource_id}:${b.day}`))
-  // taken start-times, as local minutes for the resource that holds them
-  const takenBy = new Map<string, number[]>()
+  // What is taken, as local minute SPANS. A 2-hour session booked at 10:00
+  // occupies 11:00 as well — carrying only its start time let a 1-hour
+  // service be offered right through the middle of it.
+  const takenBy = new Map<string, { start_min: number; end_min: number }[]>()
   for (const b of taken ?? []) {
     const res = resources.find(r => r.id === b.resource_id)
     if (!res) continue
-    const { day, minutes } = utcToZoned(new Date(b.start_at as string), res.timezone)
-    const key = `${b.resource_id}:${day}`
-    takenBy.set(key, [...(takenBy.get(key) ?? []), minutes])
+    const startLocal = utcToZoned(new Date(b.start_at as string), res.timezone)
+    const endAt = b.end_at ? new Date(b.end_at as string) : null
+    const endLocal = endAt ? utcToZoned(endAt, res.timezone) : null
+    // an end past midnight is clamped to the day so it still blocks the
+    // evening it actually occupies
+    const endMin = !endLocal
+      ? startLocal.minutes + 60
+      : endLocal.day === startLocal.day ? endLocal.minutes : 1440
+    const key = `${b.resource_id}:${startLocal.day}`
+    takenBy.set(key, [
+      ...(takenBy.get(key) ?? []),
+      { start_min: startLocal.minutes, end_min: Math.max(startLocal.minutes + 1, endMin) },
+    ])
   }
 
   const now = Date.now()
@@ -182,7 +194,7 @@ export async function availabilityFor(
         windows,
         durationMin: service.duration_min,
         capacity: service.capacity,
-        takenMins: takenBy.get(`${res.id}:${day}`) ?? [],
+        taken: takenBy.get(`${res.id}:${day}`) ?? [],
       })) {
         // lead time and horizon are real instants, not wall-clock guesses
         const at = zonedToUtc(day, min, res.timezone)
