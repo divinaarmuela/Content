@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, Clock, DollarSign } from 'lucide-react'
+import { Plus, Trash2, Clock, DollarSign, Link as LinkIcon } from 'lucide-react'
 import { minToLabel } from '../../lib/booking-core'
+import BookingCalendar from './BookingCalendar'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
@@ -29,6 +30,9 @@ export default function BookingsPage() {
   const [svcDraft, setSvcDraft] = useState({ name: '', duration_min: '60', price: '' })
   const [resDraft, setResDraft] = useState({ label: '', email: '' })
   const [busy, setBusy] = useState(false)
+  /** the month grid answers "what does that week look like"; the list is the
+   *  audit trail. Calendar first, because that is the question people ask. */
+  const [view, setView] = useState<'calendar' | 'list'>('calendar')
 
   const load = useCallback(async () => {
     const res = await fetch('/api/booking/admin')
@@ -84,7 +88,20 @@ export default function BookingsPage() {
               <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{s.duration_min}m</span>
               <span className="flex items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(s.price_cents, s.currency)}</span>
               {!s.active && <span className="rounded bg-zinc-100 px-1.5 text-[10px] uppercase text-zinc-500 dark:bg-zinc-800">archived</span>}
-              <button className="ml-auto text-zinc-400 hover:text-rose-600" onClick={() => void post({ action: 'delete_service', id: s.id }, 'Service removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+              {/* the whole point of a booking type is the link you send people */}
+              <button
+                className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                onClick={() => {
+                  const url = `${window.location.origin}/book/${s.slug}`
+                  void navigator.clipboard.writeText(url)
+                    .then(() => toast.success('Booking link copied'))
+                    .catch(() => toast.error(url))
+                }}>
+                <LinkIcon className="h-3.5 w-3.5" /> Copy link
+              </button>
+              <a href={`/book/${s.slug}`} target="_blank" rel="noreferrer noopener"
+                className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">Preview</a>
+              <button className="text-zinc-400 hover:text-rose-600" onClick={() => void post({ action: 'delete_service', id: s.id }, 'Service removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
           <div className="mt-1 flex flex-wrap gap-2">
@@ -118,7 +135,27 @@ export default function BookingsPage() {
 
       {/* ── Bookings ── */}
       <section className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookings</p>
+        <div className="flex items-center gap-3">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookings</p>
+          <div className="ml-auto flex rounded-md border border-zinc-200 p-0.5 dark:border-zinc-800">
+            {(['calendar', 'list'] as const).map(v => (
+              <button key={v} type="button" onClick={() => setView(v)}
+                className={`rounded px-2.5 py-1 text-xs capitalize transition-colors ${
+                  view === v ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-500'
+                }`}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {view === 'calendar' && (
+          <Card><CardContent className="p-4">
+            <BookingCalendar bookings={data.bookings} />
+          </CardContent></Card>
+        )}
+
+        {view === 'list' && (
         <Card><CardContent className="flex flex-col gap-1 p-4">
           {data.bookings.length === 0 && <p className="text-sm text-zinc-400">No bookings yet.</p>}
           {data.bookings.map(b => (
@@ -133,6 +170,7 @@ export default function BookingsPage() {
             </div>
           ))}
         </CardContent></Card>
+        )}
       </section>
     </div>
   )
