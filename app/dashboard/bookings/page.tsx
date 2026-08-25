@@ -13,7 +13,7 @@ import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 
-type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null }
+type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null; horizon_days?: number; lead_time_min?: number; capacity?: number }
 type Resource = { id: string; label: string; email: string | null; active: boolean }
 type Availability = { id: string; resource_id: string; weekday: number; start_min: number; end_min: number }
 type Booking = {
@@ -97,6 +97,9 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
     requires_payment: service.requires_payment === true,
     active: service.active,
     resource_id: service.resource_id ?? (resources[0]?.id ?? ''),
+    horizon_days: String(service.horizon_days ?? 60),
+    lead_time_min: String(service.lead_time_min ?? 120),
+    capacity: String(service.capacity ?? 1),
   })
   const dirty =
     draft.name !== service.name
@@ -108,6 +111,9 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
     || draft.requires_payment !== (service.requires_payment === true)
     || draft.active !== service.active
     || draft.resource_id !== (service.resource_id ?? (resources[0]?.id ?? ''))
+    || Number(draft.horizon_days) !== (service.horizon_days ?? 60)
+    || Number(draft.lead_time_min) !== (service.lead_time_min ?? 120)
+    || Number(draft.capacity) !== (service.capacity ?? 1)
 
   const save = async () => {
     const ok = await onSave({
@@ -121,6 +127,9 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
       requires_payment: draft.requires_payment,
       active: draft.active,
       resource_id: draft.resource_id || null,
+      horizon_days: Number(draft.horizon_days),
+      lead_time_min: Number(draft.lead_time_min),
+      capacity: Number(draft.capacity),
     }, 'Saved')
     if (ok) setOpen(false)
   }
@@ -189,6 +198,24 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
             <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">Where it happens
               <Input placeholder="Altona North, VIC" value={draft.location}
                 onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500">
+              How far ahead people can book
+              <span className="text-[11px] text-zinc-400">Days shown on the calendar</span>
+              <Input type="number" min={1} max={365} value={draft.horizon_days}
+                onChange={e => setDraft(d => ({ ...d, horizon_days: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500">
+              Notice needed
+              <span className="text-[11px] text-zinc-400">Minutes — 120 hides the next 2 hours</span>
+              <Input type="number" min={0} value={draft.lead_time_min}
+                onChange={e => setDraft(d => ({ ...d, lead_time_min: e.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">
+              Seats per slot
+              <span className="text-[11px] text-zinc-400">1 = private hire · more = an event several people can join</span>
+              <Input type="number" min={1} max={500} value={draft.capacity}
+                onChange={e => setDraft(d => ({ ...d, capacity: e.target.value }))} />
             </label>
           </div>
 

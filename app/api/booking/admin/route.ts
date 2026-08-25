@@ -122,6 +122,16 @@ export async function POST(req: Request) {
         // which mailbox delivers it — null means the first free one takes it
         if ('resource_id' in body) patch.resource_id = body.resource_id || null
         if ('requires_payment' in body) patch.requires_payment = body.requires_payment === true
+        // how far ahead people may book, and how much notice we need
+        if ('horizon_days' in body) {
+          patch.horizon_days = Math.min(365, Math.max(1, Math.round(Number(body.horizon_days) || 60)))
+        }
+        if ('lead_time_min' in body) {
+          patch.lead_time_min = Math.min(43200, Math.max(0, Math.round(Number(body.lead_time_min) || 0)))
+        }
+        if ('capacity' in body) {
+          patch.capacity = Math.min(500, Math.max(1, Math.round(Number(body.capacity) || 1)))
+        }
         if (!Object.keys(patch).length) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
         const { data, error } = await supabase.from('booking_services').update(patch).eq('id', body.id).select().single()
         if (error) throw new Error(error.message)
