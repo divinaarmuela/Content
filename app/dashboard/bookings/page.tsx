@@ -139,14 +139,6 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
           )}
           <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{service.duration_min}m</span>
           <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(service.price_cents, service.currency)}</span>
-          {service.requires_payment && (
-            <span title="Customers pay for this at checkout"
-              className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">takes payment</span>
-          )}
-          {!service.requires_payment && (
-            <span title="Anyone can book this without paying"
-              className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">free to book</span>
-          )}
           {!service.active && <span className="shrink-0 rounded bg-zinc-100 px-1.5 text-[10px] uppercase text-zinc-500 dark:bg-zinc-800">hidden</span>}
         </button>
 
