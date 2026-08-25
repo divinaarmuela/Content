@@ -256,8 +256,8 @@ function ResourceRow({ resource, availability, onSave, busy }: {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* the email is how alerts route, not something to read here */}
         <span className="text-sm font-medium">{resource.label}</span>
-        {resource.email && <span className="text-xs text-zinc-400">{resource.email}</span>}
         <Button size="sm" variant="ghost" className="h-7 text-xs text-zinc-500"
           onClick={() => { setDirty(true); setGrid(DAYS.map((_, wd) => ({ on: wd >= 1 && wd <= 5, start: '09:00', end: '17:00' }))) }}>
           Weekdays 9–5
