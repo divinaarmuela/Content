@@ -85,16 +85,31 @@ export default function EventBooking() {
   const [done, setDone] = useState<{ ref: string; start_at: string } | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
 
-  // Changing step swaps the content but keeps the scroll position, so on a
-  // phone you land halfway down whatever replaced it. Bring the section back
-  // into view whenever the step changes.
+  /**
+   * Changing step swaps the content but keeps the scroll position, so on a
+   * phone you land halfway down whatever replaced it.
+   *
+   * Which step is showing — NOT which state changed. Watching `slug` fired
+   * the moment a session was tapped, while the details were still loading and
+   * the catalogue was still on screen: the element being scrolled to did not
+   * exist yet, so nothing moved, and then the detail view rendered underneath
+   * someone already scrolled far down the list. It read as being thrown
+   * downward. Keying on the rendered step means the target always exists.
+   */
+  const step = payment ? 'pay'
+    : done ? 'done'
+      : expired ? 'expired'
+        : slug && service ? 'detail'
+          : 'list'
+  const settled = useRef(false)
   useEffect(() => {
+    // never on first paint — that would yank the page on load
+    if (!settled.current) { settled.current = true; return }
     // the payment step scrolls itself once Stripe's iframe is mounted —
     // doing it here too would fight that and land on the heading
-    if (!payment && (done || slug)) {
-      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [payment, done, slug])
+    if (step === 'pay') return
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [step])
 
   useEffect(() => {
     void fetch('/api/booking/public/services')
@@ -225,7 +240,7 @@ export default function EventBooking() {
       if (g) g.items.push(c); else groups.push({ name: key, items: [c] })
     }
     return (
-      <div style={{ width: CATALOGUE_W, margin: '0 auto', textAlign: 'left' }}>
+      <div ref={topRef} style={{ width: CATALOGUE_W, margin: '0 auto', textAlign: 'left', scrollMarginTop: 90 }}>
         {groups.map(g => (
           <div key={g.name} style={{ marginBottom: 36 }}>
             <p style={{ fontFamily: MONO, fontSize: LABEL_S, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 14 }}>
