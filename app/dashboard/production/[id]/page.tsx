@@ -786,8 +786,15 @@ export default function ItemDetailPage() {
    * value locally closes that window; the refetch that follows is the source
    * of truth, and the sequence guard keeps a slow answer from undoing it.
    */
-  const saveField = (patch: Record<string, unknown>, done: string) =>
-    fetch(`/api/production/items/${id}`, {
+  const saveField = (patch: Record<string, unknown>, done: string) => {
+    // applied BEFORE the round trip, not after. These fields save on blur, and
+    // blur is the same gesture that clicks the button next to them: typing a
+    // brief link and pressing "Submit brief for review" ran the click while
+    // the PATCH was still in the air, so the button was still disabled by the
+    // old value and the click died in silence. Optimistic here means the page
+    // agrees with what the person just typed; a failure snaps it back.
+    setDetail(d => (d ? { ...d, ...patch } as Detail : d))
+    return fetch(`/api/production/items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -795,13 +802,14 @@ export default function ItemDetailPage() {
       .then(async r => {
         if (!r.ok) {
           toast.error((await r.json().catch(() => ({}))).error ?? 'Save failed')
+          void load() // put the truth back
           return
         }
-        setDetail(d => (d ? { ...d, ...patch } as Detail : d))
         toast.success(done)
         void load()
       })
-      .catch(() => toast.error('Could not save — check your connection'))
+      .catch(() => { toast.error('Could not save — check your connection'); void load() })
+  }
 
   const saveOwner = async (ownerId: string) => {
     setBusy('owner')
