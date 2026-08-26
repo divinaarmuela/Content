@@ -18,8 +18,13 @@ export const glitch = (text: string) =>
 // Decode animation: every unsettled character flickers through random glyphs
 // in chunky ~80ms steps while characters settle left-to-right over `duration`.
 export function useScramble(text: string, opts?: { play?: boolean; duration?: number }) {
-  const { play = true, duration = 900 } = opts ?? {}
-  const [display, setDisplay] = useState(() => (prefersReduced() ? text : ''))
+  // 900ms of glyph noise reads as a broken page on a first paint; the decode
+  // settles fast enough to read as an effect
+  const { play = true, duration = 450 } = opts ?? {}
+  // starts as the REAL text: the server renders a readable word, and the
+  // decode plays over it once the browser gets there. It used to start empty,
+  // so every scramble was a blank gap in the first paint.
+  const [display, setDisplay] = useState(text)
   const raf = useRef(0)
 
   useEffect(() => {

@@ -1,7 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLamaReady } from './ready'
+
+// the hidden state is set BEFORE the browser paints, so nothing ever flashes
+// in and back out. useLayoutEffect does not exist on the server — React warns
+// if it is even referenced during SSR, hence the swap.
+const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 // Reference-site reveal. Exact hidden-state recipe observed on the reference:
 //   clip-path: inset(-10% -10% 110%); transform: translate(0, 80%) scale(0.96); opacity: 0
@@ -28,23 +33,34 @@ export default function Reveal({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [seen, setSeen] = useState(false)
+  // The server renders the content VISIBLE. Hiding it is a decision the
+  // browser makes, before its first paint, and only for blocks that are still
+  // below the fold — otherwise the whole page is a blank slab until an
+  // IntersectionObserver callback fires after hydration, which on a slow
+  // phone is the client's first impression of their portal.
+  const [hides, setHides] = useState(false)
   const ready = useLamaReady()
   // the reveal plays only once the preloader is gone, so entrances that are
   // in the first viewport actually animate instead of finishing behind it
-  const shown = seen && (ready || !gate)
+  const shown = !hides || (seen && (ready || !gate))
 
-  
-  useEffect(() => {
+  useBeforePaint(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setSeen(true); return }
     const el = ref.current
     if (!el) return
+    // already on screen → it is content, not an entrance: leave it alone.
+    // A GATED page has a preloader covering the first paint, so its hero
+    // entrance is still worth playing and nothing is ever seen blank.
+    const box = el.getBoundingClientRect()
+    if (!gate && box.top < window.innerHeight && box.bottom > 0) { setSeen(true); return }
+    setHides(true)
     const io = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) { setSeen(true); io.disconnect() } },
       { threshold: 0.15 },
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [])
+  }, [gate])
 
   return (
     <div ref={ref} className={className}>
