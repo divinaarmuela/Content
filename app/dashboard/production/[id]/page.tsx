@@ -371,6 +371,10 @@ export default function ItemDetailPage() {
   const canComment = role !== 'client'
     && (isSuper || hats.includes('editor') || hats.includes('account_manager') || hats.includes('scheduler'))
   const canSchedule = isSuper || hats.includes('scheduler')
+  // …but auto-publishing to a client's LIVE accounts is the scheduling team's
+  // job by title, not a hat anyone can be handed: /publish is role-gated, so
+  // showing these buttons to a handed editor would only ever produce a 403.
+  const canAutoPublish = isSuper || role === 'scheduler'
   // reviewing IS the job, and it is not per-item — owner picker, delete,
   // handoff, comment visibility, job-pack editing
   const canManage = isSuper || hats.includes('account_manager')
@@ -674,8 +678,8 @@ export default function ItemDetailPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {/* the manager says who's carrying this — the owner is who "Request
-              revisions" notifies and whose page this item sits on */}
+          {/* the manager says who's carrying this — the owner is who a
+              request for changes notifies, and whose page this item sits on */}
           {canManage && (
             <Select
               value={detail.owner_id ?? 'none'}
@@ -1341,6 +1345,11 @@ export default function ItemDetailPage() {
 
                     {/* connected publishing: post through the client's linked
                         social accounts instead of copying files by hand */}
+                    {!canAutoPublish ? (
+                      <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+                        Publishing to the channels is done by the scheduling team; add the live link here once it&rsquo;s up.
+                      </p>
+                    ) : (
                     <div className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
@@ -1401,6 +1410,7 @@ export default function ItemDetailPage() {
                         </>
                       )}
                     </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -1479,7 +1489,7 @@ export default function ItemDetailPage() {
       <Dialog open={revisionAsk !== null} onOpenChange={o => !o && busy === null && setRevisionAsk(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{revisionAsk?.label ?? 'Request revisions'}</DialogTitle>
+            <DialogTitle>{revisionAsk?.label}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -1501,7 +1511,7 @@ export default function ItemDetailPage() {
               disabled={busy !== null}
               onClick={() => revisionAsk && doTransition(revisionAsk.to, revisionAsk.label, undefined, undefined, revisionNote)}
             >
-              {busy !== null ? 'Working…' : revisionAsk?.label ?? 'Request revisions'}
+              {busy !== null ? 'Working…' : revisionAsk?.label}
             </Button>
           </DialogFooter>
         </DialogContent>

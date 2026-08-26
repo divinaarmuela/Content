@@ -26,6 +26,7 @@ import {
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { useRole } from '../useRole'
+import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
 import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
 import { usePersistedScope, useTeamNames } from '../production/workHooks'
@@ -91,6 +92,10 @@ export default function EditorPage() {
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
+  // the footer is a link to another PAGE — only offer it to someone who may
+  // open it. No grants are loaded here, so this is the role default; a
+  // person granted the page individually reaches it from the sidebar.
+  const canSeeScheduler = defaultAllows(me?.role ?? null, '/dashboard/scheduler')
 
   // managers can hand a loose job to somebody by name instead of waiting for
   // it to be picked up
@@ -163,7 +168,10 @@ export default function EditorPage() {
       viewer, editorAssignment,
     )
     : 0
-  const tail = editorTail(filtered)
+  // the tail counts what the board is SHOWING: under "Mine" it is my
+  // scheduled and published work, not the whole team's. Counting `filtered`
+  // ignored the scope switch entirely.
+  const tail = editorTail(visible)
 
   /* ── bulk select + delete: tick cards on the board instead of opening each ── */
   const [selectMode, setSelectMode] = useState(false)
@@ -430,7 +438,7 @@ export default function EditorPage() {
       )}
 
       {/* done, but kept visible: the two counts that belong to the next page */}
-      {ready && (
+      {ready && canSeeScheduler && (
         <Link href="/dashboard/scheduler"
           className="flex items-center gap-1.5 self-start rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100">
           <span className="font-mono font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{tail.scheduled}</span>

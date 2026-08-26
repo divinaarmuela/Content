@@ -30,17 +30,20 @@ export function TurnChip({ status, item, viewer, ownerName, turns }: {
   const turn = whoseTurn(status, item, viewer, turns)
   if (turn.hat === null) return null
 
-  if (turn.mine) {
-    return (
-      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-        Your turn
-      </span>
-    )
-  }
+  // UNASSIGNED FIRST: an open item is nobody's turn yet. An editor wears the
+  // editor hat on every unowned draft, so `mine` is true there too — asking
+  // it first made every open draft on the board read "Your turn".
   if (turn.unassigned) {
     return (
       <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
         Unassigned — anyone can take it
+      </span>
+    )
+  }
+  if (turn.mine) {
+    return (
+      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+        Your turn
       </span>
     )
   }

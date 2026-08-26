@@ -1,6 +1,8 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { notify, renderEmail } from './mailer'
+import { STATUS_LABELS, type ItemStatus } from './workflow-core'
+import { itemStatusLabel } from './brief-task-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -12,6 +14,7 @@ type DueItem = {
   client_id: string
   owner_id: string | null
   clients: { name: string } | null
+  work_kinds: { slug: string } | null
 }
 type Person = { id: string; email: string; name: string }
 
@@ -37,7 +40,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
 
   const { data, error } = await supabase
     .from('content_items')
-    .select('id, title, status, due_date, client_id, owner_id, scheduler_ids, clients(name)')
+    .select('id, title, status, due_date, client_id, owner_id, scheduler_ids, clients(name), work_kinds(slug)')
     .lte('due_date', tomorrow)
     .not('due_date', 'is', null)
     .not('status', 'in', '(scheduled,published)')
@@ -75,6 +78,11 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
   let emails = 0
   for (const item of items) {
     const tag = label(item.due_date, today)
+    // the stage in the words the dashboard uses — a shoot brief has its own
+    // vocabulary, so the kind decides. Never the raw database status.
+    const stage = itemStatusLabel(
+      item.work_kinds?.slug, item.status as ItemStatus, STATUS_LABELS[item.status as ItemStatus],
+    )
     const recipients = new Map<string, Person>()
     if (item.status === 'approved_for_scheduling') {
       // honour the handoff: an item assigned to specific schedulers reminds
@@ -99,7 +107,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
         bodyHtml: renderEmail(
           `${item.title} — ${tag}`,
           `<p><strong>${item.title}</strong> for ${item.clients?.name ?? 'a client'} is <strong>${tag}</strong> ` +
-          `(due ${item.due_date}) and is still in “${item.status.replace(/_/g, ' ')}”.</p>` +
+          `(due ${item.due_date}) and is still in “${stage}”.</p>` +
           (item.status === 'approved_for_scheduling'
             ? '<p>It is approved and waiting to be scheduled.</p>'
             : '<p>It has not reached scheduling yet.</p>'),

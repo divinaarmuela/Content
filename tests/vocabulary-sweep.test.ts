@@ -64,11 +64,7 @@ describe('no raw database words reach the screen', () => {
   // debt.
   const KNOWN: Known[] = [
     { file: 'app/dashboard/production/[id]/page.tsx', contains: 'status.replace(/_/g',
-      why: 'DEBT: raw item status shown on the detail page — should use STATUS_LABELS / itemStatusLabel' },
-    { file: 'app/lib/due-reminders.ts', contains: 'item.status.replace(/_/g',
-      why: 'DEBT: raw item status in the due-date reminder email — should use STATUS_LABELS' },
-    { file: 'app/lib/production-publish.ts', contains: 'status.replace(/_/g',
-      why: 'DEBT: raw item status in the publish-blocked message — should use STATUS_LABELS' },
+      why: 'publishStatusWord renders a SCHEDULE ROW publish_status — an integration state, not an item status. "scheduled" and "published" get real words; the underscore strip is only the tidy-up for an unmapped provider state, and is correct here.' },
     { file: 'app/dashboard/notifications/page.tsx', contains: 'r.event_type.replace(/_/g',
       why: 'event_type is an internal event name, not an item status' },
     { file: 'app/dashboard/social/[id]/page.tsx', contains: "METRIC_LABEL[k] ?? k.replace(/_/g",
@@ -104,8 +100,6 @@ describe('the one-board vocabulary is gone', () => {
   ]
 
   const KNOWN: Known[] = [
-    { file: 'app/dashboard/production/[id]/page.tsx', contains: 'Request revisions',
-      why: 'DEBT: two dialog fallbacks still say "Request revisions" — the live label is "Request changes"' },
     { file: 'app/api/production/items/route.ts', contains: 'Hand to a scheduler',
       why: 'a code comment describing the retired action; no user ever reads it' },
     { file: 'app/lib/workflow-core.ts', contains: 'Hand to a scheduler',

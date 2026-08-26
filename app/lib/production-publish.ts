@@ -6,6 +6,7 @@ import {
   isPlatform, mediaTypeFor,
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
+import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 
 /**
  * The bridge from production to the outside world.
@@ -90,7 +91,7 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   // of the workflow — publishing an item still in review would bypass it.
   const status = item.status as string
   if (!['approved_for_scheduling', 'scheduled', 'published'].includes(status)) {
-    plan.blocked = `This item is "${status.replace(/_/g, ' ')}" — it has not been approved for scheduling yet`
+    plan.blocked = `This item is "${STATUS_LABELS[status as ItemStatus] ?? status}" — it has not been approved for scheduling yet`
   }
 
   // newest version wins; that is the one reviewers signed off
