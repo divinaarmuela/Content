@@ -12,8 +12,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await requireRole('account_manager')
     const { id } = await params
     const item = await loadItemForUser(user, id)
-    if (item.status !== 'approved_for_scheduling') {
-      return NextResponse.json({ error: 'Only an approved item can be handed to a scheduler' }, { status: 400 })
+    // approved OR already scheduled: re-handing a scheduled item to someone
+    // else to publish is a real need, not an edge case. A published one is done.
+    if (!['approved_for_scheduling', 'scheduled'].includes(item.status)) {
+      return NextResponse.json(
+        { error: 'Only an approved or scheduled item can be handed to someone' },
+        { status: 400 },
+      )
     }
     const body = await req.json()
     const ids: string[] = Array.isArray(body.scheduler_ids)

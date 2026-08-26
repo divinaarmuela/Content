@@ -6,6 +6,21 @@ import {
 } from './workflow-core'
 import { visibleComments } from './comment-access-core'
 
+/**
+ * Every id interpolated into a PostgREST `.or()` string passes through here.
+ *
+ * These ids are database-sourced today, which is exactly the kind of fact that
+ * quietly stops being true. A filter string is not parameterised, so a value
+ * carrying a comma or a paren would rewrite the filter around it; this makes
+ * that impossible rather than merely unlikely.
+ */
+export function assertUuid(id: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new AuthzError('Bad identifier', 400)
+  }
+  return id
+}
+
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
 export async function accessibleClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null

@@ -366,7 +366,6 @@ export async function performTransition(
   }
 
   // requirement evidence
-  let latestVersion: { created_at?: string | null } | null = null
   if (check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
@@ -380,7 +379,6 @@ export async function performTransition(
         .limit(1)
         .maybeSingle()
       if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
-      latestVersion = latest
       const valid = versionSatisfiesSubmission(latest)
       if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
     }
@@ -391,6 +389,16 @@ export async function performTransition(
   // audit trail already knows when changes were asked for, so compare against
   // it. An item with no such record predates the trail — let it through.
   if (!isBriefTask && from === 'revision_required' && to === 'revision_complete') {
+    // fetched here rather than borrowed from the requirement branch above: if
+    // this edge ever stops requiring a reviewable asset, a borrowed null would
+    // block the move forever with a message about a version nobody asked for
+    const { data: latestVersion } = await supabase
+      .from('asset_versions')
+      .select('created_at')
+      .eq('item_id', item.id)
+      .order('version_number', { ascending: false })
+      .limit(1)
+      .maybeSingle()
     const { data: lastRequest } = await supabase
       .from('workflow_activity')
       .select('created_at')
@@ -487,8 +495,11 @@ export async function performTransition(
           .from('team_users')
           .select('id, email, name, role, active_status')
           .in('id', schedulerIds)
+        // the actor is NOT filtered out here: an approver who picks only
+        // themselves would leave chosen empty and fall back to the default
+        // broadcast — the whole team emailed. The loop below skips them.
         const chosen = (picked ?? []).filter(u =>
-          u.active_status && u.role !== 'client' && u.id !== actor.id)
+          u.active_status && u.role !== 'client')
         if (chosen.length > 0) people = chosen
       }
       for (const person of people) {

@@ -4,7 +4,7 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/a
 import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
 import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
-import { accessibleClientIds } from '../../../lib/production-access'
+import { accessibleClientIds, assertUuid } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
@@ -38,7 +38,8 @@ export async function GET(req: Request) {
         // or as one of the people handed its scheduling — sees it, whether or
         // not they're assigned the whole client. `cs` is jsonb containment;
         // scheduler_ids is a jsonb array of user ids.
-        const assigned = `owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`
+        const me = assertUuid(user.id)
+        const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
         q = clientIds.length === 0
           ? q.or(assigned)
           : q.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
     if (user.role === 'scheduler') {
       // a scheduler OWNING a job (they can be assigned work now) must see it
       // at any status — the status gate is for other people's items
-      q = q.or(`status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${user.id}`)
+      q = q.or(`status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${assertUuid(user.id)}`)
     }
     if (clientFilter) q = q.eq('client_id', clientFilter)
     if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)) {

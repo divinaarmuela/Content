@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
-import { accessibleClientIds } from '../../lib/production-access'
+import { accessibleClientIds, assertUuid } from '../../lib/production-access'
 import { ITEM_STATUSES, SCHEDULER_STATUSES, schedulerIdsOf } from '../../lib/workflow-core'
 import { SHOOT_BRIEF_SLUG } from '../../lib/brief-task-core'
 
@@ -44,10 +44,19 @@ export async function GET() {
     if (clientIds !== null) {
       // assignment grants visibility, same rule as the items API — owning the
       // job, or being handed its scheduling
-      const assigned = `owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`
+      const me = assertUuid(user.id)
+      const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
       itemsQ = clientIds.length === 0
         ? itemsQ.or(assigned)
         : itemsQ.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
+    }
+    if (user.role === 'scheduler') {
+      // accessibleClientIds is null for a scheduler — they are gated by STATUS,
+      // not by client — so without this the pipeline counts on their Overview
+      // included pre-approval work their pages would refuse to show them.
+      // Same rule as the items list: the approved queue, plus anything they own.
+      itemsQ = itemsQ.or(
+        `status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${assertUuid(user.id)}`)
     }
     const { data: itemRows, error: itemsErr } = await itemsQ
     // the production tables may not exist yet in a fresh environment — the
@@ -173,7 +182,8 @@ export async function GET() {
       .filter(i =>
         (i.owner_id === user.id
           && !['approved_for_scheduling', 'scheduled', 'published'].includes(i.status))
-        || ((SCHEDULER_STATUSES as readonly string[]).includes(i.status)
+        // a published item is finished — assigned or not, it is not a task
+        || (['approved_for_scheduling', 'scheduled'].includes(i.status)
           && schedulerIdsOf(i).includes(user.id)))
       .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
     return NextResponse.json({

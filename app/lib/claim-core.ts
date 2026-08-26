@@ -24,6 +24,17 @@ export type ClaimDecision =
   | { ok: true }
   | { ok: false; status: 400 | 403; error: string }
 
+// The status windows each seat lives in — named here so the decision below and
+// the WHERE clause of the UPDATE that acts on it read from the SAME list. They
+// have to agree: the decision is made against a status that was read a moment
+// ago, and only the WHERE clause sees the status at the instant of the write.
+
+/** Past this point the editing seat is gone. */
+export const EDITING_CLOSED_STATUSES: readonly ItemStatus[] = SCHEDULER_STATUSES
+/** Where the scheduling seat can be taken — published has nothing left to do. */
+export const CLAIMABLE_SCHEDULING_STATUSES: readonly ItemStatus[] =
+  SCHEDULER_STATUSES.filter(s => s !== 'published')
+
 /**
  * May this viewer take this seat on this item?
  *
@@ -43,10 +54,10 @@ export function claimDecision(
     return { ok: false, status: 400, error: 'A shoot brief is owned by its account manager' }
   }
 
-  const inScheduling = (SCHEDULER_STATUSES as readonly string[]).includes(item.status)
-
   if (hat === 'editor') {
-    if (inScheduling) return { ok: false, status: 400, error: 'This one is past editing' }
+    if ((EDITING_CLOSED_STATUSES as readonly string[]).includes(item.status)) {
+      return { ok: false, status: 400, error: 'This one is past editing' }
+    }
     // a scheduler picking up someone's unstarted draft is not a thing
     if (viewer.role === 'scheduler') {
       return { ok: false, status: 403, error: 'Editing work is handed to you, not picked up' }
@@ -54,7 +65,7 @@ export function claimDecision(
     return { ok: true }
   }
 
-  if (!inScheduling || item.status === 'published') {
+  if (!(CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(item.status)) {
     return { ok: false, status: 400, error: 'This one is not ready for scheduling yet' }
   }
   // the OPEN scheduling pool is schedulers only — anyone else gets handed the
