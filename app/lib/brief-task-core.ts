@@ -67,6 +67,7 @@ export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   // read wrong on a shoot PLAN — same edges, plan-shaped language
   'internal_review>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
   'revision_complete>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
+  'revision_complete>revision_required': { label: 'Needs more plan changes', roles: ['account_manager'] },
   'client_review>approved_for_scheduling': { label: 'Plan approved', roles: ['client', 'account_manager'] },
   'internal_review>approved_for_scheduling': { label: 'Approve plan without client', roles: ['account_manager'] },
   'revision_complete>approved_for_scheduling': { label: 'Approve plan without client', roles: ['account_manager'] },
@@ -94,10 +95,11 @@ export function checkBriefTaskTransitionAs(
   if (!roles.includes('super_admin') && !override.roles.some(r => roles.includes(r))) {
     return { ok: false, reason: `${roles.join('/') || 'nobody'} may not perform "${override.label}"` }
   }
-  // labelFor is dropped: a brief override says the same thing to every hat
+  // labelFor is left behind: a brief override says the same thing to every hat
+  const { labelFor: _drop, ...base } = exists
   return {
     ok: true,
-    rule: { ...exists, label: override.label, roles: override.roles, labelFor: undefined },
+    rule: { ...base, label: override.label, roles: override.roles },
     requires: override.requires,
   }
 }

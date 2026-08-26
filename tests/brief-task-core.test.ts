@@ -95,6 +95,11 @@ describe('brief wording never speaks about scheduling', () => {
     const r = checkBriefTaskTransition('account_manager', 'internal_review', 'revision_required')
     expect(r.ok && r.rule.label).toBe('Request brief changes')
     expect(checkBriefTaskTransition('editor', 'internal_review', 'revision_required').ok).toBe(false)
+    // and again on the way back from a revised plan — never "Needs more changes"
+    const again = checkBriefTaskTransition('account_manager', 'revision_complete', 'revision_required')
+    expect(again.ok && again.rule.label).toBe('Needs more plan changes')
+    expect(availableBriefTaskTransitions('account_manager', 'revision_complete')
+      .find(t => t.to === 'revision_required')?.label).toBe('Needs more plan changes')
   })
 
   it("the brief's turn ends with the account manager, never a scheduler", () => {

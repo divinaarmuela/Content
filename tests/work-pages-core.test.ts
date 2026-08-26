@@ -5,7 +5,7 @@ import {
   productionScope, schedulerAssignment, schedulerIdsOf, schedulerScope, unassignedCount,
   type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
 } from '../app/lib/work-pages-core'
-import { ITEM_STATUSES, SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
+import { SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
 import type { Role } from '../app/lib/identity-core'
 
 const ME = 'me'
@@ -237,11 +237,16 @@ describe('backLinkFor — back goes where you came from', () => {
 })
 
 describe('EDITOR_LANES', () => {
-  it('cover every pre-scheduler status exactly once', () => {
-    const covered = EDITOR_LANES.flatMap(l => l.statuses)
-    const expected = ITEM_STATUSES.filter(s => !SCHEDULER_STATUSES.includes(s) || s === 'approved_for_scheduling')
-    expect([...covered].sort()).toEqual([...expected].sort())
-    expect(new Set(covered).size).toBe(covered.length)
+  it('cover exactly these seven statuses, each once, in board order', () => {
+    expect(EDITOR_LANES.flatMap(l => l.statuses)).toEqual([
+      'draft_uploaded',
+      'internal_review',
+      'revision_required',
+      'revision_complete',
+      'client_review',
+      'client_changes_requested',
+      'approved_for_scheduling',
+    ])
   })
   it('never shows a scheduled or published item', () => {
     const covered = EDITOR_LANES.flatMap(l => l.statuses) as ItemStatus[]

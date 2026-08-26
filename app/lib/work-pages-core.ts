@@ -9,7 +9,7 @@
  * never the item that is plainly someone else's.
  */
 
-import { SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
+import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
 import type { Role } from './identity-core'
 
@@ -37,10 +37,9 @@ export function defaultScope(role: Role): ScopeSet {
   return isManager(role) ? new Set<ScopeMode>(['all']) : new Set<ScopeMode>(['mine', 'unassigned'])
 }
 
-/** scheduler_ids as it is meant: a list of user ids. Anything else is none. */
-export function schedulerIdsOf(item: { scheduler_ids?: unknown }): string[] {
-  return Array.isArray(item.scheduler_ids) ? item.scheduler_ids.map(String) : []
-}
+/** scheduler_ids as it is meant: a list of user ids. Anything else is none —
+ *  the state machine's own reading of the field, not a second copy of it. */
+export { schedulerIdsOf }
 
 export function isBriefTask(i: { work_kinds?: { slug?: string } | null }): boolean {
   return i.work_kinds?.slug === SHOOT_BRIEF_SLUG

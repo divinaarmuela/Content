@@ -133,7 +133,7 @@ export const STATUS_TURN: Record<ItemStatus, Role | null> = {
 export type ActingItem = { owner_id?: string | null; scheduler_ids?: unknown }
 
 /** scheduler_ids as it is meant: a list of user ids. Anything else is none. */
-function schedulerIds(item: ActingItem): string[] {
+export function schedulerIdsOf(item: { scheduler_ids?: unknown }): string[] {
   return Array.isArray(item.scheduler_ids) ? item.scheduler_ids.map(String) : []
 }
 
@@ -157,7 +157,7 @@ export function actingRoles(viewer: { id: string; role: Role }, item: ActingItem
   // up someone else's draft is not a thing
   if (owner === viewer.id || (!owner && roleSatisfies(viewer.role, 'editor'))) roles.push('editor')
 
-  const ids = schedulerIds(item)
+  const ids = schedulerIdsOf(item)
   // handed the item = the hat, whatever the title; nobody handed it = the
   // schedulers can pick it up
   if (ids.includes(viewer.id) || (ids.length === 0 && viewer.role === 'scheduler')) roles.push('scheduler')
@@ -240,6 +240,10 @@ export function presentTransitions(
   from: ItemStatus,
   transitions: Presented[],
   ctx: { clientApprovalRequired: boolean; viewerIsOwner: boolean },
+  /** whose turn each status is. A brief hands over to nobody at the end — its
+   *  surfaces pass BRIEF_STATUS_TURN so the account manager who must book the
+   *  shoot gets the button, instead of a scheduler who will never come. */
+  turns: Record<ItemStatus, Role | null> = STATUS_TURN,
 ): { primary: Presented | null; secondary: Presented[] } {
   const visible = transitions
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
@@ -249,7 +253,7 @@ export function presentTransitions(
         : t
     ))
 
-  const turn = STATUS_TURN[from]
+  const turn = turns[from]
   const holdsTurn = roles.includes('super_admin') || (turn !== null && roles.includes(turn))
   const wanted = PRIMARY_ACTION[from]
   const primary = holdsTurn && wanted ? visible.find(t => t.to === wanted) ?? null : null
@@ -266,7 +270,7 @@ export function whoseTurn(
   const unassigned = hat === 'editor'
     ? !item.owner_id
     : hat === 'scheduler'
-      ? schedulerIds(item).length === 0
+      ? schedulerIdsOf(item).length === 0
       : false
   return { hat, mine, unassigned }
 }

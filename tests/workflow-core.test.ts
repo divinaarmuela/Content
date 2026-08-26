@@ -20,7 +20,9 @@ import {
   type ActingItem,
   type ItemStatus,
 } from '../app/lib/workflow-core'
-import { BRIEF_KIND_LABELS, BRIEF_TRANSITION_OVERRIDES } from '../app/lib/brief-task-core'
+import {
+  availableBriefTaskTransitionsAs, BRIEF_KIND_LABELS, BRIEF_STATUS_TURN, BRIEF_TRANSITION_OVERRIDES,
+} from '../app/lib/brief-task-core'
 import type { Role } from '../app/lib/identity-core'
 
 describe('funnel shape', () => {
@@ -299,17 +301,28 @@ describe('presentTransitions — one obvious button, or none', () => {
     return presentTransitions(roles, from, availableTransitionsAs(roles, from), ctx)
   }
 
-  it('never offers more than one primary, for any role in any state', () => {
+  it('never lists the primary move a second time, and it is always the state’s point', () => {
     const roles: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client']
     for (const role of roles) {
       for (const from of ITEM_STATUSES) {
         for (const owner of [ME, THEM, null]) {
           const p = present(role, { owner_id: owner, scheduler_ids: [] }, from)
-          expect(p.primary === null || typeof p.primary.to === 'string').toBe(true)
-          if (p.primary) expect(p.secondary).not.toContain(p.primary)
+          expect(p.secondary.filter(s => s.to === p.primary?.to)).toEqual([])
+          if (p.primary) expect(p.primary.to).toBe(PRIMARY_ACTION[from])
         }
       }
     }
+  })
+
+  it('a BRIEF at approved_for_scheduling is the account manager’s move, not a scheduler’s', () => {
+    const roles: Role[] = ['account_manager']
+    const outs = availableBriefTaskTransitionsAs(roles, 'approved_for_scheduling')
+    const ctx = { clientApprovalRequired: true, viewerIsOwner: false }
+    expect(presentTransitions(roles, 'approved_for_scheduling', outs, ctx, BRIEF_STATUS_TURN).primary)
+      .toEqual({ to: 'scheduled', label: 'Book the shoot' })
+    // with the ASSET turn table the same manager would be urged to do nothing —
+    // a scheduler holds that turn, and on a brief no scheduler is ever coming
+    expect(presentTransitions(roles, 'approved_for_scheduling', outs, ctx).primary).toBeNull()
   })
 
   it('an account manager holding their own item in revisions gets one button', () => {
