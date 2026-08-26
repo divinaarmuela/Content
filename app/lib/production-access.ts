@@ -1,7 +1,9 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, type TeamUser } from './authz'
-import { SCHEDULER_STATUSES, CLIENT_LABELS, type ItemStatus } from './workflow-core'
+import {
+  actingRoles, schedulerIdsOf, SCHEDULER_STATUSES, CLIENT_LABELS, type ItemStatus,
+} from './workflow-core'
 import { visibleComments } from './comment-access-core'
 
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
@@ -49,9 +51,13 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
   }
   const clientIds = await accessibleClientIds(user)
   if (clientIds !== null && !clientIds.includes(item.client_id)) {
-    // ownership grants visibility: the assigned editor sees their job even
-    // without a whole-client assignment
-    if (!(user.role !== 'client' && item.owner_id === user.id)) {
+    // ASSIGNMENT grants visibility: the person holding the job sees the job,
+    // with or without a whole-client assignment. Being handed the scheduling
+    // counts — without this, handing an item to someone off that client
+    // emailed them a link to a 404.
+    const assigned = user.role !== 'client'
+      && (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id))
+    if (!assigned) {
       throw new AuthzError('Item not found', 404) // don't reveal existence
     }
   }
@@ -69,10 +75,14 @@ type CommentRow = {
   resolved: boolean; parent_id: string | null
 }
 
-/** Role-shaped serialization — the enforcement of the link-visibility matrix.
- *  Clients never receive dropbox_url or internal comments; schedulers receive
- *  only the latest version's final links. This lives at the API layer so even
- *  direct API calls only ever get the caller's slice. */
+/** HAT-shaped serialization — the enforcement of the link-visibility matrix.
+ *
+ *  Shaped by the hats the viewer wears ON THIS ITEM, not by their job title:
+ *  someone handed the scheduling gets the scheduler's slice whatever their
+ *  role, and an editor holding nothing here gets no more than a scheduler
+ *  would. Clients never receive dropbox_url or internal comments; schedulers
+ *  receive only the latest version's final links. This lives at the API layer
+ *  so even direct API calls only ever get the caller's slice. */
 export function shapeItemDetail(
   user: TeamUser,
   item: Record<string, unknown>,
@@ -80,6 +90,10 @@ export function shapeItemDetail(
   comments: CommentRow[],
 ) {
   const status = item.status as ItemStatus
+  const hats = actingRoles(
+    { id: user.id, role: user.role },
+    item as { owner_id?: string | null; scheduler_ids?: unknown },
+  )
 
   // the job pack (brief, raw footage) is internal production material —
   // clients never see it, and schedulers work from final links only
@@ -103,32 +117,37 @@ export function shapeItemDetail(
         ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
         : [],
       comments: visibleComments(user.role, user.id, comments),
+      acting_roles: hats,
     }
   }
 
-  if (user.role === 'scheduler') {
-    const latest = versions[0]
-    // schedulers stay out of revision loops (doc 1 §3) — they read only the
-    // conversations they are actually in; visibleComments decides which
-    return {
-      ...itemPublic,
-      versions: latest
-        ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
-        : [],
-      comments: visibleComments(user.role, user.id, comments),
-    }
+  // reviewing IS the job and it is not per-item — a manager (or a super
+  // admin) reads the whole record: every comment, every version
+  if (hats.includes('account_manager') || hats.includes('super_admin')) {
+    return { ...item, versions, comments, acting_roles: hats }
   }
 
-  if (user.role === 'editor') {
+  if (hats.includes('editor')) {
     // full versions, but the thread narrows to the editor's own lane: a
     // manager reaches them by TAGGING them, never by broadcast
     return {
       ...item,
       versions,
-      comments: visibleComments(user.role, user.id, comments),
+      comments: visibleComments('editor', user.id, comments),
+      acting_roles: hats,
     }
   }
 
-  // AM / super_admin: the whole record — every comment, every version
-  return { ...item, versions, comments }
+  // the scheduler's slice — and the floor for any team viewer holding no hat
+  // on this item at all. Schedulers stay out of revision loops (doc 1 §3):
+  // they see the final links and read only the conversations they are in.
+  const latest = versions[0]
+  return {
+    ...itemPublic,
+    versions: latest
+      ? [{ id: latest.id, version_number: latest.version_number, created_at: latest.created_at, file_url: latest.file_url, drive_url: latest.drive_url }]
+      : [],
+    comments: visibleComments('scheduler', user.id, comments),
+    acting_roles: hats,
+  }
 }

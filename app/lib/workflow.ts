@@ -4,17 +4,20 @@ import { notify, renderEmail, escapeHtml } from './mailer'
 import { AuthzError, type TeamUser } from './authz'
 import { announceItemChange } from './production-live'
 import {
-  checkTransition,
+  actingRoles,
+  checkTransitionAs,
   versionSatisfiesSubmission,
   TRANSITION_NOTIFICATIONS,
   CLIENT_LABELS,
+  STATUS_LABELS,
   type ItemStatus,
   type Audience,
 } from './workflow-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
 import {
-  briefSatisfiesSubmission, checkBriefTaskTransition, SHOOT_BRIEF_SLUG,
+  briefSatisfiesSubmission, checkBriefTaskTransitionAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
 } from './brief-task-core'
+import { needsNewVersion } from './claim-core'
 
 export type ContentItem = {
   id: string
@@ -236,8 +239,10 @@ export async function notifyScheduleHandoff(
     .from('team_users')
     .select('id, email, name, role, active_status')
     .in('id', ids)
+  // anyone on the team can be handed scheduling now — the hat follows the
+  // assignment, not the job title. Only clients (and the actor) are excluded.
   const people = (data ?? []).filter(u =>
-    u.active_status && (u.role === 'scheduler' || u.role === 'super_admin') && u.id !== actor.id)
+    u.active_status && u.role !== 'client' && u.id !== actor.id)
   await Promise.all(people.map(p => notify({
     actorName: actor.name,
     actorEmail: actor.email,
@@ -341,10 +346,17 @@ export async function performTransition(
   const kindSlug = (kindRow?.work_kinds as { slug?: string } | null)?.slug ?? null
   const briefBatch = (kindRow?.batches as { status?: string; concept?: string | null; shot_list?: unknown[] } | null) ?? null
   const isBriefTask = kindSlug === SHOOT_BRIEF_SLUG
+  /** what a stage is CALLED, in this item's own vocabulary */
+  const stageLabel = (s: ItemStatus) => itemStatusLabel(kindSlug, s, STATUS_LABELS[s])
+
+  // rights follow ASSIGNMENT, not job title: the hats this actor wears on
+  // THIS item decide the move, so an editor handed a scheduling job can
+  // schedule it and an editor who holds nothing here can move nothing
+  const hats = actingRoles({ id: actor.id, role: actor.role }, item)
 
   const check = isBriefTask
-    ? checkBriefTaskTransition(actor.role, from, to)
-    : checkTransition(actor.role, from, to)
+    ? checkBriefTaskTransitionAs(hats, from, to)
+    : checkTransitionAs(hats, from, to)
   if (!check.ok) throw new AuthzError(check.reason, 403)
 
   if (isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
@@ -354,6 +366,7 @@ export async function performTransition(
   }
 
   // requirement evidence
+  let latestVersion: { created_at?: string | null } | null = null
   if (check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
@@ -361,14 +374,35 @@ export async function performTransition(
     } else {
       const { data: latest } = await supabase
         .from('asset_versions')
-        .select('file_url, drive_url, dropbox_url')
+        .select('file_url, drive_url, dropbox_url, created_at')
         .eq('item_id', item.id)
         .order('version_number', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
+      latestVersion = latest
       const valid = versionSatisfiesSubmission(latest)
       if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
+    }
+  }
+
+  // "Revisions done" has to mean a revision HAPPENED. Re-submitting the same
+  // cut the manager just rejected sends it round the loop unchanged; the
+  // audit trail already knows when changes were asked for, so compare against
+  // it. An item with no such record predates the trail — let it through.
+  if (!isBriefTask && from === 'revision_required' && to === 'revision_complete') {
+    const { data: lastRequest } = await supabase
+      .from('workflow_activity')
+      .select('created_at')
+      .eq('entity_type', 'content_item')
+      .eq('entity_id', item.id)
+      .eq('action', 'status_change')
+      .eq('new_value', 'revision_required')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (needsNewVersion(latestVersion?.created_at ?? null, lastRequest?.created_at ?? null)) {
+      throw new AuthzError('Add a new version with the revisions first.', 400)
     }
   }
   if (check.rule.requires === 'schedule_entry' && !isBriefTask) {
@@ -447,13 +481,14 @@ export async function performTransition(
       }
       if (audience === 'schedulers' && schedulerIds.length > 0) {
         // the approver picked who schedules this — same trust rule as
-        // reviewers: only active scheduling roles survive the filter
+        // reviewers, but the pool is the whole team: scheduling is an
+        // assignment, so a stale id or a client account is all that is dropped
         const { data: picked } = await supabase
           .from('team_users')
           .select('id, email, name, role, active_status')
           .in('id', schedulerIds)
         const chosen = (picked ?? []).filter(u =>
-          u.active_status && (u.role === 'scheduler' || u.role === 'super_admin'))
+          u.active_status && u.role !== 'client' && u.id !== actor.id)
         if (chosen.length > 0) people = chosen
       }
       for (const person of people) {
@@ -480,7 +515,10 @@ export async function performTransition(
             subject,
             isClientFacing && audience === 'client_users'
               ? `<p><strong>${item.title}</strong> is ready for your review.</p>`
-              : `<p><strong>${item.title}</strong> moved from “${from.replace(/_/g, ' ')}” to “${to.replace(/_/g, ' ')}” by ${actor.name || actor.email}.</p>` +
+              // the raw status is a database value, not a sentence — every
+              // human-facing surface says the same plain words, and a shoot
+              // brief says them its own way ("Shoot booked", not "Published")
+              : `<p><strong>${item.title}</strong> moved from “${stageLabel(from)}” to “${stageLabel(to)}” by ${actor.name || actor.email}.</p>` +
                 (opts?.note?.trim() && audience !== 'client_users'
                   ? `<p><strong>Note:</strong><br>${escapeHtml(opts.note.trim()).replace(/\n/g, '<br>')}</p>`
                   : ''),

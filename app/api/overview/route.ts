@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
 import { accessibleClientIds } from '../../lib/production-access'
-import { ITEM_STATUSES } from '../../lib/workflow-core'
+import { ITEM_STATUSES, SCHEDULER_STATUSES, schedulerIdsOf } from '../../lib/workflow-core'
+import { SHOOT_BRIEF_SLUG } from '../../lib/brief-task-core'
 
 /**
  * One request, shaped to the caller's role — the data behind the Overview.
@@ -41,10 +42,12 @@ export async function GET() {
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
-      // ownership grants visibility, same rule as the items API
+      // assignment grants visibility, same rule as the items API — owning the
+      // job, or being handed its scheduling
+      const assigned = `owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`
       itemsQ = clientIds.length === 0
-        ? itemsQ.eq('owner_id', user.id)
-        : itemsQ.or(`client_id.in.(${clientIds.join(',')}),owner_id.eq.${user.id}`)
+        ? itemsQ.or(assigned)
+        : itemsQ.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
     }
     const { data: itemRows, error: itemsErr } = await itemsQ
     // the production tables may not exist yet in a fresh environment — the
@@ -57,11 +60,21 @@ export async function GET() {
     const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
     const weekAhead = new Date(Date.now() + 7 * 86_400_000).toISOString()
 
+    // nobody's job yet: the pool anyone may pick up. A shoot brief is never in
+    // it (an account manager writes those), and neither is anything already
+    // approved — that pool is the scheduler's, and it is a different seat.
+    const unassignedAll = items.filter(i =>
+      !i.owner_id
+      && ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== SHOOT_BRIEF_SLUG
+      && !(SCHEDULER_STATUSES as readonly string[]).includes(i.status))
+
     if (user.role === 'editor') {
       const mine = items.filter(i => i.owner_id === user.id)
       const pool = mine.length > 0 ? mine : items // editors on shared boards still get a picture
+      // 'revision_complete' is deliberately absent: the editor has already
+      // done that one and it is the manager's move now
       const needsAction = pool
-        .filter(i => ['revision_required', 'draft_uploaded', 'revision_complete'].includes(i.status))
+        .filter(i => ['revision_required', 'draft_uploaded'].includes(i.status))
         .sort((a, b) => (a.status === 'revision_required' ? -1 : 1) - (b.status === 'revision_required' ? -1 : 1))
         .slice(0, 8)
       const dueSoonAll = pool
@@ -79,6 +92,8 @@ export async function GET() {
           needs_action: needsAction,
           due_soon: dueSoon,
           due_soon_count: dueSoonAll.length,
+          unassigned: unassignedAll.slice(0, 8),
+          unassigned_count: unassignedAll.length,
         },
       })
     }
@@ -151,9 +166,15 @@ export async function GET() {
       .slice(0, 8)
     // managers get assigned work too (a graphics or copy task can land on
     // anyone) — surface it, soonest due first, or it silently rots
+    // — and being handed the SCHEDULING of an approved item is an assignment
+    // too, whatever your title. Those live past the point where owning it
+    // stops mattering, so they are matched on scheduler_ids instead.
     const myTasks = items
-      .filter(i => i.owner_id === user.id
-        && !['approved_for_scheduling', 'scheduled', 'published'].includes(i.status))
+      .filter(i =>
+        (i.owner_id === user.id
+          && !['approved_for_scheduling', 'scheduled', 'published'].includes(i.status))
+        || ((SCHEDULER_STATUSES as readonly string[]).includes(i.status)
+          && schedulerIdsOf(i).includes(user.id)))
       .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
     return NextResponse.json({
       role: user.role,
@@ -167,6 +188,8 @@ export async function GET() {
         needs_review: needsReview,
         my_tasks: myTasks.slice(0, 8),
         my_tasks_count: myTasks.length,
+        // work sitting in nobody's queue — the number a manager acts on
+        unassigned_count: unassignedAll.length,
         ...(mayLeads
           ? {
               leads_total: leads.length,

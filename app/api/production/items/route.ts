@@ -34,11 +34,14 @@ export async function GET(req: Request) {
         if (clientIds.length === 0) return NextResponse.json([])
         q = q.in('client_id', clientIds)
       } else {
-        // owning an item grants visibility to it: an editor assigned a job
-        // must see the job, whether or not they're assigned the whole client
+        // ASSIGNMENT grants visibility: whoever holds the job — as its owner
+        // or as one of the people handed its scheduling — sees it, whether or
+        // not they're assigned the whole client. `cs` is jsonb containment;
+        // scheduler_ids is a jsonb array of user ids.
+        const assigned = `owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`
         q = clientIds.length === 0
-          ? q.eq('owner_id', user.id)
-          : q.or(`client_id.in.(${clientIds.join(',')}),owner_id.eq.${user.id}`)
+          ? q.or(assigned)
+          : q.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
       }
     }
     if (user.role === 'scheduler') {
@@ -73,9 +76,28 @@ export async function GET(req: Request) {
         })
       : (data ?? [])
 
-    const rows = user.role === 'client'
-      ? (data ?? []).map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] }))
-      : scoped
+    if (user.role === 'client') {
+      return NextResponse.json(
+        (data ?? []).map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] })),
+      )
+    }
+
+    // "someone is waiting on YOU here" — an unresolved comment tagged to the
+    // viewer. One query for the whole list; best-effort, because a missing
+    // badge is a smaller failure than a board that won't load.
+    let rows: Record<string, unknown>[] = scoped
+    try {
+      const { data: tagged, error: tagErr } = await supabase
+        .from('item_comments')
+        .select('item_id')
+        .eq('assigned_to', user.id)
+        .eq('resolved', false)
+      if (tagErr) throw new Error(tagErr.message)
+      const waiting = new Set((tagged ?? []).map(t => t.item_id as string))
+      rows = rows.map(r => ({ ...r, my_open_task: waiting.has(r.id as string) }))
+    } catch {
+      // leave the annotation off rather than fail the list
+    }
     return NextResponse.json(rows)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
