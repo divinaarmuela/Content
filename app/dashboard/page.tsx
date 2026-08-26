@@ -260,13 +260,17 @@ export default function OverviewPage() {
     <div className="flex flex-col gap-4">
       <Greeting subtitle={subtitle} />
 
+      {/* one neutral skeleton until the role is known — branching while
+          `loading` flashed the editor layout at every other role first */}
+      {loading && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
+        </div>
+      )}
+
       {/* ---- editor ---- */}
-      {(loading || role === 'editor') && role !== 'scheduler' && !data?.manager && (
-        loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
-          </div>
-        ) : (
+      {!loading && role === 'editor' && data?.editor && (
+        (
           <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="My items" value={data!.editor!.my_items} loading={false} hint="Assigned to you" icon={Film} />
@@ -294,7 +298,7 @@ export default function OverviewPage() {
       {role === 'scheduler' && data?.scheduler && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="To schedule" value={data.scheduler.to_schedule} loading={false} hint="Approved, waiting on you" icon={ClipboardList} />
+            <Stat label="Approved — to schedule" value={data.scheduler.to_schedule} loading={false} hint="Signed off, waiting on you" icon={ClipboardList} />
             <Stat label="Going out · 7 days" value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} loading={false} hint="Scheduled posts" icon={CalendarClock} />
             <Stat label="Published · 7 days" value={data.scheduler.published_week} loading={false} hint="Live this week" icon={CheckCircle2} />
             <Stat label="Scheduled total" value={data.pipeline.scheduled ?? 0} loading={false} hint="In the calendar" icon={Send} />
@@ -358,8 +362,10 @@ export default function OverviewPage() {
               empty="" actionHref="/dashboard/editor" actionLabel="Open board" />
           )}
           <div className={data.manager.latest_leads ? "grid gap-4 lg:grid-cols-[1.5fr_1fr]" : "grid gap-4"}>
-            <ItemList title="Waiting on review" icon={ClipboardList} items={data.manager.needs_review}
-              empty="Nothing in review — the funnel is clear." actionHref="/dashboard/editor" actionLabel="Open board" />
+            {/* the three stages whose turn is a MANAGER's — the same
+                population the stat above it counts */}
+            <ItemList title="Waiting on you" icon={ClipboardList} items={data.manager.needs_review}
+              empty="Nothing waiting on you — the funnel is clear." actionHref="/dashboard/editor" actionLabel="Open board" />
             {data.manager.latest_leads && <div className="flex flex-col gap-4">
               <Card>
                 <CardHeader className="flex-row items-center">

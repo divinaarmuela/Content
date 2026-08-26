@@ -18,8 +18,10 @@ import {
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
+import { defaultAllows } from '../../lib/page-access-core'
 import { ClaimButton } from '../production/ClaimButton'
 import { ScopeSwitch } from '../production/ScopeSwitch'
+import { TurnChip } from '../production/TurnChip'
 import { AccountUnavailable } from '../production/shoot-ui'
 import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { useRole } from '../useRole'
@@ -38,8 +40,11 @@ type Item = {
   work_kinds?: { slug?: string } | null
 }
 
+/** The Editor board calls this state "Approved" and so does the badge, so the
+ *  hand-off between the two pages says one word. The tab adds what the
+ *  scheduler is being asked to do with it. */
 const LANES = [
-  { key: 'approved_for_scheduling', label: 'To schedule' },
+  { key: 'approved_for_scheduling', label: 'Approved — to schedule' },
   { key: 'scheduled', label: 'Scheduled' },
   { key: 'published', label: 'Published' },
 ] as const
@@ -67,6 +72,9 @@ export default function SchedulerPage() {
   // without the name, which is all the row needs to say
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
+  // the empty-state link is to another PAGE — only offer it to someone who
+  // may open it. No grants are loaded here, so this is the role default.
+  const canSeeEditor = defaultAllows(me?.role ?? null, '/dashboard/editor')
 
   const load = useCallback(async () => {
     try {
@@ -106,8 +114,13 @@ export default function SchedulerPage() {
   const queue = ready ? schedulerScope(all, viewer!, scope) : []
   const visible = queue.filter(i => i.status === lane)
   const counts = Object.fromEntries(LANES.map(l => [l.key, queue.filter(i => i.status === l.key).length]))
+  // the pool is what can still be TAKEN — a published row cannot, so counting
+  // it advertised a pool with nothing in it to pick up
   const openPool = ready
-    ? unassignedCount(schedulerScope(all, viewer!, new Set<ScopeMode>(['all'])), viewer!, schedulerAssignment)
+    ? unassignedCount(
+      schedulerScope(all, viewer!, new Set<ScopeMode>(['all'])).filter(i => i.status !== 'published'),
+      viewer!, schedulerAssignment,
+    )
     : 0
   const showingOnlyMineAndPool = !scope.has('all')
 
@@ -161,6 +174,14 @@ export default function SchedulerPage() {
                 Show everyone
               </Button>
             )}
+            {/* a page you cannot act on and cannot leave is a dead end —
+                point at where the work is coming from */}
+            {canSeeEditor && (
+              <Link href="/dashboard/editor"
+                className="flex items-center gap-1 text-xs text-zinc-500 underline-offset-4 hover:underline dark:text-zinc-400">
+                See what&rsquo;s still in the edit <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -170,7 +191,7 @@ export default function SchedulerPage() {
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
                 <TableHead>Item</TableHead>
                 <TableHead>Client</TableHead>
-                <TableHead>Caption / instructions</TableHead>
+                <TableHead>Caption</TableHead>
                 <TableHead>{lane === 'approved_for_scheduling' ? 'Status' : 'Platforms'}</TableHead>
                 <TableHead className="w-28" />
               </TableRow>
@@ -192,19 +213,14 @@ export default function SchedulerPage() {
                         {item.content_type} · v{item.current_version_number}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {assignment === 'mine' && (
-                          <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                            you
-                          </span>
-                        )}
-                        {assignment === 'other' && (
+                        {/* one component answers "is this on me?" — the same
+                            one the other two work pages use. The parallel
+                            you / Unassigned pills said it a second time, in
+                            different words, on the same row. */}
+                        <TurnChip status={item.status} item={item} viewer={viewer!} />
+                        {assignment === 'other' && handedNames.length > 0 && (
                           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                            {handedNames.length > 0 ? `Handed to ${handedNames.join(', ')}` : 'handed to someone'}
-                          </span>
-                        )}
-                        {assignment === 'unassigned' && (
-                          <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
-                            Unassigned
+                            Handed to {handedNames.join(', ')}
                           </span>
                         )}
                       </div>
@@ -252,7 +268,9 @@ export default function SchedulerPage() {
                         )}
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/production/${item.id}`}>
-                            {lane === 'approved_for_scheduling' ? 'Schedule' : 'Open'} <ArrowRight className="h-3.5 w-3.5" />
+                            {/* the click opens the item so you can pick a
+                                platform and a time — it schedules nothing */}
+                            {lane === 'approved_for_scheduling' ? 'Set a date' : 'Open'} <ArrowRight className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
                       </div>

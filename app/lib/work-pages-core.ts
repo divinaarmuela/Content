@@ -91,6 +91,23 @@ export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] 
   { key: 'approved', title: 'Approved', statuses: ['approved_for_scheduling'] },
 ]
 
+/**
+ * The Production page's TASK columns — the same shape as EDITOR_LANES, in the
+ * task's own vocabulary. A flat list of rows never showed where the approve /
+ * review step was; a board does, and it is the board people already know from
+ * the Editor page.
+ *
+ * 'Done' is the tail: it holds all three end statuses, and the page shows only
+ * the recent ones (see `recentlyDoneTasks`) so the column stays a footnote.
+ */
+export const TASK_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
+  { key: 'doing', title: 'In progress', statuses: ['draft_uploaded'] },
+  { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
+  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
+  { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
+  { key: 'done', title: 'Done', statuses: ['approved_for_scheduling', 'scheduled', 'published'] },
+]
+
 export type Assignment = 'mine' | 'unassigned' | 'other'
 
 export function editorAssignment(i: WorkItem, v: Viewer): Assignment {

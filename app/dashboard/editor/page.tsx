@@ -22,7 +22,7 @@ import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/wo
 import { itemStatusLabel } from '../../lib/brief-task-core'
 import {
   EDITOR_LANES, canClaimEditor, editorAssignment, editorScope, editorTail,
-  isBriefTask, unassignedCount, type ScopeMode, type Viewer,
+  isAsset, unassignedCount, type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { useRole } from '../useRole'
@@ -59,6 +59,15 @@ const LANE_TINT: Record<string, string> = {
   revising: 'bg-amber-500',
   client: 'bg-violet-500',
   approved: 'bg-emerald-500',
+}
+
+/** What is NOT in a column, said in the column's own words. */
+const LANE_EMPTY: Record<string, string> = {
+  drafting: 'No drafts.',
+  review: 'Nothing waiting on a manager.',
+  revising: 'No changes in progress.',
+  client: 'Nothing with a client.',
+  approved: 'Nothing approved yet.',
 }
 
 const SCOPE_KEY = 'md-editor-scope'
@@ -162,16 +171,18 @@ export default function EditorPage() {
 
   // the pool anyone may pick up — briefs are never in it, and neither is
   // anything already approved: that seat belongs to the scheduler
+  // …and only ASSETS: this board shows nothing else, so counting a research
+  // task here advertised a pool with rows the columns cannot draw.
   const openPool = viewer
     ? unassignedCount(
-      filtered.filter(i => !isBriefTask(i) && !SCHEDULER_STATUSES.includes(i.status)),
+      filtered.filter(i => isAsset(i) && !SCHEDULER_STATUSES.includes(i.status)),
       viewer, editorAssignment,
     )
     : 0
-  // the tail counts what the board is SHOWING: under "Mine" it is my
-  // scheduled and published work, not the whole team's. Counting `filtered`
-  // ignored the scope switch entirely.
-  const tail = editorTail(visible)
+  // the tail counts the work that has LEFT this board — editorScope has
+  // already dropped scheduled and published, so it has to be counted before
+  // the scope is applied or both numbers are structurally zero
+  const tail = editorTail(filtered)
 
   /* ── bulk select + delete: tick cards on the board instead of opening each ── */
   const [selectMode, setSelectMode] = useState(false)
@@ -224,8 +235,8 @@ export default function EditorPage() {
     return (
       <Card className="border-dashed shadow-none">
         <CardContent className="py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          The production tables don&apos;t exist yet — run <span className="font-mono">supabase/production.sql</span> in
-          the Supabase SQL editor, then reload.
+          This part of the app isn&rsquo;t switched on yet. Send this to your developer:
+          run <span className="font-mono">supabase/production.sql</span>.
         </CardContent>
       </Card>
     )
@@ -309,7 +320,22 @@ export default function EditorPage() {
                 </Button>
               </>
             ) : (
-              <p>No assets in the edit yet.</p>
+              /* scope Everyone and still nothing — the first thing a new
+                 account manager sees. A dead end needs a next step. */
+              <>
+                <p className="font-medium text-zinc-700 dark:text-zinc-200">Nothing in the edit yet.</p>
+                <p className="max-w-sm">
+                  Assets come from a shoot: Production → Create items, or add one here.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button size="sm" onClick={() => setNewOpen(true)}>
+                    <Plus className="h-4 w-4" /> New content item
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/dashboard/production">Plan a shoot <ArrowRight className="h-3.5 w-3.5" /></Link>
+                  </Button>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -367,12 +393,11 @@ export default function EditorPage() {
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-1.5">
+                              {/* TurnChip is the single answer to "is this on
+                                  me?" — the old `you` pill said it twice. The
+                                  initials answer a different question (who
+                                  OWNS it, whoever's turn it is) and stay. */}
                               <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName} />
-                              {assignment === 'mine' && (
-                                <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                                  you
-                                </span>
-                              )}
                               {assignment === 'other' && ownerName && (
                                 <span title={ownerName}
                                   className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
@@ -426,7 +451,9 @@ export default function EditorPage() {
                     })}
                     {colItems.length === 0 && (
                       <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                        {filtering && visible.length === 0 ? 'Nothing for this client / shoot' : 'Empty'}
+                        {/* "Empty" under a column called Ready for review is a
+                            word, not information — say what is not there */}
+                        {filtering && visible.length === 0 ? 'Nothing for this client / shoot' : LANE_EMPTY[lane.key] ?? 'Nothing here.'}
                       </div>
                     )}
                   </div>

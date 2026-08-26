@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
-  EDITOR_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor, canClaimScheduler,
-  defaultScope, editorAssignment, editorScope, editorTail, isBriefTask, isManager,
-  productionScope, schedulerAssignment, schedulerIdsOf, schedulerScope, unassignedCount,
+  EDITOR_LANES, TASK_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
+  canClaimScheduler, defaultScope, editorAssignment, editorScope, editorTail, isBriefTask,
+  isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
+  schedulerScope, unassignedCount,
   type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
 } from '../app/lib/work-pages-core'
-import { SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
+import { ITEM_STATUSES, SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
+import { TASK_DONE_STATUSES, TASK_KIND_LABELS } from '../app/lib/task-kind-core'
 import type { Role } from '../app/lib/identity-core'
 
 const ME = 'me'
@@ -252,5 +254,81 @@ describe('EDITOR_LANES', () => {
     const covered = EDITOR_LANES.flatMap(l => l.statuses) as ItemStatus[]
     expect(covered).not.toContain('scheduled')
     expect(covered).not.toContain('published')
+  })
+})
+
+describe('TASK_LANES', () => {
+  it('cover every one of the nine statuses, each exactly once', () => {
+    const covered = TASK_LANES.flatMap(l => l.statuses)
+    expect([...covered].sort()).toEqual([...ITEM_STATUSES].sort())
+    expect(new Set(covered).size).toBe(covered.length)
+  })
+
+  it('read in the task vocabulary — In progress, not Drafting', () => {
+    expect(TASK_LANES.map(l => l.title)).toEqual([
+      'In progress', 'Ready for review', 'Being revised', 'With client', 'Done',
+    ])
+  })
+
+  it('ends in one Done column holding all three finished statuses', () => {
+    const done = TASK_LANES[TASK_LANES.length - 1]
+    expect(done.key).toBe('done')
+    expect(done.statuses).toEqual([...TASK_DONE_STATUSES])
+  })
+
+  it('names each lane the same way the task labels do', () => {
+    for (const lane of TASK_LANES) {
+      for (const s of lane.statuses) {
+        // the column title is the status label, or the shared name of the
+        // pair the column merges — never a word from the asset pipeline
+        expect(TASK_KIND_LABELS[s]).toBeTruthy()
+      }
+    }
+    expect(TASK_KIND_LABELS.draft_uploaded).toBe('In progress')
+    expect(TASK_KIND_LABELS.approved_for_scheduling).toBe('Done')
+  })
+})
+
+describe('recentlyDoneTasks', () => {
+  const now = new Date('2026-08-26T00:00:00Z')
+  const task = (id: string, status: ItemStatus, daysAgo: number) => ({
+    id, status, owner_id: null,
+    work_kinds: { slug: 'research', uses_media: false },
+    updated_at: new Date(now.getTime() - daysAgo * 86_400_000).toISOString(),
+  })
+
+  it('keeps only tasks finished inside the window', () => {
+    const rows = recentlyDoneTasks([
+      task('fresh', 'approved_for_scheduling', 2),
+      task('stale', 'approved_for_scheduling', 30),
+      task('open', 'internal_review', 1),
+    ], now)
+    expect(rows.map(r => r.id)).toEqual(['fresh'])
+  })
+
+  it('is newest first', () => {
+    const rows = recentlyDoneTasks([
+      task('older', 'published', 10),
+      task('newer', 'scheduled', 1),
+    ], now)
+    expect(rows.map(r => r.id)).toEqual(['newer', 'older'])
+  })
+
+  it('never returns an asset or a brief', () => {
+    const rows = recentlyDoneTasks([
+      { id: 'asset', status: 'approved_for_scheduling' as ItemStatus, owner_id: null,
+        work_kinds: { slug: 'edit', uses_media: true }, updated_at: now.toISOString() },
+      { id: 'brief', status: 'published' as ItemStatus, owner_id: null,
+        work_kinds: { slug: 'shoot_brief', uses_media: false }, updated_at: now.toISOString() },
+    ], now)
+    expect(rows).toEqual([])
+  })
+
+  it('drops a row with no usable timestamp rather than guessing', () => {
+    const rows = recentlyDoneTasks([
+      { id: 'x', status: 'approved_for_scheduling' as ItemStatus, owner_id: null,
+        work_kinds: { slug: 'copy', uses_media: false }, updated_at: null },
+    ], now)
+    expect(rows).toEqual([])
   })
 })

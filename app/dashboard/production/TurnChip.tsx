@@ -36,9 +36,17 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
   // editor hat on every unowned draft, so `mine` is true there too — asking
   // it first made every open draft on the board read "Your turn".
   if (turn.unassigned) {
+    // …and say what the viewer can actually DO about it: a brief is assigned
+    // by a manager (claim-core refuses to let anyone take one), and the
+    // scheduling seat is schedulers-only, not "anyone".
+    const word = brief
+      ? 'Unassigned — assign an account manager'
+      : turn.hat === 'scheduler'
+        ? 'Unassigned — any scheduler can take it'
+        : 'Unassigned — anyone can take it'
     return (
       <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
-        {brief ? 'Unassigned — an account manager will pick it up' : 'Unassigned — anyone can take it'}
+        {word}
       </span>
     )
   }
@@ -51,7 +59,10 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
   }
   return (
     <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-      Waiting on {ownerName ?? `the ${HAT_WORD[turn.hat] ?? turn.hat.replace('_', ' ')}`}
+      {/* ownerName is the item's OWNER. That is only the person holding it up
+          while the EDITOR has the turn — at internal_review the move belongs
+          to an account manager, and naming the editor there was a lie. */}
+      Waiting on {turn.hat === 'editor' && ownerName ? ownerName : `the ${HAT_WORD[turn.hat] ?? turn.hat}`}
     </span>
   )
 }
