@@ -467,6 +467,16 @@ export async function performTransition(
     })
   }
 
+  // Sharing a plan with the client IS showing it to them. The shoot's own
+  // portal switch used to stay off after this move, so the brief read
+  // "Plan with client" while the client could see nothing — two switches
+  // for one intention. Turn it on here; an AM can still hide it again.
+  if (isBriefTask && to === 'client_review' && item.batch_id) {
+    const { error: shareErr } = await supabase.from('batches')
+      .update({ shared_with_client: true }).eq('id', item.batch_id)
+    if (shareErr) console.error('share plan with client: could not flag the shoot', shareErr.message)
+  }
+
   // notifications — fire-and-forget; the outbox dedupe makes retries safe
   const audiences = TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
   const isClientFacing = to === 'client_review'

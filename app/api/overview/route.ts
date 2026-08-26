@@ -64,11 +64,12 @@ export async function GET() {
     const items: ItemLite[] = itemsErr ? [] : ((itemRows ?? []) as unknown as ItemLite[])
 
     const pipeline: Record<string, number> = Object.fromEntries(ITEM_STATUSES.map(s => [s, 0]))
-    // assets only: a booked shoot brief is 'scheduled' under the hood, and
-    // counting it here made the Overview say "Scheduled 2" while the
-    // Scheduler page — which rightly never lists briefs — showed none
     for (const i of items) {
-      if (((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === SHOOT_BRIEF_SLUG) continue
+      // a BOOKED brief is 'scheduled' under the hood but is nothing the
+      // Scheduler page will ever show — a brief still in review counts,
+      // because "With client 1" must be true when a plan is with the client
+      const brief = ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === SHOOT_BRIEF_SLUG
+      if (brief && (i.status === 'scheduled' || i.status === 'published')) continue
       if (pipeline[i.status] !== undefined) pipeline[i.status] += 1
     }
 
