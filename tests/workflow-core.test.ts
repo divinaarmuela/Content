@@ -386,6 +386,18 @@ describe('whoseTurn', () => {
   it('a super admin can always take the turn', () => {
     expect(whoseTurn('client_review', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
   })
+
+  it('a BRIEF hands its last stages to the account manager, not to an empty scheduler seat', () => {
+    const brief = { owner_id: ME, scheduler_ids: [] }
+    expect(whoseTurn('approved_for_scheduling', brief, me('account_manager'), BRIEF_STATUS_TURN))
+      .toEqual({ hat: 'account_manager', mine: true, unassigned: false })
+    // the asset table reads the same item as a shoot waiting on nobody
+    expect(whoseTurn('approved_for_scheduling', brief, me('account_manager')))
+      .toEqual({ hat: 'scheduler', mine: false, unassigned: true })
+    // and a booked shoot is finished, whatever the status word says
+    expect(whoseTurn('scheduled', brief, me('account_manager'), BRIEF_STATUS_TURN))
+      .toEqual({ hat: null, mine: false, unassigned: false })
+  })
 })
 
 describe('the vocabulary guard — no database words, no jargon on screen', () => {
