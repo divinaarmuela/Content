@@ -8,6 +8,9 @@ import { Calendar, Check, ChevronDown, FileDown, MapPin, MessageCircle } from 'l
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
 import type { PortalShoot } from '../../lib/portal-data'
+import {
+  approvePlanConsequence, changesSentToast, contentTypeLabel, contentTypePlural, PLAN_APPROVED_TOAST,
+} from '../../lib/portal-words'
 
 const dateLabel = (d: string | null) =>
   d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date to be confirmed'
@@ -18,19 +21,44 @@ const dateLabel = (d: string | null) =>
  * board. The board keeps its own light look inside the portal, framed like
  * a piece of work rather than restyled.
  */
-export default function ShootSection({ shoots, clientName, token }: { shoots: PortalShoot[]; clientName?: string; token?: string }) {
+export default function ShootSection({ shoots, clientName, token, amName, loggedIn, onActed, bare }: {
+  shoots: PortalShoot[]
+  clientName?: string
+  token?: string
+  amName?: string | null
+  /** signed-in portal: no share token, but the viewer IS the client and acts
+   *  through the normal item API */
+  loggedIn?: boolean
+  /** the signed-in portal holds its data in state — tell it to reload */
+  onActed?: () => void
+  /** one shoot on its own page — "SHOOT PLANS 01" over a single plan reads
+   *  like a list that lost its list */
+  bare?: boolean
+}) {
   if (shoots.length === 0) return null
+  const cards = (
+    <div className="flex flex-col gap-10">
+      {shoots.map(s => (
+        <ShootCard key={s.id} shoot={s} clientName={clientName} token={token} amName={amName}
+          loggedIn={loggedIn} onActed={onActed} bare={bare} />
+      ))}
+    </div>
+  )
+  if (bare) return cards
   return (
     <section className="flex flex-col gap-6">
       <SectionHeading count={shoots.length}>SHOOT PLANS</SectionHeading>
-      <div className="flex flex-col gap-10">
-        {shoots.map(s => <ShootCard key={s.id} shoot={s} clientName={clientName} token={token} />)}
-      </div>
+      {cards}
     </section>
   )
 }
 
-function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientName?: string; token?: string }) {
+function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }: {
+  shoot: PortalShoot; clientName?: string; token?: string; amName?: string | null
+  loggedIn?: boolean; onActed?: () => void
+  /** already ON the plan's own page — no link back to where you are */
+  bare?: boolean
+}) {
   const router = useRouter()
   const [boardOpen, setBoardOpen] = useState(false)
   const done = shoot.shot_list.filter(r => r.done).length
@@ -45,25 +73,45 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
   const [busy, setBusy] = useState<string | null>(null)
 
   const act = async (action: 'approve' | 'request_changes') => {
-    if (!token || !decide) return
+    if ((!token && !loggedIn) || !decide) return
     if (action === 'request_changes') {
       if (!note.trim()) return toast.error('Write what should change first')
-      if (!name.trim()) return toast.error('Add your name so the team knows who asked')
+      if (token && !name.trim()) return toast.error('Add your name so the team knows who asked')
     }
     if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
     setBusy(action)
     try {
-      const res = await fetch('/api/portal/act', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, item_id: decide.item_id, action, comment: note, author_name: name.trim() }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
-      toast.success(action === 'approve' ? 'Plan approved — thank you!' : 'Sent to your account manager')
+      if (token) {
+        const res = await fetch('/api/portal/act', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, item_id: decide.item_id, action, comment: note, author_name: name.trim() }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      } else {
+        // signed-in client: the same two moves through the item API — the
+        // note goes first so the manager has the context with the status
+        if (note.trim()) {
+          const c = await fetch(`/api/production/items/${decide.item_id}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body: note.trim() }),
+          })
+          if (!c.ok) throw new Error((await c.json()).error ?? 'Could not send your note')
+        }
+        const t = await fetch(`/api/production/items/${decide.item_id}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested' }),
+        })
+        if (!t.ok) throw new Error((await t.json()).error ?? 'Something went wrong')
+      }
+      toast.success(action === 'approve' ? PLAN_APPROVED_TOAST : changesSentToast(amName))
       setNote('')
       setMode(null)
       router.refresh()
+      onActed?.()
     } catch (e) {
       if (e instanceof TypeError) {
         toast.message('Connection hiccup — refreshing to check…')
@@ -115,7 +163,7 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
           className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
           style={{ fontFamily: 'var(--p-mono-font, inherit)' }}
         >
-          <FileDown className="h-3.5 w-3.5" /> Download brief PDF
+          <FileDown className="h-3.5 w-3.5" /> Download the shoot plan (PDF)
         </a>
       )}
 
@@ -124,7 +172,7 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
           {shoot.planned_deliverables.map(d => (
             <span key={d.type} className="border px-2 py-1 text-[11px] uppercase tracking-wider"
               style={{ borderColor: 'var(--p-border)', fontFamily: 'var(--p-mono-font, inherit)' }}>
-              {d.qty} {d.type}{d.qty > 1 ? 's' : ''}
+              {d.qty} {d.qty > 1 ? contentTypePlural(d.type).toLowerCase() : (contentTypeLabel(d.type) ?? 'piece').toLowerCase()}
             </span>
           ))}
         </div>
@@ -154,20 +202,21 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
         </div>
       )}
 
-      {token && decide && (
+      {(token || loggedIn) && decide && (
         <div className="flex flex-col gap-3 border-t pt-4" style={{ borderColor: 'var(--p-border)' }}>
           <p className="text-sm font-medium">
-            This plan is with you. Approve it and we&rsquo;ll lock the date, or tell us what to change.
+            This plan is with you. Approve it, or tell us what to change.
           </p>
+          {mode === null && <p className="text-xs opacity-60">{approvePlanConsequence}</p>}
           {mode === 'changes' && (
             <div className="flex flex-col gap-2">
-              <input
+              {token && <input
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Your name"
                 className="w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
                 style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
-              />
+              />}
               <textarea
                 rows={3}
                 value={note}
@@ -198,7 +247,7 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
                 <button type="button" disabled={busy !== null} onClick={() => act('request_changes')}
                   className="rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
-                  {busy === 'request_changes' ? 'Sending…' : 'Send this to the team'}
+                  {busy === 'request_changes' ? 'Sending…' : 'Send'}
                 </button>
                 <button type="button" disabled={busy !== null} onClick={() => { setMode(null); setNote('') }}
                   className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: 'var(--p-border)' }}>
@@ -236,14 +285,18 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
               />
             </div>
           )}
-          {boardOpen && token && (
-            <Link href={`/portal/${token}/shoot/${shoot.id}`}
-              className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] underline-offset-4 hover:underline"
-              style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
-              <MessageCircle className="h-3.5 w-3.5" /> Thoughts on this plan? Leave a comment →
-            </Link>
-          )}
         </div>
+      )}
+
+      {/* the thread is reachable from the plan itself — it used to appear only
+          once the planning board was expanded, so a plan with no board had no
+          visible way to reply at all */}
+      {token && shoot.details_shared && !bare && (
+        <Link href={`/portal/${token}/shoot/${shoot.id}`}
+          className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] underline-offset-4 hover:underline"
+          style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
+          <MessageCircle className="h-3.5 w-3.5" /> Thoughts on this plan? Leave a comment →
+        </Link>
       )}
     </article>
   )
