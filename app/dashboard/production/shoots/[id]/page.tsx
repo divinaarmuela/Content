@@ -267,7 +267,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 })
                 const json = await res.json()
                 if (!res.ok) throw new Error(json.error ?? 'Could not create the brief task')
-                toast.success('Brief task created — it starts in Shoot brief on the board')
+                toast.success("Brief task created — it's on Production, under Briefs in flight")
                 void load()
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Could not create the brief task')
@@ -282,7 +282,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {briefTask && (
         <Link href={`/dashboard/production/${briefTask.id}`}
           className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
-          Brief task on the pipeline →
+          Open the brief task →
         </Link>
       )}
 
@@ -476,11 +476,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   ))}
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" variant="outline" asChild>
-                      <Link href="/dashboard/production">View on board</Link>
+                      <Link href="/dashboard/editor">View on Editor</Link>
                     </Button>
                     {canEdit && role !== 'scheduler' && (
                       <Button size="sm" asChild>
-                        <Link href={`/dashboard/production?new_for_batch=${batch.id}&client=${batch.client_id}`}>
+                        <Link href={`/dashboard/editor?new_for_batch=${batch.id}&client=${batch.client_id}`}>
                           <Camera className="h-3.5 w-3.5" /> Create items
                         </Link>
                       </Button>

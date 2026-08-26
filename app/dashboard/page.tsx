@@ -8,15 +8,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowRight, Inbox, Users, TrendingUp, CalendarClock,
-  ClipboardList, PencilLine, Send, CheckCircle2, Film,
+  ClipboardList, PencilLine, Send, CheckCircle2, Film, HandHelping,
 } from 'lucide-react'
 import Greeting from './Greeting'
 import { useProductionLive } from './production/useProductionLive'
+import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
+import { itemStatusLabel } from '../lib/brief-task-core'
 
 type ItemLite = {
-  id: string; title: string; status: string; content_type: string
+  id: string; title: string; status: ItemStatus; content_type: string
   priority: string; due_date: string | null
   clients: { name: string } | null
+  work_kinds?: { slug?: string } | null
 }
 type LeadLite = { id: string; created_at: string; fname: string; lname: string; biz: string }
 type UpcomingEntry = {
@@ -35,6 +38,9 @@ type Overview = {
     needs_action: ItemLite[]
     due_soon: ItemLite[]
     due_soon_count?: number
+    /** the open pool — absent on an older server */
+    unassigned?: ItemLite[]
+    unassigned_count?: number
   }
   scheduler?: {
     to_schedule: number
@@ -51,6 +57,8 @@ type Overview = {
     needs_review: ItemLite[]
     my_tasks?: ItemLite[]
     my_tasks_count?: number
+    /** work sitting in nobody's queue — absent on an older server */
+    unassigned_count?: number
     /** absent for managers without a Leads grant */
     leads_total?: number
     leads_week?: number
@@ -70,14 +78,18 @@ const STATUS_BADGE: Record<string, string> = {
   published: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
 }
 
-const statusLabel = (s: string) => s.replace(/_/g, ' ')
+/** Plain words, and a shoot brief's own words when it is one. */
+const statusLabel = (i: ItemLite) =>
+  itemStatusLabel(i.work_kinds?.slug, i.status, STATUS_LABELS[i.status])
 
-function Stat({ label, value, hint, loading, icon: Icon }: {
+function Stat({ label, value, hint, loading, icon: Icon, href }: {
   label: string; value: string | number; hint?: string; loading: boolean
   icon: React.ComponentType<{ className?: string }>
+  /** a number worth acting on links to the page you act on it from */
+  href?: string
 }) {
-  return (
-    <Card>
+  const card = (
+    <Card className={href ? 'transition-shadow hover:shadow-md' : undefined}>
       <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{label}</p>
@@ -92,6 +104,7 @@ function Stat({ label, value, hint, loading, icon: Icon }: {
       </CardContent>
     </Card>
   )
+  return href ? <Link href={href} className="block">{card}</Link> : card
 }
 
 function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: {
@@ -122,8 +135,8 @@ function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: 
             className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
             <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
             <span className="hidden truncate text-xs text-zinc-500 dark:text-zinc-400 sm:block">{i.clients?.name ?? ''}</span>
-            <Badge variant="outline" className={`ml-auto shrink-0 font-normal capitalize ${STATUS_BADGE[i.status] ?? ''}`}>
-              {statusLabel(i.status)}
+            <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${STATUS_BADGE[i.status] ?? ''}`}>
+              {statusLabel(i)}
             </Badge>
           </Link>
         ))}
@@ -193,13 +206,14 @@ function AtRiskThisMonth() {
 /** The production funnel at a glance — draft → review → approval → published. */
 function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }) {
   const STAGES: { key: string; label: string; tint: string }[] = [
-    { key: 'draft_uploaded', label: 'Draft', tint: 'bg-zinc-400' },
-    { key: 'internal_review', label: 'Internal review', tint: 'bg-blue-500' },
-    { key: 'revision_required', label: 'Revisions', tint: 'bg-amber-500' },
-    { key: 'client_review', label: 'Client review', tint: 'bg-violet-500' },
-    { key: 'approved_for_scheduling', label: 'Approved', tint: 'bg-emerald-500' },
-    { key: 'scheduled', label: 'Scheduled', tint: 'bg-cyan-600' },
-    { key: 'published', label: 'Published', tint: 'bg-emerald-700' },
+    // the same words the board uses — a stage is called one thing everywhere
+    { key: 'draft_uploaded', label: STATUS_LABELS.draft_uploaded, tint: 'bg-zinc-400' },
+    { key: 'internal_review', label: STATUS_LABELS.internal_review, tint: 'bg-blue-500' },
+    { key: 'revision_required', label: STATUS_LABELS.revision_required, tint: 'bg-amber-500' },
+    { key: 'client_review', label: STATUS_LABELS.client_review, tint: 'bg-violet-500' },
+    { key: 'approved_for_scheduling', label: STATUS_LABELS.approved_for_scheduling, tint: 'bg-emerald-500' },
+    { key: 'scheduled', label: STATUS_LABELS.scheduled, tint: 'bg-cyan-600' },
+    { key: 'published', label: STATUS_LABELS.published, tint: 'bg-emerald-700' },
   ]
   return (
     <Card>
@@ -255,17 +269,22 @@ export default function OverviewPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="My items" value={data!.editor!.my_items} loading={false} hint="Assigned to you" icon={Film} />
-              <Stat label="Needs re-edit" value={data!.editor!.revisions_needed} loading={false} hint="Revision required" icon={PencilLine} />
-              <Stat label="In internal review" value={data!.editor!.in_internal_review} loading={false} hint="With the account manager" icon={Send} />
+              <Stat label="Being revised" value={data!.editor!.revisions_needed} loading={false} hint="Revision required" icon={PencilLine} />
+              <Stat label="Ready for review" value={data!.editor!.in_internal_review} loading={false} hint="With the account manager" icon={Send} />
               <Stat label="Due this week" value={data!.editor!.due_soon_count ?? data!.editor!.due_soon.length} loading={false} hint="Not yet scheduled" icon={CalendarClock} />
             </div>
             <Pipeline pipeline={data!.pipeline} />
             <div className="grid gap-4 lg:grid-cols-2">
               <ItemList title="Needs your action" icon={PencilLine} items={data!.editor!.needs_action}
-                empty="Nothing waiting on you — all drafts are in review." actionHref="/dashboard/production" actionLabel="Open board" />
+                empty="Nothing waiting on you — all drafts are in review." actionHref="/dashboard/editor" actionLabel="Open board" />
               <ItemList title="Due soon" icon={CalendarClock} items={data!.editor!.due_soon}
-                empty="Nothing due in the next 7 days." actionHref="/dashboard/production" actionLabel="Open board" />
+                empty="Nothing due in the next 7 days." actionHref="/dashboard/editor" actionLabel="Open board" />
             </div>
+            {/* the open pool: work nobody holds, one click from being yours */}
+            {data!.editor!.unassigned && (
+              <ItemList title="Up for grabs" icon={HandHelping} items={data!.editor!.unassigned}
+                empty="Nothing waiting to be picked up." actionHref="/dashboard/editor" actionLabel="Open board" />
+            )}
           </>
         )
       )}
@@ -321,21 +340,25 @@ export default function OverviewPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat label="Clients" value={data.manager.clients} loading={false} hint="You look after" icon={Users} />
-            <Stat label="Internal review" value={data.manager.awaiting_internal_review} loading={false} hint="Waiting on your sign-off" icon={ClipboardList} />
+            <Stat label="Ready for review" value={data.manager.awaiting_internal_review} loading={false} hint="Waiting on your sign-off" icon={ClipboardList} />
             <Stat label="With client" value={data.manager.awaiting_client} loading={false} hint="In client review" icon={Send} />
             {data.manager.latest_leads
               ? <Stat label="Leads · 7 days" value={data.manager.leads_week ?? 0} loading={false} hint={`${data.manager.leads_total ?? 0}+ total`} icon={TrendingUp} />
-              : <Stat label="Revisions open" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
+              : <Stat label="Being revised" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
+            {data.manager.unassigned_count !== undefined && (
+              <Stat label="Unassigned" value={data.manager.unassigned_count} loading={false}
+                hint="Nobody has picked these up" icon={HandHelping} href="/dashboard/editor" />
+            )}
           </div>
           <Pipeline pipeline={data.pipeline} />
           <AtRiskThisMonth />
           {(data.manager.my_tasks?.length ?? 0) > 0 && (
             <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
-              empty="" actionHref="/dashboard/production" actionLabel="Open board" />
+              empty="" actionHref="/dashboard/editor" actionLabel="Open board" />
           )}
           <div className={data.manager.latest_leads ? "grid gap-4 lg:grid-cols-[1.5fr_1fr]" : "grid gap-4"}>
             <ItemList title="Waiting on review" icon={ClipboardList} items={data.manager.needs_review}
-              empty="Nothing in review — the funnel is clear." actionHref="/dashboard/production" actionLabel="Open board" />
+              empty="Nothing in review — the funnel is clear." actionHref="/dashboard/editor" actionLabel="Open board" />
             {data.manager.latest_leads && <div className="flex flex-col gap-4">
               <Card>
                 <CardHeader className="flex-row items-center">

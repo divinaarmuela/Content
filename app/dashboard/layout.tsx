@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Activity,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
 } from 'lucide-react'
 import { useRole } from './useRole'
@@ -54,7 +54,11 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
-  { href: '/dashboard/production', label: 'Production',       icon: Kanban },
+  // one board became three pages, each answering one question: which shoots
+  // am I planning, what is mine to edit, what is mine to post
+  { href: '/dashboard/production', label: 'Production',       icon: Camera },
+  { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
+  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
 ]
@@ -73,9 +77,13 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/audience':      'Audience',
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Production',
+  '/dashboard/editor':        'Editor',
   '/dashboard/bookings':      'Bookings',
   '/dashboard/production/shoots': 'Shoots',
+  '/dashboard/production/availability': 'Availability',
+  '/dashboard/production/proposals': 'Proposals',
   '/dashboard/scheduler':     'Scheduler',
+  '/dashboard/scheduler/calendar': 'Calendar',
   '/dashboard/calendar':      'Calendar',
   '/dashboard/activity':      'Team Activity',
   '/dashboard/reports':       'Reports',
@@ -202,13 +210,13 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
    */
   const resolving = roleLoading || role === null
     || (role !== 'super_admin' && !grantsLoaded)
-  // an ITEM page is shared ground: the scheduler queue links straight to
-  // /dashboard/production/<id> for scheduling, so anyone who may see the
-  // scheduler may open item detail — the API still scopes what it returns
-  // (schedulers get approved+ items only, or a 404)
-  const isItemDetail = /^\/dashboard\/production\/[^/]+$/.test(path)
+  // an ITEM page is shared ground: all three work pages link straight to
+  // /dashboard/production/<id>, so no team member is turned away at the door.
+  // The API (loadItemForUser) decides what any one person may actually see —
+  // a client is the one hat that never gets in this way.
+  const isItemDetail = /^\/dashboard\/production\/[0-9a-f-]{36}$/i.test(path)
   const blocked = !resolving && section !== null && !canSeePage(role, section, granted, hidden)
-    && !(isItemDetail && canSeePage(role, '/dashboard/scheduler', granted, hidden))
+    && !(isItemDetail && role !== 'client')
   const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted, hidden)[0] ?? null
 
   return (
