@@ -102,8 +102,6 @@ describe('the one-board vocabulary is gone', () => {
   const KNOWN: Known[] = [
     { file: 'app/api/production/items/route.ts', contains: 'Hand to a scheduler',
       why: 'a code comment describing the retired action; no user ever reads it' },
-    { file: 'app/lib/workflow-core.ts', contains: 'Hand to a scheduler',
-      why: 'a code comment describing the retired action; no user ever reads it' },
     { file: 'app/lib/brief-task-core.ts', contains: 'Approve for scheduling',
       why: 'a code comment quoting the content-pipeline wording it deliberately overrides' },
   ]

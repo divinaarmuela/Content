@@ -510,20 +510,30 @@ export async function performTransition(
           u.active_status && (u.role === 'account_manager' || u.role === 'super_admin'))
         if (chosen.length > 0) people = chosen
       }
-      if (audience === 'schedulers' && schedulerIds.length > 0) {
-        // the approver picked who schedules this — same trust rule as
-        // reviewers, but the pool is the whole team: scheduling is an
-        // assignment, so a stale id or a client account is all that is dropped
-        const { data: picked } = await supabase
-          .from('team_users')
-          .select('id, email, name, role, active_status')
-          .in('id', schedulerIds)
-        // the actor is NOT filtered out here: an approver who picks only
-        // themselves would leave chosen empty and fall back to the default
-        // broadcast — the whole team emailed. The loop below skips them.
-        const chosen = (picked ?? []).filter(u =>
-          u.active_status && u.role !== 'client')
-        if (chosen.length > 0) people = chosen
+      if (audience === 'assigned_schedulers') {
+        if (schedulerIds.length > 0) {
+          // the approver picked who schedules this — same trust rule as
+          // reviewers, but the pool is the whole team: scheduling is an
+          // assignment, so a stale id or a client account is all that is
+          // dropped. The item's own scheduler_ids are written AFTER this runs,
+          // so the pre-transition snapshot resolveAudience saw is empty and
+          // the pick is the only thing that knows who was chosen.
+          const { data: picked } = await supabase
+            .from('team_users')
+            .select('id, email, name, role, active_status')
+            .in('id', schedulerIds)
+          // the actor is NOT filtered out here: an approver who picks only
+          // themselves would leave chosen empty and fall back to the default
+          // broadcast — the whole team emailed. The loop below skips them.
+          const chosen = (picked ?? []).filter(u =>
+            u.active_status && u.role !== 'client')
+          if (chosen.length > 0) people = chosen
+        } else if (people.length === 0 && to === 'approved_for_scheduling') {
+          // approved and handed to nobody: the queue is open, so every
+          // scheduler hears "anyone can pick it up". Silence here was the bug —
+          // the status says it is their turn and no email ever said so.
+          people = await resolveAudience('schedulers', item)
+        }
       }
       for (const person of people) {
         if (person.id === actor.id) continue // don't notify yourself

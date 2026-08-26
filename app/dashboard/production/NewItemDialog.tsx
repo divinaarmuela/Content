@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
@@ -26,6 +27,14 @@ export type Batch = {
 }
 
 const CONTENT_TYPES = ['reel', 'carousel', 'story', 'static', 'video', 'other']
+
+/** Job titles as people say them. */
+const ROLE_WORD: Record<string, string> = {
+  super_admin: 'super admin',
+  account_manager: 'account manager',
+  scheduler: 'scheduler',
+  editor: 'editor',
+}
 
 const BLANK = {
   client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
@@ -125,6 +134,9 @@ export default function NewItemDialog({
   }, [])
 
   const [adhocReason, setAdhocReason] = useState('')
+  // does this need the client's sign-off, or can a manager finish it in-house?
+  // An asset says yes by default; an internal task never asks the client.
+  const [clientApproval, setClientApproval] = useState(true)
 
   // What the caller already knows, folded in when the dialog opens. The two
   // fields are read out as primitives on purpose: an inline `preset={{…}}`
@@ -173,10 +185,21 @@ export default function NewItemDialog({
   const isTaskKind = presetKind === 'task'
   const hidesMedia = selectedKind ? !selectedKind.uses_media : false
 
+  /** an asset with no shoot behind it needs a reason, and the reason is logged */
+  const needsAdhocReason = !isBriefKind && !isTaskKind && isManager && !draft.batch_id
+  /** a non-manager with no locked shoot to pick cannot create an asset at all */
+  const shootChoices = batches
+    .filter(b => ['locked', 'shot'].includes(b.status ?? 'shot'))
+    .filter(b => !draft.client_id || b.client_id === draft.client_id)
+  const blockedNoShoot = !isBriefKind && !isTaskKind && !isManager && shootChoices.length === 0
+
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
     if (isBriefKind && draft.deliverables.length === 0) {
       return toast.error('Add at least one deliverable — the brief is the promise of what gets made.')
+    }
+    if (needsAdhocReason && !adhocReason.trim()) {
+      return toast.error('Say why this has no shoot — it goes in the log.')
     }
     setNewBusy(true)
     try {
@@ -199,6 +222,8 @@ export default function NewItemDialog({
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
+        // a task is finished in-house; a brief always goes to the client
+        client_approval_required: isTaskKind ? false : isBriefKind ? true : clientApproval,
       }))
       const res = await fetch('/api/production/items', {
         method: 'POST',
@@ -209,6 +234,8 @@ export default function NewItemDialog({
       toast.success(isTaskKind ? 'Task created — it is on Production, under Tasks' : count === 1 ? 'Item created' : `${count} items created`)
       onOpenChange(false)
       setDraft({ ...BLANK })
+      setAdhocReason('')
+      setClientApproval(true)
       onCreated()
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
@@ -229,7 +256,10 @@ export default function NewItemDialog({
   return (
     <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null) }}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{isBriefKind ? 'New shoot brief' : isTaskKind ? 'New task' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{isBriefKind ? 'New brief task' : isTaskKind ? 'New task' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle>
+          <DialogDescription className="text-xs">* required</DialogDescription>
+        </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Client *</Label>
@@ -249,20 +279,20 @@ export default function NewItemDialog({
                 {isManager && (
                   <SelectItem value="none">Ad-hoc item (no shoot)</SelectItem>
                 )}
-                {batches
-                  .filter(b => ['locked', 'shot'].includes(b.status ?? 'shot'))
-                  .filter(b => !draft.client_id || b.client_id === draft.client_id).map(b => (
+                {shootChoices.map(b => (
                   <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {!draft.batch_id && isManager && (
+            {needsAdhocReason && (
               <Input value={adhocReason} placeholder="Why no shoot? (required — this is logged)"
                 onChange={e => setAdhocReason(e.target.value)} className="text-xs" />
             )}
-            {!draft.batch_id && !isManager && (
-              <p className="text-[11px] text-zinc-400">
-                Content items need a locked shoot. Lock the shoot date on its brief first.
+            {blockedNoShoot && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                No shoot is ready for this client yet. Ask an account manager to lock a
+                shoot date, or plan one on{' '}
+                <a href="/dashboard/production" className="underline underline-offset-2">Production</a>.
               </p>
             )}
           </div>
@@ -349,30 +379,54 @@ export default function NewItemDialog({
           )}
           {isManager && (
             <div className="grid gap-1.5">
-              <Label>{isBriefKind ? 'Account manager' : 'Assign to'}</Label>
+              <Label>Who&rsquo;s doing this?</Label>
               <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
-                <SelectTrigger><SelectValue placeholder="Later" /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Leave unassigned — anyone can take it</SelectItem>
+                  <SelectItem value="none">Nobody yet — anyone can pick it up</SelectItem>
                   {(() => {
                     const kind = selectedKind
                     const suggested = kind ? team.filter(m => kind.default_roles.includes(m.role)) : []
                     const ids = new Set(suggested.map(m => m.id))
                     const rest = team.filter(m => !ids.has(m.id))
-                    return [...suggested, ...rest].map(m => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name || m.email}
-                        {ids.has(m.id) ? '' : ` · ${m.role.replace('_', ' ')}`}
-                      </SelectItem>
-                    ))
+                    return (
+                      <>
+                        {suggested.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Suggested for this work type</SelectLabel>
+                            {suggested.map(m => (
+                              <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        {rest.map(m => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name || m.email} · {ROLE_WORD[m.role] ?? m.role}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )
                   })()}
                 </SelectContent>
               </Select>
             </div>
           )}
+          {/* does the client have to sign this off, or can we finish it in
+              house? A task never asks; a brief always does. */}
+          {!isTaskKind && !isBriefKind && (
+            <label className="flex items-center gap-2.5 self-end pb-1.5 text-sm sm:col-span-2">
+              <Switch checked={clientApproval} onCheckedChange={setClientApproval} />
+              <span>
+                Client must approve this
+                <span className="block text-[11px] text-zinc-400 dark:text-zinc-500">
+                  Off means an account manager can approve it without sending it out.
+                </span>
+              </span>
+            </label>
+          )}
           {!hidesMedia && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Raw assets link <span className="text-xs font-normal text-zinc-400">(Dropbox/Drive folder the editor works from)</span></Label>
+            <Label>Folder link <span className="text-xs font-normal text-zinc-400">(Dropbox / Drive — what the editor works from)</span></Label>
             <Input value={draft.raw_assets_url} placeholder="https://www.dropbox.com/…"
               onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-xs" />
           </div>
@@ -419,7 +473,7 @@ export default function NewItemDialog({
           </div>
           {!hidesMedia && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Source files <span className="text-xs font-normal text-zinc-400">(uploaded for the editor — or use the assets link for full shoots)</span></Label>
+            <Label>Files <span className="text-xs font-normal text-zinc-400">(uploaded for the editor — or use the folder link for full shoots)</span></Label>
             {draft.raw_assets.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {draft.raw_assets.map(a => (
@@ -436,14 +490,14 @@ export default function NewItemDialog({
               onChange={e => void onAssetFiles(e.target.files)} />
             <Button type="button" variant="outline" size="sm" className="w-fit"
               disabled={assetBusy} onClick={() => assetFileRef.current?.click()}>
-              <Plus className="h-3.5 w-3.5" /> {assetBusy ? 'Uploading…' : 'Upload files'}
+              <Plus className="h-3.5 w-3.5" /> {assetBusy ? 'Uploading…' : 'Add files'}
             </Button>
           </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
-          <Button onClick={createItems} disabled={newBusy}>{newBusy ? 'Creating…' : isBriefKind ? 'Create shoot brief' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
+          <Button onClick={createItems} disabled={newBusy || blockedNoShoot}>{newBusy ? 'Creating…' : isBriefKind ? 'Create brief task' : isTaskKind ? 'Create task' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -239,7 +239,15 @@ export function presentTransitions(
   roles: readonly Role[],
   from: ItemStatus,
   transitions: Presented[],
-  ctx: { clientApprovalRequired: boolean; viewerIsOwner: boolean },
+  ctx: {
+    clientApprovalRequired: boolean
+    viewerIsOwner: boolean
+    /** whoseTurn().mine, when the caller has it. A super admin MAY act on
+     *  everything, so the role check below says "yes" on every item and drew a
+     *  filled primary button beside a header reading "Waiting on someone else".
+     *  Passing the same answer whoseTurn gives keeps the two in step. */
+    viewerHoldsTurn?: boolean
+  },
   /** whose turn each status is. A brief hands over to nobody at the end — its
    *  surfaces pass BRIEF_STATUS_TURN so the account manager who must book the
    *  shoot gets the button, instead of a scheduler who will never come. */
@@ -254,7 +262,9 @@ export function presentTransitions(
     ))
 
   const turn = turns[from]
-  const holdsTurn = roles.includes('super_admin') || (turn !== null && roles.includes(turn))
+  const holdsTurn = ctx.viewerHoldsTurn !== undefined
+    ? ctx.viewerHoldsTurn
+    : roles.includes('super_admin') || (turn !== null && roles.includes(turn))
   const wanted = PRIMARY_ACTION[from]
   const primary = holdsTurn && wanted ? visible.find(t => t.to === wanted) ?? null : null
 
@@ -320,9 +330,9 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
   'client_changes_requested>revision_required': ['owner_editor'],
   'client_changes_requested>client_review': ['client_users', 'account_managers', 'owner_editor'],
-  // approving never blasts every scheduler — 'assigned_schedulers' is only the
-  // people already on THIS item's scheduler_ids (set by the explicit 'Hand to
-  // a scheduler' action); with none assigned, no scheduler hears anything
+  // approving prefers the people the approver picked, then the item's own
+  // scheduler_ids. Only when nobody at all has been named does the approval
+  // reach every scheduler — an open queue has to be announced to somebody.
   'client_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'internal_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'revision_complete>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],

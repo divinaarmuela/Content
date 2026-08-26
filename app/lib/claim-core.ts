@@ -18,6 +18,8 @@ export type ClaimItem = {
   status: ItemStatus
   /** a shoot brief belongs to the account manager who wrote it */
   is_brief: boolean
+  /** research / strategy / copy: there is no scheduling seat to take */
+  is_internal?: boolean
 }
 
 export type ClaimDecision =
@@ -65,6 +67,11 @@ export function claimDecision(
     return { ok: true }
   }
 
+  // a task ends at "Done" — the statuses look like the scheduler's, but there
+  // is nothing to post, and no page offers the seat
+  if (item.is_internal) {
+    return { ok: false, status: 400, error: 'A task ends when it is approved — there is nothing to schedule' }
+  }
   if (!(CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(item.status)) {
     return { ok: false, status: 400, error: 'This one is not ready for scheduling yet' }
   }

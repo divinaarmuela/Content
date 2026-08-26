@@ -51,8 +51,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // it stays visible in their narrowed view even when the requester isn't
     // their assignor — best-effort, never fails the transition
     if (note) {
+      // …except on the client's own change request: that edge notifies account
+      // managers and NEVER the editor directly (workflow-core), and a tagged
+      // comment emails whoever it names. Leave it untagged so the rule holds.
+      const clientChanges = item.status === 'client_review' && to === 'client_changes_requested'
       await supabase.from('item_comments')
-        .insert({ item_id: id, author_id: user.id, visibility: 'internal', body: note, assigned_to: item.owner_id ?? null })
+        .insert({
+          item_id: id, author_id: user.id, visibility: 'internal', body: note,
+          assigned_to: clientChanges ? null : item.owner_id ?? null,
+        })
         .then(() => {}, () => {})
     }
     // an approve-with-picker is also an assignment: the chosen schedulers'

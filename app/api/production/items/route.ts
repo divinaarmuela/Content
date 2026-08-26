@@ -235,7 +235,11 @@ export async function POST(req: Request) {
         raw_assets_url: it.raw_assets_url ? String(it.raw_assets_url).slice(0, 2000) : null,
         brief: it.brief ? String(it.brief).slice(0, 5000) : null,
         raw_assets: sanitiseRawAssets(it.raw_assets),
-        client_approval_required: it.client_approval_required ?? true,
+        // the caller decides; an internal task defaults to NO client step
+        // (its "Approve — done" is the whole point), everything else to yes
+        client_approval_required: typeof it.client_approval_required === 'boolean'
+          ? it.client_approval_required
+          : !isInternal,
       })
     }
 

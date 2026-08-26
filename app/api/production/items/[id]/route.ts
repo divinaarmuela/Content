@@ -84,9 +84,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json()
     const keys = Object.keys(body ?? {})
     const captionOnly = keys.length === 1 && keys[0] === 'caption'
-    const user = captionOnly ? await requireRole('scheduler') : await requireRole('account_manager')
+    // the BRIEF fields are the evidence a shoot brief is submitted with, and
+    // the brief's own submit edge is open to its editor-owner — so an owner
+    // who is not an account manager must be able to fill them in
+    const briefOnly = keys.length > 0 && keys.every(k => k === 'brief_url' || k === 'brief')
+    // 'scheduler' is the lowest team floor: it admits every team role and no
+    // client. The per-item hat check below is the real gate.
+    const user = captionOnly || briefOnly
+      ? await requireRole('scheduler')
+      : await requireRole('account_manager')
     const { id } = await params
     const current = await loadItemForUser(user, id)
+    if (
+      briefOnly
+      && !['account_manager', 'super_admin'].includes(user.role)
+      && !actingRoles({ id: user.id, role: user.role }, current).includes('editor')
+    ) {
+      return NextResponse.json({ error: 'This brief is assigned to someone else' }, { status: 403 })
+    }
     // 'scheduler' as a floor admits editors — the caption IS the published post
     // text, so it belongs to whoever holds the SCHEDULING here (the hat, not
     // the title: an editor handed the item writes the post text they will

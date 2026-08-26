@@ -74,12 +74,15 @@ describe('defaultAllows — the ladder as it always was', () => {
     }
   })
 
-  it('keeps a scheduler on their own pages, scheduler, calendar, social and the editor board', () => {
+  it('keeps a scheduler on their own pages, scheduler, calendar, social, editor and production', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/calendar')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/editor')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/production')).toBe(false)
+    // an internal task can be handed to anyone, and Production is the only
+    // page that lists one — without it the holder cannot see their own work
+    expect(defaultAllows('scheduler', '/dashboard/production')).toBe(true)
+    expect(defaultAllows('scheduler', '/dashboard/clients')).toBe(false)
   })
 
   it('every team role gets Notifications and Settings — their own feed and prefs', () => {

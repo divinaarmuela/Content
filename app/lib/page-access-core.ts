@@ -87,8 +87,11 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   }
   // schedulers run the client channels day-to-day: queue, calendar, and the
   // social area itself (channels, inbox, analytics) — that is where they post
+  // …plus Production: a scheduler can be handed an internal task like anyone
+  // else, and Production is the only page that lists one. Without it, a task
+  // assigned to a scheduler was invisible to the person holding it.
   if (role === 'scheduler') {
-    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor'].includes(href)
+    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor', '/dashboard/production'].includes(href)
   }
   // account managers run client delivery, not business development — the
   // lead funnel and audience lists stay out of their default world

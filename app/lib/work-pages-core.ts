@@ -61,6 +61,26 @@ export function activeInternalTasks<T extends WorkItem>(items: T[]): T[] {
   return items.filter(i => isInternalTask(i) && !TASK_DONE_STATUSES.has(i.status))
 }
 
+/**
+ * Tasks finished in the last `days` — the tail Production keeps, collapsed.
+ *
+ * A Done task leaves the open list, and `backLinkFor` still sends its detail
+ * page to Production: without this, "Back" landed on a page that did not
+ * contain the item. Newest first.
+ */
+export function recentlyDoneTasks<T extends WorkItem & { updated_at?: string | null }>(
+  items: T[], now: Date = new Date(), days = 14,
+): T[] {
+  const since = now.getTime() - days * 86_400_000
+  return items
+    .filter(i => isInternalTask(i) && TASK_DONE_STATUSES.has(i.status))
+    .filter(i => {
+      const t = i.updated_at ? new Date(i.updated_at).getTime() : NaN
+      return Number.isFinite(t) && t >= since
+    })
+    .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+}
+
 /** The editor board's columns. Together they cover every status before the
  *  scheduler takes over — each one exactly once. */
 export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
@@ -135,6 +155,8 @@ export function unassignedCount<T extends WorkItem>(
 /** The two counts the editor page shows as a footnote rather than a column —
  *  work that is done, kept visible without taking up the board. */
 export function editorTail(items: WorkItem[]): { scheduled: number; published: number } {
+  // NOTE: pass the PRE-scope list. editorScope has already dropped 'scheduled'
+  // and 'published', so counting its output can only ever return two zeros.
   const own = items.filter(i => isAsset(i))
   return {
     scheduled: own.filter(i => i.status === 'scheduled').length,

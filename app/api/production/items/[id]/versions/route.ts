@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { addVersion } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
@@ -9,7 +9,11 @@ import { actingRoles } from '../../../../../lib/workflow-core'
  *  item — its owner, or anyone while it is unowned — plus managers. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('editor')
+    // NOT requireRole('editor'): the editor HAT is an assignment, not a job
+    // title, so a scheduler-role person who OWNS this item wears it. The
+    // actingRoles check below is the real gate; a role floor here refused the
+    // owner their own item and stranded it at draft forever.
+    const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
     // uploading a cut to someone else's assigned job is not a thing: hiding

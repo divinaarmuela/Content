@@ -83,14 +83,22 @@ export async function GET() {
     // nobody's job yet: the pool anyone may pick up. A shoot brief is never in
     // it (an account manager writes those), and neither is anything already
     // approved — that pool is the scheduler's, and it is a different seat.
-    const unassignedAll = items.filter(i =>
-      !i.owner_id
-      && ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== SHOOT_BRIEF_SLUG
-      && !(SCHEDULER_STATUSES as readonly string[]).includes(i.status))
+    // …and neither is an internal task: the Editor board this list links to
+    // shows assets only, so counting tasks here promised rows nobody could see.
+    const unassignedAll = items.filter(i => {
+      const kind = (i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds
+      return !i.owner_id
+        && (kind?.slug ?? '') !== SHOOT_BRIEF_SLUG
+        && !isInternalKind(kind)
+        && !(SCHEDULER_STATUSES as readonly string[]).includes(i.status)
+    })
 
     if (user.role === 'editor') {
-      const mine = items.filter(i => i.owner_id === user.id)
-      const pool = mine.length > 0 ? mine : items // editors on shared boards still get a picture
+      // strictly the editor's OWN work: the old "…else everything" fallback
+      // filed colleagues' items under "Needs your action" for anyone holding
+      // nothing. The "Up for grabs" list below is the answer to an empty desk.
+      const pool = items.filter(i => i.owner_id === user.id)
+      const mine = pool
       // 'revision_complete' is deliberately absent: the editor has already
       // done that one and it is the manager's move now
       const needsAction = pool
@@ -123,8 +131,12 @@ export async function GET() {
       // them, plus unassigned ones so nothing approved can go invisible
       const queue = items.filter(i => {
         if (i.status !== 'approved_for_scheduling') return false
+        const kind = (i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds
         // an approved shoot BRIEF is booked by its account manager, not queued
-        if (((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === 'shoot_brief') return false
+        if ((kind?.slug ?? '') === 'shoot_brief') return false
+        // …and an approved internal task is simply Done — the Scheduler page
+        // hides it, so counting it in "To schedule" promised work that isn't
+        if (isInternalKind(kind)) return false
         const assigned = Array.isArray(i.scheduler_ids) ? i.scheduler_ids : []
         return assigned.length === 0 || assigned.includes(user.id)
       })
@@ -181,8 +193,14 @@ export async function GET() {
         : Promise.resolve({ data: null }),
     ])
     const leads = leadRows ?? []
+    // the manager's own queue: the three statuses whose turn is theirs.
+    // 'client_review' is the CLIENT's move and already has its own stat
+    // ("With client"); 'revision_complete' is a manager sign-off and used to
+    // be reported nowhere at all. Same population as the pipeline counts
+    // above it — a "Ready for review 0" above three rows is a bug report.
     const needsReview = items
-      .filter(i => ['internal_review', 'client_review', 'client_changes_requested'].includes(i.status))
+      .filter(i => ['internal_review', 'revision_complete', 'client_changes_requested'].includes(i.status))
+      .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
       .slice(0, 8)
     // managers get assigned work too (a graphics or copy task can land on
     // anyone) — surface it, soonest due first, or it silently rots
@@ -203,7 +221,8 @@ export async function GET() {
       pipeline,
       manager: {
         clients: (clientRows ?? []).length,
-        awaiting_internal_review: pipeline.internal_review ?? 0,
+        // both stages that wait on a manager: the first look and the re-look
+        awaiting_internal_review: (pipeline.internal_review ?? 0) + (pipeline.revision_complete ?? 0),
         awaiting_client: (pipeline.client_review ?? 0) + (pipeline.client_changes_requested ?? 0),
         revisions_open: pipeline.revision_required ?? 0,
         needs_review: needsReview,

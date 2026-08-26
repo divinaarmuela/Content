@@ -8,6 +8,7 @@ import {
   claimDecision, CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES, type ClaimHat,
 } from '../../../../../lib/claim-core'
 import { SHOOT_BRIEF_SLUG } from '../../../../../lib/brief-task-core'
+import { isInternalKind } from '../../../../../lib/task-kind-core'
 import { schedulerIdsOf, type ItemStatus } from '../../../../../lib/workflow-core'
 
 /** Name a team member for a 409 message. Never their email — a colleague's
@@ -59,11 +60,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // a shoot brief rides the item machine but is not open work
     const { data: kindRow } = await supabase
-      .from('content_items').select('work_kinds(slug)').eq('id', id).maybeSingle()
-    const isBrief = ((kindRow?.work_kinds as { slug?: string } | null)?.slug ?? null) === SHOOT_BRIEF_SLUG
+      .from('content_items').select('work_kinds(slug, uses_media)').eq('id', id).maybeSingle()
+    const kind = kindRow?.work_kinds as { slug?: string; uses_media?: boolean } | null
+    const isBrief = (kind?.slug ?? null) === SHOOT_BRIEF_SLUG
 
     const decision = claimDecision(
-      { status: item.status as ItemStatus, is_brief: isBrief },
+      { status: item.status as ItemStatus, is_brief: isBrief, is_internal: isInternalKind(kind) },
       { id: user.id, role: user.role },
       hat,
     )
