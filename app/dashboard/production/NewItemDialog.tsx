@@ -432,13 +432,15 @@ export default function NewItemDialog({
                   {isTaskKind ? '' : '(optional — defaults below)'}
                 </span>
               </Label>
-              <Select value={draft.work_kind_id || 'default'}
+              {/* the first row IS the default kind, so an id equal to it selects that row;
+                  in task mode the default is a real task type, never the asset fallback */}
+              <Select value={draft.work_kind_id && draft.work_kind_id !== defaultKind?.id ? draft.work_kind_id : 'default'}
                 onValueChange={v => {
                   if (v === '__new__') { setKindHint(null); setNewKindName(''); return }
                   kindTouchedRef.current = true
                   setKindHint(null)
                   setNewKindName(null)
-                  setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' }))
+                  setDraft(d => ({ ...d, work_kind_id: v === 'default' ? (isTaskKind ? (defaultKind?.id ?? '') : '') : v ?? '' }))
                 }}>
                 <SelectTrigger className={newKindName !== null ? 'hidden' : undefined}><SelectValue /></SelectTrigger>
                 <SelectContent>
