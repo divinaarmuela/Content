@@ -101,7 +101,10 @@ export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] 
  * the recent ones (see `recentlyDoneTasks`) so the column stays a footnote.
  */
 export const TASK_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
-  { key: 'doing', title: 'In progress', statuses: ['draft_uploaded'] },
+  // "To do", not "In progress": a task at draft_uploaded with nothing attached
+  // reads "Not started" on its own page, and a card saying Not started inside
+  // a column headed In progress is the board contradicting the item
+  { key: 'doing', title: 'To do', statuses: ['draft_uploaded'] },
   { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
   { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
   { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
@@ -116,11 +119,19 @@ export function editorAssignment(i: WorkItem, v: Viewer): Assignment {
   return 'other'
 }
 
-/** On the scheduler page the OWNER counts as mine too: the person who made it
- *  is allowed to follow it out the door. */
+/**
+ * On the scheduler page "mine" means the SCHEDULING is mine — nothing else.
+ *
+ * The owner used to count too, on the theory that whoever made a thing may
+ * follow it out the door. On screen that produced a flat contradiction: under
+ * "Mine · Only what is assigned to you" sat a row badged "Unassigned — any
+ * scheduler can take it", because the item's editor was the viewer and its
+ * scheduler was nobody. One row cannot be both. The scheduling seat is the
+ * only assignment this page is about.
+ */
 export function schedulerAssignment(i: WorkItem, v: Viewer): Assignment {
   const ids = schedulerIdsOf(i)
-  if (ids.includes(v.id) || i.owner_id === v.id) return 'mine'
+  if (ids.includes(v.id)) return 'mine'
   if (ids.length === 0) return 'unassigned'
   return 'other'
 }

@@ -27,19 +27,20 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-  AlertDialogTitle, AlertDialogTrigger,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Trash2 } from 'lucide-react'
 import {
   actingRoles, availableTransitionsAs, presentTransitions, schedulerIdsOf, whoseTurn,
-  CLIENT_LABELS, STATUS_LABELS, STATUS_MEANING, STATUS_TURN, type ItemStatus,
+  CLIENT_LABELS, SCHEDULER_STATUSES, STATUS_LABELS, STATUS_MEANING, STATUS_TURN, type ItemStatus,
 } from '../../../lib/workflow-core'
 import {
   availableBriefTaskTransitionsAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
   BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN,
 } from '../../../lib/brief-task-core'
 import {
-  availableTaskTransitionsAs, isInternalKind, taskStatusLabel, TASK_STATUS_MEANING, TASK_STATUS_TURN,
+  availableTaskTransitionsAs, isInternalKind, taskStatusLabel,
+  TASK_DONE_STATUSES, TASK_STATUS_MEANING, TASK_STATUS_TURN,
 } from '../../../lib/task-kind-core'
 import { needsNewVersion } from '../../../lib/claim-core'
 import { lastList } from '../../lastList'
@@ -203,6 +204,7 @@ export default function ItemDetailPage() {
 
   // type-to-confirm for deletion — a destructive click must be deliberate
   const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   // connected social publishing (the Zernio integration): what WOULD go out
   type PublishPlan = {
@@ -308,16 +310,35 @@ export default function ItemDetailPage() {
   // reverting someone else's edit. Only what YOU typed since focus is saved.
   const focusVal = useRef<Record<string, string>>({})
 
+  /**
+   * Refetch, with the answers kept in order.
+   *
+   * THE BUG THIS FIXES. Three things call load(): a mutation finishing, the
+   * realtime hint, and the 60s poll. They overlap constantly, and HTTP gives
+   * no ordering guarantee — so a poll issued BEFORE a save could answer AFTER
+   * it and put the pre-save item straight back into state. The screen then
+   * told you to do the thing you had just done ("Nothing attached yet" under
+   * a toast reading "Version v1 added"), and every flag derived from `detail`
+   * — including which buttons are disabled — came from data that was already
+   * wrong. A stamped sequence makes a late answer a discarded answer.
+   */
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
-    const res = await fetch(`/api/production/items/${id}`)
+    const seq = ++loadSeq.current
+    // no-store: this is live workflow state, and a revalidation-free hit from
+    // the browser cache is the same stale-state bug by another route
+    const res = await fetch(`/api/production/items/${id}`, { cache: 'no-store' })
     if (!res.ok) {
+      if (seq !== loadSeq.current) return
       toast.error((await res.json()).error ?? 'Failed to load item')
       // no detail to ask where this came from — the editor board is where an
       // unreadable content item would have been listed
       router.push('/dashboard/editor')
       return
     }
-    setDetail(await res.json())
+    const json = await res.json()
+    if (seq !== loadSeq.current) return // a newer request already answered
+    setDetail(json)
   }, [id, router])
 
   useEffect(() => { load() }, [load])
@@ -399,7 +420,13 @@ export default function ItemDetailPage() {
   // the fallback for a payload from before that field existed.
   const hats = detail.acting_roles ?? actingRoles(viewer, detail)
   const isSuper = role === 'super_admin'
-  const canAddVersion = isSuper || hats.includes('editor') || hats.includes('account_manager')
+  /** past this point there is nothing left to attach — a finished task still
+   *  offering "Attach the work · Save this draft" invites work nobody wants */
+  const editingClosed = isInternal
+    ? TASK_DONE_STATUSES.has(detail.status)
+    : SCHEDULER_STATUSES.includes(detail.status)
+  const canAddVersion = !editingClosed
+    && (isSuper || hats.includes('editor') || hats.includes('account_manager'))
   // schedulers may comment on what they schedule; clients talk in their portal
   const canComment = role !== 'client'
     && (isSuper || hats.includes('editor') || hats.includes('account_manager') || hats.includes('scheduler'))
@@ -697,8 +724,16 @@ export default function ItemDetailPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
-      toast.success(`Version v${json.version_number} added`)
+      toast.success(isInternal ? `Draft ${json.version_number} saved` : `Version v${json.version_number} added`)
       setVerDraft({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
+      // put it on the page NOW: "The work" and the Submit button both read
+      // detail.versions, and a toast above an unchanged screen is how the
+      // team learns to distrust the save
+      setDetail(d => (d ? {
+        ...d,
+        versions: [json as Version, ...d.versions],
+        current_version_number: json.version_number ?? d.current_version_number,
+      } : d))
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
@@ -740,6 +775,33 @@ export default function ItemDetailPage() {
     if (!res.ok) return toast.error('Update failed')
     load()
   }
+
+  /**
+   * Save one field, and make the page agree with itself immediately.
+   *
+   * These used to fire-and-forget a PATCH and then call load(). Between the
+   * two, every flag derived from `detail` — "is a brief link present", "is
+   * Submit enabled" — still described the state before the save, so the page
+   * carried on telling you to do the thing you had just done. Applying the
+   * value locally closes that window; the refetch that follows is the source
+   * of truth, and the sequence guard keeps a slow answer from undoing it.
+   */
+  const saveField = (patch: Record<string, unknown>, done: string) =>
+    fetch(`/api/production/items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+      .then(async r => {
+        if (!r.ok) {
+          toast.error((await r.json().catch(() => ({}))).error ?? 'Save failed')
+          return
+        }
+        setDetail(d => (d ? { ...d, ...patch } as Detail : d))
+        toast.success(done)
+        void load()
+      })
+      .catch(() => toast.error('Could not save — check your connection'))
 
   const saveOwner = async (ownerId: string) => {
     setBusy('owner')
@@ -793,7 +855,9 @@ export default function ItemDetailPage() {
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
-      toast.success(mode === 'live' ? 'Live link saved' : mode === 'posted' ? 'Marked posted in-app' : 'Schedule saved')
+      toast.success(mode === 'live' ? 'Live link saved'
+        : mode === 'posted' ? 'Marked posted — no link'
+        : 'Date set — you can mark it scheduled now')
       setSchedDraft(d => ({ ...d, live_url: '' }))
       load()
     } catch (e) {
@@ -1031,11 +1095,7 @@ export default function ItemDetailPage() {
                     const v = e.target.value.trim()
                     if (v === (focusVal.current.brief_url ?? '').trim()) return
                     if (v !== (detail.brief_url ?? '')) {
-                      void fetch(`/api/production/items/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ brief_url: v || null }),
-                      }).then(r => { if (r.ok) { toast.success('Brief link saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                      void saveField({ brief_url: v || null }, 'Brief link saved')
                     }
                   }}
                 />
@@ -1058,11 +1118,7 @@ export default function ItemDetailPage() {
                   const v = e.target.value.trim()
                   if (v === (focusVal.current.brief ?? '').trim()) return
                   if (v !== (detail.brief ?? '')) {
-                    void fetch(`/api/production/items/${id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ brief: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Note saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                    void saveField({ brief: v || null }, 'Note saved')
                   }
                 }}
               />
@@ -1196,11 +1252,7 @@ export default function ItemDetailPage() {
                       const v = e.target.value.trim()
                       if (v === (focusVal.current.raw_assets_url ?? '').trim()) return // nothing typed — never save
                       if (v !== (detail.raw_assets_url ?? '')) {
-                        void fetch(`/api/production/items/${id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ raw_assets_url: v || null }),
-                        }).then(r => { if (r.ok) { toast.success('Folder link saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                        void saveField({ raw_assets_url: v || null }, 'Folder link saved')
                       }
                     }}
                   />
@@ -1217,11 +1269,7 @@ export default function ItemDetailPage() {
                       const v = e.target.value.trim()
                       if (v === (focusVal.current.brief ?? '').trim()) return // nothing typed — never save
                       if (v !== (detail.brief ?? '')) {
-                        void fetch(`/api/production/items/${id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ brief: v || null }),
-                        }).then(r => { if (r.ok) { toast.success('Brief saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                        void saveField({ brief: v || null }, 'Brief saved')
                       }
                     }}
                   />
@@ -1244,11 +1292,7 @@ export default function ItemDetailPage() {
                         <button type="button" aria-label={`Remove ${a.name}`}
                           className="text-zinc-400 hover:text-red-500"
                           onClick={() => {
-                            void fetch(`/api/production/items/${id}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }),
-                            }).then(r => { if (r.ok) { toast.success('File removed'); load() } else toast.error('Remove failed') }).catch(() => toast.error('Could not save — check your connection'))
+                            void saveField({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }, 'File removed')
                           }}>✕</button>
                       )}
                     </div>
@@ -1286,11 +1330,7 @@ export default function ItemDetailPage() {
                   const v = e.target.value.trim()
                   if (v === (focusVal.current.brief ?? '').trim()) return
                   if (v !== (detail.brief ?? '')) {
-                    void fetch(`/api/production/items/${id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ brief: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                    void saveField({ brief: v || null }, 'Saved')
                   }
                 }}
               />
@@ -1421,11 +1461,7 @@ export default function ItemDetailPage() {
                   const v = e.target.value.trim()
                   if (v === (focusVal.current.caption ?? '').trim()) return // nothing typed — never save
                   if (v !== (detail.caption ?? '')) {
-                    void fetch(`/api/production/items/${id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ caption: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Caption saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
+                    void saveField({ caption: v || null }, 'Caption saved')
                   }
                 }}
               />
@@ -1669,12 +1705,17 @@ export default function ItemDetailPage() {
                 Its versions, comments and schedule go with it — for everyone, including the client.
               </p>
             </div>
-            <AlertDialog onOpenChange={o => !o && setDeleteConfirm('')}>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400">
-                  <Trash2 className="h-3.5 w-3.5" /> Delete item
-                </Button>
-              </AlertDialogTrigger>
+            {/* CONTROLLED, and opened by a plain button. Radix's own trigger
+                TOGGLES the dialog, so a click that opened it and a stray
+                dismiss in the same gesture left it shut — which is exactly the
+                "click once to arm it, again for the dialog, a third to disarm"
+                behaviour people reported. A set is not a toggle. */}
+            <AlertDialog open={deleteOpen}
+              onOpenChange={o => { setDeleteOpen(o); if (!o) setDeleteConfirm('') }}>
+              <Button variant="outline" size="sm" className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400"
+                onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete item
+              </Button>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete “{detail.title}”?</AlertDialogTitle>

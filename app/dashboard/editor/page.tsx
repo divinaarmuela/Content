@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -120,7 +120,9 @@ export default function EditorPage() {
       .catch(() => setStrip([]))
   }, [clientFilter])
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     try {
       const [itemsRes, clientsRes, batchesRes] = await Promise.all([
         fetch('/api/production/items', { cache: 'no-store' }),
@@ -132,6 +134,7 @@ export default function EditorPage() {
         if (String(err).match(/relation|does not exist/i)) { setNeedsSchema(true); setItems([]); return }
         throw new Error(err || 'Failed to load items')
       }
+      if (seq !== loadSeq.current) return // an older answer must never win
       setItems(await itemsRes.json())
       if (clientsRes.ok) setClients(await clientsRes.json())
       if (batchesRes.ok) setBatches(await batchesRes.json())

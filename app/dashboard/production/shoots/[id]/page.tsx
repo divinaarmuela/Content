@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -91,14 +91,20 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [portalToken, setPortalToken] = useState<string | null>(null)
 
+  /** Stamped so a slow answer from an older request cannot overwrite a newer
+   *  one — the poll, the realtime hint and every save all call this. */
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
-    const res = await fetch(`/api/production/batches/${id}`)
+    const seq = ++loadSeq.current
+    const res = await fetch(`/api/production/batches/${id}`, { cache: 'no-store' })
     if (!res.ok) {
+      if (seq !== loadSeq.current) return
       toast.error((await res.json()).error ?? 'Could not load the brief')
       router.push('/dashboard/production')
       return
     }
     const json = await res.json()
+    if (seq !== loadSeq.current) return
     setBatch(json.batch)
     setItems(json.items ?? [])
     setLockedByName(json.locked_by_name ?? null)
@@ -127,14 +133,32 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const isManager = ['account_manager', 'super_admin'].includes(role)
   const canEdit = ['editor', 'account_manager', 'super_admin'].includes(role)
 
-  /** Field-level save: send ONLY what changed. */
+  /**
+   * Field-level save: send ONLY what changed.
+   *
+   * `pending` counts saves still in the air. THE FIRST-CLICK BUG lived here:
+   * the shoot date is an uncontrolled input saved on blur, and the Lock
+   * confirm was `disabled={… || !batch.shoot_date}`. Type a date, click
+   * "Lock shoot date", click "Lock date" — and the blur's PATCH had not
+   * answered yet, so `batch.shoot_date` was still null, so the confirm was
+   * disabled, so the click hit a disabled button and vanished without a
+   * toast. A second click, after the PATCH landed, worked. Nothing else on
+   * screen ever said why.
+   */
+  const pending = useRef(0)
+  // the freshest batch, readable from inside an async click handler — the
+  // `batch` a closure captured is the one from the render it was created in
+  const batchRef = useRef<Batch | null>(null)
+  useEffect(() => { batchRef.current = batch }, [batch])
   const patch = async (field: string, value: unknown, quiet = false) => {
+    pending.current += 1
     setSaveState('saving')
     const res = await fetch(`/api/production/batches/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [field]: value }),
     })
+    pending.current = Math.max(0, pending.current - 1)
     if (!res.ok) {
       setSaveState('idle')
       toast.error((await res.json()).error ?? 'Could not save')
@@ -638,8 +662,25 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={busy !== null || !batch.shoot_date}
-              onClick={e => { e.preventDefault(); void transition('locked', 'Lock shoot date') }}>
+            {/* never disabled by data that might still be in flight: while a
+                field save is in the air the button WAITS for it and then goes,
+                so a click always ends in a lock or a message */}
+            <AlertDialogAction disabled={busy !== null}
+              onClick={async e => {
+                e.preventDefault()
+                if (pending.current > 0) {
+                  setBusy('locked')
+                  // let the blur-save that is in the air land first
+                  for (let i = 0; i < 40 && pending.current > 0; i++) await new Promise(r => setTimeout(r, 50))
+                  setBusy(null)
+                }
+                const dated = batchRef.current?.shoot_date ?? batch.shoot_date
+                if (!dated) {
+                  toast.error('Set the shoot date first — it is the field above this button.')
+                  return
+                }
+                void transition('locked', 'Lock shoot date')
+              }}>
               {busy === 'locked' ? 'Locking…' : 'Lock date'}
             </AlertDialogAction>
           </AlertDialogFooter>

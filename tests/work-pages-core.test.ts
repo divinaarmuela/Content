@@ -69,8 +69,13 @@ describe('schedulerAssignment', () => {
   it('mine when I am handed it', () => {
     expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: [ME] }), viewer('scheduler'))).toBe('mine')
   })
-  it('mine when I made it — the owner follows their post out of the door', () => {
-    expect(schedulerAssignment(item({ owner_id: ME, scheduler_ids: [THEM] }), viewer())).toBe('mine')
+  it('NOT mine merely because I own the item — this page is about scheduling', () => {
+    // owning it and holding the scheduling are different seats. Counting the
+    // owner put a row badged "Unassigned — any scheduler can take it" under a
+    // filter that said "Only what is assigned to you".
+    expect(schedulerAssignment(item({ owner_id: ME, scheduler_ids: [THEM] }), viewer())).toBe('other')
+    expect(schedulerAssignment(item({ owner_id: ME, scheduler_ids: [] }), viewer())).toBe('unassigned')
+    expect(schedulerAssignment(item({ owner_id: ME, scheduler_ids: [ME] }), viewer())).toBe('mine')
   })
   it('unassigned when nobody is handed it', () => {
     expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: [] }), viewer('scheduler'))).toBe('unassigned')
@@ -264,9 +269,9 @@ describe('TASK_LANES', () => {
     expect(new Set(covered).size).toBe(covered.length)
   })
 
-  it('read in the task vocabulary — In progress, not Drafting', () => {
+  it('read in the task vocabulary — To do, never "Drafting"', () => {
     expect(TASK_LANES.map(l => l.title)).toEqual([
-      'In progress', 'Ready for review', 'Being revised', 'With client', 'Done',
+      'To do', 'Ready for review', 'Being revised', 'With client', 'Done',
     ])
   })
 
@@ -284,7 +289,9 @@ describe('TASK_LANES', () => {
         expect(TASK_KIND_LABELS[s]).toBeTruthy()
       }
     }
+    // the CARD says Not started or In progress; the LANE has to hold both
     expect(TASK_KIND_LABELS.draft_uploaded).toBe('In progress')
+    expect(TASK_LANES[0].title).toBe('To do')
     expect(TASK_KIND_LABELS.approved_for_scheduling).toBe('Done')
   })
 })

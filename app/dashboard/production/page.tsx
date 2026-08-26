@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -153,13 +153,16 @@ export default function ProductionPage() {
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     try {
       const [bRes, cRes, iRes] = await Promise.all([
         fetch('/api/production/batches', { cache: 'no-store' }),
         fetch('/api/website/clients'),
         fetch('/api/production/items', { cache: 'no-store' }),
       ])
+      if (seq !== loadSeq.current) return // an older answer must never win
       if (bRes.ok) {
         const rows: Shoot[] = await bRes.json()
         // schema not migrated yet → rows have no status; show the setup card

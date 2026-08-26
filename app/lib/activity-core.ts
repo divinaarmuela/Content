@@ -75,6 +75,13 @@ export function describeActivity(row: ActivityRow, kind: ActivityKind): string |
     case 'created':
       return `Created by ${who}`
     case 'status_change': {
+      // the client's own yes is a different sentence from the team's, and the
+      // button that writes it says so — the history has to match it
+      if (row.new_value === 'approved_for_scheduling' && row.old_value === 'client_review') {
+        return kind === 'task' ? `Client approved — marked done by ${who}`
+          : kind === 'brief' ? `The client's plan approval logged by ${who}`
+          : `The client's approval logged by ${who}`
+      }
       const word = ARRIVED[kind][row.new_value as ItemStatus]
       return word ? `${word} by ${who}` : null
     }

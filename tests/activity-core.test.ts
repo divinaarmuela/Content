@@ -17,10 +17,20 @@ describe('describeActivity', () => {
   })
 
   it('says approved for an asset, plan approved for a brief, done for a task', () => {
-    const r = row({ new_value: 'approved_for_scheduling' })
+    // an INTERNAL approval — nobody asked the client
+    const r = row({ new_value: 'approved_for_scheduling', old_value: 'internal_review' })
     expect(describeActivity(r, 'asset')).toBe('Approved by Divina')
     expect(describeActivity(r, 'brief')).toBe('Plan approved by Divina')
     expect(describeActivity(r, 'task')).toBe('Approved — done by Divina')
+  })
+
+  it('records the CLIENT’s approval in the words the button used', () => {
+    // the button says "Client approved — mark done"; the history said
+    // "Approved — done", which is the one place the old vocabulary survived
+    const r = row({ new_value: 'approved_for_scheduling', old_value: 'client_review' })
+    expect(describeActivity(r, 'task')).toBe('Client approved — marked done by Divina')
+    expect(describeActivity(r, 'brief')).toBe("The client's plan approval logged by Divina")
+    expect(describeActivity(r, 'asset')).toBe("The client's approval logged by Divina")
   })
 
   it('calls a booked shoot booked, never published', () => {

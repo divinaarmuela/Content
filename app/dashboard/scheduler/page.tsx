@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -76,11 +76,14 @@ export default function SchedulerPage() {
   // may open it. No grants are loaded here, so this is the role default.
   const canSeeEditor = defaultAllows(me?.role ?? null, '/dashboard/editor')
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     try {
       const res = await fetch('/api/production/items', { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load queue')
       const all: Item[] = await res.json()
+      if (seq !== loadSeq.current) return // an older answer must never win
       setItems(all)
       // fetch schedule entries for scheduled/published rows (small N, parallel).
       // a shoot brief rides this same status pipeline but is never scheduled,
