@@ -316,9 +316,9 @@ export default function ProductionPage() {
                 ? 'Briefs are in flight, but none of them are yours — switch to Everyone above to see them.'
                 : 'Plan a shoot to brief the team before production starts.'}
             </p>
-            {canPlan && !briefsOutOfScope && (
-              <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan shoot</Button>
-            )}
+            {/* planning is always a valid next move for whoever can plan —
+                whatever the reason the page is empty */}
+            {canPlan && <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan shoot</Button>}
           </CardContent>
         </Card>
       ) : (
