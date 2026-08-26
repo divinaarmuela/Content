@@ -93,9 +93,11 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
           <Reveal gate={false} delay={160}>
             <div className="mt-7 flex flex-wrap gap-x-10 gap-y-3" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
               {[
-                ['In review', data.needs_review.length],
-                ['In production', data.in_production.length],
-                ['Queued', data.approved.length + data.scheduled.length],
+                // the counters, the headings and the chips are the SAME four
+                // words — a client counting "01" finds the section that says it
+                ['Needs your review', data.needs_review.length],
+                ['In production', data.in_production.length + data.changes_requested.length],
+                ['Approved', data.approved.length + data.scheduled.length],
                 ['Published', data.published.length],
               ].map(([label, n]) => (
                 <div key={label as string}>
@@ -125,14 +127,22 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
       </header>
 
       <main className="flex w-full flex-col gap-16 px-6 py-14 sm:px-10">
-        <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} /></Reveal>
-        <Reveal gate={false}><ShootSection shoots={data.shoots} clientName={data.client.name} token={token} /></Reveal>
+        <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} amName={data.am_name} /></Reveal>
+        <Reveal gate={false}><ShootSection shoots={data.shoots} clientName={data.client.name} token={token} amName={data.am_name} /></Reveal>
         <Reveal gate={false}><CommitmentCards data={data} /></Reveal>
+        {data.changes_requested.length > 0 && (
+          // the one thing a client wants to see after asking for changes is
+          // that the note landed — not their piece filed under "in production"
+          <Reveal gate={false}>
+            <PortalSection title="Your changes are being made" items={data.changes_requested}
+              empty="" token={token} />
+          </Reveal>
+        )}
         <div className="grid gap-12 lg:grid-cols-2">
-          <Reveal gate={false}><PortalSection title="IN PRODUCTION" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
-          <Reveal gate={false} delay={120}><PortalSection title="APPROVED & SCHEDULED" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." token={token} /></Reveal>
+          <Reveal gate={false}><PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
+          <Reveal gate={false} delay={120}><PortalSection title="Approved" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} /></Reveal>
         </div>
-        <Reveal gate={false}><PortalSection title="PUBLISHED" items={data.published} empty="Published posts appear here with live links." token={token} /></Reveal>
+        <Reveal gate={false}><PortalSection title="Published" items={data.published} empty="Published posts appear here with live links." token={token} /></Reveal>
       </main>
 
       <footer className="px-6 pb-10 sm:px-10">

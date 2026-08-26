@@ -44,7 +44,11 @@ export default async function PortalShootPage({ params }: { params: Promise<{ to
         </header>
 
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-12 sm:px-10">
-          <ShootSection shoots={[data.shoot]} clientName={data.client.name} />
+          {/* the token is what makes the plan's PDF and its Approve /
+              Request-changes block exist — without it this page was the plan
+              with every action stripped out */}
+          <ShootSection shoots={[data.shoot]} clientName={data.client.name} token={token}
+            amName={data.am_name} bare />
           <div className="mx-auto w-full max-w-3xl">
             <CommentThread token={token} kind="shoot" id={data.shoot.id} comments={data.comments} />
           </div>

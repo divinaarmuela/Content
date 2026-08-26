@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dialog'
 import { ExternalLink, CheckCircle2, MessageSquare } from 'lucide-react'
 import { CommitmentCards, PortalSection } from '../components/portal/PortalSections'
+import ShootSection from '../components/portal/ShootSection'
+import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'
 
 function Media({ src, className }: { src: string; className?: string }) {
@@ -48,7 +50,7 @@ export default function ClientPortalPage() {
         body: JSON.stringify({ to: 'approved_for_scheduling' }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Approval failed')
-      toast.success(`${item.title} approved — thank you!`)
+      toast.success(APPROVED_TOAST)
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Approval failed')
@@ -74,7 +76,7 @@ export default function ClientPortalPage() {
         body: JSON.stringify({ to: 'client_changes_requested' }),
       })
       if (!t.ok) throw new Error((await t.json()).error ?? 'Could not submit the request')
-      toast.success('Change request sent — your account manager is on it.')
+      toast.success(changesSentToast(data?.am_name))
       setChanging(null)
       setChangeText('')
       load()
@@ -132,15 +134,18 @@ export default function ClientPortalPage() {
           {data.needs_review.map(item => (
             <div key={item.id} className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
               {item.preview_url && <Media src={item.preview_url} className="max-h-96 w-full bg-zinc-950 object-contain" />}
+              <p className="px-3 pt-3 text-xs text-zinc-500 dark:text-zinc-400">{approveConsequence(data.am_name)}</p>
               <div className="flex flex-wrap items-center gap-2 p-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{item.title}</p>
-                  <p className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</p>
+                  {contentTypeLabel(item.content_type) && (
+                    <p className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{contentTypeLabel(item.content_type)}</p>
+                  )}
                 </div>
                 {item.drive_url && (
                   <Button variant="outline" size="sm" asChild>
                     <a href={item.drive_url} target="_blank" rel="noreferrer noopener">
-                      View in Drive <ExternalLink className="h-3.5 w-3.5" />
+                      Open the file <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   </Button>
                 )}
@@ -157,9 +162,29 @@ export default function ClientPortalPage() {
         </CardContent>
       </Card>
 
+      {/* the shoot plans the team shared — the "your plan is ready" email
+          lands on THIS page, so the plan and its two moves have to be here */}
+      {/* the portal components are themed by --p-* variables; inside the
+          dashboard shell they take the dashboard's own tokens so the section
+          follows light/dark with everything else */}
+      <div style={{
+        ['--p-bg' as string]: 'hsl(var(--background))',
+        ['--p-ink' as string]: 'hsl(var(--foreground))',
+        ['--p-surface' as string]: 'hsl(var(--card))',
+        ['--p-border' as string]: 'hsl(var(--border))',
+        ['--p-accent' as string]: 'hsl(var(--primary))',
+        ['--p-accent-ink' as string]: 'hsl(var(--primary-foreground))',
+      }}>
+        <ShootSection shoots={data.shoots} clientName={data.client.name} amName={data.am_name}
+          loggedIn onActed={load} />
+      </div>
+
+      {data.changes_requested.length > 0 && (
+        <PortalSection title="Your changes are being made" items={data.changes_requested} empty="" />
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." />
-        <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing queued yet." />
+        <PortalSection title="Approved" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." />
       </div>
       <PortalSection title="Published" items={data.published} empty="Published posts will appear here with live links." />
     </div>

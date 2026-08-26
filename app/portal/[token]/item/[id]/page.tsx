@@ -6,6 +6,8 @@ import { getPortalItemDetail } from '../../../../lib/portal-thread'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import CommentThread from '../../../../components/portal/CommentThread'
+import { ReviewCard } from '../../../../components/portal/PortalSections'
+import { contentTypeLabel } from '../../../../lib/portal-words'
 
 export const metadata: Metadata = {
   title: 'Your content — MD Media',
@@ -46,14 +48,18 @@ export default async function PortalItemPage({ params }: { params: Promise<{ tok
         <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-12 sm:px-10">
           <div className="flex flex-col gap-3">
             <p className="text-[10px] uppercase tracking-[0.2em] opacity-50" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
-              {data.item.content_type} · {data.item.status_label}
+              {[contentTypeLabel(data.item.content_type), data.item.status_label].filter(Boolean).join(' · ')}
             </p>
             <h1 className="text-3xl font-medium tracking-tight" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
               {data.item.title}
             </h1>
           </div>
 
-          {data.item.preview_url && (
+          {/* the decision lives wherever the piece is — clicking the title to
+              look properly used to cost the client their two buttons */}
+          {data.item.status === 'client_review' ? (
+            <ReviewCard item={data.item} token={token} amName={data.am_name} bare />
+          ) : data.item.preview_url ? (
             <div className="overflow-hidden rounded-xl" style={{ background: '#0a0a0a' }}>
               {/\.(mp4|webm|mov)(\?|$)/i.test(data.item.preview_url) ? (
                 <video src={data.item.preview_url} controls playsInline preload="metadata" className="max-h-[70vh] w-full object-contain" />
@@ -62,7 +68,7 @@ export default async function PortalItemPage({ params }: { params: Promise<{ tok
                 <img src={data.item.preview_url} alt="" className="max-h-[70vh] w-full object-contain" />
               )}
             </div>
-          )}
+          ) : null}
 
           <CommentThread token={token} kind="item" id={data.item.id} comments={data.comments} />
         </main>
