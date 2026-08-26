@@ -408,7 +408,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   {/* the picker's field order follows the BROWSER's locale,
                       which is not ours to set — so echo it back in words */}
                   <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                    {batch.shoot_date ? longDate(batch.shoot_date) : 'Day / month / year — shown back in words once set.'}
+                    {batch.shoot_date ? longDate(batch.shoot_date) : 'The date is read back here in words once set.'}
                   </p>
                 </div>
               ) : (
@@ -700,7 +700,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             <Input type="date" value={dateDraft.shoot_date} className="font-mono text-xs"
               onChange={e => setDateDraft(d => ({ ...d, shoot_date: e.target.value }))} />
             <p className="-mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-              {dateDraft.shoot_date ? `Moving it to ${longDate(dateDraft.shoot_date)}` : 'Day / month / year.'}
+              {dateDraft.shoot_date ? `Moving it to ${longDate(dateDraft.shoot_date)}` : 'The new date is read back here in words.'}
             </p>
             <Input value={dateDraft.reason} placeholder="Why is the date moving?"
               onChange={e => setDateDraft(d => ({ ...d, reason: e.target.value }))} />

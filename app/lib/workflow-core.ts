@@ -316,11 +316,13 @@ export function whoseTurn(
 }
 
 /** Doc 1 §11: an item can only be submitted when a reviewable asset exists —
- *  an uploaded file OR a Drive link — and the Dropbox master is archived. */
+ *  an uploaded file OR a review link — and the full-quality MASTER is filed
+ *  somewhere it can be found again. The master's home is Dropbox for most of
+ *  the team and Drive for the rest; the rule is that one exists, not where. */
 export function versionSatisfiesSubmission(v: { file_url?: string; drive_url?: string; dropbox_url?: string }): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = []
   if (!v.file_url?.trim() && !v.drive_url?.trim()) missing.push('an uploaded file or a Drive review link')
-  if (!v.dropbox_url?.trim()) missing.push('the Dropbox master link')
+  if (!v.dropbox_url?.trim()) missing.push('the master file link')
   return missing.length === 0 ? { ok: true } : { ok: false, missing }
 }
 

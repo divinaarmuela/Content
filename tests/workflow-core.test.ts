@@ -100,10 +100,16 @@ describe('versionSatisfiesSubmission — doc §11 validation', () => {
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.missing[0]).toMatch(/uploaded file or a Drive/)
   })
-  it('fails without the dropbox master', () => {
+  it('fails without the master file, wherever the master lives', () => {
+    // the rule is that a full-quality original EXISTS and is filed; it used
+    // to name Dropbox, which left anyone whose master is in Drive nowhere to
+    // put it and nothing the message would accept
     const res = versionSatisfiesSubmission({ file_url: 'https://x/y.mp4' })
     expect(res.ok).toBe(false)
-    if (!res.ok) expect(res.missing[0]).toMatch(/Dropbox master/)
+    if (!res.ok) expect(res.missing[0]).toMatch(/master file/)
+    expect(versionSatisfiesSubmission({
+      file_url: 'https://x/y.mp4', dropbox_url: 'https://drive.google.com/file/abc',
+    }).ok).toBe(true)
   })
   it('whitespace-only links do not count', () => {
     expect(versionSatisfiesSubmission({ file_url: '  ', dropbox_url: ' ' }).ok).toBe(false)

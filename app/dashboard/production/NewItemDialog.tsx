@@ -279,7 +279,12 @@ export default function NewItemDialog({
         body: JSON.stringify({ items: payload, ...(draft.batch_id ? {} : { adhoc_reason: adhocReason.trim() }) }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
-      toast.success(isTaskKind ? 'Task created — it is on Production, under Tasks' : count === 1 ? 'Item created' : `${count} items created`)
+      toast.success(
+        isTaskKind ? 'Task created — it is on Production, under Tasks'
+          : isBriefKind ? 'Brief task created — it is on Production, under Briefs being planned'
+          : count === 1 ? 'Content item created — it is on the Editor board, in Drafting'
+          : `${count} content items created — they are on the Editor board, in Drafting`,
+      )
       onOpenChange(false)
       setDraft({ ...BLANK })
       setAdhocReason('')
@@ -379,7 +384,9 @@ export default function NewItemDialog({
           <div className="grid gap-1.5">
             <Label>Type</Label>
             <Select value={draft.content_type} onValueChange={v => v && setDraft(d => ({ ...d, content_type: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              {/* the trigger renders the item's own text — capitalising only
+                  the list left `reel` showing in the closed control */}
+              <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
               </SelectContent>
@@ -389,7 +396,7 @@ export default function NewItemDialog({
           <div className="grid gap-1.5">
             <Label>Priority</Label>
             <Select value={draft.priority} onValueChange={v => v && setDraft(d => ({ ...d, priority: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {['low', 'normal', 'high', 'urgent'].map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
               </SelectContent>
@@ -404,7 +411,7 @@ export default function NewItemDialog({
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
               {draft.due_date
                 ? new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
-                : 'Day / month / year — the date is echoed here once you pick it.'}
+                : 'The date is read back here in words once you pick it.'}
             </p>
           </div>
           {!isBriefKind && !isTaskKind && (
@@ -417,9 +424,9 @@ export default function NewItemDialog({
           {selectableKinds.length > 0 && presetKind !== 'shoot_brief' && (
             <div className="grid gap-1.5">
               <Label>
-                {isTaskKind ? 'Task type' : 'Work type'}
+                {isTaskKind ? 'Task type *' : 'Work type'}
                 <span className="ml-1 text-xs font-normal text-zinc-400">
-                  {isTaskKind ? '(what kind of work this is)' : '(optional — defaults below)'}
+                  {isTaskKind ? '' : '(optional — defaults below)'}
                 </span>
               </Label>
               <Select value={draft.work_kind_id || 'default'}
@@ -458,6 +465,13 @@ export default function NewItemDialog({
                     Cancel
                   </Button>
                 </div>
+              )}
+              {isTaskKind && (
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  Every task has one — it is what puts the work on Production
+                  instead of the Editor board, so there is no blank option.
+                  {taskKinds.length <= 2 && ' Only the types your team has set up appear here; a manager can add more under Work types.'}
+                </p>
               )}
               {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
                 <button type="button"
@@ -548,7 +562,7 @@ export default function NewItemDialog({
           )}
           {isBriefKind && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Brief link <span className="text-xs font-normal text-zinc-400">(Milanote or anywhere — optional; you can also build it on our brief page)</span></Label>
+              <Label>Brief link <span className="text-xs font-normal text-zinc-400">(Milanote or anywhere — or write the concept and shot list on the shoot page)</span></Label>
               <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
                 onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-xs" />
             </div>

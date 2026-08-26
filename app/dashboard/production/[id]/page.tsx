@@ -517,7 +517,7 @@ export default function ItemDetailPage() {
         ? 'Add a link to the work, or upload a file.'
         : 'Add a Drive link or upload a file.'
     }
-    if (!isInternal && !verDraft.dropbox_url) return 'Add the Dropbox master link.'
+    if (!isInternal && !verDraft.dropbox_url) return 'Add the master file link.'
     return null
   })()
 
@@ -714,7 +714,7 @@ export default function ItemDetailPage() {
 
   const saveVersion = async () => {
     if (!verDraft.file_url && !verDraft.drive_url) return toast.error(isInternal ? 'Upload a file or add a link to the work' : 'Upload a file or add a Drive link')
-    if (!isInternal && !verDraft.dropbox_url) return toast.error('The Dropbox master link is required')
+    if (!isInternal && !verDraft.dropbox_url) return toast.error('The master file link is required')
     setBusy('version')
     try {
       const res = await fetch(`/api/production/items/${id}/versions`, {
@@ -1024,7 +1024,9 @@ export default function ItemDetailPage() {
         <Card>
           <CardContent className="flex flex-wrap items-center gap-3 p-4">
             <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              The plan is approved. Lock the shoot date on the brief page, then press Book the shoot.
+              {['locked', 'shot'].includes(detail.batch?.status ?? '')
+                ? 'Date locked — you can book it.'
+                : 'The plan is approved. Lock the shoot date on the shoot page, then press Book the shoot.'}
             </p>
             {detail.batch?.id && (
               <Button size="sm" variant="outline" className="ml-auto" asChild>
@@ -1058,7 +1060,7 @@ export default function ItemDetailPage() {
             )}
             {isTeam && latest.dropbox_url && (
               <a href={latest.dropbox_url} target="_blank" rel="noreferrer noopener" className="text-sm text-zinc-500 hover:underline dark:text-zinc-400">
-                Dropbox master
+                Master file
               </a>
             )}
           </CardContent>
@@ -1125,7 +1127,7 @@ export default function ItemDetailPage() {
             </div>
             {detail.status === 'scheduled' && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Shoot booked — when it&rsquo;s shot, mark it shot on the brief page and create the content items there.
+                Shoot booked — when it&rsquo;s shot, mark it shot on the shoot page and create the content items there.
               </p>
             )}
           </CardContent>
@@ -1154,7 +1156,7 @@ export default function ItemDetailPage() {
                 <span className="ml-auto flex gap-2 text-xs">
                   {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
                   {v.drive_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
-                  {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">dropbox</a>}
+                  {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">master</a>}
                 </span>
               </div>
             ))}
@@ -1180,11 +1182,13 @@ export default function ItemDetailPage() {
                   </div>
                   {!isInternal && (
                   <div className="grid gap-1.5">
-                    <Label className="text-xs">Dropbox master link *</Label>
-                    <Input value={verDraft.dropbox_url} placeholder="https://www.dropbox.com/…"
+                    <Label className="text-xs">Master file link *</Label>
+                    <Input value={verDraft.dropbox_url} placeholder="https://www.dropbox.com/… or https://drive.google.com/…"
                       onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      The master is the full-quality original, archived in Dropbox.
+                      The full-quality original, kept where it can be found again —
+                      Dropbox or Drive, either is fine. The review link above is the
+                      copy people watch.
                     </p>
                   </div>
                   )}
@@ -1501,7 +1505,9 @@ export default function ItemDetailPage() {
               <div className="mt-1 grid gap-2.5">
                 <div className="grid grid-cols-2 gap-2">
                   <Select value={schedDraft.platform} onValueChange={v => v && setSchedDraft(d => ({ ...d, platform: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    {/* the trigger renders the item's own text, so it needs the
+                        same capitalisation the list has */}
+                    <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PLATFORMS.map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
                     </SelectContent>
@@ -1509,6 +1515,17 @@ export default function ItemDetailPage() {
                   <Input type="datetime-local" value={schedDraft.scheduled_at} className="font-mono text-xs"
                     onChange={e => setSchedDraft(d => ({ ...d, scheduled_at: e.target.value }))} />
                 </div>
+                {/* the picker's field order is the BROWSER's locale and not
+                    ours to set — so never claim an order, just read the
+                    chosen moment back in words */}
+                <p className="-mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+                  {schedDraft.scheduled_at
+                    ? new Date(schedDraft.scheduled_at).toLocaleString('en-AU', {
+                      weekday: 'short', day: 'numeric', month: 'long', year: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    })
+                    : 'Pick a date and time — it is read back here in words.'}
+                </p>
                 <div className="flex gap-2">
                   <Input value={schedDraft.live_url} placeholder="Live URL once posted"
                     onChange={e => setSchedDraft(d => ({ ...d, live_url: e.target.value }))} />

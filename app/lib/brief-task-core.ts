@@ -141,5 +141,5 @@ export function briefSatisfiesSubmission(
   if (item.brief_url && String(item.brief_url).trim() !== '') return { ok: true }
   if (batch?.concept && String(batch.concept).trim() !== '') return { ok: true }
   if (Array.isArray(batch?.shot_list) && batch.shot_list.length > 0) return { ok: true }
-  return { ok: false, missing: 'Add a brief link or fill in the brief page first' }
+  return { ok: false, missing: 'Add a brief link, or write the concept or shot list on the shoot page' }
 }
