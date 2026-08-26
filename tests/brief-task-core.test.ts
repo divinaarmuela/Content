@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  availableBriefTaskTransitions, briefSatisfiesSubmission, checkBriefTaskTransition, itemStatusLabel,
+  availableBriefTaskTransitions, BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN, briefSatisfiesSubmission,
+  checkBriefTaskTransition, checkBriefTaskTransitionAs, itemStatusLabel,
 } from '../app/lib/brief-task-core'
-import { checkTransition, type ItemStatus } from '../app/lib/workflow-core'
+import { checkTransition, ITEM_STATUSES, STATUS_TURN, type ItemStatus } from '../app/lib/workflow-core'
 import { canCreateItemsUnder } from '../app/lib/batch-brief-core'
 
 describe('itemStatusLabel', () => {
   it('relabels only the shoot-brief kind', () => {
-    expect(itemStatusLabel('shoot_brief', 'draft_uploaded', 'Draft uploaded')).toBe('Shoot brief')
+    expect(itemStatusLabel('shoot_brief', 'draft_uploaded', 'Draft uploaded')).toBe('Brief in progress')
     expect(itemStatusLabel('shoot_brief', 'scheduled', 'Scheduled')).toBe('Shoot booked')
     expect(itemStatusLabel('shoot_brief', 'published', 'Published')).toBe('Shoot booked')
     expect(itemStatusLabel('edit', 'draft_uploaded', 'Draft uploaded')).toBe('Draft uploaded')
@@ -54,6 +55,63 @@ describe('checkBriefTaskTransition', () => {
   })
 })
 
+describe('checkBriefTaskTransitionAs — booking is the account manager hat, wherever it comes from', () => {
+  it('an editor who is also handed the scheduling never books a shoot', () => {
+    const r = checkBriefTaskTransitionAs(['editor', 'scheduler'], 'approved_for_scheduling', 'scheduled')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toContain('Book the shoot')
+  })
+
+  it('an account manager who also owns the brief books it, lock and all', () => {
+    expect(checkBriefTaskTransitionAs(['account_manager', 'editor'], 'approved_for_scheduling', 'scheduled'))
+      .toMatchObject({ ok: true, requires: 'batch_locked' })
+  })
+
+  it('no hats at all can do nothing', () => {
+    expect(checkBriefTaskTransitionAs([], 'draft_uploaded', 'internal_review').ok).toBe(false)
+  })
+
+  it('the single-role function is the one-hat case of the set form', () => {
+    const roles = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client'] as const
+    const edges: [ItemStatus, ItemStatus][] = [
+      ['draft_uploaded', 'internal_review'],
+      ['internal_review', 'revision_required'],
+      ['revision_required', 'revision_complete'],
+      ['client_review', 'approved_for_scheduling'],
+      ['approved_for_scheduling', 'scheduled'],
+      ['scheduled', 'published'],
+    ]
+    for (const role of roles) {
+      for (const [from, to] of edges) {
+        expect(checkBriefTaskTransition(role, from, to))
+          .toEqual(checkBriefTaskTransitionAs([role], from, to))
+      }
+    }
+  })
+})
+
+describe('brief wording never speaks about scheduling', () => {
+  it('an account manager requesting brief changes says so in brief words', () => {
+    const r = checkBriefTaskTransition('account_manager', 'internal_review', 'revision_required')
+    expect(r.ok && r.rule.label).toBe('Request brief changes')
+    expect(checkBriefTaskTransition('editor', 'internal_review', 'revision_required').ok).toBe(false)
+  })
+
+  it("the brief's turn ends with the account manager, never a scheduler", () => {
+    expect(BRIEF_STATUS_TURN.approved_for_scheduling).toBe('account_manager')
+    expect(BRIEF_STATUS_TURN.scheduled).toBeNull()
+    expect(BRIEF_STATUS_TURN.published).toBeNull()
+    expect(BRIEF_STATUS_TURN.internal_review).toBe(STATUS_TURN.internal_review)
+  })
+
+  it('every stage explains itself as a plan', () => {
+    for (const s of ITEM_STATUSES) expect(BRIEF_STATUS_MEANING[s]).toBeTruthy()
+    expect(BRIEF_STATUS_MEANING.approved_for_scheduling)
+      .toBe('The plan is signed off. Lock the shoot date, then book it.')
+    expect(BRIEF_STATUS_MEANING.scheduled).toBe('The shoot is booked.')
+  })
+})
+
 describe('briefSatisfiesSubmission', () => {
   it('a link, a concept, or a shot list — any one is enough', () => {
     expect(briefSatisfiesSubmission({ brief_url: 'https://milanote.com/b' }, null).ok).toBe(true)
@@ -84,11 +142,11 @@ describe('canCreateItemsUnder with the shoot_brief kind', () => {
 describe('plan-shaped wording on client-facing edges', () => {
   it('sharing and approving speak about the PLAN, not scheduling', () => {
     const share = checkBriefTaskTransition('account_manager', 'internal_review', 'client_review')
-    expect(share.ok && share.rule.label).toBe('Share the plan with the client')
+    expect(share.ok && share.rule.label).toBe('Share plan with client')
     const approve = checkBriefTaskTransition('client', 'client_review', 'approved_for_scheduling')
-    expect(approve.ok && approve.rule.label).toBe('Plan approved — ready to book')
-    const bypass = checkBriefTaskTransition('account_manager', 'internal_review', 'approved_for_scheduling')
-    expect(bypass.ok && bypass.rule.label).toBe('Approve the plan')
+    expect(approve.ok && approve.rule.label).toBe('Plan approved')
+    const withoutClient = checkBriefTaskTransition('account_manager', 'internal_review', 'approved_for_scheduling')
+    expect(withoutClient.ok && withoutClient.rule.label).toBe('Approve plan without client')
   })
   it('override edges keep their base role gates', () => {
     expect(checkBriefTaskTransition('editor', 'internal_review', 'client_review').ok).toBe(false)
@@ -97,10 +155,10 @@ describe('plan-shaped wording on client-facing edges', () => {
 })
 
 describe('availableBriefTaskTransitions — buttons come from brief rules, not base roles', () => {
-  it('an account manager sees "Mark revisions done" on a brief', () => {
+  it('an account manager sees "Brief revisions done" on a brief', () => {
     const ts = availableBriefTaskTransitions('account_manager', 'revision_required')
     expect(ts.map(t => t.to)).toContain('revision_complete')
-    expect(ts.find(t => t.to === 'revision_complete')?.label).toBe('Mark revisions done')
+    expect(ts.find(t => t.to === 'revision_complete')?.label).toBe('Brief revisions done')
   })
   it('a scheduler still sees nothing on a brief in revisions', () => {
     expect(availableBriefTaskTransitions('scheduler', 'revision_required')).toEqual([])

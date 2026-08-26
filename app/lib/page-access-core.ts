@@ -39,6 +39,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/social', label: 'Social channels' },
   { href: '/dashboard/website', label: 'Website' },
   { href: '/dashboard/production', label: 'Production' },
+  { href: '/dashboard/editor', label: 'Editor' },
   { href: '/dashboard/bookings', label: 'Bookings' },
   { href: '/dashboard/scheduler', label: 'Scheduler' },
   { href: '/dashboard/calendar', label: 'Calendar' },
@@ -64,9 +65,14 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
 
 /**
- * The default ladder, mirroring what the sidebar has always done: editors
- * live on the production board, schedulers on the scheduler and calendar,
- * clients get nothing, and account managers and above see everything.
+ * The default ladder: editors live on the editor board and can see the shoots
+ * they are filming (production) and where their work ends up (scheduler);
+ * schedulers run the queue, calendar and social, and can look back at the
+ * editor board their posts came from; clients get nothing, and account
+ * managers and above see everything.
+ *
+ * Both extra pages are read-and-claim, not authority: what a person may DO on
+ * an item is decided per item by their assignment, in workflow-core.
  */
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
@@ -76,11 +82,13 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // every team role gets the Overview, their own Notifications feed, and
   // Settings (their profile and notification preferences live there)
   const personal = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
-  if (role === 'editor') return [...personal, '/dashboard/production'].includes(href)
+  if (role === 'editor') {
+    return [...personal, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler'].includes(href)
+  }
   // schedulers run the client channels day-to-day: queue, calendar, and the
   // social area itself (channels, inbox, analytics) — that is where they post
   if (role === 'scheduler') {
-    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social'].includes(href)
+    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor'].includes(href)
   }
   // account managers run client delivery, not business development — the
   // lead funnel and audience lists stay out of their default world

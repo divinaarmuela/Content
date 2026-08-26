@@ -56,6 +56,7 @@ const NAV = [
   { href: '/dashboard' },
   { href: '/dashboard/leads' },
   { href: '/dashboard/production' },
+  { href: '/dashboard/editor' },
   { href: '/dashboard/scheduler' },
   { href: '/dashboard/settings' },
 ]
@@ -63,18 +64,21 @@ const NAV = [
 const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
 
 describe('defaultAllows — the ladder as it always was', () => {
-  it('keeps an editor on their own pages and the production board only', () => {
+  it('keeps an editor on the work pages: editor board, production, scheduler', () => {
     expect(defaultAllows('editor', '/dashboard')).toBe(true)
+    expect(defaultAllows('editor', '/dashboard/editor')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/production')).toBe(true)
-    for (const href of ['/dashboard/leads', '/dashboard/clients', '/dashboard/scheduler']) {
+    expect(defaultAllows('editor', '/dashboard/scheduler')).toBe(true)
+    for (const href of ['/dashboard/leads', '/dashboard/clients', '/dashboard/calendar']) {
       expect(defaultAllows('editor', href)).toBe(false)
     }
   })
 
-  it('keeps a scheduler on their own pages, scheduler, calendar and social', () => {
+  it('keeps a scheduler on their own pages, scheduler, calendar, social and the editor board', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/calendar')).toBe(true)
+    expect(defaultAllows('scheduler', '/dashboard/editor')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/production')).toBe(false)
   })
 
@@ -146,11 +150,16 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 describe('visiblePages', () => {
   it('filters to what the person may see and preserves nav order', () => {
     const seen = visiblePages('editor', NAV, ['/dashboard/leads'])
-    expect(seen.map(s => s.href)).toEqual(['/dashboard', '/dashboard/leads', '/dashboard/production', '/dashboard/settings'])
+    expect(seen.map(s => s.href)).toEqual([
+      '/dashboard', '/dashboard/leads', '/dashboard/production', '/dashboard/editor',
+      '/dashboard/scheduler', '/dashboard/settings',
+    ])
   })
 
-  it('an editor with no grants sees only their own pages and production', () => {
-    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual(['/dashboard', '/dashboard/production', '/dashboard/settings'])
+  it('an editor with no grants sees only their own pages and the work boards', () => {
+    expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual([
+      '/dashboard', '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/settings',
+    ])
   })
 
   it('an unresolved role sees nothing, grants or not', () => {
@@ -160,14 +169,18 @@ describe('visiblePages', () => {
   it('two people with the same role can differ', () => {
     const manal = visiblePages('editor', NAV, ['/dashboard/leads'])
     const other = visiblePages('editor', NAV, [])
-    expect(manal.length).toBe(4)
-    expect(other.length).toBe(3)
+    expect(manal.length).toBe(6)
+    expect(other.length).toBe(5)
   })
 })
 
 describe('isGrantablePage', () => {
   it('accepts every page offered in the UI', () => {
     for (const { href } of GRANTABLE_PAGES) expect(isGrantablePage(href)).toBe(true)
+  })
+
+  it('offers the editor board', () => {
+    expect(isGrantablePage('/dashboard/editor')).toBe(true)
   })
 
   it('refuses anything invented, mistyped, or outside the dashboard', () => {
@@ -186,6 +199,9 @@ describe('normaliseGrantedPages', () => {
   it('drops pages the person already has by default', () => {
     // storing these would let a later role change silently keep access
     expect(normaliseGrantedPages(['/dashboard/production', '/dashboard/leads'], 'editor'))
+      .toEqual(['/dashboard/leads'])
+    // the editor board is an editor default now — granting it stores nothing
+    expect(normaliseGrantedPages(['/dashboard/editor', '/dashboard/leads'], 'editor'))
       .toEqual(['/dashboard/leads'])
     expect(normaliseGrantedPages(['/dashboard/clients'], 'account_manager')).toEqual([])
     // leads is NOT an AM default anymore, so a leads grant survives cleaning

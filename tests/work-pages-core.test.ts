@@ -1,0 +1,251 @@
+import { describe, it, expect } from 'vitest'
+import {
+  EDITOR_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor, canClaimScheduler,
+  defaultScope, editorAssignment, editorScope, editorTail, isBriefTask, isManager,
+  productionScope, schedulerAssignment, schedulerIdsOf, schedulerScope, unassignedCount,
+  type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
+} from '../app/lib/work-pages-core'
+import { ITEM_STATUSES, SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
+import type { Role } from '../app/lib/identity-core'
+
+const ME = 'me'
+const THEM = 'them'
+const viewer = (role: Role = 'editor', id = ME): Viewer => ({ id, role })
+const scope = (...modes: ScopeMode[]): ScopeSet => new Set(modes)
+
+const item = (over: Partial<WorkItem> = {}): WorkItem => ({
+  id: 'i1', status: 'draft_uploaded', owner_id: null, ...over,
+})
+const brief = (over: Partial<WorkItem> = {}) => item({ work_kinds: { slug: 'shoot_brief' }, ...over })
+
+describe('defaultScope — you open on your own work; a manager opens on all of it', () => {
+  it('managers see everything', () => {
+    for (const role of ['account_manager', 'super_admin'] as Role[]) {
+      expect(isManager(role)).toBe(true)
+      expect([...defaultScope(role)]).toEqual(['all'])
+    }
+  })
+  it('everyone else sees their own work and the unclaimed pool', () => {
+    for (const role of ['editor', 'scheduler', 'client'] as Role[]) {
+      expect(isManager(role)).toBe(false)
+      expect([...defaultScope(role)].sort()).toEqual(['mine', 'unassigned'])
+    }
+  })
+})
+
+describe('schedulerIdsOf / isBriefTask', () => {
+  it('reads a real list and nothing else', () => {
+    expect(schedulerIdsOf({ scheduler_ids: [ME, THEM] })).toEqual([ME, THEM])
+    for (const junk of [null, undefined, 'me', 7, {}]) {
+      expect(schedulerIdsOf({ scheduler_ids: junk })).toEqual([])
+    }
+  })
+  it('recognises a shoot brief by its kind slug only', () => {
+    expect(isBriefTask(brief())).toBe(true)
+    expect(isBriefTask(item({ work_kinds: { slug: 'edit' } }))).toBe(false)
+    expect(isBriefTask(item({ work_kinds: null }))).toBe(false)
+    expect(isBriefTask(item())).toBe(false)
+  })
+})
+
+describe('editorAssignment', () => {
+  it('mine when I own it', () => {
+    expect(editorAssignment(item({ owner_id: ME }), viewer())).toBe('mine')
+  })
+  it('mine when I have an open task on it, even though someone else owns it', () => {
+    expect(editorAssignment(item({ owner_id: THEM, my_open_task: true }), viewer())).toBe('mine')
+  })
+  it('unassigned when nobody owns it', () => {
+    expect(editorAssignment(item({ owner_id: null }), viewer())).toBe('unassigned')
+  })
+  it('other when it is plainly somebody else’s', () => {
+    expect(editorAssignment(item({ owner_id: THEM }), viewer())).toBe('other')
+  })
+})
+
+describe('schedulerAssignment', () => {
+  it('mine when I am handed it', () => {
+    expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: [ME] }), viewer('scheduler'))).toBe('mine')
+  })
+  it('mine when I made it — the owner follows their post out of the door', () => {
+    expect(schedulerAssignment(item({ owner_id: ME, scheduler_ids: [THEM] }), viewer())).toBe('mine')
+  })
+  it('unassigned when nobody is handed it', () => {
+    expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: [] }), viewer('scheduler'))).toBe('unassigned')
+    expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: 'nonsense' }), viewer('scheduler'))).toBe('unassigned')
+  })
+  it('other when it is handed to somebody else', () => {
+    expect(schedulerAssignment(item({ owner_id: THEM, scheduler_ids: [THEM] }), viewer('scheduler'))).toBe('other')
+  })
+})
+
+describe('applyScope — the default never shows another person’s work', () => {
+  const items = [
+    item({ id: 'mine', owner_id: ME }),
+    item({ id: 'free', owner_id: null }),
+    item({ id: 'theirs', owner_id: THEM }),
+  ]
+
+  it('all shows everything, untouched', () => {
+    expect(applyScope(items, viewer(), scope('all'), editorAssignment)).toEqual(items)
+  })
+  it('{mine,unassigned} hides the item that is plainly someone else’s', () => {
+    expect(applyScope(items, viewer(), scope('mine', 'unassigned'), editorAssignment).map(i => i.id))
+      .toEqual(['mine', 'free'])
+  })
+  it('{unassigned} alone shows only the unclaimed pool', () => {
+    expect(applyScope(items, viewer(), scope('unassigned'), editorAssignment).map(i => i.id)).toEqual(['free'])
+  })
+  it('{mine} alone shows only mine', () => {
+    expect(applyScope(items, viewer(), scope('mine'), editorAssignment).map(i => i.id)).toEqual(['mine'])
+  })
+  it('an empty scope shows nothing', () => {
+    expect(applyScope(items, viewer(), scope(), editorAssignment)).toEqual([])
+  })
+})
+
+describe('editorScope', () => {
+  const items = [
+    item({ id: 'draft', owner_id: ME }),
+    item({ id: 'brief', owner_id: ME, work_kinds: { slug: 'shoot_brief' } }),
+    item({ id: 'sched', owner_id: ME, status: 'scheduled' }),
+    item({ id: 'pub', owner_id: ME, status: 'published' }),
+    item({ id: 'approved', owner_id: ME, status: 'approved_for_scheduling' }),
+    item({ id: 'theirs', owner_id: THEM, status: 'internal_review' }),
+  ]
+
+  it('drops briefs and anything already out of the editors’ hands', () => {
+    expect(editorScope(items, viewer(), scope('all')).map(i => i.id)).toEqual(['draft', 'approved', 'theirs'])
+  })
+  it('a default-scoped editor never sees another person’s item', () => {
+    expect(editorScope(items, viewer(), defaultScope('editor')).map(i => i.id)).toEqual(['draft', 'approved'])
+  })
+})
+
+describe('schedulerScope', () => {
+  const items = [
+    item({ id: 'early', owner_id: ME, status: 'internal_review' }),
+    item({ id: 'approved', owner_id: THEM, status: 'approved_for_scheduling', scheduler_ids: [ME] }),
+    item({ id: 'sched', owner_id: THEM, status: 'scheduled', scheduler_ids: [THEM] }),
+    item({ id: 'pub', owner_id: THEM, status: 'published', scheduler_ids: [] }),
+    item({ id: 'brief', owner_id: THEM, status: 'approved_for_scheduling', work_kinds: { slug: 'shoot_brief' } }),
+  ]
+
+  it('keeps only signed-off content items', () => {
+    expect(schedulerScope(items, viewer('scheduler'), scope('all')).map(i => i.id))
+      .toEqual(['approved', 'sched', 'pub'])
+  })
+  it('a default-scoped scheduler sees theirs and the pool, not another’s', () => {
+    expect(schedulerScope(items, viewer('scheduler'), defaultScope('scheduler')).map(i => i.id))
+      .toEqual(['approved', 'pub'])
+  })
+})
+
+describe('productionScope — a brief belongs to whoever is planning the shoot', () => {
+  const tasks = [
+    brief({ id: 'mine', owner_id: ME, batch_id: 'b1' }),
+    brief({ id: 'by-batch', owner_id: null, batch_id: 'b2' }),
+    brief({ id: 'free', owner_id: null, batch_id: 'b3' }),
+    brief({ id: 'theirs', owner_id: THEM, batch_id: 'b4' }),
+    brief({ id: 'no-batch', owner_id: null }),
+  ]
+  const owners = { b1: THEM, b2: ME, b3: null, b4: THEM }
+
+  it('the batch owner counts as much as the task owner', () => {
+    expect(productionScope(tasks, viewer('account_manager'), scope('mine'), owners).map(i => i.id))
+      .toEqual(['mine', 'by-batch'])
+  })
+  it('unclaimed means neither the task nor its batch has an owner', () => {
+    expect(productionScope(tasks, viewer('account_manager'), scope('unassigned'), owners).map(i => i.id))
+      .toEqual(['free', 'no-batch'])
+  })
+  it('all is everything', () => {
+    expect(productionScope(tasks, viewer('account_manager'), scope('all'), owners)).toEqual(tasks)
+  })
+})
+
+describe('unassignedCount / editorTail / activeBriefTasks', () => {
+  it('counts what is waiting to be picked up', () => {
+    const items = [item({ owner_id: null }), item({ owner_id: null }), item({ owner_id: ME }), item({ owner_id: THEM })]
+    expect(unassignedCount(items, viewer(), editorAssignment)).toBe(2)
+  })
+  it('the tail counts finished content only, never briefs', () => {
+    const items = [
+      item({ status: 'scheduled' }), item({ status: 'published' }), item({ status: 'published' }),
+      brief({ status: 'scheduled' }), brief({ status: 'published' }), item({ status: 'draft_uploaded' }),
+    ]
+    expect(editorTail(items)).toEqual({ scheduled: 1, published: 2 })
+  })
+  it('a booked shoot is not an active brief', () => {
+    const items = [
+      brief({ id: 'a', status: 'internal_review' }),
+      brief({ id: 'b', status: 'scheduled' }),
+      brief({ id: 'c', status: 'published' }),
+      item({ id: 'd', status: 'internal_review' }),
+    ]
+    expect(activeBriefTasks(items).map(i => i.id)).toEqual(['a'])
+  })
+})
+
+describe('claiming', () => {
+  it('an editor claims an unowned item that is still in production', () => {
+    expect(canClaimEditor(item({ owner_id: null }), viewer('editor'))).toBe(true)
+    expect(canClaimEditor(item({ owner_id: null }), viewer('account_manager'))).toBe(true)
+  })
+  it('nobody claims what is owned, a brief, or something already approved', () => {
+    expect(canClaimEditor(item({ owner_id: THEM }), viewer('editor'))).toBe(false)
+    expect(canClaimEditor(brief({ owner_id: null }), viewer('editor'))).toBe(false)
+    expect(canClaimEditor(item({ owner_id: null, status: 'approved_for_scheduling' }), viewer('editor'))).toBe(false)
+    expect(canClaimEditor(item({ owner_id: null, status: 'scheduled' }), viewer('editor'))).toBe(false)
+  })
+  it('a client and a scheduler never claim editing work', () => {
+    expect(canClaimEditor(item({ owner_id: null }), viewer('client'))).toBe(false)
+    expect(canClaimEditor(item({ owner_id: null }), viewer('scheduler'))).toBe(false)
+  })
+
+  it('a scheduler claims an unhanded, signed-off item that is not live yet', () => {
+    expect(canClaimScheduler(item({ owner_id: THEM, status: 'approved_for_scheduling' }), viewer('scheduler'))).toBe(true)
+    expect(canClaimScheduler(item({ owner_id: THEM, status: 'scheduled' }), viewer('super_admin'))).toBe(true)
+  })
+  it('not when it is handed out, published, a brief, or too early', () => {
+    expect(canClaimScheduler(item({ status: 'approved_for_scheduling', scheduler_ids: [THEM] }), viewer('scheduler'))).toBe(false)
+    expect(canClaimScheduler(item({ status: 'published' }), viewer('scheduler'))).toBe(false)
+    expect(canClaimScheduler(brief({ status: 'approved_for_scheduling' }), viewer('scheduler'))).toBe(false)
+    expect(canClaimScheduler(item({ status: 'internal_review' }), viewer('scheduler'))).toBe(false)
+  })
+  it('an editor, an account manager or a client never claims the posting', () => {
+    for (const role of ['editor', 'account_manager', 'client'] as Role[]) {
+      expect(canClaimScheduler(item({ status: 'approved_for_scheduling' }), viewer(role))).toBe(false)
+    }
+  })
+})
+
+describe('backLinkFor — back goes where you came from', () => {
+  it('a brief always goes back to Production, approved or not', () => {
+    expect(backLinkFor(brief({ status: 'approved_for_scheduling' })))
+      .toEqual({ href: '/dashboard/production', label: 'Production' })
+    expect(backLinkFor(brief({ status: 'draft_uploaded' })).label).toBe('Production')
+  })
+  it('a signed-off content item goes back to the scheduler queue', () => {
+    for (const status of SCHEDULER_STATUSES) {
+      expect(backLinkFor({ status })).toEqual({ href: '/dashboard/scheduler', label: 'Scheduler' })
+    }
+  })
+  it('everything else goes back to the editor board', () => {
+    expect(backLinkFor({ status: 'internal_review' })).toEqual({ href: '/dashboard/editor', label: 'Editor' })
+  })
+})
+
+describe('EDITOR_LANES', () => {
+  it('cover every pre-scheduler status exactly once', () => {
+    const covered = EDITOR_LANES.flatMap(l => l.statuses)
+    const expected = ITEM_STATUSES.filter(s => !SCHEDULER_STATUSES.includes(s) || s === 'approved_for_scheduling')
+    expect([...covered].sort()).toEqual([...expected].sort())
+    expect(new Set(covered).size).toBe(covered.length)
+  })
+  it('never shows a scheduled or published item', () => {
+    const covered = EDITOR_LANES.flatMap(l => l.statuses) as ItemStatus[]
+    expect(covered).not.toContain('scheduled')
+    expect(covered).not.toContain('published')
+  })
+})
