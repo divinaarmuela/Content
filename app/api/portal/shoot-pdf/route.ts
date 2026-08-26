@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../lib/batch-brief-core'
 import { renderBriefPdf } from '../../../lib/brief-pdf'
+import { shootStatusLabel } from '../../../lib/portal-words'
 
-const STATUS_LABEL: Record<string, string> = {
-  brief: 'In planning', locked: 'Shoot booked', shot: 'Shot', wrapped: 'Wrapped',
-}
+
 
 /** The same brief PDF the team downloads, for a client with a valid portal
  *  token — only for a shoot the AM explicitly shared. Public, token-gated,
@@ -34,7 +33,7 @@ export async function GET(req: Request) {
     const pdf = await renderBriefPdf({
       title: batch.title,
       clientName: client.name,
-      statusLabel: STATUS_LABEL[batch.status as string] ?? batch.status,
+      statusLabel: shootStatusLabel(batch.status as string),
       shootDate: batch.shoot_date ?? null,
       location: batch.location ?? null,
       concept: batch.concept ?? null,
@@ -45,7 +44,7 @@ export async function GET(req: Request) {
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="shoot-brief-${slug}.pdf"`,
+        'Content-Disposition': `attachment; filename="shoot-plan-${slug}.pdf"`,
       },
     })
   } catch (e) {

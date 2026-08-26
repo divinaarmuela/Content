@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit'
 import type { PlannedDeliverable, ShotRow } from './batch-brief-core'
 
 /**
- * Shoot-brief PDF — the brief as a hand-out: client, date, location,
+ * The shoot plan as a PDF — the brief as a hand-out: client, date, location,
  * concept, deliverables, and the shot list with capture ticks. Same visual
  * system as the leads report (pdfkit, built-in Helvetica, serverless-safe).
  */
@@ -43,9 +43,9 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
     doc.rect(0, 0, PAGE.width, 110).fill(INK)
     doc.rect(0, 110, PAGE.width, 3).fill(BLUE)
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20)
-      .text('Shoot Brief', PAGE.margin, 34)
+      .text('Shoot plan', PAGE.margin, 34)
     doc.fillColor(FAINT).font('Courier').fontSize(8)
-      .text('MD MEDIA · PRODUCTION', PAGE.margin, 62)
+      .text('Prepared by MD Media', PAGE.margin, 62)
     doc.fillColor('#ffffff').font('Helvetica').fontSize(11)
       .text(`${data.clientName} — ${data.title}`, PAGE.margin, 78, { width: contentW })
     doc.fillColor(FAINT).font('Courier').fontSize(8)
@@ -138,7 +138,7 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       doc.page.margins.bottom = 0
       doc.fillColor(FAINT).font('Courier').fontSize(7)
         .text(
-          `MD MEDIA · SHOOT BRIEF · ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne' })}`,
+          `MD MEDIA · SHOOT PLAN · ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne' })}`,
           PAGE.margin, PAGE.height - 34, { width: contentW, lineBreak: false },
         )
       doc.text(`${i - range.start + 1} / ${range.count}`, PAGE.margin, PAGE.height - 34, {

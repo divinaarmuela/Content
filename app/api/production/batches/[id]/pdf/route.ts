@@ -42,7 +42,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="shoot-brief-${slug}.pdf"`,
+        'Content-Disposition': `attachment; filename="shoot-plan-${slug}.pdf"`,
       },
     })
   } catch (e) {
