@@ -39,6 +39,12 @@ export type PortalShoot = {
   /** false = a booked shoot whose PLAN was not shared: the client sees that
    *  it's happening (status, date, location) but none of the working detail */
   details_shared: boolean
+  /** the shoot's brief task, when the plan is sitting with the client for a
+   *  decision. The brief itself never appears in the portal as an item — but
+   *  the state machine gives the CLIENT the turn at client_review, so the
+   *  decision has to be reachable somewhere, and the plan card is where the
+   *  plan is. Null at every other stage. */
+  awaiting_decision?: { item_id: string } | null
 }
 
 /** What a shoot's internal status means to the client reading their portal. */
@@ -74,7 +80,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
     supabase
       .from('content_items')
-      .select('id, title, content_type, status, updated_at, work_kinds(slug)')
+      .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug)')
       .eq('client_id', clientId)
       .order('updated_at', { ascending: false })
       .limit(300),
@@ -100,8 +106,18 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   if (!clientRes.data) return null
   // a shoot BRIEF is internal planning work riding the item pipeline — the
   // client sees the shoot in SHOOT PLANS, never as a mystery "other" card
-  const items = (itemsRes.data ?? []).filter(i =>
-    ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+  const isBrief = (i: { work_kinds?: { slug?: string } | null }) =>
+    (i.work_kinds?.slug ?? '') === 'shoot_brief'
+  const items = (itemsRes.data ?? []).filter(i => !isBrief(i as { work_kinds?: { slug?: string } | null }))
+  // …except when the plan is with the client: the brief stays out of the item
+  // lists, but its decision has to reach the shoot card it belongs to
+  const briefAwaiting = new Map<string, string>()
+  for (const i of itemsRes.data ?? []) {
+    const row = i as { id: string; status: string; batch_id?: string | null; work_kinds?: { slug?: string } | null }
+    if (isBrief(row) && row.status === 'client_review' && row.batch_id) {
+      briefAwaiting.set(row.batch_id, row.id)
+    }
+  }
 
   const ids = items.map(i => i.id)
   const [versionsRes, scheduleRes] = await Promise.all([
@@ -188,6 +204,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       // (share_board undefined) keep the old behaviour of following the brief
       canvas_cards: shared && (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
       details_shared: shared,
+      // only a shared plan can be decided on — approving something you were
+      // never shown is not a decision
+      awaiting_decision: shared && briefAwaiting.has(b.id)
+        ? { item_id: briefAwaiting.get(b.id)! }
+        : null,
     }
   })
 

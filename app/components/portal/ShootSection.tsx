@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Calendar, Check, ChevronDown, FileDown, MapPin, MessageCircle } from 'lucide-react'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
@@ -29,8 +31,50 @@ export default function ShootSection({ shoots, clientName, token }: { shoots: Po
 }
 
 function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientName?: string; token?: string }) {
+  const router = useRouter()
   const [boardOpen, setBoardOpen] = useState(false)
   const done = shoot.shot_list.filter(r => r.done).length
+
+  // the plan is with the client for a decision — the state machine says it is
+  // their turn, so the two moves have to be here, on the plan
+  const decide = shoot.awaiting_decision
+  const [mode, setMode] = useState<null | 'changes'>(null)
+  const [note, setNote] = useState('')
+  const [name, setName] = useState(() =>
+    typeof window === 'undefined' ? '' : localStorage.getItem('mdm-portal-name') ?? '')
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const act = async (action: 'approve' | 'request_changes') => {
+    if (!token || !decide) return
+    if (action === 'request_changes') {
+      if (!note.trim()) return toast.error('Write what should change first')
+      if (!name.trim()) return toast.error('Add your name so the team knows who asked')
+    }
+    if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
+    setBusy(action)
+    try {
+      const res = await fetch('/api/portal/act', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, item_id: decide.item_id, action, comment: note, author_name: name.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      toast.success(action === 'approve' ? 'Plan approved — thank you!' : 'Sent to your account manager')
+      setNote('')
+      setMode(null)
+      router.refresh()
+    } catch (e) {
+      if (e instanceof TypeError) {
+        toast.message('Connection hiccup — refreshing to check…')
+        router.refresh()
+      } else {
+        toast.error(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <article
@@ -107,6 +151,62 @@ function ShootCard({ shoot, clientName, token }: { shoot: PortalShoot; clientNam
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {token && decide && (
+        <div className="flex flex-col gap-3 border-t pt-4" style={{ borderColor: 'var(--p-border)' }}>
+          <p className="text-sm font-medium">
+            This plan is with you. Approve it and we&rsquo;ll lock the date, or tell us what to change.
+          </p>
+          {mode === 'changes' && (
+            <div className="flex flex-col gap-2">
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
+                style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
+              />
+              <textarea
+                rows={3}
+                value={note}
+                autoFocus
+                onChange={e => setNote(e.target.value)}
+                placeholder="What should change? e.g. “Can we shoot the garden set in the morning instead?”"
+                className="w-full rounded-lg p-3 text-sm outline-none"
+                style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {mode === null ? (
+              <>
+                <button type="button" disabled={busy !== null} onClick={() => act('approve')}
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
+                  <Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve the plan'}
+                </button>
+                <button type="button" disabled={busy !== null} onClick={() => setMode('changes')}
+                  className="rounded-lg border px-4 py-2 text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+                  style={{ borderColor: 'var(--p-border)' }}>
+                  Request changes
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" disabled={busy !== null} onClick={() => act('request_changes')}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
+                  {busy === 'request_changes' ? 'Sending…' : 'Send this to the team'}
+                </button>
+                <button type="button" disabled={busy !== null} onClick={() => { setMode(null); setNote('') }}
+                  className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: 'var(--p-border)' }}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
