@@ -318,10 +318,13 @@ export default function ClientsPage() {
                       {c.share_token && (
                         <Button
                           variant="ghost" size="icon" className="h-8 w-8"
-                          aria-label={`Copy read-only portal link for ${c.name}`}
+                          // the link is NOT read-only: whoever holds it can
+                          // approve content and shoot plans
+                          aria-label={`Copy client portal link for ${c.name} (they can approve from it)`}
+                          title={`Copy client portal link for ${c.name} (they can approve from it)`}
                           onClick={() => {
                             navigator.clipboard.writeText(publicUrl(`/portal/${c.share_token}`))
-                            toast.success(`Read-only portal link for ${c.name} copied`)
+                            toast.success(`Portal link for ${c.name} copied — anyone with it can approve`)
                           }}
                         >
                           <Link2 className="h-3.5 w-3.5" />

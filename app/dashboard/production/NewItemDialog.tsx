@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
+import { KIND_COLORS } from '../../lib/work-kinds-core'
 import { useRole } from '../useRole'
 import { uploadMedia } from '../uploadMedia'
 
@@ -75,6 +76,11 @@ export default function NewItemDialog({
     { match: 'existing'; kind_id: string; name: string } | { match: 'new'; name: string; color: string } | null
   >(null)
   const kindTouchedRef = useRef(false)
+  // making a task type on the spot: null = the dropdown as usual, a string =
+  // the name field is open. A type is data, and the dialog is where the gap
+  // in the data is noticed.
+  const [newKindName, setNewKindName] = useState<string | null>(null)
+  const [newKindBusy, setNewKindBusy] = useState(false)
   const onAssetFiles = async (files: FileList | null) => {
     if (!files?.length) return
     setAssetBusy(true)
@@ -134,6 +140,39 @@ export default function NewItemDialog({
       .then(j => setKinds(j?.kinds ?? []))
       .catch(() => {})
   }, [])
+
+  /** Mint a task type from here and select it. Tasks have nothing to post, so
+   *  the new kind uses no media — that is what keeps it off the Scheduler and
+   *  out of the client's agreement. AM-gated, exactly like the API. */
+  const createKind = async () => {
+    const name = (newKindName ?? '').trim()
+    if (!name || newKindBusy) return
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+    if (!slug) { toast.error('Give the type a name with some letters in it'); return }
+    setNewKindBusy(true)
+    try {
+      const res = await fetch('/api/production/work-kinds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug, name, default_roles: [], uses_media: false,
+          // a colour per type so the board stays readable; cycles the palette
+          color: KIND_COLORS[kinds.length % KIND_COLORS.length],
+        }),
+      })
+      const j = await res.json().catch(() => null)
+      if (!res.ok) { toast.error(j?.error ?? 'Could not create the work type'); return }
+      setKinds(ks => [...ks, j])
+      kindTouchedRef.current = true
+      setDraft(d => ({ ...d, work_kind_id: j.id }))
+      setNewKindName(null)
+      toast.success(`New task type "${name}" created`)
+    } catch {
+      toast.error('Could not create the work type')
+    } finally {
+      setNewKindBusy(false)
+    }
+  }
 
   const [adhocReason, setAdhocReason] = useState('')
   // does this need the client's sign-off, or can a manager finish it in-house?
@@ -263,7 +302,7 @@ export default function NewItemDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null) }}>
+    <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null); setNewKindName(null) }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isBriefKind ? 'New brief task' : isTaskKind ? 'New task' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle>
@@ -384,14 +423,42 @@ export default function NewItemDialog({
                 </span>
               </Label>
               <Select value={draft.work_kind_id || 'default'}
-                onValueChange={v => { kindTouchedRef.current = true; setKindHint(null); setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' })) }}>
+                onValueChange={v => {
+                  if (v === '__new__') { setKindHint(null); setNewKindName(''); return }
+                  kindTouchedRef.current = true
+                  setKindHint(null)
+                  setNewKindName(null)
+                  setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' }))
+                }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">{defaultKind?.name ?? 'Video edit'}</SelectItem>
                   {selectableKinds.filter(k => k.id !== defaultKind?.id)
                     .map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                  {isTaskKind && isManager && <SelectItem value="__new__">+ New type&hellip;</SelectItem>}
                 </SelectContent>
               </Select>
+              {newKindName !== null && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    autoFocus
+                    value={newKindName}
+                    maxLength={80}
+                    placeholder="What kind of work is it? e.g. Market research"
+                    className="w-64"
+                    onChange={e => setNewKindName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createKind() } }}
+                  />
+                  <Button type="button" size="sm" disabled={newKindBusy || !newKindName.trim()}
+                    onClick={() => void createKind()}>
+                    {newKindBusy ? 'Creating…' : 'Create'}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={newKindBusy}
+                    onClick={() => setNewKindName(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
               {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
                 <button type="button"
                   className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
