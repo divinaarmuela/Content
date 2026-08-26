@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarClock, CalendarDays, ListChecks, Send } from 'lucide-react'
+import { CalendarDays, ListChecks } from 'lucide-react'
 
 /**
- * Scheduler shell: the three views are real CHILD ROUTES, not tab state —
- * /dashboard/scheduler (queue), /scheduler/calendar, /scheduler/availability.
- * A refresh keeps you on the view you were on, the URL is shareable, and the
- * back button means something.
+ * Scheduler shell: the views are real CHILD ROUTES, not tab state —
+ * /dashboard/scheduler (queue) and /scheduler/calendar. A refresh keeps you on
+ * the view you were on, the URL is shareable, and the back button means
+ * something. Availability and Proposals live on Production now: booking a
+ * shoot is pre-production work, not posting work.
  */
 const VIEWS = [
   {
@@ -22,18 +23,6 @@ const VIEWS = [
     label: 'Calendar',
     icon: CalendarDays,
     blurb: 'Everything with a date, and whether it actually went out.',
-  },
-  {
-    href: '/dashboard/scheduler/availability',
-    label: 'Availability',
-    icon: CalendarClock,
-    blurb: 'Google Calendars side by side — empty space is shootable time.',
-  },
-  {
-    href: '/dashboard/scheduler/proposals',
-    label: 'Proposals',
-    icon: Send,
-    blurb: 'Every shoot invitation sent, its status, and the place to call one off.',
   },
 ]
 

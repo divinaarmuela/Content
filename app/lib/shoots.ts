@@ -259,7 +259,7 @@ export async function respondToShoot(
           `to ${proposal.title}.</p><p>${when}</p>` +
           (status === 'declined' ? '<p>Propose another date from the Availability view.</p>' : ''),
           'Open availability',
-          publicUrl('/dashboard/scheduler/availability'),
+          publicUrl('/dashboard/production/availability'),
         ),
         ...(status === 'accepted' ? {
           attachments: [{

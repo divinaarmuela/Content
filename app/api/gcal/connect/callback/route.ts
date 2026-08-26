@@ -6,7 +6,7 @@ import { completeCalendarConnect } from '../../../../lib/gcal'
  *  a short result in the query string, never a raw JSON body. */
 export const dynamic = 'force-dynamic'
 
-const AVAILABILITY = '/dashboard/scheduler/availability'
+const AVAILABILITY = '/dashboard/production/availability'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
