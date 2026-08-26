@@ -95,7 +95,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     const res = await fetch(`/api/production/batches/${id}`)
     if (!res.ok) {
       toast.error((await res.json()).error ?? 'Could not load the brief')
-      router.push('/dashboard/production/shoots')
+      router.push('/dashboard/production')
       return
     }
     const json = await res.json()
@@ -192,7 +192,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="flex flex-col gap-4">
-      <Link href="/dashboard/production/shoots"
+      <Link href="/dashboard/production"
         className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
         <ArrowLeft className="h-3.5 w-3.5" /> Shoots
       </Link>
@@ -679,7 +679,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 const res = await fetch(`/api/production/batches/${id}`, { method: 'DELETE' })
                 if (!res.ok) { toast.error((await res.json()).error ?? 'Could not delete'); return }
                 toast.success('Brief deleted')
-                router.push('/dashboard/production/shoots')
+                router.push('/dashboard/production')
               }}>
               Delete
             </AlertDialogAction>

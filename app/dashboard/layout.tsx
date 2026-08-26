@@ -79,7 +79,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/production':    'Production',
   '/dashboard/editor':        'Editor',
   '/dashboard/bookings':      'Bookings',
-  '/dashboard/production/shoots': 'Shoots',
   '/dashboard/production/availability': 'Availability',
   '/dashboard/production/proposals': 'Proposals',
   '/dashboard/scheduler':     'Scheduler',

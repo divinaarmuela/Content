@@ -2,449 +2,468 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
-} from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { Plus, CalendarDays, CheckSquare, Flag, Trash2, ChevronDown } from 'lucide-react'
-import type { ItemStatus } from '../../lib/workflow-core'
+  Camera, CalendarDays, ChevronDown, FileText, Plus, Search, Trash2,
+} from 'lucide-react'
+import type { BatchStatus } from '../../lib/batch-brief-core'
+import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
+import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
+import {
+  activeBriefTasks, defaultScope, productionScope,
+  type ScopeMode, type ScopeSet, type Viewer,
+} from '../../lib/work-pages-core'
 import { useProductionLive } from './useProductionLive'
-import { ViewSwitch } from './shoot-ui'
+import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from './shoot-ui'
 import { useRole } from '../useRole'
-import NewItemDialog, { type Batch, type ClientRow } from './NewItemDialog'
+import NewItemDialog, { type Batch } from './NewItemDialog'
+import { ScopeSwitch } from './ScopeSwitch'
+import { TurnChip } from './TurnChip'
 
-type Item = {
+type Shoot = {
+  id: string
+  title: string
+  status: BatchStatus
+  client_id: string
+  owner_id?: string | null
+  shoot_date: string | null
+  shot_list?: { done?: boolean }[] | null
+  planned_deliverables?: { qty: number }[] | null
+  clients: { name: string } | null
+  content_items?: { count: number }[]
+}
+type BriefTask = {
   id: string
   title: string
   client_id: string
   batch_id: string | null
-  content_type: string
   status: ItemStatus
-  priority: string
   due_date: string | null
-  current_version_number: number
+  owner_id: string | null
+  scheduler_ids?: unknown
+  my_open_task?: boolean
   clients: { name: string } | null
-  batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   work_kinds?: { name: string; slug: string; color: string } | null
 }
+type ClientRow = { id: string; name: string }
 
-/** Board columns — revision-loop states share columns to keep the board tight. */
-const COLUMNS: { key: string; title: string; statuses: ItemStatus[]; tint: string }[] = [
-  { key: 'draft',     title: 'Draft uploaded',  statuses: ['draft_uploaded'], tint: 'bg-zinc-400' },
-  { key: 'internal',  title: 'Internal review', statuses: ['internal_review'], tint: 'bg-blue-500' },
-  { key: 'revision',  title: 'Revisions',       statuses: ['revision_required', 'revision_complete'], tint: 'bg-amber-500' },
-  { key: 'client',    title: 'Client review',   statuses: ['client_review', 'client_changes_requested'], tint: 'bg-violet-500' },
-  { key: 'approved',  title: 'Approved',        statuses: ['approved_for_scheduling'], tint: 'bg-emerald-500' },
-  { key: 'scheduled', title: 'Scheduled',       statuses: ['scheduled'], tint: 'bg-cyan-600' },
-  { key: 'published', title: 'Published',       statuses: ['published'], tint: 'bg-emerald-700' },
+const SECTIONS: { status: BatchStatus; title: string }[] = [
+  { status: 'brief', title: 'IN PLANNING' },
+  { status: 'locked', title: 'DATE LOCKED' },
+  { status: 'shot', title: 'SHOT' },
+  { status: 'wrapped', title: 'WRAPPED' },
 ]
 
-const PRIORITY_TINT: Record<string, string> = {
-  urgent: 'text-red-600 dark:text-red-400',
-  high: 'text-amber-600 dark:text-amber-400',
-  normal: 'text-zinc-400 dark:text-zinc-500',
-  low: 'text-zinc-300 dark:text-zinc-600',
+const SCOPE_KEY = 'md-production-scope'
+
+function whenShort(iso: string | null) {
+  return iso
+    ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
 }
 
-const KIND_CHIP: Record<string, string> = {
-  zinc: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-  pink: 'bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-400',
-  sky: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400',
-  indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400',
-  violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400',
-  emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
-  amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
-  rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400',
-}
-
-/** Card face per work kind — a coloured edge and a faint wash, so a column
- *  full of mixed work reads at a glance instead of as plain white cards. */
-const KIND_CARD: Record<string, string> = {
-  zinc: '',
-  pink: 'border-l-2 border-l-pink-400 bg-pink-50/40 dark:bg-pink-950/20',
-  sky: 'border-l-2 border-l-sky-400 bg-sky-50/40 dark:bg-sky-950/20',
-  indigo: 'border-l-2 border-l-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20',
-  violet: 'border-l-2 border-l-violet-400 bg-violet-50/40 dark:bg-violet-950/20',
-  emerald: 'border-l-2 border-l-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/20',
-  amber: 'border-l-2 border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/20',
-  rose: 'border-l-2 border-l-rose-400 bg-rose-50/40 dark:bg-rose-950/20',
-}
-
+/**
+ * Production: the shoots, and the briefs that are still becoming shoots.
+ *
+ * A shoot is planned here BEFORE any content item exists — the Editor board
+ * shows the aftermath; this shows the plan. The briefs in flight sit above the
+ * shoots because they are the work: a shoot with no signed-off brief is a date
+ * nobody can hold you to.
+ */
 export default function ProductionPage() {
-  const [items, setItems] = useState<Item[] | null>(null)
+  const router = useRouter()
+  const [shoots, setShoots] = useState<Shoot[] | null>(null)
+  const [briefTasks, setBriefTasks] = useState<BriefTask[]>([])
   const [clients, setClients] = useState<ClientRow[]>([])
-  const [batches, setBatches] = useState<Batch[]>([])
-  const [clientFilter, setClientFilter] = useState<string>('all')
-  const [batchFilter, setBatchFilter] = useState<string>('all')
+  const [clientFilter, setClientFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const [needsSchema, setNeedsSchema] = useState(false)
 
   const [newOpen, setNewOpen] = useState(false)
-  const [preset, setPreset] = useState<{ client_id?: string; batch_id?: string } | undefined>()
+  const [newBusy, setNewBusy] = useState(false)
+  const [draft, setDraft] = useState({ client_id: '', title: '' })
+  const [briefOpen, setBriefOpen] = useState(false)
 
-  const { can } = useRole()
+  const { me, role, can } = useRole()
+  const canPlan = can('editor')
   const isManager = can('account_manager')
+  const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 
-  const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number }[] | null>(null)
+  // names for "waiting on …" — managers can see who holds a brief
+  const [team, setTeam] = useState<{ id: string; name: string; email: string }[]>([])
   useEffect(() => {
-    if (clientFilter === 'all') { setStrip(null); return }
-    fetch(`/api/production/deliverables-progress?client_id=${clientFilter}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => setStrip(j?.per_type ?? []))
-      .catch(() => setStrip([]))
-  }, [clientFilter])
+    if (!isManager) return
+    fetch('/api/team')
+      .then(r => (r.ok ? r.json() : { members: [] }))
+      .then(json => setTeam(
+        (json.members ?? []).map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
+      ))
+      .catch(() => setTeam([]))
+  }, [isManager])
+
+  /* ── scope: whose briefs are on screen ── */
+  const [scope, setScopeState] = useState<ScopeSet | null>(null)
+  useEffect(() => {
+    if (role === null || scope !== null) return
+    try {
+      const saved = localStorage.getItem(SCOPE_KEY)
+      const parsed: unknown = saved ? JSON.parse(saved) : null
+      // whatever is in storage is a guess, not a fact — an old key, a hand-edit,
+      // a mode we have since renamed. Keep the words we still understand; if
+      // that leaves nothing, open where this role would have opened anyway.
+      const restored = Array.isArray(parsed)
+        ? parsed.filter((v): v is ScopeMode => v === 'mine' || v === 'unassigned' || v === 'all')
+        : []
+      if (restored.length > 0) {
+        setScopeState(new Set(restored))
+        return
+      }
+    } catch { /* a corrupt or blocked localStorage is not worth a broken page */ }
+    setScopeState(defaultScope(role))
+  }, [role, scope])
+  const setScope = (s: ScopeSet) => {
+    setScopeState(s)
+    try { localStorage.setItem(SCOPE_KEY, JSON.stringify([...s])) } catch { /* private mode */ }
+  }
 
   const load = useCallback(async () => {
     try {
-      const [itemsRes, clientsRes, batchesRes] = await Promise.all([
-        fetch('/api/production/items'),
-        fetch('/api/website/clients'),
+      const [bRes, cRes, iRes] = await Promise.all([
         fetch('/api/production/batches'),
+        fetch('/api/website/clients'),
+        fetch('/api/production/items'),
       ])
-      if (!itemsRes.ok) {
-        const err = (await itemsRes.json()).error ?? ''
-        if (String(err).match(/relation|does not exist/i)) { setNeedsSchema(true); setItems([]); return }
-        throw new Error(err || 'Failed to load items')
-      }
-      setItems(await itemsRes.json())
-      if (clientsRes.ok) setClients(await clientsRes.json())
-      if (batchesRes.ok) setBatches(await batchesRes.json())
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load production board')
-      setItems([])
+      if (bRes.ok) {
+        const rows: Shoot[] = await bRes.json()
+        // schema not migrated yet → rows have no status; show the setup card
+        setNeedsSchema(rows.length > 0 && rows.every(r => !r.status))
+        setShoots(rows)
+      } else setShoots([])
+      if (cRes.ok) setClients(((await cRes.json()) as ClientRow[]).filter(Boolean))
+      if (iRes.ok) setBriefTasks(activeBriefTasks((await iRes.json()) as BriefTask[]))
+    } catch {
+      toast.error('Could not load shoots')
+      setShoots([])
     }
   }, [])
+  useEffect(() => { void load() }, [load])
+  useProductionLive(useCallback(() => { void load() }, [load]))
 
-  useEffect(() => { load() }, [load])
+  const [toDelete, setToDelete] = useState<Shoot | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
 
-  // arriving from a brief's "Create items": dialog open, client+shoot preset
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search)
-    const forBatch = q.get('new_for_batch')
-    if (forBatch) {
-      setPreset({ batch_id: forBatch, client_id: q.get('client') ?? undefined })
-      setNewOpen(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // live board: any item created/moved/commented anywhere refreshes the columns
-  useProductionLive(load)
-
-  const visible = (items ?? [])
-    .filter(i => clientFilter === 'all' || i.client_id === clientFilter)
-    .filter(i => batchFilter === 'all' || i.batch_id === batchFilter)
-
-  /* ── bulk select + delete: tick cards on the board instead of opening each ── */
-  const [selectMode, setSelectMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulkBusy, setBulkBusy] = useState(false)
-  const toggleSelected = (id: string) => setSelectedIds(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
-  const exitSelect = () => { setSelectMode(false); setSelectedIds(new Set()) }
-  const bulkDelete = async () => {
-    setBulkBusy(true)
+  const remove = async () => {
+    if (!toDelete) return
+    setDelBusy(true)
     try {
-      const ids = [...selectedIds]
-      const results = await Promise.allSettled(ids.map(async id => {
-        const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed')
-      }))
-      const failed = results.filter(r => r.status === 'rejected').length
-      const deleted = ids.length - failed
-      if (failed === 0) toast.success(deleted === 1 ? 'Item deleted' : `${deleted} items deleted`)
-      else toast.error(`Deleted ${deleted}, but ${failed} failed — the board shows what remains`)
-      setBulkOpen(false)
-      exitSelect()
+      const res = await fetch(`/api/production/batches/${toDelete.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not delete the shoot')
+      toast.success('Shoot deleted')
+      setToDelete(null)
       void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete the shoot')
     } finally {
-      setBulkBusy(false)
+      setDelBusy(false)
     }
   }
 
-
-  if (needsSchema) {
-    return (
-      <Card className="border-dashed shadow-none">
-        <CardContent className="py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          The production tables don&apos;t exist yet — run <span className="font-mono">supabase/production.sql</span> in
-          the Supabase SQL editor, then reload.
-        </CardContent>
-      </Card>
-    )
+  const create = async () => {
+    if (!draft.client_id || !draft.title.trim()) { toast.error('Client and a working title are required'); return }
+    setNewBusy(true)
+    try {
+      const res = await fetch('/api/production/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: draft.client_id, title: draft.title.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not create the brief')
+      router.push(`/dashboard/production/shoots/${json.id}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create the brief')
+      setNewBusy(false)
+    }
   }
+
+  const matches = (clientId: string, title: string) =>
+    (clientFilter === 'all' || clientId === clientFilter)
+    && (!search || title.toLowerCase().includes(search.toLowerCase()))
+
+  const visible = (shoots ?? []).filter(s => matches(s.client_id, s.title))
+
+  // a brief and its shoot are one job: whoever owns the shoot owns the brief,
+  // even when the task row itself was never assigned to anybody
+  const batchOwnerById = Object.fromEntries((shoots ?? []).map(s => [s.id, s.owner_id ?? null]))
+  const briefsInFilters = briefTasks.filter(b => matches(b.client_id, b.title))
+  const briefRows = viewer && scope
+    ? productionScope(briefsInFilters, viewer, scope, batchOwnerById)
+    : []
+  const nameById = new Map(team.map(m => [m.id, m.name || m.email]))
+  const briefByBatch = new Map(briefTasks.filter(b => b.batch_id).map(b => [b.batch_id as string, b]))
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Production</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Every piece of work, from shoot brief to published. Click a card for detail and actions.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <ViewSwitch current="board" />
-          <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Select value={clientFilter} onValueChange={v => v && setClientFilter(v)}>
             <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All clients</SelectItem>
               {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          {isManager && (
-            <Button variant={selectMode ? 'default' : 'outline'} size="sm"
-              onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
-              <CheckSquare className="h-4 w-4" /> {selectMode ? 'Cancel' : 'Select to delete'}
-            </Button>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+            <Input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Find a shoot…" className="w-44 bg-white pl-8 dark:bg-zinc-900" />
+          </div>
+          {(canPlan || isManager) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {canPlan && (
+                  <DropdownMenuItem onClick={() => setNewOpen(true)}>
+                    <CalendarDays className="h-4 w-4" /> Plan shoot
+                  </DropdownMenuItem>
+                )}
+                {isManager && (
+                  <DropdownMenuItem onClick={() => setBriefOpen(true)}>
+                    <FileText className="h-4 w-4" /> New brief task
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => setNewOpen(true)}>
-                <Plus className="h-4 w-4" /> Content item
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/production/shoots"><CalendarDays className="h-4 w-4" /> Plan a shoot</Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
-      {/* shoots exist as first-class things, not just a dropdown inside the
-          create dialog — a new batch appears here immediately, and clicking
-          one narrows the board to that shoot's items */}
-      {batches.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-            Shoots
-          </span>
-          <button type="button" onClick={() => setBatchFilter('all')}
-            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-              batchFilter === 'all'
-                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
-            }`}>
-            All
-          </button>
-          {batches
-            .filter(b => (b.status ?? 'shot') !== 'brief')
-            .filter(b => clientFilter === 'all' || b.client_id === clientFilter)
-            .map(b => {
-              const count = b.content_items?.[0]?.count ?? 0
-              return (
-                <button key={b.id} type="button"
-                  onClick={() => setBatchFilter(f => (f === b.id ? 'all' : b.id))}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    batchFilter === b.id
-                      ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                      : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
-                  }`}>
-                  {(b.status === 'locked' || b.status === 'shot') && (
-                    <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${b.status === 'locked' ? 'bg-sky-500' : 'bg-violet-500'}`} />
-                  )}
-                  {b.title}
-                  {b.clients?.name && <span className="opacity-60"> · {b.clients.name}</span>}
-                  <span className="ml-1 font-mono tabular-nums opacity-60">{count}</span>
-                </button>
-              )
-            })}
-        </div>
+      {needsSchema && (
+        <Card className="border-amber-200 dark:border-amber-900">
+          <CardContent className="p-4 text-sm text-amber-800 dark:text-amber-300">
+            The shoot-brief upgrade needs its database migration — run
+            <span className="font-mono"> supabase/agreements_and_briefs.sql</span> in the SQL editor.
+          </CardContent>
+        </Card>
       )}
 
-      {strip && strip.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-            {new Date().toLocaleDateString('en-AU', { month: 'long' })}
-          </span>
-          {strip.map(r => (
-            <span key={r.type}
-              title={`${r.delivered} delivered · ${r.planned - r.delivered > 0 ? `${r.planned - r.delivered} in production · ` : ''}${Math.max(0, r.quota - r.planned)} remaining`}
-              className={`rounded-full border px-2.5 py-1 font-mono text-xs tabular-nums ${
-                r.delivered > r.quota
-                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
-                  : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
-              }`}>
-              {r.label} {r.delivered}/{r.quota}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {items === null ? (
-        <div className="flex gap-3 overflow-x-hidden">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
-        </div>
-      ) : (
-        <div className="w-full overflow-x-auto">
-          <div className="flex gap-3 pb-3">
-            {COLUMNS.map(col => {
-              const colItems = visible.filter(i => col.statuses.includes(i.status))
-              // a booked shoot brief reuses 'scheduled' (same pipeline, different
-              // meaning) — the lane header must not read as "scheduled to post"
-              // when it's actually holding a booked shoot
-              // 'approved' is likewise approved_for_scheduling under the hood —
-              // for a brief that means "the plan is signed off, book the date",
-              // never "a scheduler has it"
-              const briefsHere = colItems.some(i => i.work_kinds?.slug === 'shoot_brief')
-              const hasBrief = col.key === 'scheduled' && briefsHere
-              const briefApproved = col.key === 'approved' && briefsHere
-              return (
-                <div key={col.key} className="min-w-44 flex-1">
-                  <div className="mb-2 flex items-center gap-2 px-1">
-                    <span className={`h-2 w-2 rounded-full ${col.tint}`} />
-                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                      {hasBrief ? 'Scheduled · Shoot booked'
-                        : briefApproved ? 'Approved · Ready to book'
-                        : col.title}
-                    </span>
-                    <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
-                  </div>
-                  <div className="flex min-h-24 flex-col gap-2">
-                    {colItems.map(item => (
-                      <Link key={item.id} href={`/dashboard/production/${item.id}`} className="block"
-                        onClick={e => { if (selectMode) { e.preventDefault(); toggleSelected(item.id) } }}>
-                        <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${
-                          item.work_kinds?.slug === 'shoot_brief'
-                            ? 'border-l-2 border-l-sky-400 bg-sky-50/40 dark:bg-sky-950/20'
-                            : KIND_CARD[item.work_kinds?.color ?? 'zinc'] ?? ''
-                        } ${selectMode && selectedIds.has(item.id) ? 'ring-2 ring-inset ring-blue-500' : ''}`}>
-                          <CardContent className="flex flex-col gap-1.5 p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              {selectMode && (
-                                <input type="checkbox" checked={selectedIds.has(item.id)} readOnly
-                                  className="pointer-events-none mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
-                              )}
-                              <span className="text-sm font-medium leading-snug">{item.title}</span>
-                              <Flag className={`mt-0.5 h-3 w-3 shrink-0 ${PRIORITY_TINT[item.priority] ?? ''}`} />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                                {item.clients?.name ?? '—'}
-                              </Badge>
-                              {item.work_kinds?.slug !== 'shoot_brief' && (
-                                <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
-                              )}
-                              {item.work_kinds?.slug === 'shoot_brief' && item.status === 'scheduled' && (
-                                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
-                                  Shoot booked
-                                </span>
-                              )}
-                              {item.work_kinds?.slug === 'shoot_brief' && (item.batches?.planned_deliverables?.length ?? 0) > 0 && (
-                                <span className="font-mono text-[10.5px] text-zinc-400 dark:text-zinc-500">
-                                  {item.batches!.planned_deliverables!.slice(0, 3).map(d => `${d.qty} ${d.type}${d.qty > 1 ? 's' : ''}`).join(' · ')}
-                                  {item.batches!.planned_deliverables!.length > 3 ? ` +${item.batches!.planned_deliverables!.length - 3}` : ''}
-                                </span>
-                              )}
-                              {item.work_kinds && item.work_kinds.slug !== 'edit' && (
-                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[item.work_kinds.color] ?? KIND_CHIP.zinc}`}>
-                                  {item.work_kinds.name}
-                                </span>
-                              )}
-                              {item.current_version_number > 0 && (
-                                <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">v{item.current_version_number}</span>
-                              )}
-                            </div>
-                            {(item.due_date || item.status === 'revision_required' || item.status === 'client_changes_requested') && (
-                              <div className="flex items-center gap-2">
-                                {item.due_date && (
-                                  <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                                    <CalendarDays className="h-3 w-3" />
-                                    {new Date(item.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                                  </span>
-                                )}
-                                {item.status === 'revision_required' && (
-                                  <Badge variant="outline" className="border-amber-200 bg-amber-50 font-normal text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">needs edit</Badge>
-                                )}
-                                {item.status === 'client_changes_requested' && (
-                                  <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">client changes</Badge>
-                                )}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    ))}
-                    {colItems.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                        Empty
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+      {/* the plans still being written, above the shoots they will become */}
+      {briefsInFilters.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+              BRIEFS IN FLIGHT <span className="tabular-nums">{briefRows.length}</span>
+            </p>
+            {scope && (
+              <div className="ml-auto">
+                <ScopeSwitch scope={scope} onChange={setScope} />
+              </div>
+            )}
           </div>
+          {briefRows.length === 0 ? (
+            <Card className="border-dashed shadow-none">
+              <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                Briefs are in flight, but none of them are yours — switch to Everyone to see them.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-2">
+              {briefRows.map(b => (
+                <div key={b.id} className="relative">
+                  <Card className="py-0 transition-shadow hover:shadow-md">
+                    <CardContent className="flex flex-wrap items-center gap-2 p-3">
+                      {/* the whole row opens the brief task, as a stretched link
+                          rather than a wrapper — controls may live inside it */}
+                      <Link href={`/dashboard/production/${b.id}`} aria-label={b.title}
+                        className="absolute inset-0 rounded-xl" />
+                      <span className="text-sm font-medium">{b.title}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {b.clients?.name ?? 'Unassigned'}
+                      </span>
+                      <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+                        {itemStatusLabel('shoot_brief', b.status, b.status)}
+                      </Badge>
+                      {viewer && (
+                        <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN}
+                          ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
+                      )}
+                      {b.due_date && (
+                        <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                          <CalendarDays className="h-3 w-3" />
+                          {whenShort(b.due_date)}
+                        </span>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* select-mode action bar */}
-      {selectMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-zinc-200 bg-white/95 px-4 py-2 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
-          <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
-            {selectedIds.size} selected
-          </span>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-            onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>
-            Select all
-          </Button>
-          <Button size="sm" variant="destructive" className="h-7 gap-1.5 px-3 text-xs"
-            disabled={selectedIds.size === 0} onClick={() => setBulkOpen(true)}>
-            <Trash2 className="h-3.5 w-3.5" /> Delete
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitSelect}>Cancel</Button>
-        </div>
+      {shoots === null ? (
+        <div className="grid gap-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-24" />)}</div>
+      ) : visible.length === 0 && briefRows.length === 0 ? (
+        <Card className="border-dashed shadow-none">
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+              <Camera className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+            </div>
+            <p className="text-sm font-medium">No shoots planned</p>
+            <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+              Plan a shoot to brief the team before production starts.
+            </p>
+            {canPlan && <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan shoot</Button>}
+          </CardContent>
+        </Card>
+      ) : (
+        SECTIONS.map(section => {
+          const rows = visible.filter(s => (s.status ?? 'shot') === section.status)
+          if (rows.length === 0) return null
+          return (
+            <div key={section.status} className="flex flex-col gap-2">
+              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                {section.title} <span className="tabular-nums">{rows.length}</span>
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {rows.map(s => {
+                  const shots = s.shot_list?.length ?? 0
+                  const deliverables = (s.planned_deliverables ?? []).reduce((n, d) => n + (d.qty || 0), 0)
+                  const itemCount = s.content_items?.[0]?.count ?? 0
+                  const meta = [
+                    shots > 0 && `${shots} shot${shots === 1 ? '' : 's'} planned`,
+                    deliverables > 0 && `${deliverables} deliverables`,
+                    itemCount > 0 && `${itemCount} item${itemCount === 1 ? '' : 's'} in production`,
+                  ].filter(Boolean).join(' · ')
+                  const canDelete = isManager && itemCount === 0
+                  const brief = briefByBatch.get(s.id)
+                  return (
+                    <div key={s.id} className="group/shoot relative">
+                      <Card className="py-0 transition-shadow hover:shadow-md">
+                        <CardContent className="flex flex-col gap-1.5 p-3">
+                          {/* stretched link, so the delete control below is a
+                              button beside an anchor and not inside one */}
+                          <Link href={`/dashboard/production/shoots/${s.id}`} aria-label={s.title}
+                            className="absolute inset-0 rounded-xl" />
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold">{s.title}</span>
+                            <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${BATCH_STATUS_STYLE[s.status ?? 'shot']}`}>
+                              {BATCH_STATUS_LABEL[s.status ?? 'shot']}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            {s.clients?.name ?? 'Unassigned'} ·{' '}
+                            {whenShort(s.shoot_date) ?? <span className="italic text-zinc-400">No date yet</span>}
+                          </p>
+                          {brief && (
+                            <span className="w-fit rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                              Brief: {itemStatusLabel('shoot_brief', brief.status, STATUS_LABELS[brief.status])}
+                            </span>
+                          )}
+                          {meta && (
+                            <p className="font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{meta}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          aria-label="Delete shoot"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); setToDelete(s) }}
+                          className="absolute right-2 top-2 z-10 hidden rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 group-hover/shoot:block dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
       )}
 
-      {/* bulk delete confirm */}
-      <AlertDialog open={bulkOpen} onOpenChange={o => !bulkBusy && setBulkOpen(o)}>
+      <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>New shoot brief</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Client</label>
+              <Select value={draft.client_id} onValueChange={v => v && setDraft(d => ({ ...d, client_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Pick a client" /></SelectTrigger>
+                <SelectContent>
+                  {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Working title</label>
+              <Input value={draft.title} placeholder="e.g. September studio day"
+                onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && create()} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewOpen(false)} disabled={newBusy}>Cancel</Button>
+            <Button onClick={create} disabled={newBusy}>{newBusy ? 'Creating…' : 'Create brief'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* the brief TASK — the reviewable plan that rides the item pipeline.
+          presetKind locks the kind: without it the dialog filters it out. */}
+      <NewItemDialog
+        open={briefOpen}
+        onOpenChange={setBriefOpen}
+        onCreated={load}
+        presetKind="shoot_brief"
+        clients={clients}
+        batches={(shoots ?? []) as Batch[]}
+      />
+
+      <AlertDialog open={!!toDelete} onOpenChange={o => !delBusy && !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {selectedIds.size === 1 ? 'this item' : `these ${selectedIds.size} items`}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Each item goes with its versions, comments, approvals, and schedule
-              entries. This cannot be undone.
+              This removes the shoot plan and its board. A shoot that produced no
+              content items can be deleted at any stage; one with items is wrapped instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700"
-              disabled={bulkBusy}
-              onClick={e => { e.preventDefault(); void bulkDelete() }}>
-              {bulkBusy ? 'Deleting…' : 'Delete'}
+            <AlertDialogCancel disabled={delBusy}>Keep it</AlertDialogCancel>
+            <AlertDialogAction disabled={delBusy}
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={e => { e.preventDefault(); void remove() }}>
+              {delBusy ? 'Deleting…' : 'Delete shoot'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <NewItemDialog
-        open={newOpen}
-        onOpenChange={o => { setNewOpen(o); if (!o) setPreset(undefined) }}
-        onCreated={load}
-        preset={preset}
-        clients={clients}
-        batches={batches}
-      />
-
     </div>
   )
 }

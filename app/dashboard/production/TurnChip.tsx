@@ -17,13 +17,17 @@ const HAT_WORD: Record<string, string> = {
  * you are the one holding it up. This does, in the three words that matter.
  * A published item has nobody's turn left, so it gets no chip at all.
  */
-export function TurnChip({ status, item, viewer, ownerName }: {
+export function TurnChip({ status, item, viewer, ownerName, turns }: {
   status: ItemStatus
   item: ActingItem
   viewer: { id: string; role: Role }
   ownerName?: string
+  /** whose turn each status is. A brief hands over to nobody at the end, so
+   *  Production passes BRIEF_STATUS_TURN — otherwise a booked shoot would sit
+   *  there waiting on a scheduler who is never coming. */
+  turns?: Record<ItemStatus, Role | null>
 }) {
-  const turn = whoseTurn(status, item, viewer)
+  const turn = whoseTurn(status, item, viewer, turns)
   if (turn.hat === null) return null
 
   if (turn.mine) {
