@@ -332,7 +332,9 @@ export default function NewItemDialog({
                     const res = await fetch('/api/production/work-kinds', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ slug, name: hint.name, color: hint.color, default_roles: [], uses_media: true }),
+                      // a type minted from the task dialog is a task type: no media, so it
+                      // lands on Production and never on the Scheduler or the agreement
+                      body: JSON.stringify({ slug, name: hint.name, color: hint.color, default_roles: [], uses_media: !isTaskKind }),
                     })
                     const j = await res.json().catch(() => null)
                     if (!res.ok) { toast.error(j?.error ?? 'Could not create the work type'); return }
