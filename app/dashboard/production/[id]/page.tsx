@@ -411,7 +411,7 @@ export default function ItemDetailPage() {
     if (turn.hat === null) return 'nobody — this one is finished'
     // an unowned draft belongs to the pool, not to you — "You" on an item
     // anyone could pick up reads as an assignment that was never made
-    if (turn.unassigned) return 'Unassigned — anyone can take it'
+    if (turn.unassigned) return isBrief ? 'Unassigned — an account manager will pick it up' : 'Unassigned — anyone can take it'
     if (turn.mine) return 'You'
     if (turn.hat === 'editor') return `${detail.owner_name ?? 'the editor'} (editing)`
     if (turn.hat === 'scheduler') {

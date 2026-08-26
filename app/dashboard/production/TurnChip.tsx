@@ -17,7 +17,7 @@ const HAT_WORD: Record<string, string> = {
  * you are the one holding it up. This does, in the three words that matter.
  * A published item has nobody's turn left, so it gets no chip at all.
  */
-export function TurnChip({ status, item, viewer, ownerName, turns }: {
+export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
   status: ItemStatus
   item: ActingItem
   viewer: { id: string; role: Role }
@@ -26,6 +26,8 @@ export function TurnChip({ status, item, viewer, ownerName, turns }: {
    *  Production passes BRIEF_STATUS_TURN — otherwise a booked shoot would sit
    *  there waiting on a scheduler who is never coming. */
   turns?: Record<ItemStatus, Role | null>
+  /** a shoot brief cannot be claimed — only an account manager picks it up */
+  brief?: boolean
 }) {
   const turn = whoseTurn(status, item, viewer, turns)
   if (turn.hat === null) return null
@@ -36,7 +38,7 @@ export function TurnChip({ status, item, viewer, ownerName, turns }: {
   if (turn.unassigned) {
     return (
       <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
-        Unassigned — anyone can take it
+        {brief ? 'Unassigned — an account manager will pick it up' : 'Unassigned — anyone can take it'}
       </span>
     )
   }

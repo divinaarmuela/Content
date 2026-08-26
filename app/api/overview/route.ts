@@ -64,7 +64,13 @@ export async function GET() {
     const items: ItemLite[] = itemsErr ? [] : ((itemRows ?? []) as unknown as ItemLite[])
 
     const pipeline: Record<string, number> = Object.fromEntries(ITEM_STATUSES.map(s => [s, 0]))
-    for (const i of items) if (pipeline[i.status] !== undefined) pipeline[i.status] += 1
+    // assets only: a booked shoot brief is 'scheduled' under the hood, and
+    // counting it here made the Overview say "Scheduled 2" while the
+    // Scheduler page — which rightly never lists briefs — showed none
+    for (const i of items) {
+      if (((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === SHOOT_BRIEF_SLUG) continue
+      if (pipeline[i.status] !== undefined) pipeline[i.status] += 1
+    }
 
     const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
     const weekAhead = new Date(Date.now() + 7 * 86_400_000).toISOString()

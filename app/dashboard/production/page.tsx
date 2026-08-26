@@ -284,7 +284,7 @@ export default function ProductionPage() {
                         {itemStatusLabel('shoot_brief', b.status, b.status)}
                       </Badge>
                       {viewer && (
-                        <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN}
+                        <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
                           ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
                       )}
                       {b.due_date && (
