@@ -5,6 +5,8 @@ import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
   type CanvasCard, type ShotRow,
 } from './batch-brief-core'
+import { isInternalKind } from './task-kind-core'
+import { shootStatusLabel } from './portal-words'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -47,16 +49,11 @@ export type PortalShoot = {
   awaiting_decision?: { item_id: string } | null
 }
 
-/** What a shoot's internal status means to the client reading their portal. */
-const SHOOT_LABELS: Record<string, string> = {
-  brief: 'In planning',
-  locked: 'Shoot booked',
-  shot: 'Shot',
-  wrapped: 'Wrapped',
-}
-
 export type PortalData = {
   client: { id: string; name: string }
+  /** the name of the account manager assigned to this client, when there is
+   *  one — the portal says a person's name instead of an org-chart role */
+  am_name: string | null
   /** the client's scanned brand profile — the portal dresses in it */
   brand: Record<string, unknown> | null
   commitment: {
@@ -64,6 +61,9 @@ export type PortalData = {
     quotas: { type: string; quota: number; published: number }[]
   } | null
   needs_review: PortalItem[]
+  /** the client asked for changes and the team is making them — its own pile,
+   *  because "did my note land?" is the only question that matters then */
+  changes_requested: PortalItem[]
   in_production: PortalItem[]
   approved: PortalItem[]
   scheduled: PortalItem[]
@@ -71,16 +71,31 @@ export type PortalData = {
   shoots: PortalShoot[]
 }
 
+/** The first name of the manager this client deals with, or null. Shared by
+ *  the portal home and the child pages so they name the same person. */
+export async function accountManagerName(clientId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('team_user_clients')
+    .select('team_users!team_user_clients_team_user_id_fkey(name, role, active_status)')
+    .eq('client_id', clientId)
+  if (error) return null
+  const managers = (data ?? [])
+    .map(r => r.team_users as unknown as { name: string | null; role: string | null; active_status: boolean | null })
+    .filter(u => u && u.active_status !== false && (u.role === 'account_manager' || u.role === 'super_admin'))
+  const am = managers.find(u => u.role === 'account_manager') ?? managers[0] ?? null
+  return (am?.name ?? '').trim().split(/\s+/)[0] || null
+}
+
 export async function getPortalData(clientId: string): Promise<PortalData | null> {
   const now = new Date()
   const month = now.getMonth() + 1
   const year = now.getFullYear()
 
-  const [clientRes, itemsRes, commitmentRes, brandRes, shootsRes] = await Promise.all([
+  const [clientRes, itemsRes, commitmentRes, brandRes, shootsRes, amRes] = await Promise.all([
     supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
     supabase
       .from('content_items')
-      .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug)')
+      .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug, uses_media)')
       .eq('client_id', clientId)
       .order('updated_at', { ascending: false })
       .limit(300),
@@ -102,13 +117,20 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .or('shared_with_client.eq.true,status.in.(locked,shot)')
       .order('shoot_date', { ascending: false, nullsFirst: false })
       .limit(6),
+    // who the client actually deals with — read alongside everything else
+    accountManagerName(clientId),
   ])
   if (!clientRes.data) return null
+  type KindRow = { slug?: string | null; uses_media?: boolean | null } | null
   // a shoot BRIEF is internal planning work riding the item pipeline — the
   // client sees the shoot in SHOOT PLANS, never as a mystery "other" card
-  const isBrief = (i: { work_kinds?: { slug?: string } | null }) =>
+  const isBrief = (i: { work_kinds?: KindRow }) =>
     (i.work_kinds?.slug ?? '') === 'shoot_brief'
-  const items = (itemsRes.data ?? []).filter(i => !isBrief(i as { work_kinds?: { slug?: string } | null }))
+  // …and neither is any other work with nothing to post: research, strategy,
+  // admin. The client's lists are the things they were promised.
+  const isInternal = (i: { work_kinds?: KindRow }) =>
+    isBrief(i) || isInternalKind(i.work_kinds)
+  const items = (itemsRes.data ?? []).filter(i => !isInternal(i as { work_kinds?: KindRow }))
   // …except when the plan is with the client: the brief stays out of the item
   // lists, but its decision has to reach the shoot card it belongs to
   const briefAwaiting = new Map<string, string>()
@@ -192,7 +214,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     return {
       id: b.id,
       title: b.title,
-      status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
+      status_label: shootStatusLabel(b.status as string),
       shoot_date: b.shoot_date ?? null,
       location: b.location ?? null,
       // an unshared booked shoot shows the fact, never the working detail
@@ -214,10 +236,12 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
   return {
     client: clientRes.data,
+    am_name: amRes,
     brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
-    in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'client_changes_requested']),
+    changes_requested: bucket(['client_changes_requested']),
+    in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete']),
     approved: bucket(['approved_for_scheduling']),
     scheduled: bucket(['scheduled']),
     published: bucket(['published']),

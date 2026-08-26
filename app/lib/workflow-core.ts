@@ -84,7 +84,9 @@ export const CLIENT_LABELS: Record<ItemStatus, string> = {
   client_review: 'Needs your review',
   client_changes_requested: 'Changes in progress',
   approved_for_scheduling: 'Approved',
-  scheduled: 'Scheduled',
+  // one word for one pile: to a client, everything past their approval is
+  // approved. The posting time is a DATE on the card, not a second status.
+  scheduled: 'Approved',
   published: 'Published',
 }
 

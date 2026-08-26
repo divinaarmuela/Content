@@ -4,7 +4,9 @@ import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
 } from './batch-brief-core'
-import type { PortalShoot } from './portal-data'
+import { accountManagerName, type PortalItem, type PortalShoot } from './portal-data'
+import { isInternalKind } from './task-kind-core'
+import { shootStatusLabel } from './portal-words'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -22,18 +24,16 @@ export type PortalComment = {
 
 export type PortalItemDetail = {
   client: { id: string; name: string }
-  item: {
-    id: string
-    title: string
-    content_type: string
-    status_label: string
-    preview_url: string | null
-  }
+  am_name: string | null
+  /** the full card shape — the detail page carries the same Approve /
+   *  Request changes block as the list, so it needs the same fields */
+  item: PortalItem
   comments: PortalComment[]
 }
 
 export type PortalShootDetail = {
   client: { id: string; name: string }
+  am_name: string | null
   shoot: PortalShoot
   comments: PortalComment[]
 }
@@ -69,18 +69,20 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   if (!client) return null
   const { data: item } = await supabase
     .from('content_items')
-    .select('id, title, content_type, status, work_kinds(slug)')
+    .select('id, title, content_type, status, updated_at, work_kinds(slug, uses_media)')
     .eq('id', itemId).eq('client_id', client.id)
     .maybeSingle()
   // an internal brief task is not a client-facing item — same rule as the
-  // portal overview: the shoot itself lives in SHOOT PLANS
-  if (!item || (item.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief') return null
+  // portal overview: the shoot itself lives in SHOOT PLANS, and no other
+  // internal work (research, strategy, admin) is the client's content either
+  const kind = item?.work_kinds as { slug?: string | null; uses_media?: boolean | null } | null
+  if (!item || kind?.slug === 'shoot_brief' || isInternalKind(kind)) return null
 
   const status = item.status as ItemStatus
   const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
-  const [versionRes, commentsRes] = await Promise.all([
+  const [versionRes, commentsRes, amName] = await Promise.all([
     clientFacing
-      ? supabase.from('asset_versions').select('file_url')
+      ? supabase.from('asset_versions').select('file_url, drive_url')
           .eq('item_id', item.id).order('version_number', { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from('item_comments')
@@ -89,25 +91,28 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       .eq('item_id', item.id).eq('visibility', 'client')
       .order('created_at', { ascending: true })
       .limit(200),
+    accountManagerName(client.id),
   ])
+  const latest = versionRes.data as { file_url?: string; drive_url?: string } | null
 
   return {
     client: { id: client.id, name: client.name },
+    am_name: amName,
     item: {
       id: item.id,
       title: item.title,
       content_type: item.content_type,
+      status,
       status_label: CLIENT_LABELS[status],
-      preview_url: (versionRes.data as { file_url?: string } | null)?.file_url ?? null,
+      updated_at: item.updated_at,
+      preview_url: latest?.file_url ?? null,
+      drive_url: latest?.drive_url ?? null,
+      schedule: [],
     },
     comments: ((commentsRes.data ?? []) as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow
     }[]).map(toComment(client.name)),
   }
-}
-
-const SHOOT_LABELS: Record<string, string> = {
-  brief: 'In planning', locked: 'Shoot booked', shot: 'Shot', wrapped: 'Wrapped',
 }
 
 export async function getPortalShootDetail(rawToken: string, batchId: string): Promise<PortalShootDetail | null> {
@@ -122,18 +127,30 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
   if (!b || !b.shared_with_client) return null
 
   // thread degrades to empty until the batch_comments migration runs
-  const commentsRes = await supabase.from('batch_comments')
-    .select('id, created_at, body, team_users!batch_comments_author_id_fkey(name, role)')
-    .eq('batch_id', b.id)
-    .order('created_at', { ascending: true })
-    .limit(200)
+  const [commentsRes, briefRes, amName] = await Promise.all([
+    supabase.from('batch_comments')
+      .select('id, created_at, body, team_users!batch_comments_author_id_fkey(name, role)')
+      .eq('batch_id', b.id)
+      .order('created_at', { ascending: true })
+      .limit(200),
+    // the plan's own brief task, when the decision is sitting with the client:
+    // the plan page has to carry the two moves the state machine says are theirs
+    supabase.from('content_items')
+      .select('id, work_kinds(slug)')
+      .eq('batch_id', b.id).eq('client_id', client.id).eq('status', 'client_review')
+      .limit(5),
+    accountManagerName(client.id),
+  ])
+  const brief = ((briefRes.data ?? []) as { id: string; work_kinds: { slug?: string } | null }[])
+    .find(r => (r.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief')
 
   return {
     client: { id: client.id, name: client.name },
+    am_name: amName,
     shoot: {
       id: b.id,
       title: b.title,
-      status_label: SHOOT_LABELS[b.status as string] ?? 'In planning',
+      status_label: shootStatusLabel(b.status as string),
       shoot_date: b.shoot_date ?? null,
       location: b.location ?? null,
       concept: b.concept ?? null,
@@ -142,6 +159,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       shot_list: sanitiseShotList(b.shot_list),
       canvas_cards: (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
       details_shared: true, // this page only exists for shared shoots
+      awaiting_decision: brief ? { item_id: brief.id } : null,
     },
     comments: ((commentsRes.error ? [] : commentsRes.data ?? []) as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow
