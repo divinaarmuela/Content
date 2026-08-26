@@ -381,7 +381,7 @@ export default function NewItemDialog({
           )}
           <div className="grid gap-1.5 sm:col-span-2">
             <Label>Title * {draft.count > 1 && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
-            <Input value={draft.title} placeholder="e.g. May shoot — BTS reel" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
+            <Input value={draft.title} placeholder={isTaskKind ? "e.g. Competitor research — October" : isBriefKind ? "e.g. October clinic day" : "e.g. May shoot — BTS reel"} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
           {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">
@@ -414,7 +414,7 @@ export default function NewItemDialog({
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
               {draft.due_date
                 ? new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
-                : 'The date is read back here in words once you pick it.'}
+                : 'Shown in words once picked.'}
             </p>
           </div>
           {!isBriefKind && !isTaskKind && (
@@ -440,7 +440,7 @@ export default function NewItemDialog({
                   setNewKindName(null)
                   setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' }))
                 }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className={newKindName !== null ? 'hidden' : undefined}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">{defaultKind?.name ?? 'Video edit'}</SelectItem>
                   {selectableKinds.filter(k => k.id !== defaultKind?.id)
@@ -449,31 +449,29 @@ export default function NewItemDialog({
                 </SelectContent>
               </Select>
               {newKindName !== null && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <Input
                     autoFocus
                     value={newKindName}
                     maxLength={80}
-                    placeholder="What kind of work is it? e.g. Market research"
-                    className="w-64"
+                    placeholder="Name the type, e.g. Market research"
+                    className="min-w-0 flex-1"
                     onChange={e => setNewKindName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createKind() } }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createKind() } if (e.key === 'Escape') setNewKindName(null) }}
                   />
                   <Button type="button" size="sm" disabled={newKindBusy || !newKindName.trim()}
                     onClick={() => void createKind()}>
-                    {newKindBusy ? 'Creating…' : 'Create'}
+                    {newKindBusy ? '…' : 'Add'}
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" disabled={newKindBusy}
+                  <Button type="button" size="sm" variant="ghost" disabled={newKindBusy} aria-label="Cancel"
                     onClick={() => setNewKindName(null)}>
-                    Cancel
+                    ✕
                   </Button>
                 </div>
               )}
               {isTaskKind && (
                 <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                  Every task has one — it is what puts the work on Production
-                  instead of the Editor board, so there is no blank option.
-                  {taskKinds.length <= 2 && ' Only the types your team has set up appear here; a manager can add more under Work types.'}
+                  What kind of work this is. Managers can add a type from the list.
                 </p>
               )}
               {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
@@ -600,7 +598,7 @@ export default function NewItemDialog({
           )}
           <div className="grid gap-1.5 sm:col-span-2">
             <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Brief'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the brief)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
-            <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
+            <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
           </div>
           {!hidesMedia && (
