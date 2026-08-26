@@ -27,7 +27,7 @@ the codebase works and the traps in it.
 ```bash
 npm run dev        # dev server
 npm run build      # production build
-npm test           # vitest run — 58 tests, all must pass
+npm test           # vitest run — 636 tests, all must pass
 npx tsc --noEmit   # type check
 ```
 

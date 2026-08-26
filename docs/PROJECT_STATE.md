@@ -1,5 +1,28 @@
 # Project state — as at 19 August 2026
 
+## Three pages (Production / Editor / Scheduler) — 26 Aug
+
+- One board became three, each answering one question. **Editor**
+  (`/dashboard/editor`) holds content items still in the making — everything
+  before "scheduled". **Scheduler** (`/dashboard/scheduler`) holds signed-off
+  items waiting for a posting time. **Production** (`/dashboard/production`)
+  holds shoot briefs; a brief never appears on the Scheduler at all, and its
+  end state is "Shoot booked", not "Published".
+- **Scope pills** — Mine / Unassigned / All (`work-pages-core.ts`). Managers
+  open on All, everyone else on Mine + Unassigned, so nobody scrolls past work
+  that is plainly someone else's.
+- **Claim** ("I'll take this one") is an `UPDATE … WHERE owner_id IS NULL` —
+  or `WHERE scheduler_ids = '[]'` for the scheduling seat. Two people clicking
+  at once is the normal case; the WHERE clause is the referee, never a read.
+- **Rights follow assignment, not job title** (`actingRoles`): an AM who owns
+  the edit may mark revisions done; an editor handed the scheduling may mark it
+  scheduled and published; a scheduler handed nothing may do neither.
+- **Redirects**: item detail lives at `/dashboard/production/<id>` and its
+  "Back" returns to whichever page it came from (`backLinkFor`) — Production
+  for a brief, Scheduler once approved, Editor otherwise.
+- Proven live by `tests/e2e/assignment-roleplay.e2e.ts` (hats, brief booking,
+  claim races, per-role visibility) alongside the original funnel roleplay.
+
 ## Latest: role-based build (19 Aug)
 
 - **Realtime everywhere on production**: `productionChannel` (app/inngest/channels.ts)

@@ -178,7 +178,7 @@ describe('the funnel, role by role', () => {
 
     // published needs the live URL first — evidence rule again
     await expect(performTransition(scheduler, await freshItem(), 'published'))
-      .rejects.toThrow(/live URL/)
+      .rejects.toThrow(/live link/i)
     await supabase.from('schedule_entries')
       .update({ live_url: 'https://instagram.com/p/test', publish_status: 'published', published_at: new Date().toISOString() })
       .eq('item_id', itemId).eq('platform', 'instagram')
