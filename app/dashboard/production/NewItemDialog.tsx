@@ -150,9 +150,15 @@ export default function NewItemDialog({
     setDraft(d => (d.work_kind_id === briefKind.id ? d : { ...d, work_kind_id: briefKind.id }))
   }, [presetKind, briefKind])
 
+  // Leaving the work type alone sends no work_kind_id at all, and the server
+  // resolves that to the 'edit' kind — so the row that means "I didn't choose"
+  // has to be labelled with the kind that actually gets used, not with
+  // whatever happens to sort first.
+  const defaultKind = kinds.find(k => k.slug === 'edit') ?? selectableKinds[0] ?? null
+
   // the chosen work kind reshapes the dialog: a shoot BRIEF is planned, not
   // produced — no footage fields, its own gate, deliverables instead of type
-  const selectedKind = kinds.find(k => k.id === draft.work_kind_id) ?? selectableKinds[0] ?? null
+  const selectedKind = kinds.find(k => k.id === draft.work_kind_id) ?? defaultKind
   const isBriefKind = selectedKind?.slug === 'shoot_brief'
   const hidesMedia = selectedKind ? !selectedKind.uses_media : false
 
@@ -291,11 +297,12 @@ export default function NewItemDialog({
                 onValueChange={v => { kindTouchedRef.current = true; setKindHint(null); setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' })) }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">{selectableKinds[0]?.name ?? 'Video edit'}</SelectItem>
-                  {selectableKinds.slice(1).map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                  <SelectItem value="default">{defaultKind?.name ?? 'Video edit'}</SelectItem>
+                  {selectableKinds.filter(k => k.id !== defaultKind?.id)
+                    .map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || selectableKinds[0]?.id) && (
+              {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
                 <button type="button"
                   className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
                   onClick={() => { kindTouchedRef.current = true; setDraft(d => ({ ...d, work_kind_id: kindHint.kind_id })); setKindHint(null) }}>

@@ -35,12 +35,14 @@ export function ScopeSwitch({ scope, onChange, unassignedCount, unassignedHint }
     }`
 
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
-      <button type="button" className={pill(scope.has('mine'))} onClick={() => toggle('mine')}>
+    <div role="group" aria-label="Scope"
+      className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
+      <button type="button" aria-pressed={scope.has('mine')} className={pill(scope.has('mine'))}
+        onClick={() => toggle('mine')}>
         Mine
       </button>
-      <button type="button" className={pill(scope.has('unassigned'))} title={unassignedHint}
-        onClick={() => toggle('unassigned')}>
+      <button type="button" aria-pressed={scope.has('unassigned')} className={pill(scope.has('unassigned'))}
+        title={unassignedHint} onClick={() => toggle('unassigned')}>
         Unassigned
         {unassignedCount !== undefined && unassignedCount > 0 && (
           <span className="ml-1.5 rounded-full bg-zinc-200 px-1.5 py-px font-mono text-[10px] tabular-nums text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
@@ -48,7 +50,8 @@ export function ScopeSwitch({ scope, onChange, unassignedCount, unassignedHint }
           </span>
         )}
       </button>
-      <button type="button" className={pill(scope.has('all'))} onClick={() => onChange(new Set<ScopeMode>(['all']))}>
+      <button type="button" aria-pressed={scope.has('all')} className={pill(scope.has('all'))}
+        onClick={() => onChange(new Set<ScopeMode>(['all']))}>
         Everyone
       </button>
     </div>

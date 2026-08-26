@@ -261,16 +261,31 @@ export function presentTransitions(
   return { primary, secondary: visible.filter(t => t !== primary) }
 }
 
-/** Whose move is it, is it mine, and is the seat empty? `turns` is the same
- *  optional vocabulary presentTransitions takes — a brief hands the last two
- *  stages to nobody, so its surfaces pass BRIEF_STATUS_TURN and stop reporting
- *  an empty scheduler seat on a shoot that no scheduler will ever touch. */
+/**
+ * Whose move is it, is it mine, and is the seat empty? `turns` is the same
+ * optional vocabulary presentTransitions takes — a brief hands the last two
+ * stages to nobody, so its surfaces pass BRIEF_STATUS_TURN and stop reporting
+ * an empty scheduler seat on a shoot that no scheduler will ever touch.
+ *
+ * `mine` is a question about the WORK, not about permission. A super admin MAY
+ * act on everything, and answering "yes, yours" on every card told them
+ * nothing — a board of forty items, forty "Your turn" chips, no signal. So the
+ * super admin is asked the same question as everybody else: reviewing is their
+ * job wherever it lands, but an edit or a post is theirs only when the item
+ * actually names them. What they may DO is unchanged — checkTransition still
+ * lets them do anything.
+ */
 export function whoseTurn(
   status: ItemStatus, item: ActingItem, viewer: { id: string; role: Role },
   turns: Record<ItemStatus, Role | null> = STATUS_TURN,
 ): { hat: Role | null; mine: boolean; unassigned: boolean } {
   const hat = turns[status]
-  const mine = hat !== null && (actingRoles(viewer, item).includes(hat) || viewer.role === 'super_admin')
+  const mine = hat === null ? false
+    : viewer.role === 'super_admin'
+      ? hat === 'account_manager'
+        || (hat === 'editor' && item.owner_id === viewer.id)
+        || (hat === 'scheduler' && schedulerIdsOf(item).includes(viewer.id))
+      : actingRoles(viewer, item).includes(hat)
   const unassigned = hat === 'editor'
     ? !item.owner_id
     : hat === 'scheduler'

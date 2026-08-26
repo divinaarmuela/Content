@@ -383,8 +383,21 @@ describe('whoseTurn', () => {
       .toEqual({ hat: null, mine: false, unassigned: false })
   })
 
-  it('a super admin can always take the turn', () => {
-    expect(whoseTurn('client_review', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
+  it('a super admin is asked the same question as everyone else', () => {
+    // reviewing IS their job, wherever it lands
+    expect(whoseTurn('internal_review', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
+    expect(whoseTurn('client_changes_requested', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
+    // an edit or a post is theirs only when the item names them — otherwise a
+    // board of forty items would wear forty "Your turn" chips and say nothing
+    expect(whoseTurn('draft_uploaded', { owner_id: THEM }, me('super_admin')).mine).toBe(false)
+    expect(whoseTurn('draft_uploaded', { owner_id: ME }, me('super_admin')).mine).toBe(true)
+    expect(whoseTurn('scheduled', { owner_id: ME, scheduler_ids: [THEM] }, me('super_admin')).mine).toBe(false)
+    expect(whoseTurn('scheduled', { owner_id: THEM, scheduler_ids: [ME] }, me('super_admin')).mine).toBe(true)
+    // waiting on the client is never waiting on us
+    expect(whoseTurn('client_review', { owner_id: THEM }, me('super_admin')).mine).toBe(false)
+    // an empty seat is still reported as empty, whoever is looking
+    expect(whoseTurn('draft_uploaded', { owner_id: null }, me('super_admin')))
+      .toEqual({ hat: 'editor', mine: false, unassigned: true })
   })
 
   it('a BRIEF hands its last stages to the account manager, not to an empty scheduler seat', () => {

@@ -14,6 +14,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { Plus, CalendarDays, CheckSquare, Flag, Trash2, ArrowRight } from 'lucide-react'
 import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { itemStatusLabel } from '../../lib/brief-task-core'
@@ -139,9 +142,15 @@ export default function EditorPage() {
     if (role === null || scope !== null) return
     try {
       const saved = localStorage.getItem(SCOPE_KEY)
-      const parsed = saved ? JSON.parse(saved) : null
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setScopeState(new Set(parsed as ScopeMode[]))
+      const parsed: unknown = saved ? JSON.parse(saved) : null
+      // whatever is in storage is a guess, not a fact — an old key, a hand-edit,
+      // a mode we have since renamed. Keep the words we still understand; if
+      // that leaves nothing, open where this role would have opened anyway.
+      const restored = Array.isArray(parsed)
+        ? parsed.filter((v): v is ScopeMode => v === 'mine' || v === 'unassigned' || v === 'all')
+        : []
+      if (restored.length > 0) {
+        setScopeState(new Set(restored))
         return
       }
     } catch { /* a corrupt or blocked localStorage is not worth a broken board */ }
@@ -199,19 +208,26 @@ export default function EditorPage() {
   useProductionLive(load)
 
   const all = items ?? []
-  const visible = (viewer && scope ? editorScope(all, viewer, scope) : [])
-    .filter(i => clientFilter === 'all' || i.client_id === clientFilter)
-    .filter(i => batchFilter === 'all' || i.batch_id === batchFilter)
+  // the client and shoot chips narrow EVERYTHING the header reports, not just
+  // the lanes — a badge reading 7 above five empty columns is a bug report
+  const inFilters = (i: Item) =>
+    (clientFilter === 'all' || i.client_id === clientFilter)
+    && (batchFilter === 'all' || i.batch_id === batchFilter)
+  const filtering = clientFilter !== 'all' || batchFilter !== 'all'
+
+  const scoped = viewer && scope ? editorScope(all, viewer, scope) : []
+  const visible = scoped.filter(inFilters)
+  const filtered = all.filter(inFilters)
 
   // the pool anyone may pick up — briefs are never in it, and neither is
   // anything already approved: that seat belongs to the scheduler
   const openPool = viewer
     ? unassignedCount(
-      all.filter(i => !isBriefTask(i) && !SCHEDULER_STATUSES.includes(i.status)),
+      filtered.filter(i => !isBriefTask(i) && !SCHEDULER_STATUSES.includes(i.status)),
       viewer, editorAssignment,
     )
     : 0
-  const tail = editorTail(all)
+  const tail = editorTail(filtered)
   const nameById = new Map(team.map(m => [m.id, m.name || m.email]))
 
   /* ── bulk select + delete: tick cards on the board instead of opening each ── */
@@ -372,7 +388,9 @@ export default function EditorPage() {
         <div className="flex gap-3 overflow-x-hidden">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
         </div>
-      ) : visible.length === 0 ? (
+      ) : scoped.length === 0 ? (
+        /* the scope itself is empty — a real "there is nothing here". A client
+           or shoot chip matching nothing is not that, and keeps its board. */
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
             {showingOnlyMineAndPool ? (
@@ -404,12 +422,17 @@ export default function EditorPage() {
                       const assignment = editorAssignment(item, viewer!)
                       const ownerName = item.owner_id ? nameById.get(item.owner_id) : undefined
                       return (
-                      <Link key={item.id} href={`/dashboard/production/${item.id}`} className="block"
-                        onClick={e => { if (selectMode) { e.preventDefault(); toggleSelected(item.id) } }}>
+                      <div key={item.id} className="relative">
                         <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${
                           KIND_CARD[item.work_kinds?.color ?? 'zinc'] ?? ''
                         } ${selectMode && selectedIds.has(item.id) ? 'ring-2 ring-inset ring-blue-500' : ''}`}>
                           <CardContent className="flex flex-col gap-1.5 p-3">
+                            {/* the whole card opens the item, but as a stretched
+                                link rather than a wrapper — a button inside an
+                                anchor is invalid, and the claim button is one */}
+                            <Link href={`/dashboard/production/${item.id}`} aria-label={item.title}
+                              className="absolute inset-0 rounded-xl"
+                              onClick={e => { if (selectMode) { e.preventDefault(); toggleSelected(item.id) } }} />
                             <div className="flex items-start justify-between gap-2">
                               {selectMode && (
                                 <input type="checkbox" checked={selectedIds.has(item.id)} readOnly
@@ -466,31 +489,36 @@ export default function EditorPage() {
                               </div>
                             )}
                             {assignment === 'unassigned' && !selectMode && (
-                              <div className="flex flex-wrap items-center gap-1.5"
-                                onClick={e => { e.preventDefault(); e.stopPropagation() }}>
+                              // above the stretched link, so these are clicks on
+                              // a control and not on the card
+                              <div className="relative z-10 flex flex-wrap items-center gap-1.5">
                                 {canClaimEditor(item, viewer!) && (
                                   <ClaimButton itemId={item.id} hat="editor" label="Take this job" onDone={load} />
                                 )}
                                 {isManager && team.length > 0 && (
-                                  <Select value="" onValueChange={v => v && void assignTo(item.id, v)}>
-                                    <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Assign…" /></SelectTrigger>
-                                    <SelectContent>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="sm" variant="outline">Assign…</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
                                       {team.map(m => (
-                                        <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>
+                                        <DropdownMenuItem key={m.id} onClick={() => void assignTo(item.id, m.id)}>
+                                          {m.name || m.email}
+                                        </DropdownMenuItem>
                                       ))}
-                                    </SelectContent>
-                                  </Select>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 )}
                               </div>
                             )}
                           </CardContent>
                         </Card>
-                      </Link>
+                      </div>
                       )
                     })}
                     {colItems.length === 0 && (
                       <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                        Empty
+                        {filtering && visible.length === 0 ? 'Nothing for this client / shoot' : 'Empty'}
                       </div>
                     )}
                   </div>
