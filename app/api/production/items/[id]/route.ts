@@ -4,6 +4,7 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../li
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
+import { actingRoles } from '../../../../lib/workflow-core'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -84,13 +85,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const keys = Object.keys(body ?? {})
     const captionOnly = keys.length === 1 && keys[0] === 'caption'
     const user = captionOnly ? await requireRole('scheduler') : await requireRole('account_manager')
-    // 'scheduler' as a floor admits editors — the caption IS the published post
-    // text, so restrict caption edits to scheduler/AM/super, not editors
-    if (captionOnly && !['scheduler', 'account_manager', 'super_admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Editors cannot edit the caption' }, { status: 403 })
-    }
     const { id } = await params
-    await loadItemForUser(user, id)
+    const current = await loadItemForUser(user, id)
+    // 'scheduler' as a floor admits editors — the caption IS the published post
+    // text, so it belongs to whoever holds the SCHEDULING here (the hat, not
+    // the title: an editor handed the item writes the post text they will
+    // post) plus AM and super admin. An editor holding no scheduling hat may
+    // not touch it.
+    if (
+      captionOnly
+      && !['account_manager', 'super_admin'].includes(user.role)
+      && !actingRoles({ id: user.id, role: user.role }, current).includes('scheduler')
+    ) {
+      return NextResponse.json({ error: 'Only the person scheduling this may edit the caption' }, { status: 403 })
+    }
 
     const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url'] as const
     const patch: Record<string, unknown> = {}

@@ -42,7 +42,7 @@ export async function GET(req: Request) {
         const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
         q = clientIds.length === 0
           ? q.or(assigned)
-          : q.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
+          : q.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)
       }
     }
     if (user.role === 'scheduler') {

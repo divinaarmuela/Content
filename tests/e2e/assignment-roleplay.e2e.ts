@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import type { TeamUser } from '../../app/lib/authz'
 import { performTransition, addVersion, type ContentItem } from '../../app/lib/workflow'
 import { loadItemForUser } from '../../app/lib/production-access'
+import { upsertScheduleEntry } from '../../app/lib/schedule'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
 
@@ -37,6 +38,40 @@ const created: string[] = []
 const batches: string[] = []
 
 const scope = (...m: ScopeMode[]) => new Set<ScopeMode>(m)
+
+/**
+ * Wait for a fire-and-forget fan-out to land.
+ *
+ * The notifications these flows produce are not awaited by the code under
+ * test, so the assertions used to sleep a flat few seconds and hope. Polling
+ * asks the question every 250 ms instead: it returns the moment the rows are
+ * there (usually far sooner) and only spends the whole budget when something
+ * is genuinely wrong.
+ */
+async function until<T>(
+  probe: () => Promise<T>, done: (v: T) => boolean, budgetMs = 5000,
+): Promise<T> {
+  const deadline = Date.now() + budgetMs
+  let last = await probe()
+  while (!done(last) && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 250))
+    last = await probe()
+  }
+  return last
+}
+
+/** every notification row these items produced, right now */
+async function notificationRows(ids: string[]) {
+  const rows: { recipient_email: string; entity_id: string; status: string }[] = []
+  for (const id of ids) {
+    const { data } = await supabase
+      .from('notification_log')
+      .select('recipient_email, entity_id, status')
+      .like('entity_id', `${id}%`)
+    rows.push(...(data ?? []))
+  }
+  return rows
+}
 
 const fresh = async (id: string): Promise<ContentItem> => {
   const { data, error } = await supabase.from('content_items').select('*').eq('id', id).single()
@@ -89,8 +124,10 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  // let the fire-and-forget notification fan-outs settle before teardown
-  await new Promise(r => setTimeout(r, 3000))
+  // let the fire-and-forget notification fan-outs settle before teardown —
+  // poll for them rather than sleeping blind, so a fast run is fast and a
+  // slow one still gets its full budget
+  await until(() => notificationRows(created), rows => rows.length > 0)
   for (const id of created) {
     await supabase.from('schedule_entries').delete().eq('item_id', id)
     await supabase.from('item_comments').delete().eq('item_id', id)
@@ -158,6 +195,36 @@ describe('rights follow assignment, not job title', () => {
       .update({ live_url: 'https://instagram.com/p/e2e-assignment', publish_status: 'published', published_at: new Date().toISOString() })
       .eq('item_id', id).eq('platform', 'instagram')
     expect((await performTransition(editor, await fresh(id), 'published')).status).toBe('published')
+  })
+
+  it('the schedule ENTRY itself follows the hat: the handed editor writes it, the unhanded scheduler cannot', async () => {
+    const id = await makeItem({ owner_id: editor.id })
+    await addVersion(editor, id, v(1))
+    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await supabase.from('content_items').update({ scheduler_ids: [editor.id] }).eq('id', id)
+
+    // through the REAL code path the API route uses — the route is a thin
+    // wrapper around this, so proving it here proves the endpoint
+    const entry = await upsertScheduleEntry(editor, await fresh(id), {
+      platform: 'instagram',
+      scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
+    })
+    expect(entry.platform).toBe('instagram')
+    expect(entry.scheduler_id).toBe(editor.id)
+
+    // …and the entry is real evidence: the transition it gates now passes
+    expect((await performTransition(editor, await fresh(id), 'scheduled')).status).toBe('scheduled')
+
+    // the scheduler by TITLE was handed nothing here — same function, refused
+    await expect(upsertScheduleEntry(scheduler, await fresh(id), { platform: 'tiktok' }))
+      .rejects.toThrow(/scheduling/i)
+    const { data: entries } = await supabase
+      .from('schedule_entries').select('platform').eq('item_id', id)
+    expect((entries ?? []).map(e => e.platform)).toEqual(['instagram'])
+
+    // and they cannot even READ it: a taken seat is not their job to see
+    await expect(loadItemForUser(scheduler, id)).rejects.toThrow(/not found/i)
   })
 
   it('with nobody handed the scheduling, the scheduler picks it up and posts it', async () => {
@@ -310,8 +377,10 @@ describe('who can even SEE an unclaimed item', () => {
     const id = await makeItem({ owner_id: null, status: 'approved_for_scheduling' })
     await supabase.from('content_items').update({ scheduler_ids: [editor.id] }).eq('id', id)
 
-    // the scheduler may still read a post-approval item (loadItemForUser gates
-    // on STATUS, not on the handoff) but holds no hat on it: the seat is taken
+    // the seat is TAKEN: a scheduler who was not handed this item holds no hat
+    // on it and cannot even read it. Status alone used to let them in — a
+    // 404 is the right answer, not a readable item they may not act on
+    await expect(loadItemForUser(scheduler, id)).rejects.toThrow(/not found/i)
     await expect(performTransition(scheduler, await fresh(id), 'scheduled')).rejects.toThrow()
     // …and it is off their board under the scheduler's default scope
     const { data } = await supabase
@@ -341,15 +410,7 @@ describe('who can even SEE an unclaimed item', () => {
 
 describe('no real person was notified', () => {
   it('every notification these items produced went to a .invalid test address', async () => {
-    await new Promise(r => setTimeout(r, 2500))
-    const rows: { recipient_email: string; entity_id: string; status: string }[] = []
-    for (const id of created) {
-      const { data } = await supabase
-        .from('notification_log')
-        .select('recipient_email, entity_id, status')
-        .like('entity_id', `${id}%`)
-      rows.push(...(data ?? []))
-    }
+    const rows = await until(() => notificationRows(created), r => r.length > 0)
     expect(rows.length).toBeGreaterThan(0) // the flow really did fan out
     // a refused send to a real address is the EMAIL_TEST_ONLY kill-switch doing
     // its job; only a SENT email to a real person is a leak

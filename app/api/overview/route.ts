@@ -48,7 +48,7 @@ export async function GET() {
       const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
       itemsQ = clientIds.length === 0
         ? itemsQ.or(assigned)
-        : itemsQ.or(`client_id.in.(${clientIds.join(',')}),${assigned}`)
+        : itemsQ.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)
     }
     if (user.role === 'scheduler') {
       // accessibleClientIds is null for a scheduler — they are gated by STATUS,

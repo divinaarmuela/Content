@@ -20,9 +20,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // scheduler assignment is a TEAM decision — a client-role caller (the
     // portal approves through this machinery) must not be able to pick who
     // schedules or narrow another scheduler's queue
-    const schedulerIds = user.role !== 'client' && Array.isArray(body.scheduler_ids)
+    const requestedSchedulerIds = user.role !== 'client' && Array.isArray(body.scheduler_ids)
       ? body.scheduler_ids.map((v: unknown) => String(v)).filter(Boolean).slice(0, 20)
       : undefined
+    // …and only REAL people: the same validation the handoff route does. A
+    // stale or client id persisted as an assignee would hand the scheduling
+    // hat to an account that can never wear it, and quietly empty the queue
+    // it was taken out of.
+    let schedulerIds: string[] | undefined
+    if (requestedSchedulerIds?.length) {
+      const { data: people } = await supabase
+        .from('team_users')
+        .select('id, role, active_status')
+        .in('id', requestedSchedulerIds)
+      const valid = (people ?? [])
+        .filter(u => u.active_status && u.role !== 'client')
+        .map(u => u.id as string)
+      if (valid.length === 0) {
+        return NextResponse.json({ error: 'Pick at least one active team member' }, { status: 400 })
+      }
+      schedulerIds = valid
+    }
     const note = String(body.note ?? '').trim().slice(0, 2000)
     const updated = await performTransition(user, item, to, {
       reviewerIds: Array.isArray(body.notify_ids) ? body.notify_ids : undefined,

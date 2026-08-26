@@ -57,12 +57,20 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
   if (error) throw new AuthzError(error.message, 500)
   if (!item) throw new AuthzError('Item not found', 404)
 
-  if (
-    user.role === 'scheduler'
-    && !SCHEDULER_STATUSES.includes(item.status as ItemStatus)
-    && item.owner_id !== user.id  // a scheduler assigned the job sees the job
-  ) {
-    throw new AuthzError('Item not found', 404) // invisible to schedulers pre-approval
+  if (user.role === 'scheduler') {
+    if (
+      !SCHEDULER_STATUSES.includes(item.status as ItemStatus)
+      && item.owner_id !== user.id  // a scheduler assigned the job sees the job
+    ) {
+      throw new AuthzError('Item not found', 404) // invisible to schedulers pre-approval
+    }
+    // the seat is TAKEN: once an item has been handed to specific people, a
+    // scheduler who is not one of them holds no hat on it, and reading it is
+    // reading someone else's job. Status alone used to let them through.
+    const handed = schedulerIdsOf(item)
+    if (handed.length > 0 && !handed.includes(user.id) && item.owner_id !== user.id) {
+      throw new AuthzError('Item not found', 404)
+    }
   }
   const clientIds = await accessibleClientIds(user)
   if (clientIds !== null && !clientIds.includes(item.client_id)) {
