@@ -90,6 +90,14 @@ const STATUS_TINT: Record<string, string> = {
 
 const PLATFORMS = ['instagram', 'tiktok', 'facebook', 'linkedin', 'youtube']
 
+/** A schedule row's state, said in words rather than in database. */
+function publishStatusWord(status: string): string {
+  if (status === 'scheduled') return 'Scheduled'
+  if (status === 'published') return 'Live'
+  const words = status.replace(/_/g, ' ').trim()
+  return words ? words[0].toUpperCase() + words.slice(1) : '—'
+}
+
 /** Job titles as people say them, for the pickers. */
 const ROLE_WORD: Record<string, string> = {
   super_admin: 'Super admin',
@@ -156,6 +164,8 @@ export default function ItemDetailPage() {
   // "Submit for review" reviewer picker — the editor chooses who is asked
   const [reviewPick, setReviewPick] = useState<{ to: ItemStatus; label: string } | null>(null)
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
+  /** the reviewer fetch failed — an empty list here means "unknown", not "none" */
+  const [reviewersFailed, setReviewersFailed] = useState(false)
   /** "what needs to change" — asked when requesting revisions */
   const [revisionAsk, setRevisionAsk] = useState<{ to: ItemStatus; label: string } | null>(null)
   const [revisionNote, setRevisionNote] = useState('')
@@ -319,9 +329,15 @@ export default function ItemDetailPage() {
   const captionRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     if (!detail) return
+    // a field the cursor is in is left alone — it self-corrects on the next
+    // poll, once you have moved on. Writing an identical value would still
+    // reset the caret and the scroll position, so don't.
     const sync = (
       el: HTMLInputElement | HTMLTextAreaElement | null, value: string,
-    ) => { if (el && document.activeElement !== el) el.value = value }
+    ) => {
+      if (!el || document.activeElement === el || el.value === value) return
+      el.value = value
+    }
     sync(briefUrlRef.current, detail.brief_url ?? '')
     sync(briefNoteRef.current, detail.brief ?? '')
     sync(rawAssetsRef.current, detail.raw_assets_url ?? '')
@@ -389,8 +405,10 @@ export default function ItemDetailPage() {
   /** whose move it is, said as a person rather than a role */
   const turnText = (): string => {
     if (turn.hat === null) return 'nobody — this one is finished'
-    if (turn.mine) return 'You'
+    // an unowned draft belongs to the pool, not to you — "You" on an item
+    // anyone could pick up reads as an assignment that was never made
     if (turn.unassigned) return 'Unassigned — anyone can take it'
+    if (turn.mine) return 'You'
     if (turn.hat === 'editor') return `${detail.owner_name ?? 'the editor'} (editing)`
     if (turn.hat === 'scheduler') {
       const names = schedulerIds.map(nameOf).filter(Boolean)
@@ -413,7 +431,7 @@ export default function ItemDetailPage() {
   /** The manager who is also the only reviewer: submitting to nobody is a dead
    *  end, so the move becomes "submit it and review it myself" — the AM
    *  buttons are waiting on the other side. */
-  const soloReviewer = reviewers?.length === 0 && hats.includes('account_manager')
+  const soloReviewer = reviewers?.length === 0 && !reviewersFailed && hats.includes('account_manager')
 
   const latest = detail.versions[0]
 
@@ -490,6 +508,7 @@ export default function ItemDetailPage() {
   const openReviewerPick = async (t: { to: ItemStatus; label: string }) => {
     setReviewPick(t)
     setReviewers(null)
+    setReviewersFailed(false)
     try {
       const res = await fetch(`/api/clients/${detail!.client_id}/managers`)
       const json = await res.json()
@@ -513,9 +532,12 @@ export default function ItemDetailPage() {
       if (detail?.assigned_by && list.some(r => r.id === detail.assigned_by)) defaults.add(detail.assigned_by)
       setChosen(defaults)
     } catch (e) {
-      // picker unavailable → submit still works, routed to assigned managers
+      // an empty list and a list we could not fetch are different facts: one
+      // means "nobody else works on this client", the other means "we don't
+      // know". Never let the second read as the first.
       toast.error(e instanceof Error ? e.message : 'Could not load reviewers')
       setReviewers([])
+      setReviewersFailed(true)
     }
   }
 
@@ -784,6 +806,9 @@ export default function ItemDetailPage() {
           : shown.some(t => t.to === 'published')
             ? 'Needs at least one platform live (a link, or marked posted in-app).'
             : null
+        // nothing legal but the turn is still yours — say the stage's meaning
+        // once, in the sentence, rather than twice on top of each other
+        const yourMove = transitions.length === 0 && turn.mine && !turn.unassigned
         const button = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline') => (
           <Button
             key={t.to}
@@ -820,10 +845,12 @@ export default function ItemDetailPage() {
                   )}
                 </div>
               ) : (
-                <p className="text-sm font-medium">Waiting on {turnText()}</p>
+                <p className="text-sm font-medium">
+                  {yourMove ? `Your move — ${meaning}` : `Waiting on ${turnText()}`}
+                </p>
               )}
               {hint && <p className="text-xs text-zinc-400 dark:text-zinc-500">{hint}</p>}
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{meaning}</p>
+              {!yourMove && <p className="text-xs text-zinc-500 dark:text-zinc-400">{meaning}</p>}
             </CardContent>
           </Card>
         )
@@ -831,8 +858,10 @@ export default function ItemDetailPage() {
 
       {/* approved and nobody named: the manager picks the person who takes it,
           rather than every scheduler hearing about every item */}
-      {!isBrief && canManage && detail.status === 'approved_for_scheduling'
-        && !schedulerIds.includes(detail.viewer_id ?? '') && (
+      {!isBrief && canManage
+        && (detail.status === 'approved_for_scheduling' || detail.status === 'scheduled') && (
+        /* a manager who handed it to themselves still gets to change their
+           mind — the card is theirs whether or not they hold the item */
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">Choose who schedules this</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3 pt-0">
@@ -1284,7 +1313,7 @@ export default function ItemDetailPage() {
                         ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
                         : s.publish_status === 'published'
                           ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">posted in-app</span>
-                          : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{s.publish_status}</span>}
+                          : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{publishStatusWord(s.publish_status)}</span>}
                     </span>
                   </div>
                 ))}
@@ -1393,7 +1422,15 @@ export default function ItemDetailPage() {
                 <Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" />
               </div>
             )}
-            {reviewers?.length === 0 && (
+            {reviewersFailed ? (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <p className="text-sm text-zinc-400 dark:text-zinc-500">Couldn&rsquo;t load reviewers — try again</p>
+                <Button variant="outline" size="sm" disabled={busy !== null}
+                  onClick={() => reviewPick && void openReviewerPick(reviewPick)}>
+                  Try again
+                </Button>
+              </div>
+            ) : reviewers?.length === 0 && (
               <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
                 {soloReviewer
                   ? 'You’re the only reviewer on this client.'
@@ -1426,7 +1463,7 @@ export default function ItemDetailPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
             <Button
-              disabled={busy !== null || reviewers === null}
+              disabled={busy !== null || reviewers === null || reviewersFailed}
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
               {busy !== null ? 'Working…'
