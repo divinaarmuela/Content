@@ -39,6 +39,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ;(shaped as Record<string, unknown>).work_kind = kindRes.data?.work_kinds ?? null
     ;(shaped as Record<string, unknown>).batch = kindRes.data?.batches ?? null
 
+    // the audit trail, named. A client never sees who inside the agency did
+    // what — the history is an internal record, like the internal comments.
+    let activity: Record<string, unknown>[] = []
+    if (user.role !== 'client') {
+      const { data: rows } = await supabase
+        .from('workflow_activity')
+        .select('id, created_at, actor_id, action, old_value, new_value, detail')
+        .eq('entity_type', 'content_item')
+        .eq('entity_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      const actorIds = [...new Set((rows ?? []).map(r => r.actor_id).filter(Boolean))]
+      const { data: actors } = actorIds.length
+        ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
+        : { data: [] }
+      const actorName = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
+      activity = (rows ?? []).map(r => ({
+        ...r, actor_name: r.actor_id ? actorName.get(r.actor_id) ?? null : null,
+      }))
+    }
+
     // who's who on this job — every team role reads it at a glance
     let owner_name: string | null = null
     let managers: { name: string; email: string }[] = []
@@ -64,6 +85,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       client_name: clientRes.data?.name ?? null,
       owner_name,
       managers,
+      activity,
       schedule: scheduleRes.data ?? [],
       viewer_role: user.role,
       // the pickers need to know who is looking: you are never emailed about

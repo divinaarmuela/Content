@@ -68,6 +68,17 @@ type BriefTask = {
   my_open_task?: boolean
   clients: { name: string } | null
   work_kinds?: { name: string; slug: string; color: string; uses_media?: boolean } | null
+  /** the audit trail, as much of it as a card has room for */
+  created_by?: string | null
+  approved_by?: string | null
+}
+
+/** "Manal made this · Divina approved it" — the log, on the card. */
+function credits(i: { created_by?: string | null; approved_by?: string | null }): string | null {
+  return [
+    i.created_by && `by ${i.created_by}`,
+    i.approved_by && `approved by ${i.approved_by}`,
+  ].filter(Boolean).join(' · ') || null
 }
 
 /** The four stages a shoot goes through — and what each one actually means,
@@ -311,6 +322,9 @@ export default function ProductionPage() {
                 </span>
               )}
             </div>
+            {credits(t) && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(t)}</p>
+            )}
             {assignment === 'unassigned' && viewer && (
               // above the stretched link, so these are clicks on a control
               <div className="relative z-10 flex flex-wrap items-center gap-1.5">
@@ -440,6 +454,9 @@ export default function ProductionPage() {
                       )}
                       {!b.owner_id && (
                         <span className="relative z-10">{assignMenu(b.id)}</span>
+                      )}
+                      {credits(b) && (
+                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(b)}</span>
                       )}
                       {b.due_date && (
                         <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">

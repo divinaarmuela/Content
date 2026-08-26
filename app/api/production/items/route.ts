@@ -99,6 +99,41 @@ export async function GET(req: Request) {
     } catch {
       // leave the annotation off rather than fail the list
     }
+
+    // "who made this" and "who signed it off" — the audit trail the cards
+    // show. Best-effort like the tag badge: a missing credit is a smaller
+    // failure than a board that will not load.
+    try {
+      const ids = rows.map(r => r.id as string).slice(0, 300)
+      if (ids.length > 0) {
+        const { data: acts } = await supabase
+          .from('workflow_activity')
+          .select('entity_id, actor_id, action, new_value, created_at')
+          .eq('entity_type', 'content_item')
+          .in('entity_id', ids)
+          .in('action', ['created', 'status_change'])
+          .order('created_at', { ascending: true })
+          .limit(3000)
+        const actorIds = [...new Set((acts ?? []).map(a => a.actor_id).filter(Boolean))]
+        const { data: actors } = actorIds.length
+          ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
+          : { data: [] }
+        const nameOf = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
+        const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
+        for (const a of acts ?? []) {
+          const key = a.entity_id as string
+          const entry = byItem.get(key) ?? { created_by: null, approved_by: null }
+          const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
+          if (a.action === 'created') entry.created_by = who
+          // rows arrive oldest-first, so the last approval wins
+          else if (a.new_value === 'approved_for_scheduling') entry.approved_by = who
+          byItem.set(key, entry)
+        }
+        rows = rows.map(r => ({ ...r, ...(byItem.get(r.id as string) ?? {}) }))
+      }
+    } catch {
+      // no credits rather than no board
+    }
     return NextResponse.json(rows)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
