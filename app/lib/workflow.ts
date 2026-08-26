@@ -559,7 +559,12 @@ export async function performTransition(
           bodyHtml: renderEmail(
             subject,
             isClientFacing && audience === 'client_users'
-              ? `<p><strong>${item.title}</strong> is ready for your review.</p>`
+              ? isBriefTask
+                // the plan and the piece are different things to a client, and
+                // the portal shows each in its own place
+                ? `<p>Your shoot plan for <strong>${item.title}</strong> is ready for you to look over.</p>` +
+                  `<p>Open your portal to approve it or tell us what to change — it&rsquo;s under Shoot plans.</p>`
+                : `<p><strong>${item.title}</strong> is ready for your review.</p>`
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")
