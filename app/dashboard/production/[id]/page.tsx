@@ -31,12 +31,15 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Trash2 } from 'lucide-react'
 import {
-  availableTransitions, CLIENT_LABELS, type ItemStatus,
-
+  actingRoles, availableTransitionsAs, presentTransitions, schedulerIdsOf, whoseTurn,
+  CLIENT_LABELS, STATUS_LABELS, STATUS_MEANING, STATUS_TURN, type ItemStatus,
 } from '../../../lib/workflow-core'
 import {
-  availableBriefTaskTransitions, itemStatusLabel, SHOOT_BRIEF_SLUG,
+  availableBriefTaskTransitionsAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
+  BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN,
 } from '../../../lib/brief-task-core'
+import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
+import { ClaimButton } from '../ClaimButton'
 import type { Role } from '../../../lib/identity-core'
 
 type Version = {
@@ -69,6 +72,8 @@ type Detail = {
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
   viewer_role: Role
+  /** the hats this viewer wears ON THIS ITEM — the server's own reading */
+  acting_roles?: Role[]
 }
 
 const STATUS_TINT: Record<string, string> = {
@@ -84,6 +89,14 @@ const STATUS_TINT: Record<string, string> = {
 }
 
 const PLATFORMS = ['instagram', 'tiktok', 'facebook', 'linkedin', 'youtube']
+
+/** Job titles as people say them, for the pickers. */
+const ROLE_WORD: Record<string, string> = {
+  super_admin: 'Super admin',
+  account_manager: 'Account manager',
+  scheduler: 'Scheduler',
+  editor: 'Editor',
+}
 
 /** Pixel size of a local image/video file, measured before it ever leaves
  *  the browser. Resolves null for anything unmeasurable — never throws. */
@@ -227,10 +240,10 @@ export default function ItemDetailPage() {
     }
   }
 
-  // editors for owner assignment + comment tasks (managers only)
+  // the people who can carry this job: every active, non-client team member.
+  // One list serves the owner picker, the comment tagger, AND "who's
+  // scheduling this?" — scheduling is a hat you are handed, not a job title.
   const [editors, setEditors] = useState<{ id: string; name: string; email: string; role?: string }[]>([])
-  // "who schedules this?" — for the approve edge and the post-client-approval handoff
-  const [schedulers, setSchedulers] = useState<{ id: string; name: string; email: string; role: string }[]>([])
   const [schedPick, setSchedPick] = useState<{ to: ItemStatus; label: string } | 'handoff' | null>(null)
   const [schedChosen, setSchedChosen] = useState<Set<string>>(new Set())
   const [commentAssignee, setCommentAssignee] = useState<string>('')
@@ -259,7 +272,9 @@ export default function ItemDetailPage() {
     const res = await fetch(`/api/production/items/${id}`)
     if (!res.ok) {
       toast.error((await res.json()).error ?? 'Failed to load item')
-      router.push('/dashboard/production')
+      // no detail to ask where this came from — the editor board is where an
+      // unreadable content item would have been listed
+      router.push('/dashboard/editor')
       return
     }
     setDetail(await res.json())
@@ -289,13 +304,30 @@ export default function ItemDetailPage() {
           .filter((m: { role: string }) => m.role !== 'client')
           .map((m: { id: string; name: string; email: string; role: string }) =>
             ({ id: m.id, name: m.name, email: m.email, role: m.role })))
-        setSchedulers(active
-          .filter((m: { role: string }) => ['scheduler', 'super_admin'].includes(m.role))
-          .map((m: { id: string; name: string; email: string; role: string }) =>
-            ({ id: m.id, name: m.name, email: m.email, role: m.role })))
       })
-      .catch(() => { setEditors([]); setSchedulers([]) })
+      .catch(() => { setEditors([]) })
   }, [viewerRole])
+
+  // The five uncontrolled fields on this page are `defaultValue` only: a live
+  // refetch used to remount them via `key={…}` and wipe whatever was being
+  // typed. Now the server's value is written into the DOM directly, and only
+  // when the field is NOT the one under the cursor.
+  const briefUrlRef = useRef<HTMLInputElement>(null)
+  const briefNoteRef = useRef<HTMLTextAreaElement>(null)
+  const rawAssetsRef = useRef<HTMLInputElement>(null)
+  const jobBriefRef = useRef<HTMLTextAreaElement>(null)
+  const captionRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (!detail) return
+    const sync = (
+      el: HTMLInputElement | HTMLTextAreaElement | null, value: string,
+    ) => { if (el && document.activeElement !== el) el.value = value }
+    sync(briefUrlRef.current, detail.brief_url ?? '')
+    sync(briefNoteRef.current, detail.brief ?? '')
+    sync(rawAssetsRef.current, detail.raw_assets_url ?? '')
+    sync(jobBriefRef.current, detail.brief ?? '')
+    sync(captionRef.current, detail.caption ?? '')
+  }, [detail])
 
   if (!detail) {
     return (
@@ -309,16 +341,79 @@ export default function ItemDetailPage() {
 
   const role = detail.viewer_role
   const isTeam = role !== 'client'
-  const canAddVersion = ['editor', 'account_manager', 'super_admin'].includes(role)
-  const canComment = role !== 'scheduler'
-  const canSchedule = ['scheduler', 'super_admin'].includes(role)
+  const viewer = { id: detail.viewer_id ?? '', role }
   const isBrief = detail.work_kind?.slug === SHOOT_BRIEF_SLUG
+
+  // What you may do here follows the ASSIGNMENT, not the job title: an editor
+  // looking at somebody else's item wears no hat on it and sees it read-only.
+  // The server sends the hats it shaped the payload with; actingRoles is only
+  // the fallback for a payload from before that field existed.
+  const hats = detail.acting_roles ?? actingRoles(viewer, detail)
+  const isSuper = role === 'super_admin'
+  const canAddVersion = isSuper || hats.includes('editor') || hats.includes('account_manager')
+  // schedulers may comment on what they schedule; clients talk in their portal
+  const canComment = role !== 'client'
+    && (isSuper || hats.includes('editor') || hats.includes('account_manager') || hats.includes('scheduler'))
+  const canSchedule = isSuper || hats.includes('scheduler')
+  // reviewing IS the job, and it is not per-item — owner picker, delete,
+  // handoff, comment visibility, job-pack editing
+  const canManage = isSuper || hats.includes('account_manager')
+  /** no hat at all on this item: someone else's job, open for reading only */
+  const noHats = isTeam && hats.length === 0
+
   // a brief task wears its own words, drops edges that make no sense for it
   // (a booked shoot never "publishes"), and judges roles by its OWN rules —
   // filtering through the base pipeline's roles first hid brief-legal buttons
   const transitions = isBrief
-    ? availableBriefTaskTransitions(role as never, detail.status)
-    : availableTransitions(role, detail.status)
+    ? availableBriefTaskTransitionsAs(hats, detail.status)
+    : availableTransitionsAs(hats, detail.status)
+  // a brief hands its last stages to an account manager and then to nobody —
+  // no scheduler is ever coming for a shoot
+  const turns = isBrief ? BRIEF_STATUS_TURN : STATUS_TURN
+  const { primary, secondary } = presentTransitions(
+    hats, detail.status, transitions,
+    {
+      clientApprovalRequired: detail.client_approval_required !== false,
+      viewerIsOwner: detail.owner_id === detail.viewer_id,
+    },
+    turns,
+  )
+  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
+
+  const schedulerIds = schedulerIdsOf(detail)
+  const nameOf = (uid: string) => {
+    const m = editors.find(e => e.id === uid)
+    return m ? (m.name || m.email) : null
+  }
+  const turn = whoseTurn(detail.status, detail, viewer, turns)
+  /** whose move it is, said as a person rather than a role */
+  const turnText = (): string => {
+    if (turn.hat === null) return 'nobody — this one is finished'
+    if (turn.mine) return 'You'
+    if (turn.unassigned) return 'Unassigned — anyone can take it'
+    if (turn.hat === 'editor') return `${detail.owner_name ?? 'the editor'} (editing)`
+    if (turn.hat === 'scheduler') {
+      const names = schedulerIds.map(nameOf).filter(Boolean)
+      return names.length > 0 ? `${names.join(', ')} (scheduling)` : 'the scheduler (scheduling)'
+    }
+    if (turn.hat === 'client') return 'the client'
+    return 'an account manager'
+  }
+
+  // the item as the work pages read it — one vocabulary for "can I take this?"
+  const workItem = {
+    id: detail.id,
+    status: detail.status,
+    owner_id: detail.owner_id ?? null,
+    scheduler_ids: detail.scheduler_ids,
+    work_kinds: detail.work_kind ? { slug: detail.work_kind.slug } : null,
+  }
+  const back = backLinkFor(workItem)
+
+  /** The manager who is also the only reviewer: submitting to nobody is a dead
+   *  end, so the move becomes "submit it and review it myself" — the AM
+   *  buttons are waiting on the other side. */
+  const soloReviewer = reviewers?.length === 0 && hats.includes('account_manager')
 
   const latest = detail.versions[0]
 
@@ -350,7 +445,18 @@ export default function ItemDetailPage() {
         setReviewPick(null)
         toast.message('Refreshed. If the status moved, it worked — don’t click again.')
       } else {
-        toast.error(e instanceof Error ? e.message : `${label} failed`)
+        const msg = e instanceof Error ? e.message : `${label} failed`
+        // "No transition from X to Y" means somebody else moved it while this
+        // page was open — that is a stale screen, not a machine fault
+        if (/^No transition from /.test(msg)) {
+          toast.error('That move isn’t available any more — the item just changed. Reloading.')
+          setReviewPick(null)
+          setSchedPick(null)
+          setRevisionAsk(null)
+          await load()
+        } else {
+          toast.error(msg)
+        }
       }
     } finally {
       setBusy(null)
@@ -367,8 +473,10 @@ export default function ItemDetailPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not notify')
-      toast.success(`Notified ${json.notified} scheduler${json.notified === 1 ? '' : 's'}`)
+      const names = [...schedChosen].map(nameOf).filter(Boolean)
+      toast.success(names.length > 0 ? `Handed to ${names.join(', ')}` : 'Handed over')
       setSchedPick(null)
+      load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not notify')
     } finally {
@@ -496,7 +604,7 @@ export default function ItemDetailPage() {
         body: JSON.stringify({ owner_id: ownerId === 'none' ? null : ownerId }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign')
-      toast.success(ownerId === 'none' ? 'Editor unassigned' : 'Editor assigned')
+      toast.success(ownerId === 'none' ? 'Unassigned' : 'Assigned')
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign')
@@ -533,8 +641,8 @@ export default function ItemDetailPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/production')}>
-          <ArrowLeft className="h-4 w-4" /> Board
+        <Button variant="outline" size="sm" onClick={() => router.push(back.href)}>
+          <ArrowLeft className="h-4 w-4" /> {back.label}
         </Button>
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{detail.title}</h2>
@@ -544,18 +652,18 @@ export default function ItemDetailPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {/* spec §3: the AM assigns the job — the owner is who "Request
-              revisions" notifies and whose board queue this item sits in */}
-          {(role === 'account_manager' || role === 'super_admin') && (
+          {/* the manager says who's carrying this — the owner is who "Request
+              revisions" notifies and whose page this item sits on */}
+          {canManage && (
             <Select
               value={detail.owner_id ?? 'none'}
               onValueChange={v => v && v !== (detail.owner_id ?? 'none') && saveOwner(v)}
             >
-              <SelectTrigger className="h-8 w-44 bg-white text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
-                <SelectValue placeholder="Assign editor" />
+              <SelectTrigger className="h-8 w-52 bg-white text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
+                <SelectValue placeholder="Who's editing" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No editor assigned</SelectItem>
+                <SelectItem value="none">Unassigned — anyone can take it</SelectItem>
                 {editors.map(e => (
                   <SelectItem key={e.id} value={e.id}>
                     {(e.name || e.email) + (e.role && e.role !== 'editor' ? ` · ${e.role.replace('_', ' ')}` : '')}
@@ -564,12 +672,19 @@ export default function ItemDetailPage() {
               </SelectContent>
             </Select>
           )}
+          {/* nobody has it — take it rather than wait to be given it */}
+          {canClaimEditor(workItem, viewer) && (
+            <ClaimButton itemId={id} hat="editor" label="Take this job" onDone={load} />
+          )}
+          {canClaimScheduler(workItem, viewer) && (
+            <ClaimButton itemId={id} hat="scheduler" label="I'll schedule this" onDone={load} />
+          )}
           <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
             {role === 'client'
               ? (detail.status_label ?? CLIENT_LABELS[detail.status])
-              : itemStatusLabel(detail.work_kind?.slug, detail.status, detail.status.replace(/_/g, ' '))}
+              : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
           </Badge>
-          {['account_manager', 'super_admin'].includes(role) && (
+          {canManage && (
             <AlertDialog onOpenChange={o => !o && setDeleteConfirm('')}>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" aria-label="Delete item">
@@ -602,7 +717,7 @@ export default function ItemDetailPage() {
                       const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
                       if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
                       toast.success('Item deleted')
-                      router.push('/dashboard/production')
+                      router.push(back.href)
                     }}
                   >
                     Delete item
@@ -630,7 +745,7 @@ export default function ItemDetailPage() {
             <span className="font-medium capitalize">{detail.priority}</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Editor</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Assigned to</span>
             <span className="font-medium">{detail.owner_name ?? <span className="font-normal text-zinc-400">unassigned</span>}</span>
           </span>
           <span className="flex min-w-0 items-center gap-1.5">
@@ -643,60 +758,116 @@ export default function ItemDetailPage() {
                 : <span className="font-normal text-zinc-400">none assigned</span>}
             </span>
           </span>
+          {/* a status says where the work IS; this says who is holding it up */}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Whose turn</span>
+            <span className="truncate font-medium">{turnText()}</span>
+          </span>
         </div>
       )}
 
-      {/* Actions */}
-      {transitions.length > 0 && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-4">
-            {transitions.map(t => (
-              <Button
-                key={t.to}
-                size="sm"
-                variant={t.to === 'revision_required' || t.to === 'client_changes_requested' ? 'outline' : 'default'}
-                disabled={busy !== null}
-                onClick={() =>
-                  (t.to === 'internal_review' || t.to === 'revision_complete')
-                    ? openReviewerPick(t)
-                    // asking for changes deserves a WHY — the note rides the
-                    // transition into the thread and the assignee's email
-                    : (t.to === 'revision_required' || t.to === 'client_changes_requested')
-                      ? (setRevisionAsk(t), setRevisionNote(''))
-                      // approving never auto-picks schedulers anymore — it's a
-                      // plain transition; 'Hand to a scheduler' below is the
-                      // one deliberate place a human chooses who's notified
-                      : doTransition(t.to, t.label)
-                }
-              >
-                {busy === t.to ? 'Working…' : t.label}
-              </Button>
-            ))}
-            {isTeam && detail.status === 'internal_review' && detail.client_approval_required && (
-              <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                client approval required
-              </span>
-            )}
-          </CardContent>
-        </Card>
+      {/* someone else's job: readable, not editable — say so plainly rather
+          than leaving a page with every control quietly missing */}
+      {noHats && detail.owner_name && (
+        <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-2.5 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          This job is assigned to {detail.owner_name}.
+        </p>
       )}
 
-      {/* the client approved → every scheduler heard; the manager narrows it
-          to the person who actually takes it */}
-      {['account_manager', 'super_admin'].includes(role)
-        && detail.status === 'approved_for_scheduling' && schedulers.length > 0 && (
+      {/* Actions — one obvious move, everything else offered but not urged */}
+      {(transitions.length > 0 || turns[detail.status] !== null) && (() => {
+        // the button's own precondition, said before it is pressed rather
+        // than as a rejection afterwards
+        const shown = [...(primary ? [primary] : []), ...secondary]
+        const hint = shown.some(t => t.to === 'scheduled') && !isBrief
+          ? 'Needs at least one platform with a date.'
+          : shown.some(t => t.to === 'published')
+            ? 'Needs at least one platform live (a link, or marked posted in-app).'
+            : null
+        const button = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline') => (
+          <Button
+            key={t.to}
+            size="sm"
+            variant={variant}
+            disabled={busy !== null}
+            onClick={() =>
+              (t.to === 'internal_review' || t.to === 'revision_complete')
+                ? openReviewerPick(t)
+                // asking for changes deserves a WHY — the note rides the
+                // transition into the thread and the assignee's email
+                : (t.to === 'revision_required' || t.to === 'client_changes_requested')
+                  ? (setRevisionAsk(t), setRevisionNote(''))
+                  // approving never auto-picks schedulers anymore — it's a
+                  // plain transition; the handoff card below is the one
+                  // deliberate place a human chooses who takes it
+                  : doTransition(t.to, t.label)
+            }
+          >
+            {busy === t.to ? 'Working…' : t.label}
+          </Button>
+        )
+        return (
+          <Card>
+            <CardContent className="flex flex-col gap-2 p-4">
+              {transitions.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {primary && button(primary, 'default')}
+                  {secondary.map(t => button(t, 'outline'))}
+                  {isTeam && detail.status === 'internal_review' && detail.client_approval_required && (
+                    <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      client approval required
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm font-medium">Waiting on {turnText()}</p>
+              )}
+              {hint && <p className="text-xs text-zinc-400 dark:text-zinc-500">{hint}</p>}
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{meaning}</p>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
+      {/* approved and nobody named: the manager picks the person who takes it,
+          rather than every scheduler hearing about every item */}
+      {!isBrief && canManage && detail.status === 'approved_for_scheduling'
+        && !schedulerIds.includes(detail.viewer_id ?? '') && (
         <Card>
-          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+          <CardHeader><CardTitle className="text-sm font-semibold">Choose who schedules this</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3 pt-0">
             <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              Approved and waiting to be scheduled.
+              {schedulerIds.length === 0
+                ? 'Any scheduler can pick this up. Hand it to someone specific if you want one person on it.'
+                : `Handed to ${schedulerIds.map(nameOf).filter(Boolean).join(', ') || 'someone on the team'}.`}
             </p>
             <Button size="sm" variant="outline" className="ml-auto" disabled={busy !== null}
               onClick={() => {
                 setSchedPick('handoff')
-                setSchedChosen(new Set(schedulers.filter(s => s.role === 'scheduler').map(s => s.id)))
+                setSchedChosen(new Set(
+                  schedulerIds.length > 0
+                    ? schedulerIds
+                    : editors.filter(e => e.role === 'scheduler').map(e => e.id),
+                ))
               }}>
-              Hand to a scheduler
+              {schedulerIds.length === 0 ? 'Hand it to someone' : 'Change'}
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* a brief's "approved" is a shoot to book, not a post to schedule */}
+      {isTeam && isBrief && detail.status === 'approved_for_scheduling' && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              The plan is approved. Lock the shoot date on the brief page, then press Book the shoot.
+            </p>
+            {detail.batch?.id && (
+              <Button size="sm" variant="outline" className="ml-auto" asChild>
+                <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open the shoot</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -720,7 +891,7 @@ export default function ItemDetailPage() {
                 Open in Drive
               </a>
             )}
-            {isTeam && role !== 'scheduler' && latest.dropbox_url && (
+            {isTeam && latest.dropbox_url && (
               <a href={latest.dropbox_url} target="_blank" rel="noreferrer noopener" className="text-sm text-zinc-500 hover:underline dark:text-zinc-400">
                 Dropbox master
               </a>
@@ -746,7 +917,7 @@ export default function ItemDetailPage() {
               <Label className="text-xs">Brief link <span className="font-normal text-zinc-400">(Milanote or anywhere — optional)</span></Label>
               <div className="flex gap-2">
                 <Input
-                  key={detail.brief_url ?? ''}
+                  ref={briefUrlRef}
                   defaultValue={detail.brief_url ?? ''}
                   placeholder="https://app.milanote.com/…"
                   className="font-mono text-xs"
@@ -773,7 +944,7 @@ export default function ItemDetailPage() {
             <div className="grid gap-1.5">
               <Label className="text-xs">Note to reviewer</Label>
               <Textarea
-                key={detail.brief ?? ''}
+                ref={briefNoteRef}
                 rows={3}
                 defaultValue={detail.brief ?? ''}
                 placeholder="What the reviewer should look at first…"
@@ -802,7 +973,7 @@ export default function ItemDetailPage() {
 
       {/* Job pack — internal only (never in the client or scheduler payload):
           the brief and raw footage the editor works from */}
-      {isTeam && !isBrief && role !== 'scheduler' && (detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0 || ['account_manager', 'super_admin'].includes(role)) && (
+      {isTeam && !isBrief && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">Job pack</CardTitle>
@@ -815,12 +986,12 @@ export default function ItemDetailPage() {
             )}
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
-            {['account_manager', 'super_admin'].includes(role) ? (
+            {canManage ? (
               <>
                 <div className="grid gap-1.5">
                   <Label className="text-xs">Raw assets link</Label>
                   <Input
-                    key={detail.raw_assets_url ?? ''}
+                    ref={rawAssetsRef}
                     defaultValue={detail.raw_assets_url ?? ''}
                     onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
                     placeholder="https://www.dropbox.com/… (folder the editor works from)"
@@ -841,8 +1012,8 @@ export default function ItemDetailPage() {
                 <div className="grid gap-1.5">
                   <Label className="text-xs">Brief</Label>
                   <Textarea
+                    ref={jobBriefRef}
                     rows={3}
-                    key={detail.brief ?? ''}
                     defaultValue={detail.brief ?? ''}
                     onFocus={e => { focusVal.current.brief = e.target.value }}
                     placeholder="What the edit should be…"
@@ -873,7 +1044,7 @@ export default function ItemDetailPage() {
                         className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
                         {a.name || a.url}
                       </a>
-                      {['account_manager', 'super_admin'].includes(role) && (
+                      {canManage && (
                         <button type="button" aria-label={`Remove ${a.name}`}
                           className="text-zinc-400 hover:text-red-500"
                           onClick={() => {
@@ -889,7 +1060,7 @@ export default function ItemDetailPage() {
                 </div>
               </div>
             )}
-            {['account_manager', 'super_admin'].includes(role) && (
+            {canManage && (
               <div>
                 <input ref={jobFileRef} type="file" multiple className="hidden"
                   onChange={e => onJobFiles(e.target.files)} />
@@ -926,7 +1097,7 @@ export default function ItemDetailPage() {
                 <span className="ml-auto flex gap-2 text-xs">
                   {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
                   {v.drive_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
-                  {isTeam && role !== 'scheduler' && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">dropbox</a>}
+                  {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">dropbox</a>}
                 </span>
               </div>
             ))}
@@ -1007,11 +1178,11 @@ export default function ItemDetailPage() {
                   <Textarea
                     rows={2}
                     value={commentDraft}
-                    placeholder={role === 'client' ? 'Ask a question or request a change…' : 'Add a comment…'}
+                    placeholder="Add a comment…"
                     onChange={e => setCommentDraft(e.target.value)}
                   />
                   <div className="flex flex-wrap items-center gap-3">
-                    {(role === 'account_manager' || role === 'super_admin') && (
+                    {canManage && (
                       <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                         <Switch
                           checked={commentVisibility === 'client'}
@@ -1024,7 +1195,7 @@ export default function ItemDetailPage() {
                         with an assignee emails that editor as a task. It is
                         also the ONLY way the comment reaches them: untagged
                         internal notes stay between managers. */}
-                    {(role === 'account_manager' || role === 'super_admin') && commentVisibility === 'internal' && (
+                    {canManage && commentVisibility === 'internal' && (
                       <Select value={commentAssignee || 'none'} onValueChange={v => setCommentAssignee(v === 'none' ? '' : v ?? '')}>
                         <SelectTrigger className="h-8 w-44 bg-white text-xs dark:bg-zinc-900">
                           <SelectValue placeholder="Tag someone" />
@@ -1049,7 +1220,7 @@ export default function ItemDetailPage() {
                       <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
                     </Button>
                   </div>
-                  {(role === 'account_manager' || role === 'super_admin') && commentVisibility === 'internal' && (
+                  {canManage && commentVisibility === 'internal' && (
                     <p className="text-xs text-zinc-400 dark:text-zinc-500">
                       {commentAssignee
                         ? 'They’ll be emailed and will see this on the card.'
@@ -1068,10 +1239,10 @@ export default function ItemDetailPage() {
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Caption</CardTitle></CardHeader>
               <CardContent className="pt-0">
-                {['account_manager', 'super_admin', 'scheduler'].includes(role) ? (
+                {canManage || canSchedule ? (
                   <Textarea
+                    ref={captionRef}
                     rows={3}
-                    key={detail.caption ?? ''}
                     defaultValue={detail.caption ?? ''}
                     onFocus={e => { focusVal.current.caption = e.target.value }}
                     placeholder="The post text — published exactly as written here…"
@@ -1224,7 +1395,9 @@ export default function ItemDetailPage() {
             )}
             {reviewers?.length === 0 && (
               <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
-                Nobody else to notify on this client — the move is still recorded.
+                {soloReviewer
+                  ? 'You’re the only reviewer on this client.'
+                  : 'Nobody else to notify on this client — the move is still recorded.'}
               </p>
             )}
             {(reviewers ?? []).map(r => (
@@ -1256,7 +1429,10 @@ export default function ItemDetailPage() {
               disabled={busy !== null || reviewers === null}
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
-              {busy !== null ? 'Working…' : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}` : 'Send'}
+              {busy !== null ? 'Working…'
+                : soloReviewer ? 'Submit and review it myself'
+                : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}`
+                : 'Send'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1294,18 +1470,20 @@ export default function ItemDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* who schedules this? */}
+      {/* who's scheduling this? */}
       <Dialog open={schedPick !== null} onOpenChange={o => !o && busy === null && setSchedPick(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{schedPick === 'handoff' ? 'Hand to a scheduler' : 'Who schedules this?'}</DialogTitle>
+            <DialogTitle>{schedPick === 'handoff' ? 'Choose who schedules this' : 'Who’s scheduling this?'}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
               They&rsquo;ll be emailed to schedule and publish it. Untick anyone who
               shouldn&rsquo;t hear about it.
             </p>
-            {schedulers.map(s => (
+            {/* anyone active on the team can be handed the scheduling — the
+                hat follows the assignment, not the job title */}
+            {editors.map(s => (
               <label key={s.id}
                 className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
                 <input
@@ -1321,7 +1499,7 @@ export default function ItemDetailPage() {
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{s.name || s.email}</span>
                   <span className="block text-xs text-zinc-400 dark:text-zinc-500">
-                    {s.role === 'super_admin' ? 'Super admin' : 'Scheduler'}
+                    {ROLE_WORD[s.role ?? ''] ?? 'Team'}
                   </span>
                 </span>
               </label>
@@ -1337,7 +1515,7 @@ export default function ItemDetailPage() {
               }}
             >
               {busy !== null ? 'Working…'
-                : schedPick === 'handoff' ? `Notify ${schedChosen.size || ''}`.trim()
+                : schedPick === 'handoff' ? `Hand to ${schedChosen.size} ${schedChosen.size === 1 ? 'person' : 'people'}`
                 : 'Approve & notify'}
             </Button>
           </DialogFooter>
