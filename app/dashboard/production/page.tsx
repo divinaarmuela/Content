@@ -441,6 +441,12 @@ export default function ProductionPage() {
                           rather than a wrapper — controls may live inside it */}
                       <Link href={`/dashboard/production/${b.id}`} aria-label={b.title}
                         className="absolute inset-0 rounded-xl" />
+                      {/* the brief task and its shoot carry the same title;
+                          without a word for each, two identical rows sat on
+                          the page meaning different things */}
+                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
+                        Brief task
+                      </span>
                       <span className="text-sm font-medium">{b.title}</span>
                       <span className="text-xs text-zinc-500 dark:text-zinc-400">
                         {b.clients?.name ?? 'Unassigned'}
@@ -598,6 +604,9 @@ export default function ProductionPage() {
                           <Link href={`/dashboard/production/shoots/${s.id}`} aria-label={s.title}
                             className="absolute inset-0 rounded-xl" />
                           <div className="flex items-center gap-2">
+                            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                              Shoot
+                            </span>
                             <span className="truncate text-sm font-semibold">{s.title}</span>
                             {brief && (
                               <span className={`ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${BATCH_STATUS_STYLE[s.status ?? 'shot']}`}>

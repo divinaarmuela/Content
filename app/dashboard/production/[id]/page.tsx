@@ -1035,7 +1035,7 @@ export default function ItemDetailPage() {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ brief_url: v || null }),
-                      }).then(r => { if (r.ok) { toast.success('Brief link saved'); load() } else toast.error('Save failed') })
+                      }).then(r => { if (r.ok) { toast.success('Brief link saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                     }
                   }}
                 />
@@ -1062,7 +1062,7 @@ export default function ItemDetailPage() {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ brief: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Note saved'); load() } else toast.error('Save failed') })
+                    }).then(r => { if (r.ok) { toast.success('Note saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                   }
                 }}
               />
@@ -1200,7 +1200,7 @@ export default function ItemDetailPage() {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ raw_assets_url: v || null }),
-                        }).then(r => { if (r.ok) { toast.success('Folder link saved'); load() } else toast.error('Save failed') })
+                        }).then(r => { if (r.ok) { toast.success('Folder link saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                       }
                     }}
                   />
@@ -1221,7 +1221,7 @@ export default function ItemDetailPage() {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ brief: v || null }),
-                        }).then(r => { if (r.ok) { toast.success('Brief saved'); load() } else toast.error('Save failed') })
+                        }).then(r => { if (r.ok) { toast.success('Brief saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                       }
                     }}
                   />
@@ -1248,7 +1248,7 @@ export default function ItemDetailPage() {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }),
-                            }).then(r => { if (r.ok) { toast.success('File removed'); load() } else toast.error('Remove failed') })
+                            }).then(r => { if (r.ok) { toast.success('File removed'); load() } else toast.error('Remove failed') }).catch(() => toast.error('Could not save — check your connection'))
                           }}>✕</button>
                       )}
                     </div>
@@ -1290,7 +1290,7 @@ export default function ItemDetailPage() {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ brief: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Saved'); load() } else toast.error('Save failed') })
+                    }).then(r => { if (r.ok) { toast.success('Saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                   }
                 }}
               />
@@ -1425,7 +1425,7 @@ export default function ItemDetailPage() {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ caption: v || null }),
-                    }).then(r => { if (r.ok) { toast.success('Caption saved'); load() } else toast.error('Save failed') })
+                    }).then(r => { if (r.ok) { toast.success('Caption saved'); load() } else toast.error('Save failed') }).catch(() => toast.error('Could not save — check your connection'))
                   }
                 }}
               />
