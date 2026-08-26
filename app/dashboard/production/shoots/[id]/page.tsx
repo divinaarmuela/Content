@@ -211,6 +211,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   // "Book the shoot" moves the BRIEF to scheduled; the batch keeps its own
   // status. Without reading it back here the shoot never said it was booked.
   const booked = briefTask?.status === 'scheduled' || briefTask?.status === 'published'
+  /** what this shoot actually PRODUCED — its own brief is not a deliverable */
+  const deliverableItems = items.filter(i => i.work_kinds?.slug !== 'shoot_brief')
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
@@ -510,10 +512,16 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 </p>
               ) : (
                 <>
+                  {/* the BRIEF task rides this shoot too, and it is paperwork,
+                      not a deliverable — counting it told an account manager
+                      there was a piece of content when there was none */}
                   <p className="text-sm">
-                    <span className="font-mono tabular-nums">{items.length}</span> item{items.length === 1 ? '' : 's'} in production
+                    <span className="font-mono tabular-nums">{deliverableItems.length}</span> item{deliverableItems.length === 1 ? '' : 's'} in production
+                    {deliverableItems.length === 0 && (
+                      <span className="text-zinc-400 dark:text-zinc-500"> — nothing made from this shoot yet</span>
+                    )}
                   </p>
-                  {items.slice(0, 5).map(it => (
+                  {deliverableItems.slice(0, 5).map(it => (
                     <Link key={it.id} href={`/dashboard/production/${it.id}`}
                       className="flex items-center gap-2 text-sm hover:underline">
                       <Check className={`h-3.5 w-3.5 ${['published', 'scheduled'].includes(it.status) ? 'text-emerald-500' : 'text-zinc-300 dark:text-zinc-600'}`} />

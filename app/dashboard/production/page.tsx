@@ -32,7 +32,7 @@ import { TASK_STATUS_TURN, taskStatusLabel } from '../../lib/task-kind-core'
 import {
   TASK_LANES, activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
   isBriefTask, isInternalTask, productionScope, recentlyDoneTasks, unassignedCount,
-  type Viewer,
+  type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from './useProductionLive'
 import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
@@ -71,6 +71,7 @@ type BriefTask = {
   /** the audit trail, as much of it as a card has room for */
   created_by?: string | null
   approved_by?: string | null
+  current_version_number?: number
 }
 
 /** "Manal made this · Divina approved it" — the log, on the card. */
@@ -239,6 +240,26 @@ export default function ProductionPage() {
     }
   }
 
+  /**
+   * After creating something, make sure the person can SEE it.
+   *
+   * A task created with nobody on it is "unassigned"; if the remembered scope
+   * happens to be "Mine" alone, the board answered a successful creation with
+   * an empty page and a count of zero, and the only way out was to click a
+   * filter nobody suspected. Creating is an explicit act — it earns a view.
+   */
+  const revealCreated = (created?: { id: string; owner_id?: string | null }[]) => {
+    void load()
+    if (!viewer || !created?.length || scope.has('all')) return
+    const hidden = created.some(r => {
+      const a = editorAssignment({ id: r.id, status: 'draft_uploaded', owner_id: r.owner_id ?? null }, viewer)
+      return a === 'other' || !scope.has(a)
+    })
+    if (!hidden) return
+    setScope(new Set<ScopeMode>(['all']))
+    toast.message('Showing everyone’s, so the new work is on screen.')
+  }
+
   const matches = (clientId: string, title: string) =>
     (clientFilter === 'all' || clientId === clientFilter)
     && (!search || title.toLowerCase().includes(search.toLowerCase()))
@@ -306,6 +327,11 @@ export default function ProductionPage() {
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                 {t.clients?.name ?? '—'}
+              </Badge>
+              {/* "Not started" and "In progress" share the To-do lane — the
+                  card is the only place that can tell them apart */}
+              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+                {taskStatusLabel(t.work_kinds, t.status, t.status, { hasWork: (t.current_version_number ?? 0) > 0 })}
               </Badge>
               {t.work_kinds?.name && (
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[t.work_kinds.color] ?? KIND_CHIP.zinc}`}>
@@ -488,7 +514,15 @@ export default function ProductionPage() {
         <div className="flex flex-col gap-2">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-              TASKS <span className="tabular-nums">{taskRows.length}</span>
+              {/* the Done lane is one of the columns under this heading, so it
+                  counts: "TASKS 0" beside a Done lane reading 1 is the block
+                  contradicting itself */}
+              TASKS <span className="tabular-nums">{taskRows.length + doneRows.length}</span>
+              {tasksInFilters.length > taskRows.length && (
+                <span className="ml-2 normal-case tracking-normal text-zinc-400 dark:text-zinc-500">
+                  ({tasksInFilters.length - taskRows.length} more outside this filter)
+                </span>
+              )}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
               Research, strategy and copy — work with nothing to post.
@@ -586,13 +620,16 @@ export default function ProductionPage() {
                   const shots = s.shot_list?.length ?? 0
                   const deliverables = (s.planned_deliverables ?? []).reduce((n, d) => n + (d.qty || 0), 0)
                   const itemCount = s.content_items?.[0]?.count ?? 0
+                  const brief = briefByBatch.get(s.id)
+                  // the shoot's own brief task rides this count — it is
+                  // paperwork, not something the shoot produced
+                  const madeCount = Math.max(0, itemCount - (brief ? 1 : 0))
                   const meta = [
                     shots > 0 && `${shots} shot${shots === 1 ? '' : 's'} planned`,
                     deliverables > 0 && `${deliverables} deliverables`,
-                    itemCount > 0 && `${itemCount} item${itemCount === 1 ? '' : 's'} in production`,
+                    madeCount > 0 && `${madeCount} item${madeCount === 1 ? '' : 's'} in production`,
                   ].filter(Boolean).join(' · ')
                   const canDelete = isManager && itemCount === 0
-                  const brief = briefByBatch.get(s.id)
                   // the card is already inside its named section, so the state
                   // badge would only repeat the heading — say the next move
                   const nextMove = brief?.status === 'approved_for_scheduling' && s.status === 'brief'
@@ -697,7 +734,7 @@ export default function ProductionPage() {
       <NewItemDialog
         open={briefOpen}
         onOpenChange={setBriefOpen}
-        onCreated={load}
+        onCreated={revealCreated}
         presetKind="shoot_brief"
         clients={clients}
         batches={shoots ?? []}
@@ -708,7 +745,7 @@ export default function ProductionPage() {
       <NewItemDialog
         open={taskOpen}
         onOpenChange={setTaskOpen}
-        onCreated={load}
+        onCreated={revealCreated}
         presetKind="task"
         clients={clients}
         batches={shoots ?? []}

@@ -58,7 +58,9 @@ export default function NewItemDialog({
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
-  onCreated: () => void
+  /** the rows the server actually created — the caller may need to widen a
+   *  filter so the person can see what they just made */
+  onCreated: (created?: { id: string; owner_id?: string | null }[]) => void
   presetKind?: 'shoot_brief' | 'task'
   preset?: { client_id?: string; batch_id?: string }
   clients: ClientRow[]
@@ -278,7 +280,8 @@ export default function NewItemDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: payload, ...(draft.batch_id ? {} : { adhoc_reason: adhocReason.trim() }) }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
+      const created = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(created?.error ?? 'Create failed')
       toast.success(
         isTaskKind ? 'Task created — it is on Production, under Tasks'
           : isBriefKind ? 'Brief task created — it is on Production, under Briefs being planned'
@@ -289,7 +292,7 @@ export default function NewItemDialog({
       setDraft({ ...BLANK })
       setAdhocReason('')
       setClientApproval(true)
-      onCreated()
+      onCreated(Array.isArray(created) ? created : undefined)
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
       // may well have created everything. Check before inviting a retry that
