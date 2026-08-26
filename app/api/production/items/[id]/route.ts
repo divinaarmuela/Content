@@ -19,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       supabase.from('schedule_entries').select('*').eq('item_id', id),
       supabase.from('clients').select('name').eq('id', item.client_id).maybeSingle(),
       supabase.from('content_items')
-        .select('work_kinds(name, slug, color, uses_media), batches(id, title, status, planned_deliverables)')
+        // concept + shot_list travel too: the brief's submit edge accepts
+        // either as evidence, and the page can only pre-check what it can see
+        .select('work_kinds(name, slug, color, uses_media), batches(id, title, status, planned_deliverables, concept, shot_list)')
         .eq('id', id).maybeSingle(),
     ])
 
@@ -60,6 +62,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }))
     }
 
+    // who at the client would actually be emailed by a "Send to client" —
+    // the confirm dialog names them rather than asking for a leap of faith
+    let client_users: { name: string; email: string }[] = []
+    if (user.role !== 'client') {
+      const { data: cu } = await supabase.from('team_users')
+        .select('name, email')
+        .eq('role', 'client').eq('client_id', item.client_id).eq('active_status', true)
+      client_users = (cu ?? []).map(u => ({ name: u.name || u.email, email: u.email }))
+    }
+
     // who's who on this job — every team role reads it at a glance
     let owner_name: string | null = null
     let managers: { name: string; email: string }[] = []
@@ -85,6 +97,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       client_name: clientRes.data?.name ?? null,
       owner_name,
       managers,
+      client_users,
       activity,
       schedule: scheduleRes.data ?? [],
       viewer_role: user.role,

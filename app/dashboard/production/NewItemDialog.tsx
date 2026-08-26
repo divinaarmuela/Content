@@ -359,6 +359,14 @@ export default function NewItemDialog({
           <div className="grid gap-1.5">
             <Label>{isBriefKind ? 'Target shoot date' : 'Due date'}</Label>
             <Input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))} className="font-mono" />
+            {/* the picker's own order follows the BROWSER's locale, which is
+                not ours to set — so echo the date back in words. An Australian
+                typing 09/15 for 15 September sees it immediately. */}
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              {draft.due_date
+                ? new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+                : 'Day / month / year — the date is echoed here once you pick it.'}
+            </p>
           </div>
           {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">

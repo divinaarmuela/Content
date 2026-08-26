@@ -100,9 +100,9 @@ export default function ActivityPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Team Activity</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Asana activity</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {isAdmin ? 'Who is working on what, from Asana.' : 'Your work, from Asana.'}
+            {isAdmin ? 'Who is working on what, from Asana. Production work lives on the item’s own History card.' : 'Your work, from Asana. Production work lives on the item’s own History card.'}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">

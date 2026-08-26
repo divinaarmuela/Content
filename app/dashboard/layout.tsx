@@ -15,6 +15,7 @@ import {
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
 } from 'lucide-react'
 import { useRole } from './useRole'
+import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
 import NotificationBell from './NotificationBell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
@@ -60,7 +61,7 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
   { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
-  { href: '/dashboard/activity',   label: 'Team Activity',    icon: Activity },
+  { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
 ]
 
 const NAV_TOOLS: NavItem[] = [
@@ -84,7 +85,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/scheduler':     'Scheduler',
   '/dashboard/scheduler/calendar': 'Calendar',
   '/dashboard/calendar':      'Calendar',
-  '/dashboard/activity':      'Team Activity',
+  '/dashboard/activity':      'Asana activity',
   '/dashboard/reports':       'Reports',
   '/dashboard/team':          'Team',
   '/dashboard/ai':            'AI Assistant',
@@ -160,6 +161,9 @@ function SidebarHeader() {
 
 function DashboardInner({ children }: { children: React.ReactNode }) {
   const path = usePathname()
+  // remember the last LIST page, so an item's "Back" returns where the person
+  // came from rather than wherever its status happens to file it
+  useEffect(() => { rememberList(path ?? '') }, [path])
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user } = useUser()
   // The role comes from the server (team_users), not Clerk publicMetadata.

@@ -366,7 +366,8 @@ export async function performTransition(
 
   if (isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
-      throw new AuthzError('Lock the shoot date on the brief page before marking it booked', 400)
+      // "the brief page" is this page; the date lives on the SHOOT page
+      throw new AuthzError('Lock the shoot date on the shoot page before booking it', 400)
     }
   }
 

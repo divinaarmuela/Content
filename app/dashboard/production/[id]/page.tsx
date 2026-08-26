@@ -41,6 +41,8 @@ import {
 import {
   availableTaskTransitionsAs, isInternalKind, taskStatusLabel, TASK_STATUS_MEANING, TASK_STATUS_TURN,
 } from '../../../lib/task-kind-core'
+import { needsNewVersion } from '../../../lib/claim-core'
+import { lastList } from '../../lastList'
 import { activityLines, type ActivityRow } from '../../../lib/activity-core'
 import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
 import { ClaimButton } from '../ClaimButton'
@@ -70,8 +72,19 @@ type Detail = {
   client_approval_required: boolean; current_version_number: number
   owner_name?: string | null; managers?: { name: string; email: string }[]
   brief_url?: string | null
-  work_kind?: { name: string; slug: string; color: string } | null
-  batch?: { id: string; title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
+  // uses_media is NOT optional decoration: isInternalKind reads it, and
+  // leaving it off the type meant every task on this page was treated as an
+  // asset — "· Other" in the header, a Scheduling card, "I'll schedule this"
+  // on a finished research task, and a back link to a page it never reaches.
+  work_kind?: { name: string; slug: string; color: string; uses_media?: boolean } | null
+  batch?: {
+    id: string; title: string; status?: string
+    planned_deliverables?: { type: string; qty: number }[]
+    /** the brief page's own content — either of these satisfies submission */
+    concept?: string | null; shot_list?: unknown[] | null
+  } | null
+  /** the client's portal accounts, so a send-to-client can name who it emails */
+  client_users?: { name: string; email: string }[]
   raw_assets_url?: string | null; brief?: string | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
@@ -167,6 +180,11 @@ export default function ItemDetailPage() {
 
   const [commentDraft, setCommentDraft] = useState('')
 
+  // the list this person was on before they opened the item. Read once, in an
+  // effect: sessionStorage during render is a hydration mismatch.
+  const [cameFrom, setCameFrom] = useState<{ href: string; label: string } | null>(null)
+  useEffect(() => { setCameFrom(lastList()) }, [])
+
   // "Submit for review" reviewer picker — the editor chooses who is asked
   const [reviewPick, setReviewPick] = useState<{ to: ItemStatus; label: string } | null>(null)
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null)
@@ -174,6 +192,12 @@ export default function ItemDetailPage() {
   const [reviewersFailed, setReviewersFailed] = useState(false)
   /** "what needs to change" — asked when requesting revisions */
   const [revisionAsk, setRevisionAsk] = useState<{ to: ItemStatus; label: string } | null>(null)
+  /** the confirm before anything reaches the client's own screen */
+  const [clientSend, setClientSend] = useState<{ to: ItemStatus; label: string } | null>(null)
+  /** a refusal, shown INSIDE the dialog that caused it. A toast in the far
+   *  bottom-right corner, behind a modal, is a message nobody reads — they
+   *  press the blue button again instead. */
+  const [dialogError, setDialogError] = useState<string | null>(null)
   const [revisionNote, setRevisionNote] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(new Set())
 
@@ -445,9 +469,12 @@ export default function ItemDetailPage() {
     status: detail.status,
     owner_id: detail.owner_id ?? null,
     scheduler_ids: detail.scheduler_ids,
-    work_kinds: detail.work_kind ? { slug: detail.work_kind.slug } : null,
+    work_kinds: detail.work_kind
+      ? { slug: detail.work_kind.slug, uses_media: detail.work_kind.uses_media }
+      : null,
   }
-  const back = backLinkFor(workItem)
+  // where you actually came from wins over where the status files it
+  const back = cameFrom ?? backLinkFor(workItem)
 
   /** The manager who is also the only reviewer: submitting to nobody is a dead
    *  end, so the move becomes "submit it and review it myself" — the AM
@@ -456,8 +483,78 @@ export default function ItemDetailPage() {
 
   const latest = detail.versions[0]
 
+  /** What the version form is still missing, or null when it can be saved. */
+  const versionMissing: string | null = (() => {
+    if (!verDraft.file_url && !verDraft.drive_url) {
+      return isInternal
+        ? 'Add a link to the work, or upload a file.'
+        : 'Add a Drive link or upload a file.'
+    }
+    if (!isInternal && !verDraft.dropbox_url) return 'Add the Dropbox master link.'
+    return null
+  })()
+
+  /**
+   * Preconditions the SERVER will enforce, worked out here so the button can
+   * say so before it is pressed instead of rejecting a filled-in dialog.
+   */
+  const briefHasContent = Boolean(
+    detail.brief_url?.trim()
+    || detail.batch?.concept?.trim()
+    || (detail.batch?.shot_list?.length ?? 0) > 0,
+  )
+  /** "Revisions done" has to mean a revision happened — same rule as the
+   *  server's, read off the history it already sends us. */
+  const lastRevisionRequest = (detail.activity ?? [])
+    .filter(a => a.action === 'status_change' && a.new_value === 'revision_required')
+    .map(a => a.created_at).sort().pop() ?? null
+  const blockedReason = (to: ItemStatus): string | null => {
+    if (to === 'internal_review' && isBrief && !briefHasContent) {
+      return 'Add a brief link, or fill in the concept or shot list on the shoot page.'
+    }
+    if (to === 'internal_review' && !isBrief && detail.versions.length === 0) {
+      return isInternal
+        ? 'Attach the work first — upload a file or add a link.'
+        : 'Add a version with its links first.'
+    }
+    if (to === 'revision_complete' && !isBrief
+      && needsNewVersion(latest?.created_at ?? null, lastRevisionRequest)) {
+      return 'Add a new version with the revisions first.'
+    }
+    if (to === 'scheduled' && isAsset && detail.schedule.every(s => !s.scheduled_at)) {
+      return 'Add a platform with a date below first.'
+    }
+    if (to === 'scheduled' && isBrief && !['locked', 'shot'].includes(detail.batch?.status ?? '')) {
+      return 'Lock the shoot date on the shoot page first.'
+    }
+    if (to === 'published' && isAsset && detail.schedule.every(s => s.publish_status !== 'published')) {
+      return 'Add a live link, or mark a platform posted, below first.'
+    }
+    return null
+  }
+
+  /** What just happened, in the past tense, with who now has it. */
+  const successWord = (to: ItemStatus, label: string): string => {
+    const client = detail.client_name ?? 'the client'
+    switch (to) {
+      case 'internal_review': return 'Sent for review — an account manager has it now'
+      case 'revision_required': return 'Sent back for changes — the person on it has been told'
+      case 'revision_complete': return 'Marked as revised — back with an account manager'
+      case 'client_review': return `Sent to ${client} — it is on their portal now`
+      case 'client_changes_requested': return "The client's changes are logged"
+      case 'approved_for_scheduling':
+        return isBrief ? 'Plan approved — lock the date, then book the shoot'
+          : isInternal ? 'Approved — this one is done'
+          : 'Approved — it is in the scheduler\'s queue'
+      case 'scheduled': return isBrief ? 'Shoot booked' : 'Marked scheduled'
+      case 'published': return 'Marked published'
+      default: return label
+    }
+  }
+
   const doTransition = async (to: ItemStatus, label: string, notifyIds?: string[], schedulerIds?: string[], note?: string) => {
     setBusy(to)
+    setDialogError(null)
     try {
       const res = await fetch(`/api/production/items/${id}/transition`, {
         method: 'POST',
@@ -471,10 +568,13 @@ export default function ItemDetailPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
-      toast.success(label)
+      // …in the past tense, with the consequence: a toast that just repeats
+      // the button reads like a prompt to do it again
+      toast.success(successWord(to, label))
       setReviewPick(null)
       setSchedPick(null)
       setRevisionAsk(null)
+      setClientSend(null)
       load()
     } catch (e) {
       // a dropped RESPONSE is not a failed request — check before alarming
@@ -495,6 +595,8 @@ export default function ItemDetailPage() {
           await load()
         } else {
           toast.error(msg)
+          // …and again where the person is actually looking
+          setDialogError(msg)
         }
       }
     } finally {
@@ -528,6 +630,7 @@ export default function ItemDetailPage() {
    *  client's assigned managers come pre-ticked. */
   const openReviewerPick = async (t: { to: ItemStatus; label: string }) => {
     setReviewPick(t)
+    setDialogError(null)
     setReviewers(null)
     setReviewersFailed(false)
     try {
@@ -741,28 +844,32 @@ export default function ItemDetailPage() {
         // the button's own precondition, said before it is pressed rather
         // than as a rejection afterwards
         const shown = [...(primary ? [primary] : []), ...secondary]
-        const hint = shown.some(t => t.to === 'scheduled') && isAsset
-          ? 'Needs at least one platform with a date.'
-          : shown.some(t => t.to === 'published')
-            ? 'Needs at least one platform live (a link, or marked posted in-app).'
-            : null
+        // every reason a shown button cannot work yet, collected once
+        const hints = [...new Set(shown.map(t => blockedReason(t.to)).filter(Boolean))] as string[]
         const button = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline') => (
           <Button
             key={t.to}
             size="sm"
             variant={variant}
-            disabled={busy !== null}
+            // the biggest, bluest button on the page must not be a trapdoor
+            // into a corner toast telling you to go and do something else
+            disabled={busy !== null || blockedReason(t.to) !== null}
             onClick={() =>
               (t.to === 'internal_review' || t.to === 'revision_complete')
                 ? openReviewerPick(t)
                 // asking for changes deserves a WHY — the note rides the
                 // transition into the thread and the assignee's email
                 : (t.to === 'revision_required' || t.to === 'client_changes_requested')
-                  ? (setRevisionAsk(t), setRevisionNote(''))
-                  // approving never auto-picks schedulers anymore — it's a
-                  // plain transition; the handoff card below is the one
-                  // deliberate place a human chooses who takes it
-                  : doTransition(t.to, t.label)
+                  ? (setRevisionAsk(t), setRevisionNote(''), setDialogError(null))
+                  // anything that puts this in front of the CLIENT gets a
+                  // confirm naming who it reaches — it is the riskiest move
+                  // in the app and it used to fire on a single click
+                  : t.to === 'client_review'
+                    ? (setClientSend(t), setDialogError(null))
+                    // approving never auto-picks schedulers anymore — it's a
+                    // plain transition; the handoff card below is the one
+                    // deliberate place a human chooses who takes it
+                    : doTransition(t.to, t.label)
             }
           >
             {busy === t.to ? 'Working…' : t.label}
@@ -787,7 +894,9 @@ export default function ItemDetailPage() {
                   {secondary.map(t => button(t, 'outline'))}
                 </div>
               )}
-              {hint && <p className="text-xs text-zinc-400 dark:text-zinc-500">{hint}</p>}
+              {hints.map(h => (
+                <p key={h} className="text-xs text-amber-600 dark:text-amber-400">{h}</p>
+              ))}
               {/* the flag that decides whether "approve without the client"
                   exists at all — a real control, not a caption */}
               {canManage && !isInternal && (
@@ -905,7 +1014,12 @@ export default function ItemDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             <div className="grid gap-1.5">
-              <Label className="text-xs">Brief link <span className="font-normal text-zinc-400">(Milanote or anywhere — optional)</span></Label>
+              <Label className="text-xs">
+                Brief link{briefHasContent ? '' : ' *'}
+                <span className="font-normal text-zinc-400">
+                  {' '}(Milanote or anywhere — or write the concept and shot list on the shoot page)
+                </span>
+              </Label>
               <div className="flex gap-2">
                 <Input
                   ref={briefUrlRef}
@@ -1013,10 +1127,20 @@ export default function ItemDetailPage() {
                     <Label className="text-xs">Dropbox master link *</Label>
                     <Input value={verDraft.dropbox_url} placeholder="https://www.dropbox.com/…"
                       onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
+                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                      The master is the full-quality original, archived in Dropbox.
+                    </p>
                   </div>
                   )}
                   <div className="grid gap-1.5">
-                    <Label className="text-xs">{isInternal ? `Link to the work ${verDraft.file_url ? '(optional)' : '(Google Doc, Drive, Notion — or upload a file)'}` : `Drive review link ${verDraft.file_url ? '(optional)' : '(or upload a file)'}`}</Label>
+                    {/* never "(optional)" on a field the save requires: an
+                        asterisk that lies teaches people to ignore every other
+                        one on the page */}
+                    <Label className="text-xs">
+                      {isInternal
+                        ? `Link to the work ${verDraft.file_url ? '' : '* (Google Doc, Drive, Notion — or upload a file)'}`
+                        : `Drive review link ${verDraft.file_url ? '' : '* (or upload a file)'}`}
+                    </Label>
                     <Input value={verDraft.drive_url} placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/…'}
                       onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
                   </div>
@@ -1025,9 +1149,17 @@ export default function ItemDetailPage() {
                     <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}
                       onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
                   </div>
-                  <Button size="sm" className="self-start" disabled={busy === 'version'} onClick={saveVersion}>
-                    {busy === 'version' ? 'Saving…' : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
-                  </Button>
+                  <div className="flex flex-col gap-1">
+                    <Button size="sm" className="self-start"
+                      disabled={busy === 'version' || versionMissing !== null} onClick={saveVersion}>
+                      {busy === 'version' ? 'Saving…' : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
+                    </Button>
+                    {/* the precondition, said before the click rather than as a
+                        toast in the far corner afterwards */}
+                    {versionMissing && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">{versionMissing}</p>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -1322,7 +1454,9 @@ export default function ItemDetailPage() {
                   {s.live_url
                     ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
                     : s.publish_status === 'published'
-                      ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">posted in-app</span>
+                      // grey, not green: green + "POSTED" read as "already
+                      // live" on a post that had not gone out
+                      ? <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">marked posted — no link</span>
                       : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{publishStatusWord(s.publish_status)}</span>}
                 </span>
               </div>
@@ -1622,6 +1756,9 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
+                  {/* two people called "MD Media" are two different mailboxes —
+                      the address is the only thing that tells them apart */}
+                  <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
                   <span className="block text-xs text-zinc-400 dark:text-zinc-500">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
                     {r.assigned && ' · manages this client'}
@@ -1630,6 +1767,11 @@ export default function ItemDetailPage() {
               </label>
             ))}
           </div>
+          {dialogError && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              {dialogError}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
             <Button
@@ -1640,6 +1782,45 @@ export default function ItemDetailPage() {
                 : soloReviewer ? 'Submit and review it myself'
                 : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}`
                 : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* about to reach the client — say who, and what they will see */}
+      <Dialog open={clientSend !== null} onOpenChange={o => !o && busy === null && setClientSend(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send to {detail.client_name ?? 'the client'}?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            {(detail.client_users?.length ?? 0) > 0 ? (
+              <p>
+                {detail.client_users!.length} portal {detail.client_users!.length === 1 ? 'user' : 'users'} will be
+                emailed: {detail.client_users!.map(u => u.name || u.email).join(', ')}.
+              </p>
+            ) : (
+              <p>
+                This client has no portal account yet, so no email goes out — but the
+                work still moves to their side and appears the moment one is created.
+              </p>
+            )}
+            <p className="text-zinc-500 dark:text-zinc-400">
+              {isBrief
+                ? 'The plan becomes visible on their portal, where they can approve it or ask for changes.'
+                : 'The asset becomes visible on their portal, where they can approve it or ask for changes.'}
+            </p>
+          </div>
+          {dialogError && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              {dialogError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClientSend(null)} disabled={busy !== null}>Cancel</Button>
+            <Button disabled={busy !== null}
+              onClick={() => clientSend && doTransition(clientSend.to, clientSend.label)}>
+              {busy !== null ? 'Working…' : 'Send'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1665,6 +1846,11 @@ export default function ItemDetailPage() {
               className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
             />
           </div>
+          {dialogError && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              {dialogError}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevisionAsk(null)} disabled={busy !== null}>Cancel</Button>
             <Button
@@ -1764,6 +1950,9 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
+                  {/* two people called "MD Media" are two different mailboxes —
+                      the address is the only thing that tells them apart */}
+                  <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
                   <span className="block text-xs text-zinc-400 dark:text-zinc-500">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
                     {r.assigned && ' · manages this client'}

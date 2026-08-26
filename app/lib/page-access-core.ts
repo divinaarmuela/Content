@@ -43,7 +43,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/bookings', label: 'Bookings' },
   { href: '/dashboard/scheduler', label: 'Scheduler' },
   { href: '/dashboard/calendar', label: 'Calendar' },
-  { href: '/dashboard/activity', label: 'Team Activity' },
+  { href: '/dashboard/activity', label: 'Asana activity' },
   { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/team', label: 'Team' },
   { href: '/dashboard/ai', label: 'AI Assistant' },

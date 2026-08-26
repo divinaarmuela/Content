@@ -381,6 +381,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   <Input type="date" key={batch.shoot_date ?? ''} defaultValue={batch.shoot_date ?? ''} disabled={!canEdit}
                     className="font-mono text-xs"
                     onBlur={e => { if ((e.target.value || null) !== batch.shoot_date) void patch('shoot_date', e.target.value || null) }} />
+                  {/* the picker's field order follows the BROWSER's locale,
+                      which is not ours to set — so echo it back in words */}
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                    {batch.shoot_date ? longDate(batch.shoot_date) : 'Day / month / year — shown back in words once set.'}
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-0.5">
@@ -652,6 +657,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           <div className="grid gap-3">
             <Input type="date" value={dateDraft.shoot_date} className="font-mono text-xs"
               onChange={e => setDateDraft(d => ({ ...d, shoot_date: e.target.value }))} />
+            <p className="-mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+              {dateDraft.shoot_date ? `Moving it to ${longDate(dateDraft.shoot_date)}` : 'Day / month / year.'}
+            </p>
             <Input value={dateDraft.reason} placeholder="Why is the date moving?"
               onChange={e => setDateDraft(d => ({ ...d, reason: e.target.value }))} />
           </div>
