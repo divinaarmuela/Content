@@ -65,8 +65,8 @@ export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   'revision_required>revision_complete': { label: 'Brief revisions done', roles: ['editor', 'account_manager'] },
   // the content-pipeline words ("Send to client", "Approve for scheduling")
   // read wrong on a shoot PLAN — same edges, plan-shaped language
-  'internal_review>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
-  'revision_complete>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
+  'internal_review>client_review': { label: 'Share plan with client for approval', roles: ['account_manager'] },
+  'revision_complete>client_review': { label: 'Share plan with client for approval', roles: ['account_manager'] },
   'revision_complete>revision_required': { label: 'Ask for more changes', roles: ['account_manager'] },
   // for the team this is a RECORD of what the client said, not their own
   // approval — the plain word read as "I approve this"

@@ -526,7 +526,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                         if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
                       }}
                     />
-                    Show this shoot plan on the client portal
+                    Visible on the client portal
+                    <span className="block text-[11px] text-zinc-400">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing.</span>
                   </label>
                   <label className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${batch.shared_with_client ? '' : 'opacity-50'}`}>
                     <Switch

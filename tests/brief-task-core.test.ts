@@ -152,7 +152,7 @@ describe('canCreateItemsUnder with the shoot_brief kind', () => {
 describe('plan-shaped wording on client-facing edges', () => {
   it('sharing and approving speak about the PLAN, not scheduling', () => {
     const share = checkBriefTaskTransition('account_manager', 'internal_review', 'client_review')
-    expect(share.ok && share.rule.label).toBe('Share plan with client')
+    expect(share.ok && share.rule.label).toBe('Share plan with client for approval')
     const approve = checkBriefTaskTransition('client', 'client_review', 'approved_for_scheduling')
     expect(approve.ok && approve.rule.label).toBe("Log the client's approval")
     const withoutClient = checkBriefTaskTransition('account_manager', 'internal_review', 'approved_for_scheduling')
