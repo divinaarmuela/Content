@@ -573,8 +573,8 @@ export default function ItemDetailPage() {
   }
 
   const saveVersion = async () => {
-    if (!verDraft.file_url && !verDraft.drive_url) return toast.error('Upload a file or add a Drive link')
-    if (!verDraft.dropbox_url) return toast.error('The Dropbox master link is required')
+    if (!verDraft.file_url && !verDraft.drive_url) return toast.error(isInternal ? 'Upload a file or add a link to the work' : 'Upload a file or add a Drive link')
+    if (!isInternal && !verDraft.dropbox_url) return toast.error('The Dropbox master link is required')
     setBusy('version')
     try {
       const res = await fetch(`/api/production/items/${id}/versions`, {
@@ -1013,7 +1013,7 @@ export default function ItemDetailPage() {
 
       {/* Job pack — internal only (never in the client or scheduler payload):
           the brief and raw footage the editor works from */}
-      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
+      {isTeam && !isBrief && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">Job pack</CardTitle>
@@ -1119,13 +1119,15 @@ export default function ItemDetailPage() {
       {isTeam && <BrandCard clientId={detail.client_id} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Versions */}
-        {isAsset && (
+        {/* Versions — for a task, the work itself (a doc, a deck, a link) */}
+        {!isBrief && (
         <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Versions</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm font-semibold">{isInternal ? 'The work' : 'Versions'}</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {detail.versions.length === 0 && (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">No versions yet — add the first below.</p>
+              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+                {isInternal ? 'Nothing attached yet — add a file or a link below, then submit it for review.' : 'No versions yet — add the first below.'}
+              </p>
             )}
             {detail.versions.map(v => (
               <div key={v.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
@@ -1146,7 +1148,7 @@ export default function ItemDetailPage() {
               <>
                 <Separator />
                 <div className="flex flex-col gap-2.5">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">New version</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{isInternal ? 'Attach the work' : 'New version'}</p>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
                       <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : verDraft.file_url ? 'Replace file' : 'Upload file'}
@@ -1158,22 +1160,24 @@ export default function ItemDetailPage() {
                     )}
                     {/* sr-only, not hidden: display:none file inputs can silently
                         refuse a programmatic .click() — same bug as the board's */}
-                    <input ref={fileRef} type="file" accept="image/*,video/*" className="sr-only"
+                    <input ref={fileRef} type="file" accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
                       onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
                   </div>
+                  {!isInternal && (
                   <div className="grid gap-1.5">
                     <Label className="text-xs">Dropbox master link *</Label>
                     <Input value={verDraft.dropbox_url} placeholder="https://www.dropbox.com/…"
                       onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
                   </div>
+                  )}
                   <div className="grid gap-1.5">
-                    <Label className="text-xs">Drive review link {verDraft.file_url ? '(optional)' : '(or upload a file)'}</Label>
-                    <Input value={verDraft.drive_url} placeholder="https://drive.google.com/…"
+                    <Label className="text-xs">{isInternal ? `Link to the work ${verDraft.file_url ? '(optional)' : '(Google Doc, Drive, Notion — or upload a file)'}` : `Drive review link ${verDraft.file_url ? '(optional)' : '(or upload a file)'}`}</Label>
+                    <Input value={verDraft.drive_url} placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/…'}
                       onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
                   </div>
                   <div className="grid gap-1.5">
                     <Label className="text-xs">Notes</Label>
-                    <Input value={verDraft.notes} placeholder="What changed in this version?"
+                    <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}
                       onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
                   </div>
                   <Button size="sm" className="self-start" disabled={busy === 'version'} onClick={saveVersion}>

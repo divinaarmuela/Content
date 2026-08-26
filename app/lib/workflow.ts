@@ -383,9 +383,17 @@ export async function performTransition(
         .order('version_number', { ascending: false })
         .limit(1)
         .maybeSingle()
-      if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
-      const valid = versionSatisfiesSubmission(latest)
-      if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
+      if (isInternal) {
+        // a task's evidence is the work itself: a file or a link. No Dropbox
+        // master — there is no footage to archive
+        if (!latest || (!latest.file_url && !latest.drive_url)) {
+          throw new AuthzError('Attach the work first — upload a file or add a link, then submit', 400)
+        }
+      } else {
+        if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
+        const valid = versionSatisfiesSubmission(latest)
+        if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
+      }
     }
   }
 
