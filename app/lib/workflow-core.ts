@@ -34,7 +34,9 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     internal_review: { roles: ['editor', 'account_manager'], requires: 'reviewable_asset', label: 'Submit for review' },
   },
   internal_review: {
-    revision_required: { roles: ['account_manager'], label: 'Request changes' },
+    // one name for one action, on all three overlays: the button that sends
+    // work back for changes is "Ask for changes", never the assignee's name
+    revision_required: { roles: ['account_manager'], label: 'Ask for changes' },
     client_review: { roles: ['account_manager'], label: 'Send to client' },
     approved_for_scheduling: { roles: ['account_manager'], label: 'Approve without client' },
   },
@@ -43,17 +45,20 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
   },
   revision_complete: {
     client_review: { roles: ['account_manager'], label: 'Looks good — send to client' },
-    revision_required: { roles: ['account_manager'], label: 'Needs more changes' },
+    revision_required: { roles: ['account_manager'], label: 'Ask for more changes' },
     approved_for_scheduling: { roles: ['account_manager'], label: 'Approve without client' },
   },
   client_review: {
     client_changes_requested: {
-      roles: ['client', 'account_manager'], label: 'Request changes',
-      labelFor: { account_manager: "Log client's changes" },
+      roles: ['client', 'account_manager'], label: 'Ask for changes',
+      labelFor: { account_manager: "Log the client's changes" },
     },
     approved_for_scheduling: {
+      // plain "Approve" beside "Waiting for the client to approve" reads as
+      // though YOU are approving — for the team it is a record of what the
+      // client said, and it has to say so
       roles: ['client', 'account_manager'], label: 'Approve',
-      labelFor: { account_manager: "Log client's approval" },
+      labelFor: { account_manager: "Log the client's approval" },
     },
   },
   client_changes_requested: {
@@ -192,6 +197,12 @@ function labelFor(rule: TransitionRule, roles: readonly Role[]): string {
     const l = rule.labelFor[r]
     if (l) return l
   }
+  // a super admin acting on the team's side of a client decision is doing the
+  // account manager's job — actingRoles collapses them to ['super_admin'], so
+  // without this they were the one person shown the raw "Approve"
+  if (roles.includes('super_admin') && rule.labelFor.account_manager) {
+    return rule.labelFor.account_manager
+  }
   return rule.label
 }
 
@@ -241,7 +252,6 @@ export function presentTransitions(
   transitions: Presented[],
   ctx: {
     clientApprovalRequired: boolean
-    viewerIsOwner: boolean
     /** whoseTurn().mine, when the caller has it. A super admin MAY act on
      *  everything, so the role check below says "yes" on every item and drew a
      *  filled primary button beside a header reading "Waiting on someone else".
@@ -253,13 +263,12 @@ export function presentTransitions(
    *  shoot gets the button, instead of a scheduler who will never come. */
   turns: Record<ItemStatus, Role | null> = STATUS_TURN,
 ): { primary: Presented | null; secondary: Presented[] } {
+  // NOTE: the owner-reviewing-their-own-work case used to relabel this
+  // "Send back to myself", which read as a note-to-self rather than the
+  // reject button it is. One name for one action; the dialog says who it
+  // reaches.
   const visible = transitions
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
-    .map(t => (
-      ctx.viewerIsOwner && t.to === 'revision_required' && (from === 'internal_review' || from === 'revision_complete')
-        ? { ...t, label: 'Send back to myself' }
-        : t
-    ))
 
   const turn = turns[from]
   const holdsTurn = ctx.viewerHoldsTurn !== undefined

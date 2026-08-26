@@ -49,8 +49,11 @@ describe('task transitions', () => {
     const am = availableTaskTransitionsAs(['account_manager'], 'internal_review')
     expect(am.find(t => t.to === 'approved_for_scheduling')?.label).toBe('Approve — done')
     expect(am.find(t => t.to === 'client_review')?.label).toBe('Send to client')
+    // the client's own yes is RECORDED, not given by the manager
+    const fromClient = availableTaskTransitionsAs(['account_manager'], 'client_review')
+    expect(fromClient.find(t => t.to === 'approved_for_scheduling')?.label).toBe('Client approved — mark done')
     const client = availableTaskTransitionsAs(['client'], 'client_review')
-    expect(client.find(t => t.to === 'approved_for_scheduling')?.label).toBe('Approve — done')
+    expect(client.find(t => t.to === 'approved_for_scheduling')?.label).toBe('Client approved — mark done')
   })
   it('the editor hat submits, the AM hat reviews — same as an asset', () => {
     expect(checkTaskTransitionAs(['editor'], 'draft_uploaded', 'internal_review').ok).toBe(true)
@@ -61,7 +64,7 @@ describe('task transitions', () => {
     const p = presentTransitions(
       ['account_manager'], 'approved_for_scheduling',
       availableTaskTransitionsAs(['account_manager'], 'approved_for_scheduling'),
-      { clientApprovalRequired: false, viewerIsOwner: false }, TASK_STATUS_TURN,
+      { clientApprovalRequired: false }, TASK_STATUS_TURN,
     )
     expect(p.primary).toBeNull()
     expect(p.secondary).toEqual([])

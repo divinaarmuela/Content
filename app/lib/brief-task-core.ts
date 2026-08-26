@@ -61,17 +61,19 @@ type Override = { label: string; roles: Role[]; requires?: 'batch_locked' } | { 
  *  through to checkTransition unchanged. */
 export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   'draft_uploaded>internal_review': { label: 'Submit brief for review', roles: ['editor', 'account_manager'] },
-  'internal_review>revision_required': { label: 'Request brief changes', roles: ['account_manager'] },
+  'internal_review>revision_required': { label: 'Ask for changes', roles: ['account_manager'] },
   'revision_required>revision_complete': { label: 'Brief revisions done', roles: ['editor', 'account_manager'] },
   // the content-pipeline words ("Send to client", "Approve for scheduling")
   // read wrong on a shoot PLAN — same edges, plan-shaped language
   'internal_review>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
   'revision_complete>client_review': { label: 'Share plan with client', roles: ['account_manager'] },
-  'revision_complete>revision_required': { label: 'Needs more plan changes', roles: ['account_manager'] },
-  'client_review>approved_for_scheduling': { label: 'Plan approved', roles: ['client', 'account_manager'] },
+  'revision_complete>revision_required': { label: 'Ask for more changes', roles: ['account_manager'] },
+  // for the team this is a RECORD of what the client said, not their own
+  // approval — the plain word read as "I approve this"
+  'client_review>approved_for_scheduling': { label: "Log the client's approval", roles: ['client', 'account_manager'] },
   'internal_review>approved_for_scheduling': { label: 'Approve plan without client', roles: ['account_manager'] },
   'revision_complete>approved_for_scheduling': { label: 'Approve plan without client', roles: ['account_manager'] },
-  'client_review>client_changes_requested': { label: 'Client wants changes', roles: ['client', 'account_manager'] },
+  'client_review>client_changes_requested': { label: "Log the client's changes", roles: ['client', 'account_manager'] },
   'client_changes_requested>revision_required': { label: 'Send plan for revision', roles: ['account_manager'] },
   'client_changes_requested>client_review': { label: 'No change needed — reshare', roles: ['account_manager'] },
   // booking = the date is locked on the shoot; an AM makes the call

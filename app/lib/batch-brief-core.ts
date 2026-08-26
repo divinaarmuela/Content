@@ -88,7 +88,11 @@ export function canCreateItemsUnder(
   // account managers own that act
   if (kindSlug === 'shoot_brief') {
     if (role !== 'account_manager' && role !== 'super_admin') return false
-    return batchStatus === null || batchStatus === 'brief'
+    // …or attach to any shoot that is not finished. Restricting it to a
+    // still-planning shoot meant that the moment a date was locked the brief
+    // could never be raised, and "New brief task" quietly built a SECOND
+    // shoot instead of joining the one already there.
+    return batchStatus === null || batchStatus !== 'wrapped'
   }
   if (batchStatus === 'locked' || batchStatus === 'shot' || batchStatus === 'wrapped') return true
   if (batchStatus === null) {

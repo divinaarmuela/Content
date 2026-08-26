@@ -91,15 +91,16 @@ describe('checkBriefTaskTransitionAs — booking is the account manager hat, whe
 })
 
 describe('brief wording never speaks about scheduling', () => {
-  it('an account manager requesting brief changes says so in brief words', () => {
+  it('the reject button has the same name here as everywhere else', () => {
+    // "Request brief changes" / "Request changes" / "Needs more plan changes"
+    // were three labels for one action, and nobody could tell them apart
     const r = checkBriefTaskTransition('account_manager', 'internal_review', 'revision_required')
-    expect(r.ok && r.rule.label).toBe('Request brief changes')
+    expect(r.ok && r.rule.label).toBe('Ask for changes')
     expect(checkBriefTaskTransition('editor', 'internal_review', 'revision_required').ok).toBe(false)
-    // and again on the way back from a revised plan — never "Needs more changes"
     const again = checkBriefTaskTransition('account_manager', 'revision_complete', 'revision_required')
-    expect(again.ok && again.rule.label).toBe('Needs more plan changes')
+    expect(again.ok && again.rule.label).toBe('Ask for more changes')
     expect(availableBriefTaskTransitions('account_manager', 'revision_complete')
-      .find(t => t.to === 'revision_required')?.label).toBe('Needs more plan changes')
+      .find(t => t.to === 'revision_required')?.label).toBe('Ask for more changes')
   })
 
   it("the brief's turn ends with the account manager, never a scheduler", () => {
@@ -128,10 +129,14 @@ describe('briefSatisfiesSubmission', () => {
 })
 
 describe('canCreateItemsUnder with the shoot_brief kind', () => {
-  it('AMs start a brief from nothing or attach to a planning shoot; never to a locked one', () => {
+  it('AMs raise a brief against any shoot that is not finished', () => {
     expect(canCreateItemsUnder(null, 'account_manager', undefined, 'shoot_brief')).toBe(true)
     expect(canCreateItemsUnder('brief', 'super_admin', undefined, 'shoot_brief')).toBe(true)
-    expect(canCreateItemsUnder('locked', 'account_manager', undefined, 'shoot_brief')).toBe(false)
+    // a locked shoot with no brief used to be unreachable, and "New brief
+    // task" quietly built a second shoot beside it
+    expect(canCreateItemsUnder('locked', 'account_manager', undefined, 'shoot_brief')).toBe(true)
+    expect(canCreateItemsUnder('shot', 'account_manager', undefined, 'shoot_brief')).toBe(true)
+    expect(canCreateItemsUnder('wrapped', 'account_manager', undefined, 'shoot_brief')).toBe(false)
     expect(canCreateItemsUnder(null, 'editor', undefined, 'shoot_brief')).toBe(false)
     expect(canCreateItemsUnder(null, 'scheduler', undefined, 'shoot_brief')).toBe(false)
   })
@@ -149,7 +154,7 @@ describe('plan-shaped wording on client-facing edges', () => {
     const share = checkBriefTaskTransition('account_manager', 'internal_review', 'client_review')
     expect(share.ok && share.rule.label).toBe('Share plan with client')
     const approve = checkBriefTaskTransition('client', 'client_review', 'approved_for_scheduling')
-    expect(approve.ok && approve.rule.label).toBe('Plan approved')
+    expect(approve.ok && approve.rule.label).toBe("Log the client's approval")
     const withoutClient = checkBriefTaskTransition('account_manager', 'internal_review', 'approved_for_scheduling')
     expect(withoutClient.ok && withoutClient.rule.label).toBe('Approve plan without client')
   })

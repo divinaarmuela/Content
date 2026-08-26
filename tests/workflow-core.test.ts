@@ -285,18 +285,18 @@ describe('checkTransitionAs — the assignment decides, not the title', () => {
 describe('availableTransitionsAs — the words follow the hat', () => {
   it("an account manager on a client review is LOGGING the client's decision", () => {
     const av = availableTransitionsAs(['account_manager'], 'client_review')
-    expect(av.find(t => t.to === 'approved_for_scheduling')?.label).toBe("Log client's approval")
-    expect(av.find(t => t.to === 'client_changes_requested')?.label).toBe("Log client's changes")
+    expect(av.find(t => t.to === 'approved_for_scheduling')?.label).toBe("Log the client's approval")
+    expect(av.find(t => t.to === 'client_changes_requested')?.label).toBe("Log the client's changes")
   })
   it('the client sees the plain words — it is their own decision', () => {
     const av = availableTransitionsAs(['client'], 'client_review')
     expect(av.find(t => t.to === 'approved_for_scheduling')?.label).toBe('Approve')
-    expect(av.find(t => t.to === 'client_changes_requested')?.label).toBe('Request changes')
+    expect(av.find(t => t.to === 'client_changes_requested')?.label).toBe('Ask for changes')
   })
 })
 
 describe('presentTransitions — one obvious button, or none', () => {
-  const present = (role: Role, item: ActingItem, from: ItemStatus, ctx = { clientApprovalRequired: true, viewerIsOwner: false }) => {
+  const present = (role: Role, item: ActingItem, from: ItemStatus, ctx = { clientApprovalRequired: true }) => {
     const roles = actingRoles(me(role), item)
     return presentTransitions(roles, from, availableTransitionsAs(roles, from), ctx)
   }
@@ -317,7 +317,7 @@ describe('presentTransitions — one obvious button, or none', () => {
   it('a BRIEF at approved_for_scheduling is the account manager’s move, not a scheduler’s', () => {
     const roles: Role[] = ['account_manager']
     const outs = availableBriefTaskTransitionsAs(roles, 'approved_for_scheduling')
-    const ctx = { clientApprovalRequired: true, viewerIsOwner: false }
+    const ctx = { clientApprovalRequired: true }
     expect(presentTransitions(roles, 'approved_for_scheduling', outs, ctx, BRIEF_STATUS_TURN).primary)
       .toEqual({ to: 'scheduled', label: 'Book the shoot' })
     // with the ASSET turn table the same manager would be urged to do nothing —
@@ -331,17 +331,19 @@ describe('presentTransitions — one obvious button, or none', () => {
     expect(p.secondary).toEqual([])
   })
 
-  it('sending your own item back to yourself is named honestly', () => {
-    const p = present('account_manager', { owner_id: ME }, 'revision_complete', { clientApprovalRequired: true, viewerIsOwner: true })
+  it('the reject button has ONE name, even on your own item', () => {
+    // it used to become "Send back to myself" for the owner, which read as a
+    // note to self rather than the request-for-changes it is
+    const p = present('account_manager', { owner_id: ME }, 'revision_complete')
     expect(p.primary?.label).toBe('Looks good — send to client')
-    expect(p.secondary.map(s => s.label)).toEqual(['Send back to myself'])
+    expect(p.secondary.map(s => s.label)).toEqual(['Ask for more changes'])
   })
 
   it('the client-bypass approval is hidden when the client must approve', () => {
     const strict = present('account_manager', { owner_id: THEM }, 'internal_review')
     expect(strict.secondary.concat(strict.primary ? [strict.primary] : []).map(t => t.to))
       .not.toContain('approved_for_scheduling')
-    const relaxed = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false, viewerIsOwner: false })
+    const relaxed = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false })
     expect(relaxed.secondary.map(t => t.to)).toContain('approved_for_scheduling')
   })
 
@@ -351,7 +353,7 @@ describe('presentTransitions — one obvious button, or none', () => {
     const am = present('account_manager', { owner_id: THEM }, 'client_review')
     expect(am.primary).toBeNull()
     expect(am.secondary.map(t => t.label).sort())
-      .toEqual(["Log client's approval", "Log client's changes"])
+      .toEqual(["Log the client's approval", "Log the client's changes"])
   })
 
   it('someone who does not hold the turn is urged to do nothing', () => {

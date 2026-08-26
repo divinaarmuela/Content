@@ -53,8 +53,16 @@ export const TASK_STATUS_TURN: Record<ItemStatus, Role | null> = {
   published: null,
 }
 
-export function taskStatusLabel(kind: KindShape, status: ItemStatus, fallback: string): string {
-  return isInternalKind(kind) ? TASK_KIND_LABELS[status] ?? fallback : fallback
+export function taskStatusLabel(
+  kind: KindShape, status: ItemStatus, fallback: string,
+  /** has anything been attached yet? A task created a minute ago that nobody
+   *  has opened reads as "In progress", and the team assumes somebody is on
+   *  it. Nothing attached means nobody has started. */
+  opts?: { hasWork?: boolean },
+): string {
+  if (!isInternalKind(kind)) return fallback
+  if (status === 'draft_uploaded' && opts?.hasWork === false) return 'Not started'
+  return TASK_KIND_LABELS[status] ?? fallback
 }
 
 type Override = { label: string; roles: Role[] } | { blocked: true }
@@ -64,7 +72,8 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
   'draft_uploaded>internal_review': { label: 'Submit for review', roles: ['editor', 'account_manager'] },
   'internal_review>approved_for_scheduling': { label: 'Approve — done', roles: ['account_manager'] },
   'revision_complete>approved_for_scheduling': { label: 'Approve — done', roles: ['account_manager'] },
-  'client_review>approved_for_scheduling': { label: 'Approve — done', roles: ['client', 'account_manager'] },
+  // the client's own yes, recorded — not the manager approving it themselves
+  'client_review>approved_for_scheduling': { label: 'Client approved — mark done', roles: ['client', 'account_manager'] },
   // a task has nothing to schedule or publish — Done is the end, for everyone
   'approved_for_scheduling>scheduled': { blocked: true },
   'scheduled>published': { blocked: true },

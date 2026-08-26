@@ -403,7 +403,6 @@ export default function ItemDetailPage() {
     hats, detail.status, transitions,
     {
       clientApprovalRequired: detail.client_approval_required !== false,
-      viewerIsOwner: detail.owner_id === detail.viewer_id,
       // the same answer the header gives: a super admin MAY move anything,
       // but a filled primary button under "Waiting on the editor" is the page
       // arguing with itself
@@ -731,7 +730,7 @@ export default function ItemDetailPage() {
           <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
             {role === 'client'
               ? (detail.status_label ?? CLIENT_LABELS[detail.status])
-              : isInternal ? taskStatusLabel(detail.work_kind, detail.status, STATUS_LABELS[detail.status]) : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
+              : isInternal ? taskStatusLabel(detail.work_kind, detail.status, STATUS_LABELS[detail.status], { hasWork: detail.versions.length > 0 }) : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
           </Badge>
         </div>
       </div>

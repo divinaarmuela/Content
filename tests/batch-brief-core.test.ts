@@ -72,6 +72,23 @@ describe('canCreateItemsUnder — the production gate', () => {
     }
   })
 
+  it('lets an AM raise a brief task against any shoot that is not finished', () => {
+    // a locked shoot with no brief is the exact case that used to build a
+    // SECOND shoot instead of joining the one already there
+    for (const status of [null, 'brief', 'locked', 'shot'] as const) {
+      expect(canCreateItemsUnder(status, 'account_manager', undefined, 'shoot_brief')).toBe(true)
+      expect(canCreateItemsUnder(status, 'super_admin', undefined, 'shoot_brief')).toBe(true)
+    }
+    // a wrapped shoot is done; nobody raises a plan for it
+    expect(canCreateItemsUnder('wrapped', 'account_manager', undefined, 'shoot_brief')).toBe(false)
+    // and it stays a manager's act whatever the stage
+    for (const status of [null, 'brief', 'locked'] as const) {
+      expect(canCreateItemsUnder(status, 'editor', undefined, 'shoot_brief')).toBe(false)
+      expect(canCreateItemsUnder(status, 'scheduler', undefined, 'shoot_brief')).toBe(false)
+      expect(canCreateItemsUnder(status, 'client', undefined, 'shoot_brief')).toBe(false)
+    }
+  })
+
   it('batchless items need an AM+ with a stated reason — supers included', () => {
     expect(canCreateItemsUnder(null, 'editor', { reason: 'urgent' })).toBe(false)
     expect(canCreateItemsUnder(null, 'account_manager')).toBe(false)
