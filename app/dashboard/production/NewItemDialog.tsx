@@ -53,7 +53,7 @@ const BLANK = {
  * hint, the uploads, the manager-only fields.
  */
 export default function NewItemDialog({
-  open, onOpenChange, onCreated, presetKind, preset, clients, batches,
+  open, onOpenChange, onCreated, presetKind, preset, clients, batches, briefedBatchIds,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -62,6 +62,8 @@ export default function NewItemDialog({
   preset?: { client_id?: string; batch_id?: string }
   clients: ClientRow[]
   batches: Batch[]
+  /** shoots that already have a brief task — they cannot take a second one */
+  briefedBatchIds?: string[]
 }) {
   const [newBusy, setNewBusy] = useState(false)
   const [draft, setDraft] = useState({ ...BLANK })
@@ -191,6 +193,12 @@ export default function NewItemDialog({
   const shootChoices = batches
     .filter(b => ['locked', 'shot'].includes(b.status ?? 'shot'))
     .filter(b => !draft.client_id || b.client_id === draft.client_id)
+  // the shoots a BRIEF may attach to: this client's, not finished, and not
+  // already carrying one (the DB has a one-brief-per-shoot unique index)
+  const briefableShoots = batches.filter(b =>
+    (!draft.client_id || b.client_id === draft.client_id)
+    && (b.status ?? 'brief') !== 'wrapped'
+    && !(briefedBatchIds ?? []).includes(b.id))
   const blockedNoShoot = !isBriefKind && !isTaskKind && !isManager && shootChoices.length === 0
 
   const createItems = async () => {
@@ -216,7 +224,8 @@ export default function NewItemDialog({
         ...(isBriefKind ? {
           brief_url: draft.brief_url.trim() || null,
           planned_deliverables: draft.deliverables,
-          batch_id: null,
+          // an explicitly chosen shoot, or null to create one with the brief
+          batch_id: draft.batch_id || null,
         } : {}),
         ...(isTaskKind ? { batch_id: null } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
@@ -270,6 +279,32 @@ export default function NewItemDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* a brief belongs to a shoot. Without this picker "New brief task"
+              silently created a SECOND shoot beside the one already there. */}
+          {isBriefKind && (
+            <div className="grid gap-1.5">
+              <Label>Which shoot?</Label>
+              <Select value={draft.batch_id || 'new'}
+                onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'new' ? '' : v ?? '' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">…or start a new shoot</SelectItem>
+                  {briefableShoots.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                {!draft.client_id
+                  ? 'Choose a client to see their shoots.'
+                  : briefableShoots.length === 0
+                    ? 'This client has no shoot waiting for a brief — one will be created with this task.'
+                    : draft.batch_id
+                      ? 'The brief attaches to that shoot; no new shoot is created.'
+                      : 'A new shoot will be created with this brief.'}
+              </p>
+            </div>
+          )}
           {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">
             <Label>Shoot</Label>
@@ -334,7 +369,12 @@ export default function NewItemDialog({
           )}
           {selectableKinds.length > 0 && presetKind !== 'shoot_brief' && (
             <div className="grid gap-1.5">
-              <Label>Work type</Label>
+              <Label>
+                {isTaskKind ? 'Task type' : 'Work type'}
+                <span className="ml-1 text-xs font-normal text-zinc-400">
+                  {isTaskKind ? '(what kind of work this is)' : '(optional — defaults below)'}
+                </span>
+              </Label>
               <Select value={draft.work_kind_id || 'default'}
                 onValueChange={v => { kindTouchedRef.current = true; setKindHint(null); setDraft(d => ({ ...d, work_kind_id: v === 'default' ? '' : v ?? '' })) }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

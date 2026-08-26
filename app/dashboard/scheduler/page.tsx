@@ -78,7 +78,7 @@ export default function SchedulerPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/production/items')
+      const res = await fetch('/api/production/items', { cache: 'no-store' })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load queue')
       const all: Item[] = await res.json()
       setItems(all)
@@ -165,13 +165,17 @@ export default function SchedulerPage() {
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
               {lane !== 'approved_for_scheduling'
                 ? 'Nothing here yet.'
-                : showingOnlyMineAndPool
-                  ? 'Nothing handed to you and nothing waiting — approved items land here the moment an account manager signs them off.'
-                  : 'Nothing waiting — items appear here the moment they’re approved for scheduling.'}
+                : !showingOnlyMineAndPool
+                  ? 'Nothing waiting — items appear here the moment they’re approved for scheduling.'
+                  : scope.has('mine') && scope.has('unassigned')
+                    ? 'Nothing handed to you and nothing free to take — approved items land here the moment an account manager signs them off.'
+                    : scope.has('mine')
+                      ? 'Nothing has been handed to you to schedule.'
+                      : 'Nothing free to take — every approved item already has someone on it.'}
             </p>
             {showingOnlyMineAndPool && (
               <Button variant="outline" size="sm" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
-                Show everyone
+                Show everyone&rsquo;s
               </Button>
             )}
             {/* a page you cannot act on and cannot leave is a dead end —
@@ -210,7 +214,7 @@ export default function SchedulerPage() {
                     <TableCell>
                       <div className="text-sm font-medium">{item.title}</div>
                       <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
-                        {item.content_type} · v{item.current_version_number}
+                        <span className="capitalize">{item.content_type}</span> · v{item.current_version_number}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         {/* one component answers "is this on me?" — the same

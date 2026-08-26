@@ -184,6 +184,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   }
 
   const briefTask = items.find(i => i.work_kinds?.slug === 'shoot_brief') ?? null
+  // "Book the shoot" moves the BRIEF to scheduled; the batch keeps its own
+  // status. Without reading it back here the shoot never said it was booked.
+  const booked = briefTask?.status === 'scheduled' || briefTask?.status === 'published'
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
@@ -209,6 +212,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         <Badge variant="outline" className={`font-normal ${BATCH_STATUS_STYLE[batch.status]}`}>
           {BATCH_STATUS_LABEL[batch.status]}
         </Badge>
+        {/* the brief said "Shoot booked" while the shoot itself said nothing —
+            one job, two pages, and they have to agree */}
+        {booked && (
+          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-normal text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
+            Booked
+          </Badge>
+        )}
         {primary && (
           <Button size="sm" disabled={busy !== null}
             onClick={() => primary.to === 'locked' ? setLockOpen(true) : void transition(primary.to, primary.label)}
@@ -216,13 +226,17 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             {primary.to === 'locked' && <Lock className="h-3.5 w-3.5" />} {primary.label}
           </Button>
         )}
+        {/* "Wrap" was unpredictable from the label — say what it does */}
         {isManager && transitions.some(t => t.to === 'wrapped') && (
           <Button size="sm" variant="outline" disabled={busy !== null}
-            onClick={() => void transition('wrapped', 'Wrap shoot')}>Wrap</Button>
+            title="Everything from this shoot is delivered. It moves to WRAPPED and stops appearing as live work."
+            onClick={() => void transition('wrapped', 'Close this shoot')}>Close this shoot</Button>
         )}
         {isManager && items.length === 0 && (
-          <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400"
-            onClick={() => setDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400"
+            onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="h-3.5 w-3.5" /> Delete shoot
+          </Button>
         )}
       </div>
       <p className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-zinc-500 dark:text-zinc-400">
@@ -241,7 +255,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         )}
       </p>
 
-      {isManager && batch.status === 'brief' && !briefTask && (
+      {/* stays until the shoot HAS a brief. Gating it on 'brief' meant that
+          locking the date removed the only way to raise one, and the New ▾
+          menu then built a second shoot instead of joining this one. */}
+      {isManager && batch.status !== 'wrapped' && !briefTask && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950/40">
           <p className="text-sm text-sky-900 dark:text-sky-200">
             This shoot isn&rsquo;t on the pipeline yet — a brief task puts it through

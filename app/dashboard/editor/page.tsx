@@ -123,7 +123,7 @@ export default function EditorPage() {
   const load = useCallback(async () => {
     try {
       const [itemsRes, clientsRes, batchesRes] = await Promise.all([
-        fetch('/api/production/items'),
+        fetch('/api/production/items', { cache: 'no-store' }),
         fetch('/api/website/clients'),
         fetch('/api/production/batches'),
       ])
@@ -282,7 +282,9 @@ export default function EditorPage() {
       </div>
 
       <ShootChips batches={batches} clientFilter={clientFilter}
-        value={batchFilter} onChange={setBatchFilter} />
+        value={batchFilter} onChange={setBatchFilter}
+        countFor={bid => scoped.filter(i =>
+          i.batch_id === bid && (clientFilter === 'all' || i.client_id === clientFilter)).length} />
 
       {strip && strip.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -314,9 +316,18 @@ export default function EditorPage() {
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
             {showingOnlyMineAndPool ? (
               <>
-                <p>Nothing assigned to you, and nothing waiting to be picked up.</p>
+                {/* say what THIS filter is empty of — "nothing assigned to
+                    you" beside a pill reading "Free to take 1" is a page
+                    arguing with itself */}
+                <p>
+                  {scope.has('mine') && scope.has('unassigned')
+                    ? 'Nothing assigned to you, and nothing waiting to be picked up.'
+                    : scope.has('mine')
+                      ? 'Nothing is assigned to you right now.'
+                      : 'Nothing is waiting to be picked up.'}
+                </p>
                 <Button variant="outline" size="sm" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
-                  Show everyone
+                  Show everyone&rsquo;s
                 </Button>
               </>
             ) : (
@@ -379,7 +390,7 @@ export default function EditorPage() {
                               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                                 {item.clients?.name ?? '—'}
                               </Badge>
-                              <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
+                              <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
                               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                                 {itemStatusLabel(item.work_kinds?.slug, item.status, STATUS_LABELS[item.status])}
                               </Badge>

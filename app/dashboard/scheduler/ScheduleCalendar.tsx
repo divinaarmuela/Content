@@ -54,6 +54,8 @@ const key = (d: Date) =>
 export default function ScheduleCalendar() {
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [anchor, setAnchor] = useState(() => new Date())
+  /** the viewer has moved the calendar themselves — stop steering it */
+  const [pinned, setPinned] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -82,11 +84,37 @@ export default function ScheduleCalendar() {
     return map
   }, [entries])
 
+  // Opening on an empty month above a badge reading "1 scheduled" makes the
+  // whole calendar look broken. Land on the soonest month that HAS something
+  // — this month when it does, otherwise the nearest one that does — until
+  // the viewer takes the wheel with the arrows or Today.
+  useEffect(() => {
+    if (pinned || entries === null) return
+    const dated = entries.map(e => e.scheduled_at).filter((d): d is string => !!d).sort()
+    if (dated.length === 0) return
+    const now = new Date()
+    const inThisMonth = dated.some(d => {
+      const x = new Date(d)
+      return x.getFullYear() === now.getFullYear() && x.getMonth() === now.getMonth()
+    })
+    if (inThisMonth) return
+    // the next one coming up, or — with nothing ahead — the most recent
+    const upcoming = dated.find(d => new Date(d) >= now) ?? dated[dated.length - 1]
+    const target = new Date(upcoming)
+    setAnchor(new Date(target.getFullYear(), target.getMonth(), 1))
+  }, [entries, pinned])
+
   const cells = monthGrid(anchor)
   const monthLabel = anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const todayKey = key(new Date())
 
   const unscheduled = (entries ?? []).filter(e => !e.scheduled_at).length
+  // …and say how many of the total are in the month actually on screen
+  const inMonth = (entries ?? []).filter(e => {
+    if (!e.scheduled_at) return false
+    const d = new Date(e.scheduled_at)
+    return d.getFullYear() === anchor.getFullYear() && d.getMonth() === anchor.getMonth()
+  }).length
 
   if (entries === null) {
     return <Skeleton className="h-[480px] w-full" />
@@ -96,18 +124,18 @@ export default function ScheduleCalendar() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm"
-          onClick={() => setAnchor(a => new Date(a.getFullYear(), a.getMonth() - 1, 1))}>
+          onClick={() => { setPinned(true); setAnchor(a => new Date(a.getFullYear(), a.getMonth() - 1, 1)) }}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="min-w-44 text-sm font-medium">{monthLabel}</span>
         <Button variant="outline" size="sm"
-          onClick={() => setAnchor(a => new Date(a.getFullYear(), a.getMonth() + 1, 1))}>
+          onClick={() => { setPinned(true); setAnchor(a => new Date(a.getFullYear(), a.getMonth() + 1, 1)) }}>
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setAnchor(new Date())}>Today</Button>
+        <Button variant="ghost" size="sm" onClick={() => { setPinned(true); setAnchor(new Date()) }}>Today</Button>
 
         <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
-          {(entries ?? []).filter(e => e.scheduled_at).length} scheduled
+          {inMonth} this month · {(entries ?? []).filter(e => e.scheduled_at).length} in total
           {unscheduled > 0 && ` · ${unscheduled} with no date`}
         </span>
       </div>

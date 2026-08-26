@@ -80,11 +80,15 @@ const chip = (active: boolean) =>
  * dialog — a new one appears here immediately, and clicking it narrows the
  * board to that shoot's items. Clicking the chip that is already on clears it.
  */
-export function ShootChips({ batches, clientFilter, value, onChange }: {
+export function ShootChips({ batches, clientFilter, value, onChange, countFor }: {
   batches: Batch[]
   clientFilter: string
   value: string
   onChange: (batchId: string) => void
+  /** how many rows the BOARD will draw for this shoot. The batch row carries a
+   *  content_items count that includes brief tasks and finished work, so a
+   *  chip reading 2 sat above a board showing one card. */
+  countFor?: (batchId: string) => number
 }) {
   if (batches.length === 0) return null
   return (
@@ -99,7 +103,7 @@ export function ShootChips({ batches, clientFilter, value, onChange }: {
         .filter(b => (b.status ?? 'shot') !== 'brief')
         .filter(b => clientFilter === 'all' || b.client_id === clientFilter)
         .map(b => {
-          const count = b.content_items?.[0]?.count ?? 0
+          const count = countFor ? countFor(b.id) : b.content_items?.[0]?.count ?? 0
           return (
             <button key={b.id} type="button"
               onClick={() => onChange(value === b.id ? 'all' : b.id)}

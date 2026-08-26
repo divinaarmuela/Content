@@ -156,9 +156,9 @@ export default function ProductionPage() {
   const load = useCallback(async () => {
     try {
       const [bRes, cRes, iRes] = await Promise.all([
-        fetch('/api/production/batches'),
+        fetch('/api/production/batches', { cache: 'no-store' }),
         fetch('/api/website/clients'),
-        fetch('/api/production/items'),
+        fetch('/api/production/items', { cache: 'no-store' }),
       ])
       if (bRes.ok) {
         const rows: Shoot[] = await bRes.json()
@@ -689,6 +689,7 @@ export default function ProductionPage() {
         presetKind="shoot_brief"
         clients={clients}
         batches={shoots ?? []}
+        briefedBatchIds={[...briefByBatch.keys()]}
       />
 
       {/* a TASK: research, strategy, copy — no shoot, no post, ends at Done */}
