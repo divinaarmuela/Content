@@ -109,8 +109,8 @@ describe('computeMonthlyProgress', () => {
       { content_type: 'static', status: 'published', published_at: '2026-08-15T00:00:00Z' },
     ]
     expect(computeMonthlyProgress(items, batches, 9, 2026, quotas)).toEqual([
-      { type: 'static', label: 'Graphics', quota: 20, planned: 3, delivered: 1 },
-      { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1 },
+      { type: 'static', label: 'Graphics', quota: 20, planned: 3, delivered: 1, in_production: 0, approved: 1, scheduled: 1, posted: 1 },
+      { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1, in_production: 1, approved: 0, scheduled: 0, posted: 1 },
     ])
   })
 })

@@ -145,7 +145,7 @@ function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: 
   )
 }
 
-type AtRiskLine = { type: string; label: string; quota: number; delivered: number; pace: string }
+type AtRiskLine = { type: string; label: string; quota: number; delivered: number; pace: string; in_production?: number; approved?: number; scheduled?: number; posted?: number }
 type AtRiskClient = { id: string; name: string; has_agreement: boolean; worst: string; lines: AtRiskLine[] }
 
 const PACE_DOT: Record<string, string> = {
@@ -187,6 +187,7 @@ function AtRiskThisMonth() {
             <span className="ml-auto flex flex-wrap justify-end gap-1.5">
               {c.lines.filter(l => l.delivered < l.quota).map(l => (
                 <span key={l.type}
+                  title={`${l.posted ?? l.delivered} posted · ${l.scheduled ?? 0} scheduled · ${l.approved ?? 0} approved · ${l.in_production ?? 0} in production`}
                   className={`font-mono text-[11px] tabular-nums ${
                     l.pace === 'behind' ? 'text-red-500 dark:text-red-400'
                       : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'

@@ -102,7 +102,7 @@ export default function EditorPage() {
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
-  const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number }[] | null>(null)
+  const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number; in_production?: number; approved?: number; scheduled?: number; posted?: number }[] | null>(null)
   useEffect(() => {
     if (clientFilter === 'all') { setStrip(null); return }
     fetch(`/api/production/deliverables-progress?client_id=${clientFilter}`)
@@ -280,7 +280,7 @@ export default function EditorPage() {
           </span>
           {strip.map(r => (
             <span key={r.type}
-              title={`${r.delivered} delivered · ${r.planned - r.delivered > 0 ? `${r.planned - r.delivered} in production · ` : ''}${Math.max(0, r.quota - r.planned)} remaining`}
+              title={`${r.posted ?? r.delivered} posted · ${r.scheduled ?? 0} scheduled · ${r.approved ?? 0} approved · ${r.in_production ?? Math.max(0, r.planned - r.delivered)} in production · ${Math.max(0, r.quota - r.planned)} not started`}
               className={`rounded-full border px-2.5 py-1 font-mono text-xs tabular-nums ${
                 r.delivered > r.quota
                   ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'

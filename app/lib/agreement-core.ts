@@ -176,7 +176,17 @@ export function liveAtFromEntries(entries: { published_at?: string | null }[] | 
   return dates[0] ?? null
 }
 
-export type MonthlyProgress = EffectiveQuota & { planned: number; delivered: number }
+/** planned = exists; in_production = not yet approved; approved = signed off,
+ *  waiting for a slot; scheduled = booked, not live; posted = live (this is
+ *  what "delivered" means). in_production + approved + scheduled + posted = planned. */
+export type MonthlyProgress = EffectiveQuota & {
+  planned: number
+  delivered: number
+  in_production: number
+  approved: number
+  scheduled: number
+  posted: number
+}
 
 export function computeMonthlyProgress(
   items: { content_type: string; status: string; batch_id?: string | null; published_at?: string | null; due_date?: string | null; created_at?: string | null }[],
@@ -185,20 +195,25 @@ export function computeMonthlyProgress(
   year: number,
   quotas: EffectiveQuota[],
 ): MonthlyProgress[] {
+  const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1)
   const planned = new Map<string, number>()
-  const delivered = new Map<string, number>()
+  const approved = new Map<string, number>()
+  const scheduled = new Map<string, number>()
+  const posted = new Map<string, number>()
   for (const item of items) {
     const batch = item.batch_id ? batchesById.get(item.batch_id) ?? null : null
     const m = monthOfItem(item, batch)
     if (!m || m.month !== month || m.year !== year) continue
-    planned.set(item.content_type, (planned.get(item.content_type) ?? 0) + 1)
-    if (DELIVERED_STATUSES.has(item.status)) {
-      delivered.set(item.content_type, (delivered.get(item.content_type) ?? 0) + 1)
-    }
+    bump(planned, item.content_type)
+    if (item.status === 'approved_for_scheduling') bump(approved, item.content_type)
+    else if (item.status === 'scheduled') bump(scheduled, item.content_type)
+    else if (DELIVERED_STATUSES.has(item.status)) bump(posted, item.content_type)
   }
-  return quotas.map(q => ({
-    ...q,
-    planned: planned.get(q.type) ?? 0,
-    delivered: delivered.get(q.type) ?? 0,
-  }))
+  return quotas.map(q => {
+    const p = planned.get(q.type) ?? 0
+    const a = approved.get(q.type) ?? 0
+    const s = scheduled.get(q.type) ?? 0
+    const d = posted.get(q.type) ?? 0
+    return { ...q, planned: p, delivered: d, in_production: p - a - s - d, approved: a, scheduled: s, posted: d }
+  })
 }

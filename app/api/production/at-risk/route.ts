@@ -73,6 +73,7 @@ export async function GET(req: Request) {
       const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
       const withPace = progress.map(p => ({
         type: p.type, label: p.label, quota: p.quota, delivered: p.delivered, planned: p.planned,
+        in_production: p.in_production, approved: p.approved, scheduled: p.scheduled, posted: p.posted,
         pace: paceStatus(p.delivered, p.quota, window.dayOfMonth, window.daysInMonth),
       }))
       const worst = withPace.reduce<PaceStatus>((w, p) => (RANK[p.pace] < RANK[w] ? p.pace : w), 'met')

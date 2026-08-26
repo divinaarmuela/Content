@@ -5,7 +5,19 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
-type Row = { type: string; label: string; quota: number; planned: number; delivered: number }
+type Row = {
+  type: string; label: string; quota: number; planned: number; delivered: number
+  in_production?: number; approved?: number; scheduled?: number; posted?: number
+}
+
+/** The stages an item passes through on its way to counting. Same order and
+ *  colours as the Overview pipeline, so the two read as one thing. */
+const STAGES: { key: 'in_production' | 'approved' | 'scheduled' | 'posted'; label: string; dot: string; bar: string }[] = [
+  { key: 'in_production', label: 'in production', dot: 'bg-zinc-400', bar: 'bg-zinc-300 dark:bg-zinc-600' },
+  { key: 'approved', label: 'approved', dot: 'bg-emerald-400', bar: 'bg-emerald-300 dark:bg-emerald-800' },
+  { key: 'scheduled', label: 'scheduled', dot: 'bg-cyan-500', bar: 'bg-cyan-400 dark:bg-cyan-700' },
+  { key: 'posted', label: 'posted', dot: 'bg-emerald-600', bar: 'bg-emerald-600 dark:bg-emerald-400' },
+]
 type Service = { key: string; label: string; active: boolean }
 
 /**
@@ -65,24 +77,33 @@ export default function MonthProgress({ clientId }: { clientId: string }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {rows.map(r => {
               const over = r.delivered > r.quota
-              const pct = Math.min(100, Math.round((r.delivered / Math.max(1, r.quota)) * 100))
+              const denom = Math.max(1, r.quota, r.planned)
+              const width = (n: number) => `${Math.min(100, Math.round((n / denom) * 100))}%`
+              // the bar fills in the order the work moves: posted first (the
+              // part that counts), then scheduled, approved, in production
+              const segments = [...STAGES].reverse()
               return (
                 <div key={r.type} className="flex flex-col gap-1">
                   <div className="flex items-baseline justify-between text-sm">
                     <span>{r.label}</span>
                     <span className={`font-mono tabular-nums ${over ? 'text-amber-600 dark:text-amber-400' : ''}`}>
-                      {r.delivered} / {r.quota}
+                      {r.delivered} / {r.quota} <span className="text-zinc-400">posted</span>
                     </span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
-                    <div className={`h-1.5 rounded transition-[width] ${over ? 'bg-amber-500' : 'bg-zinc-900 dark:bg-zinc-100'}`}
-                      style={{ width: `${pct}%` }} />
+                  <div className="flex h-1.5 w-full gap-px overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
+                    {segments.map(s => {
+                      const n = r[s.key] ?? 0
+                      return n > 0 ? <div key={s.key} className={`h-1.5 ${over && s.key === 'posted' ? 'bg-amber-500' : s.bar}`} style={{ width: width(n) }} /> : null
+                    })}
                   </div>
-                  {r.planned > r.delivered && (
-                    <span className="font-mono text-[10.5px] text-zinc-400">
-                      {r.planned - r.delivered} more in production
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10.5px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                    {STAGES.map(s => (
+                      <span key={s.key} className="flex items-center gap-1">
+                        <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                        {s.label} <span className="text-zinc-800 dark:text-zinc-200">{r[s.key] ?? 0}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )
             })}
