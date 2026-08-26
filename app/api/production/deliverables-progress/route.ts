@@ -5,6 +5,7 @@ import { accessibleClientIds } from '../../../lib/production-access'
 import {
   computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines,
 } from '../../../lib/agreement-core'
+import { isInternalKind } from '../../../lib/task-kind-core'
 
 /**
  * "Are we hitting Releeph's 20 graphics this month?" — one number set,
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
       supabase.from('monthly_commitments').select('*')
         .eq('client_id', clientId).eq('month', month).eq('year', year).maybeSingle(),
       supabase.from('content_items')
-        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug), schedule_entries(published_at)')
+        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug, uses_media), schedule_entries(published_at)')
         .eq('client_id', clientId).limit(1000),
       supabase.from('batches').select('id, month, year').eq('client_id', clientId).limit(200),
     ])
@@ -44,6 +45,8 @@ export async function GET(req: Request) {
     // brief TASKS are the plan, not the delivery — they never count
     const producedItems = (items ?? [])
       .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+      // nor does a research/strategy task — the agreement is what gets posted
+      .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
       .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
     const per_type = computeMonthlyProgress(producedItems, batchesById, month, year, quotas)
 

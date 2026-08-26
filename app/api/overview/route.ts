@@ -4,6 +4,7 @@ import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz
 import { accessibleClientIds, assertUuid } from '../../lib/production-access'
 import { ITEM_STATUSES, SCHEDULER_STATUSES, schedulerIdsOf } from '../../lib/workflow-core'
 import { SHOOT_BRIEF_SLUG } from '../../lib/brief-task-core'
+import { isInternalKind } from '../../lib/task-kind-core'
 
 /**
  * One request, shaped to the caller's role — the data behind the Overview.
@@ -38,7 +39,7 @@ export async function GET() {
 
     let itemsQ = supabase
       .from('content_items')
-      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name), work_kinds(slug)')
+      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name), work_kinds(slug, uses_media)')
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
@@ -68,8 +69,11 @@ export async function GET() {
       // a BOOKED brief is 'scheduled' under the hood but is nothing the
       // Scheduler page will ever show — a brief still in review counts,
       // because "With client 1" must be true when a plan is with the client
-      const brief = ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') === SHOOT_BRIEF_SLUG
+      const kind = (i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds
+      const brief = (kind?.slug ?? '') === SHOOT_BRIEF_SLUG
       if (brief && (i.status === 'scheduled' || i.status === 'published')) continue
+      // a research/strategy task is not in the content pipeline at all
+      if (isInternalKind(kind)) continue
       if (pipeline[i.status] !== undefined) pipeline[i.status] += 1
     }
 

@@ -6,6 +6,7 @@ import {
   agreementMonthWindow, computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines, paceStatus,
   type PaceStatus,
 } from '../../../lib/agreement-core'
+import { isInternalKind } from '../../../lib/task-kind-core'
 
 /**
  * The cross-client "are we meeting the month" rollup. For every client the
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
       supabase.from('client_agreements').select('client_id, deliverable_lines, start_date').in('client_id', clientIds),
       supabase.from('monthly_commitments').select('*').in('client_id', clientIds).eq('month', month).eq('year', year),
       supabase.from('content_items')
-        .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug), schedule_entries(published_at)')
+        .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug, uses_media), schedule_entries(published_at)')
         .in('client_id', clientIds).limit(4000),
       supabase.from('batches').select('id, client_id, month, year').in('client_id', clientIds).limit(1000),
     ])
@@ -69,6 +70,7 @@ export async function GET(req: Request) {
       }
       const clientItems = (itemsByClient.get(client.id) ?? [])
         .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+        .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
         .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
       const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
       const withPace = progress.map(p => ({

@@ -17,6 +17,7 @@ import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
 import {
   briefSatisfiesSubmission, checkBriefTaskTransitionAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
 } from './brief-task-core'
+import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
 
 export type ContentItem = {
@@ -340,14 +341,17 @@ export async function performTransition(
   // means the shoot is booked — which requires its date to be locked
   const { data: kindRow } = item.id
     ? await supabase.from('content_items')
-        .select('work_kinds(slug), batches(status, concept, shot_list)')
+        .select('work_kinds(slug, uses_media), batches(status, concept, shot_list)')
         .eq('id', item.id).maybeSingle()
     : { data: null }
   const kindSlug = (kindRow?.work_kinds as { slug?: string } | null)?.slug ?? null
   const briefBatch = (kindRow?.batches as { status?: string; concept?: string | null; shot_list?: unknown[] } | null) ?? null
   const isBriefTask = kindSlug === SHOOT_BRIEF_SLUG
+  const isInternal = isInternalKind(kindRow?.work_kinds as KindShape)
   /** what a stage is CALLED, in this item's own vocabulary */
-  const stageLabel = (s: ItemStatus) => itemStatusLabel(kindSlug, s, STATUS_LABELS[s])
+  const stageLabel = (s: ItemStatus) => isInternal
+    ? taskStatusLabel(kindRow?.work_kinds as KindShape, s, STATUS_LABELS[s])
+    : itemStatusLabel(kindSlug, s, STATUS_LABELS[s])
 
   // rights follow ASSIGNMENT, not job title: the hats this actor wears on
   // THIS item decide the move, so an editor handed a scheduling job can
@@ -356,6 +360,7 @@ export async function performTransition(
 
   const check = isBriefTask
     ? checkBriefTaskTransitionAs(hats, from, to)
+    : isInternal ? checkTaskTransitionAs(hats, from, to)
     : checkTransitionAs(hats, from, to)
   if (!check.ok) throw new AuthzError(check.reason, 403)
 

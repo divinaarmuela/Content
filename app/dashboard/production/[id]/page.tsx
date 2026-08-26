@@ -38,6 +38,9 @@ import {
   availableBriefTaskTransitionsAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
   BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN,
 } from '../../../lib/brief-task-core'
+import {
+  availableTaskTransitionsAs, isInternalKind, taskStatusLabel, TASK_STATUS_MEANING, TASK_STATUS_TURN,
+} from '../../../lib/task-kind-core'
 import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
 import { ClaimButton } from '../ClaimButton'
 import type { Role } from '../../../lib/identity-core'
@@ -359,6 +362,9 @@ export default function ItemDetailPage() {
   const isTeam = role !== 'client'
   const viewer = { id: detail.viewer_id ?? '', role }
   const isBrief = detail.work_kind?.slug === SHOOT_BRIEF_SLUG
+  // research / strategy / copy: nothing to upload, schedule or post
+  const isInternal = isInternalKind(detail.work_kind)
+  const isAsset = !isBrief && !isInternal
 
   // What you may do here follows the ASSIGNMENT, not the job title: an editor
   // looking at somebody else's item wears no hat on it and sees it read-only.
@@ -386,10 +392,11 @@ export default function ItemDetailPage() {
   // filtering through the base pipeline's roles first hid brief-legal buttons
   const transitions = isBrief
     ? availableBriefTaskTransitionsAs(hats, detail.status)
+    : isInternal ? availableTaskTransitionsAs(hats, detail.status)
     : availableTransitionsAs(hats, detail.status)
   // a brief hands its last stages to an account manager and then to nobody —
   // no scheduler is ever coming for a shoot
-  const turns = isBrief ? BRIEF_STATUS_TURN : STATUS_TURN
+  const turns = isBrief ? BRIEF_STATUS_TURN : isInternal ? TASK_STATUS_TURN : STATUS_TURN
   const { primary, secondary } = presentTransitions(
     hats, detail.status, transitions,
     {
@@ -398,7 +405,7 @@ export default function ItemDetailPage() {
     },
     turns,
   )
-  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
+  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : isInternal ? TASK_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
 
   const schedulerIds = schedulerIdsOf(detail)
   const nameOf = (uid: string) => {
@@ -708,7 +715,7 @@ export default function ItemDetailPage() {
           <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
             {role === 'client'
               ? (detail.status_label ?? CLIENT_LABELS[detail.status])
-              : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
+              : isInternal ? taskStatusLabel(detail.work_kind, detail.status, STATUS_LABELS[detail.status]) : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
           </Badge>
           {canManage && (
             <AlertDialog onOpenChange={o => !o && setDeleteConfirm('')}>
@@ -805,7 +812,7 @@ export default function ItemDetailPage() {
         // the button's own precondition, said before it is pressed rather
         // than as a rejection afterwards
         const shown = [...(primary ? [primary] : []), ...secondary]
-        const hint = shown.some(t => t.to === 'scheduled') && !isBrief
+        const hint = shown.some(t => t.to === 'scheduled') && isAsset
           ? 'Needs at least one platform with a date.'
           : shown.some(t => t.to === 'published')
             ? 'Needs at least one platform live (a link, or marked posted in-app).'
@@ -862,7 +869,7 @@ export default function ItemDetailPage() {
 
       {/* approved and nobody named: the manager picks the person who takes it,
           rather than every scheduler hearing about every item */}
-      {!isBrief && canManage
+      {isAsset && canManage
         && (detail.status === 'approved_for_scheduling' || detail.status === 'scheduled') && (
         /* a manager who handed it to themselves still gets to change their
            mind — the card is theirs whether or not they hold the item */
@@ -1006,7 +1013,7 @@ export default function ItemDetailPage() {
 
       {/* Job pack — internal only (never in the client or scheduler payload):
           the brief and raw footage the editor works from */}
-      {isTeam && !isBrief && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
+      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">Job pack</CardTitle>
@@ -1113,7 +1120,7 @@ export default function ItemDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Versions */}
-        {!isBrief && (
+        {isAsset && (
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">Versions</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
@@ -1268,7 +1275,7 @@ export default function ItemDetailPage() {
           {/* the caption IS the post: what the scheduler publishes and the
               auto-publisher sends as the post text. Managers write it,
               schedulers may polish it. */}
-          {isTeam && !isBrief && (
+          {isTeam && isAsset && (
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Caption</CardTitle></CardHeader>
               <CardContent className="pt-0">
@@ -1300,7 +1307,7 @@ export default function ItemDetailPage() {
             </Card>
           )}
 
-          {!isBrief && (canSchedule || detail.schedule.length > 0) && (
+          {isAsset && (canSchedule || detail.schedule.length > 0) && (
             <Card>
               <CardHeader><CardTitle className="text-sm font-semibold">Scheduling</CardTitle></CardHeader>
               <CardContent className="flex flex-col gap-2.5 pt-0">

@@ -49,7 +49,7 @@ export default function NewItemDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
   onCreated: () => void
-  presetKind?: 'shoot_brief'
+  presetKind?: 'shoot_brief' | 'task'
   preset?: { client_id?: string; batch_id?: string }
   clients: ClientRow[]
   batches: Batch[]
@@ -144,22 +144,33 @@ export default function NewItemDialog({
   // never by accident from the other one. Preset: lock the kind and hide the
   // chooser. No preset: the brief kind is not in the list at all.
   const briefKind = kinds.find(k => k.slug === 'shoot_brief') ?? null
-  const selectableKinds = presetKind === 'shoot_brief' ? kinds : kinds.filter(k => k.slug !== 'shoot_brief')
+  // a TASK (research, strategy, copy) is any kind with no media that is not
+  // a brief; it is made from Production and never offered on the Editor page
+  const taskKinds = kinds.filter(k => k.slug !== 'shoot_brief' && !k.uses_media)
+  const selectableKinds = presetKind === 'shoot_brief' ? kinds
+    : presetKind === 'task' ? taskKinds
+    : kinds.filter(k => k.slug !== 'shoot_brief' && k.uses_media)
   useEffect(() => {
+    if (presetKind === 'task') {
+      const first = taskKinds[0]
+      if (first) setDraft(d => (taskKinds.some(k => k.id === d.work_kind_id) ? d : { ...d, work_kind_id: first.id }))
+      return
+    }
     if (presetKind !== 'shoot_brief' || !briefKind) return
     setDraft(d => (d.work_kind_id === briefKind.id ? d : { ...d, work_kind_id: briefKind.id }))
-  }, [presetKind, briefKind])
+  }, [presetKind, briefKind, taskKinds])
 
   // Leaving the work type alone sends no work_kind_id at all, and the server
   // resolves that to the 'edit' kind — so the row that means "I didn't choose"
   // has to be labelled with the kind that actually gets used, not with
   // whatever happens to sort first.
-  const defaultKind = kinds.find(k => k.slug === 'edit') ?? selectableKinds[0] ?? null
+  const defaultKind = (presetKind === 'task' ? null : kinds.find(k => k.slug === 'edit')) ?? selectableKinds[0] ?? null
 
   // the chosen work kind reshapes the dialog: a shoot BRIEF is planned, not
   // produced — no footage fields, its own gate, deliverables instead of type
   const selectedKind = kinds.find(k => k.id === draft.work_kind_id) ?? defaultKind
   const isBriefKind = selectedKind?.slug === 'shoot_brief'
+  const isTaskKind = presetKind === 'task'
   const hidesMedia = selectedKind ? !selectedKind.uses_media : false
 
   const createItems = async () => {
@@ -169,12 +180,12 @@ export default function NewItemDialog({
     }
     setNewBusy(true)
     try {
-      const count = isBriefKind ? 1 : Math.min(Math.max(1, draft.count), 30)
+      const count = isBriefKind || isTaskKind ? 1 : Math.min(Math.max(1, draft.count), 30)
       const payload = Array.from({ length: count }, (_, i) => ({
         client_id: draft.client_id,
         batch_id: draft.batch_id || null,
         title: count === 1 ? draft.title.trim() : `${draft.title.trim()} ${String(i + 1).padStart(2, '0')}`,
-        content_type: draft.content_type,
+        content_type: isTaskKind ? 'other' : draft.content_type,
         priority: draft.priority,
         due_date: draft.due_date || null,
         ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
@@ -184,6 +195,7 @@ export default function NewItemDialog({
           planned_deliverables: draft.deliverables,
           batch_id: null,
         } : {}),
+        ...(isTaskKind ? { batch_id: null } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
@@ -194,7 +206,7 @@ export default function NewItemDialog({
         body: JSON.stringify({ items: payload, ...(draft.batch_id ? {} : { adhoc_reason: adhocReason.trim() }) }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed')
-      toast.success(count === 1 ? 'Item created' : `${count} items created`)
+      toast.success(isTaskKind ? 'Task created — it is on Production, under Tasks' : count === 1 ? 'Item created' : `${count} items created`)
       onOpenChange(false)
       setDraft({ ...BLANK })
       onCreated()
@@ -217,7 +229,7 @@ export default function NewItemDialog({
   return (
     <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null) }}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{isBriefKind ? 'New shoot brief' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isBriefKind ? 'New shoot brief' : isTaskKind ? 'New task' : `New content item${draft.count > 1 ? 's' : ''}`}</DialogTitle></DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Client *</Label>
@@ -228,7 +240,7 @@ export default function NewItemDialog({
               </SelectContent>
             </Select>
           </div>
-          {!isBriefKind && (
+          {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">
             <Label>Shoot</Label>
             <Select value={draft.batch_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'none' ? '' : v ?? '' }))}>
@@ -259,7 +271,7 @@ export default function NewItemDialog({
             <Label>Title * {draft.count > 1 && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
             <Input value={draft.title} placeholder="e.g. May shoot — BTS reel" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
-          {!isBriefKind && (
+          {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">
             <Label>Type</Label>
             <Select value={draft.content_type} onValueChange={v => v && setDraft(d => ({ ...d, content_type: v }))}>
@@ -283,7 +295,7 @@ export default function NewItemDialog({
             <Label>{isBriefKind ? 'Target shoot date' : 'Due date'}</Label>
             <Input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))} className="font-mono" />
           </div>
-          {!isBriefKind && (
+          {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5">
             <Label>How many?</Label>
             <Input type="number" min={1} max={30} value={draft.count}
@@ -399,7 +411,7 @@ export default function NewItemDialog({
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>{isBriefKind ? 'Note to reviewer' : 'Brief'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the brief)' : '(what the edit should be — sent to the editor)'}</span></Label>
+            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Brief'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the brief)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
             <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
           </div>

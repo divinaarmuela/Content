@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
     let q = supabase
       .from('content_items')
-      .select('*, clients(name), batches(title, status, planned_deliverables), work_kinds(name, slug, color)')
+      .select('*, clients(name), batches(title, status, planned_deliverables), work_kinds(name, slug, color, uses_media)')
       .order('updated_at', { ascending: false })
       .limit(500)
 
@@ -159,6 +159,9 @@ export async function POST(req: Request) {
       const kind = resolveKindForWrite(kinds, it.work_kind_id)
       if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
       const kindSlug = kinds.find(k => k.id === kind.id)?.slug ?? null
+      // research / strategy / copy: nothing to shoot, nothing to post — the
+      // shoot gate is about assets and does not apply
+      const isInternal = kindSlug !== 'shoot_brief' && kinds.find(k => k.id === kind.id)?.uses_media === false
 
       if (it.batch_id) {
         const batch = batchById.get(it.batch_id)
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "That shoot belongs to a different client" }, { status: 403 })
         }
       }
-      if (kindSlug !== 'shoot_brief') {
+      if (kindSlug !== 'shoot_brief' && !isInternal) {
         const batchStatus = it.batch_id
           ? ((batchById.get(it.batch_id)?.status ?? null) as BatchStatus | null)
           : null
@@ -219,9 +222,9 @@ export async function POST(req: Request) {
             }
           : {}),
         client_id: it.client_id,
-        batch_id: kindSlug === 'shoot_brief' ? briefBatchId : (it.batch_id ?? null),
+        batch_id: kindSlug === 'shoot_brief' ? briefBatchId : isInternal ? null : (it.batch_id ?? null),
         title: String(it.title),
-        content_type: kindSlug === 'shoot_brief' ? 'other' : (it.content_type ?? 'reel'),
+        content_type: kindSlug === 'shoot_brief' || isInternal ? 'other' : (it.content_type ?? 'reel'),
         platform_targets: Array.isArray(it.platform_targets) ? it.platform_targets : [],
         owner_id: it.owner_id ?? (user.role === 'editor' ? user.id : null),
         // who handed out the job — the natural default reviewer later

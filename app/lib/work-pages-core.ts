@@ -11,6 +11,7 @@
 
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
+import { isInternalKind, TASK_DONE_STATUSES } from './task-kind-core'
 import type { Role } from './identity-core'
 
 export type WorkItem = {
@@ -19,7 +20,7 @@ export type WorkItem = {
   owner_id: string | null
   scheduler_ids?: unknown
   batch_id?: string | null
-  work_kinds?: { slug?: string } | null
+  work_kinds?: { slug?: string; uses_media?: boolean } | null
   /** the viewer has an open task on this item — a hand-off that outranks ownership */
   my_open_task?: boolean
 }
@@ -41,8 +42,23 @@ export function defaultScope(role: Role): ScopeSet {
  *  the state machine's own reading of the field, not a second copy of it. */
 export { schedulerIdsOf }
 
-export function isBriefTask(i: { work_kinds?: { slug?: string } | null }): boolean {
+export function isBriefTask(i: { work_kinds?: { slug?: string; uses_media?: boolean } | null }): boolean {
   return i.work_kinds?.slug === SHOOT_BRIEF_SLUG
+}
+
+/** Research, strategy, copy: a task with nothing to post. Lives on Production. */
+export function isInternalTask(i: { work_kinds?: { slug?: string; uses_media?: boolean } | null }): boolean {
+  return isInternalKind(i.work_kinds)
+}
+
+/** An asset: the only thing the Editor board and the Scheduler ever show. */
+export function isAsset(i: { work_kinds?: { slug?: string; uses_media?: boolean } | null }): boolean {
+  return !isBriefTask(i) && !isInternalTask(i)
+}
+
+/** Tasks still open — Done ones leave the list. */
+export function activeInternalTasks<T extends WorkItem>(items: T[]): T[] {
+  return items.filter(i => isInternalTask(i) && !TASK_DONE_STATUSES.has(i.status))
 }
 
 /** The editor board's columns. Together they cover every status before the
@@ -85,13 +101,13 @@ export function applyScope<T extends WorkItem>(
 /** The editor page: content items only, and only while they are still in the
  *  making — once it is scheduled it belongs to the scheduler page. */
 export function editorScope<T extends WorkItem>(items: T[], v: Viewer, scope: ScopeSet): T[] {
-  const live = items.filter(i => !isBriefTask(i) && i.status !== 'scheduled' && i.status !== 'published')
+  const live = items.filter(i => isAsset(i) && i.status !== 'scheduled' && i.status !== 'published')
   return applyScope(live, v, scope, editorAssignment)
 }
 
 /** The scheduler page: content items that have been signed off. */
 export function schedulerScope<T extends WorkItem>(items: T[], v: Viewer, scope: ScopeSet): T[] {
-  const queue = items.filter(i => !isBriefTask(i) && SCHEDULER_STATUSES.includes(i.status))
+  const queue = items.filter(i => isAsset(i) && SCHEDULER_STATUSES.includes(i.status))
   return applyScope(queue, v, scope, schedulerAssignment)
 }
 
@@ -119,7 +135,7 @@ export function unassignedCount<T extends WorkItem>(
 /** The two counts the editor page shows as a footnote rather than a column —
  *  work that is done, kept visible without taking up the board. */
 export function editorTail(items: WorkItem[]): { scheduled: number; published: number } {
-  const own = items.filter(i => !isBriefTask(i))
+  const own = items.filter(i => isAsset(i))
   return {
     scheduled: own.filter(i => i.status === 'scheduled').length,
     published: own.filter(i => i.status === 'published').length,
@@ -135,7 +151,7 @@ export function canClaimEditor(i: WorkItem, v: Viewer): boolean {
 }
 
 export function canClaimScheduler(i: WorkItem, v: Viewer): boolean {
-  return !isBriefTask(i)
+  return isAsset(i)
     && SCHEDULER_STATUSES.includes(i.status)
     && i.status !== 'published'
     && schedulerIdsOf(i).length === 0
@@ -149,11 +165,11 @@ export function activeBriefTasks<T extends WorkItem>(items: T[]): T[] {
 
 /** Where an item's detail page came from, so "Back" lands where you were. */
 export function backLinkFor(
-  i: { status: ItemStatus; work_kinds?: { slug?: string } | null },
+  i: { status: ItemStatus; work_kinds?: { slug?: string; uses_media?: boolean } | null },
 ): { href: string; label: string } {
   // a brief lives on Production whatever its status — its "approved" is a
   // shoot to book, not a post to schedule
-  if (isBriefTask(i)) return { href: '/dashboard/production', label: 'Production' }
+  if (isBriefTask(i) || isInternalTask(i)) return { href: '/dashboard/production', label: 'Production' }
   if (SCHEDULER_STATUSES.includes(i.status)) return { href: '/dashboard/scheduler', label: 'Scheduler' }
   return { href: '/dashboard/editor', label: 'Editor' }
 }

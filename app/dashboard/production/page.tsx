@@ -23,13 +23,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Camera, CalendarDays, ChevronDown, FileText, Plus, Search, Trash2,
+  Camera, CalendarDays, ChevronDown, FileText, ListChecks, Plus, Search, Trash2,
 } from 'lucide-react'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
+import { TASK_STATUS_TURN, taskStatusLabel } from '../../lib/task-kind-core'
 import {
-  activeBriefTasks, isBriefTask, productionScope, type Viewer,
+  activeBriefTasks, activeInternalTasks, isBriefTask, isInternalTask, productionScope, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from './useProductionLive'
 import { AccountUnavailable, BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from './shoot-ui'
@@ -62,7 +63,7 @@ type BriefTask = {
   scheduler_ids?: unknown
   my_open_task?: boolean
   clients: { name: string } | null
-  work_kinds?: { name: string; slug: string; color: string } | null
+  work_kinds?: { name: string; slug: string; color: string; uses_media?: boolean } | null
 }
 
 const SECTIONS: { status: BatchStatus; title: string }[] = [
@@ -92,6 +93,8 @@ export default function ProductionPage() {
   const router = useRouter()
   const [shoots, setShoots] = useState<Shoot[] | null>(null)
   const [briefTasks, setBriefTasks] = useState<BriefTask[]>([])
+  const [internalTasks, setInternalTasks] = useState<BriefTask[]>([])
+  const [taskOpen, setTaskOpen] = useState(false)
   const [clients, setClients] = useState<ClientRow[]>([])
   const [clientFilter, setClientFilter] = useState('all')
   const [search, setSearch] = useState('')
@@ -127,7 +130,11 @@ export default function ProductionPage() {
       if (cRes.ok) setClients(((await cRes.json()) as ClientRow[]).filter(Boolean))
       // every brief, not just the live ones: the flight list wants the active
       // ones, but a shoot card still has to say "Brief: Shoot booked"
-      if (iRes.ok) setBriefTasks(((await iRes.json()) as BriefTask[]).filter(isBriefTask))
+      if (iRes.ok) {
+        const all = (await iRes.json()) as BriefTask[]
+        setBriefTasks(all.filter(isBriefTask))
+        setInternalTasks(all.filter(isInternalTask))
+      }
     } catch {
       toast.error('Could not load shoots')
       setShoots([])
@@ -192,7 +199,10 @@ export default function ProductionPage() {
   // briefs that exist but sit outside the chosen scope — worth saying, and
   // worth saying in the ONE empty card rather than a second one beside it
   const briefsOutOfScope = briefsInFilters.length > 0 && briefRows.length === 0
-  const nothingToShow = shoots !== null && visible.length === 0 && briefRows.length === 0
+  // research / strategy / copy — production work with nothing to post
+  const tasksInFilters = activeInternalTasks(internalTasks).filter(t => matches(t.client_id, t.title))
+  const taskRows = viewer ? productionScope(tasksInFilters, viewer, scope, {}) : []
+  const nothingToShow = shoots !== null && visible.length === 0 && briefRows.length === 0 && taskRows.length === 0
 
   // the whole page hangs off the viewer, so a missing account is not a slower
   // load — it is a different screen, and saying so beats a skeleton forever
@@ -228,6 +238,11 @@ export default function ProductionPage() {
                 {isManager && (
                   <DropdownMenuItem onClick={() => setBriefOpen(true)}>
                     <FileText className="h-4 w-4" /> New brief task
+                  </DropdownMenuItem>
+                )}
+                {canPlan && (
+                  <DropdownMenuItem onClick={() => setTaskOpen(true)}>
+                    <ListChecks className="h-4 w-4" /> New task
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -291,6 +306,67 @@ export default function ProductionPage() {
                         <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
                           <CalendarDays className="h-3 w-3" />
                           {whenShort(b.due_date)}
+                        </span>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* research, strategy, copy — production work with nothing to post.
+          Same shape as the briefs above; a Done task leaves the list. */}
+      {tasksInFilters.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+              TASKS <span className="tabular-nums">{taskRows.length}</span>
+            </p>
+            {briefsInFilters.length === 0 && (
+              <div className="ml-auto">
+                <ScopeSwitch scope={scope} onChange={setScope} />
+              </div>
+            )}
+          </div>
+          {taskRows.length === 0 ? (
+            nothingToShow ? null : (
+              <Card className="border-dashed shadow-none">
+                <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  There are open tasks, but none of them are yours — switch to Everyone to see them.
+                </CardContent>
+              </Card>
+            )
+          ) : (
+            <div className="grid gap-2">
+              {taskRows.map(t => (
+                <div key={t.id} className="relative">
+                  <Card className="py-0 transition-shadow hover:shadow-md">
+                    <CardContent className="flex flex-wrap items-center gap-2 p-3">
+                      <Link href={`/dashboard/production/${t.id}`} aria-label={t.title}
+                        className="absolute inset-0 rounded-xl" />
+                      <span className="text-sm font-medium">{t.title}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {t.clients?.name ?? 'Unassigned'}
+                      </span>
+                      {t.work_kinds?.name && (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">
+                          {t.work_kinds.name}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+                        {taskStatusLabel(t.work_kinds, t.status, t.status)}
+                      </Badge>
+                      {viewer && (
+                        <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
+                          ownerName={t.owner_id ? nameById.get(t.owner_id) : undefined} />
+                      )}
+                      {t.due_date && (
+                        <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                          <CalendarDays className="h-3 w-3" />
+                          {whenShort(t.due_date)}
                         </span>
                       )}
                     </CardContent>
@@ -426,6 +502,16 @@ export default function ProductionPage() {
         onOpenChange={setBriefOpen}
         onCreated={load}
         presetKind="shoot_brief"
+        clients={clients}
+        batches={shoots ?? []}
+      />
+
+      {/* a TASK: research, strategy, copy — no shoot, no post, ends at Done */}
+      <NewItemDialog
+        open={taskOpen}
+        onOpenChange={setTaskOpen}
+        onCreated={load}
+        presetKind="task"
         clients={clients}
         batches={shoots ?? []}
       />

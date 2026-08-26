@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       supabase.from('schedule_entries').select('*').eq('item_id', id),
       supabase.from('clients').select('name').eq('id', item.client_id).maybeSingle(),
       supabase.from('content_items')
-        .select('work_kinds(name, slug, color), batches(id, title, status, planned_deliverables)')
+        .select('work_kinds(name, slug, color, uses_media), batches(id, title, status, planned_deliverables)')
         .eq('id', id).maybeSingle(),
     ])
 
