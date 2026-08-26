@@ -29,13 +29,13 @@ import type { BatchStatus } from '../../lib/batch-brief-core'
 import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
 import {
-  activeBriefTasks, defaultScope, productionScope,
-  type ScopeMode, type ScopeSet, type Viewer,
+  activeBriefTasks, isBriefTask, productionScope, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from './useProductionLive'
-import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from './shoot-ui'
+import { AccountUnavailable, BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from './shoot-ui'
+import { usePersistedScope, useTeamNames } from './workHooks'
 import { useRole } from '../useRole'
-import NewItemDialog, { type Batch } from './NewItemDialog'
+import NewItemDialog, { type ClientRow } from './NewItemDialog'
 import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
 
@@ -64,7 +64,6 @@ type BriefTask = {
   clients: { name: string } | null
   work_kinds?: { name: string; slug: string; color: string } | null
 }
-type ClientRow = { id: string; name: string }
 
 const SECTIONS: { status: BatchStatus; title: string }[] = [
   { status: 'brief', title: 'IN PLANNING' },
@@ -103,47 +102,14 @@ export default function ProductionPage() {
   const [draft, setDraft] = useState({ client_id: '', title: '' })
   const [briefOpen, setBriefOpen] = useState(false)
 
-  const { me, role, can } = useRole()
+  const { me, role, loading, can } = useRole()
   const canPlan = can('editor')
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 
   // names for "waiting on …" — managers can see who holds a brief
-  const [team, setTeam] = useState<{ id: string; name: string; email: string }[]>([])
-  useEffect(() => {
-    if (!isManager) return
-    fetch('/api/team')
-      .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setTeam(
-        (json.members ?? []).map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
-      ))
-      .catch(() => setTeam([]))
-  }, [isManager])
-
-  /* ── scope: whose briefs are on screen ── */
-  const [scope, setScopeState] = useState<ScopeSet | null>(null)
-  useEffect(() => {
-    if (role === null || scope !== null) return
-    try {
-      const saved = localStorage.getItem(SCOPE_KEY)
-      const parsed: unknown = saved ? JSON.parse(saved) : null
-      // whatever is in storage is a guess, not a fact — an old key, a hand-edit,
-      // a mode we have since renamed. Keep the words we still understand; if
-      // that leaves nothing, open where this role would have opened anyway.
-      const restored = Array.isArray(parsed)
-        ? parsed.filter((v): v is ScopeMode => v === 'mine' || v === 'unassigned' || v === 'all')
-        : []
-      if (restored.length > 0) {
-        setScopeState(new Set(restored))
-        return
-      }
-    } catch { /* a corrupt or blocked localStorage is not worth a broken page */ }
-    setScopeState(defaultScope(role))
-  }, [role, scope])
-  const setScope = (s: ScopeSet) => {
-    setScopeState(s)
-    try { localStorage.setItem(SCOPE_KEY, JSON.stringify([...s])) } catch { /* private mode */ }
-  }
+  const nameById = useTeamNames(isManager)
+  const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
   const load = useCallback(async () => {
     try {
@@ -159,7 +125,9 @@ export default function ProductionPage() {
         setShoots(rows)
       } else setShoots([])
       if (cRes.ok) setClients(((await cRes.json()) as ClientRow[]).filter(Boolean))
-      if (iRes.ok) setBriefTasks(activeBriefTasks((await iRes.json()) as BriefTask[]))
+      // every brief, not just the live ones: the flight list wants the active
+      // ones, but a shoot card still has to say "Brief: Shoot booked"
+      if (iRes.ok) setBriefTasks(((await iRes.json()) as BriefTask[]).filter(isBriefTask))
     } catch {
       toast.error('Could not load shoots')
       setShoots([])
@@ -215,12 +183,20 @@ export default function ProductionPage() {
   // a brief and its shoot are one job: whoever owns the shoot owns the brief,
   // even when the task row itself was never assigned to anybody
   const batchOwnerById = Object.fromEntries((shoots ?? []).map(s => [s.id, s.owner_id ?? null]))
-  const briefsInFilters = briefTasks.filter(b => matches(b.client_id, b.title))
-  const briefRows = viewer && scope
+  const briefsInFilters = activeBriefTasks(briefTasks).filter(b => matches(b.client_id, b.title))
+  const briefRows = viewer
     ? productionScope(briefsInFilters, viewer, scope, batchOwnerById)
     : []
-  const nameById = new Map(team.map(m => [m.id, m.name || m.email]))
+  // built from every brief, so a booked one still labels its shoot card
   const briefByBatch = new Map(briefTasks.filter(b => b.batch_id).map(b => [b.batch_id as string, b]))
+  // briefs that exist but sit outside the chosen scope — worth saying, and
+  // worth saying in the ONE empty card rather than a second one beside it
+  const briefsOutOfScope = briefsInFilters.length > 0 && briefRows.length === 0
+  const nothingToShow = shoots !== null && visible.length === 0 && briefRows.length === 0
+
+  // the whole page hangs off the viewer, so a missing account is not a slower
+  // load — it is a different screen, and saying so beats a skeleton forever
+  if (!loading && !viewer) return <AccountUnavailable />
 
   return (
     <div className="flex flex-col gap-4">
@@ -276,18 +252,20 @@ export default function ProductionPage() {
             <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
               BRIEFS IN FLIGHT <span className="tabular-nums">{briefRows.length}</span>
             </p>
-            {scope && (
-              <div className="ml-auto">
-                <ScopeSwitch scope={scope} onChange={setScope} />
-              </div>
-            )}
+            <div className="ml-auto">
+              <ScopeSwitch scope={scope} onChange={setScope} />
+            </div>
           </div>
           {briefRows.length === 0 ? (
-            <Card className="border-dashed shadow-none">
-              <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                Briefs are in flight, but none of them are yours — switch to Everyone to see them.
-              </CardContent>
-            </Card>
+            /* when there is nothing at all on the page, the one empty card
+               below carries this line — never two empty cards at once */
+            nothingToShow ? null : (
+              <Card className="border-dashed shadow-none">
+                <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  Briefs are in flight, but none of them are yours — switch to Everyone to see them.
+                </CardContent>
+              </Card>
+            )
           ) : (
             <div className="grid gap-2">
               {briefRows.map(b => (
@@ -326,7 +304,7 @@ export default function ProductionPage() {
 
       {shoots === null ? (
         <div className="grid gap-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-24" />)}</div>
-      ) : visible.length === 0 && briefRows.length === 0 ? (
+      ) : nothingToShow ? (
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
@@ -334,9 +312,13 @@ export default function ProductionPage() {
             </div>
             <p className="text-sm font-medium">No shoots planned</p>
             <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-              Plan a shoot to brief the team before production starts.
+              {briefsOutOfScope
+                ? 'Briefs are in flight, but none of them are yours — switch to Everyone above to see them.'
+                : 'Plan a shoot to brief the team before production starts.'}
             </p>
-            {canPlan && <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan shoot</Button>}
+            {canPlan && !briefsOutOfScope && (
+              <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan shoot</Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -393,7 +375,10 @@ export default function ProductionPage() {
                           type="button"
                           aria-label="Delete shoot"
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setToDelete(s) }}
-                          className="absolute right-2 top-2 z-10 hidden rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 group-hover/shoot:block dark:hover:bg-rose-950/40"
+                          // hidden until the card is hovered OR anything in it
+                          // takes focus — a keyboard tabbing the stretched link
+                          // reveals it, and it stays put once focused itself
+                          className="absolute right-2 top-2 z-10 hidden rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 focus:block group-hover/shoot:block group-focus-within/shoot:block dark:hover:bg-rose-950/40"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -442,7 +427,7 @@ export default function ProductionPage() {
         onCreated={load}
         presetKind="shoot_brief"
         clients={clients}
-        batches={(shoots ?? []) as Batch[]}
+        batches={shoots ?? []}
       />
 
       <AlertDialog open={!!toDelete} onOpenChange={o => !delBusy && !o && setToDelete(null)}>

@@ -56,6 +56,7 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
               <Link
                 key={v.href}
                 href={v.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'

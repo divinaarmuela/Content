@@ -1,7 +1,25 @@
 'use client'
 
+import { Card, CardContent } from '@/components/ui/card'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import type { Batch } from './NewItemDialog'
+
+/**
+ * `/api/team/me` answered, and it did not know who we are.
+ *
+ * The work pages hang everything off the viewer, so without one there is
+ * nothing honest to draw. Showing the loading skeleton forever would be a lie
+ * about what is happening; this says it, and names the two things that fix it.
+ */
+export function AccountUnavailable() {
+  return (
+    <Card className="border-dashed shadow-none">
+      <CardContent className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        Couldn’t load your account — refresh, or sign in again.
+      </CardContent>
+    </Card>
+  )
+}
 
 /** Status badge classes shared by the shoots view, brief page, and board chips. */
 export const BATCH_STATUS_STYLE: Record<BatchStatus, string> = {

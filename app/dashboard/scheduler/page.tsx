@@ -14,12 +14,14 @@ import {
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
 import { STATUS_LABELS, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
 import {
-  canClaimScheduler, defaultScope, schedulerAssignment, schedulerScope, unassignedCount,
-  type ScopeMode, type ScopeSet, type Viewer,
+  canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
+  type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { ClaimButton } from '../production/ClaimButton'
 import { ScopeSwitch } from '../production/ScopeSwitch'
+import { AccountUnavailable } from '../production/shoot-ui'
+import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { useRole } from '../useRole'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
@@ -57,47 +59,14 @@ export default function SchedulerPage() {
   const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
 
-  const { me, role, can } = useRole()
+  const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 
   // only a manager may read the team list — everyone else gets the fact
   // without the name, which is all the row needs to say
-  const [team, setTeam] = useState<{ id: string; name: string; email: string }[]>([])
-  useEffect(() => {
-    if (!isManager) return
-    fetch('/api/team')
-      .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setTeam(
-        (json.members ?? []).map((m: { id: string; name: string; email: string }) => ({ id: m.id, name: m.name, email: m.email })),
-      ))
-      .catch(() => setTeam([]))
-  }, [isManager])
-
-  /* ── scope: whose queue is on screen ── */
-  const [scope, setScopeState] = useState<ScopeSet | null>(null)
-  useEffect(() => {
-    if (role === null || scope !== null) return
-    try {
-      const saved = localStorage.getItem(SCOPE_KEY)
-      const parsed: unknown = saved ? JSON.parse(saved) : null
-      // whatever is in storage is a guess, not a fact — an old key, a hand-edit,
-      // a mode we have since renamed. Keep the words we still understand; if
-      // that leaves nothing, open where this role would have opened anyway.
-      const restored = Array.isArray(parsed)
-        ? parsed.filter((v): v is ScopeMode => v === 'mine' || v === 'unassigned' || v === 'all')
-        : []
-      if (restored.length > 0) {
-        setScopeState(new Set(restored))
-        return
-      }
-    } catch { /* a corrupt or blocked localStorage is not worth a broken queue */ }
-    setScopeState(defaultScope(role))
-  }, [role, scope])
-  const setScope = (s: ScopeSet) => {
-    setScopeState(s)
-    try { localStorage.setItem(SCOPE_KEY, JSON.stringify([...s])) } catch { /* private mode */ }
-  }
+  const nameById = useTeamNames(isManager)
+  const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
   const load = useCallback(async () => {
     try {
@@ -132,16 +101,19 @@ export default function SchedulerPage() {
   // live queue: an approval lands in "To schedule" the moment the AM clicks it
   useProductionLive(load)
 
-  const ready = items !== null && viewer !== null && scope !== null
+  const ready = items !== null && viewer !== null
   const all = items ?? []
-  const queue = ready ? schedulerScope(all, viewer!, scope!) : []
+  const queue = ready ? schedulerScope(all, viewer!, scope) : []
   const visible = queue.filter(i => i.status === lane)
   const counts = Object.fromEntries(LANES.map(l => [l.key, queue.filter(i => i.status === l.key).length]))
   const openPool = ready
     ? unassignedCount(schedulerScope(all, viewer!, new Set<ScopeMode>(['all'])), viewer!, schedulerAssignment)
     : 0
-  const nameById = new Map(team.map(m => [m.id, m.name || m.email]))
-  const showingOnlyMineAndPool = scope !== null && !scope.has('all')
+  const showingOnlyMineAndPool = !scope.has('all')
+
+  // the queue is drawn per viewer, so no viewer is a different screen — not a
+  // slower load. A skeleton that never resolves tells the user nothing.
+  if (!loading && !viewer) return <AccountUnavailable />
 
   return (
     <div className="flex flex-col gap-4">
@@ -156,12 +128,10 @@ export default function SchedulerPage() {
             ))}
           </TabsList>
         </Tabs>
-        {scope && (
-          <div className="ml-auto">
-            <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
-              unassignedHint="Not handed to a specific person yet — any scheduler can take it." />
-          </div>
-        )}
+        <div className="ml-auto">
+          <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
+            unassignedHint="Not handed to a specific person yet — any scheduler can take it." />
+        </div>
       </div>
 
       {/* the two lane names mean precise things, and guessing wrong costs a post */}

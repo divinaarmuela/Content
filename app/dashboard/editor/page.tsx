@@ -21,13 +21,14 @@ import { Plus, CalendarDays, CheckSquare, Flag, Trash2, ArrowRight } from 'lucid
 import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { itemStatusLabel } from '../../lib/brief-task-core'
 import {
-  EDITOR_LANES, canClaimEditor, defaultScope, editorAssignment, editorScope, editorTail,
-  isBriefTask, unassignedCount, type ScopeMode, type ScopeSet, type Viewer,
+  EDITOR_LANES, canClaimEditor, editorAssignment, editorScope, editorTail,
+  isBriefTask, unassignedCount, type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { useRole } from '../useRole'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
-import { KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
+import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
+import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
@@ -87,49 +88,14 @@ export default function EditorPage() {
   const [newOpen, setNewOpen] = useState(false)
   const [preset, setPreset] = useState<{ client_id?: string; batch_id?: string } | undefined>()
 
-  const { me, role, can } = useRole()
+  const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 
   // managers can hand a loose job to somebody by name instead of waiting for
   // it to be picked up
-  const [team, setTeam] = useState<{ id: string; name: string; email: string; role: string }[]>([])
-  useEffect(() => {
-    if (!isManager) return
-    fetch('/api/team')
-      .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setTeam(
-        (json.members ?? [])
-          .filter((m: { role: string; active_status?: boolean }) => m.role !== 'client' && m.active_status !== false)
-          .map((m: { id: string; name: string; email: string; role: string }) => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
-      ))
-      .catch(() => setTeam([]))
-  }, [isManager])
-
-  /* ── scope: what slice of the board is on screen ── */
-  const [scope, setScopeState] = useState<ScopeSet | null>(null)
-  useEffect(() => {
-    if (role === null || scope !== null) return
-    try {
-      const saved = localStorage.getItem(SCOPE_KEY)
-      const parsed: unknown = saved ? JSON.parse(saved) : null
-      // whatever is in storage is a guess, not a fact — an old key, a hand-edit,
-      // a mode we have since renamed. Keep the words we still understand; if
-      // that leaves nothing, open where this role would have opened anyway.
-      const restored = Array.isArray(parsed)
-        ? parsed.filter((v): v is ScopeMode => v === 'mine' || v === 'unassigned' || v === 'all')
-        : []
-      if (restored.length > 0) {
-        setScopeState(new Set(restored))
-        return
-      }
-    } catch { /* a corrupt or blocked localStorage is not worth a broken board */ }
-    setScopeState(defaultScope(role))
-  }, [role, scope])
-  const setScope = (s: ScopeSet) => {
-    setScopeState(s)
-    try { localStorage.setItem(SCOPE_KEY, JSON.stringify([...s])) } catch { /* private mode */ }
-  }
+  const nameById = useTeamNames(isManager)
+  const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
   const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number }[] | null>(null)
   useEffect(() => {
@@ -185,7 +151,7 @@ export default function EditorPage() {
     && (batchFilter === 'all' || i.batch_id === batchFilter)
   const filtering = clientFilter !== 'all' || batchFilter !== 'all'
 
-  const scoped = viewer && scope ? editorScope(all, viewer, scope) : []
+  const scoped = viewer ? editorScope(all, viewer, scope) : []
   const visible = scoped.filter(inFilters)
   const filtered = all.filter(inFilters)
 
@@ -198,7 +164,6 @@ export default function EditorPage() {
     )
     : 0
   const tail = editorTail(filtered)
-  const nameById = new Map(team.map(m => [m.id, m.name || m.email]))
 
   /* ── bulk select + delete: tick cards on the board instead of opening each ── */
   const [selectMode, setSelectMode] = useState(false)
@@ -258,11 +223,15 @@ export default function EditorPage() {
     )
   }
 
-  const ready = viewer !== null && scope !== null && items !== null
+  // the board is drawn per viewer — no viewer is a different screen, not a
+  // slower load, and a skeleton that never resolves tells nobody anything
+  if (!loading && !viewer) return <AccountUnavailable />
+
+  const ready = viewer !== null && items !== null
   const unassignedHint = role === 'super_admin'
     ? 'Unassigned across all clients.'
     : role === 'account_manager' ? 'Unassigned within your clients.' : undefined
-  const showingOnlyMineAndPool = scope !== null && !scope.has('all')
+  const showingOnlyMineAndPool = !scope.has('all')
 
   return (
     <div className="flex flex-col gap-4">
@@ -274,10 +243,8 @@ export default function EditorPage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {scope && (
-            <ScopeSwitch scope={scope} onChange={setScope}
-              unassignedCount={openPool} unassignedHint={unassignedHint} />
-          )}
+          <ScopeSwitch scope={scope} onChange={setScope}
+            unassignedCount={openPool} unassignedHint={unassignedHint} />
           <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
             <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -428,15 +395,15 @@ export default function EditorPage() {
                                 {canClaimEditor(item, viewer!) && (
                                   <ClaimButton itemId={item.id} hat="editor" label="Take this job" onDone={load} />
                                 )}
-                                {isManager && team.length > 0 && (
+                                {isManager && nameById.size > 0 && (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button size="sm" variant="outline">Assign…</Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                                      {team.map(m => (
-                                        <DropdownMenuItem key={m.id} onClick={() => void assignTo(item.id, m.id)}>
-                                          {m.name || m.email}
+                                      {[...nameById].map(([id, name]) => (
+                                        <DropdownMenuItem key={id} onClick={() => void assignTo(item.id, id)}>
+                                          {name}
                                         </DropdownMenuItem>
                                       ))}
                                     </DropdownMenuContent>
