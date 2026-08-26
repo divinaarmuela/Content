@@ -74,7 +74,10 @@ describe('effectiveQuotas', () => {
 })
 
 describe('monthOfItem', () => {
-  it("prefers the shoot's month, then due date, then creation", () => {
+  it('prefers the month it went live, then the shoot, then due date, then creation', () => {
+    // shot in September, posted in November: November's delivery
+    expect(monthOfItem({ published_at: '2026-11-03T10:00:00Z', due_date: '2026-10-02' }, { month: 9, year: 2026 }))
+      .toEqual({ month: 11, year: 2026 })
     expect(monthOfItem({ due_date: '2026-10-02' }, { month: 9, year: 2026 }))
       .toEqual({ month: 9, year: 2026 })
     expect(monthOfItem({ due_date: '2026-10-02' }, null)).toEqual({ month: 10, year: 2026 })
@@ -90,17 +93,23 @@ describe('computeMonthlyProgress', () => {
   ]
   const batches = new Map([['b1', { month: 9, year: 2026 }]])
 
-  it('counts planned vs delivered per type for the month, shoot-month first', () => {
+  it('delivered means LIVE, counted in the month it went live', () => {
     const items = [
-      // September shoot delivering early October still counts to September
-      { content_type: 'reel', status: 'published', batch_id: 'b1', due_date: '2026-10-01' },
+      // September shoot, went live in September
+      { content_type: 'reel', status: 'published', batch_id: 'b1', published_at: '2026-09-20T00:00:00Z' },
+      // September shoot, still being edited — planned, not delivered
       { content_type: 'reel', status: 'draft_uploaded', batch_id: 'b1' },
+      // approved but never posted — NOT delivered
       { content_type: 'static', status: 'approved_for_scheduling', due_date: '2026-09-15' },
+      // scheduled but not live yet — NOT delivered
+      { content_type: 'static', status: 'scheduled', due_date: '2026-09-16' },
+      // August footage posted in September counts to September
+      { content_type: 'static', status: 'published', due_date: '2026-08-15', published_at: '2026-09-02T00:00:00Z' },
       // a different month — excluded
-      { content_type: 'static', status: 'published', due_date: '2026-08-15' },
+      { content_type: 'static', status: 'published', published_at: '2026-08-15T00:00:00Z' },
     ]
     expect(computeMonthlyProgress(items, batches, 9, 2026, quotas)).toEqual([
-      { type: 'static', label: 'Graphics', quota: 20, planned: 1, delivered: 1 },
+      { type: 'static', label: 'Graphics', quota: 20, planned: 3, delivered: 1 },
       { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1 },
     ])
   })

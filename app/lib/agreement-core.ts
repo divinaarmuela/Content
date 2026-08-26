@@ -102,24 +102,28 @@ export function effectiveQuotas(
   return out
 }
 
-/** Which month an item counts toward: its shoot's month first, then its due
- *  date, then when it was created. */
+/** Which month an item counts toward: the month it went LIVE if it has,
+ *  else its shoot's month, then its due date, then when it was created.
+ *  Footage shot in August and posted in November is November's delivery. */
 export function monthOfItem(
-  item: { due_date?: string | null; created_at?: string | null },
+  item: { published_at?: string | null; due_date?: string | null; created_at?: string | null },
   batch: { month?: number | null; year?: number | null } | null,
 ): { month: number; year: number } | null {
-  if (batch?.month && batch?.year) return { month: batch.month, year: batch.year }
   const from = (iso: string) => {
     const d = new Date(iso)
     return Number.isNaN(d.getTime()) ? null : { month: d.getUTCMonth() + 1, year: d.getUTCFullYear() }
   }
+  if (item.published_at) { const m = from(item.published_at); if (m) return m }
+  if (batch?.month && batch?.year) return { month: batch.month, year: batch.year }
   if (item.due_date) { const m = from(item.due_date); if (m) return m }
   if (item.created_at) { const m = from(item.created_at); if (m) return m }
   return null
 }
 
-/** Delivered = past the client's approval; planned = exists at all. */
-const DELIVERED_STATUSES = new Set(['approved_for_scheduling', 'scheduled', 'published'])
+/** Delivered = LIVE for the client. The agreement is what the client got,
+ *  not what was approved — an approved reel nobody posted is not a reel
+ *  delivered. Planned = exists at all. */
+const DELIVERED_STATUSES = new Set(['published'])
 
 export type PaceStatus = 'met' | 'on_track' | 'tight' | 'behind'
 
@@ -165,10 +169,17 @@ export function agreementMonthWindow(
   return { dayOfMonth: elapsed, daysInMonth: windowDays }
 }
 
+/** When did an item go live? The earliest published schedule entry — set
+ *  by Save live, by "posted without a link", and by auto-publish. */
+export function liveAtFromEntries(entries: { published_at?: string | null }[] | null | undefined): string | null {
+  const dates = (entries ?? []).map(e => e?.published_at).filter((d): d is string => Boolean(d)).sort()
+  return dates[0] ?? null
+}
+
 export type MonthlyProgress = EffectiveQuota & { planned: number; delivered: number }
 
 export function computeMonthlyProgress(
-  items: { content_type: string; status: string; batch_id?: string | null; due_date?: string | null; created_at?: string | null }[],
+  items: { content_type: string; status: string; batch_id?: string | null; published_at?: string | null; due_date?: string | null; created_at?: string | null }[],
   batchesById: Map<string, { month?: number | null; year?: number | null }>,
   month: number,
   year: number,

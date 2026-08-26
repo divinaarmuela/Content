@@ -59,8 +59,13 @@ describe('canCreateItemsUnder — the production gate', () => {
     }
   })
 
-  it('keeps brief and wrapped shoots closed to everyone', () => {
-    for (const status of ['brief', 'wrapped'] as const) {
+  it('keeps a wrapped shoot open — late edits count toward their live month', () => {
+    expect(canCreateItemsUnder('wrapped', 'editor')).toBe(true)
+    expect(canCreateItemsUnder('wrapped', 'account_manager')).toBe(true)
+  })
+
+  it('keeps a shoot still being planned closed to everyone', () => {
+    for (const status of ['brief'] as const) {
       for (const role of roles) {
         expect(canCreateItemsUnder(status, role)).toBe(false)
       }

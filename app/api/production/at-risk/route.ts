@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import {
-  agreementMonthWindow, computeMonthlyProgress, effectiveQuotas, normaliseDeliverableLines, paceStatus,
+  agreementMonthWindow, computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines, paceStatus,
   type PaceStatus,
 } from '../../../lib/agreement-core'
 
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       supabase.from('client_agreements').select('client_id, deliverable_lines, start_date').in('client_id', clientIds),
       supabase.from('monthly_commitments').select('*').in('client_id', clientIds).eq('month', month).eq('year', year),
       supabase.from('content_items')
-        .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug)')
+        .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug), schedule_entries(published_at)')
         .in('client_id', clientIds).limit(4000),
       supabase.from('batches').select('id, client_id, month, year').in('client_id', clientIds).limit(1000),
     ])
@@ -67,8 +67,9 @@ export async function GET(req: Request) {
       if (window === null) {
         return { id: client.id, name: client.name, has_agreement: true, not_started: true, worst: 'met' as PaceStatus, lines: [] }
       }
-      const clientItems = (itemsByClient.get(client.id) ?? []).filter(i =>
-        ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+      const clientItems = (itemsByClient.get(client.id) ?? [])
+        .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+        .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
       const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
       const withPace = progress.map(p => ({
         type: p.type, label: p.label, quota: p.quota, delivered: p.delivered, planned: p.planned,

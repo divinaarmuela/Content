@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireSignedIn, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import {
-  computeMonthlyProgress, effectiveQuotas, normaliseDeliverableLines,
+  computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines,
 } from '../../../lib/agreement-core'
 
 /**
@@ -12,6 +12,7 @@ import {
  * brief captions). Month attribution: the shoot's month first, then the
  * item's due date, then its creation date.
  */
+
 export async function GET(req: Request) {
   try {
     const user = await requireSignedIn()
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
       supabase.from('monthly_commitments').select('*')
         .eq('client_id', clientId).eq('month', month).eq('year', year).maybeSingle(),
       supabase.from('content_items')
-        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug)')
+        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug), schedule_entries(published_at)')
         .eq('client_id', clientId).limit(1000),
       supabase.from('batches').select('id, month, year').eq('client_id', clientId).limit(200),
     ])
@@ -41,8 +42,9 @@ export async function GET(req: Request) {
     const quotas = effectiveQuotas('lines' in lines ? lines.lines : [], commitment ?? null)
     const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
     // brief TASKS are the plan, not the delivery — they never count
-    const producedItems = (items ?? []).filter(i =>
-      ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+    const producedItems = (items ?? [])
+      .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+      .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
     const per_type = computeMonthlyProgress(producedItems, batchesById, month, year, quotas)
 
     return NextResponse.json({ month, year, per_type, has_agreement: Boolean(agreement) })

@@ -1340,7 +1340,7 @@ export default function ItemDetailPage() {
                       <Button size="sm" disabled={busy === 'schedule' || !schedDraft.live_url} onClick={() => saveSchedule('live')}>Save live</Button>
                     </div>
                     <Button size="sm" variant="outline" className="w-fit" disabled={busy === 'schedule'} onClick={() => saveSchedule('posted')}>
-                      Mark posted in-app (Story / no link)
+                      Posted or delivered without a link (Story, files handed over)
                     </Button>
 
                     {/* connected publishing: post through the client's linked

@@ -69,8 +69,10 @@ export function batchSatisfiesLock(b: { title?: string | null; shoot_date?: stri
 
 /**
  * The production gate: may this person create content items here?
- *  - under a locked or shot brief: any item-creating role (editor+)
- *  - under a brief/wrapped one: nobody — the point of the stage
+ *  - under a locked, shot or WRAPPED brief: any item-creating role (editor+).
+ *    Wrapped stays open on purpose: footage gets cut months later, and that
+ *    work counts toward the month it goes live, not the shoot's month
+ *  - under a brief still being planned: nobody — the point of the stage
  *  - with NO batch at all: account managers and up only, WITH a stated
  *    reason (supers included — auditability is the point, not trust)
  */
@@ -88,7 +90,7 @@ export function canCreateItemsUnder(
     if (role !== 'account_manager' && role !== 'super_admin') return false
     return batchStatus === null || batchStatus === 'brief'
   }
-  if (batchStatus === 'locked' || batchStatus === 'shot') return true
+  if (batchStatus === 'locked' || batchStatus === 'shot' || batchStatus === 'wrapped') return true
   if (batchStatus === null) {
     if (role !== 'account_manager' && role !== 'super_admin') return false
     return Boolean(adhoc?.reason && adhoc.reason.trim())
