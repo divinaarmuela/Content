@@ -147,8 +147,18 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // night of a month the server's idea of the date and the client's are one
   // day and one month apart, and the commitment tiles would show the wrong
   // month's quota to the only person who cares about it.
-  const { data: clientRow } = await supabase
-    .from('clients').select('id, name, timezone, brand_profile').eq('id', clientId).maybeSingle()
+  // Columns added by hand-run migrations (timezone, brand_profile) may not
+  // exist yet on the live database: asking for a missing column fails the
+  // WHOLE select, and a null client here is a 404 for every client's portal.
+  // So the select degrades — newest columns first, the bare row last.
+  const clientRow = await (async () => {
+    for (const cols of ['id, name, timezone, brand_profile', 'id, name, timezone', 'id, name']) {
+      const { data, error } = await supabase.from('clients').select(cols).eq('id', clientId).maybeSingle()
+      if (!error) return data as Record<string, unknown> | null
+      console.error('[portal] client select failed, degrading:', cols, error.message)
+    }
+    return null
+  })()
   if (!clientRow) return null
   const tz = safeZone(clientRow.timezone as string | null)
   const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
