@@ -13,7 +13,8 @@ import { copyDriveFile, driveFileUrl, moveDriveFile, uploadStreamToFolder } from
 import { ensureItemFoldersNow, ensureShootFoldersNow, type BatchLike, type ItemLike } from './gdrive-hooks'
 import {
   earliestScheduledMonth, fileNameFromUrl, isClientTarget, isMirrorableUrl,
-  mirrorProgress, versionFileName, type MirrorTarget, type MirrorProgress,
+  missingItemMirrors, mirrorProgress, versionFileName,
+  type MirrorTarget, type MirrorProgress, type SweepItem, type SweepVersion,
 } from './gdrive-mirror-core'
 import { slideFileName, slidesOf, type Slide } from './version-files-core'
 
@@ -489,6 +490,107 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
     bytes: result.bytes,
     copied: Boolean(source?.drive_file_id),
   }
+}
+
+// ── the self-healing pass ─────────────────────────────────────────────────
+
+/** How far back a sweep looks. Long enough to cover a frozen weekend and the
+ *  Monday nobody noticed; short enough that the query stays small. */
+export const MIRROR_SWEEP_DAYS = 14
+/** Files queued per run. A bound on spend, not on eventual completeness — the
+ *  remainder is still missing next time, and the run after that. */
+export const MIRROR_SWEEP_CAP = 100
+/** Items examined per run. */
+const SWEEP_ITEM_LIMIT = 500
+
+export type MirrorSweepResult = {
+  /** items examined */
+  items: number
+  /** files that should be in Drive and were not */
+  missing: number
+  /** …of those, how many were actually queued */
+  queued: number
+}
+
+/**
+ * Find files that never made it to Drive and ask for them again.
+ *
+ * Not a retry queue: there is nothing to retry FROM. A mirror that was never
+ * queued left no trace anywhere — no event, no `drive_files` row, no error —
+ * so the only way to find it is to recompute what should be there and compare.
+ * `missingItemMirrors` does that arithmetic; this does the four reads it needs
+ * and hands the difference to the same `requestMirror` every upload path uses.
+ *
+ * Runs inside the existing half-hourly cron rather than as a function of its
+ * own, because a NEW Inngest function does nothing at all until the app is
+ * re-synced (see CLAUDE.md) — a self-healing job that itself silently does
+ * nothing would be the joke writing itself.
+ *
+ * `itemIds` narrows it to one item, which is the "Retry Drive copy" button.
+ */
+export async function sweepMissingMirrors(opts?: {
+  itemIds?: string[]
+  days?: number
+  cap?: number
+}): Promise<MirrorSweepResult> {
+  const empty: MirrorSweepResult = { items: 0, missing: 0, queued: 0 }
+  if (!driveConfigured()) return empty
+
+  const one = (opts?.itemIds ?? []).filter(Boolean).slice(0, 50)
+  const since = new Date(
+    Date.now() - (opts?.days ?? MIRROR_SWEEP_DAYS) * 24 * 60 * 60 * 1000,
+  ).toISOString()
+  const q = supabase.from('content_items').select('id, raw_assets')
+  const { data: itemRows, error } = one.length > 0
+    ? await q.in('id', one)
+    // recently touched, not everything ever made: a file that was going to be
+    // mirrored was going to be mirrored because somebody just saved something
+    : await q.gte('updated_at', since).order('updated_at', { ascending: false }).limit(SWEEP_ITEM_LIMIT)
+  if (error) {
+    console.error('[gdrive] mirror sweep could not read items:', error.message)
+    return empty
+  }
+  const ids = (itemRows ?? []).map(r => String(r.id))
+  if (ids.length === 0) return empty
+
+  const [versionsRes, mirroredRes] = await Promise.all([
+    supabase.from('asset_versions')
+      .select('item_id, version_number, file_url, files')
+      .in('item_id', ids),
+    // a claim with no drive_file_id is an upload that DIED, and asking for it
+    // again is exactly what the claim was left behind for — so only completed
+    // rows count as "already there"
+    supabase.from('drive_files')
+      .select('source_url')
+      .in('item_id', ids)
+      .eq('target', 'item')
+      .not('drive_file_id', 'is', null),
+  ])
+
+  const versionsByItem = new Map<string, SweepVersion[]>()
+  for (const v of versionsRes.data ?? []) {
+    const key = String(v.item_id)
+    const list = versionsByItem.get(key) ?? []
+    list.push(v as SweepVersion)
+    versionsByItem.set(key, list)
+  }
+  const items: SweepItem[] = (itemRows ?? []).map(r => ({
+    id: String(r.id),
+    raw_assets: Array.isArray(r.raw_assets) ? r.raw_assets : [],
+    versions: versionsByItem.get(String(r.id)) ?? [],
+  }))
+  const mirrored = (mirroredRes.data ?? []).map(r => String(r.source_url))
+
+  const missing = missingItemMirrors(items, mirrored, opts?.cap ?? MIRROR_SWEEP_CAP)
+  if (missing.length === 0) return { items: ids.length, missing: 0, queued: 0 }
+
+  const queued = await requestMirror(missing)
+  // one line per run, and only when it found something — a sweep that finds
+  // nothing is the normal case and must not fill the log with proof of it
+  console.log(
+    `[gdrive] mirror sweep: ${missing.length} file(s) missing across ${ids.length} item(s), queued ${queued}`,
+  )
+  return { items: ids.length, missing: missing.length, queued }
 }
 
 // ── what the item page says ───────────────────────────────────────────────

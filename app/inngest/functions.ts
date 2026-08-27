@@ -238,10 +238,29 @@ export const postAnalyticsRefresh = inngest.createFunction(
     // one sweep at a time: two would ask the provider about the same posts
     concurrency: { limit: 1 },
   },
-  async ({ step }) => step.run('refresh', async () => {
-    const { refreshRecentPostAnalytics } = await import('../lib/post-analytics')
-    return refreshRecentPostAnalytics()
-  })
+  async ({ step }) => {
+    const analytics = await step.run('refresh', async () => {
+      const { refreshRecentPostAnalytics } = await import('../lib/post-analytics')
+      return refreshRecentPostAnalytics()
+    })
+
+    // …and while we are here every half hour, heal the Drive mirror.
+    //
+    // A file whose queue call never left the request left no trace to retry
+    // from — no event, no row, no error — so the only way to find it is to
+    // recompute what should be in Drive and ask for the difference. It rides
+    // this cron rather than a function of its own precisely BECAUSE a new
+    // Inngest function does nothing until the app is re-synced (CLAUDE.md
+    // trap 5b), and a self-healing job that itself silently did nothing would
+    // be the same bug wearing a different hat. Its own step, so a failure here
+    // never re-runs the analytics refresh above.
+    const mirrors = await step.run('sweep-drive-mirror', async () => {
+      const { sweepMissingMirrors } = await import('../lib/gdrive-mirror')
+      return sweepMissingMirrors()
+    })
+
+    return { analytics, mirrors }
+  }
 )
 
 /**

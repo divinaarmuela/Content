@@ -3,7 +3,8 @@ import {
   CHUNK_MULTIPLE, CHUNK_SIZE, contentRange, earliestScheduledMonth,
   emailDomain, fileNameFromUrl, isClientTarget, isMirrorTarget, isMirrorableUrl,
   isTestAddress, memberPermissionDiff, membersNeedingPermission, mirrorProgress,
-  receivedBytes, sharingSummary, statusRange, versionFileName,
+  missingItemMirrors, receivedBytes, sharingSummary, statusRange, versionFileName,
+  wantedItemFiles, type SweepItem,
 } from '../app/lib/gdrive-mirror-core'
 import {
   FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER, SCHEDULED_FOLDER, dayStamp,
@@ -459,5 +460,105 @@ describe('resumable upload arithmetic', () => {
     expect(receivedBytes(null)).toBe(0)
     expect(receivedBytes('')).toBe(0)
     expect(receivedBytes('nonsense')).toBe(0)
+  })
+})
+
+describe('the self-healing sweep — what should be in Drive and is not', () => {
+  const u = (n: string) => `https://media.mdmmarketing.com.au/1755043200000-k3f9a1-${n}`
+
+  const item = (over: Partial<SweepItem> = {}): SweepItem => ({
+    id: 'item-1',
+    raw_assets: [{ url: u('shoot-01.mov'), name: 'Shoot 01.mov' }],
+    versions: [{ version_number: 1, file_url: u('cut.mp4'), files: [] }],
+    ...over,
+  })
+
+  it('wants the job pack and every slide of every version', () => {
+    const files = wantedItemFiles(item({
+      versions: [
+        { version_number: 1, file_url: u('v1.mp4'), files: [] },
+        {
+          version_number: 2,
+          file_url: u('a.jpg'),
+          files: [{ url: u('a.jpg'), name: 'a.jpg' }, { url: u('b.jpg'), name: 'b.jpg' }],
+        },
+      ],
+    }))
+    expect(files.map(f => f.name)).toEqual([
+      'Shoot 01.mov', 'v1 - v1.mp4', 'v2 - 01 - a.jpg', 'v2 - 02 - b.jpg',
+    ])
+    // everything lands in the item's own folder — finals and months are
+    // decided by approving and scheduling, never by a repair pass
+    expect([...new Set(files.map(f => f.target))]).toEqual(['item'])
+    expect([...new Set(files.map(f => f.item_id))]).toEqual(['item-1'])
+  })
+
+  it('names files exactly as the live upload paths name them', () => {
+    // a sweep with a naming scheme of its own would fill the folder with
+    // second copies the first time it ran
+    const [asset] = wantedItemFiles(item({ raw_assets: [{ url: u('clip.mov'), name: '' }], versions: [] }))
+    expect(asset.name).toBe(fileNameFromUrl(u('clip.mov')))
+    const [single] = wantedItemFiles(item({
+      raw_assets: [], versions: [{ version_number: 3, file_url: u('hook.mp4'), files: [] }],
+    }))
+    expect(single.name).toBe(versionFileName(3, 'hook.mp4'))
+  })
+
+  it('never wants a pasted link — there are no bytes of ours to copy', () => {
+    const files = wantedItemFiles(item({
+      raw_assets: [{ url: 'https://drive.google.com/file/d/abc', name: 'brief' }],
+      versions: [{ version_number: 1, file_url: 'https://youtu.be/abc', files: [] }],
+    }))
+    expect(files).toEqual([])
+  })
+
+  it('subtracts what Drive already holds', () => {
+    const missing = missingItemMirrors([item()], [u('shoot-01.mov')])
+    expect(missing.map(f => f.source_url)).toEqual([u('cut.mp4')])
+  })
+
+  it('finds nothing when everything is there — the normal case', () => {
+    expect(missingItemMirrors([item()], [u('shoot-01.mov'), u('cut.mp4')])).toEqual([])
+  })
+
+  it('asks again for a claim whose upload died', () => {
+    // the caller only passes rows WITH a drive_file_id, so a half-finished
+    // claim is absent from `mirrored` and comes back into the answer — which
+    // is the whole reason the claim is left behind
+    expect(missingItemMirrors([item()], []).map(f => f.source_url))
+      .toEqual([u('shoot-01.mov'), u('cut.mp4')])
+  })
+
+  it('asks for one file once, however many versions carry it', () => {
+    const missing = missingItemMirrors([item({
+      raw_assets: [{ url: u('a.jpg'), name: 'a.jpg' }],
+      versions: [
+        { version_number: 1, file_url: u('a.jpg'), files: [] },
+        { version_number: 2, file_url: u('a.jpg'), files: [] },
+      ],
+    })], [])
+    expect(missing).toHaveLength(1)
+  })
+
+  it('caps a run, and the remainder is simply still missing next time', () => {
+    const many = item({
+      raw_assets: Array.from({ length: 30 }, (_, i) => ({ url: u(`f${i}.jpg`), name: `f${i}.jpg` })),
+      versions: [],
+    })
+    expect(missingItemMirrors([many], [], 10)).toHaveLength(10)
+    expect(missingItemMirrors([many], [], 0)).toEqual([])
+    expect(missingItemMirrors([many], [])).toHaveLength(30)
+  })
+
+  it('sweeps across items, and shrugs at nothing at all', () => {
+    const missing = missingItemMirrors(
+      [item(), item({ id: 'item-2', raw_assets: [{ url: u('x.jpg'), name: 'x.jpg' }], versions: [] })],
+      [u('shoot-01.mov'), u('cut.mp4')],
+    )
+    expect(missing).toEqual([
+      { item_id: 'item-2', source_url: u('x.jpg'), name: 'x.jpg', target: 'item' },
+    ])
+    expect(missingItemMirrors(null, [])).toEqual([])
+    expect(missingItemMirrors([{ id: 'x' }], [])).toEqual([])
   })
 })

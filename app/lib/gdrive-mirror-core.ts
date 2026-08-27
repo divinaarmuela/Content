@@ -9,6 +9,7 @@
  * the wrong place (or a permission granted to the wrong person) rather than a
  * folder with an ugly name.
  */
+import { slideFileName, slidesOf, type VersionLike } from './version-files-core'
 
 /**
  * Where a mirrored copy lives.
@@ -141,6 +142,113 @@ export function earliestScheduledMonth(
   times.sort((a, b) => a.t - b.t)
   const d = new Date(times[0].t)
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+// ── what never made it ────────────────────────────────────────────────────
+
+/**
+ * The self-healing pass, as arithmetic.
+ *
+ * Every mirror starts life as a queue call made on the side of a request that
+ * has already answered the browser. On a serverless platform that is exactly
+ * the moment the function can be frozen, and a queue call that never left is a
+ * file that never reaches Drive — silently, with nothing anywhere recording
+ * that it was meant to. `after()` closes that window for new uploads; it does
+ * nothing for the files already missing, and nothing for a queue call that
+ * failed for any other reason.
+ *
+ * So the sweep does not track intentions at all. It recomputes what SHOULD be
+ * in an item's folder from the item itself — its job-pack assets, and every
+ * slide of every version — subtracts what `drive_files` says is actually
+ * there, and asks for the difference. Idempotent by construction: a file
+ * already recorded is never in the answer, and the `(source_url, target)`
+ * claim catches anything queued twice in the gap between two runs.
+ *
+ * Pure, so the arithmetic is testable without a database or a Drive.
+ */
+export type SweepVersion = VersionLike & { version_number?: number | null }
+
+export type SweepItem = {
+  id: string
+  /** content_items.raw_assets, as it is stored */
+  raw_assets?: { url?: string | null; name?: string | null }[] | null
+  versions?: SweepVersion[] | null
+}
+
+export type WantedFile = {
+  item_id: string
+  source_url: string
+  name: string
+  target: MirrorTarget
+}
+
+/**
+ * Every file that belongs in this item's own Drive folder, named exactly as
+ * the live mirror callers name it — `mirrorRawAssets` for the job pack,
+ * `mirrorVersionSlides` for the cuts. The names have to agree: a sweep that
+ * invented its own would fill the folder with second copies under new names
+ * the first time it ran.
+ */
+export function wantedItemFiles(item: SweepItem): WantedFile[] {
+  const out: WantedFile[] = []
+  const seen = new Set<string>()
+  const add = (source_url: string, name: string) => {
+    if (!isMirrorableUrl(source_url) || seen.has(source_url)) return
+    seen.add(source_url)
+    out.push({ item_id: item.id, source_url, name, target: 'item' })
+  }
+
+  for (const a of item.raw_assets ?? []) {
+    const url = String(a?.url ?? '')
+    add(url, String(a?.name ?? '').trim() || fileNameFromUrl(url))
+  }
+
+  // newest version last is irrelevant to correctness — every version's slides
+  // belong in the folder, and each carries its own version number in its name
+  for (const v of item.versions ?? []) {
+    const slides = slidesOf(v).filter(s => isMirrorableUrl(s.url))
+    const n = Number(v?.version_number ?? 0)
+    slides.forEach((s, i) => {
+      // through fileNameFromUrl either way: a version stored as a bare
+      // `file_url` has no name of its own, so slidesOf recovers one from the
+      // URL — complete with the `{millis}-{random}-` collision prefix that
+      // objectKey put there. That prefix is ours, not the editor's, and a
+      // repair pass is not the place to start writing it into folder listings.
+      add(s.url, slideFileName(n, i, fileNameFromUrl(s.name || s.url), slides.length))
+    })
+  }
+  return out
+}
+
+/**
+ * The files that should be in Drive and are not, capped.
+ *
+ * `mirrored` is the set of `source_url`s that `drive_files` holds WITH a
+ * `drive_file_id` — a claim whose upload never finished is deliberately not in
+ * it, because that is precisely the row a retry is allowed to take back.
+ *
+ * The cap is a spend bound, not a correctness one: whatever is left over is
+ * still missing at the next run, and the run after that, until it is done.
+ */
+export function missingItemMirrors(
+  items: SweepItem[] | null | undefined,
+  mirrored: Iterable<string>,
+  cap = 100,
+): WantedFile[] {
+  const limit = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 0
+  if (limit === 0) return []
+  const have = new Set<string>(mirrored)
+  const out: WantedFile[] = []
+  const seen = new Set<string>()
+  for (const item of items ?? []) {
+    for (const f of wantedItemFiles(item)) {
+      if (have.has(f.source_url) || seen.has(f.source_url)) continue
+      seen.add(f.source_url)
+      out.push(f)
+      if (out.length >= limit) return out
+    }
+  }
+  return out
 }
 
 // ── who needs a permission of their own ───────────────────────────────────
