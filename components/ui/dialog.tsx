@@ -35,7 +35,10 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-lg',
+        // max-h + overflow-y-auto: without them a tall form (the New item
+        // dialog is ~1400px) is clipped by the screen edges on a phone and the
+        // primary button is unreachable — the page behind does not scroll it.
+        'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-lg',
         className
       )}
       {...props}
@@ -70,7 +73,9 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      // sticky: when the body scrolls (see DialogContent) the primary button
+      // stays on screen instead of sitting 1200px down a phone-sized form.
+      'sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t bg-popover px-6 py-4 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2',
       className
     )}
     {...props}
