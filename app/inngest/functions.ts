@@ -292,8 +292,57 @@ export const dueReminders = inngest.createFunction(
   }
 )
 
+/**
+ * Copy one file into Google Drive.
+ *
+ * A background job because the file can be gigabytes and the transfer can
+ * fail halfway — the two things a request handler is worst at. The step body
+ * throws on a transient failure and Inngest retries it, which is the whole
+ * reason this is here rather than behind `after()` like the folder hooks.
+ *
+ * Retries are safe by construction: `drive_files` has
+ * `unique (source_url, target)` and the row is claimed BEFORE the bytes move,
+ * so a retry either finds the job finished or finds its own unfinished claim
+ * to take back. It never uploads the same file twice.
+ *
+ * Concurrency is keyed on the ITEM, not globally: a shoot drop is two hundred
+ * files that should mirror in parallel across items, while two files on the
+ * same item racing to create the same missing folder is exactly how a
+ * duplicate folder appears (Drive has no unique-name constraint).
+ */
+export const driveMirrorFile = inngest.createFunction(
+  {
+    id: 'drive-mirror-file',
+    name: 'Mirror a file into Google Drive',
+    triggers: [{ event: 'drive/mirror.file' }],
+    retries: 3,
+    concurrency: { limit: 3, key: 'event.data.scope' },
+  },
+  async ({ event, step }) => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const { isMirrorTarget } = await import('../lib/gdrive-mirror-core')
+    const target = data.target
+    if (!data.source_url || !isMirrorTarget(target)) {
+      return { skipped: 'malformed event' }
+    }
+    if (!data.item_id && !data.client_id) return { skipped: 'malformed event' }
+    return step.run('mirror', async () => {
+      const { mirrorFileNow } = await import('../lib/gdrive-mirror')
+      return mirrorFileNow({
+        item_id: data.item_id ? String(data.item_id) : null,
+        client_id: data.client_id ? String(data.client_id) : null,
+        source_url: String(data.source_url),
+        name: String(data.name ?? ''),
+        target,
+        received_at: data.received_at ? String(data.received_at) : null,
+      })
+    })
+  }
+)
+
 export const functions = [
   dueReminders,
+  driveMirrorFile,
   scanInboxScheduled,
   scanMailbox,
   leadsReportScheduled,
