@@ -603,9 +603,9 @@ export default function NewItemDialog({
             <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
           </div>
-          {!hidesMedia && (
+          {(!hidesMedia || isTaskKind) && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Files <span className="text-xs font-normal text-zinc-400">(uploaded for the editor — or use the folder link for full shoots)</span></Label>
+            <Label>Files <span className="text-xs font-normal text-zinc-400">{isTaskKind ? '(anything the task needs — docs, decks, references; as many as you like)' : '(uploaded for the editor — or use the folder link for full shoots)'}</span></Label>
             {draft.raw_assets.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {draft.raw_assets.map(a => (

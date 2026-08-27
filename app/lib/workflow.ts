@@ -124,7 +124,8 @@ export function sanitiseRawAssets(raw: unknown): { url: string; name: string }[]
     .filter((a): a is { url?: unknown; name?: unknown } => !!a && typeof a === 'object')
     .map(a => ({ url: String(a.url ?? '').slice(0, 2000), name: String(a.name ?? '').slice(0, 200) }))
     .filter(a => /^https:\/\//.test(a.url))
-    .slice(0, 50)
+    // a sanity bound, not a quota: a shoot day can be hundreds of files
+    .slice(0, 5000)
 }
 
 /**

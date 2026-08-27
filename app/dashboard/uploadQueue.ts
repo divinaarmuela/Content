@@ -16,7 +16,7 @@ export type QueuedUpload = {
   id: string
   name: string
   itemId: string
-  status: 'uploading' | 'done' | 'failed'
+  status: 'queued' | 'uploading' | 'done' | 'failed'
   error?: string
 }
 
@@ -62,19 +62,34 @@ async function attachToItem(itemId: string, file: { url: string; name: string })
   if (!save.ok) throw new Error((await save.json()).error ?? 'Could not attach the file')
 }
 
+/** How many files travel at once. One at a time made a hundred-file drop
+ *  take an afternoon; more than a handful just fights the same connection. */
+const PARALLEL_UPLOADS = 4
+let inFlight = 0
+const waiting: (() => void)[] = []
+const acquire = () => new Promise<void>(resolve => {
+  if (inFlight < PARALLEL_UPLOADS) { inFlight += 1; resolve() }
+  else waiting.push(() => { inFlight += 1; resolve() })
+})
+const release = () => { inFlight -= 1; waiting.shift()?.() }
+
 /** Start background uploads of source files for one item's job pack. */
 export function enqueueJobAssets(itemId: string, files: File[]): void {
   for (const file of files) {
     const id = `${itemId}:${file.name}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`
-    queue = [...queue, { id, name: file.name, itemId, status: 'uploading' }]
+    queue = [...queue, { id, name: file.name, itemId, status: 'queued' }]
     emit()
     void (async () => {
+      await acquire()
+      patch(id, { status: 'uploading' })
       try {
         const { url } = await uploadMedia(file, { purpose: 'production' })
         await serialise(itemId, () => attachToItem(itemId, { url, name: file.name }))
         patch(id, { status: 'done' })
       } catch (e) {
         patch(id, { status: 'failed', error: e instanceof Error ? e.message : 'Upload failed' })
+      } finally {
+        release()
       }
     })()
   }
