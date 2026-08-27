@@ -1,22 +1,57 @@
 # Project state — as at 19 August 2026
 
-## Dropbox — 27 Aug
+## Google Drive — 27 Aug
+
+Replaces the Dropbox integration built earlier the same day: same behaviour,
+same folder shapes, Google instead. The Dropbox table and columns are dropped by
+the migration below, because the Dropbox migration really was run on the live
+database.
 
 - **What it does.** Creating a shoot mints `{root}/{Client}/{YYYY-MM Title}` with
-  `01 Raw`, `02 Edits`, `03 Final`; creating an item mints `02 Edits/{Reel 01 - Title}`
-  (internal work goes to `{Client}/_Tasks/{Title}`) and prefills the item's
-  folder link. Hooks are fire-and-forget — Dropbox can never delay or fail a create.
-- **Configure.** Create a Dropbox app (scoped access, full Dropbox), then set
-  `DROPBOX_APP_KEY` and `DROPBOX_APP_SECRET` in Vercel. Both are read lazily, so
-  the build and the app work fine without them; the Integrations card just says
-  "not configured".
-- **Redirect URI** (must be added to the Dropbox app console, exactly):
-  `https://app.mdmmarketing.com.au/api/dropbox/callback`
-- **Scopes**: `account_info.read`, `files.metadata.read`, `files.metadata.write`,
-  `files.content.read`, `files.content.write`, `sharing.read`, `sharing.write`.
+  `01 Raw`, `02 Edits`, `03 Final`; creating an item mints `02 Edits/{Reel 01 - Title}`.
+  An item with no shoot goes to `{Client}/_No shoot/{Reel 01 - Title}` if it is a
+  real deliverable, or `{Client}/_Tasks/{Title}` if it is internal work
+  (research, strategy, copy). The item's folder link is prefilled from it. Hooks
+  are fire-and-forget — Drive can never delay or fail a create.
+- **No new environment variables.** It reuses the **Internal** Google OAuth app
+  that already backs inbox and calendar connecting (`INBOX_CLIENT_ID` /
+  `INBOX_CLIENT_SECRET`), and `CREDENTIALS_KEY` to encrypt the refresh token.
+  All read lazily, so the build and the app work fine without them; the
+  Integrations card just says "not configured".
+- **Enable the API.** Turn on **Google Drive API** for the existing Google Cloud
+  project (the one that owns the Internal OAuth client). Nothing else changes there.
+- **Redirect URI** (add to the Internal OAuth client, exactly):
+  `https://app.mdmmarketing.com.au/api/gdrive/callback`
+- **Scope**: `https://www.googleapis.com/auth/drive.file`, plus `openid email
+  profile`. `drive.file` is Google's *non-sensitive* per-file scope — no
+  verification, no security review, and no read access to anything the app did
+  not create.
+  - **The consequence to know about.** A folder this app creates stays visible
+    to it forever, but a folder that already existed is invisible to it and
+    always will be. So a "Clients" folder already sitting in the Drive **cannot
+    be adopted** — the app creates its own root, named by
+    `drive_connection.root_name` (default `Clients`), and records its id in
+    `root_folder_id`. To use a different name, set `root_name` before connecting.
+- **Sharing.** A new folder is shared with the connected account's Workspace
+  **domain** as writer, so everyone at the agency can open it and nobody outside
+  can. If the account is a personal Google account (or the Workspace forbids
+  domain sharing) no extra permission is granted at all — deliberately, rather
+  than falling back to "anyone with the link", which would be a leak. The
+  Integrations card says which of the two is happening.
+- **Shared Drives** are supported: every call passes `supportsAllDrives`, so
+  moving the root into a Shared Drive later keeps working.
 - **Who connects.** A **super admin only**, from Settings → Integrations →
-  Dropbox → Connect. There is one connection for the whole agency, stored
-  encrypted in `dropbox_connection` (run `supabase/dropbox_connect.sql` first).
+  Google Drive → Connect. There is one connection for the whole agency, stored
+  encrypted in `drive_connection` (run `supabase/gdrive_connect.sql` first).
+
+## Items with no shoot — 27 Aug
+
+An editor may now create a content item with no shoot behind it, not just an
+account manager — "sometimes we don't have a shoot brief and videos are edited
+straight from the editor". The stated **reason stays required for everyone**
+(supers included) and is logged on the item; schedulers and clients still cannot
+create work at all. The New item dialog asks "No shoot — where is the footage
+from?" and files the folder under `_No shoot`.
 
 ## Three pages (Production / Editor / Scheduler) — 26 Aug
 
