@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, ChevronDown, ChevronUp, Pencil, Plus, Star, Trash2, Upload, X } from 'lucide-react'
 import { moveItem } from '@/app/lib/website-gallery-core'
 import { uploadMedia } from '../uploadMedia'
+import { friendlyError } from '@/app/lib/support-core'
 
 type Section = { heading?: string; paragraphs: string[]; callout?: string }
 
@@ -144,7 +145,8 @@ export default function JournalAdmin() {
       if (!res.ok) throw new Error(json.error ?? 'Failed to load')
       setPosts(json)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load — has journal.sql been run?')
+      console.error('[journal] load failed', e)
+      toast.error(friendlyError(e instanceof Error ? e.message : null, 'The journal'))
       setPosts([])
     }
   }, [])
@@ -334,7 +336,7 @@ export default function JournalAdmin() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">

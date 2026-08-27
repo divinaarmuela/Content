@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeft, ChevronDown, ChevronUp, Download, GripVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { moveItem } from '@/app/lib/website-gallery-core'
+import { friendlyError } from '@/app/lib/support-core'
 
 type Project = {
   id: string
@@ -252,7 +253,8 @@ export default function WebsiteAdminPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load')
       setProjects(await res.json())
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load — has website_cms.sql been run in Supabase?')
+      console.error('[website] load failed', e)
+      toast.error(friendlyError(e instanceof Error ? e.message : null, 'The website pages'))
       setProjects([])
     }
   }, [])
@@ -471,7 +473,7 @@ export default function WebsiteAdminPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">

@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, Link2, Search, ArrowRight } from 'lucide-react'
 import SocialChannels from './SocialChannels'
+import { friendlyError } from '@/app/lib/support-core'
 
 type Client = {
   id: string
@@ -80,7 +81,10 @@ export default function ClientsPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load')
       setClients(await res.json())
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load clients. Has website_cms.sql been run in Supabase?')
+      // the raw string may name a .sql file or an env var; that is for the
+      // console, never for the account manager reading this page
+      console.error('[clients] load failed', e)
+      toast.error(friendlyError(e instanceof Error ? e.message : null, 'Clients'))
       setClients([])
     }
   }, [])
@@ -125,7 +129,8 @@ export default function ClientsPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Clients</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Master registry. Website case studies and (soon) client portal access key off this list.
+            Every client we work with. Add one here before booking a shoot or
+            connecting their social accounts.
           </p>
         </div>
         <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
@@ -251,7 +256,10 @@ export default function ClientsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        /* no `overflow-hidden`: the Table primitive scrolls itself, and an
+           overflow-hidden Card outside it CLIPPED the right-hand columns —
+           status and the row actions simply were not there on a phone */
+        <Card className="py-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">

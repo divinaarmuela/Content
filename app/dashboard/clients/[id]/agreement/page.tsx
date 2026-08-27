@@ -8,6 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FileText, Plus } from 'lucide-react'
+import { friendlyError } from '@/app/lib/support-core'
+import HelpHint from '../../../HelpHint'
 import {
   CONTENT_TYPES, TYPE_LABELS, type ContentType, type DeliverableLine, type RetainedService,
 } from '../../../../lib/agreement-core'
@@ -31,14 +33,16 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
   const [catalog, setCatalog] = useState<{ key: string; label: string }[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [customService, setCustomService] = useState('')
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/clients/${id}/agreement`)
     if (!res.ok) {
       const err = (await res.json()).error ?? ''
-      if (/relation|does not exist/i.test(String(err))) {
-        toast.error('Run supabase/agreements_and_briefs.sql first')
-      }
+      // the migration name is for whoever opens the console, not for the
+      // account manager trying to read a client's monthly commitment
+      console.error('[agreement] load failed', err)
+      toast.error(friendlyError(String(err), 'Agreements'))
       setAgreement(null)
       return
     }
@@ -51,7 +55,14 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
   }, [id])
   useEffect(() => { void load() }, [load])
 
-  const save = async (next: Partial<Agreement>) => {
+  /**
+   * Everything on this page saves on blur. That is fine — until you realise
+   * what is being changed: a client's monthly quota is a commercial
+   * commitment, and it used to change with no Save button and no confirmation
+   * of any kind. `what` names the thing that moved, so the person who clicked
+   * away sees that it landed.
+   */
+  const save = async (next: Partial<Agreement>, what?: string) => {
     setBusy(true)
     try {
       const body = {
@@ -68,6 +79,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not save the agreement')
       setAgreement(json.agreement)
+      if (what) toast.success(`Saved — ${what}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save the agreement')
       void load()
@@ -115,7 +127,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
     const lines = qty > 0
       ? [...others, { type, label: TYPE_LABELS[type], monthly_qty: qty }]
       : others
-    void save({ deliverable_lines: lines })
+    void save({ deliverable_lines: lines }, `${TYPE_LABELS[type]}: ${qty} a month`)
   }
   const serviceFor = (key: string) => agreement.services.find(s => s.key === key)
   const setService = (key: string, label: string, patch: Partial<RetainedService>) => {
@@ -131,9 +143,13 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
         <CardContent className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Monthly deliverables</h3>
-              <p className="mt-0.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                Default quantities per month. Individual months can be adjusted from the production board.
+              <h3 className="flex items-center text-sm font-semibold">
+                What we owe them each month
+                <HelpHint term="deliverable" />
+              </h3>
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                How many of each we promised per month. Saved as you go. A single
+                month can be adjusted later in Production.
               </p>
             </div>
             <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -141,7 +157,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
               {canManage ? (
                 <Input type="date" key={agreement.start_date ?? ''} defaultValue={agreement.start_date ?? ''}
                   disabled={busy} className="h-8 w-36 font-mono text-xs"
-                  onBlur={e => { if (e.target.value !== (agreement.start_date ?? '')) void save({ start_date: e.target.value || null }) }} />
+                  onBlur={e => { if (e.target.value !== (agreement.start_date ?? '')) void save({ start_date: e.target.value || null }, e.target.value ? `agreement starts ${e.target.value}` : 'start date cleared') }} />
               ) : (
                 <span className="font-mono">{agreement.start_date ?? '—'}</span>
               )}
@@ -202,16 +218,30 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
                 <Badge variant="outline" className="font-normal text-zinc-400">custom</Badge>
               </label>
             ))}
+            {/* window.prompt was the only native browser dialog left in the
+                app: unstyled, untranslatable, and invisible in dark mode. */}
             {canManage && (
-              <Button size="sm" variant="ghost" className="w-fit text-zinc-500" disabled={busy}
-                onClick={() => {
-                  const label = window.prompt('Name the service')?.trim()
+              <form
+                className="flex flex-wrap items-center gap-2 pt-1"
+                onSubmit={e => {
+                  e.preventDefault()
+                  const label = customService.trim()
                   if (!label) return
                   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
                   setService(`custom:${slug}`, label, { active: true })
-                }}>
-                <Plus className="h-3.5 w-3.5" /> Custom service
-              </Button>
+                  setCustomService('')
+                }}
+              >
+                <Input
+                  value={customService}
+                  onChange={e => setCustomService(e.target.value)}
+                  placeholder="Something else we do for them"
+                  className="h-9 max-w-xs"
+                />
+                <Button size="sm" variant="outline" type="submit" disabled={busy || !customService.trim()}>
+                  <Plus className="h-3.5 w-3.5" /> Add it
+                </Button>
+              </form>
             )}
           </div>
         </CardContent>
@@ -226,7 +256,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
             disabled={!canManage}
             rows={3}
             placeholder="Commercial notes, term dates, anything the team should know."
-            onBlur={e => { if (e.target.value !== (agreement.notes ?? '')) void save({ notes: e.target.value }) }}
+            onBlur={e => { if (e.target.value !== (agreement.notes ?? '')) void save({ notes: e.target.value }, 'notes updated') }}
             className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-3 text-sm outline-none placeholder:text-zinc-400 dark:border-zinc-800"
           />
         </CardContent>

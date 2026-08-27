@@ -133,7 +133,7 @@ export default function SocialPage() {
       {!configured && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Publishing is not configured — set ZERNIO_API_KEY on the server.</span>
+          <span>Posting isn&apos;t switched on yet — nobody can schedule or publish from here until someone on our side turns it on.</span>
         </div>
       )}
 

@@ -13,6 +13,8 @@ import BookingDetails from './BookingDetails'
 import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
+import ConfirmAction from '../ConfirmAction'
+import { NotSetUp } from '../NotSetUp'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null; horizon_days?: number; lead_time_min?: number; capacity?: number }
 type Resource = { id: string; label: string; email: string | null; active: boolean; space_id?: string | null }
@@ -183,7 +185,7 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
                 share a resource or they will double-book it; two services in
                 different rooms must not, or one blocks the other. */}
             <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">
-              Which room/calendar it books
+              Which bookable person or room it uses
               <select value={draft.resource_id}
                 onChange={e => setDraft(d => ({ ...d, resource_id: e.target.value }))}
                 className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800">
@@ -246,11 +248,17 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
             <Button size="sm" className="ml-auto" disabled={busy || !dirty} onClick={() => void save()}>
               {dirty ? 'Save changes' : 'Saved'}
             </Button>
-            <button className="text-zinc-400 hover:text-rose-600"
-              onClick={() => void onSave({ action: 'delete_service', id: service.id }, 'Service removed')}
-              aria-label="Delete service">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <ConfirmAction
+              title={`Delete “${service.name}”?`}
+              body="It disappears from the public booking page immediately and nobody can book it again. Bookings already made are not affected. To stop new bookings without losing it, untick “Show on the public page” instead."
+              confirmLabel="Delete service"
+              onConfirm={() => void onSave({ action: 'delete_service', id: service.id }, `${service.name} deleted`)}
+            >
+              <button className="rounded p-2 text-zinc-400 hover:text-rose-600"
+                aria-label={`Delete ${service.name}`}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </ConfirmAction>
           </div>
         </div>
       )}
@@ -498,11 +506,7 @@ export default function BookingsPage() {
       </div>
 
       {data.needs_schema && (
-        <Card className="border-amber-200 dark:border-amber-900">
-          <CardContent className="p-4 text-sm text-amber-800 dark:text-amber-300">
-            Run <span className="font-mono">supabase/booking.sql</span> in the SQL editor to switch bookings on.
-          </CardContent>
-        </Card>
+        <NotSetUp feature="Bookings" detail="booking.sql has not been run on this database" />
       )}
 
       {/* ── Services ── */}
@@ -528,9 +532,14 @@ export default function BookingsPage() {
 
       {/* ── Resources + availability ── */}
       <section className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Opening hours</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookable people and rooms</p>
         <Card><CardContent className="flex flex-col gap-4 p-4">
-          {data.resources.length === 0 && <p className="text-sm text-zinc-400">Add a bookable person or mailbox (e.g. tech@, hello@, contact@).</p>}
+          {data.resources.length === 0 && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Nothing can be booked yet. Add the person or room people are booking
+              — a studio, or a mailbox like tech@ — then set when it is open.
+            </p>
+          )}
           {data.resources.map(r => (
             <ResourceRow key={r.id} resource={r} availability={data.availability.filter(a => a.resource_id === r.id)} onSave={post} busy={busy} />
           ))}
@@ -538,8 +547,8 @@ export default function BookingsPage() {
             <Input value={resDraft.label} placeholder="Label (e.g. Tech — tech@)" className="max-w-xs" onChange={e => setResDraft(d => ({ ...d, label: e.target.value }))} />
             <Input value={resDraft.email} placeholder="email (optional)" className="max-w-xs" onChange={e => setResDraft(d => ({ ...d, email: e.target.value }))} />
             <Button size="sm" disabled={busy || !resDraft.label.trim()} onClick={async () => {
-              if (await post({ action: 'create_resource', label: resDraft.label, email: resDraft.email }, 'Resource added')) setResDraft({ label: '', email: '' })
-            }}><Plus className="h-3.5 w-3.5" /> Add resource</Button>
+              if (await post({ action: 'create_resource', label: resDraft.label, email: resDraft.email }, 'Added — now set when it is open')) setResDraft({ label: '', email: '' })
+            }}><Plus className="h-3.5 w-3.5" /> Add a bookable person or room</Button>
           </div>
         </CardContent></Card>
       </section>
@@ -593,8 +602,15 @@ export default function BookingsPage() {
                   : (
                     <span className="ml-auto flex items-center gap-3">
                       <MoveBooking booking={b} onSave={post} busy={busy} />
-                      <button className="text-xs text-rose-600 hover:underline"
-                        onClick={() => void post({ action: 'cancel_booking', id: b.id }, 'Booking cancelled')}>Cancel</button>
+                      <ConfirmAction
+                        title={`Cancel ${b.customer_name}'s booking?`}
+                        body="They are emailed a cancellation straight away, and the slot goes back on the public page. If they have paid, the refund is handled separately — this does not refund them."
+                        confirmLabel="Cancel the booking"
+                        onConfirm={() => void post({ action: 'cancel_booking', id: b.id }, `${b.customer_name}'s booking cancelled — they have been emailed`)}
+                      >
+                        <button className="min-h-11 px-1 text-xs text-rose-600 hover:underline"
+                          aria-label={`Cancel ${b.customer_name}'s booking`}>Cancel</button>
+                      </ConfirmAction>
                     </span>
                   )}
               </div>
@@ -651,12 +667,20 @@ function ResourceRow({ resource, availability, onSave, busy }: {
           onClick={() => { setDirty(true); setGrid(DAYS.map((_, wd) => ({ on: wd >= 1 && wd <= 5, start: '09:00', end: '17:00' }))) }}>
           Weekdays 9–5
         </Button>
-        <button className="ml-auto text-zinc-400 hover:text-rose-600" onClick={() => void onSave({ action: 'delete_resource', id: resource.id }, 'Removed')} aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+        <ConfirmAction
+          title={`Delete “${resource.label}”?`}
+          body="Every service that books this person or room stops working until you point it at another one. Their opening hours are deleted too, and none of it can be restored."
+          confirmLabel="Delete it"
+          onConfirm={() => void onSave({ action: 'delete_resource', id: resource.id }, `${resource.label} deleted`)}
+        >
+          <button className="ml-auto rounded p-2 text-zinc-400 hover:text-rose-600"
+            aria-label={`Delete ${resource.label}`}><Trash2 className="h-3.5 w-3.5" /></button>
+        </ConfirmAction>
       </div>
 
       <div className="flex flex-col gap-1">
         {grid.map((g, wd) => (
-          <div key={wd} className="flex items-center gap-3 text-sm">
+          <div key={wd} className="flex flex-wrap items-center gap-3 text-sm">
             <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2">
               <input type="checkbox" checked={g.on} className="h-3.5 w-3.5 accent-blue-600"
                 onChange={e => edit(wd, { on: e.target.checked })} />

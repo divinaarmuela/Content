@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { formatInZone, zoneAbbrev, zoneLabel } from '../../lib/timezone-core'
+import { COMMON_ZONES, formatInZone, zoneAbbrev, zoneLabel, zoneOption } from '../../lib/timezone-core'
+import { friendlyError } from '../../lib/support-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,10 +65,9 @@ const ROLE_STYLE: Record<string, string> = {
   client:          'bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800',
 }
 
-const TIMEZONES = [
-  'Australia/Melbourne', 'Australia/Sydney', 'Australia/Brisbane', 'Australia/Perth',
-  'Asia/Singapore', 'America/Bogota', 'Europe/London', 'Asia/Manila', 'Asia/Kolkata',
-]
+/** Shared with Settings → Profile. Two hand-maintained lists drifted once
+ *  already: this one had Asia/Manila and the self-serve one did not. */
+const TIMEZONES = COMMON_ZONES
 
 /** Half-hour time options for workday windows — rendered via shadcn Select so
  *  the picker matches the design system instead of the browser default. */
@@ -158,7 +158,8 @@ export default function TeamPage() {
       setCanManage(json.can_manage !== false)
       if (clientsRes.ok) setClients(await clientsRes.json())
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load — has identity.sql been run in Supabase?')
+      console.error('[team] load failed', e)
+      toast.error(friendlyError(e instanceof Error ? e.message : null, 'Team'))
       setMembers([])
     }
   }, [])
@@ -321,7 +322,7 @@ export default function TeamPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
@@ -483,7 +484,7 @@ export default function TeamPage() {
               <Select value={invite.timezone} onValueChange={v => v && setInvite(i => ({ ...i, timezone: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIMEZONES.map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}
+                  {TIMEZONES.map(tz => <SelectItem key={tz} value={tz}>{zoneOption(tz)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -575,7 +576,7 @@ export default function TeamPage() {
               <Select value={editDraft.timezone} onValueChange={v => v && setEditDraft(d => ({ ...d, timezone: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIMEZONES.map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}
+                  {TIMEZONES.map(tz => <SelectItem key={tz} value={tz}>{zoneOption(tz)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

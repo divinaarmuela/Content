@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import ScanPanel from './ScanPanel'
 import { useRole } from '../useRole'
+import { LoadFailed } from '../NotSetUp'
 
 interface Lead {
   id: string
@@ -156,10 +157,11 @@ export default function LeadsPage() {
       })
       if (!res.ok) throw new Error(`${res.status}`)
       setLeads(await res.json())
-    } catch {
-      if (!quiet) {
-        setError('Could not load leads — check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.')
-      }
+    } catch (e) {
+      // env-var names belong in the console, not in front of whoever is
+      // chasing this morning's enquiries
+      console.error('[leads] load failed', e)
+      if (!quiet) setError(e instanceof Error ? e.message : 'unknown')
     } finally {
       if (!quiet) setLoading(false)
     }
@@ -240,6 +242,12 @@ export default function LeadsPage() {
     XLSX.writeFile(wb, `md-leads-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  /** "No leads yet" used to show when a SEARCH found nothing, so looking for a
+   *  name that isn't there told you the business had no enquiries at all. */
+  const emptyMessage = search.trim()
+    ? `No leads match “${search.trim()}”. Clear the search to see all ${leads.length}.`
+    : 'No leads yet — submissions appear here automatically.'
+
   const fmt = (val: string, key: keyof Lead) => {
     if (key === 'created_at' && val)
       return new Date(val).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -292,7 +300,10 @@ export default function LeadsPage() {
           <Button variant="outline" size="sm" onClick={() => fetchLeads()}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
-          <Button size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
+          {/* Export is a monthly reporting job. It used to be the only filled
+              button on the page, so the page looked like it was FOR exporting
+              — the daily work is opening a lead and contacting it. */}
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
             <Download className="h-4 w-4" /> Export ({filtered.length})
           </Button>
         </div>
@@ -324,11 +335,35 @@ export default function LeadsPage() {
           </CardContent>
         </Card>
       ) : error ? (
-        <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
-          <CardContent className="p-6 text-sm text-red-700 dark:text-red-400">{error}</CardContent>
-        </Card>
+        <LoadFailed what="your leads" detail={error} onRetry={() => fetchLeads()} />
       ) : (
-        <Card className="overflow-hidden py-0">
+        <>
+        {/* Below md the eleven-column table is about one and a half columns
+            wide. Same data, stacked, with the one thing you came to do. */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {filtered.length === 0 ? (
+            <Card className="border-dashed shadow-none">
+              <CardContent className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                {emptyMessage}
+              </CardContent>
+            </Card>
+          ) : filtered.map((l, i) => (
+            <Card key={l.id ?? i} className="py-0">
+              <CardContent className="flex items-center gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{l.fname} {l.lname}</p>
+                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    {[l.biz, l.model].filter(Boolean).join(' · ') || l.email}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[11px] text-zinc-400">{fmt(l.created_at, 'created_at')}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => openDetail(l)}>View</Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="hidden py-0 md:block">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -351,12 +386,18 @@ export default function LeadsPage() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={COLS.length + 1} className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500">
-                      No leads yet — submissions appear here automatically.
+                      {emptyMessage}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filtered.map((l, i) => (
-                    <TableRow key={l.id ?? i}>
+                    // the row is the click target: opening a lead was hidden
+                    // behind a kebab, and clicking the row itself did nothing
+                    <TableRow
+                      key={l.id ?? i}
+                      onClick={() => openDetail(l)}
+                      className="cursor-pointer"
+                    >
                       {COLS.map(c => (
                         <TableCell
                           key={c.key}
@@ -364,11 +405,11 @@ export default function LeadsPage() {
                           title={l[c.key] ?? ''}
                         >
                           {c.key === 'email'
-                            ? <a href={`mailto:${l.email}`} className="text-blue-600 dark:text-blue-400 hover:underline">{l.email}</a>
+                            ? <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="text-blue-600 dark:text-blue-400 hover:underline">{l.email}</a>
                             : fmt(l[c.key], c.key)}
                         </TableCell>
                       ))}
-                      <TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -412,6 +453,7 @@ export default function LeadsPage() {
             </Table>
           </div>
         </Card>
+        </>
       )}
 
       <Sheet open={!!detail} onOpenChange={open => !open && !saveBusy && setDetail(null)}>
