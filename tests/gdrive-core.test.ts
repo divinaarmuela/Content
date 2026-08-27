@@ -12,8 +12,8 @@ describe('safeSegment', () => {
   })
 
   it('keeps everything Drive is perfectly happy with', () => {
-    // the Dropbox version had to strip : ? * " < > | — Drive does not care,
-    // and a title that reads correctly is worth more than a sanitised one
+    // Drive does not mind : ? * " < > or |, and a title that reads correctly
+    // is worth more than a sanitised one
     expect(safeSegment('Audit: socials? "v2" <final> | 100% *hero*'))
       .toBe('Audit: socials? "v2" <final> | 100% *hero*')
     expect(safeSegment("Nathan's 30% off — Reel #2 (v1) & co"))
@@ -186,8 +186,8 @@ describe('chains', () => {
 
   it('the three fixed folders group together, away from the dated shoots', () => {
     // `_` sorts AFTER digits, so these land in one block at the END of the
-    // client folder — not above the shoots, which is what the Dropbox module
-    // this replaces claimed. The property that matters is that they are
+    // client folder — NOT above the shoots, however much the underscore
+    // prefix suggests otherwise. The property that matters is that they are
     // contiguous and the shoots stay chronological.
     const names = ['2026-07 A', '2026-08 B', '_Brand', '_No shoot', '_Tasks']
     expect([...names].sort()).toEqual(names)
