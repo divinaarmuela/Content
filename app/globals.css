@@ -13,6 +13,30 @@
   --ring: 240 10% 3.9%;
   --radius: 0.5rem;
 }
+/* ═══ Client portal palette ═══
+   The share-link portal's ink-and-cream dark, and its paper-light twin.
+   Driven by an attribute rather than inline custom properties: inline vars
+   are set on one element, so anything deeper that declares --p-bg for its own
+   reasons wins inside its own subtree and the toggle looks broken. PortalShell
+   stamps this on <html> AND on its wrapper, so both the page and anything a
+   Radix portal mounts on <body> read the same theme. */
+[data-portal-theme='dark'] {
+  --p-bg: #0B0B0B;
+  --p-ink: #f9f4eb;
+  --p-surface: #141414;
+  --p-border: rgba(249, 244, 235, 0.16);
+  --p-accent: #f9f4eb;
+  --p-accent-ink: #0B0B0B;
+}
+[data-portal-theme='light'] {
+  --p-bg: #f9f4eb;
+  --p-ink: #0B0B0B;
+  --p-surface: #ffffff;
+  --p-border: rgba(11, 11, 11, 0.14);
+  --p-accent: #0B0B0B;
+  --p-accent-ink: #f9f4eb;
+}
+
 /* full token set applies to the whole page when the dashboard shell (.dbx)
    is mounted — dashboard routes own the page, and Radix portals mount on
    <body> outside .dbx, so tokens must live at body level */

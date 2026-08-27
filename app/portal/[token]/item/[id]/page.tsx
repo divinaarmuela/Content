@@ -72,7 +72,7 @@ export default async function PortalItemPage({ params }: { params: Promise<{ tok
 
           <CommentThread token={token} kind="item" id={data.item.id} comments={data.comments} />
         </main>
-        <Toaster position="bottom-right" />
+        <Toaster position="top-center" />
       </div>
     </PortalShell>
   )

@@ -151,7 +151,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
           MD Media · get seen · get known · get booked
         </p>
       </footer>
-      <Toaster position="bottom-right" />
+      <Toaster position="top-center" />
       </div>
     </PortalShell>
   )

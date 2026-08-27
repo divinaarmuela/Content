@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { contrast, googleFontsHref, luminance, pickPortalTheme, tint } from '../app/lib/portal-theme'
+import {
+  contrast, googleFontsHref, luminance, nextPortalMode, pickPortalTheme, readPortalMode, tint,
+} from '../app/lib/portal-theme'
 
 describe('luminance & contrast — the guards the theme leans on', () => {
   it('orders black, mid, white correctly', () => {
@@ -85,5 +87,21 @@ describe('tint', () => {
   it('moves a colour toward white', () => {
     expect(tint('#000000', 1)).toBe('#ffffff')
     expect(tint('#000000', 0)).toBe('#000000')
+  })
+})
+
+describe('the portal light/dark switch', () => {
+  it('defaults to the house dark, and only "light" means light', () => {
+    expect(readPortalMode(null)).toBe('dark')
+    expect(readPortalMode(undefined)).toBe('dark')
+    expect(readPortalMode('')).toBe('dark')
+    expect(readPortalMode('nonsense')).toBe('dark')
+    expect(readPortalMode('light')).toBe('light')
+    expect(readPortalMode('dark')).toBe('dark')
+  })
+  it('flips both ways', () => {
+    expect(nextPortalMode('dark')).toBe('light')
+    expect(nextPortalMode('light')).toBe('dark')
+    expect(nextPortalMode(nextPortalMode('dark'))).toBe('dark')
   })
 })

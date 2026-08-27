@@ -53,7 +53,7 @@ export default async function PortalShootPage({ params }: { params: Promise<{ to
             <CommentThread token={token} kind="shoot" id={data.shoot.id} comments={data.comments} />
           </div>
         </main>
-        <Toaster position="bottom-right" />
+        <Toaster position="top-center" />
       </div>
     </PortalShell>
   )

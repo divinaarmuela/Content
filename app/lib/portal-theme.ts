@@ -166,3 +166,23 @@ export function googleFontsHref(families: string[]): string | null {
     .map(f => `family=${encodeURIComponent(f).replace(/%20/g, '+')}:wght@400;500;600;700`)
   return `https://fonts.googleapis.com/css2?${parts.join('&')}&display=swap`
 }
+
+/**
+ * The portal's light/dark switch — the two values, the storage key, and the
+ * flip, kept here so the shell holds no logic worth getting wrong.
+ *
+ * `readPortalMode` takes whatever localStorage hands back — a string, null,
+ * or something a previous version wrote — and answers with a real theme.
+ * Anything unrecognised is the house default rather than a broken page.
+ */
+export type PortalMode = 'dark' | 'light'
+
+export const PORTAL_MODE_KEY = 'mdm-portal-theme'
+
+export function readPortalMode(saved: string | null | undefined): PortalMode {
+  return saved === 'light' ? 'light' : 'dark'
+}
+
+export function nextPortalMode(current: PortalMode): PortalMode {
+  return current === 'dark' ? 'light' : 'dark'
+}
