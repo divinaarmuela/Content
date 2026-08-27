@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { Copy, Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, ExternalLink } from 'lucide-react'
 import ConfirmAction from './ConfirmAction'
+import EmptyState from './EmptyState'
 import { useRole } from './useRole'
 
 type Credential = {
@@ -220,14 +221,13 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
       )}
 
       {items.length === 0 && !draft ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <KeyRound className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No credentials stored for this client yet.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={KeyRound}
+          title="No shared logins yet"
+          body="Store the logins the whole team needs for this client here, so nobody keeps them in a chat message. Everyone with access to this client can see them."
+          actionLabel={canEdit ? 'Add a login' : undefined}
+          onAction={() => { setCustom(false); setDraft({ ...BLANK }) }}
+        />
       ) : items.length > 0 && (
         <Card className="py-0">
           <Table>

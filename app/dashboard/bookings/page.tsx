@@ -564,10 +564,12 @@ export default function BookingsPage() {
           <div className="ml-auto flex rounded-md border border-zinc-200 p-0.5 dark:border-zinc-800">
             {(['calendar', 'list'] as const).map(v => (
               <button key={v} type="button" onClick={() => setView(v)}
-                className={`rounded px-2.5 py-1 text-xs capitalize transition-colors ${
+                className={`min-h-11 rounded px-2.5 py-1 text-xs transition-colors ${
                   view === v ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-500'
                 }`}>
-                {v}
+                {/* "Calendar" already means the posting calendar elsewhere in
+                    the app, and green means something different on each */}
+                {v === 'calendar' ? 'Booking calendar' : 'List'}
               </button>
             ))}
           </div>

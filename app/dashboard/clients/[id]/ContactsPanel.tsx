@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Mail, Phone, Pencil, Plus, Star, Trash2, UserRound, X, Copy } from 'lucide-react'
 import ConfirmAction from '../../ConfirmAction'
+import EmptyState from '../../EmptyState'
 
 type Contact = {
   id: string
@@ -140,14 +141,13 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       )}
 
       {contacts.length === 0 && !draft ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <UserRound className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No contacts yet — add the people you actually deal with.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={UserRound}
+          title="No contacts yet"
+          body="Add the people you actually deal with at this client, so nobody has to hunt through old emails for a phone number."
+          actionLabel="Add a contact"
+          onAction={() => setDraft({ ...BLANK })}
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {contacts.map(c => (

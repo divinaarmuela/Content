@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Greeting from './Greeting'
 import GettingStarted from './GettingStarted'
+import { LoadFailed } from './NotSetUp'
 import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
 import { DEFAULT_TZ, formatInZone, formatWithZone } from '../lib/timezone-core'
@@ -214,7 +215,11 @@ function MonthAcrossClients() {
   const router = useRouter()
   const [back, setBack] = useState(0)                 // whole months before now
   const [rows, setRows] = useState<MonthClientRow[] | null>(null)
+  // a failed fetch used to render "No active clients to report on." — the app
+  // telling a manager their agency has no clients because a request 500'd
+  const [failed, setFailed] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   const now = new Date()
   const target = new Date(now.getFullYear(), now.getMonth() - back, 1)
@@ -223,13 +228,19 @@ function MonthAcrossClients() {
 
   useEffect(() => {
     let live = true
-    setRows(null)
+    setRows(null); setFailed(null)
     fetch(`/api/overview/month?month=${month}&year=${year}`)
-      .then(r => (r.ok ? r.json() : { clients: [] }))
+      .then(async r => {
+        if (!r.ok) throw new Error(`${r.status}`)
+        return r.json()
+      })
       .then(j => { if (live) setRows(j.clients ?? []) })
-      .catch(() => { if (live) setRows([]) })
+      .catch(e => {
+        console.error('[overview month] load failed', e)
+        if (live) setFailed(e instanceof Error ? e.message : 'unknown')
+      })
     return () => { live = false }
-  }, [month, year])
+  }, [month, year, attempt])
 
   const monthName = target.toLocaleDateString('en-AU', { month: 'long', year: back === 0 ? undefined : 'numeric' })
   const openClient = (id: string) => router.push(`/dashboard/clients/${id}`)
@@ -256,8 +267,10 @@ function MonthAcrossClients() {
       </CardHeader>
 
       <CardContent className="pt-0">
-        {rows === null && <Skeleton className="h-40 w-full" />}
-        {rows !== null && rows.length === 0 && (
+        {failed
+          ? <LoadFailed what="this month's numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
+          : rows === null && <Skeleton className="h-40 w-full" />}
+        {!failed && rows !== null && rows.length === 0 && (
           <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
             No active clients to report on.
           </p>

@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageSquare, Trash2, Users, ShieldCheck, Lock } from 'lucide-react'
 import ConfirmAction from '../../ConfirmAction'
+import EmptyState from '../../EmptyState'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -133,14 +134,11 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
       {notes === null ? (
         <Skeleton className="h-40 w-full" />
       ) : notes.length === 0 ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No notes yet. Anything written here is attributed and timestamped.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={MessageSquare}
+          title="No notes yet"
+          body="Write down what the team should know about this client — a preference, a warning, what was agreed on a call. Every note shows who wrote it and when."
+        />
       ) : (
         <ol className="flex flex-col">
           {notes.map(n => (

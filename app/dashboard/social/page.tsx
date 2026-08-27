@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, BarChart3, MessageSquare, PenLine, Search, Share2 , Zap } from 'lucide-react'
+import EmptyState from '../EmptyState'
 import SocialChannels from '../clients/SocialChannels'
 import PlatformIcon from './PlatformIcon'
 import ComposeDialog from './ComposeDialog'
@@ -169,16 +170,21 @@ export default function SocialPage() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
         </CardContent></Card>
       ) : visible.length === 0 ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-              <Share2 className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
-            </div>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {search ? 'No client matches that search.' : 'Add a client first, then connect their channels here.'}
-            </p>
-          </CardContent>
-        </Card>
+        search ? (
+          <EmptyState
+            icon={Share2}
+            title={`No client matches “${search}”`}
+            body="Clear the search to see every client with connected accounts."
+          />
+        ) : (
+          <EmptyState
+            icon={Share2}
+            title="No clients to post for yet"
+            body="Social accounts hang off a client, so add the client first — then connect their Instagram, Facebook or TikTok here."
+            actionLabel="Go to Clients"
+            actionHref="/dashboard/clients"
+          />
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {visible.map(c => (

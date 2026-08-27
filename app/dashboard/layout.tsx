@@ -105,8 +105,9 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/production/availability': 'Availability',
   '/dashboard/production/proposals': 'Proposals',
   '/dashboard/scheduler':     'Scheduler',
-  '/dashboard/scheduler/calendar': 'Calendar',
-  '/dashboard/calendar':      'Calendar',
+  // "Calendar" meant three different things; each one now says which
+  '/dashboard/scheduler/calendar': 'Posting calendar',
+  '/dashboard/calendar':      'Posting calendar',
   '/dashboard/activity':      'Asana activity',
   '/dashboard/reports':       'Reports',
   '/dashboard/team':          'Team',
