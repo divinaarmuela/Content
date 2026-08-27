@@ -272,16 +272,30 @@ export async function reconcilePublishedJobs(): Promise<number> {
   if (!jobs?.length) return 0
 
   const publisher = getPublisher()
-  const all = await publisher.postAnalytics() as {
-    posts?: { _id?: string; status?: string; platforms?: { platformPostUrl?: string }[] }[]
+  type Remote = { status?: string; platforms?: { platformPostUrl?: string | null }[] }
+  const all = await publisher.postAnalytics().catch(() => null) as {
+    posts?: ({ _id?: string } & Remote)[]
   } | null
-  if (!all?.posts) return 0
-
-  const byId = new Map(all.posts.map(p => [p._id, p]))
+  const byId = new Map((all?.posts ?? []).map(p => [p._id, p as Remote]))
   let changed = 0
 
+  // The list endpoint is a cached sync that can lag the platform by an hour or
+  // more — a post that went live at 1:30 was still missing from it at 1:45
+  // while asking for THAT post answered "published" at once. So a job we still
+  // think is scheduled is always asked about by id; the list is only a
+  // shortcut for jobs already known to be published.
+  const lookup = async (job: { status: string; provider_post_id: unknown }): Promise<Remote | null> => {
+    const id = String(job.provider_post_id)
+    if (job.status !== 'scheduled' && byId.has(id)) return byId.get(id) ?? null
+    const one = await publisher.postAnalytics(id).catch(() => null) as
+      | (Remote & { platformAnalytics?: { platformPostUrl?: string | null }[] })
+      | null
+    if (!one?.status) return byId.get(id) ?? null
+    return { status: one.status, platforms: one.platforms ?? one.platformAnalytics ?? [] }
+  }
+
   for (const job of jobs) {
-    const remote = byId.get(job.provider_post_id as string)
+    const remote = await lookup(job)
     if (!remote?.status) continue
 
     if (job.status === 'scheduled' && ['published', 'posted', 'success'].includes(remote.status)) {
