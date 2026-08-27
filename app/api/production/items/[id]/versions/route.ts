@@ -5,6 +5,7 @@ import { addVersion, performTransition, type ContentItem } from '../../../../../
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
 import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
+import { previewVideos } from '../../../../../lib/stream'
 import { normaliseSlides, slidesSatisfyType } from '../../../../../lib/version-files-core'
 
 /** Append a new asset version (race-safe numbering). The editor HAT on this
@@ -60,6 +61,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // EVERY slide goes into the item's Drive folder, numbered in posting
     // order; a version that is only a pasted link has no bytes of ours to copy
     mirrorVersionSlides(id, version.version_number as number, slides)
+    // the cut a client is about to be shown is the one that MUST play. A
+    // review link that spins is the failure this exists to end, so the encode
+    // is asked for the moment the version is saved rather than when somebody
+    // opens it.
+    previewVideos(slides.map(s => s.url))
 
     // ── a new cut while the piece is WITH THE CLIENT ──
     //

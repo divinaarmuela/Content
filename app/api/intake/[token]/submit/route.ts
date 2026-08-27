@@ -10,6 +10,7 @@ import { packIntakeFiles } from '../../../../lib/intake-attachments'
 import { inngest } from '../../../../inngest/client'
 import { intakeChannel } from '../../../../inngest/channels'
 import { mirrorIntakeFiles } from '../../../../lib/gdrive-mirror'
+import { previewVideos } from '../../../../lib/stream'
 
 export const dynamic = 'force-dynamic'
 // Building the PDF and pulling attachments out of storage takes longer than a
@@ -60,6 +61,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
       submitted.map(f => ({ ...f, label: labels.get(f.block_id) ?? null })),
       new Date().toISOString(),
     )
+    // a client's own phone footage is the likeliest thing in the whole system
+    // to be HEVC — that is what an iPhone records by default. Queued on
+    // SUBMIT for the same reason the mirror is: the sign step only hands out
+    // a URL, and the bytes arrive from the browser afterwards.
+    previewVideos(submitted.map(f => f.url))
   } catch (e) {
     console.error('intake drive mirror failed:', e)
   }

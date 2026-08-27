@@ -259,7 +259,26 @@ export const postAnalyticsRefresh = inngest.createFunction(
       return sweepMissingMirrors()
     })
 
-    return { analytics, mirrors }
+    // …and heal the video previews the same way, for the same reason.
+    //
+    // Two jobs in one step, because they are the same job: find video that
+    // ought to have a browser-playable copy and does not, and chase the rows
+    // whose `ready` webhook never arrived. The webhook is the live path and
+    // answers in seconds; this is what makes a video that will not play a
+    // delay rather than a dead end — including for every file uploaded before
+    // Cloudflare Stream was wired up.
+    //
+    // It rides this cron for the same reason the Drive sweep does: a NEW
+    // Inngest function does nothing until the app is re-synced (CLAUDE.md
+    // trap 5b), and a self-healing job that silently did nothing would be the
+    // bug wearing a hat. Its own step, so a Cloudflare outage never re-runs
+    // the analytics refresh or the Drive sweep above.
+    const previews = await step.run('sweep-video-previews', async () => {
+      const { sweepMissingPreviews } = await import('../lib/stream')
+      return sweepMissingPreviews()
+    })
+
+    return { analytics, mirrors, previews }
   }
 )
 

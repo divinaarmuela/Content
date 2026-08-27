@@ -33,6 +33,11 @@ vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition }))
 const announceItemChange = vi.fn()
 vi.mock('../app/lib/production-live', () => ({ announceItemChange }))
 vi.mock('../app/lib/gdrive-mirror', () => ({ mirrorVersionSlides }))
+// same reason as the Drive mirror above: the real module builds its Supabase
+// client at import time (CLAUDE.md trap 7), so importing it here would fail
+// the suite on a missing env var rather than on anything about this route
+const previewVideos = vi.fn()
+vi.mock('../app/lib/stream', () => ({ previewVideos }))
 
 const { POST } = await import('../app/api/production/items/[id]/versions/route')
 

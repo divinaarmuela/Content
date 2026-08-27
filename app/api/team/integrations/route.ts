@@ -6,6 +6,8 @@ import { driveStatus } from '@/app/lib/gdrive'
 import { driveMemberNote } from '@/app/lib/gdrive-members'
 import { zernioWebhookUrl } from '@/app/lib/zernio-webhook'
 import { webhookDeliveryStats } from '@/app/lib/zernio-events'
+import { previewStats, streamConfigured, streamWebhookUrl } from '@/app/lib/stream'
+import { previewCountsLine } from '@/app/lib/stream-core'
 
 /** "2 min ago" — the only form of this timestamp anybody reads off a card. */
 function sinceWords(iso: string | null): string {
@@ -82,6 +84,10 @@ export async function GET() {
       count('asana_project_map'),
       count('asana_webhooks'),
     ])
+
+    // ready / preparing / failed over the last seven days. Zero everywhere
+    // when Stream is not configured, which is exactly what the card should say.
+    const previews = await previewStats()
 
     const drive = await driveStatus()
     // who can open the tree, counted from the TEAM rather than by asking
@@ -188,6 +194,34 @@ export async function GET() {
           ? 'Cloudflare R2'
           : 'Supabase Storage — files above ~45MB will be refused until R2 is configured',
         href: '/dashboard/website',
+      },
+      {
+        key: 'stream',
+        name: 'Video previews (Cloudflare Stream)',
+        detail: 'Makes camera .mov files playable in the browser, without touching the original.',
+        // "connected" means encodes are actually landing, not that a token
+        // exists — a token with the wrong permissions configures fine and
+        // fails every copy, and a card that said "connected" about that would
+        // be the confidently-wrong answer this page was rewritten to stop.
+        connected: streamConfigured() && previews.ready > 0,
+        configured: streamConfigured(),
+        status: !streamConfigured()
+          ? 'Not configured — set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_STREAM_TOKEN. '
+            + 'Until then a .mov that will not play says why, as it does today'
+          : [
+              previewCountsLine(previews),
+              process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET
+                ? 'Instant ready notices: on'
+                : 'Instant ready notices: off — an encode is noticed within 30 minutes',
+            ].join(' · '),
+        href: null,
+        // super admin only, and the route enforces it: this deletes encodes
+        // at Cloudflare and pays to make them again
+        action_href: canConnect && streamConfigured() && previews.failed > 0
+          ? '/api/team/integrations/stream-retry' : null,
+        action_label: 'Retry failed',
+        copy_value: streamConfigured() ? streamWebhookUrl() : null,
+        copy_label: 'Copy webhook URL',
       },
       {
         key: 'inngest',

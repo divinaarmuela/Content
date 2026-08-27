@@ -10,6 +10,7 @@ import { DEFAULT_TZ } from '../../../../lib/timezone-core'
 import {
   itemMirrorProgress, mirrorRawAssets, newRawAssets, type RawAsset,
 } from '../../../../lib/gdrive-mirror'
+import { previewVideos } from '../../../../lib/stream'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -148,19 +149,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the brief's own submit edge is open to its editor-owner — so an owner
     // who is not an account manager must be able to fill them in
     const briefOnly = keys.length > 0 && keys.every(k => k === 'brief_url' || k === 'brief')
+    // the due date is the one planning field the person DOING the work may
+    // move — the calendar lets an owner drag their own item to another day
+    const dueOnly = keys.length > 0 && keys.every(k => k === 'due_date')
     // 'scheduler' is the lowest team floor: it admits every team role and no
     // client. The per-item hat check below is the real gate.
-    const user = captionOnly || briefOnly
+    const user = captionOnly || briefOnly || dueOnly
       ? await requireRole('scheduler')
       : await requireRole('account_manager')
     const { id } = await params
     const current = await loadItemForUser(user, id)
     if (
-      briefOnly
+      (briefOnly || dueOnly)
       && !['account_manager', 'super_admin'].includes(user.role)
       && !actingRoles({ id: user.id, role: user.role }, current).includes('editor')
     ) {
-      return NextResponse.json({ error: 'This brief is assigned to someone else' }, { status: 403 })
+      return NextResponse.json({
+        error: dueOnly ? 'Only the person holding this item can move its due date' : 'This brief is assigned to someone else',
+      }, { status: 403 })
     }
     // 'scheduler' as a floor admits editors — the caption IS the published post
     // text, so it belongs to whoever holds the SCHEDULING here (the hat, not
@@ -224,6 +230,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // every new file lands in the item's Drive folder too — queued, never
     // awaited: a slow Drive must not slow a save
     if (addedAssets.length > 0) mirrorRawAssets(id, addedAssets)
+    // …and a camera .mov gets a browser-playable copy made of it, so the
+    // first person to open the job pack watches the footage instead of
+    // reading an apology about HEVC. Same `after()` treatment, same rule:
+    // never awaited, never fatal, and the half-hourly sweep is the backstop.
+    if (addedAssets.length > 0) previewVideos(addedAssets.map(a => a.url))
     announceItemChange({ item_id: id, client_id: data.client_id, status: data.status, kind: 'updated' })
     return NextResponse.json(data)
   } catch (e) {
