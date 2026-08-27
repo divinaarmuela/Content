@@ -40,6 +40,56 @@ export function inboxConnectConfigured(): boolean {
   return Boolean(inboxClientId() && inboxClientSecret() && credentialsKeyConfigured())
 }
 
+// ── the shared refresh-token exchange ─────────────────────────────────────
+
+/**
+ * One cached access token per refresh token, for the life of the process.
+ *
+ * Google's access tokens last an hour. Every feature built on the Internal app
+ * — calendar, Drive — was growing its own copy of this exchange plus its own
+ * cache; the copies then drift (different headroom, different error text) and
+ * each one re-refreshes a token the others already hold. One map, one place.
+ */
+const googleTokenCache = new Map<string, { token: string; expiresAt: number }>()
+
+/**
+ * An access token for a stored refresh token, minted by the Internal app.
+ *
+ * Throws on refusal rather than returning null: a revoked grant is not a
+ * "maybe", and every caller here wants to say something specific about it.
+ * The 60s of headroom means a token never expires mid-request.
+ */
+export async function googleAccessToken(refreshToken: string): Promise<string> {
+  const hit = googleTokenCache.get(refreshToken)
+  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: inboxClientId(),
+      client_secret: inboxClientSecret(),
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  })
+  if (!res.ok) throw new Error(`Google token exchange failed: ${(await res.text()).slice(0, 200)}`)
+
+  const json = await res.json() as { access_token?: string; expires_in?: number }
+  if (!json.access_token) throw new Error('Google returned no access token')
+  googleTokenCache.set(refreshToken, {
+    token: json.access_token,
+    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000,
+  })
+  return json.access_token
+}
+
+/** Drop a cached token — after a reconnect, or a disconnect. */
+export function forgetGoogleToken(refreshToken?: string | null): void {
+  if (refreshToken) googleTokenCache.delete(refreshToken)
+  else googleTokenCache.clear()
+}
+
 /**
  * Must match a URI registered on the Google client, character for character.
  *

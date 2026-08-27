@@ -4,7 +4,7 @@ import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { batchClientIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
-import { onBatchCreated } from '../../../lib/dropbox-hooks'
+import { onBatchCreated } from '../../../lib/gdrive-hooks'
 import {
   sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
 } from '../../../lib/batch-brief-core'
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     })
     announceBatchChange({ batch_id: data.id, client_id: data.client_id, status: data.status ?? 'brief', kind: 'created' })
     // the shoot's folder tree, in the background: never awaited, never able to
-    // fail the create. With Dropbox unconnected this does nothing at all.
+    // fail the create. With Drive unconnected this does nothing at all.
     onBatchCreated(data)
     return NextResponse.json(data, { status: 201 })
   } catch (e) {

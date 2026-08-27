@@ -103,7 +103,7 @@ type CommentRow = {
  *  Shaped by the hats the viewer wears ON THIS ITEM, not by their job title:
  *  someone handed the scheduling gets the scheduler's slice whatever their
  *  role, and an editor holding nothing here gets no more than a scheduler
- *  would. Clients never receive dropbox_url or internal comments; schedulers
+ *  would. Clients never receive the internal master link or internal comments; schedulers
  *  receive only the latest version's final links. This lives at the API layer
  *  so even direct API calls only ever get the caller's slice. */
 export function shapeItemDetail(
@@ -118,18 +118,18 @@ export function shapeItemDetail(
     item as { owner_id?: string | null; scheduler_ids?: unknown },
   )
 
-  // the job pack (brief, raw footage, the Dropbox working folder) is internal
+  // the job pack (brief, raw footage, the Drive working folder) is internal
   // production material — clients never see it, and schedulers work from
-  // final links only. The Dropbox folder goes in this list for the same
-  // reason raw_assets_url does: it is the unedited material.
+  // final links only. The Drive folder goes in this list for the same reason
+  // raw_assets_url does: it is the unedited material.
   const {
     raw_assets_url: _raw, brief: _brief, raw_assets: _files,
-    dropbox_url: _dbxUrl, dropbox_path: _dbxPath, ...itemPublic
+    drive_url: _driveUrl, drive_folder_id: _driveId, ...itemPublic
   } = item as Record<string, unknown> & {
     raw_assets_url?: unknown; brief?: unknown; raw_assets?: unknown
-    dropbox_url?: unknown; dropbox_path?: unknown
+    drive_url?: unknown; drive_folder_id?: unknown
   }
-  void _raw; void _brief; void _files; void _dbxUrl; void _dbxPath
+  void _raw; void _brief; void _files; void _driveUrl; void _driveId
 
   if (user.role === 'client') {
     const latest = versions[0]

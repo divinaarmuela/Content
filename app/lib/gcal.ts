@@ -1,7 +1,7 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { decryptSecret, encryptSecret } from './secret-box'
-import { inboxClientId, inboxClientSecret, redirectUriFor } from './inbox-connect'
+import { googleAccessToken, inboxClientId, inboxClientSecret, redirectUriFor } from './inbox-connect'
 import type { CalEvent } from './gcal-core'
 
 /**
@@ -127,27 +127,10 @@ export async function disconnectCalendar(email: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-// one cached access token per refresh token
-const tokenCache = new Map<string, { token: string; expiresAt: number }>()
-
-async function accessToken(refreshToken: string): Promise<string> {
-  const hit = tokenCache.get(refreshToken)
-  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: inboxClientId(),
-      client_secret: inboxClientSecret(),
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  })
-  if (!res.ok) throw new Error(`Calendar token exchange failed: ${await res.text()}`)
-  const json = await res.json()
-  tokenCache.set(refreshToken, { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 })
-  return json.access_token
-}
+// the refresh-token exchange and its cache live in inbox-connect.ts, shared
+// with Drive — the Internal app is the same app, and two caches would each
+// re-mint a token the other already holds
+const accessToken = googleAccessToken
 
 /** The stored token for one connected account, or null if not connected. */
 async function tokenFor(email: string): Promise<string | null> {

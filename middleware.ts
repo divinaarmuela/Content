@@ -100,7 +100,7 @@ export const config = {
     // like /api/gcal: not force-protected above, because every handler calls
     // requireRole itself — but auth() needs the middleware to have run, and
     // the OAuth callback must be able to identify who came back
-    '/api/dropbox/:path*',
+    '/api/gdrive/:path*',
     '/api/gcal/:path*',
     '/api/inbox/:path*',
     '/api/intake-templates/:path*',

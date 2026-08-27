@@ -7,7 +7,7 @@ import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/w
 import { accessibleClientIds, assertUuid } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
-import { onItemsCreated } from '../../../lib/dropbox-hooks'
+import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
@@ -299,7 +299,7 @@ export async function POST(req: Request) {
       notifyJobAssigned(user, item)
     }
     // a folder per deliverable, and the master link prefilled from it — in
-    // the background, so a slow Dropbox never delays a batch upload
+    // the background, so a slow Drive never delays a batch upload
     onItemsCreated(data ?? [])
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
