@@ -4,6 +4,7 @@ import { AuthzError, type TeamUser } from './authz'
 import { actingRoles } from './workflow-core'
 import { logActivity } from './workflow'
 import { announceItemChange } from './production-live'
+import { mirrorLatestVersionSoon } from './gdrive-mirror'
 
 export type ScheduleEntryInput = {
   platform?: unknown
@@ -81,6 +82,14 @@ export async function upsertScheduleEntry(
     action: input.live_url ? 'live_link_added' : 'schedule_set',
     detail: `${patch.platform}${input.scheduled_at ? ` @ ${input.scheduled_at}` : ''}`,
   })
+  // a date arriving — or moving — decides which month folder the piece lives
+  // in. The mirror job re-parents an existing file rather than copying it
+  // again, so a post pushed from August to September empties the August folder
+  // instead of leaving it claiming a post that is not happening then.
+  if ('scheduled_at' in input && input.scheduled_at) {
+    mirrorLatestVersionSoon(item.id, 'scheduled')
+  }
+
   announceItemChange({
     item_id: item.id, client_id: item.client_id, status: item.status, kind: 'schedule',
   })

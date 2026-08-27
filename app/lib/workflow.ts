@@ -19,6 +19,7 @@ import {
 } from './brief-task-core'
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
+import { mirrorLatestVersionSoon } from './gdrive-mirror'
 
 export type ContentItem = {
   id: string
@@ -490,6 +491,16 @@ export async function performTransition(
     const { error: shareErr } = await supabase.from('batches')
       .update({ shared_with_client: true }).eq('id', item.batch_id)
     if (shareErr) console.error('share plan with client: could not flag the shoot', shareErr.message)
+  }
+
+  // ── the archive follows the decision ──
+  // Approving a cut is what makes it THE cut, so that is the moment a copy
+  // belongs in the shoot's finals; giving it a date is what commits it to a
+  // month, so that is the moment a copy belongs under that month. Assets
+  // only: a brief has no footage and an internal task has nothing to post.
+  if (!isBriefTask && !isInternal) {
+    if (to === 'approved_for_scheduling') mirrorLatestVersionSoon(item.id, 'final')
+    if (to === 'scheduled') mirrorLatestVersionSoon(item.id, 'scheduled')
   }
 
   // notifications — fire-and-forget; the outbox dedupe makes retries safe

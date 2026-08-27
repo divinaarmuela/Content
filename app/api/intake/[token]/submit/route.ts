@@ -9,6 +9,7 @@ import { renderIntakePdf } from '../../../../lib/intake-pdf'
 import { packIntakeFiles } from '../../../../lib/intake-attachments'
 import { inngest } from '../../../../inngest/client'
 import { intakeChannel } from '../../../../inngest/channels'
+import { mirrorIntakeFiles } from '../../../../lib/gdrive-mirror'
 
 export const dynamic = 'force-dynamic'
 // Building the PDF and pulling attachments out of storage takes longer than a
@@ -43,6 +44,26 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // client has done their part, so a failed PDF, a missing attachment or a
   // bounced email must never turn a successful submission into an error they
   // see. notify() carries its own dedupe key, so a retry cannot double-send.
+  // What the client sent goes into their Drive folder: brand material to
+  // `_Brand`, everything else to `_From client/{the day it arrived}`. On
+  // SUBMIT, not on upload — the upload route only signs a URL, and the bytes
+  // arrive from the browser afterwards, so a mirror queued there would race
+  // the file into existence and spend its retries fetching a 404.
+  try {
+    const labels = new Map<string, string>()
+    for (const section of form.definition.sections) {
+      for (const block of section.blocks) labels.set(block.id, block.label ?? '')
+    }
+    const submitted = await listIntakeFiles(form.id)
+    mirrorIntakeFiles(
+      form.client_id,
+      submitted.map(f => ({ ...f, label: labels.get(f.block_id) ?? null })),
+      new Date().toISOString(),
+    )
+  } catch (e) {
+    console.error('intake drive mirror failed:', e)
+  }
+
   try {
     const files = await listIntakeFiles(form.id)
     const [pdf, packed] = await Promise.all([

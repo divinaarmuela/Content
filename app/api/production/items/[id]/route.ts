@@ -5,6 +5,9 @@ import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
+import {
+  itemMirrorProgress, mirrorRawAssets, newRawAssets, type RawAsset,
+} from '../../../../lib/gdrive-mirror'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -104,6 +107,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       // the pickers need to know who is looking: you are never emailed about
       // your own action, so offering yourself as a reviewer is a silent no-op
       viewer_id: user.id,
+      // "Mirrored to Drive · 7 files" under the folder link. A client never
+      // sees it: the job pack is internal production material, and so is the
+      // fact that we keep a copy of it.
+      drive_mirror: user.role === 'client' ? null : await itemMirrorProgress(
+        id, (item as { raw_assets?: RawAsset[] | null }).raw_assets ?? null,
+      ),
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -154,6 +163,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
+    // what this save ADDED, decided before the write: the upload queue sends
+    // the whole array back every time it appends one file, so the payload is
+    // not the news — the difference is
+    const addedAssets = 'raw_assets' in patch
+      ? newRawAssets(
+          (current as { raw_assets?: RawAsset[] | null }).raw_assets ?? null,
+          patch.raw_assets as RawAsset[],
+        )
+      : []
     // re-assigning records who handed out the job
     if ('owner_id' in patch && patch.owner_id) {
       // anyone active on the team can carry a task — but only real, active
@@ -187,6 +205,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
     // (re)assignment is a handoff: email the editor their job pack
     if ('owner_id' in patch && patch.owner_id) notifyJobAssigned(user, data)
+    // every new file lands in the item's Drive folder too — queued, never
+    // awaited: a slow Drive must not slow a save
+    if (addedAssets.length > 0) mirrorRawAssets(id, addedAssets)
     announceItemChange({ item_id: id, client_id: data.client_id, status: data.status, kind: 'updated' })
     return NextResponse.json(data)
   } catch (e) {

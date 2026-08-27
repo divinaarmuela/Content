@@ -4,6 +4,7 @@ import { loadItemForUser } from '../../../../../lib/production-access'
 import { addVersion } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles } from '../../../../../lib/workflow-core'
+import { mirrorVersion } from '../../../../../lib/gdrive-mirror'
 
 /** Append a new asset version (race-safe numbering). The editor HAT on this
  *  item — its owner, or anyone while it is unowned — plus managers. */
@@ -29,6 +30,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       drive_url: body.drive_url,
       notes: body.notes,
     })
+    // the cut goes into the item's Drive folder as `v3 - <their name>`; a
+    // version that is only a pasted link has no bytes of ours to copy
+    mirrorVersion(id, version.version_number as number, version.file_url as string)
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'version' })
     return NextResponse.json(version, { status: 201 })
   } catch (e) {

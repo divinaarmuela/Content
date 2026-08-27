@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import { signUpload } from '@/app/lib/storage'
 import { inngest } from '../../../../inngest/client'
+import { mirrorBrandDoc } from '../../../../lib/gdrive-mirror'
 
 /**
  * Brand guidelines per client.
@@ -99,6 +100,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         name: 'app/brand.scan.requested',
         data: { clientId: id, url, filename, by: user.email },
       })
+
+      // the document itself belongs in the client's `_Brand` folder — this is
+      // the first point the server knows it exists and is uploaded (the sign
+      // step above knows only a name and a size)
+      mirrorBrandDoc(id, url, filename)
 
       // 202: accepted, not finished. The panel watches the brand channel and
       // fills itself in as chunks complete.
