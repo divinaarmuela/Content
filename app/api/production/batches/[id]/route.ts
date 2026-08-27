@@ -4,6 +4,7 @@ import { requireRole, roleSatisfies, authzErrorResponse } from '../../../../lib/
 import { batchClientIds } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
+import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
 } from '../../../../lib/batch-brief-core'
@@ -103,6 +104,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         oldValue: batch.shoot_date ?? '', newValue: newDate, detail: reason,
       })
       announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status, kind: 'updated' })
+      // the folder leads with the month; the month just changed
+      onShootDateChanged(data)
       return NextResponse.json(data)
     }
 
@@ -183,6 +186,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .eq('id', id)
       .then(() => {}, () => {})
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status, kind: 'updated' })
+    // a shoot folder is named by its MONTH, and a plan with no date yet was
+    // filed under the month it was raised in — put it right the moment the
+    // date exists
+    if ('shoot_date' in patch) onShootDateChanged(data)
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

@@ -4,6 +4,7 @@ import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { accessibleClientIds } from '../../../../../lib/production-access'
 import { logActivity, notifyBatchTransition } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
+import { onShootDateChanged } from '../../../../../lib/gdrive-hooks'
 import {
   BATCH_STATUSES, batchSatisfiesLock, checkBatchTransition, type BatchStatus,
 } from '../../../../../lib/batch-brief-core'
@@ -67,6 +68,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     notifyBatchTransition(user, updated, from, to)
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: to, kind: 'transition' })
+    // locking is the moment the date becomes a fact — and the shoot folder is
+    // named by the date's MONTH, so a plan folded under the month it was
+    // RAISED in gets its name put right here
+    if (to === 'locked') onShootDateChanged(updated)
     return NextResponse.json(updated)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

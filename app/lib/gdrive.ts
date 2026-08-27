@@ -604,4 +604,48 @@ export async function ensureChainWithLink(
   return { id: made.id, url: await shareWithDomain(made.id) }
 }
 
+/** What a folder is called right now, and what it sits in. Drive is the truth
+ *  here: our own guess at the name is exactly the thing being corrected. */
+export async function folderInfo(
+  folderId: string,
+): Promise<{ name: string; parentId: string | null } | null> {
+  const auth = await accessToken()
+  if (!auth.ok) return null
+  const url = `${FILES}/${encodeURIComponent(folderId)}?` +
+    new URLSearchParams({ fields: 'id,name,parents,trashed', ...ALL_DRIVES })
+  const res = await driveFetch<{ name?: string; parents?: string[]; trashed?: boolean }>(auth.token, url)
+  if (!res.ok || res.data.trashed) return null
+  return { name: res.data.name ?? '', parentId: res.data.parents?.[0] ?? null }
+}
+
+/**
+ * Rename a folder in place — `files.update` with a new `name`.
+ *
+ * In place matters: the id does not change, so every link we have recorded,
+ * every file already inside it and every permission on it survive. Moving the
+ * contents to a new folder would have broken all three, and a Drive link in a
+ * client's inbox is not something we get to invalidate.
+ *
+ * Returns the name Drive is now using, or null if it would not do it — a
+ * folder we cannot rename is a cosmetic problem, never a failed request.
+ */
+export async function renameFolder(
+  folderId: string, name: string,
+): Promise<string | null> {
+  const safe = safeSegment(name)
+  const auth = await accessToken()
+  if (!auth.ok) return null
+  const url = `${FILES}/${encodeURIComponent(folderId)}?` +
+    new URLSearchParams({ fields: 'id,name', ...ALL_DRIVES })
+  const res = await driveFetch<DriveFile>(auth.token, url, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: safe }),
+  })
+  if (!res.ok) {
+    console.error('[gdrive] rename failed:', res.message, res.detail)
+    return null
+  }
+  return res.data.name ?? safe
+}
+
 export { folderUrl }
