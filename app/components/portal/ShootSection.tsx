@@ -153,7 +153,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
         {token && shoot.details_shared ? (
           <Link href={`/portal/${token}/shoot/${shoot.id}`}
-            className="text-lg font-medium tracking-tight underline-offset-4 hover:underline"
+            className="portal-tap text-lg font-medium tracking-tight underline-offset-4 hover:underline"
             style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
             {shoot.title}
           </Link>
@@ -168,7 +168,9 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
         >
           {shoot.status_label}
         </span>
-        <span className="ml-auto flex items-center gap-4 text-xs opacity-70" style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
+        {/* on a phone the date and location get the full row rather than
+            being squeezed against the status chip by `ml-auto` */}
+        <span className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-70 sm:ml-auto sm:w-auto" style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
           <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {dateLabel(shoot.shoot_date)}</span>
           {shoot.location && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {shoot.location}</span>}
         </span>
@@ -181,7 +183,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
       {token && shoot.details_shared && (
         <a
           href={`/api/portal/shoot-pdf?token=${encodeURIComponent(token)}&id=${shoot.id}`}
-          className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
+          className="portal-tap flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
           style={{ fontFamily: 'var(--p-mono-font, inherit)' }}
         >
           <FileDown className="h-3.5 w-3.5" /> Download the shoot plan (PDF)
@@ -239,7 +241,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Your name"
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
+                className="min-h-11 w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
                 style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
               />}
               <textarea
@@ -258,12 +260,12 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
             {mode === null ? (
               <>
                 <button type="button" disabled={busy !== null} onClick={() => act('approve')}
-                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
                   <Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve the plan'}
                 </button>
                 <button type="button" disabled={busy !== null} onClick={() => setMode('changes')}
-                  className="rounded-lg border px-4 py-2 text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+                  className="portal-tap rounded-lg border px-4 py-2.5 text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
                   style={{ borderColor: 'var(--p-border)' }}>
                   Request changes
                 </button>
@@ -271,12 +273,12 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
             ) : (
               <>
                 <button type="button" disabled={busy !== null} onClick={() => act('request_changes')}
-                  className="rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="portal-tap rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
                   {busy === 'request_changes' ? 'Sending…' : 'Send'}
                 </button>
                 <button type="button" disabled={busy !== null} onClick={() => { setMode(null); setNote('') }}
-                  className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: 'var(--p-border)' }}>
+                  className="portal-tap rounded-lg border px-4 py-2.5 text-sm" style={{ borderColor: 'var(--p-border)' }}>
                   Cancel
                 </button>
               </>
@@ -291,7 +293,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
           <button
             type="button"
             onClick={() => setBoardOpen(v => !v)}
-            className="flex w-fit items-center gap-2 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
+            className="portal-tap flex w-fit items-center gap-2 text-[11px] uppercase tracking-[0.14em] opacity-70 transition-opacity hover:opacity-100"
             style={{ fontFamily: 'var(--p-mono-font, inherit)' }}
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${boardOpen ? 'rotate-180' : ''}`} />
@@ -320,7 +322,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
           visible way to reply at all */}
       {token && shoot.details_shared && !bare && (
         <Link href={`/portal/${token}/shoot/${shoot.id}`}
-          className="flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] underline-offset-4 hover:underline"
+          className="portal-tap flex w-fit items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] underline-offset-4 hover:underline"
           style={{ fontFamily: 'var(--p-mono-font, inherit)' }}>
           <MessageCircle className="h-3.5 w-3.5" /> Thoughts on this plan? Leave a comment →
         </Link>

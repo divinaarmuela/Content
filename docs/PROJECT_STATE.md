@@ -1,5 +1,12 @@
 # Project state — as at 19 August 2026
 
+## Client portal is mobile-checked — 27 Aug
+
+`npm run check:mobile` loads the portal at 390×844 and 768×1024 (URLs from
+`MOBILE_CHECK_URLS`, default the ZZ TEST share link) and fails on horizontal
+overflow, tap targets under 40px tall or off-screen, text under 12px, and the
+mode pill covering a control — screenshots land in `.mobile-check/`.
+
 ## Google Drive is now a mirror, not an index — 27 Aug
 
 The folder tree below created folders and links. This fills them: **every file

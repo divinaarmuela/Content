@@ -135,27 +135,32 @@ export default function ClientPortalPage() {
             <div key={item.id} className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
               {item.preview_url && <Media src={item.preview_url} className="max-h-96 w-full bg-zinc-950 object-contain" />}
               <p className="px-3 pt-3 text-xs text-zinc-500 dark:text-zinc-400">{approveConsequence(data.am_name)}</p>
-              <div className="flex flex-wrap items-center gap-2 p-3">
+              {/* on a phone the title and three `size="sm"` buttons fought over
+                  one 320px row; the buttons get their own full-width row and a
+                  44px hit area, and only line up beside the title from sm up */}
+              <div className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{item.title}</p>
                   {contentTypeLabel(item.content_type) && (
                     <p className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{contentTypeLabel(item.content_type)}</p>
                   )}
                 </div>
-                {item.drive_url && (
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={item.drive_url} target="_blank" rel="noreferrer noopener">
-                      Open the file <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                <div className="flex flex-wrap gap-2">
+                  {item.drive_url && (
+                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" asChild>
+                      <a href={item.drive_url} target="_blank" rel="noreferrer noopener">
+                        Open the file <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id}
+                    onClick={() => { setChanging(item); setChangeText('') }}>
+                    <MessageSquare className="h-3.5 w-3.5" /> Request changes
                   </Button>
-                )}
-                <Button variant="outline" size="sm" disabled={busy === item.id}
-                  onClick={() => { setChanging(item); setChangeText('') }}>
-                  <MessageSquare className="h-3.5 w-3.5" /> Request changes
-                </Button>
-                <Button size="sm" disabled={busy === item.id} onClick={() => approve(item)}>
-                  <CheckCircle2 className="h-3.5 w-3.5" /> {busy === item.id ? 'Working…' : 'Approve'}
-                </Button>
+                  <Button size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id} onClick={() => approve(item)}>
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {busy === item.id ? 'Working…' : 'Approve'}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -184,7 +189,7 @@ export default function ClientPortalPage() {
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." />
-        <PortalSection title="Approved" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." />
+        <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." />
       </div>
       <PortalSection title="Published" items={data.published} empty="Published posts will appear here with live links." />
     </div>

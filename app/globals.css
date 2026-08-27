@@ -37,6 +37,49 @@
   --p-accent-ink: #f9f4eb;
 }
 
+/* ═══ Client portal: legibility + tap-target floor on phones and tablets ═══
+   The portal's mono kickers, chips and status labels are set in 9–11px. That
+   reads as deliberate typography on a laptop and as fine print on a phone,
+   where most clients open the link from the email we send them.
+
+   One rule lifts every sub-12px size to 12px below the desktop breakpoint
+   instead of forking three dozen class strings into responsive pairs — new
+   portal components inherit the floor for free, and `npm run check:mobile`
+   fails the build-adjacent check if anything slips under it again.
+
+   Scoped, deliberately: `[data-portal-theme]` is stamped by PortalShell (the
+   share-link portal), `.portal-legible` marks the signed-in portal's main.
+   Nothing here is a bare element selector, so the dashboard (trap 2 in
+   CLAUDE.md) and the marketing site keep their own type untouched.
+
+   `.portal-tap` / `.portal-tap-block` do the same job for hit areas: a link
+   or button on a phone is a thumb target, not a word — 44px minimum. The
+   -block variant is for links that must stay block-level because they
+   `truncate` (text-overflow does not apply to a flex container). */
+@media (max-width: 1023px) {
+  [data-portal-theme] [class*='text-[9px]'],
+  [data-portal-theme] [class*='text-[10px]'],
+  [data-portal-theme] [class*='text-[11px]'],
+  .portal-legible [class*='text-[9px]'],
+  .portal-legible [class*='text-[10px]'],
+  .portal-legible [class*='text-[11px]'] {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .portal-tap {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .portal-tap-block {
+    min-height: 44px;
+    display: block;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
 /* full token set applies to the whole page when the dashboard shell (.dbx)
    is mounted — dashboard routes own the page, and Radix portals mount on
    <body> outside .dbx, so tokens must live at body level */

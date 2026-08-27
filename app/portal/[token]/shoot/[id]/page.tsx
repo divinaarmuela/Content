@@ -32,18 +32,18 @@ export default async function PortalShootPage({ params }: { params: Promise<{ to
         ['--p-mono-font' as string]: 'var(--font-sometype), monospace',
       }}>
         <header className="sticky top-0 z-20 backdrop-blur" style={{ background: 'color-mix(in srgb, var(--p-bg) 85%, transparent)', borderBottom: '1px solid var(--p-border)' }}>
-          <div className="flex h-12 items-center gap-3 px-6 sm:px-10">
-            <Link href={`/portal/${token}`} className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] opacity-70 hover:opacity-100"
+          <div className="flex h-12 items-center gap-3 px-5 sm:px-10">
+            <Link href={`/portal/${token}`} className="portal-tap flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] opacity-70 hover:opacity-100"
               style={{ fontFamily: 'var(--font-sometype), monospace' }}>
               ← {data.client.name}
             </Link>
-            <p className="ml-auto shrink-0 text-[9px] uppercase tracking-[0.2em] opacity-40" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
+            <p className="ml-auto hidden shrink-0 text-[9px] uppercase tracking-[0.2em] opacity-40 sm:block" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
               by MD Media
             </p>
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-12 sm:px-10">
+        <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-5 py-12 pb-24 sm:px-10 sm:pb-16">
           {/* the token is what makes the plan's PDF and its Approve /
               Request-changes block exist — without it this page was the plan
               with every action stripped out */}

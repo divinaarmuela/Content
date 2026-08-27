@@ -151,7 +151,7 @@ export function ReviewCard({ item, token, amName, bare }: {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             {bare ? null : token ? (
-              <Link href={`/portal/${token}/item/${item.id}`} className="text-base font-semibold underline-offset-4 hover:underline"
+              <Link href={`/portal/${token}/item/${item.id}`} className="portal-tap text-base font-semibold underline-offset-4 hover:underline"
                 style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>
                 {item.title}
               </Link>
@@ -164,7 +164,7 @@ export function ReviewCard({ item, token, amName, bare }: {
           </div>
           {item.drive_url && (
             <a href={item.drive_url} target="_blank" rel="noreferrer noopener"
-              className="flex shrink-0 items-center gap-1 text-xs opacity-60 hover:opacity-100">
+              className="portal-tap flex shrink-0 items-center gap-1 text-xs opacity-60 hover:opacity-100">
               Open the file <ExternalLink className="h-3 w-3" />
             </a>
           )}
@@ -183,7 +183,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
+                  className="min-h-11 w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
                   style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
                 />
                 <textarea
@@ -206,7 +206,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                     type="button"
                     disabled={busy !== null}
                     onClick={() => act('approve')}
-                    className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
                   >
                     <Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve'}
@@ -215,7 +215,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                     type="button"
                     disabled={busy !== null}
                     onClick={() => setMode('changes')}
-                    className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                     style={{ background: 'transparent', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
                   >
                     <MessageSquare className="h-4 w-4" /> Request changes
@@ -224,7 +224,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                     type="button"
                     disabled={busy !== null}
                     onClick={() => setMode('approve')}
-                    className="px-1 py-2 text-xs underline-offset-2 opacity-60 hover:underline hover:opacity-100"
+                    className="portal-tap px-1 py-2 text-xs underline-offset-2 opacity-60 hover:underline hover:opacity-100"
                   >
                     Approve with a note
                   </button>
@@ -235,7 +235,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                     type="button"
                     disabled={busy !== null}
                     onClick={() => act(mode === 'changes' ? 'request_changes' : 'approve')}
-                    className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
                   >
                     {mode === 'changes'
@@ -246,7 +246,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                     type="button"
                     disabled={busy !== null}
                     onClick={() => { setMode(null); setNote('') }}
-                    className="rounded-lg px-3 py-2 text-sm opacity-60 hover:opacity-100"
+                    className="portal-tap rounded-lg px-3 py-2 text-sm opacity-60 hover:opacity-100"
                   >
                     Cancel
                   </button>
@@ -292,7 +292,7 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
       <div className="flex flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
           {token ? (
-            <Link href={`/portal/${token}/item/${item.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
+            <Link href={`/portal/${token}/item/${item.id}`} className="portal-tap-block min-w-0 truncate text-sm font-medium underline-offset-4 hover:underline">
               {item.title}
             </Link>
           ) : (
@@ -310,7 +310,7 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
             ))}
             {item.schedule.filter(s => s.live_url).map(s => (
               <a key={s.platform} href={s.live_url!} target="_blank" rel="noreferrer noopener"
-                className="flex items-center gap-1 text-xs font-medium capitalize hover:underline"
+                className="portal-tap flex items-center gap-1 text-xs font-medium capitalize hover:underline"
                 style={{ color: 'var(--p-accent, #18181b)' }}>
                 Watch on {s.platform} <ExternalLink className="h-3 w-3" />
               </a>

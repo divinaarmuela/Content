@@ -94,7 +94,7 @@ export default function CommentThread({
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="Your name"
-          className="w-full max-w-[240px] border-b bg-transparent pb-1 text-sm outline-none placeholder:opacity-40"
+          className="min-h-11 w-full max-w-[240px] border-b bg-transparent pb-1 text-sm outline-none placeholder:opacity-40"
           style={{ borderColor: 'var(--p-border)' }}
         />
         <textarea
@@ -103,14 +103,14 @@ export default function CommentThread({
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send() }}
           placeholder="Write a comment — it stays on this page for you and the team…"
           rows={3}
-          className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:opacity-40"
+          className="min-h-11 w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:opacity-40"
         />
         {error && <p className="text-xs" style={{ color: '#f87171' }}>{error}</p>}
         <button
           type="button"
           onClick={() => void send()}
           disabled={sending || !draft.trim()}
-          className="flex w-fit items-center gap-2 px-3.5 py-2 text-[11px] uppercase tracking-[0.14em] transition-opacity disabled:opacity-40"
+          className="portal-tap flex w-fit items-center gap-2 px-4 py-2.5 text-[11px] uppercase tracking-[0.14em] transition-opacity disabled:opacity-40"
           style={{ background: 'var(--p-accent)', color: 'var(--p-accent-ink)', fontFamily: 'var(--p-mono-font, inherit)' }}
         >
           <Send className="h-3.5 w-3.5" /> {sending ? 'Sending…' : 'Send'}

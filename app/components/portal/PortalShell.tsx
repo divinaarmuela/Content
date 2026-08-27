@@ -46,20 +46,27 @@ export default function PortalShell({ className = '', children }: {
       style={{ background: 'var(--p-bg)', color: 'var(--p-ink)' }}
     >
       {children}
-      {/* bottom-RIGHT, above everything: the portal's own action buttons are
-          all left-aligned inside their cards, and a fixed pill in the bottom
-          left corner sat squarely on top of the "Send" button of the
+      {/* bottom-RIGHT from sm up, above everything: the portal's own action
+          buttons are all left-aligned inside their cards, and a fixed pill in
+          the bottom left corner sat squarely on top of the "Send" button of the
           request-changes form at ordinary window widths. The toasts moved to
-          the top of the screen to make room. */}
+          the top of the screen to make room.
+
+          On a phone there is no free corner at all — the cards are full-bleed,
+          so a bottom-right pill lands on whatever control happens to be at the
+          bottom of the screen (`npm run check:mobile` caught it sitting on the
+          shoot plan's PDF link). Below sm it docks into the sticky header strip
+          instead, icon-only: the top bar is the one band of the page with no
+          controls in it, so it can never cover one. */}
       <button
         type="button"
         onClick={flip}
         aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-[11px] uppercase tracking-[0.14em] shadow-lg backdrop-blur transition-transform hover:scale-105"
+        className="portal-tap fixed right-3 top-1.5 z-50 flex min-h-11 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] uppercase tracking-[0.14em] shadow-lg backdrop-blur transition-transform hover:scale-105 sm:bottom-4 sm:right-4 sm:top-auto sm:px-4"
         style={{ background: 'var(--p-accent)', color: 'var(--p-accent-ink)', fontFamily: 'var(--p-mono-font, inherit)' }}
       >
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        <span className="hidden sm:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
       </button>
     </div>
   )
