@@ -12,12 +12,14 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
-import { STATUS_LABELS, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
+import { STATUS_LABELS, STATUS_MEANING, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
 import { choosePlatform, platformLabel } from '../../lib/posting-card-core'
 import {
-  canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
+  SCHEDULER_LANES, canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
+import GettingStarted from '../GettingStarted'
+import HelpHint from '../HelpHint'
 import { slideCountLabel } from '../../lib/version-files-core'
 import {
   DEFAULT_TZ, formatInZone, formatWithZone, viewerHint, zoneAbbrev,
@@ -49,16 +51,13 @@ type Item = {
   scheduler_ids?: unknown
   clients: { name: string; timezone?: string | null } | null
   work_kinds?: { slug?: string } | null
+  /** somebody tagged the viewer in a comment here and it is not done */
+  my_open_task?: boolean
 }
 
-/** The Editor board calls this state "Approved" and so does the badge, so the
- *  hand-off between the two pages says one word. The tab adds what the
- *  scheduler is being asked to do with it. */
-const LANES = [
-  { key: 'approved_for_scheduling', label: 'Approved — to schedule' },
-  { key: 'scheduled', label: 'Scheduled' },
-  { key: 'published', label: 'Published' },
-] as const
+/** The three tabs, in the status's own words — the same words the Editor
+ *  board's last column and the item badge use, so the hand-off says one thing. */
+const LANES = SCHEDULER_LANES
 
 const STATUS_BADGE: Record<string, string> = {
   approved_for_scheduling: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
@@ -183,14 +182,27 @@ export default function SchedulerPage() {
   // slower load. A skeleton that never resolves tells the user nothing.
   if (!loading && !viewer) return <AccountUnavailable />
 
+  /** The one thing to do with this row, named by what happens. */
+  const rowAction = (item: Item) => {
+    const clientChannels = connected[item.client_id ?? ''] ?? []
+    const platform = choosePlatform(item.platform_targets ?? [], clientChannels)
+    const postsFromApp = clientChannels.includes(platform)
+    const label = lane !== 'approved_for_scheduling'
+      ? 'Open'
+      : postsFromApp ? `Schedule on ${platformLabel(platform)}` : 'Set the posting time'
+    return { platform, postsFromApp, label }
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {ready && <GettingStarted role={role} page="scheduler" />}
+
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={lane} onValueChange={v => v && setLane(v)}>
-          <TabsList>
+          <TabsList className="h-auto">
             {LANES.map(l => (
-              <TabsTrigger key={l.key} value={l.key} className="gap-1.5">
-                {l.label}
+              <TabsTrigger key={l.key} value={l.key} className="min-h-11 gap-1.5 md:min-h-8">
+                {l.title}
                 <span className="font-mono text-[11px] tabular-nums text-zinc-400">{counts[l.key] ?? 0}</span>
               </TabsTrigger>
             ))}
@@ -202,9 +214,14 @@ export default function SchedulerPage() {
         </div>
       </div>
 
-      {/* the two lane names mean precise things, and guessing wrong costs a post */}
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Scheduled means at least one platform has a date; Published means at least one platform is live.
+      {/* what the open tab MEANS — the status's own sentence, not a legend
+          in the smallest type on the page. Guessing wrong costs a post. */}
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        {lane === 'approved_for_scheduling'
+          ? <>{STATUS_MEANING.approved_for_scheduling} <HelpHint term="approved_for_scheduling" /></>
+          : lane === 'scheduled'
+            ? 'Scheduled means at least one platform has a posting time. Nothing here is live yet.'
+            : 'Published means at least one platform is live. Nothing left to do.'}
       </p>
 
       {!ready ? (
@@ -215,36 +232,101 @@ export default function SchedulerPage() {
         </Card>
       ) : visible.length === 0 ? (
         <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
             <CalendarClock className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {lane !== 'approved_for_scheduling'
-                ? 'Nothing here yet.'
+            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+              {lane === 'scheduled' ? 'Nothing scheduled yet.'
+                : lane === 'published' ? 'Nothing published yet.'
+                : 'Nothing to schedule yet.'}
+            </p>
+            <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+              {lane === 'scheduled'
+                ? 'Set a posting time on an item under "Needs a posting date" and it moves here.'
+                : lane === 'published'
+                  ? 'Once a scheduled post goes live it moves here, with its link.'
                 : !showingOnlyMineAndPool
-                  ? 'Nothing waiting — items appear here the moment they’re approved for scheduling.'
+                  ? 'Items appear here the moment an account manager signs them off. Until then they are on the Editor board.'
                   : scope.has('mine') && scope.has('unassigned')
                     ? 'Nothing handed to you and nothing free to take — approved items land here the moment an account manager signs them off.'
                     : scope.has('mine')
                       ? 'Nothing has been handed to you to schedule.'
                       : 'Nothing free to take — every approved item already has someone on it.'}
             </p>
-            {showingOnlyMineAndPool && (
-              <Button variant="outline" size="sm" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
-                Show everyone&rsquo;s
-              </Button>
-            )}
-            {/* a page you cannot act on and cannot leave is a dead end —
-                point at where the work is coming from */}
-            {canSeeEditor && (
-              <Link href="/dashboard/editor"
-                className="flex items-center gap-1 text-xs text-zinc-500 underline-offset-4 hover:underline dark:text-zinc-400">
-                See what&rsquo;s still in the edit <ArrowRight className="h-3 w-3" />
-              </Link>
-            )}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {lane !== 'approved_for_scheduling' && (counts.approved_for_scheduling ?? 0) > 0 && (
+                <Button size="sm" className="min-h-11" onClick={() => setLane('approved_for_scheduling')}>
+                  Schedule the {counts.approved_for_scheduling} waiting <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {showingOnlyMineAndPool && lane === 'approved_for_scheduling' && (
+                <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                  Show everyone&rsquo;s
+                </Button>
+              )}
+              {/* a page you cannot act on and cannot leave is a dead end —
+                  point at where the work is coming from */}
+              {canSeeEditor && (
+                <Button variant="outline" size="sm" className="min-h-11" asChild>
+                  <Link href="/dashboard/editor">
+                    See what&rsquo;s still being edited <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        <>
+        {/* PHONE: one card per item, the action as a full-width button. A
+            five-column table clipped its last two columns — the action
+            column among them — on every phone. */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {visible.map(item => {
+            const assignment = schedulerAssignment(item, viewer!)
+            const { postsFromApp, label } = rowAction(item)
+            const itemTz = item.clients?.timezone || DEFAULT_TZ
+            const entries = schedules[item.id] ?? []
+            const canTake = lane === 'approved_for_scheduling' && assignment === 'unassigned' && canClaimScheduler(item, viewer!)
+            return (
+              <Card key={item.id} className="py-0">
+                <CardContent className="flex flex-col gap-2 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">{item.title}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {item.clients?.name ?? '—'} · <span className="capitalize">{item.content_type}</span>
+                        {(item.slide_count ?? 0) > 1 && ` · ${slideCountLabel(item.slide_count ?? 0)}`}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      postsFromApp ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                    }`}>
+                      {postsFromApp ? 'Posts itself' : 'Posted by hand'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task} />
+                    {entries.map(e => (
+                      <Badge key={e.platform} variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">
+                        {e.platform}
+                        {e.scheduled_at && <span className="ml-1 font-mono text-[11px] normal-case">{formatInZone(e.scheduled_at, itemTz, 'short')} {zoneAbbrev(itemTz, e.scheduled_at)}</span>}
+                      </Badge>
+                    ))}
+                  </div>
+                  {item.caption && <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">{item.caption}</p>}
+                  <div className="flex flex-col gap-2">
+                    {canTake && <ClaimButton itemId={item.id} hat="scheduler" onDone={load} />}
+                    <Button variant={canTake ? 'outline' : 'default'} size="sm" className="min-h-11 w-full" asChild>
+                      <Link href={`/dashboard/production/${item.id}`}>{label} <ArrowRight className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+
+        <Card className="hidden py-0 md:block">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
@@ -265,11 +347,9 @@ export default function SchedulerPage() {
                   .map(id => nameById.get(id))
                   .filter((n): n is string => !!n)
                 // the row's next move follows the client's channels, not the
-                // status: an unconnected client needs a connect link before a
-                // posting time means anything
-                const clientChannels = connected[item.client_id ?? ''] ?? []
-                const platform = choosePlatform(item.platform_targets ?? [], clientChannels)
-                const postsFromApp = clientChannels.includes(platform)
+                // status: a client with nothing connected gets a posting time
+                // recorded by hand, one with a channel gets it queued
+                const { postsFromApp, label: actionLabel } = rowAction(item)
                 // …and its posting times follow the client's zone, per row:
                 // this queue mixes clients, so there is no one zone for the page
                 const itemTz = item.clients?.timezone || DEFAULT_TZ
@@ -286,19 +366,18 @@ export default function SchedulerPage() {
                             one the other two work pages use. The parallel
                             you / Unassigned pills said it a second time, in
                             different words, on the same row. */}
-                        <TurnChip status={item.status} item={item} viewer={viewer!} />
-                        {/* how this one goes out. "Queued · auto" is the whole
-                            point of the new flow being visible from the queue:
-                            nobody has to open the item to find out whether a
-                            human still owes it a click. */}
+                        <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task} />
+                        {/* how this one goes out — in words, not "Auto" /
+                            "Manual": nobody has to open the item to find out
+                            whether a human still owes it a click. */}
                         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
                           postsFromApp
                             ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400'
                             : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
                         }`}>
                           {postsFromApp
-                            ? (item.status === 'approved_for_scheduling' ? 'Auto' : 'Queued · auto')
-                            : 'Manual'}
+                            ? (item.status === 'approved_for_scheduling' ? 'Posts itself' : 'Queued — posts itself')
+                            : 'Posted by hand'}
                         </span>
                         {assignment === 'other' && handedNames.length > 0 && (
                           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
@@ -352,22 +431,27 @@ export default function SchedulerPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {/* ONE primary per row: take it if nobody has, else
+                            the posting action. Both filled at once was two
+                            blue buttons asking two different questions. */}
                         {lane === 'approved_for_scheduling' && assignment === 'unassigned'
-                          && canClaimScheduler(item, viewer!) && (
-                          <ClaimButton itemId={item.id} hat="scheduler" label="I’ll schedule this" onDone={load} />
+                          && canClaimScheduler(item, viewer!) ? (
+                          <>
+                            <ClaimButton itemId={item.id} hat="scheduler" onDone={load} />
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/dashboard/production/${item.id}`}>Open</Link>
+                            </Button>
+                          </>
+                        ) : (
+                          <Button variant={lane === 'approved_for_scheduling' ? 'default' : 'outline'} size="sm" asChild>
+                            {/* the click opens the item's posting card, which is
+                                where the one real action lives — the row names
+                                that action rather than describing a page */}
+                            <Link href={`/dashboard/production/${item.id}`}>
+                              {actionLabel} <ArrowRight className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
                         )}
-                        <Button variant={lane === 'approved_for_scheduling' && postsFromApp ? 'default' : 'outline'} size="sm" asChild>
-                          {/* the click opens the item's posting card, which is
-                              where the one real action lives — the row names
-                              that action rather than describing a page */}
-                          <Link href={`/dashboard/production/${item.id}`}>
-                            {lane !== 'approved_for_scheduling'
-                              ? 'Open'
-                              : postsFromApp
-                                ? `Schedule on ${platformLabel(platform)}`
-                                : 'Send connect link'} <ArrowRight className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -376,6 +460,7 @@ export default function SchedulerPage() {
             </TableBody>
           </Table>
         </Card>
+        </>
       )}
     </div>
   )

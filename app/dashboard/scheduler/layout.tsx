@@ -16,13 +16,13 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Queue',
     icon: ListChecks,
-    blurb: 'Only client-approved content appears here. Open an item to set platforms, dates, and live links.',
+    blurb: 'Signed-off items waiting for a posting time. Take one, open it, set the platform and the time.',
   },
   {
     href: '/dashboard/scheduler/calendar',
-    label: 'Calendar',
+    label: 'Posting calendar',
     icon: CalendarDays,
-    blurb: 'Everything with a date, and whether it actually went out.',
+    blurb: 'Every post on the day it goes out, and whether it actually did.',
   },
 ]
 
@@ -39,7 +39,7 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* link pills styled like the shadcn TabsList they replace */}
-        <nav className="ml-auto inline-flex h-9 items-center justify-center rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+        <nav className="ml-auto inline-flex h-auto items-center justify-center rounded-lg bg-zinc-100 p-1 md:h-9 dark:bg-zinc-800">
           {VIEWS.map(v => {
             const Icon = v.icon
             const isActive = v.href === active.href
@@ -48,7 +48,7 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
                 key={v.href}
                 href={v.href}
                 aria-current={isActive ? 'page' : undefined}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+                className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all md:min-h-7 ${
                   isActive
                     ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
                     : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'

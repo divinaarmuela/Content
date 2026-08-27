@@ -131,22 +131,22 @@ export default function ScheduleCalendar() {
       controls={
         <button type="button" aria-pressed={showDue} onClick={() => setShowDue(!showDue)}
           title="Show the due dates of the items you are scheduling, under the posting times"
-          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+          className={`min-h-11 rounded-full border px-3 py-1 text-xs transition-colors md:min-h-8 ${
             showDue
               ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
               : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
           }`}>
-          Tasks due
+          Due dates
           {dueCount > 0 && (
             <span className="ml-1.5 font-mono text-[10px] tabular-nums opacity-70">{dueCount}</span>
           )}
         </button>
       }
       legend={
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Green means published, with a live link; grey is booked but not yet out. Times are
-          the client&rsquo;s, not yours. Switch on Tasks due for the deadlines behind them —
-          those are outlined, and can be dragged.
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Every post on the day its audience sees it. Green is live, with a link; grey has a
+          time but is not out yet. Times are the client&rsquo;s, not yours. Switch on
+          &ldquo;Due dates&rdquo; to see the deadlines behind them — those are outlined, and can be dragged.
         </p>
       }
     />

@@ -328,7 +328,7 @@ export default function WorkCalendar({
           {/* the week view has room to name the day; the month grid has a
               header row doing it once */}
           {view === 'week' && (
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 sm:hidden">
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 md:hidden">
               {LONG_WEEKDAYS[(new Date(Date.UTC(c.year, c.month - 1, c.day)).getUTCDay() + 6) % 7]}
             </span>
           )}
@@ -354,18 +354,18 @@ export default function WorkCalendar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+        <Button variant="outline" size="sm" className="h-11 w-11 p-0 md:h-8 md:w-8"
           aria-label={view === 'month' ? 'Previous month' : 'Previous week'}
           onClick={() => step(-1)}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-44 text-sm font-medium">{heading}</span>
-        <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+        <span className="min-w-36 text-sm font-medium md:min-w-44">{heading}</span>
+        <Button variant="outline" size="sm" className="h-11 w-11 p-0 md:h-8 md:w-8"
           aria-label={view === 'month' ? 'Next month' : 'Next week'}
           onClick={() => step(1)}>
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="sm" onClick={goToday}>Today</Button>
+        <Button variant="ghost" size="sm" className="min-h-11 md:min-h-8" onClick={goToday}>Today</Button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {controls}
@@ -380,6 +380,10 @@ export default function WorkCalendar({
           />
         </div>
       </div>
+
+      {/* the legend ABOVE the thing it explains — under ~500px of grid it was
+          read by nobody */}
+      {legend}
 
       {/* MONTH is a seven-column grid that scrolls sideways on a phone rather
           than crushing seven columns into 360px. WEEK stacks into one column
@@ -401,17 +405,15 @@ export default function WorkCalendar({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg bg-zinc-200 sm:grid-cols-7 dark:bg-zinc-800">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg bg-zinc-200 md:grid-cols-7 dark:bg-zinc-800">
           {cells.map(c => (
-            <div key={`h-${c.key}`} className="hidden bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 sm:block dark:bg-zinc-900 dark:text-zinc-400">
+            <div key={`h-${c.key}`} className="hidden bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 md:block dark:bg-zinc-900 dark:text-zinc-400">
               {WEEKDAYS[(new Date(Date.UTC(c.year, c.month - 1, c.day)).getUTCDay() + 6) % 7]}
             </div>
           ))}
           {cells.map(cell)}
         </div>
       )}
-
-      {legend}
 
       {undatedLabel && events.undated.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-zinc-200 p-3 dark:border-zinc-800">
