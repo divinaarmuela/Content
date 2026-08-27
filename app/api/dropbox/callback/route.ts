@@ -27,7 +27,10 @@ export async function GET(req: Request) {
   try {
     const user = await requireRole('super_admin')
     const result = await completeDropboxConnect(req, code, user.email)
-    if (!result.ok) return back('error', result.message)
+    if (!result.ok) {
+      console.error('[dropbox] connect failed', result.reason, result.detail)
+      return back('error', result.detail ? `${result.message}: ${result.detail}` : result.message)
+    }
     return back('ok', result.email)
   } catch (e) {
     return back('error', e instanceof Error ? e.message : undefined)
