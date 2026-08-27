@@ -302,10 +302,21 @@ export async function reconcilePublishedJobs(): Promise<number> {
     const id = String(job.provider_post_id)
     if (job.status !== 'scheduled' && byId.has(id)) return byId.get(id) ?? null
     const one = await publisher.postAnalytics(id).catch(() => null) as
-      | (Remote & { platformAnalytics?: { platformPostUrl?: string | null }[] })
+      | (Remote & {
+        publishedAt?: string | null
+        platformAnalytics?: { platformPostUrl?: string | null; status?: string }[]
+      })
       | null
     if (!one?.status) return byId.get(id) ?? null
-    return { status: one.status, platforms: one.platforms ?? one.platformAnalytics ?? [] }
+    const platforms = one.platforms ?? one.platformAnalytics ?? []
+    // The per-post endpoint says `status: "published"` the moment the provider
+    // ACCEPTS a future-dated post — with `publishedAt: null` and no platform
+    // reporting anything. Read literally, a 3:00 pm post was "live" at 2:40.
+    // Live means the provider has a publish time, or a platform says so.
+    const LIVE = ['published', 'posted', 'success']
+    const platformLive = platforms.some(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
+    const live = LIVE.includes(String(one.status).toLowerCase()) && (Boolean(one.publishedAt) || platformLive)
+    return { status: live ? 'published' : (LIVE.includes(one.status) ? 'scheduled' : one.status), platforms }
   }
 
   for (const job of jobs) {
