@@ -10,7 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import { ExternalLink, CheckCircle2, MessageSquare } from 'lucide-react'
-import { CommitmentCards, PortalSection } from '../components/portal/PortalSections'
+import { CommitmentCards, PortalSection, publishedLines } from '../components/portal/PortalSections'
 import ShootSection from '../components/portal/ShootSection'
 import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'
@@ -191,7 +191,11 @@ export default function ClientPortalPage() {
         <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." />
         <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." />
       </div>
-      <PortalSection title="Published" items={data.published} empty="Published posts will appear here with live links." />
+      {/* the portal cards are themed by --p-* variables; inside the dashboard
+          shell they take the dashboard's own tokens */}
+      <PortalSection title="Published" items={data.published}
+        lines={publishedLines(data)}
+        empty="Published posts will appear here with live links." />
     </div>
   )
 }

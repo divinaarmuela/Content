@@ -108,6 +108,9 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       preview_url: latest?.file_url ?? null,
       drive_url: latest?.drive_url ?? null,
       schedule: [],
+      // this page is the conversation about one piece, not its scoreboard —
+      // the numbers live on the card in the Published section
+      metrics: null,
     },
     comments: ((commentsRes.data ?? []) as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow

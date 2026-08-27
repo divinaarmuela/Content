@@ -8,7 +8,7 @@ import Rule from '../../components/lama/Rule'
 import { Scramble } from '../../components/lama/Scramble'
 import PortalShell from '../../components/portal/PortalShell'
 import {
-  CommitmentCards, PortalSection, ReviewSection,
+  CommitmentCards, PortalSection, ReviewSection, publishedLines,
 } from '../../components/portal/PortalSections'
 import ShootSection from '../../components/portal/ShootSection'
 
@@ -150,7 +150,11 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
           <Reveal gate={false}><PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
           <Reveal gate={false} delay={120}><PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} /></Reveal>
         </div>
-        <Reveal gate={false}><PortalSection title="Published" items={data.published} empty="Published posts appear here with live links." token={token} /></Reveal>
+        <Reveal gate={false}>
+          <PortalSection title="Published" items={data.published}
+            lines={publishedLines(data)}
+            empty="Published posts appear here with live links." token={token} />
+        </Reveal>
       </main>
 
       {/* pb-24 keeps the fixed mode pill off the last line of the page */}

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CalendarDays, Check, ExternalLink, MessageSquare, Send } from 'lucide-react'
@@ -10,6 +10,10 @@ import {
   APPROVED_TOAST, approveConsequence, changesSentToast,
   contentTypeLabel, contentTypePlural, scheduledWhen,
 } from '../../lib/portal-words'
+import {
+  METRICS_PENDING_LINE, compactCount, metricCells, metricsPending,
+  monthTotalsLine, typeTotalsLine, updatedAgo,
+} from '../../lib/post-analytics-core'
 
 /**
  * The client portal's building blocks — themed by CSS variables set from the
@@ -73,6 +77,59 @@ export function CommitmentCards({ data }: { data: PortalData }) {
       </div>
     </div>
   )
+}
+
+/**
+ * How a published post is doing — Views · Likes · Comments · Shares · Saves.
+ *
+ * Only the figures the platform actually reported appear: a missing metric is
+ * a metric that platform does not publish (Reels have no impressions, stills
+ * have no plays), and printing "0 saves" for it would be a number the client
+ * would try to explain. Nothing yet, or the provider still syncing, gets one
+ * honest sentence instead.
+ */
+export function PostMetricsRow({ item }: { item: PortalItem }) {
+  const m = item.metrics
+  const cells = metricCells(m)
+  if (metricsPending(m)) {
+    return (
+      <p className="font-mono text-[10px] uppercase tracking-wider opacity-40">
+        {METRICS_PENDING_LINE}
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        {cells.map(c => (
+          <span key={c.key} className="flex items-baseline gap-1">
+            <span className="font-mono text-xs tabular-nums">{compactCount(c.value)}</span>
+            <span className="font-mono text-[9px] uppercase tracking-wider opacity-45">{c.label}</span>
+          </span>
+        ))}
+      </div>
+      {/* a figure with no age on it invites the reader to think it is live */}
+      {m?.synced_at && (
+        <span className="font-mono text-[9px] uppercase tracking-wider opacity-35" suppressHydrationWarning>
+          <UpdatedAgo iso={m.synced_at} />
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Rendered on the client after mount: "12 min ago" computed on the server
+ *  and again in the browser is two different sentences a minute apart, and
+ *  React calls that a hydration error. */
+function UpdatedAgo({ iso }: { iso: string }) {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    const tick = () => setText(updatedAgo(iso))
+    tick()
+    const t = setInterval(tick, 60_000)
+    return () => clearInterval(t)
+  }, [iso])
+  return <>{text ?? ''}</>
 }
 
 function Media({ src }: { src: string }) {
@@ -269,6 +326,12 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
   const slate = ['approved_for_scheduling', 'scheduled', 'published'].includes(item.status)
     ? 'No preview here — ask us for the file'
     : 'Preview coming soon'
+  const isPublished = item.status === 'published'
+  // once a piece is live, the thing behind its name is the POST — the client
+  // asked "where is it", and a link to our own page about it is not an answer
+  const liveUrl = isPublished
+    ? item.metrics?.post_url ?? item.schedule.find(s => s.live_url)?.live_url ?? null
+    : null
   return (
     <div className="group overflow-hidden rounded-xl" style={surface}>
       <div className="relative aspect-video w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
@@ -291,7 +354,13 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
       </div>
       <div className="flex flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
-          {token ? (
+          {liveUrl ? (
+            <a href={liveUrl} target="_blank" rel="noreferrer noopener"
+              className="portal-tap-block flex min-w-0 items-baseline gap-1 text-sm font-medium underline-offset-4 hover:underline">
+              <span className="min-w-0 truncate">{item.title}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 self-center opacity-60" />
+            </a>
+          ) : token ? (
             <Link href={`/portal/${token}/item/${item.id}`} className="portal-tap-block min-w-0 truncate text-sm font-medium underline-offset-4 hover:underline">
               {item.title}
             </Link>
@@ -300,6 +369,7 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
           )}
           <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-50">{item.status_label}</span>
         </div>
+        {isPublished && <PostMetricsRow item={item} />}
         {(item.schedule.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
@@ -310,7 +380,9 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
                 {s.platform} · {scheduledWhen(s.scheduled_at)}
               </span>
             ))}
-            {item.schedule.filter(s => s.live_url).map(s => (
+            {/* the title already IS that link once the piece is live — a
+                second one to the same URL is just noise on the card */}
+            {item.schedule.filter(s => s.live_url && s.live_url !== liveUrl).map(s => (
               <a key={s.platform} href={s.live_url!} target="_blank" rel="noreferrer noopener"
                 className="portal-tap flex items-center gap-1 text-xs font-medium capitalize hover:underline"
                 style={{ color: 'var(--p-accent, #18181b)' }}>
@@ -324,17 +396,44 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
   )
 }
 
-export function PortalSection({ title, items, empty, token }: {
+export function PortalSection({ title, items, empty, token, lines }: {
   title: string; items: PortalItem[]; empty: string; token?: string
+  /** one-line roll-ups printed under the heading — the month's totals */
+  lines?: (string | null)[]
 }) {
+  const shown = (lines ?? []).filter((l): l is string => Boolean(l))
   return (
     <div className="flex flex-col gap-3">
       <SectionHeading count={items.length}>{title}</SectionHeading>
+      {shown.length > 0 && (
+        <div className="-mt-1 flex flex-col gap-0.5">
+          {shown.map((l, i) => (
+            <p key={l}
+              className={i === 0
+                ? 'font-mono text-[11px] tracking-wide opacity-70'
+                : 'font-mono text-[10px] tracking-wide opacity-45'}>
+              {l}
+            </p>
+          ))}
+        </div>
+      )}
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
         : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} token={token} />)}</div>}
     </div>
   )
+}
+
+/**
+ * The lines under the Published heading: the month in total, then the same
+ * month per kind of piece. Shared so the share-link portal and the logged-in
+ * portal say the identical thing.
+ */
+export function publishedLines(data: PortalData): (string | null)[] {
+  return [
+    monthTotalsLine(data.published_totals),
+    ...(data.published_by_type ?? []).map(typeTotalsLine),
+  ]
 }
 
 /** The review queue: each awaiting piece as a full card with actions. */

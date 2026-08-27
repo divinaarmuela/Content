@@ -7,6 +7,11 @@ import {
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, shootStatusLabel, type PlanState } from './portal-words'
+import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
+import {
+  monthTotals, typeTotals,
+  type MonthTotals, type PostMetrics, type TypeTotals,
+} from './post-analytics-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -25,6 +30,20 @@ export type PortalItem = {
   preview_url: string | null
   drive_url: string | null
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
+  /** how the live post is doing, once the platform has counted it. Null on
+   *  anything not published, and on a post whose numbers have not arrived. */
+  metrics: PortalItemMetrics | null
+}
+
+/** A published piece's numbers, already client-safe: no engagement rate, no
+ *  sync plumbing beyond "are these ready", no provider ids. */
+export type PortalItemMetrics = PostMetrics & {
+  /** the provider's readiness word — the card says "arriving" for 'pending' */
+  sync_status: string | null
+  synced_at: string
+  /** the live post, when the platform has assigned a URL */
+  post_url: string | null
+  published_at: string | null
 }
 
 export type PortalShoot = {
@@ -77,6 +96,11 @@ export type PortalData = {
   approved: PortalItem[]
   scheduled: PortalItem[]
   published: PortalItem[]
+  /** the month's work added up — the line under the Published heading */
+  published_totals: MonthTotals
+  /** …and the same month cut by what the piece is, because a Reel's plays and
+   *  a graphic's reach are not the same number and must not be summed */
+  published_by_type: TypeTotals[]
   shoots: PortalShoot[]
 }
 
@@ -153,7 +177,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   }
 
   const ids = items.map(i => i.id)
-  const [versionsRes, scheduleRes] = await Promise.all([
+  const [versionsRes, scheduleRes, analyticsByItem] = await Promise.all([
     ids.length
       ? supabase
           .from('asset_versions')
@@ -167,6 +191,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
           .select('item_id, platform, scheduled_at, live_url')
           .in('item_id', ids)
       : Promise.resolve({ data: [] as { item_id: string; platform: string; scheduled_at: string | null; live_url: string | null }[] }),
+    // the cached per-post numbers; the cron keeps them fresh, and the
+    // background refresh below shortens the wait for a post that just landed
+    analyticsForItems(ids),
   ])
 
   // latest version per item (rows are ordered desc — first wins)
@@ -186,6 +213,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     const latest = latestByItem.get(i.id)
     // clients only get preview media once the item has reached client review
     const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
+    const a = status === 'published' ? analyticsByItem.get(i.id) ?? null : null
     return {
       id: i.id,
       title: i.title,
@@ -197,6 +225,17 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       preview_url: clientFacing ? latest?.file_url || null : null,
       drive_url: clientFacing ? latest?.drive_url || null : null,
       schedule: scheduleByItem.get(i.id) ?? [],
+      metrics: a
+        ? {
+          views: a.views, reach: a.reach, impressions: a.impressions, likes: a.likes,
+          comments: a.comments, shares: a.shares, saves: a.saves,
+          engagement_rate: a.engagement_rate,
+          sync_status: a.sync_status,
+          synced_at: a.synced_at,
+          post_url: a.platform_post_url,
+          published_at: a.published_at,
+        }
+        : null,
     }
   }
 
@@ -249,6 +288,17 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     }
   })
 
+  const published = bucket(['published'])
+  // published_at comes from the POST, not the item: an item's updated_at moves
+  // every time anyone touches it, and "this month" must mean the month it went
+  // out in.
+  const publishedRows = published
+    .filter(p => p.metrics)
+    .map(p => ({ ...p.metrics!, content_type: p.content_type }))
+
+  // freshen anything stale once the response is out — never before it
+  refreshStaleAnalyticsInBackground(clientId)
+
   return {
     client: clientRes.data,
     am_name: amRes,
@@ -263,7 +313,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete']),
     approved: bucket(['approved_for_scheduling']),
     scheduled: bucket(['scheduled']),
-    published: bucket(['published']),
+    published,
+    published_totals: monthTotals(publishedRows),
+    published_by_type: typeTotals(publishedRows),
     shoots,
   }
 }
