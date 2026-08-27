@@ -27,11 +27,20 @@ export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
 }
 
 /**
- * Whose move it is on a BRIEF. A brief ends with an account manager booking
- * the shoot — no scheduler ever touches one, and a booked brief is finished.
+ * Whose move it is on a BRIEF.
+ *
+ * A brief is an account manager's document from end to end. Writing it is the
+ * AM's own stage, not an editor's — the base pipeline's "editor" answer at
+ * draft_uploaded and revision_required produced "Waiting on Unassigned — an
+ * account manager will pick it up" on a brief the account manager was in the
+ * middle of writing, and the same line again after they had asked themselves
+ * for changes. And it ends with an account manager booking the shoot: no
+ * scheduler ever touches one, and a booked brief is finished.
  */
 export const BRIEF_STATUS_TURN: Record<ItemStatus, Role | null> = {
   ...STATUS_TURN,
+  draft_uploaded: 'account_manager',
+  revision_required: 'account_manager',
   approved_for_scheduling: 'account_manager',
   scheduled: null,
   published: null,

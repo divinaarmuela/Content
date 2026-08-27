@@ -524,7 +524,9 @@ export default function ItemDetailPage() {
       return names.length > 0 ? `${names.join(', ')} (scheduling)` : 'the scheduler (scheduling)'
     }
     if (turn.hat === 'client') return 'the client'
-    return 'an account manager'
+    // "the", not "an": the client has one account manager on this job, and a
+    // brief is that person's own document from first draft to booked shoot
+    return 'the account manager'
   }
 
   // the item as the work pages read it — one vocabulary for "can I take this?"

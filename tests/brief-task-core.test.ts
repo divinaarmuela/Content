@@ -3,7 +3,9 @@ import {
   availableBriefTaskTransitions, BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN, briefSatisfiesSubmission,
   checkBriefTaskTransition, checkBriefTaskTransitionAs, itemStatusLabel,
 } from '../app/lib/brief-task-core'
-import { checkTransition, ITEM_STATUSES, STATUS_TURN, type ItemStatus } from '../app/lib/workflow-core'
+import {
+  checkTransition, ITEM_STATUSES, STATUS_TURN, whoseTurn, type ItemStatus,
+} from '../app/lib/workflow-core'
 import { canCreateItemsUnder } from '../app/lib/batch-brief-core'
 
 describe('itemStatusLabel', () => {
@@ -108,6 +110,30 @@ describe('brief wording never speaks about scheduling', () => {
     expect(BRIEF_STATUS_TURN.scheduled).toBeNull()
     expect(BRIEF_STATUS_TURN.published).toBeNull()
     expect(BRIEF_STATUS_TURN.internal_review).toBe(STATUS_TURN.internal_review)
+  })
+
+  it('writing and reworking a brief belongs to the account manager', () => {
+    // the base pipeline hands both of these to an editor, which on a brief
+    // read "Waiting on Unassigned — an account manager will pick it up" while
+    // the account manager was the one writing it
+    expect(STATUS_TURN.draft_uploaded).toBe('editor')
+    expect(STATUS_TURN.revision_required).toBe('editor')
+    expect(BRIEF_STATUS_TURN.draft_uploaded).toBe('account_manager')
+    expect(BRIEF_STATUS_TURN.revision_required).toBe('account_manager')
+  })
+
+  it('so a brief in progress is never reported as an unclaimed seat', () => {
+    const brief = { owner_id: null }
+    const am = { id: 'am-1', role: 'account_manager' as const }
+    for (const s of ['draft_uploaded', 'revision_required'] as ItemStatus[]) {
+      const turn = whoseTurn(s, brief, am, BRIEF_STATUS_TURN)
+      expect(turn.hat).toBe('account_manager')
+      expect(turn.unassigned).toBe(false)
+      expect(turn.mine).toBe(true)
+    }
+    // …and to anyone else it is plainly the account manager's move
+    const editor = { id: 'ed-1', role: 'editor' as const }
+    expect(whoseTurn('draft_uploaded', brief, editor, BRIEF_STATUS_TURN).mine).toBe(false)
   })
 
   it('every stage explains itself as a plan', () => {
