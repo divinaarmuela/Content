@@ -55,10 +55,11 @@ export const EDITS_FOLDER = SHOOT_SUBFOLDERS[1]
 /**
  * One safe folder name.
  *
- * Drive accepts nearly everything, so this strips far less than the Dropbox
- * version it replaces — but the trim still matters: a name with a trailing
- * space or dot syncs badly to Windows through Drive for desktop, and a name
- * that is entirely whitespace is unreadable in the UI.
+ * Drive accepts nearly everything — : ? * " < > and | are all fine — so this
+ * strips only the slash, which reads as a folder level that is not there. The
+ * trim still matters, though: a name with a trailing space or dot syncs badly
+ * to Windows through Drive for desktop, and a name that is entirely
+ * whitespace is unreadable in the UI.
  */
 export function safeSegment(raw: string): string {
   const cleaned = String(raw ?? '')

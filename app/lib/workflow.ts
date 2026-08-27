@@ -386,8 +386,8 @@ export async function performTransition(
         .limit(1)
         .maybeSingle()
       if (isInternal) {
-        // a task's evidence is the work itself: a file or a link. No Dropbox
-        // master — there is no footage to archive
+        // a task's evidence is the work itself: a file or a link. No master
+        // file — there is no footage to archive
         if (!latest || (!latest.file_url && !latest.drive_url)) {
           throw new AuthzError('Attach the work first — upload a file or add a link, then submit', 400)
         }

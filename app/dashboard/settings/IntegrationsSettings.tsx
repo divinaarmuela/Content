@@ -50,16 +50,16 @@ export default function IntegrationsSettings() {
   useEffect(() => { load() }, [load])
 
   // The OAuth round trip comes back here with its result in the query string —
-  // Dropbox has no way to tell the page anything else. Read from the URL
-  // directly rather than useSearchParams: this is a one-shot read on mount,
-  // and it keeps the page out of the Suspense boundary that hook demands.
+  // an OAuth callback has no way to tell the page anything else. Read from the
+  // URL directly rather than useSearchParams: this is a one-shot read on
+  // mount, and it keeps the page out of the Suspense boundary that hook demands.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const result = params.get('dropbox')
+    const result = params.get('gdrive')
     if (!result) return
     const detail = params.get('detail')
-    if (result === 'ok') toast.success(detail ? `Dropbox connected as ${detail}` : 'Dropbox connected')
-    else toast.error(detail || 'Dropbox could not be connected')
+    if (result === 'ok') toast.success(detail ? `Google Drive connected as ${detail}` : 'Google Drive connected')
+    else toast.error(detail || 'Google Drive could not be connected')
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
 

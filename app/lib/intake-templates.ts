@@ -107,7 +107,7 @@ const VISUAL: Section = {
   blocks: [
     { id: 'refs_right', type: 'long_text', label: 'Three accounts whose content feels right', help: 'Paste links. It is faster than describing them.' },
     { id: 'refs_wrong', type: 'long_text', label: 'Three that feel wrong, and why' },
-    { id: 'existing_assets', type: 'long_text', label: 'Existing photography, renders or video we can use', help: 'A Drive or Dropbox link is fine.' },
+    { id: 'existing_assets', type: 'long_text', label: 'Existing photography, renders or video we can use', help: 'A Google Drive link is fine.' },
     {
       id: 'mood', type: 'select', label: 'Colour palette and mood for the shoot',
       options: ['Warm and intimate', 'Bright and airy', 'Cinematic', 'Follows our brand palette'],

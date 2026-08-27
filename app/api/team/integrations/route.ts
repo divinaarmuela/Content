@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
-import { dropboxStatus } from '@/app/lib/dropbox'
+import { driveStatus } from '@/app/lib/gdrive'
 
 /**
  * What is actually connected.
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const viewer = await requireRole('account_manager')
-    // ONE Dropbox connection serves the whole agency, so connecting and
+    // ONE Drive connection serves the whole agency, so connecting and
     // disconnecting are super-admin acts. Hiding the button is presentation;
     // the routes enforce the same rule themselves.
     const canConnect = viewer.role === 'super_admin'
@@ -47,27 +47,32 @@ export async function GET() {
       count('asana_webhooks'),
     ])
 
-    const dropbox = await dropboxStatus()
+    const drive = await driveStatus()
 
     const integrations = [
       {
-        key: 'dropbox',
-        name: 'Dropbox',
+        key: 'gdrive',
+        name: 'Google Drive',
         detail: 'The folder tree behind every shoot — raw, edits and finals.',
-        connected: dropbox.connected,
-        configured: dropbox.configured,
-        status: !dropbox.configured
-          ? 'Not configured — no app key or secret set'
-          : !dropbox.connected
+        connected: drive.connected,
+        configured: drive.configured,
+        status: !drive.configured
+          ? 'Not configured — the Internal Google app credentials are not set'
+          : !drive.connected
             ? 'Configured, but no account connected yet'
-            : `Connected as ${dropbox.account_email ?? 'an account'} · files under ${dropbox.root_path}`,
+            : [
+                `Connected as ${drive.account_email ?? 'an account'} · files under "${drive.root_name}"`,
+                // how a folder becomes reachable by the rest of the team is
+                // the question an editor actually has when a link 404s
+                drive.sharing_note,
+              ].filter(Boolean).join(' · '),
         href: null,
-        // full navigation, not fetch: /api/dropbox/connect answers with a
-        // redirect to Dropbox's own consent screen
-        connect_href: dropbox.configured && !dropbox.connected && canConnect
-          ? '/api/dropbox/connect' : null,
-        disconnect_href: dropbox.connected && canConnect
-          ? '/api/dropbox/disconnect' : null,
+        // full navigation, not fetch: /api/gdrive/connect answers with a
+        // redirect to Google's own consent screen
+        connect_href: drive.configured && !drive.connected && canConnect
+          ? '/api/gdrive/connect' : null,
+        disconnect_href: drive.connected && canConnect
+          ? '/api/gdrive/disconnect' : null,
       },
       {
         key: 'zernio',

@@ -42,9 +42,9 @@ type Batch = {
   share_board?: boolean | null
   board_name?: string | null
   month: number | null; year: number | null
-  /** the shoot's folder in Dropbox, minted when the shoot was created */
-  dropbox_path?: string | null
-  dropbox_url?: string | null
+  /** the shoot's folder in Drive, minted when the shoot was created */
+  drive_folder_id?: string | null
+  drive_url?: string | null
   clients: { name: string } | null
 }
 type ItemLite = { id: string; title: string; status: string; work_kinds?: { slug?: string } | null }
@@ -334,10 +334,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         )}
         {/* only when the folder actually exists — an integration that is off
             should leave no trace on this page at all */}
-        {batch.dropbox_url && (
-          <a href={batch.dropbox_url} target="_blank" rel="noreferrer noopener"
+        {batch.drive_url && (
+          <a href={batch.drive_url} target="_blank" rel="noreferrer noopener"
             className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
-            Open Dropbox folder →
+            Open Drive folder →
           </a>
         )}
       </div>

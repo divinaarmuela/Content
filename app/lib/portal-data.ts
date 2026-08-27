@@ -11,7 +11,7 @@ import { shootStatusLabel } from './portal-words'
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
  * view-only share link. Everything here is already stripped to what a client
- * may see: no Dropbox links, no internal comments, client-facing labels.
+ * may see: no internal master links, no internal comments, client-facing labels.
  * Two queries total (items + schedule entries) — no N+1.
  */
 

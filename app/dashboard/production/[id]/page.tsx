@@ -88,7 +88,7 @@ type Detail = {
   client_users?: { name: string; email: string }[]
   raw_assets_url?: string | null; brief?: string | null
   /** this deliverable's own folder — internal, so it never reaches a client */
-  dropbox_url?: string | null; dropbox_path?: string | null
+  drive_url?: string | null; drive_folder_id?: string | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
   /** the named audit trail — internal only, never in the client payload */
@@ -393,7 +393,7 @@ export default function ItemDetailPage() {
     }
     sync(briefUrlRef.current, detail.brief_url ?? '')
     sync(briefNoteRef.current, detail.brief ?? '')
-    sync(rawAssetsRef.current, detail.raw_assets_url ?? detail.dropbox_url ?? '')
+    sync(rawAssetsRef.current, detail.raw_assets_url ?? detail.drive_url ?? '')
     sync(jobBriefRef.current, detail.brief ?? '')
     sync(captionRef.current, detail.caption ?? '')
   }, [detail])
@@ -1193,12 +1193,11 @@ export default function ItemDetailPage() {
                   {!isInternal && (
                   <div className="grid gap-1.5">
                     <Label className="text-xs">Master file link *</Label>
-                    <Input value={verDraft.dropbox_url} placeholder="https://www.dropbox.com/… or https://drive.google.com/…"
+                    <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
                       onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      The full-quality original, kept where it can be found again —
-                      Dropbox or Drive, either is fine. The review link above is the
-                      copy people watch.
+                      The full-quality original, kept where it can be found again.
+                      The review link above is the copy people watch.
                     </p>
                   </div>
                   )}
@@ -1239,7 +1238,7 @@ export default function ItemDetailPage() {
 
       {/* 6 — what the editor works from. ASSETS only: a strategy doc has no
           raw footage, so a research task gets the ask and its files instead. */}
-      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || detail.dropbox_url || (detail.raw_assets?.length ?? 0) > 0) && (
+      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || detail.drive_url || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">What the editor works from</CardTitle>
@@ -1247,10 +1246,10 @@ export default function ItemDetailPage() {
               {/* the folder we made, alongside whatever link is on the record —
                   they are usually the same, and when they are not, the pasted
                   one is a deliberate override worth being able to see past */}
-              {detail.dropbox_url && detail.dropbox_url !== detail.raw_assets_url && (
+              {detail.drive_url && detail.drive_url !== detail.raw_assets_url && (
                 <Button variant="outline" size="sm" asChild>
-                  <a href={detail.dropbox_url} target="_blank" rel="noreferrer noopener">
-                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open Dropbox folder
+                  <a href={detail.drive_url} target="_blank" rel="noreferrer noopener">
+                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open Drive folder
                   </a>
                 </Button>
               )}
@@ -1267,15 +1266,15 @@ export default function ItemDetailPage() {
             {canManage ? (
               <>
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Dropbox / Drive)</span></Label>
+                  <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Google Drive)</span></Label>
                   <Input
                     ref={rawAssetsRef}
-                    // prefilled from the Dropbox folder we made for this item,
+                    // prefilled from the Drive folder we made for this item,
                     // so the common case is already right; it only SAVES if
                     // someone edits it, which keeps the record honest
-                    defaultValue={detail.raw_assets_url ?? detail.dropbox_url ?? ''}
+                    defaultValue={detail.raw_assets_url ?? detail.drive_url ?? ''}
                     onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
-                    placeholder="https://www.dropbox.com/…"
+                    placeholder="https://drive.google.com/drive/folders/…"
                     className="font-mono text-xs"
                     onBlur={e => {
                       const v = e.target.value.trim()
