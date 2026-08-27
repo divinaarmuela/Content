@@ -89,6 +89,8 @@ type Detail = {
   raw_assets_url?: string | null; brief?: string | null
   /** this deliverable's own folder — internal, so it never reaches a client */
   drive_url?: string | null; drive_folder_id?: string | null
+  /** how much of this item's material is actually IN Drive yet */
+  drive_mirror?: { total: number; done: number; copying: boolean; line: string | null } | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
   /** the named audit trail — internal only, never in the client payload */
@@ -1263,6 +1265,19 @@ export default function ItemDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
+            {/* whether the folder actually HAS the work in it — the question
+                anyone about to click that link is really asking. Sits under
+                the link rather than beside it because it is an answer about
+                the link, not another control. */}
+            {detail.drive_mirror?.line && (
+              <p className={`-mt-1 text-xs ${
+                detail.drive_mirror.copying
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-zinc-500 dark:text-zinc-400'
+              }`}>
+                {detail.drive_mirror.line}
+              </p>
+            )}
             {canManage ? (
               <>
                 <div className="grid gap-1.5">

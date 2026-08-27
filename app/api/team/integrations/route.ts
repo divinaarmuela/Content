@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
 import { driveStatus } from '@/app/lib/gdrive'
+import { driveMemberNote } from '@/app/lib/gdrive-members'
 
 /**
  * What is actually connected.
@@ -48,12 +49,20 @@ export async function GET() {
     ])
 
     const drive = await driveStatus()
+    // who can open the tree, counted from the TEAM rather than by asking
+    // Google: this card renders on every Settings visit, and a settings page
+    // that waits on a Drive round trip to describe sharing is worse than one
+    // that describes who should have access. "Re-share with team" is what
+    // makes the two agree.
+    const members = drive.connected
+      ? await driveMemberNote(drive.sharing_domain, drive.account_email)
+      : null
 
     const integrations = [
       {
         key: 'gdrive',
         name: 'Google Drive',
-        detail: 'The folder tree behind every shoot — raw, edits and finals.',
+        detail: 'Every file, mirrored — raw, edits, finals and what goes out.',
         connected: drive.connected,
         configured: drive.configured,
         status: !drive.configured
@@ -63,8 +72,10 @@ export async function GET() {
             : [
                 `Connected as ${drive.account_email ?? 'an account'} · files under "${drive.root_name}"`,
                 // how a folder becomes reachable by the rest of the team is
-                // the question an editor actually has when a link 404s
-                drive.sharing_note,
+                // the question an editor actually has when a link 404s. The
+                // member line is the answer for everyone the domain grant
+                // does not cover — the freelancer on a Gmail address.
+                members?.note ?? drive.sharing_note,
               ].filter(Boolean).join(' · '),
         href: null,
         // full navigation, not fetch: /api/gdrive/connect answers with a
@@ -73,6 +84,8 @@ export async function GET() {
           ? '/api/gdrive/connect' : null,
         disconnect_href: drive.connected && canConnect
           ? '/api/gdrive/disconnect' : null,
+        action_href: drive.connected && canConnect ? '/api/gdrive/share' : null,
+        action_label: 'Re-share with team',
       },
       {
         key: 'zernio',

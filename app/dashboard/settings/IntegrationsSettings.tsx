@@ -21,6 +21,9 @@ type Integration = {
   /** present only where connecting is a thing the viewer may do */
   connect_href?: string | null
   disconnect_href?: string | null
+  /** a POST the viewer may run against this integration, and its button text */
+  action_href?: string | null
+  action_label?: string | null
 }
 
 /**
@@ -62,6 +65,34 @@ export default function IntegrationsSettings() {
     else toast.error(detail || 'Google Drive could not be connected')
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
+
+  /**
+   * "Re-share with team" — reconcile who may open the Drive tree.
+   *
+   * It reports what it CHANGED rather than "done": the whole reason to press
+   * it is that you suspect the automatic reconciles missed someone, and "no
+   * changes needed" is a genuinely different answer from "shared with 2".
+   */
+  async function runAction(href: string) {
+    setBusy(href)
+    try {
+      const res = await fetch(href, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'That did not work')
+      const added = Array.isArray(json.added) ? json.added.length : 0
+      const removed = Array.isArray(json.removed) ? json.removed.length : 0
+      toast.success(
+        added || removed
+          ? `Shared with ${added}, access removed for ${removed}`
+          : 'Everyone who should have access already does',
+      )
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function disconnect(href: string) {
     setBusy(href)
@@ -116,6 +147,15 @@ export default function IntegrationsSettings() {
               {it.connect_href && (
                 <Button size="sm" asChild>
                   <a href={it.connect_href}>Connect</a>
+                </Button>
+              )}
+              {it.action_href && (
+                <Button
+                  variant="outline" size="sm"
+                  disabled={busy === it.action_href}
+                  onClick={() => void runAction(it.action_href!)}
+                >
+                  {busy === it.action_href ? 'Sharing…' : it.action_label ?? 'Run'}
                 </Button>
               )}
               {it.disconnect_href && (
