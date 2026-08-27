@@ -118,11 +118,18 @@ export function shapeItemDetail(
     item as { owner_id?: string | null; scheduler_ids?: unknown },
   )
 
-  // the job pack (brief, raw footage) is internal production material —
-  // clients never see it, and schedulers work from final links only
-  const { raw_assets_url: _raw, brief: _brief, raw_assets: _files, ...itemPublic } =
-    item as Record<string, unknown> & { raw_assets_url?: unknown; brief?: unknown; raw_assets?: unknown }
-  void _raw; void _brief; void _files
+  // the job pack (brief, raw footage, the Dropbox working folder) is internal
+  // production material — clients never see it, and schedulers work from
+  // final links only. The Dropbox folder goes in this list for the same
+  // reason raw_assets_url does: it is the unedited material.
+  const {
+    raw_assets_url: _raw, brief: _brief, raw_assets: _files,
+    dropbox_url: _dbxUrl, dropbox_path: _dbxPath, ...itemPublic
+  } = item as Record<string, unknown> & {
+    raw_assets_url?: unknown; brief?: unknown; raw_assets?: unknown
+    dropbox_url?: unknown; dropbox_path?: unknown
+  }
+  void _raw; void _brief; void _files; void _dbxUrl; void _dbxPath
 
   if (user.role === 'client') {
     const latest = versions[0]
