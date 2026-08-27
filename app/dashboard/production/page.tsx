@@ -47,6 +47,11 @@ import NewItemDialog, { type ClientRow } from './NewItemDialog'
 import { ClaimButton } from './ClaimButton'
 import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
+import { LaneBoard, type Lane } from './LaneBoard'
+import GettingStarted from '../GettingStarted'
+import HelpHint from '../HelpHint'
+import { toastOpen } from '../toastLink'
+import { SHOOT_PLAN_SECTION, SHOOTS_SECTION, TASK_SECTION } from '../../lib/section-names'
 
 type Shoot = {
   id: string
@@ -96,14 +101,14 @@ const SECTIONS: { status: BatchStatus; title: string; hint: string }[] = [
   { status: 'wrapped', title: 'WRAPPED', hint: 'Everything delivered.' },
 ]
 
-/** The brief's state as a shoot card should say it: the state only, four
+/** The plan's state as a shoot card should say it: the state only, four
  *  words at most. The card body says the action. */
 function briefChip(status: ItemStatus): string {
-  if (status === 'draft_uploaded') return 'Brief being written'
-  if (status === 'client_review' || status === 'client_changes_requested') return 'Brief with client'
-  if (status === 'approved_for_scheduling') return 'Brief approved'
+  if (status === 'draft_uploaded') return 'Plan being written'
+  if (status === 'client_review' || status === 'client_changes_requested') return 'Plan with client'
+  if (status === 'approved_for_scheduling') return 'Plan approved'
   if (status === 'scheduled' || status === 'published') return 'Shoot booked'
-  return 'Brief in review'
+  return 'Plan in review'
 }
 
 const SCOPE_KEY = 'md-production-scope'
@@ -124,13 +129,22 @@ const LANE_TINT: Record<string, string> = {
   done: 'bg-emerald-500',
 }
 
-/** What is NOT in a brief column, in the column's own words. */
+/** What is NOT in a shoot-plan column, in the column's own words. */
 const BRIEF_LANE_EMPTY: Record<string, string> = {
   doing: 'Nothing being written.',
   review: 'Nothing waiting on a manager.',
   revising: 'No plans in revision.',
   client: 'Nothing with a client.',
   approved: 'Nothing to book.',
+}
+
+/** What is NOT in a task column. */
+const TASK_LANE_EMPTY: Record<string, string> = {
+  doing: 'Nothing to do.',
+  review: 'Nothing waiting on a manager.',
+  revising: 'No changes in progress.',
+  client: 'Nothing with a client.',
+  done: 'Nothing finished recently.',
 }
 
 function whenShort(iso: string | null) {
@@ -140,13 +154,13 @@ function whenShort(iso: string | null) {
 }
 
 /**
- * Production: the shoots, the briefs that are still becoming shoots, and the
- * tasks that have nothing to post.
+ * Production: the shoots, the shoot plans that are still becoming shoots, and
+ * the tasks that have nothing to post.
  *
- * A shoot is planned here BEFORE any content item exists — the Editor board
- * shows the aftermath; this shows the plan. Tasks run as a board rather than a
- * list for the same reason the Editor page does: a row tells you a task exists,
- * a column tells you whose step it is waiting on.
+ * A shoot is planned here BEFORE any item exists — the Editor board shows the
+ * aftermath; this shows the plan. Tasks run as a board rather than a list for
+ * the same reason the Editor page does: a row tells you a task exists, a
+ * column tells you whose step it is waiting on.
  */
 export default function ProductionPage() {
   const router = useRouter()
@@ -271,7 +285,8 @@ export default function ProductionPage() {
         body: JSON.stringify({ owner_id: ownerId }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign it')
-      toast.success(`Assigned to ${nameById.get(ownerId) ?? 'them'}`)
+      const who = nameById.get(ownerId) ?? 'a teammate'
+      toastOpen(`Assigned to ${who} — they have been emailed`, `/dashboard/production/${itemId}`, router.push)
       void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign it')
@@ -392,7 +407,7 @@ export default function ProductionPage() {
     isManager && nameById.size > 0 ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="outline">Assign…</Button>
+          <Button size="sm" variant="outline" className="min-h-11 md:min-h-8">Assign…</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
           {[...nameById].map(([uid, name]) => (
@@ -403,10 +418,9 @@ export default function ProductionPage() {
     ) : null
   )
 
-  /** One task card — the Editor board's card, in the task vocabulary. */
-  /** A brief on the brief board — the task card's twin, in the plan's own
-   *  words. A brief is never claimed (only an account manager picks one up),
-   *  so it carries the Assign… menu where a task carries "Take this task". */
+  /** A shoot plan on the plan board — the task card's twin, in the plan's own
+   *  words. A plan is never claimed (only an account manager picks one up),
+   *  so it carries the Assign… menu where a task carries "Take this". */
   const briefCard = (b: BriefTask) => (
     <div key={b.id} className="relative">
       <Card className="py-0 transition-shadow hover:shadow-md">
@@ -427,6 +441,7 @@ export default function ProductionPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             {viewer && (
               <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
+                openTask={b.my_open_task}
                 ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
             )}
             {b.due_date && (
@@ -479,6 +494,7 @@ export default function ProductionPage() {
             <div className="flex flex-wrap items-center gap-1.5">
               {viewer && (
                 <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
+                  openTask={t.my_open_task}
                   ownerName={t.owner_id ? nameById.get(t.owner_id) : undefined} />
               )}
               {t.due_date && (
@@ -495,7 +511,7 @@ export default function ProductionPage() {
               // above the stretched link, so these are clicks on a control
               <div className="relative z-10 flex flex-wrap items-center gap-1.5">
                 {canClaimEditor(t, viewer) && (
-                  <ClaimButton itemId={t.id} hat="editor" label="Take this task" onDone={load} />
+                  <ClaimButton itemId={t.id} hat="editor" onDone={load} />
                 )}
                 {assignMenu(t.id)}
               </div>
@@ -508,8 +524,12 @@ export default function ProductionPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {viewer && shoots !== null && <GettingStarted role={role} page="production" />}
+
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Shoots, briefs and tasks</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Shoots <HelpHint term="shoot" />, shoot plans <HelpHint term="shoot_plan" /> and tasks
+        </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {/* Board answers "whose step is this on"; Calendar answers "what is
               happening on Thursday". Same rows, same filters, two questions. */}
@@ -536,38 +556,43 @@ export default function ProductionPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search shoots, briefs and tasks…" className="w-56 bg-white pl-8 dark:bg-zinc-900" />
+              placeholder="Search shoots, plans and tasks…" className="w-56 bg-white pl-8 dark:bg-zinc-900" />
           </div>
           {(canPlan || isManager) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
+                <Button size="sm" className="min-h-11 md:min-h-9"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuContent align="end" className="w-80">
+                {/* the one line that lets a new hire choose: the two words
+                    this menu turns on, defined where the choice is made */}
+                <p className="px-2 py-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  A shoot is the filming day. A shoot plan is what the client signs off before it.
+                </p>
                 {canPlan && (
-                  <DropdownMenuItem className="items-start" onClick={() => setNewOpen(true)}>
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setNewOpen(true)}>
                     <CalendarDays className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
-                      Shoot
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">plan a shoot and its brief page</span>
+                      Plan a shoot
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">a filming day — date, location, shot list</span>
                     </span>
                   </DropdownMenuItem>
                 )}
                 {isManager && (
-                  <DropdownMenuItem className="items-start" onClick={() => setBriefOpen(true)}>
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setBriefOpen(true)}>
                     <FileText className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
-                      Brief task
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">a shoot plan that gets signed off</span>
+                      Write a shoot plan
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">the concept the client signs off before we film</span>
                     </span>
                   </DropdownMenuItem>
                 )}
                 {canPlan && (
-                  <DropdownMenuItem className="items-start" onClick={() => setTaskOpen(true)}>
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setTaskOpen(true)}>
                     <ListChecks className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
-                      Task
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">research, strategy or copy</span>
+                      Other work
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">research, strategy or copy — nothing to post</span>
                     </span>
                   </DropdownMenuItem>
                 )}
@@ -577,7 +602,7 @@ export default function ProductionPage() {
         </div>
       </div>
       <p className="-mt-2 text-xs text-zinc-400 dark:text-zinc-500">
-        The filter above covers briefs and tasks. Shoots are always shown.
+        The Mine / Nobody&rsquo;s / Everyone switch covers plans and tasks. Shoots are always shown.
       </p>
 
       {needsSchema && (
@@ -598,8 +623,8 @@ export default function ProductionPage() {
           onMove={moveEvent}
           undatedLabel="No date yet"
           legend={
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Shoots sit on their shoot date; briefs and tasks on their due date. Drag one
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Shoots sit on their shoot date; plans and tasks on their due date. Drag one
               to another day to move it — a shoot whose date is locked moves from the shoot
               page, with a reason.
             </p>
@@ -612,7 +637,7 @@ export default function ProductionPage() {
         <div className="flex flex-col gap-2">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-              BRIEFS BEING PLANNED <span className="tabular-nums">{briefRows.length}</span>
+              {SHOOT_PLAN_SECTION} <span className="tabular-nums">{briefRows.length}</span>
               {briefsInFilters.length > briefRows.length && (
                 <span className="ml-2 normal-case tracking-normal text-zinc-400 dark:text-zinc-500">
                   ({briefsInFilters.length - briefRows.length} more outside this filter)
@@ -620,7 +645,7 @@ export default function ProductionPage() {
               )}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              Shoot plans on their way to becoming shoots. A booked one moves down to the shoots.
+              What the client signs off before we film. A booked one moves down to the shoots.
             </p>
           </div>
           {briefRows.length === 0 ? (
@@ -628,38 +653,30 @@ export default function ProductionPage() {
                below carries this line — never two empty cards at once */
             nothingToShow ? null : (
               <Card className="border-dashed shadow-none">
-                <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  Briefs are being planned, but none of them are yours — switch to Everyone to see them.
+                <CardContent className="flex flex-col items-center gap-2 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  Shoot plans are being written, but none of them are yours.
+                  <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                    Show everyone&rsquo;s
+                  </Button>
                 </CardContent>
               </Card>
             )
           ) : (
-            <div className="w-full overflow-x-auto">
-              <div className="flex gap-3 pb-3">
-                {BRIEF_LANES.map(lane => {
-                  const colItems = briefRows.filter(b => lane.statuses.includes(b.status))
-                  return (
-                    <div key={lane.key} className="min-w-44 flex-1">
-                      <div className="mb-2 flex items-center gap-2 px-1">
-                        <span className={`h-2 w-2 rounded-full ${LANE_TINT[lane.key] ?? 'bg-zinc-400'}`} />
-                        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{lane.title}</span>
-                        <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                          {colItems.length}
-                        </span>
-                      </div>
-                      <div className="flex min-h-24 flex-col gap-2">
-                        {colItems.map(b => briefCard(b))}
-                        {colItems.length === 0 && (
-                          <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                            {BRIEF_LANE_EMPTY[lane.key] ?? 'Nothing here.'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <LaneBoard
+              ariaLabel="Shoot plan columns"
+              initialLane={BRIEF_LANES.find(l => briefRows.some(b => l.statuses.includes(b.status) && b.owner_id === viewer?.id))?.key}
+              lanes={BRIEF_LANES.map((lane): Lane => {
+                const colItems = briefRows.filter(b => lane.statuses.includes(b.status))
+                return {
+                  key: lane.key,
+                  title: lane.title,
+                  tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
+                  count: colItems.length,
+                  empty: BRIEF_LANE_EMPTY[lane.key] ?? 'Nothing here.',
+                  cards: colItems.map(b => briefCard(b)),
+                }
+              })}
+            />
           )}
         </div>
       )}
@@ -673,7 +690,7 @@ export default function ProductionPage() {
               {/* the Done lane is one of the columns under this heading, so it
                   counts: "TASKS 0" beside a Done lane reading 1 is the block
                   contradicting itself */}
-              TASKS <span className="tabular-nums">{taskRows.length + doneRows.length}</span>
+              {TASK_SECTION} <span className="tabular-nums">{taskRows.length + doneRows.length}</span>
               {tasksInFilters.length > taskRows.length && (
                 <span className="ml-2 normal-case tracking-normal text-zinc-400 dark:text-zinc-500">
                   ({tasksInFilters.length - taskRows.length} more outside this filter)
@@ -681,61 +698,57 @@ export default function ProductionPage() {
               )}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              Research, strategy and copy — work with nothing to post.
+              Research, strategy and copy — work with nothing to post. A task with nobody on it says &ldquo;Take this&rdquo;.
             </p>
           </div>
           {taskRows.length === 0 && doneRows.length === 0 ? (
             nothingToShow ? null : (
               <Card className="border-dashed shadow-none">
-                <CardContent className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  There are open tasks, but none of them are yours — switch to Everyone to see them.
+                <CardContent className="flex flex-col items-center gap-2 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  There are open tasks, but none of them are yours.
+                  <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                    Show everyone&rsquo;s
+                  </Button>
                 </CardContent>
               </Card>
             )
           ) : (
-            <div className="w-full overflow-x-auto">
-              <div className="flex gap-3 pb-3">
-                {TASK_LANES.map(lane => {
-                  const isDone = lane.key === 'done'
-                  // the Done column is the last 14 days only — a tail, kept
-                  // visible so "Back" from a finished task lands somewhere real
-                  const colItems = (isDone ? doneRows : taskRows)
-                    .filter(t => lane.statuses.includes(t.status))
-                  return (
-                    <div key={lane.key} className="min-w-44 flex-1">
-                      <div className="mb-2 flex items-center gap-2 px-1">
-                        <span className={`h-2 w-2 rounded-full ${LANE_TINT[lane.key] ?? 'bg-zinc-400'}`} />
-                        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{lane.title}</span>
-                        <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                          {colItems.length}
-                        </span>
-                      </div>
-                      <div className="flex min-h-24 flex-col gap-2">
-                        {isDone && colItems.length > 0 && !doneOpen ? (
-                          <button type="button" onClick={() => setDoneOpen(true)}
-                            className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-500 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
-                            {colItems.length} finished in the last 14 days — show
-                          </button>
-                        ) : (
-                          colItems.map(t => taskCard(t, isDone))
-                        )}
-                        {isDone && colItems.length > 0 && doneOpen && (
+            <LaneBoard
+              ariaLabel="Task columns"
+              initialLane={TASK_LANES.find(l => taskRows.some(t => l.statuses.includes(t.status) && (t.owner_id === viewer?.id || t.my_open_task)))?.key}
+              lanes={TASK_LANES.map((lane): Lane => {
+                const isDone = lane.key === 'done'
+                // the Done column is the last 14 days only — a tail, kept
+                // visible so "Back" from a finished task lands somewhere real
+                const colItems = (isDone ? doneRows : taskRows)
+                  .filter(t => lane.statuses.includes(t.status))
+                return {
+                  key: lane.key,
+                  title: lane.title,
+                  tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
+                  count: colItems.length,
+                  empty: TASK_LANE_EMPTY[lane.key] ?? 'Nothing here.',
+                  cards: colItems.map(t => taskCard(t, isDone)),
+                  replace: isDone && colItems.length > 0
+                    ? (!doneOpen
+                      ? (
+                        <button type="button" onClick={() => setDoneOpen(true)}
+                          className="min-h-11 rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-500 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
+                          {colItems.length} finished in the last 14 days — show
+                        </button>
+                      ) : (
+                        <>
+                          {colItems.map(t => taskCard(t, true))}
                           <button type="button" onClick={() => setDoneOpen(false)}
-                            className="self-start px-1 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                            className="min-h-11 self-start px-1 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
                             Hide
                           </button>
-                        )}
-                        {colItems.length === 0 && (
-                          <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                            {isDone ? 'Nothing finished recently.' : 'Nothing here.'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+                        </>
+                      ))
+                    : undefined,
+                }
+              })}
+            />
           )}
         </div>
       )}
@@ -748,15 +761,22 @@ export default function ProductionPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
               <Camera className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
             </div>
-            <p className="text-sm font-medium">No shoots planned</p>
+            <p className="text-sm font-medium">No shoots planned yet</p>
             <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
               {briefsOutOfScope
-                ? 'Briefs are being planned, but none of them are yours — switch to Everyone above to see them.'
-                : 'Plan a shoot to brief the team before production starts.'}
+                ? 'Shoot plans are being written, but none of them are yours.'
+                : 'A shoot is one filming day. Plan the first one — pick the client and give it a working title — and the shoot page opens.'}
             </p>
             {/* planning is always a valid next move for whoever can plan —
                 whatever the reason the page is empty */}
-            {canPlan && <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan a shoot</Button>}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {briefsOutOfScope && (
+                <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                  Show everyone&rsquo;s
+                </Button>
+              )}
+              {canPlan && <Button size="sm" className="min-h-11" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan a shoot</Button>}
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -767,7 +787,8 @@ export default function ProductionPage() {
             <div key={section.status} className="flex flex-col gap-2">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-                  {section.title} <span className="tabular-nums">{rows.length}</span>
+                  {SHOOTS_SECTION} · {section.title} <span className="tabular-nums">{rows.length}</span>
+                  {section.status === 'wrapped' && <HelpHint term="wrapped" />}
                 </p>
                 <p className="text-xs text-zinc-400 dark:text-zinc-500">{section.hint}</p>
               </div>
@@ -782,15 +803,21 @@ export default function ProductionPage() {
                   const madeCount = Math.max(0, itemCount - (brief ? 1 : 0))
                   const meta = [
                     shots > 0 && `${shots} shot${shots === 1 ? '' : 's'} planned`,
-                    deliverables > 0 && `${deliverables} deliverables`,
-                    madeCount > 0 && `${madeCount} item${madeCount === 1 ? '' : 's'} in production`,
+                    deliverables > 0 && `${deliverables} promised`,
+                    madeCount > 0 && `${madeCount} item${madeCount === 1 ? '' : 's'} being edited`,
                   ].filter(Boolean).join(' · ')
                   const canDelete = isManager && itemCount === 0
                   // the card is already inside its named section, so the state
                   // badge would only repeat the heading — say the next move
-                  const nextMove = brief?.status === 'approved_for_scheduling' && s.status === 'brief'
-                    ? 'Lock the date →'
-                    : null
+                  const nextMove = !brief && s.status !== 'wrapped'
+                    ? 'Write the shoot plan →'
+                    : brief?.status === 'approved_for_scheduling' && s.status === 'brief'
+                      ? 'Lock the date →'
+                      : s.status === 'locked'
+                        ? 'After the shoot: mark it shot, then create the items →'
+                        : s.status === 'shot' && madeCount === 0
+                          ? 'Create the items →'
+                          : null
                   return (
                     <div key={s.id} className="relative">
                       <Card className="py-0 transition-shadow hover:shadow-md">
@@ -811,7 +838,7 @@ export default function ProductionPage() {
                             )}
                           </div>
                           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                            {s.clients?.name ?? 'Unassigned'} ·{' '}
+                            {s.clients?.name ?? 'No client'} ·{' '}
                             {whenShort(s.shoot_date) ?? <span className="italic text-zinc-400">No date yet</span>}
                           </p>
                           {nextMove && (
@@ -828,7 +855,7 @@ export default function ProductionPage() {
                         <div className="absolute right-2 top-2 z-10">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400"
+                              <Button variant="ghost" size="icon" className="h-11 w-11 text-zinc-400 md:h-8 md:w-8"
                                 aria-label={`More for ${s.title}`}
                                 onClick={e => { e.preventDefault(); e.stopPropagation() }}>
                                 <MoreHorizontal className="h-4 w-4" />
@@ -859,8 +886,8 @@ export default function ProductionPage() {
           <DialogHeader>
             <DialogTitle>Plan a shoot</DialogTitle>
             <DialogDescription>
-              A shoot is a day of filming. Its brief is written on the shoot page, then
-              sent for review as a brief task.
+              A shoot is one day of filming. Next you write its shoot plan on the shoot
+              page and send that to the client to sign off.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -881,13 +908,15 @@ export default function ProductionPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewOpen(false)} disabled={newBusy}>Cancel</Button>
-            <Button onClick={create} disabled={newBusy}>{newBusy ? 'Creating…' : 'Create shoot'}</Button>
+            <Button variant="outline" className="min-h-11" onClick={() => setNewOpen(false)} disabled={newBusy}>Cancel</Button>
+            <Button className="min-h-11" onClick={create} disabled={newBusy || !draft.client_id || !draft.title.trim()}>
+              {newBusy ? 'Creating…' : 'Create the shoot'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* the brief TASK — the reviewable plan that rides the item pipeline.
+      {/* the SHOOT PLAN — the reviewable plan that rides the item pipeline.
           presetKind locks the kind: without it the dialog filters it out. */}
       <NewItemDialog
         open={briefOpen}
@@ -914,8 +943,8 @@ export default function ProductionPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the shoot plan and its board. A shoot that produced no
-              content items can be deleted at any stage; one with items is wrapped instead.
+              This removes the shoot, its plan and its board. It cannot be undone. A shoot
+              that produced no items can be deleted at any stage; one with items is closed instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

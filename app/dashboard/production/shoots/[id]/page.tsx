@@ -103,7 +103,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     const res = await fetch(`/api/production/batches/${id}`, { cache: 'no-store' })
     if (!res.ok) {
       if (seq !== loadSeq.current) return
-      toast.error((await res.json()).error ?? 'Could not load the brief')
+      toast.error((await res.json()).error ?? 'Could not load the shoot')
       router.push('/dashboard/production')
       return
     }
@@ -191,7 +191,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
       setLockOpen(false)
       toast.success(to === 'locked'
-        ? `Shoot locked for ${longDate(json.shoot_date)}. Content items are now open.`
+        ? `Shoot locked for ${longDate(json.shoot_date)}. You can create its items now.`
         : `${label} — done`)
       void load()
     } catch (e) {
@@ -549,7 +549,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                     </Button>
                     {canEdit && role !== 'scheduler' && (
                       <Button size="sm" asChild>
-                        <Link href={`/dashboard/editor?new_for_batch=${batch.id}&client=${batch.client_id}`}>
+                        <Link href={`/dashboard/editor?new_for_shoot=${batch.id}&client=${batch.client_id}`}>
                           <Camera className="h-3.5 w-3.5" /> Create items
                         </Link>
                       </Button>
@@ -584,7 +584,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       disabled={!batch.shared_with_client}
                       onCheckedChange={async v => {
                         const ok = await patch('share_board', v)
-                        if (ok) toast.success(v ? 'Board is visible to the client' : 'Board hidden — the client sees the brief only')
+                        if (ok) toast.success(v ? 'Board is visible to the client' : 'Board hidden — the client sees the plan only')
                       }}
                     />
                     Also show the planning board
