@@ -14,6 +14,7 @@ import { uploadMedia } from '../uploadMedia'
 import { useProductionLive } from '../production/useProductionLive'
 import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 import ConfirmAction from '../ConfirmAction'
+import EmptyState from '../EmptyState'
 import { NotSetUp } from '../NotSetUp'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null; horizon_days?: number; lead_time_min?: number; capacity?: number }
@@ -32,7 +33,12 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** Share links always point at the PUBLIC site — app.* is the staff login,
  *  and window.location.origin here would hand out exactly that. */
 const copy = (url: string, ok: string) =>
-  navigator.clipboard.writeText(url).then(() => toast.success(ok)).catch(() => toast.error(url))
+  navigator.clipboard.writeText(url).then(() => toast.success(ok)).catch(() =>
+    // a red toast containing nothing but a URL read as an error about the
+    // URL. Say what went wrong, and keep the link where a thumb can get it.
+    toast.error('Couldn’t copy the link', {
+      description: `Select it and copy it by hand: ${url}`, duration: 15_000,
+    }))
 const money = (c: number, cur = 'AUD') => c === 0 ? 'Free' : new Intl.NumberFormat('en-AU', { style: 'currency', currency: cur }).format(c / 100)
 
 /** The service's photo — what a customer actually sees first on the booking
@@ -409,7 +415,7 @@ function ClosedDays({ resources, blackouts, bookings, onSave, busy }: {
                     </span>
                   )}
                   <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" disabled={busy}
-                    onClick={() => void onSave({ action: 'remove_blackout', ids: idsFor(c.roomId, c.day) }, 'Open again')}>
+                    onClick={() => void onSave({ action: 'remove_blackout', ids: idsFor(c.roomId, c.day) }, `${longDay(c.day)} is open for bookings again`)}>
                     <Trash2 className="h-3.5 w-3.5" /> Reopen
                   </Button>
                 </div>
@@ -513,7 +519,14 @@ export default function BookingsPage() {
       <section className="flex flex-col gap-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Services (booking types)</p>
         <Card><CardContent className="flex flex-col gap-2 p-4">
-          {data.services.length === 0 && <p className="text-sm text-zinc-400">No services yet — add one below.</p>}
+          {data.services.length === 0 && (
+            <EmptyState
+              icon={Clock}
+              title="No services yet"
+              body="A service is one thing people can book — “Podcast studio hour”, “Creative session” — with its length and price. Add the first one below and it appears on the public booking page as soon as it is shown."
+              className="border-0"
+            />
+          )}
           {data.services.map(s => (
             <ServiceRow key={s.id} service={s} onSave={post} busy={busy}
               resources={data.resources}
@@ -535,10 +548,12 @@ export default function BookingsPage() {
         <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookable people and rooms</p>
         <Card><CardContent className="flex flex-col gap-4 p-4">
           {data.resources.length === 0 && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Nothing can be booked yet. Add the person or room people are booking
-              — a studio, or a mailbox like tech@ — then set when it is open.
-            </p>
+            <EmptyState
+              icon={Plus}
+              title="Nothing can be booked yet"
+              body="Add the person or room people are booking — a studio, or a mailbox like tech@ — using the fields below, then set the hours it is open. Every service needs one of these to book against."
+              className="border-0"
+            />
           )}
           {data.resources.map(r => (
             <ResourceRow key={r.id} resource={r} availability={data.availability.filter(a => a.resource_id === r.id)} onSave={post} busy={busy} />
@@ -583,7 +598,16 @@ export default function BookingsPage() {
 
         {view === 'list' && (
         <Card><CardContent className="flex flex-col gap-1 p-4">
-          {data.bookings.length === 0 && <p className="text-sm text-zinc-400">No bookings yet.</p>}
+          {data.bookings.length === 0 && (
+            <EmptyState
+              icon={LinkIcon}
+              title="No bookings yet"
+              body="Every appointment someone makes on the public booking page lands here, with their contact details. Share the booking link to get the first one."
+              actionLabel="Copy the booking link"
+              onAction={() => void copy(bookingIndexUrl(), 'Booking link copied — this one shows everything')}
+              className="border-0"
+            />
+          )}
           {data.bookings.map(b => (
             <div key={b.id} className="flex flex-col border-b border-zinc-100 py-2 last:border-0 dark:border-zinc-800">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">

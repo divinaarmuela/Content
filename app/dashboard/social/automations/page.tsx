@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ArrowLeft, Pause, Play, Plus, Trash2, Zap } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
+import EmptyState from '../../EmptyState'
 import { BUTTON_MESSAGE_LIMIT, MESSAGE_LIMIT, parseAutomationDraft } from '@/app/lib/automation-core'
 
 type SocialAccount = {
@@ -354,15 +355,15 @@ export default function AutomationsPage() {
       {autos === null ? (
         <div className="grid gap-3">{[0, 1].map(i => <Skeleton key={i} className="h-28" />)}</div>
       ) : autos.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-            <Zap className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No automations yet. Create one and the account starts replying to
-              keyword comments with a DM — even while everyone is asleep.
-            </p>
-          </CardContent>
-        </Card>
+        !creating && (
+          <EmptyState
+            icon={Zap}
+            title="No automations yet"
+            body="An automation watches a post for a keyword and replies to the commenter with a direct message — even while everyone is asleep. Create the first one and pick which account it runs on."
+            actionLabel="Create the first automation"
+            onAction={() => setCreating(true)}
+          />
+        )
       ) : (
         <div className="grid gap-3">
           {autos.map(a => (
@@ -430,7 +431,9 @@ export default function AutomationsPage() {
                   logs[a.id] === null ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (logs[a.id] ?? []).length === 0 ? (
-                    <p className="text-xs text-zinc-400 dark:text-zinc-500">No activity recorded yet.</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Nothing yet — the first time someone comments the keyword, the reply it sent shows up here.
+                    </p>
                   ) : (
                     <div className="flex flex-col divide-y divide-zinc-100 rounded-lg border border-zinc-100 dark:divide-zinc-800 dark:border-zinc-800">
                       {(logs[a.id] ?? []).map(l => (

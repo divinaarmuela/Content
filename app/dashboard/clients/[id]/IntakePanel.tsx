@@ -12,7 +12,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ClipboardList, Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import EmptyState from '../../EmptyState'
 import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-core'
 import { publicUrl } from '@/app/lib/public-url'
 import ManagersCard from './ManagersCard'
@@ -136,17 +137,15 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     const latest = messages.last
     if (!latest) return
     const d = latest.data as { client_id?: string }
-    console.log('[intake realtime] message', d)
     if (d?.client_id !== clientId) return
     void load(true)
   }, [messages.last, clientId, editing, load])
 
-  // Temporary: a websocket that never connects looks identical to one that
-  // connects and receives nothing. Surfaced so the difference is visible
-  // instead of inferred from server log timing.
+  // a websocket that never connects looks identical to one that connects and
+  // receives nothing — the poll below covers the difference. Only a real
+  // error is worth a line in the console; the status chatter is gone.
   useEffect(() => {
-    // console only — the badge was UI clutter, but the signal is still needed
-    console.log('[intake realtime] status', connectionStatus, rtError ?? '')
+    if (rtError) console.error('[intake realtime]', connectionStatus, rtError)
   }, [connectionStatus, rtError])
 
   /**
@@ -214,11 +213,31 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
 
   const copy = async (form: Form) => {
     const url = publicUrl(`/intake/${form.token}`)
-    await navigator.clipboard.writeText(url)
-    toast.success('Link copied')
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      toast.error('Couldn’t copy the link', {
+        description: `Select it and copy it by hand: ${url}`, duration: 15_000,
+      })
+      return
+    }
     // copying is how the link actually gets sent — a status nobody remembers
-    // to set is a status that lies
-    if (form.status === 'draft') await patch({ form_id: form.id, action: 'mark_sent' }, 'Marked as sent')
+    // to set is a status that lies. One toast for the one click: the second
+    // ("Marked as sent") reported a change the person never asked for.
+    if (form.status === 'draft') {
+      await patch({ form_id: form.id, action: 'mark_sent' }, 'Link copied — the form is now marked as sent')
+    } else {
+      toast.success('Link copied')
+    }
+  }
+
+  const startCreating = () => {
+    setCreating(true)
+    // fetched on open, not on mount — most visits never create
+    fetch(`/api/clients/${clientId}/intake?copy_sources=1`)
+      .then(r => r.ok ? r.json() : { sources: [] })
+      .then(j => setCopySources(j.sources ?? []))
+      .catch(() => {})
   }
 
   if (!forms) return <Skeleton className="h-40 w-full" />
@@ -239,14 +258,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   A shareable link with no login. Start from a template, then tailor the questions.
                 </p>
               </div>
-              <Button size="sm" className="ml-auto" onClick={() => {
-                setCreating(true)
-                // fetched on open, not on mount — most visits never create
-                fetch(`/api/clients/${clientId}/intake?copy_sources=1`)
-                  .then(r => r.ok ? r.json() : { sources: [] })
-                  .then(j => setCopySources(j.sources ?? []))
-                  .catch(() => {})
-              }}>
+              <Button size="sm" className="ml-auto" onClick={startCreating}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" /> New form
               </Button>
             </div>
@@ -309,10 +321,16 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
         </div>
       )}
 
-      {forms.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          No intake forms yet.{canManage ? ' Create one to send after the kickoff call.' : ''}
-        </p>
+      {forms.length === 0 && !creating && (
+        <EmptyState
+          icon={ClipboardList}
+          title="No intake forms yet"
+          body={canManage
+            ? 'An intake form is the questionnaire a new client fills in after the kickoff call — their answers become the starting brief for all their work. Create one, then copy its link into an email.'
+            : 'An intake form is the questionnaire a new client fills in after the kickoff call. An account manager creates it; their answers then appear here.'}
+          actionLabel={canManage ? 'New form' : undefined}
+          onAction={canManage ? startCreating : undefined}
+        />
       )}
 
       {/* ── one card per form ── */}

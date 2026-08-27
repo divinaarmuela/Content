@@ -11,6 +11,7 @@ import {
 import { ArrowLeft, Clock, ExternalLink, TrendingUp } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 import { LoadFailed } from '../../NotSetUp'
+import EmptyState from '../../EmptyState'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { zoneAbbrev, zoneLabel } from '@/app/lib/timezone-core'
 
@@ -249,7 +250,14 @@ export default function SocialAnalyticsPage() {
         <CardContent className="p-4">
           <h3 className="mb-3 text-sm font-semibold tracking-tight">Channels</h3>
           {scoped.accounts.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">No connected channels.</p>
+            <EmptyState
+              icon={TrendingUp}
+              title={clientId === 'all' ? 'No accounts connected yet' : 'No accounts connected for this client'}
+              body="Followers, reach and best posting times come from the connected Instagram, Facebook and TikTok accounts. Connect one from the Social channels page and the numbers appear here within a day."
+              actionLabel="Open Social channels"
+              actionHref="/dashboard/social"
+              className="border-0"
+            />
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {scoped.accounts.map(a => {
@@ -317,7 +325,14 @@ export default function SocialAnalyticsPage() {
             Top posts <span className="font-normal text-zinc-400 dark:text-zinc-500">by impressions</span>
           </h3>
           {scoped.posts.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Nothing published yet.</p>
+            <EmptyState
+              icon={Clock}
+              title="Nothing published yet"
+              body="Posts rank here by impressions once they have gone live from a connected account. Anything scheduled shows up the day after it posts."
+              actionLabel="Open the posting calendar"
+              actionHref="/dashboard/scheduler/calendar"
+              className="border-0"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
