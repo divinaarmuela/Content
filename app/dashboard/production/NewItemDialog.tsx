@@ -17,7 +17,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
 import { useRole } from '../useRole'
-import { uploadMedia } from '../uploadMedia'
+import { completedIn, uploadFiles } from '../uploadQueue'
+import { UploadOverall, UploadRows, useUploadGroup } from '../UploadRows'
 import ExportWarnings, {
   exportWarningsFor, type ExportWarning,
 } from '../../components/media/ExportWarnings'
@@ -76,6 +77,9 @@ export default function NewItemDialog({
   const assetFileRef = useRef<HTMLInputElement>(null)
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetWarnings, setAssetWarnings] = useState<ExportWarning[]>([])
+  /** the batch of file rows this Files box is showing, if any */
+  const [assetGroup, setAssetGroup] = useState<string | null>(null)
+  const assetUploads = useUploadGroup(assetGroup)
   // AI work-kind suggestion: fires ~1s after the title/brief stops changing;
   // only a hint — applying it is always the human's click
   const [kindHint, setKindHint] = useState<
@@ -89,24 +93,47 @@ export default function NewItemDialog({
   const [newKindBusy, setNewKindBusy] = useState(false)
   const onAssetFiles = async (files: FileList | null) => {
     if (!files?.length) return
+    const chosen = Array.from(files)
     setAssetBusy(true)
     // a header read on the chooser's own machine: says which of these will
     // not preview in a browser, without standing in the way of any of them
-    void exportWarningsFor(Array.from(files)).then(setAssetWarnings)
+    void exportWarningsFor(chosen).then(setAssetWarnings)
+    // straight to R2, same as deliverables — the API body cap never sees them.
+    // Through the shared queue rather than a bare loop: four at a time instead
+    // of one, and every file gets a bar, a speed, a cancel and a retry
+    // instead of the word "Uploading…" over the whole batch.
+    const { group, done } = uploadFiles(chosen)
+    setAssetGroup(group)
     try {
-      // straight to R2, same as deliverables — the API body cap never sees them
-      for (const f of Array.from(files)) {
-        const { url } = await uploadMedia(f, { purpose: 'production' })
-        setDraft(d => ({ ...d, raw_assets: [...d.raw_assets, { url, name: f.name }] }))
-      }
-      toast.success(files.length === 1 ? 'File uploaded' : `${files.length} files uploaded`)
+      await done
     } catch (e) {
+      // the rows say which file and why, and offer it back — a toast repeating
+      // it would be the only part of the failure that cannot be acted on
       toast.error(e instanceof Error ? e.message : 'Upload failed')
     } finally {
       setAssetBusy(false)
       if (assetFileRef.current) assetFileRef.current.value = ''
     }
   }
+
+  /**
+   * Files that landed become part of the draft.
+   *
+   * Driven by the store rather than by the upload call's return value, so a
+   * file that failed and was then RETRIED is added too. Taking the list from
+   * the batch promise alone would leave Retry showing a green tick on a file
+   * the item was then created without — a quieter lie than the one this
+   * replaced, and a harder one to notice.
+   */
+  useEffect(() => {
+    const landed = assetGroup ? completedIn(assetGroup) : []
+    if (landed.length === 0) return
+    setDraft(d => {
+      const have = new Set(d.raw_assets.map(a => a.url))
+      const add = landed.filter(l => !have.has(l.url))
+      return add.length === 0 ? d : { ...d, raw_assets: [...d.raw_assets, ...add] }
+    })
+  }, [assetUploads, assetGroup])
   useEffect(() => {
     if (!open || kindTouchedRef.current) return
     const title = draft.title.trim()
@@ -628,6 +655,14 @@ export default function NewItemDialog({
                       className="text-zinc-400 hover:text-red-500">✕</button>
                   </Badge>
                 ))}
+              </div>
+            )}
+            {/* what is actually happening to the files, per file: name, size,
+                bar, %, speed, time left, cancel, and Retry with the reason */}
+            {assetUploads.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-800">
+                <UploadOverall uploads={assetUploads} />
+                <UploadRows uploads={assetUploads} />
               </div>
             )}
             <ExportWarnings items={assetWarnings} onDismiss={() => setAssetWarnings([])} />

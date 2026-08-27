@@ -31,9 +31,112 @@ R2, `Blob.slice` for a local file) and answers both questions; the item page,
 the portal carousel and the Files box now show a reason and a Download link
 instead of a spinner, and the uploader warns the editor at export time —
 warning only, never a block.
-Future: Cloudflare Stream would transcode every upload and make the whole
-problem disappear; that is the option to take when previews matter more than
-the per-minute cost.
+
+## Video previews now PLAY — Cloudflare Stream — 27 Aug
+
+The reason card was honest but nobody could watch the cut. Camera video that a
+browser refuses is now re-encoded by Cloudflare Stream and the player falls
+back to that, so "it will not play" stops being an outcome.
+
+The rule, in order: **the original wins whenever it can play.** A fast-start
+H.264 mp4 is already the best version of itself — full quality, no extra hop,
+and it plays before Stream has finished thinking about it. Only when the
+256 KB probe says the browser will refuse the file does anything ask Cloudflare
+for a copy. So an ordinary mp4 costs nothing and behaves exactly as before.
+
+- `supabase/video_previews.sql` — **run this once in the SQL editor.**
+  `source_url` is unique: the row is the claim, so the same 2 GB master is
+  never encoded twice (Stream bills per minute *stored*).
+- `app/lib/stream-core.ts` — pure: `previewStateFor` (play-native / play-stream
+  / pending / failed), the Cloudflare URL family, `previewPatchFrom`, the
+  signature parsing, the sweep diff. Tested in `tests/stream-core.test.ts`.
+- `app/lib/stream.ts` — copy-by-URL (`POST /stream/copy`, Cloudflare pulls
+  straight from the R2 public URL — the bytes never touch Vercel), the webhook,
+  the poller, the sweep, the stats.
+- Players use Cloudflare's **iframe embed**, not HLS in a `<video>`: `hls.js`
+  is not a dependency and Chrome/Firefox will not play a manifest natively, so
+  the alternative was "works on the Mac, black on the PC" — the exact failure
+  this closes.
+- Triggers: every version save, job-pack upload and intake submit asks via
+  `after()`; the existing half-hourly cron sweeps for anything missed and polls
+  rows still encoding after 2 minutes (webhook primary, poll backstop — no new
+  Inngest function, so no re-sync needed, CLAUDE.md trap 5b); and the first
+  person to open a stuck video starts its encode, which covers everything
+  uploaded before this existed.
+- **Originals are untouched.** The Drive mirror and Instagram posting keep
+  using the R2 original, always.
+
+### What the owner has to do
+
+1. Run `supabase/video_previews.sql` in the Supabase SQL editor.
+2. Enable **Stream** on the same Cloudflare account that holds R2
+   (dash.cloudflare.com → Stream → it asks once).
+3. Make an API token with **Stream:Edit** on that account, and set two env vars
+   in Vercel (Production + Preview):
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `CLOUDFLARE_STREAM_TOKEN`
+4. Optional but worth it — register the webhook so a ready encode is noticed in
+   seconds rather than within 30 minutes. Copy the URL from
+   Settings → Integrations → "Video previews", then:
+   ```bash
+   curl -X PUT -H 'Authorization: Bearer <STREAM_TOKEN>' \
+     https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/stream/webhook \
+     --data '{"notificationUrl":"https://app.mdmmarketing.com.au/api/stream/webhook"}'
+   ```
+   The reply contains a `secret` — set it as `CLOUDFLARE_STREAM_WEBHOOK_SECRET`.
+   Without it, unsigned deliveries are accepted but can only ever tell us the
+   truth slightly early (they must name a uid we already have a row for).
+
+**With the env vars unset, everything behaves exactly as it does today** — the
+reason card and the download link, no rows, no calls, and the build passes.
+
+**Cost.** Stream is billed per 1,000 minutes stored per month plus per 1,000
+minutes delivered. Only video the browser refuses is ever encoded, which is
+camera .mov and client phone footage rather than the finished mp4s — so the
+bill tracks raw footage, not the whole library. `deletePreview(sourceUrl)` in
+`app/lib/stream.ts` removes an encode and its row when something is culled.
+
+**Follow-up: signed playback URLs.** Previews are public with
+`requireSignedURLs:false` today, so anyone who guessed a uid could watch one.
+The R2 originals are already served from a public bucket, so this exposes
+nothing new — it is a smaller door on an already-open one. Signing would need a
+key, an expiry policy and a signer on every player including the portal, which
+has no login at all; worth doing, not worth blocking this on.
+
+Settings → Integrations has a "Video previews (Cloudflare Stream)" row with
+ready / preparing / failed counts for the last seven days and a **Retry failed**
+button (super admin).
+
+## Uploads show real progress — 27 Aug
+
+"Uploading 6 files…" was the whole of what an editor saw while a gigabyte of
+footage moved, and that word is indistinguishable from a hung tab: no way to
+tell moving from dead, which file is slow, or how long is left — and the only
+available action, reload, is the one that destroys the upload.
+
+The PUT is now an `XMLHttpRequest` rather than a `fetch`, because **fetch
+cannot report upload progress** in any shipping browser. `xhr.upload.onprogress`
+gives bytes, and `xhr.abort()` gives the cancel that was missing.
+
+- `app/lib/upload-progress-core.ts` — pure and tested: EWMA rate smoothing
+  (a raw XHR rate swings between 400 MB/s and zero, so an unsmoothed ETA is
+  worse than none), ETA, the words, and a batch bar weighted **by bytes** so
+  five 3 MB files beside a 1 GB one do not read as 83% done.
+- `app/dashboard/uploadQueue.ts` is now the one store behind all three
+  surfaces. Rows carry `{loaded, total, startedAt, rateBps, etaSec, status,
+  abort, retry}`; still 4 in parallel; the file is streamed off disk and never
+  read into memory (the probe reads its first 256 KB and no more).
+- `processing` is a real state: between the PUT landing and the item PATCH or
+  version POST returning, the bytes exist and nothing references them, so a
+  green tick there would be a promise a refresh would break.
+- With Stream configured, a video row stays quietly on "Preparing preview"
+  after the tick until its encode is ready — same `previewStateFor`.
+- The tray, the new-item dialog's Files box and the item page's Files and NEW
+  VERSION zones all render `app/dashboard/UploadRows.tsx`: name · size · bar
+  with % · "12 MB/s · 40 s left" · ✕ cancel · Retry with the reason, over an
+  overall "3 of 6 files · 62%".
+- Saving a version is blocked mid-transfer ("Waiting for the files…"): a
+  version saved with four of its five slides is worse than one not saved.
 
 ## Instant post updates (Zernio webhook) — 27 Aug
 

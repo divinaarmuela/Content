@@ -4,10 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { uploadMedia } from '../../uploadMedia'
 import { useOrderedLoad } from '../../useOrderedLoad'
 import { useProductionLive } from '../useProductionLive'
-import { enqueueJobAssets } from '../../uploadQueue'
+import {
+  clearGroup, completedIn, dismissUpload, enqueueJobAssets,
+  uploadFiles as runUploads,
+} from '../../uploadQueue'
+import { UploadOverall, UploadRows, useUploadGroup } from '../../UploadRows'
+import { overallProgress } from '../../../lib/upload-progress-core'
 import BrandCard from '../BrandCard'
 import SafeVideo from '../../../components/media/SafeVideo'
 import ExportWarnings, {
@@ -292,9 +296,17 @@ export default function ItemDetailPage() {
   const [verDraft, setVerDraft] = useState({ dropbox_url: '', drive_url: '', notes: '' })
   /** the slides of the version being built, in the order they will post */
   const [slides, setSlides] = useState<Slide[]>([])
-  /** how many files are still travelling — the strip fills in as they land */
-  const [uploadingCount, setUploadingCount] = useState(0)
-  const uploading = uploadingCount > 0
+  /**
+   * The files travelling into this version, live from the shared queue.
+   *
+   * Keyed on the item so a second drop joins the first batch rather than
+   * replacing it on screen. The strip fills in as each one lands, and the
+   * rows underneath say which file, how far, how fast and how long — the
+   * whole of what `Uploading 3 files…` used to stand in for.
+   */
+  const versionGroup = `version:${id}`
+  const versionUploads = useUploadGroup(versionGroup)
+  const uploading = versionUploads.some(u => u.status !== 'done' && u.status !== 'failed')
   /** the slide being dragged, for the reorder strip */
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   /** the drop zone is the primary path; the two link fields are the exception,
@@ -406,6 +418,8 @@ export default function ItemDetailPage() {
   // working; the tray in the layout shows progress and the item live-refreshes
   // when each file attaches
   const jobFileRef = useRef<HTMLInputElement>(null)
+  /** the same rows the tray shows, for the box that started them */
+  const jobUploads = useUploadGroup(`item:${id}`)
   const onJobFiles = (files: FileList | null) => {
     if (!files?.length) return
     const chosen = Array.from(files)
@@ -912,33 +926,44 @@ export default function ItemDetailPage() {
       setDraftDims(null)
       void measureFile(wanted[0]).then(setDraftDims)
     }
-    setUploadingCount(c => c + wanted.length)
-
-    const queue = [...wanted]
-    const next = async (): Promise<void> => {
-      const file = queue.shift()
-      if (!file) return
-      try {
-        // Straight to R2 rather than through our API: this is where shoot
-        // deliverables land, and a serverless request body caps at ~4.5MB on
-        // Vercel — every real cut would have been rejected.
-        const { url } = await uploadMedia(file, { purpose: 'production' })
-        setSlides(s => s.length >= MAX_SLIDES ? s : [...s, {
-          url,
-          name: file.name,
-          type: file.type.startsWith('video/') ? 'video' : 'image',
-          ...(file.size > 0 ? { bytes: file.size } : {}),
-        }])
-      } catch (e) {
-        toast.error(`${file.name}: ${e instanceof Error ? e.message : 'Upload failed'}`)
-      } finally {
-        setUploadingCount(c => c - 1)
-      }
-      await next()
-    }
-    // four abreast; more than a handful just fights the same connection
-    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => next()))
+    // Straight to R2 rather than through our API: this is where shoot
+    // deliverables land, and a serverless request body caps at ~4.5MB on
+    // Vercel — every real cut would have been rejected.
+    //
+    // Through the shared queue, which keeps the same four-abreast width this
+    // loop had and adds the part that was missing: per-file bytes, so a
+    // gigabyte master shows a bar moving instead of a word that looks exactly
+    // like a frozen tab. The slides themselves are picked up by the effect
+    // below, which watches the queue rather than this call's return value.
+    const { done } = runUploads(wanted, { group: versionGroup })
+    await done.catch(() => {
+      // the failed row carries the file name, the reason and a Retry — a
+      // toast would only repeat the half of it nobody can act on
+    })
   }
+
+  /**
+   * Files that landed join the slide strip, in the order they were dropped.
+   *
+   * Driven by the queue rather than by the upload call, so a file that failed
+   * and was then RETRIED still makes it into the version. Without this, Retry
+   * would show a green tick on a slide the version was saved without.
+   */
+  useEffect(() => {
+    const landed = completedIn(versionGroup)
+    if (landed.length === 0) return
+    setSlides(s => {
+      const have = new Set(s.map(x => x.url))
+      const add = landed.filter(l => !have.has(l.url)).slice(0, MAX_SLIDES - s.length)
+      if (add.length === 0) return s
+      return [...s, ...add.map(l => ({
+        url: l.url,
+        name: l.name,
+        type: (looksLikeVideo(l.url) ? 'video' : 'image') as 'video' | 'image',
+        ...(l.bytes > 0 ? { bytes: l.bytes } : {}),
+      }))]
+    })
+  }, [versionUploads, versionGroup])
 
   const saveVersion = async () => {
     if (slides.length === 0 && !verDraft.drive_url) {
@@ -956,6 +981,9 @@ export default function ItemDetailPage() {
       toast.success(isInternal ? `Draft ${json.version_number} saved` : `Version v${json.version_number} added`)
       setVerDraft({ dropbox_url: '', drive_url: '', notes: '' })
       setSlides([])
+      // the version now owns these files; their upload rows have said all
+      // they have to say and would otherwise sit above an empty drop zone
+      clearGroup(versionGroup)
       setVersionWarnings([])
       setLinksOpen(false)
       // put it on the page NOW: "The work" and the Submit button both read
@@ -1492,7 +1520,7 @@ export default function ItemDetailPage() {
                     <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
                     {uploading ? (
                       <p className="text-sm font-medium">
-                        Uploading{uploadingCount > 1 ? ` ${uploadingCount} files` : ''}…
+                        {overallProgress(versionUploads).label}
                       </p>
                     ) : slides.length > 0 ? (
                       <>
@@ -1527,6 +1555,15 @@ export default function ItemDetailPage() {
                         e.target.value = ''
                       }} />
                   </div>
+
+                  {/* one row per file: name, size, bar, %, speed, time left,
+                      cancel — and on a failure, the reason and the file back */}
+                  {versionUploads.length > 0 && (
+                    <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+                      <UploadOverall uploads={versionUploads} />
+                      <UploadRows uploads={versionUploads} />
+                    </div>
+                  )}
 
                   {/* it uploaded, it will post — it just will not play here */}
                   <ExportWarnings items={versionWarnings}
@@ -1629,9 +1666,14 @@ export default function ItemDetailPage() {
                       onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1">
+                    {/* a version saved mid-transfer is a version missing a
+                        slide, and nothing afterwards would say so */}
                     <Button size="sm" className="self-start"
-                      disabled={busy === 'version' || versionMissing !== null} onClick={saveVersion}>
-                      {busy === 'version' ? 'Saving…' : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
+                      disabled={busy === 'version' || uploading || versionMissing !== null}
+                      onClick={saveVersion}>
+                      {busy === 'version' ? 'Saving…'
+                        : uploading ? 'Waiting for the files…'
+                        : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
                     </Button>
                     {/* the precondition, said before the click rather than as a
                         toast in the far corner afterwards */}
@@ -1740,6 +1782,14 @@ export default function ItemDetailPage() {
                       }} />
                   ))}
                 </div>
+              </div>
+            )}
+            {/* these keep uploading if you navigate away — the tray follows
+                them — but while you are here, they are here */}
+            {jobUploads.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+                <UploadOverall uploads={jobUploads} />
+                <UploadRows uploads={jobUploads} onDismiss={dismissUpload} />
               </div>
             )}
             <ExportWarnings items={jobWarnings} onDismiss={() => setJobWarnings([])} />
