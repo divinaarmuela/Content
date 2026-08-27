@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { defaultScope, type ScopeMode, type ScopeSet } from '../../lib/work-pages-core'
+import { defaultScope, restoredChoice, type ScopeMode, type ScopeSet } from '../../lib/work-pages-core'
 import type { Role } from '../../lib/identity-core'
 
 /**
@@ -61,21 +61,30 @@ export function usePersistedScope(key: string, role: Role | null): [ScopeSet, (s
  * than putting the page into a state it cannot draw. The read is in an effect
  * because these pages prerender, and touching localStorage while the server
  * is rendering is both a crash and a hydration mismatch.
+ *
+ * `param` names a query parameter that overrides the remembered choice for
+ * this visit — `?view=calendar` on a link from a notification opens the
+ * calendar whatever this browser used last (see `restoredChoice`). It is read
+ * off `window.location` in the same effect rather than through
+ * `useSearchParams`, which would drop these prerendered pages out of static
+ * rendering, and it is not written back: following a link is not a change
+ * of preference.
  */
 export function usePersistedChoice<T extends string>(
-  key: string, allowed: readonly T[], fallback: T,
+  key: string, allowed: readonly T[], fallback: T, param?: string,
 ): [T, (v: T) => void] {
   const [value, setValue] = useState<T>(fallback)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(key)
-      if (saved && (allowed as readonly string[]).includes(saved)) setValue(saved as T)
-    } catch { /* a blocked localStorage is not worth a broken page */ }
+    let fromStorage: string | null = null
+    let fromUrl: string | null = null
+    try { fromStorage = localStorage.getItem(key) } catch { /* a blocked localStorage is not worth a broken page */ }
+    try { if (param) fromUrl = new URLSearchParams(window.location.search).get(param) } catch { /* no URL, no override */ }
+    setValue(restoredChoice(allowed, fallback, { fromUrl, fromStorage }))
     // `allowed` is a literal at every call site; keying on its contents keeps
     // an inline array from re-running this on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, allowed.join(',')])
+  }, [key, param, allowed.join(',')])
 
   const set = useCallback((v: T) => {
     setValue(v)

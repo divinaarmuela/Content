@@ -3,7 +3,7 @@ import {
   BRIEF_LANES, EDITOR_LANES, TASK_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
   canClaimScheduler, defaultScope, editorAssignment, editorScope, editorTail, isBriefTask,
   isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
-  schedulerScope, unassignedCount,
+  restoredChoice, schedulerScope, unassignedCount,
   type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
 } from '../app/lib/work-pages-core'
 import { ITEM_STATUSES, SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
@@ -376,5 +376,24 @@ describe('BRIEF_LANES — the shoot plan as a board', () => {
       { id: 'b', status: 'scheduled' as ItemStatus, owner_id: null, work_kinds: { slug: 'shoot_brief' } },
     ]
     expect(activeBriefTasks(rows).map(r => r.id)).toEqual(['a'])
+  })
+})
+
+describe('restoredChoice — the link wins over what the browser remembers', () => {
+  const VIEWS = ['board', 'calendar'] as const
+  it('falls back when nothing is remembered', () => {
+    expect(restoredChoice(VIEWS, 'board', {})).toBe('board')
+  })
+  it('opens where the browser remembers', () => {
+    expect(restoredChoice(VIEWS, 'board', { fromStorage: 'calendar' })).toBe('calendar')
+  })
+  it('lets ?view=… override the remembered choice', () => {
+    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'board', fromStorage: 'calendar' })).toBe('board')
+    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'calendar', fromStorage: 'board' })).toBe('calendar')
+  })
+  it('ignores words it does not understand, in either place', () => {
+    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'kanban', fromStorage: 'calendar' })).toBe('calendar')
+    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'kanban', fromStorage: 'list' })).toBe('board')
+    expect(restoredChoice(VIEWS, 'board', { fromUrl: '', fromStorage: null })).toBe('board')
   })
 })

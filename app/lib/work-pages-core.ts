@@ -256,3 +256,25 @@ export function backLinkFor(
   if (SCHEDULER_STATUSES.includes(i.status)) return { href: '/dashboard/scheduler', label: 'Scheduler' }
   return { href: '/dashboard/editor', label: 'Editor' }
 }
+
+/**
+ * Which remembered choice to open on: the link's, then the browser's, then
+ * the default.
+ *
+ * A link that says `?view=calendar` was written by someone who meant the
+ * calendar — the note in the bell, the "it is on the posting calendar" toast.
+ * For a while the choice stored in localStorage won over the URL, so the
+ * person who had last used the board followed a link to the calendar and
+ * arrived on the board, wondering where the thing they were sent to had gone.
+ * Anything not in `allowed` is a guess we no longer understand and is skipped.
+ */
+export function restoredChoice<T extends string>(
+  allowed: readonly T[], fallback: T,
+  { fromUrl, fromStorage }: { fromUrl?: string | null; fromStorage?: string | null },
+): T {
+  const ok = (v: string | null | undefined): v is T =>
+    typeof v === 'string' && (allowed as readonly string[]).includes(v)
+  if (ok(fromUrl)) return fromUrl
+  if (ok(fromStorage)) return fromStorage
+  return fallback
+}

@@ -190,7 +190,7 @@ export default function ProductionPage() {
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // the board and the calendar are two readings of the same page, and which
   // one you were on is worth remembering between visits
-  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board')
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board', 'view')
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
 
   /** The page, refetched with its answers kept in order — and never dropped.

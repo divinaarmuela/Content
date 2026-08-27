@@ -138,7 +138,7 @@ export default function EditorPage() {
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // lanes or dates — two readings of the same board, and which one you were
   // on is worth remembering
-  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board')
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board', 'view')
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
 
   const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number; in_production?: number; approved?: number; scheduled?: number; posted?: number }[] | null>(null)
