@@ -9,6 +9,9 @@ import { useOrderedLoad } from '../../useOrderedLoad'
 import { useProductionLive } from '../useProductionLive'
 import { enqueueJobAssets } from '../../uploadQueue'
 import BrandCard from '../BrandCard'
+import {
+  DEFAULT_TZ, formatInZone, formatWithZone, viewerHint,
+} from '../../../lib/timezone-core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -76,6 +79,8 @@ type Reviewer = { id: string; name: string; email: string; role: string; assigne
 
 type Detail = {
   id: string; title: string; client_id: string; client_name: string | null
+  /** the audience's zone — every posting time on this page is in it */
+  client_timezone?: string | null
   owner_id: string | null
   assigned_by?: string | null
   scheduler_ids?: string[] | null
@@ -195,6 +200,12 @@ export default function ItemDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [detail, setDetail] = useState<Detail | null>(null)
+  /** where the READER is, resolved after mount — the server has no opinion
+   *  about that, and rendering one would be a hydration mismatch */
+  const [viewerTz, setViewerTz] = useState<string | null>(null)
+  useEffect(() => {
+    try { setViewerTz(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { /* no zone, no hint */ }
+  }, [])
   const [busy, setBusy] = useState<string | null>(null)
 
   const [verDraft, setVerDraft] = useState({ dropbox_url: '', drive_url: '', notes: '' })
@@ -451,6 +462,11 @@ export default function ItemDetailPage() {
 
   const role = detail.viewer_role
   const isTeam = role !== 'client'
+  /** Two different zones live on this page and they answer two different
+   *  questions. A POSTING time belongs to the client's — it is when the
+   *  audience sees it. A timestamp on something a person did belongs to the
+   *  reader's, because "when did that happen" means on their own clock. */
+  const clientTz = detail.client_timezone || DEFAULT_TZ
   const viewer = { id: detail.viewer_id ?? '', role }
   const isBrief = detail.work_kind?.slug === SHOOT_BRIEF_SLUG
   // research / strategy / copy: nothing to upload, schedule or post
@@ -1818,8 +1834,12 @@ export default function ItemDetailPage() {
               <div key={s.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
                 <span className="capitalize">{s.platform}</span>
                 {s.scheduled_at && (
-                  <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                    {new Date(s.scheduled_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400"
+                    title={viewerHint(s.scheduled_at, clientTz, viewerTz) ?? undefined}>
+                    {/* the client's zone with its letters attached: the same
+                        instant reads 9:00 here and 7:00 in Manila, and a bare
+                        "9:00" is how a post ends up two hours out */}
+                    {formatWithZone(s.scheduled_at, clientTz, 'short')}
                   </span>
                 )}
                 <span className="ml-auto">
@@ -1838,6 +1858,7 @@ export default function ItemDetailPage() {
                 itemId={id}
                 clientId={detail.client_id}
                 clientName={detail.client_name ?? 'This client'}
+                clientTz={detail.client_timezone || DEFAULT_TZ}
                 clientUsers={detail.client_users ?? []}
                 platformTargets={detail.platform_targets ?? []}
                 caption={detail.caption}
@@ -1941,8 +1962,14 @@ export default function ItemDetailPage() {
               ) : lines.map(l => (
                 <div key={l.id} className="flex items-baseline gap-3 text-sm">
                   <span className="text-zinc-600 dark:text-zinc-300">{l.text}</span>
-                  <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                    {new Date(l.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {/* History is about people, not about posts: "when did this
+                      happen" means on the reader's own clock, so it follows
+                      the browser rather than the client's zone. Rendered only
+                      once the browser has told us where it is — the server
+                      cannot know, and guessing produces a hydration mismatch. */}
+                  <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500"
+                    suppressHydrationWarning>
+                    {viewerTz ? formatInZone(l.at, viewerTz, 'long') : ''}
                   </span>
                 </div>
               ))}

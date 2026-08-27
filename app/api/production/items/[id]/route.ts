@@ -6,6 +6,7 @@ import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-acc
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
 import { loadPostingContext } from '../../../../lib/production-publish'
+import { DEFAULT_TZ } from '../../../../lib/timezone-core'
 import {
   itemMirrorProgress, mirrorRawAssets, newRawAssets, type RawAsset,
 } from '../../../../lib/gdrive-mirror'
@@ -21,7 +22,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       supabase.from('asset_versions').select('*').eq('item_id', id).order('version_number', { ascending: false }),
       supabase.from('item_comments').select('*').eq('item_id', id).order('created_at', { ascending: true }),
       supabase.from('schedule_entries').select('*').eq('item_id', id),
-      supabase.from('clients').select('name').eq('id', item.client_id).maybeSingle(),
+      // the zone travels with the name: every posting time on this page is
+      // read and written in the client's zone, never the browser's
+      supabase.from('clients').select('name, timezone').eq('id', item.client_id).maybeSingle(),
       supabase.from('content_items')
         // concept + shot_list travel too: the brief's submit edge accepts
         // either as evidence, and the page can only pre-check what it can see
@@ -110,6 +113,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ...shaped,
       posting,
       client_name: clientRes.data?.name ?? null,
+      client_timezone: (clientRes.data?.timezone as string | null) || DEFAULT_TZ,
       owner_name,
       managers,
       client_users,

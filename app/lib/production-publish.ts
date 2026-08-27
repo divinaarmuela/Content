@@ -8,6 +8,7 @@ import {
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
 import { postSlides, slidesOf } from './version-files-core'
+import { DEFAULT_TZ, safeZone } from './timezone-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
@@ -63,6 +64,11 @@ export type ItemPublishPlan = {
   media: MediaItem[]
   targets: Target[]
   scheduledFor: string | null
+  /** the AUDIENCE's zone, which is the one the provider must be told about.
+   *  `scheduledFor` is a UTC instant and needs no zone to be unambiguous —
+   *  but the provider records a post's local publishing time, and handing it
+   *  Melbourne for a Manila client puts the wrong hour on their own dashboard. */
+  timezone: string
   /** platforms the item asks for but the client has no connected account for */
   missing: string[]
   blocked: string | null
@@ -90,9 +96,15 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
     media: [],
     targets: [],
     scheduledFor: null,
+    timezone: DEFAULT_TZ,
     missing: [],
     blocked: null,
   }
+
+  // the client's own zone, read from the row that owns the audience
+  const { data: client } = await supabase
+    .from('clients').select('timezone').eq('id', item.client_id).maybeSingle()
+  plan.timezone = safeZone(client?.timezone as string | null)
 
   // Only content that has cleared approval may go out. This is the whole point
   // of the workflow — publishing an item still in review would bypass it.
@@ -276,6 +288,7 @@ export async function queueItemPublish(
     media: plan.media,
     targets: plan.targets,
     scheduledFor: opts.publishNow ? null : plan.scheduledFor,
+    timezone: plan.timezone,
     createdBy: opts.createdBy,
   })
   if ('error' in queued) return queued

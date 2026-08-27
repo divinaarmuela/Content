@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,10 @@ import {
   METRICS_PENDING_LINE, compactCount, isExternalRow, metricCells, metricsPending, updatedAgo,
   type PostMetrics,
 } from '../../../lib/post-analytics-core'
+import {
+  DEFAULT_TZ, formatWithZone, fromZonedInput, toZonedInput, viewerHint,
+  zoneAbbrev, zoneLabel,
+} from '../../../lib/timezone-core'
 
 export type PostingContext = {
   configured: boolean
@@ -89,6 +93,11 @@ type Props = {
   itemId: string
   clientId: string
   clientName: string
+  /** the AUDIENCE's zone. Every time on this card is entered and read in it —
+   *  a scheduler in Manila books 9 am Melbourne by typing 9:00, because the
+   *  post is going to a Melbourne feed and that is the only time anybody in
+   *  this conversation actually means. */
+  clientTz: string
   /** who at the client would be emailed a connect link */
   clientUsers: { name: string; email: string }[]
   platformTargets: string[]
@@ -106,20 +115,16 @@ type Props = {
   busy: boolean
 }
 
-/** A datetime-local value for an ISO instant, in the browser's own zone. */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+/** The reader's own zone, for the "= 1:00 pm your time" line. Read once, on
+ *  the client, and never on the server — there is no such thing as the
+ *  server's opinion of where you are sitting. */
+function browserZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
 }
-
-const when = (iso: string | null) => iso
-  ? new Date(iso).toLocaleString('en-AU', {
-    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
-  })
-  : null
 
 /**
  * The one card that decides whether a post goes out.
@@ -134,6 +139,7 @@ export default function PostingCard(props: Props) {
     itemId, clientId, clientName, clientUsers, platformTargets, caption,
     posting, entries, canAutoPublish, platforms, onPost, onManual, onChanged, busy,
   } = props
+  const tz = props.clientTz || DEFAULT_TZ
 
   const connected = (posting?.accounts ?? []).map(a => a.platform)
   const platform = choosePlatform(platformTargets, connected)
@@ -151,7 +157,10 @@ export default function PostingCard(props: Props) {
   // the row that says "this went out" — the same one derivePostingState reads,
   // and the one carrying the outcome of the hunt for its numbers
   const postedEntry = entries.find(e => e.publish_status === 'published') ?? null
-  const [pickedWhen, setPickedWhen] = useState<string>(() => toLocalInput(entry?.scheduled_at ?? null))
+  const [pickedWhen, setPickedWhen] = useState<string>(() => toZonedInput(entry?.scheduled_at ?? null, tz))
+  // resolved after mount: on the server there is no viewer to have a zone
+  const [viewerTz, setViewerTz] = useState<string | null>(null)
+  useEffect(() => { setViewerTz(browserZone()) }, [])
   const [manual, setManual] = useState(false)
   const [manualPlatform, setManualPlatform] = useState(platform)
   const [liveUrl, setLiveUrl] = useState('')
@@ -162,9 +171,25 @@ export default function PostingCard(props: Props) {
 
   const label = platformLabel(platform)
   const primary = postingPrimaryLabel(state)
-  const whenIso = pickedWhen ? new Date(pickedWhen).toISOString() : null
+  // the typed wall time is the CLIENT's, not this browser's — that single
+  // reading is the whole difference between 9 am Melbourne and 11 am Melbourne
+  const whenIso = fromZonedInput(pickedWhen, tz)
   /** a time already gone is not a schedule — the button says "Post now" */
   const isPast = !whenIso || new Date(whenIso).getTime() <= Date.now()
+
+  /** every printed posting time on this card, in the client's zone */
+  const when = (iso: string | null) => formatWithZone(iso, tz)
+  /** …and what that is on the reader's own clock, when it differs */
+  const hint = (iso: string | null) => viewerHint(iso, tz, viewerTz)
+  const zoneNote = `${zoneLabel(tz)} time (${zoneAbbrev(tz, whenIso ?? undefined)})`
+
+  /** "Melbourne time (AEST)" plus "= 1:00 pm your time" under a picker */
+  const pickerNote = (
+    <>
+      <span className="font-medium text-zinc-500 dark:text-zinc-400">{zoneNote}</span>
+      {whenIso && hint(whenIso) && <> · {hint(whenIso)}</>}
+    </>
+  )
 
   const sendInvite = async () => {
     setInviting(true)
@@ -253,6 +278,11 @@ export default function PostingCard(props: Props) {
         <Input type="datetime-local" value={pickedWhen} className="font-mono text-xs"
           onChange={e => setPickedWhen(e.target.value)} />
       </div>
+      <p className="-mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+        {whenIso
+          ? <>“Set date” records {when(whenIso)}. {hint(whenIso)}</>
+          : pickerNote}
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy}
           onClick={() => void onManual({ platform: manualPlatform, whenIso })}>
@@ -339,14 +369,14 @@ export default function PostingCard(props: Props) {
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">When should it go out?</Label>
+                <Label className="text-xs">When should it go out? — {zoneNote}</Label>
                 <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-xs"
                   onChange={e => setPickedWhen(e.target.value)} />
                 <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
                   {whenIso
                     ? isPast
                       ? 'That time has passed — this will post immediately.'
-                      : `Posts automatically on ${when(whenIso)}.`
+                      : <>Posts automatically on {when(whenIso)}. {hint(whenIso)}</>
                     : 'Leave it empty to post as soon as you press the button.'}
                 </p>
               </div>
@@ -375,6 +405,9 @@ export default function PostingCard(props: Props) {
                     : `Queued on ${label}`}
                   <span className="font-normal text-zinc-500 dark:text-zinc-400"> · will post automatically</span>
                 </p>
+                {state.when && hint(state.when) && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint(state.when)}</span>
+                )}
               </div>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
                 {state.handedOver
@@ -383,9 +416,10 @@ export default function PostingCard(props: Props) {
               </p>
               {rescheduling && (
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">New time</Label>
+                  <Label className="text-xs">New time — {zoneNote}</Label>
                   <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-xs"
                     onChange={e => setPickedWhen(e.target.value)} />
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{pickerNote}</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
@@ -417,6 +451,9 @@ export default function PostingCard(props: Props) {
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
                   Posted{state.at ? ` ${when(state.at)}` : ''}
                 </span>
+                {state.at && hint(state.at) && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint(state.at)}</span>
+                )}
                 {state.manual && (
                   <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                     recorded by hand

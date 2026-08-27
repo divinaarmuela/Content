@@ -62,6 +62,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       notifyPublishQueued(user, item, {
         jobId: result.id,
         publishNow: body.publishNow === true,
+        // the email names the hour, in the audience's zone — the person
+        // reading it may be in a different one from the person who set it
+        scheduledFor: result.plan.scheduledFor,
+        timezone: result.plan.timezone,
         recipientIds: Array.isArray(body.notifyIds)
           ? body.notifyIds.map((v: unknown) => String(v)).filter(Boolean)
           : undefined,

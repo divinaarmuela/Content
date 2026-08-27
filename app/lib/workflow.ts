@@ -17,6 +17,7 @@ import {
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
+import { formatWithZone, safeZone, zoneAbbrev, zoneLabel } from './timezone-core'
 import {
   briefSatisfiesSubmission, checkBriefTaskTransitionAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
 } from './brief-task-core'
@@ -280,7 +281,15 @@ export async function notifyScheduleHandoff(
 export function notifyPublishQueued(
   actor: TeamUser,
   item: ContentItem,
-  opts: { jobId: string; publishNow: boolean; recipientIds?: string[] },
+  opts: {
+    jobId: string; publishNow: boolean; recipientIds?: string[]
+    /** when it goes out, and the CLIENT's zone to say it in. An email is read
+     *  in a different country from the one that sent it more often than any
+     *  other surface here, and "queued for its scheduled time" told a manager
+     *  nothing they could act on. */
+    scheduledFor?: string | null
+    timezone?: string | null
+  },
 ) {
   void (async () => {
     let recipients: { id: string; email: string; name: string }[]
@@ -294,7 +303,14 @@ export function notifyPublishQueued(
     } else {
       recipients = await resolveAudience('account_managers', item)
     }
-    const when = opts.publishNow ? 'is being published now' : 'is queued for its scheduled time'
+    const tz = safeZone(opts.timezone)
+    const at = opts.publishNow ? null : formatWithZone(opts.scheduledFor, tz)
+    const when = opts.publishNow
+      ? 'is being published now'
+      : at ? `is scheduled for ${at}` : 'is queued for its scheduled time'
+    const heading = opts.publishNow
+      ? `Publishing: ${item.title}`
+      : at ? `Scheduled for ${at}: ${item.title}` : `Scheduled: ${item.title}`
     await Promise.all(recipients.filter(r => r.id !== actor.id).map(r => notify({
       actorName: actor.name,
       actorEmail: actor.email,
@@ -304,10 +320,13 @@ export function notifyPublishQueued(
       entityId: `${item.id}#${opts.jobId}`,
       recipientId: r.id,
       recipientEmail: r.email,
-      subject: `${opts.publishNow ? 'Publishing' : 'Scheduled'}: ${item.title}`,
+      subject: heading,
       bodyHtml: renderEmail(
-        `${opts.publishNow ? 'Publishing' : 'Scheduled'}: ${item.title}`,
-        `<p><strong>${item.title}</strong> ${when} on the client's connected accounts, sent by ${actor.name || actor.email}.</p>`,
+        heading,
+        `<p><strong>${item.title}</strong> ${when} on the client's connected accounts, sent by ${actor.name || actor.email}.</p>`
+        // the zone is the client's, and the email says so outright — the
+        // reader may well be in another one
+        + (at ? `<p>Times are ${zoneLabel(tz)} time (${zoneAbbrev(tz, opts.scheduledFor)}), where the audience is.</p>` : ''),
         'Open the item',
         `${DASHBOARD_URL}/dashboard/production/${item.id}`
       ),
