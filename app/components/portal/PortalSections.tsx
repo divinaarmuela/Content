@@ -466,13 +466,6 @@ export function PortalSection({ title, items, empty, token, lines }: {
  * month per kind of piece. Shared so the share-link portal and the logged-in
  * portal say the identical thing.
  */
-export function publishedLines(data: PortalData): (string | null)[] {
-  return [
-    monthTotalsLine(data.published_totals),
-    ...(data.published_by_type ?? []).map(typeTotalsLine),
-  ]
-}
-
 /** The review queue: each awaiting piece as a full card with actions. */
 export function ReviewSection({ items, token, amName }: {
   items: PortalItem[]; token?: string; amName?: string | null

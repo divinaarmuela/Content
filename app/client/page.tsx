@@ -10,7 +10,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import { ExternalLink, CheckCircle2, MessageSquare } from 'lucide-react'
-import { CommitmentCards, PortalSection, publishedLines } from '../components/portal/PortalSections'
+import { CommitmentCards, PortalSection } from '../components/portal/PortalSections'
+import { publishedLines } from '../lib/post-analytics-core'
 import ShootSection from '../components/portal/ShootSection'
 import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'

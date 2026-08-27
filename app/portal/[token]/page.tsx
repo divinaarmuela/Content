@@ -8,8 +8,9 @@ import Rule from '../../components/lama/Rule'
 import { Scramble } from '../../components/lama/Scramble'
 import PortalShell from '../../components/portal/PortalShell'
 import {
-  CommitmentCards, PortalSection, ReviewSection, publishedLines,
+  CommitmentCards, PortalSection, ReviewSection,
 } from '../../components/portal/PortalSections'
+import { publishedLines } from '../../lib/post-analytics-core'
 import ShootSection from '../../components/portal/ShootSection'
 
 export const metadata: Metadata = {

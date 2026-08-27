@@ -313,6 +313,22 @@ export function typeTotals(
 
 /** "Reels · 3 posts · 12.4k views · 310 likes" — or null when there is
  *  nothing but zeroes, which is the platform not having counted yet. */
+/**
+ * The lines under the portal's Published heading. Pure, so a SERVER page can
+ * compute them: the first version of this lived in a 'use client' component
+ * file, and calling it from the server page was fine locally but a 500 on
+ * Vercel ("Attempted to call publishedLines() from the server").
+ */
+export function publishedLines(data: {
+  published_totals?: MonthTotals | null
+  published_by_type?: TypeTotals[] | null
+}): (string | null)[] {
+  return [
+    monthTotalsLine(data.published_totals),
+    ...(data.published_by_type ?? []).map(typeTotalsLine),
+  ]
+}
+
 export function typeTotalsLine(t: TypeTotals | null | undefined): string | null {
   if (!t || t.posts === 0) return null
   const bits = [`${t.posts} ${t.posts === 1 ? 'post' : 'posts'}`]
