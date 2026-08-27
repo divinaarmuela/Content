@@ -3,7 +3,7 @@ import {
   EDITS_FOLDER, FOLDER_MIME, MAX_SEGMENT, brandChain, chain, clientChain,
   escapeQueryValue, folderNameFor, folderQuery, folderUrl, itemChain,
   monthPrefix, noShootChain, normaliseRoot, safeSegment, shootChains,
-  taskChain, typeWord, uniqueName,
+  kindGetsOwnFolder, shootFolderRename, taskChain, typeWord, uniqueName,
 } from '../app/lib/gdrive-core'
 
 describe('safeSegment', () => {
@@ -278,5 +278,42 @@ describe('uniqueName — collisions', () => {
     const second = uniqueName(b, taken); taken.push(second)
     expect(first).toBe('Reel 01 - Hook')
     expect(second).toBe('Reel 01 - Hook (2)')
+  })
+})
+
+describe('kindGetsOwnFolder — the brief IS the shoot', () => {
+  it('a shoot brief gets no folder of its own', () => {
+    expect(kindGetsOwnFolder('shoot_brief')).toBe(false)
+  })
+  it('everything else does', () => {
+    for (const slug of ['edit', 'research', 'strategy', 'copy', null, undefined, '']) {
+      expect(kindGetsOwnFolder(slug)).toBe(true)
+    }
+  })
+})
+
+describe('shootFolderRename — the month at the front, once the date is known', () => {
+  it('a plan raised in August for a September shoot is refiled', () => {
+    expect(shootFolderRename('2026-08 Content Day', 'Content Day', '2026-09-14', '2026-08-27'))
+      .toBe('2026-09 Content Day')
+  })
+  it('already right is not a rename', () => {
+    expect(shootFolderRename('2026-09 Content Day', 'Content Day', '2026-09-14', '2026-08-27'))
+      .toBeNull()
+  })
+  it('keeps the dedupe suffix — the folder it distinguishes is still there', () => {
+    expect(shootFolderRename('2026-08 Content Day (2)', 'Content Day', '2026-09-14'))
+      .toBe('2026-09 Content Day (2)')
+  })
+  it('no date and no creation month leaves a bare title alone', () => {
+    expect(shootFolderRename('Content Day', 'Content Day', null)).toBeNull()
+  })
+  it('a retitled shoot is renamed too, month and all', () => {
+    expect(shootFolderRename('2026-09 Content Day', 'Spring Campaign', '2026-09-14'))
+      .toBe('2026-09 Spring Campaign')
+  })
+  it('a folder we know nothing about is never touched', () => {
+    expect(shootFolderRename(null, 'Content Day', '2026-09-14')).toBeNull()
+    expect(shootFolderRename('', 'Content Day', '2026-09-14')).toBeNull()
   })
 })

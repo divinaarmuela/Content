@@ -4,11 +4,11 @@ import { supabase } from '@/lib/supabase'
 import {
   BRAND_FOLDER, EDITS_FOLDER, NO_SHOOT_FOLDER, TASKS_FOLDER,
   brandChain, clientChain, folderNameFor, itemChain, noShootChain, shootChains,
-  taskChain, uniqueName,
+  kindGetsOwnFolder, shootFolderRename, taskChain, uniqueName,
 } from './gdrive-core'
 import {
-  driveConfigured, ensureChain, ensureChainWithLink, listFolderNames,
-  rootFolderId, shareWithDomain,
+  driveConfigured, ensureChain, ensureChainWithLink, folderInfo, listFolderNames,
+  renameFolder, rootFolderId, shareWithDomain,
 } from './gdrive'
 
 /**
@@ -126,6 +126,47 @@ export function onBatchCreated(batch: BatchLike): void {
   detach('batch create', () => ensureShootFoldersNow(batch))
 }
 
+/**
+ * Put the month at the front of a shoot folder right, once the date is known.
+ *
+ * "Plan a shoot" makes the folder before anyone has picked a day, so the name
+ * falls back to the month the plan was raised — a September shoot planned in
+ * August is filed under `2026-08 …` and stays there. Setting or locking the
+ * date is the moment that stops being a guess, so that is when the folder is
+ * renamed. In place: the id, the links we have handed out, the files inside
+ * and the permissions on it all survive a rename.
+ */
+export async function renameShootFolderNow(batch: BatchLike): Promise<void> {
+  if (!driveConfigured()) return
+  const folderId = batch.drive_folder_id
+  if (!folderId) return
+
+  const info = await folderInfo(folderId)
+  if (!info) return
+  const wanted = shootFolderRename(
+    info.name, batch.title, batch.shoot_date ?? null, batch.created_at ?? null,
+  )
+  if (!wanted) return
+
+  // a sibling already wearing that name means a suffix, not a collision: two
+  // shoots in one month with one title is normal, and Drive would let both
+  // fold under the same name without a word
+  const siblings = info.parentId
+    ? (await listFolderNames(info.parentId)).filter(n => n !== info.name)
+    : []
+  const name = uniqueName(wanted, siblings)
+  if (name === info.name) return
+
+  const renamed = await renameFolder(folderId, name)
+  if (!renamed) return
+  // the URL is id-based and does not move, so nothing else needs writing back
+}
+
+/** Fire-and-forget: call this wherever a shoot's date is set or locked. */
+export function onShootDateChanged(batch: BatchLike): void {
+  detach('shoot date', () => renameShootFolderNow(batch))
+}
+
 export type ItemLike = {
   id: string
   client_id: string
@@ -146,16 +187,27 @@ export type ItemLike = {
  * cosmetic one: an editor hunting for footage looks beside the shoots, not
  * among the research jobs.
  */
-async function internalKindIds(items: ItemLike[]): Promise<Set<string>> {
+async function kindIds(items: ItemLike[]): Promise<{
+  /** kinds that file under `_Tasks` */
+  internal: Set<string>
+  /** kinds that get NO folder at all — the shoot brief IS the shoot */
+  noFolder: Set<string>
+}> {
   const ids = [...new Set(items.map(i => i.work_kind_id).filter(Boolean))] as string[]
-  if (ids.length === 0) return new Set()
+  if (ids.length === 0) return { internal: new Set(), noFolder: new Set() }
   const { data } = await supabase
     .from('work_kinds').select('id, slug, uses_media').in('id', ids)
-  return new Set(
-    (data ?? [])
-      .filter(k => k.slug !== 'shoot_brief' && k.uses_media === false)
-      .map(k => k.id as string),
-  )
+  const rows = data ?? []
+  return {
+    internal: new Set(
+      rows
+        .filter(k => kindGetsOwnFolder(k.slug) && k.uses_media === false)
+        .map(k => k.id as string),
+    ),
+    noFolder: new Set(
+      rows.filter(k => !kindGetsOwnFolder(k.slug)).map(k => k.id as string),
+    ),
+  }
 }
 
 /**
@@ -182,7 +234,7 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
     names.set(clientId, await clientName(clientId))
   }
 
-  const internal = await internalKindIds(items)
+  const { internal, noFolder } = await kindIds(items)
 
   // resolve each shoot's folder once, creating it if the batch was made in
   // the same request that made the items (the shoot-brief path does exactly
@@ -205,6 +257,10 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
 
   for (const item of items) {
     if (item.drive_folder_id) continue
+    // the shoot brief IS the shoot: its folder is the shoot folder, already
+    // made above. A second one inside `02 Edits`, named after the shoot, is
+    // an empty folder nobody files anything in — see kindGetsOwnFolder.
+    if (item.work_kind_id && noFolder.has(item.work_kind_id)) continue
     const client = names.get(item.client_id)
     if (!client) continue
 

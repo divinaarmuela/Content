@@ -321,6 +321,54 @@ export function intakeFileTarget(
     : 'from_client'
 }
 
+/**
+ * What a shoot's folder should be called NOW, when that differs from what it
+ * is called — otherwise null.
+ *
+ * A shoot folder leads with the month so the client folder sorts the way
+ * people actually search it. But "Plan a shoot" creates the folder before the
+ * date exists, so the name falls back to the month the plan was raised: a
+ * September shoot planned in August is filed under `2026-08`, and stays there
+ * for the rest of its life unless something puts it right. Locking the date is
+ * exactly that moment.
+ *
+ * The dedupe suffix is carried across. `2026-08 Content Day (2)` is the second
+ * Content Day in that folder; renaming it to `2026-09 Content Day` and losing
+ * the `(2)` would collide with a folder that is still there.
+ */
+export function shootFolderRename(
+  currentName: string | null | undefined,
+  shootTitle: string,
+  shootDate: string | null,
+  createdAt?: string | null,
+): string | null {
+  const current = safeSegment(currentName ?? '')
+  if (!currentName || current === 'Untitled') return null
+  const suffix = /\s\(\d+\)$/.exec(current)?.[0] ?? ''
+  const wanted = folderNameFor.shoot('', shootTitle, shootDate, createdAt)
+  const next = suffix
+    ? safeSegment(`${wanted.slice(0, MAX_SEGMENT - suffix.length).replace(/[.\s]+$/, '')}${suffix}`)
+    : wanted
+  return next === current ? null : next
+}
+
+/** The work kind whose item IS the shoot: the shoot brief. */
+export const SHOOT_BRIEF_KIND = 'shoot_brief'
+
+/**
+ * Does this kind of work get a folder of its own?
+ *
+ * Everything does, except the shoot brief. A brief task is not a deliverable
+ * sitting beside the shoot — it IS the shoot, riding the item pipeline so it
+ * can be reviewed and approved like anything else. Giving it one produced
+ * `{Shoot}/02 Edits/{Shoot title}`: an empty folder inside the shoot's own
+ * edits bin, named after the shoot, that nothing will ever be filed in and
+ * that every editor has to read past. The shoot folder is the brief's folder.
+ */
+export function kindGetsOwnFolder(kindSlug: string | null | undefined): boolean {
+  return String(kindSlug ?? '') !== SHOOT_BRIEF_KIND
+}
+
 /** The URL a person opens. The only folder URL form Drive publishes. */
 export function folderUrl(folderId: string): string {
   return `https://drive.google.com/drive/folders/${folderId}`
