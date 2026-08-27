@@ -102,7 +102,9 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
                 // page telling the client there is nothing to do
                 ['Needs your review', data.needs_review.length + data.plans_awaiting],
                 ['In production', data.in_production.length + data.changes_requested.length],
-                ['Approved', data.approved.length + data.scheduled.length],
+                // one counter, both piles — a fifth column breaks the 2×2 a
+                // phone gets, and the cards below say which of them are booked
+                ['Approved & scheduled', data.approved.length + data.scheduled.length],
                 ['Published', data.published.length],
               ].map(([label, n]) => (
                 <div key={label as string}>
@@ -146,7 +148,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
         )}
         <div className="grid gap-12 lg:grid-cols-2">
           <Reveal gate={false}><PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
-          <Reveal gate={false} delay={120}><PortalSection title="Approved" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} /></Reveal>
+          <Reveal gate={false} delay={120}><PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} /></Reveal>
         </div>
         <Reveal gate={false}><PortalSection title="Published" items={data.published} empty="Published posts appear here with live links." token={token} /></Reveal>
       </main>

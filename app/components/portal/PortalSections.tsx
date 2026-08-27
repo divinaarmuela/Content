@@ -8,7 +8,7 @@ import { CalendarDays, Check, ExternalLink, MessageSquare, Send } from 'lucide-r
 import type { PortalData, PortalItem } from '../../lib/portal-data'
 import {
   APPROVED_TOAST, approveConsequence, changesSentToast,
-  contentTypeLabel, contentTypePlural,
+  contentTypeLabel, contentTypePlural, scheduledWhen,
 } from '../../lib/portal-words'
 
 /**
@@ -305,7 +305,9 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
             {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
               <span key={s.platform} className="flex items-center gap-1 font-mono text-[10px] uppercase opacity-60">
                 <CalendarDays className="h-3 w-3" />
-                {s.platform} · {new Date(s.scheduled_at!).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                {/* the hour matters to whoever is waiting for it — a date
+                    alone made them ask us what time it goes out */}
+                {s.platform} · {scheduledWhen(s.scheduled_at)}
               </span>
             ))}
             {item.schedule.filter(s => s.live_url).map(s => (
