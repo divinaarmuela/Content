@@ -97,15 +97,23 @@ export default function ScannerSettings() {
   const [saving, setSaving] = useState(false)
   const [denied, setDenied] = useState(false)
   /**
-   * The Mailboxes switches save the moment you flip them; everything in
-   * Scanning behaviour and both block-lists only change local state and need
-   * a Save button at the bottom of a THIRD, unrelated card. A person flips a
-   * switch (which takes), changes a threshold (which does not), and leaves.
-   * The page cannot un-mix its two save models today, so at the very least it
-   * says out loud that something is unsaved.
+   * ONE save model for the whole page.
+   *
+   * The Mailboxes switches used to save the moment you flipped them, while
+   * everything in Scanning behaviour and both block-lists only changed local
+   * state and needed a Save button at the bottom of a THIRD, unrelated card.
+   * A person flipped a switch (which took), changed a threshold (which did
+   * not), and left. Now nothing saves until the bar at the bottom says so:
+   * a flipped switch is a pending change like any other, and Save writes
+   * settings and mailboxes together.
    */
   const [saved, setSaved] = useState<Settings | null>(null)
-  const dirty = !!settings && !!saved && JSON.stringify(settings) !== JSON.stringify(saved)
+  /** switches flipped but not yet saved, by mailbox address */
+  const [mailboxDraft, setMailboxDraft] = useState<Record<string, boolean>>({})
+  const settingsDirty = !!settings && !!saved && JSON.stringify(settings) !== JSON.stringify(saved)
+  const mailboxChanges = mailboxes.filter(m => m.email in mailboxDraft && mailboxDraft[m.email] !== m.enabled)
+  const dirty = settingsDirty || mailboxChanges.length > 0
+  const pendingCount = (settingsDirty ? 1 : 0) + mailboxChanges.length
 
   const load = useCallback(async () => {
     try {
@@ -128,51 +136,60 @@ export default function ScannerSettings() {
   const patch = (p: Partial<Settings>) =>
     setSettings(s => (s ? { ...s, ...p } : s))
 
+  const put = async (body: Record<string, unknown>) => {
+    const res = await fetch('/api/ingest/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      if (res.status === 403) setDenied(true)
+      throw new Error(json.error ?? 'Could not save')
+    }
+    return json
+  }
+
   const save = async () => {
     if (!settings) return
     setSaving(true)
+    // the server takes settings and mailboxes as separate writes; the page
+    // makes them one action, and reports what actually landed
+    const done: string[] = []
     try {
-      const res = await fetch('/api/ingest/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        if (res.status === 403) setDenied(true)
-        throw new Error(json.error ?? 'Could not save')
+      if (settingsDirty) {
+        const json = await put({ settings })
+        setSettings(json.settings)
+        setSaved(json.settings)
+        done.push('scanning settings')
       }
-      setSettings(json.settings)
-      setSaved(json.settings)
-      toast.success('Scanner settings saved')
+      for (const m of mailboxChanges) {
+        const enabled = mailboxDraft[m.email]
+        const json = await put({ mailbox: m.email, enabled })
+        setMailboxes(json.mailboxes)
+        setMailboxDraft(d => { const next = { ...d }; delete next[m.email]; return next })
+        done.push(`${m.email} ${enabled ? 'will be scanned' : 'will no longer be scanned'}`)
+      }
+      toast.success(done.length === 1 && !settingsDirty
+        ? `Saved — ${done[0]}`
+        : `Saved — ${done.join(', ')}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save')
+      toast.error(e instanceof Error ? e.message : 'Could not save', {
+        description: done.length > 0 ? `Already saved: ${done.join(', ')}. The rest is still pending.` : undefined,
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const toggleMailbox = async (email: string, enabled: boolean) => {
-    // optimistic — reverted from the server response if it is refused
-    setMailboxes(ms => ms.map(m => (m.email === email ? { ...m, enabled } : m)))
-    try {
-      const res = await fetch('/api/ingest/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mailbox: email, enabled }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        if (res.status === 403) setDenied(true)
-        throw new Error(json.error ?? 'Could not update mailbox')
-      }
-      setMailboxes(json.mailboxes)
-      toast.success(`${email} ${enabled ? 'will be scanned' : 'will no longer be scanned'}`)
-    } catch (e) {
-      setMailboxes(ms => ms.map(m => (m.email === email ? { ...m, enabled: !enabled } : m)))
-      toast.error(e instanceof Error ? e.message : 'Could not update mailbox')
-    }
+  const discard = () => {
+    if (saved) setSettings(saved)
+    setMailboxDraft({})
+    setListDraft({})
   }
+
+  /** what a mailbox switch shows: the pending flip if there is one, else the truth */
+  const mailboxEnabled = (m: MailboxEntry) => mailboxDraft[m.email] ?? m.enabled
 
   if (loading) {
     return (
@@ -196,7 +213,8 @@ export default function ScannerSettings() {
           <CardDescription>
             Which addresses the scanner reads. Shared mailboxes come from the server
             configuration; connected ones are team members who signed in with Google.
-            Turning one off stops it being scanned without disconnecting it.
+            Turning one off stops it being scanned without disconnecting it — press
+            Save at the bottom of the page for it to take.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col">
@@ -247,9 +265,12 @@ export default function ScannerSettings() {
                     )}
                   </p>
                 </div>
+                {mailboxDraft[m.email] !== undefined && mailboxDraft[m.email] !== m.enabled && (
+                  <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">not saved yet</span>
+                )}
                 <Switch
-                  checked={m.enabled}
-                  onCheckedChange={v => toggleMailbox(m.email, v)}
+                  checked={mailboxEnabled(m)}
+                  onCheckedChange={v => setMailboxDraft(d => ({ ...d, [m.email]: v }))}
                   aria-label={`Scan ${m.email}`}
                 />
               </div>
@@ -443,7 +464,7 @@ export default function ScannerSettings() {
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Skip classification entirely. Mail surviving the spam and newsletter
                 filters is flagged “needs review” instead of becoming a lead
-                automatically. Use this if the Anthropic account is unavailable —
+                automatically. Use this if the automatic sorting is down —
                 enquiries are still captured, just not sorted.
               </p>
             </div>
@@ -499,26 +520,40 @@ export default function ScannerSettings() {
           </div>
         </CardContent>
 
-        <CardFooter className="justify-between border-t border-zinc-200 dark:border-zinc-800">
-          {denied ? (
+        {denied && (
+          <CardFooter className="border-t border-zinc-200 dark:border-zinc-800">
             <p className="text-xs text-amber-700 dark:text-amber-400">
               Only a super admin can change scanner settings.
             </p>
-          ) : <span />}
-          <div className="flex items-center gap-3">
-            {dirty && (
-              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                You have unsaved changes
-              </span>
-            )}
-            <Button onClick={save} disabled={saving || !dirty}>
-              {saving
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
-                : dirty ? 'Save changes' : 'Saved'}
-            </Button>
-          </div>
-        </CardFooter>
+          </CardFooter>
+        )}
       </Card>
+
+      {/* ── the one Save for the whole page ─────────────────────────── */}
+      {/* Sticky, so it is in view whichever of the three cards you changed.
+          Before, the button lived at the foot of the LAST card and the
+          mailbox switches did not use it at all. */}
+      <div className={`sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur ${
+        dirty
+          ? 'border-amber-300 bg-amber-50/95 dark:border-amber-800 dark:bg-amber-950/80'
+          : 'border-zinc-200 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/90'
+      }`}>
+        <p className={`text-sm ${dirty ? 'font-medium text-amber-800 dark:text-amber-300' : 'text-zinc-500 dark:text-zinc-400'}`}>
+          {dirty
+            ? `You have ${pendingCount === 1 ? 'an unsaved change' : `${pendingCount} unsaved changes`}`
+            : 'Everything on this page is saved'}
+        </p>
+        <div className="ml-auto flex items-center gap-2">
+          {dirty && (
+            <Button variant="ghost" onClick={discard} disabled={saving}>Discard</Button>
+          )}
+          <Button onClick={save} disabled={saving || !dirty}>
+            {saving
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+              : dirty ? 'Save changes' : 'Saved'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
