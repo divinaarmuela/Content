@@ -8,7 +8,7 @@ import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Copy } from 'lucide-react'
 
 type Integration = {
   key: string
@@ -24,6 +24,9 @@ type Integration = {
   /** a POST the viewer may run against this integration, and its button text */
   action_href?: string | null
   action_label?: string | null
+  /** a value worth copying — a webhook URL to paste into the provider */
+  copy_value?: string | null
+  copy_label?: string | null
 }
 
 /**
@@ -67,11 +70,13 @@ export default function IntegrationsSettings() {
   }, [])
 
   /**
-   * "Re-share with team" — reconcile who may open the Drive tree.
+   * The per-integration action button — "Re-share with team", "Enable instant
+   * post updates".
    *
-   * It reports what it CHANGED rather than "done": the whole reason to press
-   * it is that you suspect the automatic reconciles missed someone, and "no
-   * changes needed" is a genuinely different answer from "shared with 2".
+   * Each reports what it CHANGED rather than "done": the whole reason to press
+   * Re-share is that you suspect the automatic reconciles missed someone, and
+   * "no changes needed" is a genuinely different answer from "shared with 2".
+   * A route that already says it in words (`message`) is quoted as-is.
    */
   async function runAction(href: string) {
     setBusy(href)
@@ -79,18 +84,34 @@ export default function IntegrationsSettings() {
       const res = await fetch(href, { method: 'POST' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'That did not work')
-      const added = Array.isArray(json.added) ? json.added.length : 0
-      const removed = Array.isArray(json.removed) ? json.removed.length : 0
-      toast.success(
-        added || removed
-          ? `Shared with ${added}, access removed for ${removed}`
-          : 'Everyone who should have access already does',
-      )
+      if (typeof json.message === 'string') {
+        toast.success(json.message)
+      } else {
+        const added = Array.isArray(json.added) ? json.added.length : 0
+        const removed = Array.isArray(json.removed) ? json.removed.length : 0
+        toast.success(
+          added || removed
+            ? `Shared with ${added}, access removed for ${removed}`
+            : 'Everyone who should have access already does',
+        )
+      }
       load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'That did not work')
     } finally {
       setBusy(null)
+    }
+  }
+
+  /** Copy a value the provider's own dashboard needs pasting into it. */
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(`${label} copied`)
+    } catch {
+      // clipboard access can be refused outright; showing the value is the
+      // fallback that still lets somebody select it by hand
+      toast.error(value)
     }
   }
 
@@ -149,13 +170,21 @@ export default function IntegrationsSettings() {
                   <a href={it.connect_href}>Connect</a>
                 </Button>
               )}
+              {it.copy_value && (
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => void copyValue(it.copy_value!, it.copy_label ?? 'Value')}
+                >
+                  <Copy className="h-3.5 w-3.5" /> {it.copy_label ?? 'Copy'}
+                </Button>
+              )}
               {it.action_href && (
                 <Button
                   variant="outline" size="sm"
                   disabled={busy === it.action_href}
                   onClick={() => void runAction(it.action_href!)}
                 >
-                  {busy === it.action_href ? 'Sharing…' : it.action_label ?? 'Run'}
+                  {busy === it.action_href ? 'Working…' : it.action_label ?? 'Run'}
                 </Button>
               )}
               {it.disconnect_href && (

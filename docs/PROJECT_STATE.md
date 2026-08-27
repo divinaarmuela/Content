@@ -1,5 +1,53 @@
 # Project state — as at 19 August 2026
 
+## Instant post updates (Zernio webhook) — 27 Aug
+
+The dashboard used to learn a post was live from `reconcilePublishedJobs`, which
+runs every 10 minutes — so the board could say "Scheduled" about something
+already on Instagram, and the scheduler had no live link to send the client.
+Zernio now tells us the moment it happens.
+
+**Endpoint:** `POST /api/social/webhook` (already registered; that is why it
+keeps that path). `POST /api/zernio/webhook` is the same handler under the
+provider-shaped name. **Register one, not both.** Both are public — the
+signature is the authentication, not Clerk.
+
+**What it does.** `post.published` → the job goes `published` with
+`published_at` and the `platformPostUrl` permalink, then `recordPublishOnItem`
+walks the item scheduled → published as the system actor ("Posted by
+Instagram"), with the usual activity row and notifications. `post.failed` /
+`post.partial` → the job goes `failed` with the provider's reason and the item
+**stays Scheduled** — it is booked, it just did not go out. `account.*` →
+unchanged. Anything else is logged and answered 200.
+
+Idempotent by conditional UPDATE, not by an event table: a delivery only acts
+if it moves a job out of `queued`/`publishing`/`scheduled`. Zernio is
+at-least-once and retries for ~51 hours, so this matters. The 10-minute
+reconcile stays as the backstop for deliveries that never arrive.
+
+### What the owner has to do
+
+Either of these is a complete setup — the handler accepts both.
+
+1. **The button.** Settings → Integrations → Social publishing →
+   **"Enable instant post updates"** (super-admin only). It registers the URL
+   with Zernio, generates the signing secret, and stores it encrypted.
+   Requires `CREDENTIALS_KEY` (already set) and one-off SQL:
+   ```sql
+   -- Supabase SQL editor, idempotent
+   supabase/zernio_webhook.sql      -- creates provider_webhooks
+   ```
+2. **By hand.** Add a webhook in the Zernio dashboard pointing at
+   `https://app.mdmmarketing.com.au/api/social/webhook` (the card has a **Copy
+   webhook URL** button), subscribed to `post.published`, `post.failed`,
+   `post.partial`, `account.disconnected`, with a secret of your choosing —
+   then set that same value as **`ZERNIO_WEBHOOK_SECRET`** in Vercel (all
+   environments) and redeploy. No SQL needed.
+
+With neither, the endpoint answers 503 and refuses every delivery: an open
+endpoint that can mark any client's post published would be worse than no
+webhook at all.
+
 ## Client portal is mobile-checked — 27 Aug
 
 `npm run check:mobile` loads the portal at 390×844 and 768×1024 (URLs from

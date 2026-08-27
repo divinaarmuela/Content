@@ -4,6 +4,7 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
 import { driveStatus } from '@/app/lib/gdrive'
 import { driveMemberNote } from '@/app/lib/gdrive-members'
+import { zernioWebhookUrl } from '@/app/lib/zernio-webhook'
 
 /**
  * What is actually connected.
@@ -34,6 +35,19 @@ export async function GET() {
         return n ?? 0
       } catch { return 0 }
     }
+
+    // Is the provider pushing outcomes to us, or are we still finding out from
+    // the 10-minute poll? Either a registered webhook row or the env-var secret
+    // counts — the handler accepts both, so the card must too.
+    const instantUpdates = await (async () => {
+      if (process.env.ZERNIO_WEBHOOK_SECRET) return true
+      try {
+        const { count: n } = await supabase
+          .from('provider_webhooks').select('id', { count: 'exact', head: true })
+          .eq('provider', 'zernio').eq('active', true)
+        return (n ?? 0) > 0
+      } catch { return false }
+    })()
 
     const [socialAccounts, activeSocial, asanaProjects, asanaHooks] = await Promise.all([
       count('social_accounts'),
@@ -99,8 +113,22 @@ export async function GET() {
         configured: Boolean(process.env.ZERNIO_API_KEY),
         status: !process.env.ZERNIO_API_KEY
           ? 'No API key set'
-          : `Connected · ${activeSocial} client account${activeSocial === 1 ? '' : 's'} linked, managed per client`,
+          : [
+              `Connected · ${activeSocial} client account${activeSocial === 1 ? '' : 's'} linked, managed per client`,
+              instantUpdates
+                ? 'Instant post updates on — the board hears the moment a post goes live'
+                : 'Instant post updates off — a published post is noticed within 10 minutes',
+            ].join(' · '),
         href: '/dashboard/social',
+        // one press registers our webhook with the provider; pressing it again
+        // refreshes the same registration rather than adding a second one
+        action_href: process.env.ZERNIO_API_KEY && canConnect
+          ? '/api/team/integrations/zernio-webhook' : null,
+        action_label: instantUpdates ? 'Refresh instant post updates' : 'Enable instant post updates',
+        // the same URL to paste into Zernio's dashboard, for whoever would
+        // rather register it there than press the button
+        copy_value: zernioWebhookUrl(),
+        copy_label: 'Copy webhook URL',
       },
       {
         key: 'asana',

@@ -477,3 +477,85 @@ export function getPublisher(): Publisher {
   const zernio = new ZernioPublisher()
   return zernio.configured() ? zernio : new UnconfiguredPublisher()
 }
+
+/* ── webhook registration ──────────────────────────────────────────────── */
+
+export type RegisteredWebhook = {
+  id: string
+  url: string
+  secret: string
+  events: string[]
+  /** false when an existing registration for the same URL was updated */
+  created: boolean
+}
+
+/**
+ * Point the provider at our webhook, so a post's outcome arrives in seconds
+ * rather than whenever the 10-minute reconcile next runs.
+ *
+ * Kept OUT of the `Publisher` interface on purpose: that interface is the
+ * vendor-neutral surface the scheduler talks to, and a second provider would
+ * register callbacks its own way (or not at all). This is Zernio's, named so.
+ *
+ * Idempotent by URL. The provider allows 50 webhooks per key and does not
+ * de-duplicate them, so a second press of "Enable instant post updates" must
+ * update the existing registration — otherwise every event would be delivered
+ * twice, then three times, forever.
+ *
+ * Docs: GET/POST/PUT `/webhooks/settings` (`_id` travels in the PUT body, not
+ * the path). The secret is OURS: we generate it, send it, and store it
+ * encrypted — the provider echoes it back rather than minting one.
+ */
+export async function registerZernioWebhook(input: {
+  url: string
+  secret: string
+  events: readonly string[]
+  name?: string
+}): Promise<RegisteredWebhook> {
+  const key = process.env.ZERNIO_API_KEY
+  if (!key) throw new Error('ZERNIO_API_KEY is not set')
+  const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }
+
+  const call = async (method: 'GET' | 'POST' | 'PUT', body?: unknown): Promise<Record<string, unknown>> => {
+    const res = await fetch(`${BASE}/webhooks/settings`, {
+      method, headers, ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>
+    if (!res.ok) {
+      throw new Error(String(json.error ?? json.message ?? `Zernio refused the webhook (${res.status})`))
+    }
+    return json
+  }
+
+  const events = [...input.events]
+  const name = input.name ?? 'MD Media dashboard'
+
+  // does one already exist for this exact URL?
+  let existingId: string | null = null
+  try {
+    const list = await call('GET')
+    const rows = (Array.isArray(list) ? list : list.webhooks ?? []) as Record<string, unknown>[]
+    const match = rows.find(w => String(w.url ?? '').trim() === input.url)
+    if (match) existingId = String(match._id ?? match.id ?? '') || null
+  } catch {
+    // listing is a courtesy; failing it should not block a first registration
+  }
+
+  const payload = { name, url: input.url, events, secret: input.secret, isActive: true }
+  const json = existingId
+    ? await call('PUT', { _id: existingId, ...payload })
+    : await call('POST', payload)
+
+  const hook = (json.webhook ?? json) as Record<string, unknown>
+  const id = String(hook._id ?? hook.id ?? existingId ?? '')
+  if (!id) throw new Error('Zernio returned no webhook id')
+
+  return {
+    id,
+    url: String(hook.url ?? input.url),
+    // the provider echoes the secret; ours is the fallback and the same value
+    secret: typeof hook.secret === 'string' && hook.secret ? hook.secret : input.secret,
+    events: Array.isArray(hook.events) ? hook.events.map(String) : events,
+    created: !existingId,
+  }
+}
