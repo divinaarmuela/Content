@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "check:mobile": "node scripts/check-mobile.mjs"
+    "check:mobile": "node scripts/check-mobile.mjs",
+    "check:item-media": "node scripts/check-item-media.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.107",

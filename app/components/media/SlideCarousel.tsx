@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import SafeVideo from './SafeVideo'
-import { previewOf } from '../../lib/stream-client'
-import { pickPoster } from '../../lib/stream-core'
+import VideoTile from './VideoTile'
 import {
   SWIPE_THRESHOLD_PX, allSeen, clampIndex, counterLabel, markSeen,
   nextIndex, prevIndex, swipeDecision,
@@ -186,8 +185,8 @@ export default function SlideCarousel({
                   ref={el => { videos.current[i] = el }}
                   src={s.url}
                   words="client"
-                  // only the card in the frame is worth a network request
-                  preload={current ? 'metadata' : 'none'}
+                  // only the card in the frame is worth a network request —
+                  // and even that one is a poster until it is pressed
                   probe={current}
                   className={mediaClass}
                   noticeClassName="w-full max-w-md rounded-lg"
@@ -266,7 +265,8 @@ export default function SlideCarousel({
               }}
             >
               {isVideo(s) ? (
-                <VideoThumb url={s.url} />
+                // a picture of the clip, never a <video> — see VideoTile
+                <VideoTile url={s.url} />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={s.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
@@ -280,40 +280,6 @@ export default function SlideCarousel({
       )}
     </div>
   )
-}
-
-/**
- * One video's tile in the thumbnail strip.
- *
- * `<video preload="none">` was chosen so ten cards did not fetch ten videos —
- * but a video element with nothing preloaded paints nothing, so the strip on
- * a video carousel was a row of black squares with numbers on them. For an
- * HEVC or ProRes .mov it would have stayed black even fully loaded, because
- * the browser cannot decode a single frame of it to show.
- *
- * Cloudflare's encode has a still, and a still is a 20 KB JPEG rather than a
- * video. Where there is one, the tile is a picture of the clip. Where there is
- * not — Stream unconfigured, encode not finished, file that plays fine
- * natively — the tile is exactly the `<video>` it always was.
- */
-function VideoThumb({ url }: { url: string }) {
-  const [poster, setPoster] = useState<string | null>(null)
-
-  useEffect(() => {
-    let live = true
-    setPoster(null)
-    void previewOf(url).then(({ row }) => {
-      if (live) setPoster(pickPoster(row))
-    })
-    return () => { live = false }
-  }, [url])
-
-  if (poster) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={poster} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-  }
-  // eslint-disable-next-line jsx-a11y/media-has-caption
-  return <video src={url} muted playsInline preload="none" className="h-full w-full object-cover" />
 }
 
 /**

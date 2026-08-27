@@ -13,12 +13,11 @@ import {
 import { UploadOverall, UploadRows, useUploadGroup } from '../../UploadRows'
 import { overallProgress } from '../../../lib/upload-progress-core'
 import BrandCard from '../BrandCard'
-import SafeVideo from '../../../components/media/SafeVideo'
+import { Media, RawFileRow, SlideThumb } from '../../../components/media/ItemMedia'
+import { looksLikeVideo } from '../../../lib/video-probe'
 import ExportWarnings, {
   exportWarningsFor, type ExportWarning,
 } from '../../../components/media/ExportWarnings'
-import { looksLikeVideo, probeUrl } from '../../../lib/video-probe'
-import { formatFileSize } from '../../../lib/video-probe-core'
 import {
   DEFAULT_TZ, formatInZone, formatWithZone, viewerHint,
 } from '../../../lib/timezone-core'
@@ -199,100 +198,6 @@ function measureFile(file: File): Promise<{ w: number; h: number } | null> {
   })
 }
 
-function Media({ src, className, driveUrl, onDims }: {
-  src: string
-  className?: string
-  /** offered on the notice when the file cannot play here */
-  driveUrl?: string | null
-  /** reports the media's true pixel size once loaded — 1080 × 1350 etc. */
-  onDims?: (d: { w: number; h: number }) => void
-}) {
-  if (!src) return null
-  if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(src)) {
-    // never a bare <video>: a .mov exported with its index at the end spins
-    // here forever, and a spinner is indistinguishable from a broken app
-    return (
-      <SafeVideo src={src} className={className} driveUrl={driveUrl} onDims={onDims}
-        noticeClassName="w-full" />
-    )
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return (
-    <img src={src} alt="" className={className}
-      onLoad={e => onDims?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
-  )
-}
-
-/**
- * One row of the Files box.
- *
- * The source files an editor works from are mostly footage, and "click the
- * link and see what happens" is a 184 MB gamble. So each video is probed
- * once: the ones that will actually play here grow a Play toggle (collapsed —
- * six autoplaying rushes is not a file list), and the ones that will not stay
- * a link, with their size and, for a team member, why.
- */
-function RawFileRow({ file, canManage, onRemove }: {
-  file: { url: string; name: string }
-  canManage: boolean
-  onRemove?: () => void
-}) {
-  const [check, setCheck] = useState<{
-    playable: boolean; bytes: number | null; reason: string | null
-  } | null>(null)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!looksLikeVideo(file.url)) return
-    let live = true
-    void probeUrl(file.url).then(c => {
-      if (!live) return
-      setCheck({
-        playable: !c.block && c.probe !== null && c.probe.container !== 'other',
-        bytes: c.bytes,
-        reason: c.block?.reason ?? null,
-      })
-    })
-    return () => { live = false }
-  }, [file.url])
-
-  const size = formatFileSize(check?.bytes)
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <a href={file.url} target="_blank" rel="noreferrer noopener"
-          className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
-          {file.name || file.url}
-        </a>
-        {size && (
-          <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-            {size}
-          </span>
-        )}
-        {check?.playable && (
-          <button type="button" onClick={() => setOpen(o => !o)}
-            className="shrink-0 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
-            {open ? 'Hide' : 'Play'}
-          </button>
-        )}
-        {canManage && onRemove && (
-          <button type="button" aria-label={`Remove ${file.name}`}
-            className="shrink-0 text-zinc-400 hover:text-red-500"
-            onClick={onRemove}>✕</button>
-        )}
-      </div>
-      {check?.reason && (
-        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-          Won&rsquo;t play here — {check.reason}. Download it to watch.
-        </p>
-      )}
-      {open && (
-        <SafeVideo src={file.url} preload="metadata"
-          className="max-h-72 w-full rounded-lg bg-zinc-950 object-contain" />
-      )}
-    </div>
-  )
-}
 
 export default function ItemDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -1357,11 +1262,7 @@ export default function ItemDetailPage() {
                   }`}
                   title={`Slide ${i + 1} of ${slides.length} — ${s.name}`}
                 >
-                  {s.type === 'video'
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                    // eslint-disable-next-line @next/next/no-img-element
-                    : <img src={s.url} alt="" className="h-full w-full object-cover" />}
+                  <SlideThumb slide={s} />
                   <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[10px] text-white">
                     {i + 1} of {slides.length}
                   </span>
@@ -1622,11 +1523,7 @@ export default function ItemDetailPage() {
                       <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener"
                         title={`Slide ${i + 1} of ${latestSlides.length} — ${s.name}`}
                         className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 dark:border-zinc-700">
-                        {s.type === 'video'
-                          // eslint-disable-next-line jsx-a11y/media-has-caption
-                          ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                          // eslint-disable-next-line @next/next/no-img-element
-                          : <img src={s.url} alt="" className="h-full w-full object-cover" />}
+                        <SlideThumb slide={s} />
                         <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[10px] text-white">{i + 1}</span>
                       </a>
                     ))}
