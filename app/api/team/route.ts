@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { clerkClient } from '@clerk/nextjs/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, AuthzError, type Role } from '../../lib/authz'
+import { onTeamChanged } from '../../lib/gdrive-members'
 
 const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
 
@@ -153,6 +154,7 @@ export async function POST(req: Request) {
         await supabase.from('team_invites')
           .update({ status: 'accepted' })
           .eq('id', invite.id)
+        onTeamChanged('invite (existing account)')
         return NextResponse.json(
           { ...invite, status: 'accepted', already_has_account: true },
           { status: 201 },
@@ -177,6 +179,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Invitation email failed: ${msg}` }, { status: 502 })
     }
 
+    // a new person needs the folder tree; if their address is not on the
+    // agency's domain, that means a permission of their own
+    onTeamChanged('invite')
     return NextResponse.json(invite, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

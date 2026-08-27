@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole } from '../../../lib/authz'
 import { completeDriveConnect } from '../../../lib/gdrive'
+import { onTeamChanged } from '../../../lib/gdrive-members'
 
 /**
  * Where Google sends them back — always onward to the Integrations page with
@@ -31,6 +32,9 @@ export async function GET(req: Request) {
       console.error('[gdrive] connect failed', result.reason, result.detail)
       return back('error', result.detail ? `${result.message}: ${result.detail}` : result.message)
     }
+    // the root folder exists as of a moment ago — share it with everyone the
+    // domain grant does not already cover, before anyone goes looking for it
+    onTeamChanged('drive connected')
     return back('ok', result.email)
   } catch (e) {
     return back('error', e instanceof Error ? e.message : undefined)

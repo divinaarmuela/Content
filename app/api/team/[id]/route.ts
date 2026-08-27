@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse, type Role } from '../../../lib/authz'
+import { onTeamChanged } from '../../../lib/gdrive-members'
 
 const ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
 
@@ -60,6 +61,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
+    // a deactivation, or a move to or from the client role, changes who
+    // should be able to open the Drive tree
+    onTeamChanged('member update')
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -104,6 +108,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
           { status: 409 },
         )
       }
+      // they are gone; so is their access to the footage
+      onTeamChanged('member removed')
       return NextResponse.json({ ok: true })
     }
     const { data, error } = await supabase
