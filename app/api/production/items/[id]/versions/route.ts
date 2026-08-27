@@ -4,7 +4,8 @@ import { loadItemForUser } from '../../../../../lib/production-access'
 import { addVersion } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
-import { mirrorVersion } from '../../../../../lib/gdrive-mirror'
+import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
+import { normaliseSlides, slidesSatisfyType } from '../../../../../lib/version-files-core'
 
 /** Append a new asset version (race-safe numbering). The editor HAT on this
  *  item — its owner, or anyone while it is unowned — plus managers. */
@@ -24,27 +25,41 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'This job is assigned to someone else' }, { status: 403 })
     }
     const body = await req.json()
+    // A version is a POST, and a post may be many files: `files` is the
+    // ordered set of slides, `file_url` the one-file shape every older caller
+    // still sends. Slide one IS file_url, so the two never disagree.
+    const slides = normaliseSlides(
+      Array.isArray(body.files) && body.files.length > 0
+        ? body.files
+        : body.file_url ? [{ url: String(body.file_url) }] : [],
+    )
     // a version is the WORK: the file uploaded here, or a link to somewhere it
     // can be watched. The master-file link is optional — recording where the
     // full-quality original is filed is useful, not a precondition — so the
     // only thing refused is a version with nothing in it to look at.
     const check = versionSatisfiesSubmission({
-      file_url: String(body.file_url ?? ''),
+      file_url: slides[0]?.url ?? '',
       drive_url: String(body.drive_url ?? ''),
       dropbox_url: String(body.dropbox_url ?? ''),
     })
     if (!check.ok) {
       return NextResponse.json({ error: `Add ${check.missing.join(' and ')}` }, { status: 422 })
     }
+    // a carousel with one card is a photo post wearing a carousel's caption —
+    // refused here rather than discovered when Instagram publishes one slide
+    const shape = slidesSatisfyType(item.content_type as string, slides)
+    if (shape) return NextResponse.json({ error: shape }, { status: 422 })
+
     const version = await addVersion(user, id, {
-      file_url: body.file_url,
+      file_url: slides[0]?.url ?? '',
+      files: slides,
       dropbox_url: body.dropbox_url,
       drive_url: body.drive_url,
       notes: body.notes,
     })
-    // the cut goes into the item's Drive folder as `v3 - <their name>`; a
-    // version that is only a pasted link has no bytes of ours to copy
-    mirrorVersion(id, version.version_number as number, version.file_url as string)
+    // EVERY slide goes into the item's Drive folder, numbered in posting
+    // order; a version that is only a pasted link has no bytes of ours to copy
+    mirrorVersionSlides(id, version.version_number as number, slides)
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'version' })
     return NextResponse.json(version, { status: 201 })
   } catch (e) {

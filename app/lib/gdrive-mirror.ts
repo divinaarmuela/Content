@@ -14,6 +14,7 @@ import {
   earliestScheduledMonth, fileNameFromUrl, isClientTarget, isMirrorableUrl,
   mirrorProgress, versionFileName, type MirrorTarget, type MirrorProgress,
 } from './gdrive-mirror-core'
+import { slideFileName, slidesOf, type Slide } from './version-files-core'
 
 /**
  * Drive as a copy of the work, not an index of it.
@@ -159,6 +160,28 @@ export function mirrorVersion(
 }
 
 /**
+ * Every slide of a version → the item's folder, numbered in posting order.
+ *
+ * A carousel is six files that only mean anything in sequence, so the name
+ * carries the sequence: `v2 - 01 - card-a.jpg`. Mirroring only slide one — the
+ * old behaviour, because only slide one existed — put a third of a carousel
+ * in Drive and called it the deliverable. A one-slide version keeps the plain
+ * `v2 - name`, so nothing already mirrored is copied again under a new name.
+ */
+export function mirrorVersionSlides(
+  itemId: string, versionNumber: number, slides: readonly Slide[],
+): void {
+  const wanted = slides.filter(s => isMirrorableUrl(s.url))
+  if (wanted.length === 0) return
+  mirrorFiles(wanted.map((s, i) => ({
+    item_id: itemId,
+    source_url: s.url,
+    name: slideFileName(versionNumber, i, s.name || fileNameFromUrl(s.url), slides.length),
+    target: 'item' as const,
+  })))
+}
+
+/**
  * The latest version of an item → `03 Final` or `_Scheduled/{month}`.
  *
  * The LATEST rather than a remembered one: approval is approval of whatever
@@ -172,18 +195,22 @@ export async function mirrorLatestVersion(
   if (!driveConfigured()) return 0
   const { data } = await supabase
     .from('asset_versions')
-    .select('version_number, file_url')
+    .select('version_number, file_url, files')
     .eq('item_id', itemId)
     .order('version_number', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (!data || !isMirrorableUrl(data.file_url)) return 0
-  return requestMirror([{
+  if (!data) return 0
+  // the whole carousel, not its cover: what was approved is the set of slides
+  const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url))
+  if (slides.length === 0) return 0
+  const n = data.version_number as number
+  return requestMirror(slides.map((s, i) => ({
     item_id: itemId,
-    source_url: data.file_url as string,
-    name: versionFileName(data.version_number as number, fileNameFromUrl(data.file_url as string)),
+    source_url: s.url,
+    name: slideFileName(n, i, s.name || fileNameFromUrl(s.url), slides.length),
     target,
-  }])
+  })))
 }
 
 /** Fire-and-forget version of the above, for transition and schedule paths. */
@@ -467,7 +494,7 @@ export async function itemMirrorProgress(
 ): Promise<MirrorProgress> {
   if (!driveConfigured()) return mirrorProgress(0, 0)
   const [versionsRes, mirroredRes] = await Promise.all([
-    supabase.from('asset_versions').select('file_url').eq('item_id', itemId),
+    supabase.from('asset_versions').select('file_url, files').eq('item_id', itemId),
     supabase.from('drive_files')
       .select('source_url')
       .eq('item_id', itemId)
@@ -476,8 +503,10 @@ export async function itemMirrorProgress(
   ])
   const wanted = new Set<string>()
   for (const a of rawAssets ?? []) if (isMirrorableUrl(a?.url)) wanted.add(a.url)
+  // every SLIDE counts: a six-card carousel with one card copied is not
+  // "mirrored", and the line on the item page must not say it is
   for (const v of versionsRes.data ?? []) {
-    if (isMirrorableUrl(v.file_url as string)) wanted.add(v.file_url as string)
+    for (const s of slidesOf(v)) if (isMirrorableUrl(s.url)) wanted.add(s.url)
   }
   const done = (mirroredRes.data ?? [])
     .filter(r => wanted.has(r.source_url as string)).length

@@ -9,6 +9,7 @@ import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
+import { slidesOf } from '../../../lib/version-files-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
 export async function GET(req: Request) {
@@ -134,6 +135,31 @@ export async function GET(req: Request) {
       }
     } catch {
       // no credits rather than no board
+    }
+
+    // How many slides the latest version holds. A scheduler picking up a
+    // carousel needs to know it IS one — "v3" said nothing about whether the
+    // post is one card or six, and six is a different job. Best-effort, like
+    // the annotations above: a missing count is smaller than a dead queue.
+    try {
+      const ids = rows.map(r => r.id as string).slice(0, 300)
+      if (ids.length > 0) {
+        const { data: versions } = await supabase
+          .from('asset_versions')
+          .select('item_id, version_number, file_url, files')
+          .in('item_id', ids)
+          .order('version_number', { ascending: false })
+          .limit(2000)
+        // rows arrive newest-first, so the first seen for an item is its latest
+        const countByItem = new Map<string, number>()
+        for (const v of versions ?? []) {
+          const key = v.item_id as string
+          if (!countByItem.has(key)) countByItem.set(key, slidesOf(v).length)
+        }
+        rows = rows.map(r => ({ ...r, slide_count: countByItem.get(r.id as string) ?? 0 }))
+      }
+    } catch {
+      // leave the count off rather than fail the list
     }
     return NextResponse.json(rows)
   } catch (e) {

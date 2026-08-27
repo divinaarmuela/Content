@@ -23,6 +23,7 @@ import {
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
+import type { Slide } from './version-files-core'
 
 export type ContentItem = {
   id: string
@@ -673,8 +674,18 @@ export async function performTransition(
 export async function addVersion(
   actor: TeamUser,
   itemId: string,
-  links: { file_url?: string; dropbox_url?: string; drive_url?: string; notes?: string },
+  links: {
+    file_url?: string; dropbox_url?: string; drive_url?: string; notes?: string
+    /** the ordered slides of a carousel — already normalised by the caller */
+    files?: Slide[]
+  },
 ) {
+  // `file_url` is slide one, always. Every reader written before carousels
+  // existed — the portal preview, the mirror, the publish planner — points at
+  // that column, so a multi-slide version still shows and still publishes
+  // something real to anything that has not been taught about `files` yet.
+  const slides = links.files ?? []
+  const firstUrl = links.file_url ?? slides[0]?.url ?? ''
   for (let attempt = 0; attempt < 5; attempt++) {
     const { data: latest } = await supabase
       .from('asset_versions')
@@ -690,7 +701,8 @@ export async function addVersion(
       .insert({
         item_id: itemId,
         version_number: nextNumber,
-        file_url: links.file_url ?? '',
+        file_url: firstUrl,
+        files: slides,
         dropbox_url: links.dropbox_url ?? '',
         drive_url: links.drive_url ?? '',
         notes: links.notes ?? null,

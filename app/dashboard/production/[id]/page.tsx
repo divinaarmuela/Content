@@ -44,6 +44,10 @@ import {
   TASK_DONE_STATUSES, TASK_STATUS_MEANING, TASK_STATUS_TURN,
 } from '../../../lib/task-kind-core'
 import { needsNewVersion } from '../../../lib/claim-core'
+import {
+  MAX_SLIDES, isCarouselType, reorder, slideCountLabel, slidesOf, slidesSatisfyType,
+  type Slide,
+} from '../../../lib/version-files-core'
 import { lastList } from '../../lastList'
 import { activityLines, type ActivityRow } from '../../../lib/activity-core'
 import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
@@ -55,6 +59,9 @@ import type { Role } from '../../../lib/identity-core'
 type Version = {
   id: string; version_number: number; created_at: string
   file_url: string; drive_url: string; dropbox_url?: string; notes?: string | null
+  /** the ordered slides of a carousel. Empty on every version saved before
+   *  carousels existed — `slidesOf` reads file_url for those. */
+  files?: Slide[]
 }
 type Comment = {
   id: string; created_at: string; author_id: string | null; author_name?: string | null
@@ -188,8 +195,14 @@ export default function ItemDetailPage() {
   const [detail, setDetail] = useState<Detail | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const [verDraft, setVerDraft] = useState({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
-  const [uploading, setUploading] = useState(false)
+  const [verDraft, setVerDraft] = useState({ dropbox_url: '', drive_url: '', notes: '' })
+  /** the slides of the version being built, in the order they will post */
+  const [slides, setSlides] = useState<Slide[]>([])
+  /** how many files are still travelling — the strip fills in as they land */
+  const [uploadingCount, setUploadingCount] = useState(0)
+  const uploading = uploadingCount > 0
+  /** the slide being dragged, for the reorder strip */
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   /** the drop zone is the primary path; the two link fields are the exception,
    *  so they stay folded away until someone actually wants one */
   const [linksOpen, setLinksOpen] = useState(false)
@@ -574,15 +587,20 @@ export default function ItemDetailPage() {
   const soloReviewer = reviewers?.length === 0 && !reviewersFailed && hats.includes('account_manager')
 
   const latest = detail.versions[0]
+  /** the slides of the latest version, whichever era it was saved in */
+  const latestSlides = slidesOf(latest)
+  const isCarousel = isCarouselType(detail.content_type)
 
   /** What the version form is still missing, or null when it can be saved. */
   const versionMissing: string | null = (() => {
     // one rule, the server's own: something to look at. The master link is
     // not a precondition, and neither field is asterisked any more.
-    if (!verDraft.file_url && !verDraft.drive_url) {
+    if (slides.length === 0 && !verDraft.drive_url) {
       return 'Upload the file, or paste a link to it.'
     }
-    return null
+    // …and the server's second rule, said before the click: a carousel is a
+    // set, and a set of one is a photo post
+    return slidesSatisfyType(detail.content_type, slides)
   })()
 
   /**
@@ -761,28 +779,58 @@ export default function ItemDetailPage() {
     }
   }
 
-  const uploadFile = async (file: File) => {
-    setUploading(true)
-    try {
-      // Straight to R2 rather than through our API: this is where shoot
-      // deliverables land, and a serverless request body caps at ~4.5MB on
-      // Vercel — every real cut would have been rejected.
-      // measure locally while it uploads — the "1080 × 1350" badge needs no
-      // round-trip to the stored file
-      setDraftDims(null)
-      void measureFile(file).then(setDraftDims)
-      const { url } = await uploadMedia(file, { purpose: 'production' })
-      setVerDraft(d => ({ ...d, file_url: url }))
-      toast.success('File uploaded — add links, then save the version')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed')
-    } finally {
-      setUploading(false)
+  /**
+   * Drop many, get slides.
+   *
+   * A carousel is one post made of several files, so the drop zone takes
+   * several — four at a time, the same width the job-pack queue uses, because
+   * one-at-a-time turned a six-card drop into six waits. Each file appends to
+   * the strip as it lands: order is the order they were dropped, and the strip
+   * is where it gets changed.
+   */
+  const uploadFiles = async (files: File[]) => {
+    const room = MAX_SLIDES - slides.length
+    if (room <= 0) return toast.error(`That is already ${MAX_SLIDES} slides — the most a carousel takes`)
+    const wanted = files.slice(0, room)
+    if (files.length > wanted.length) {
+      toast.warning(`Only the first ${room} were added — a carousel takes ${MAX_SLIDES} slides`)
     }
+    // measure the first one locally while it uploads — the "1080 × 1350"
+    // badge needs no round-trip to the stored file
+    if (slides.length === 0) {
+      setDraftDims(null)
+      void measureFile(wanted[0]).then(setDraftDims)
+    }
+    setUploadingCount(c => c + wanted.length)
+
+    const queue = [...wanted]
+    const next = async (): Promise<void> => {
+      const file = queue.shift()
+      if (!file) return
+      try {
+        // Straight to R2 rather than through our API: this is where shoot
+        // deliverables land, and a serverless request body caps at ~4.5MB on
+        // Vercel — every real cut would have been rejected.
+        const { url } = await uploadMedia(file, { purpose: 'production' })
+        setSlides(s => s.length >= MAX_SLIDES ? s : [...s, {
+          url,
+          name: file.name,
+          type: file.type.startsWith('video/') ? 'video' : 'image',
+          ...(file.size > 0 ? { bytes: file.size } : {}),
+        }])
+      } catch (e) {
+        toast.error(`${file.name}: ${e instanceof Error ? e.message : 'Upload failed'}`)
+      } finally {
+        setUploadingCount(c => c - 1)
+      }
+      await next()
+    }
+    // four abreast; more than a handful just fights the same connection
+    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => next()))
   }
 
   const saveVersion = async () => {
-    if (!verDraft.file_url && !verDraft.drive_url) {
+    if (slides.length === 0 && !verDraft.drive_url) {
       return toast.error('Upload the file, or paste a link to it')
     }
     setBusy('version')
@@ -790,12 +838,13 @@ export default function ItemDetailPage() {
       const res = await fetch(`/api/production/items/${id}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(verDraft),
+        body: JSON.stringify({ ...verDraft, files: slides }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       toast.success(isInternal ? `Draft ${json.version_number} saved` : `Version v${json.version_number} added`)
-      setVerDraft({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
+      setVerDraft({ dropbox_url: '', drive_url: '', notes: '' })
+      setSlides([])
       setLinksOpen(false)
       // put it on the page NOW: "The work" and the Submit button both read
       // detail.versions, and a toast above an unchanged screen is how the
@@ -1146,14 +1195,39 @@ export default function ItemDetailPage() {
       {/* 4 — the latest cut, as big as it deserves */}
       {latest && (latest.file_url || latest.drive_url) && (
         <Card className="overflow-hidden py-0">
-          {latest.file_url && (
-            <Media key={latest.file_url} src={latest.file_url}
+          {latestSlides[0] && (
+            <Media key={latestSlides[0].url} src={latestSlides[0].url}
               className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
+          )}
+          {/* the whole carousel, in posting order — the first card is what the
+              feed shows, the rest are what the post actually is */}
+          {latestSlides.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto border-t border-zinc-100 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/50">
+              {latestSlides.map((s, i) => (
+                <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener"
+                  title={`Slide ${i + 1} of ${latestSlides.length} — ${s.name}`}
+                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 dark:border-zinc-700">
+                  {s.type === 'video'
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    : <img src={s.url} alt="" className="h-full w-full object-cover" />}
+                  <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[10px] text-white">
+                    {i + 1}
+                  </span>
+                </a>
+              ))}
+            </div>
           )}
           <CardContent className="flex flex-wrap items-center gap-3 p-3">
             <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
               {isInternal ? `Draft ${latest.version_number}` : `v${latest.version_number}`} · latest
             </span>
+            {latestSlides.length > 1 && (
+              <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {slideCountLabel(latestSlides.length)}
+              </span>
+            )}
             {previewDims && previewDims.w > 0 && (
               <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                 {previewDims.w} × {previewDims.h}
@@ -1258,6 +1332,13 @@ export default function ItemDetailPage() {
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   {new Date(v.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                 </span>
+                {/* a carousel is one post — say how many cards it is, or the
+                    row claims a six-slide version is the same as a one-file one */}
+                {slidesOf(v).length > 1 && (
+                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                    {slideCountLabel(slidesOf(v).length)}
+                  </span>
+                )}
                 {v.notes && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{v.notes}</span>}
                 <span className="ml-auto flex gap-2 text-xs">
                   {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
@@ -1283,39 +1364,110 @@ export default function ItemDetailPage() {
                     onDragLeave={() => setDragging(false)}
                     onDrop={e => {
                       e.preventDefault(); setDragging(false)
-                      const f = e.dataTransfer.files?.[0]
-                      if (f) uploadFile(f)
+                      const f = Array.from(e.dataTransfer.files ?? [])
+                      if (f.length) void uploadFiles(f)
                     }}
                     onClick={() => fileRef.current?.click()}
                     className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
                       dragging
                         ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
-                        : verDraft.file_url
+                        : slides.length > 0
                           ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
                           : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
                     }`}
                   >
-                    <Upload className={`h-5 w-5 ${verDraft.file_url ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
+                    <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
                     {uploading ? (
-                      <p className="text-sm font-medium">Uploading…</p>
-                    ) : verDraft.file_url ? (
+                      <p className="text-sm font-medium">
+                        Uploading{uploadingCount > 1 ? ` ${uploadingCount} files` : ''}…
+                      </p>
+                    ) : slides.length > 0 ? (
                       <>
                         <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                          File ready ✓{draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
+                          {slideCountLabel(slides.length)} ready ✓
+                          {slides.length === 1 && draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
                         </p>
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Click to replace it</p>
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                          {slides.length >= MAX_SLIDES
+                            ? `That is the most a carousel takes (${MAX_SLIDES})`
+                            : 'Click to add more'}
+                        </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-medium">Drag the export here or choose a file</p>
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Any size — it goes straight to our storage.</p>
+                        <p className="text-sm font-medium">
+                          {isCarousel ? 'Drag the cards here or choose them' : 'Drag the export here or choose a file'}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                          {isCarousel
+                            ? `Any size, several at once — a carousel takes 2 to ${MAX_SLIDES} slides.`
+                            : 'Any size — it goes straight to our storage.'}
+                        </p>
                       </>
                     )}
                     {/* sr-only, not hidden: display:none file inputs can silently
                         refuse a programmatic .click() — same bug as the board's */}
-                    <input ref={fileRef} type="file" accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+                    <input ref={fileRef} type="file" multiple accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
+                      onChange={e => {
+                        const f = Array.from(e.target.files ?? [])
+                        if (f.length) void uploadFiles(f)
+                        e.target.value = ''
+                      }} />
                   </div>
+
+                  {/* THE ORDER IS THE POST. A carousel is these files in this
+                      sequence, so the sequence is something you can see and
+                      drag rather than something implied by upload timing.
+                      HTML5 drag-and-drop, not a library: this is one strip. */}
+                  {slides.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-wrap gap-2">
+                        {slides.map((s, i) => (
+                          <div
+                            key={s.url}
+                            draggable
+                            onDragStart={() => setDragIndex(i)}
+                            onDragEnd={() => setDragIndex(null)}
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={e => {
+                              e.preventDefault()
+                              if (dragIndex === null) return
+                              setSlides(list => reorder(list, dragIndex, i))
+                              setDragIndex(null)
+                            }}
+                            className={`group relative h-24 w-24 shrink-0 cursor-grab overflow-hidden rounded-lg border-2 bg-zinc-950 active:cursor-grabbing ${
+                              dragIndex === i
+                                ? 'border-blue-400 opacity-50'
+                                : 'border-zinc-200 dark:border-zinc-700'
+                            }`}
+                            title={`Slide ${i + 1} of ${slides.length} — ${s.name}. Drag to reorder.`}
+                          >
+                            {s.type === 'video'
+                              // eslint-disable-next-line jsx-a11y/media-has-caption
+                              ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                              // eslint-disable-next-line @next/next/no-img-element
+                              : <img src={s.url} alt="" className="h-full w-full object-cover" />}
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[10px] text-white">
+                              Slide {i + 1} of {slides.length}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remove slide ${i + 1}`}
+                              onClick={() => setSlides(list => list.filter((_, n) => n !== i))}
+                              className="absolute right-1 top-1 rounded-full bg-black/70 px-1.5 text-xs leading-5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                        Drag the cards to set the posting order. Once this version is
+                        saved the order is fixed — reordering it later means saving a
+                        new version.
+                      </p>
+                    </div>
+                  )}
 
                   {/* secondary, and closed until asked for. Both fields are
                       optional: a version needs something to LOOK at, and the

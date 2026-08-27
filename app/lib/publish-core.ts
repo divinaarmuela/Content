@@ -19,7 +19,14 @@ export type MediaItem = { url: string; type: MediaType }
  *
  *  `images` / `videos` / `documents` are maxima for that kind. `mixed: false`
  *  means images and video cannot appear in the same post — the rule that most
- *  often bites, because a carousel with a stray video is silently rejected. */
+ *  often bites, because a carousel with a stray video is silently rejected.
+ *
+ *  A CAROUSEL is its own set of limits, not the single-post ones: Instagram
+ *  takes 2–10 items in one carousel and they may be images and videos
+ *  together, even though the same account may only post ONE video as an
+ *  ordinary feed post. `carousel: 0` means the platform has no such thing.
+ *  Applying the single-post rules to a carousel is what made a six-card drop
+ *  publishable as one photo. */
 export const PLATFORM_RULES: Record<Platform, {
   captionMax: number
   images: number
@@ -27,17 +34,21 @@ export const PLATFORM_RULES: Record<Platform, {
   documents: number
   mixed: boolean
   requiresMedia: boolean
+  /** most items in one carousel; 0 = this platform has no carousel */
+  carousel: number
+  /** may that carousel hold images AND videos together */
+  mixedCarousel: boolean
 }> = {
-  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true  },
-  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true  },
-  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false },
-  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false },
-  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false },
-  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false },
-  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true  },
-  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true  },
-  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false },
-  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false },
+  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true  },
+  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false },
+  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
+  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false },
+  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
+  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
+  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
+  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
+  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
+  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 0,  mixedCarousel: false },
 }
 
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
@@ -92,11 +103,16 @@ export function validatePost(input: {
     if (r.requiresMedia && input.media.length === 0) {
       issues.push({ platform: p, problem: `${p} requires at least one image or video` })
     }
-    if (images > r.images) {
-      issues.push({ platform: p, problem: `${images} images; ${p} allows ${r.images}` })
+    // a carousel is measured as a carousel: one ceiling for the whole set,
+    // and — where the platform allows it — no objection to mixing kinds
+    const asCarousel = input.kinds?.[p] === 'carousel' && r.carousel > 0
+    const imageMax = asCarousel ? r.carousel : r.images
+    const videoMax = asCarousel && r.mixedCarousel ? r.carousel : r.videos
+    if (images > imageMax) {
+      issues.push({ platform: p, problem: `${images} images; ${p} allows ${imageMax}` })
     }
-    if (videos > r.videos) {
-      issues.push({ platform: p, problem: `${videos} videos; ${p} allows ${r.videos}` })
+    if (videos > videoMax) {
+      issues.push({ platform: p, problem: `${videos} videos; ${p} allows ${videoMax}` })
     }
     if (docs > r.documents) {
       issues.push({
@@ -106,7 +122,7 @@ export function validatePost(input: {
           : `${docs} documents; ${p} allows ${r.documents}`,
       })
     }
-    if (!r.mixed && images > 0 && videos > 0) {
+    if (!r.mixed && !(asCarousel && r.mixedCarousel) && images > 0 && videos > 0) {
       issues.push({ platform: p, problem: `${p} cannot mix images and video in one post` })
     }
 
@@ -124,8 +140,17 @@ export function validatePost(input: {
     if (kind === 'story' && input.media.length !== 1) {
       issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
     }
-    if (kind === 'carousel' && input.media.length < 2) {
-      issues.push({ platform: p, problem: 'A carousel needs at least two items' })
+    if (kind === 'carousel') {
+      if (r.carousel === 0) {
+        issues.push({ platform: p, problem: `${p} does not post carousels` })
+      } else if (input.media.length < 2) {
+        issues.push({ platform: p, problem: 'A carousel needs at least two items' })
+      } else if (input.media.length > r.carousel) {
+        issues.push({
+          platform: p,
+          problem: `${input.media.length} slides; ${p} allows ${r.carousel} in one carousel`,
+        })
+      }
     }
   }
   return issues

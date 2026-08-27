@@ -6,6 +6,7 @@ import {
   type CanvasCard, type ShotRow,
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
+import { slidesOf } from './version-files-core'
 import { clientStatusWord, planState, shootStatusLabel, type PlanState } from './portal-words'
 import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
 import {
@@ -29,6 +30,10 @@ export type PortalItem = {
   updated_at: string
   preview_url: string | null
   drive_url: string | null
+  /** a carousel is one post of many cards — the card shows the first three
+   *  and says how many there are. Empty for a single-file piece. */
+  preview_slides: { url: string; type: 'image' | 'video' }[]
+  slide_count: number
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
   /** how the live post is doing, once the platform has counted it. Null on
    *  anything not published, and on a post whose numbers have not arrived. */
@@ -181,10 +186,10 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     ids.length
       ? supabase
           .from('asset_versions')
-          .select('item_id, version_number, file_url, drive_url')
+          .select('item_id, version_number, file_url, files, drive_url')
           .in('item_id', ids)
           .order('version_number', { ascending: false })
-      : Promise.resolve({ data: [] as { item_id: string; version_number: number; file_url: string; drive_url: string }[] }),
+      : Promise.resolve({ data: [] as { item_id: string; version_number: number; file_url: string; files: unknown; drive_url: string }[] }),
     ids.length
       ? supabase
           .from('schedule_entries')
@@ -197,7 +202,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   ])
 
   // latest version per item (rows are ordered desc — first wins)
-  const latestByItem = new Map<string, { file_url: string; drive_url: string }>()
+  const latestByItem = new Map<string, { file_url: string; files?: unknown; drive_url: string }>()
   for (const v of versionsRes.data ?? []) {
     if (!latestByItem.has(v.item_id)) latestByItem.set(v.item_id, v)
   }
@@ -214,6 +219,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // clients only get preview media once the item has reached client review
     const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
     const a = status === 'published' ? analyticsByItem.get(i.id) ?? null : null
+    // the whole carousel, so the card can show it is one — three thumbnails
+    // and a count is enough; the rest is what opening it is for
+    const slides = clientFacing ? slidesOf(latest) : []
     return {
       id: i.id,
       title: i.title,
@@ -222,8 +230,10 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       // a booked post says so — see clientStatusWord
       status_label: clientStatusWord(status, CLIENT_LABELS[status]),
       updated_at: i.updated_at,
-      preview_url: clientFacing ? latest?.file_url || null : null,
+      preview_url: clientFacing ? slides[0]?.url || latest?.file_url || null : null,
       drive_url: clientFacing ? latest?.drive_url || null : null,
+      preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
+      slide_count: slides.length,
       schedule: scheduleByItem.get(i.id) ?? [],
       metrics: a
         ? {

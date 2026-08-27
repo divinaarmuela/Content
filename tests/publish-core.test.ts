@@ -81,6 +81,45 @@ describe('post kinds — reels, stories, carousels', () => {
     expect(issues.some(i => /at least two items/.test(i.problem))).toBe(true)
   })
 
+  it('accepts a ten-slide Instagram carousel and refuses an eleventh', () => {
+    expect(validatePost({
+      caption: 'a', media: img(10), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+    })).toEqual([])
+    const issues = validatePost({
+      caption: 'a', media: img(11), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+    })
+    expect(issues.some(i => /11 slides; instagram allows 10/.test(i.problem))).toBe(true)
+  })
+
+  it('lets an Instagram carousel mix images and video', () => {
+    expect(validatePost({
+      caption: 'a', media: [...img(4), ...vid(2)], platforms: ['instagram'],
+      kinds: { instagram: 'carousel' },
+    })).toEqual([])
+  })
+
+  it('still refuses that mix in an ordinary post', () => {
+    const issues = validatePost({
+      caption: 'a', media: [...img(4), ...vid(2)], platforms: ['instagram'],
+      kinds: { instagram: 'feed' },
+    })
+    expect(issues.some(i => /cannot mix/.test(i.problem))).toBe(true)
+  })
+
+  it('says so when the platform has no carousel at all', () => {
+    const issues = validatePost({
+      caption: 'a', media: vid(2), platforms: ['youtube'], kinds: { youtube: 'carousel' },
+    })
+    expect(issues.some(i => /does not post carousels/.test(i.problem))).toBe(true)
+  })
+
+  it('keeps the single-video limit on a carousel that may not mix', () => {
+    const issues = validatePost({
+      caption: 'a', media: vid(3), platforms: ['linkedin'], kinds: { linkedin: 'carousel' },
+    })
+    expect(issues.some(i => /3 videos; linkedin allows 1/.test(i.problem))).toBe(true)
+  })
+
   it('leaves ordinary feed posts unaffected', () => {
     expect(validatePost({
       caption: 'a', media: img(1), platforms: ['instagram'], kinds: { instagram: 'feed' },

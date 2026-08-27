@@ -18,6 +18,7 @@ import {
   canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
+import { slideCountLabel } from '../../lib/version-files-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { useOrderedLoad } from '../useOrderedLoad'
 import { defaultAllows } from '../../lib/page-access-core'
@@ -38,6 +39,9 @@ type Item = {
   status: ItemStatus
   caption: string | null
   current_version_number: number
+  /** how many slides the latest version holds — a carousel is a different
+   *  job from a single post, and the row has to say which this is */
+  slide_count?: number
   owner_id: string | null
   scheduler_ids?: unknown
   clients: { name: string } | null
@@ -264,6 +268,7 @@ export default function SchedulerPage() {
                       <div className="text-sm font-medium">{item.title}</div>
                       <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
                         <span className="capitalize">{item.content_type}</span> · v{item.current_version_number}
+                        {(item.slide_count ?? 0) > 1 && ` · ${slideCountLabel(item.slide_count ?? 0)}`}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         {/* one component answers "is this on me?" — the same

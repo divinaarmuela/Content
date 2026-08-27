@@ -7,6 +7,7 @@ import {
 import { accountManagerName, type PortalItem, type PortalShoot } from './portal-data'
 import { isInternalKind } from './task-kind-core'
 import { planState, shootStatusLabel } from './portal-words'
+import { slidesOf } from './version-files-core'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -82,7 +83,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
   const [versionRes, commentsRes, amName] = await Promise.all([
     clientFacing
-      ? supabase.from('asset_versions').select('file_url, drive_url')
+      ? supabase.from('asset_versions').select('file_url, files, drive_url')
           .eq('item_id', item.id).order('version_number', { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from('item_comments')
@@ -93,7 +94,10 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       .limit(200),
     accountManagerName(client.id),
   ])
-  const latest = versionRes.data as { file_url?: string; drive_url?: string } | null
+  const latest = versionRes.data as { file_url?: string; files?: unknown; drive_url?: string } | null
+  // the conversation is about the whole post: a carousel's cards belong on the
+  // page the client is looking at while they write "the third one is wrong"
+  const slides = slidesOf(latest)
 
   return {
     client: { id: client.id, name: client.name },
@@ -105,8 +109,10 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       status,
       status_label: CLIENT_LABELS[status],
       updated_at: item.updated_at,
-      preview_url: latest?.file_url ?? null,
+      preview_url: slides[0]?.url ?? latest?.file_url ?? null,
       drive_url: latest?.drive_url ?? null,
+      preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
+      slide_count: slides.length,
       schedule: [],
       // this page is the conversation about one piece, not its scoreboard —
       // the numbers live on the card in the Published section

@@ -7,6 +7,7 @@ import {
   isPlatform, mediaTypeFor,
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
+import { postSlides, slidesOf } from './version-files-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
@@ -103,15 +104,22 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   // newest version wins; that is the one reviewers signed off
   const { data: version } = await supabase
     .from('asset_versions')
-    .select('file_url, drive_url, version_number')
+    .select('file_url, files, drive_url, version_number')
     .eq('item_id', itemId)
     .order('version_number', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  const url = (version?.file_url as string) || (version?.drive_url as string) || ''
-  const media = url ? mediaFromUrl(url) : null
-  if (media) plan.media = [media]
+  // ALL the slides, in the order the editor left them — that order is the
+  // carousel. Taking only the first published a six-card set as one photo.
+  const slides = postSlides(item.content_type as string, slidesOf(version))
+  plan.media = slides.map(s => ({ url: s.url, type: s.type as MediaItem['type'] }))
+  if (plan.media.length === 0) {
+    // a version that is only a pasted review link still has one thing to post
+    const url = (version?.drive_url as string) || ''
+    const media = url ? mediaFromUrl(url) : null
+    if (media) plan.media = [media]
+  }
 
   // what the client actually has connected
   const { data: accounts } = await supabase
