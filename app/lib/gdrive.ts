@@ -62,7 +62,11 @@ export const DRIVE_SCOPES = [
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
-const FILES = 'https://www.googleapis.com/drive/v3/files'
+export const FILES = 'https://www.googleapis.com/drive/v3/files'
+/** The upload host is a DIFFERENT origin from the metadata one — posting a
+ *  resumable session to www.googleapis.com/drive/v3 silently creates an empty
+ *  file instead. */
+export const UPLOAD_FILES = 'https://www.googleapis.com/upload/drive/v3/files'
 
 export const NOT_CONFIGURED = 'Google Drive is not configured'
 
@@ -363,10 +367,10 @@ export async function accessToken(): Promise<DriveResult<{ token: string }>> {
 
 /** Shared-drive support on every single call: if the root is ever moved into
  *  a Shared Drive, nothing here starts 404ing. */
-const ALL_DRIVES = { supportsAllDrives: 'true' }
-const ALL_DRIVES_LIST = { supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' }
+export const ALL_DRIVES = { supportsAllDrives: 'true' }
+export const ALL_DRIVES_LIST = { supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' }
 
-async function driveFetch<T>(
+export async function driveFetch<T>(
   token: string, url: string, init?: RequestInit,
 ): Promise<DriveResult<{ data: T }>> {
   const res = await fetch(url, {
