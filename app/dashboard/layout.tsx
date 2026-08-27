@@ -66,6 +66,8 @@ const NAV_MAIN: NavItem[] = [
 
 const NAV_TOOLS: NavItem[] = [
   { href: '/dashboard/team',          label: 'Team',          icon: Users },
+  // the directory says who exists; this says what each of them is holding
+  { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
   { href: '/dashboard/ai',            label: 'AI Assistant',  icon: Sparkles },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   { href: '/dashboard/settings',      label: 'Settings',      icon: Settings },
@@ -88,6 +90,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/activity':      'Asana activity',
   '/dashboard/reports':       'Reports',
   '/dashboard/team':          'Team',
+  '/dashboard/team/activity': 'Team activity',
   '/dashboard/ai':            'AI Assistant',
   '/dashboard/notifications': 'Notifications',
   '/dashboard/settings':      'Settings',

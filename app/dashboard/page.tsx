@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, BarChart3,
 } from 'lucide-react'
 import Greeting from './Greeting'
+import TeamLoadCard from './TeamLoadCard'
 import { DEFAULT_TZ, formatInZone, formatWithZone } from '../lib/timezone-core'
 import { useProductionLive } from './production/useProductionLive'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
@@ -611,12 +612,15 @@ export default function OverviewPage() {
             <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
               empty="" actionHref="/dashboard/editor" actionLabel="Open board" />
           )}
-          <div className={data.manager.latest_leads ? "grid gap-4 lg:grid-cols-[1.5fr_1fr]" : "grid gap-4"}>
+          <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
             {/* the three stages whose turn is a MANAGER's — the same
                 population the stat above it counts */}
             <ItemList title="Waiting on you" icon={ClipboardList} items={data.manager.needs_review}
               empty="Nothing waiting on you — the funnel is clear." actionHref="/dashboard/editor" actionLabel="Open board" />
-            {data.manager.latest_leads && <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
+              {/* what is waiting on YOU, beside who else is behind */}
+              <TeamLoadCard />
+            {data.manager.latest_leads && <>
               <Card>
                 <CardHeader className="flex-row items-center">
                   <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -641,7 +645,8 @@ export default function OverviewPage() {
                   ))}
                 </CardContent>
               </Card>
-            </div>}
+            </>}
+            </div>
           </div>
         </>
       )}

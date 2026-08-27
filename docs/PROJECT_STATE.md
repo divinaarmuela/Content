@@ -1,5 +1,26 @@
 # Project state — as at 19 August 2026
 
+## Team activity — 27 Aug
+
+`/dashboard/team/activity` answers the question the boards cannot: *who is
+holding what, who is free, and what is late?* One sortable table — person,
+what they hold (owned items, scheduling handed to them, shoots they are
+planning, comments they were tagged in), due this week, overdue, five mini-bars
+of this week's throughput (versions, submissions, approvals, schedulings, posts,
+counted from `workflow_activity` on the Melbourne week) and a 14-day activity
+sparkline. A row expands to that person's open work split by `whoseTurn` into
+"Your turn" and "Waiting on others", each line linking to the item, with a
+one-click reassign for managers (the existing owner PATCH). Above it sits the
+Unassigned pool — the work-page scopes read as one question — so the page also
+says who is free. Shaping is pure in `app/lib/team-activity-core.ts` (finished
+is read from each overlay's own turn table, and due dates bucket on the
+*client's* calendar, not the viewer's); the data comes from
+`/api/team/activity/workload` — one level in, because `/api/team/activity` is
+already the Asana rollup — scoped server-side: a super admin sees the team, an
+account manager sees the people holding work on their clients, plus themselves.
+The page is visible to account managers and above and grantable per person; the
+Overview carries a small Team card naming the top three people behind.
+
 ## Video previews — 27 Aug
 
 A .mov exported with its `moov` atom AFTER `mdat` (no "fast start") makes a

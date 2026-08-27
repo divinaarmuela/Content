@@ -46,6 +46,10 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/activity', label: 'Asana activity' },
   { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/team', label: 'Team' },
+  // NOT a subpage of Team: it is the workload board, and someone can
+  // reasonably be given one without the other (an editor who runs the
+  // week's schedule does not need everybody's email address)
+  { href: '/dashboard/team/activity', label: 'Team activity' },
   { href: '/dashboard/ai', label: 'AI Assistant' },
   { href: '/dashboard/notifications', label: 'Notifications' },
   { href: '/dashboard/settings', label: 'Settings' },
