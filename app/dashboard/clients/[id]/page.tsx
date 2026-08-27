@@ -15,6 +15,8 @@ import { ExternalLink } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import ManagersCard from './ManagersCard'
 import MonthProgress from './MonthProgress'
+import TimezoneField from './TimezoneField'
+import { DEFAULT_TZ } from '@/app/lib/timezone-core'
 
 /** Overview — the client's own details. Header and tabs live in the layout. */
 
@@ -29,6 +31,9 @@ type Client = {
   contact_name: string | null
   email: string | null
   phone: string | null
+  /** the AUDIENCE's zone — every posting time in the app is entered and shown
+   *  in it. Rows predating the migration read as Melbourne, as they did. */
+  timezone: string | null
 }
 
 export default function ClientOverviewPage() {
@@ -124,6 +129,12 @@ export default function ClientOverviewPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <TimezoneField
+            value={client.timezone || DEFAULT_TZ}
+            disabled={saving}
+            onSave={tz => patch({ timezone: tz })}
+          />
 
           {portalUrl && (
             <div className="grid gap-1.5 sm:col-span-2">
