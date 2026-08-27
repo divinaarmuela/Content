@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { Toaster } from '@/components/ui/sonner'
 import { ClerkProvider, UserButton, useUser } from '@clerk/nextjs'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,6 +18,7 @@ import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
 import NotificationBell from './NotificationBell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
+import { techMailto } from '@/app/lib/support-core'
 import type { Role } from '@/app/lib/identity-core'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
@@ -64,7 +64,23 @@ const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
 ]
 
+/**
+ * Social's own pages. Inbox, Analytics and Automations existed only as three
+ * outline buttons in the header of the channels list — so someone sent a direct
+ * link to the Inbox, who then navigated away, could never find it again.
+ *
+ * They are children of Social rather than entries in GRANTABLE_PAGES: whoever
+ * may see Social may see all of it, and inventing three more permissions for
+ * one page's tabs is a permission model nobody would maintain.
+ */
+const NAV_SOCIAL_CHILDREN: NavItem[] = [
+  { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
+  { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
+  { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
+]
+
 const NAV_TOOLS: NavItem[] = [
+  { href: '/dashboard/reports',       label: 'Reports',       icon: BarChart3 },
   { href: '/dashboard/team',          label: 'Team',          icon: Users },
   // the directory says who exists; this says what each of them is holding
   { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
@@ -78,6 +94,10 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
+  '/dashboard/social':        'Social channels',
+  '/dashboard/social/inbox':  'Inbox',
+  '/dashboard/social/analytics': 'Analytics',
+  '/dashboard/social/automations': 'Automations',
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Production',
   '/dashboard/editor':        'Editor',
@@ -108,25 +128,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-function NavLinks({ role, granted, hidden, path, onNavigate }: {
+/**
+ * Which nav entry the current page belongs to.
+ *
+ * An exact match only used to count, so opening a client, a shoot or a
+ * settings tab un-highlighted the whole sidebar and the person lost track of
+ * where they were. Longest prefix wins, so /dashboard/team/activity highlights
+ * Team activity rather than Team, and bare '/dashboard' never swallows
+ * everything below it.
+ */
+export function activeNavHref(path: string, hrefs: string[]): string | null {
+  const exact = hrefs.find(h => h === path)
+  if (exact) return exact
+  return hrefs
+    .filter(h => path.startsWith(`${h}/`))
+    .sort((a, b) => b.length - a.length)[0] ?? null
+}
+
+function NavLinks({ role, granted, hidden, path, onNavigate, touch }: {
   role: Role | null
   granted: string[]
   hidden: string[]
   path: string
   onNavigate?: () => void
+  /** the mobile drawer: every link is a 44px finger target, not a 30px one */
+  touch?: boolean
 }) {
   // the role ladder decides by default; a super admin's grants can only add
   const main = visiblePages(role, NAV_MAIN, granted, hidden)
   const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
-  const link = (item: NavItem) => {
-    const active = path === item.href
+  // Social's children ride on Social's own permission
+  const socialOpen = main.some(i => i.href === '/dashboard/social')
+  const children = socialOpen ? NAV_SOCIAL_CHILDREN : []
+  const current = activeNavHref(path, [...main, ...children, ...tools].map(i => i.href))
+  const link = (item: NavItem, nested = false) => {
+    const active = current === item.href
     const Icon = item.icon
     return (
       <Link
         key={item.href}
         href={item.href}
+        aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
-        className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-sm transition-all duration-150 ${
+        className={`group flex items-center gap-2.5 rounded-lg text-sm transition-all duration-150 ${
+          nested ? 'ml-3 pl-4 pr-2.5' : 'px-2.5'
+        } ${
+          touch ? 'min-h-11 py-3' : 'py-[7px]'
+        } ${
           active
             ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
             : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
@@ -141,11 +189,16 @@ function NavLinks({ role, granted, hidden, path, onNavigate }: {
   return (
     <nav className="flex flex-col gap-0.5 px-3">
       <p className="px-2.5 pb-1.5 pt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Workspace</p>
-      {main.map(link)}
+      {main.map(item => (
+        <div key={item.href} className="contents">
+          {link(item)}
+          {item.href === '/dashboard/social' && children.map(c => link(c, true))}
+        </div>
+      ))}
       {tools.length > 0 && (
         <p className="px-2.5 pb-1.5 pt-5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">System</p>
       )}
-      {tools.map(link)}
+      {tools.map(i => link(i))}
     </nav>
   )
 }
@@ -199,6 +252,17 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
    * people who are perfectly entitled to be here.
    */
   const section = useMemo(() => {
+    // Routes with no nav entry used to resolve to `null`, and a null section
+    // SKIPS the access check below — so the pages nobody could find were also
+    // the pages nobody was checked against. Each is pinned to the permission
+    // it belongs under.
+    const ORPHANS: Record<string, string> = {
+      '/dashboard/calendar': '/dashboard/calendar',
+      '/dashboard/tracker': '/dashboard/production',
+    }
+    if (ORPHANS[path]) return ORPHANS[path]
+    // NOT the social children: they inherit Social's permission by resolving
+    // to it through the prefix rule below, which is exactly what we want.
     const all = [...NAV_MAIN, ...NAV_TOOLS]
     const exact = all.find(i => i.href === path)
     if (exact) return exact.href
@@ -228,7 +292,10 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="dbx min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Desktop sidebar from `md`, not `lg`: at the old 1024px breakpoint an
+          iPad in portrait — a real device on this team — lost the whole
+          navigation and had to work through one hamburger. */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-900">
         <SidebarHeader />
         <div className="flex-1 overflow-y-auto pb-6">
           <NavLinks role={role} granted={granted} hidden={hidden} path={path} />
@@ -247,35 +314,35 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main column */}
-      <div className="lg:pl-60">
+      <div className="md:pl-60">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-zinc-800 dark:bg-zinc-900/85">
           {/* Mobile nav */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
+              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="flex w-72 flex-col p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
-              <NavLinks role={role} granted={granted} hidden={hidden} path={path} onNavigate={() => setMobileOpen(false)} />
+              <div className="flex-1 overflow-y-auto pb-6">
+                <NavLinks role={role} granted={granted} hidden={hidden} path={path} touch onNavigate={() => setMobileOpen(false)} />
+              </div>
             </SheetContent>
           </Sheet>
 
           <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).sort((a, b) => b.length - a.length).find(k => path.startsWith(`${k}/`)) ?? ''] ?? 'Dashboard'}</h1>
           {/* Beta: this is in daily use while still being built, so the state
               is stated rather than left to be discovered on a rough edge. */}
-          <span
-            title="In active development — expect rough edges, and tell us about them"
-            className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
+          {/* The badge used to say "tell us about them" in a hover-only
+              title=, with nobody to tell. It is now the way to tell us. */}
+          <a
+            href={techMailto({ subject: 'Feedback on the dashboard', page: path })}
+            className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-widest text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
           >
             Beta
-          </span>
-          <Separator orientation="vertical" className="h-4 bg-zinc-200 dark:bg-zinc-700" />
-          <p className="hidden rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-500 sm:block dark:bg-zinc-800 dark:text-zinc-400">
-            {path}
-          </p>
+          </a>
 
           <div className="ml-auto flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -312,8 +379,12 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
               <Lock className="h-6 w-6 text-zinc-400" />
               <p className="text-sm font-medium">This page is not part of your access</p>
+              {/* Naming the tab was a dead end: Page access is super-admin
+                  only, so following the instruction landed on "this section is
+                  for super admins". Name a person instead. */}
               <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
-                Ask a super admin to open it for you in Settings → Page access.
+                If you need it, ask Manal or Divina to open it for you — they can
+                do it in a minute.
               </p>
               {firstAllowed && (
                 <Button variant="outline" size="sm" asChild>
