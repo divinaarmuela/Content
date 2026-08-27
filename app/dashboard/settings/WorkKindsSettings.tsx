@@ -5,8 +5,9 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
-import { Plus } from 'lucide-react'
+import { Lock, Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -93,8 +94,32 @@ export default function WorkKindsSettings() {
     }
   }
 
-  // managing work types shapes everyone's filing — AM and up only
-  if (!canManage || kinds === null || kinds.length === 0) return null
+  if (kinds === null) return <Skeleton className="h-64 w-full" />
+
+  // Managing work types shapes everyone's filing — AM and up only. It used to
+  // return null here: no card, no explanation, just a page that was shorter
+  // for some people than for others.
+  if (!canManage) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-2 py-8">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Lock className="h-4 w-4 text-zinc-400" /> Work types
+          </h3>
+          <p className="max-w-lg text-sm text-zinc-500 dark:text-zinc-400">
+            These are the kinds of work the New item dialog offers — reel,
+            carousel, shoot plan, and so on. Only account managers and super
+            admins can change them, because the choice files everybody&rsquo;s work.
+          </p>
+          {kinds.length > 0 && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Right now: {kinds.map(k => k.name).join(', ')}.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>
@@ -103,8 +128,9 @@ export default function WorkKindsSettings() {
           <div>
             <h3 className="text-sm font-semibold">Work types</h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              How tasks are filed — each type suggests its usual assignees. Archive, never delete:
-              old items keep their label.
+              The kinds of work the New item dialog offers. Each one suggests
+              who usually does it. Archive rather than delete — old items keep
+              the label they were filed under.
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => setAdding(v => !v)}>

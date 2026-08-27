@@ -14,11 +14,15 @@ import { useRole } from '../useRole'
 
 const TABS = [
   { href: '/dashboard/settings', label: 'Profile', superOnly: false },
+  // its own tab, not the bottom of "Profile" — it governs every dropdown in
+  // the New item dialog, which is nobody's idea of a personal preference
+  { href: '/dashboard/settings/work-types', label: 'Work types', superOnly: false },
   { href: '/dashboard/settings/scanner', label: 'Inbox scanner', superOnly: true },
   { href: '/dashboard/settings/intake', label: 'Intake templates', superOnly: true },
   { href: '/dashboard/settings/access', label: 'Page access', superOnly: true },
   { href: '/dashboard/settings/credentials', label: 'Credentials', superOnly: false },
   { href: '/dashboard/settings/integrations', label: 'Integrations', superOnly: false },
+  { href: '/dashboard/settings/glossary', label: 'What the words mean', superOnly: false },
 ]
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +35,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Workspace configuration, team, and integrations.
+          Your profile, how work is filed, and the accounts this workspace is
+          connected to. People and roles are on the Team page.
         </p>
       </div>
 

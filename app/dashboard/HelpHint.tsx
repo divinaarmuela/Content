@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { HelpCircle } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
@@ -38,6 +39,12 @@ export default function HelpHint({ term, className }: { term: GlossaryKey; class
       <DropdownMenuContent align="start" className="max-w-[18rem] p-3">
         <p className="text-sm font-medium">{title}</p>
         <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{body}</p>
+        <Link
+          href="/dashboard/settings/glossary"
+          className="mt-2 inline-block text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          See all the words →
+        </Link>
       </DropdownMenuContent>
     </DropdownMenu>
   )
