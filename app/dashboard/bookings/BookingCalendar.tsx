@@ -107,7 +107,10 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
         )}
       </div>
 
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800">
+      {/* a month grid needs room: below ~560px the cells were 55px wide and
+          unreadable, with no way to scroll to the rest of the week */}
+      <div className="overflow-x-auto">
+      <div className="grid min-w-[560px] grid-cols-7 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800">
         {WEEKDAYS.map(d => (
           <div key={d} className="bg-zinc-50 py-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
             {d}
@@ -156,6 +159,7 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
             </div>
           )
         })}
+      </div>
       </div>
 
       {(() => {

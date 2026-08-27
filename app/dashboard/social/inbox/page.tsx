@@ -16,6 +16,7 @@ import {
   Reply, Send, Trash2,
 } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
+import ConfirmAction from '../../ConfirmAction'
 
 type PostRow = {
   id: string
@@ -564,11 +565,18 @@ export default function InboxPage() {
                             disabled={busy === c.id + 'hide'}>
                             <EyeOff className="h-3.5 w-3.5" /> {c.hidden ? 'Unhide' : 'Hide'}
                           </Button>
-                          <Button size="sm" variant="ghost"
-                            onClick={() => act('delete', c)}
-                            disabled={busy === c.id + 'delete'}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <ConfirmAction
+                            title="Delete this comment from the client's post?"
+                            body="It disappears for everyone on the client's post and cannot be restored. Hiding it instead keeps it recoverable — only the person who wrote it can still see it."
+                            confirmLabel="Delete comment"
+                            onConfirm={() => act('delete', c)}
+                          >
+                            <Button size="sm" variant="ghost"
+                              aria-label="Delete this comment"
+                              disabled={busy === c.id + 'delete'}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </ConfirmAction>
                         </div>
 
                         {replyTo?.id === c.id && (

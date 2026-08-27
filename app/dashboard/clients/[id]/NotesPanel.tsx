@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageSquare, Trash2, Users, ShieldCheck, Lock } from 'lucide-react'
+import ConfirmAction from '../../ConfirmAction'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -167,17 +168,24 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
                       {VISIBILITY[n.visibility].label}
                     </span>
                   )}
-                  <button
-                    onClick={async () => {
+                  <ConfirmAction
+                    title="Delete this note?"
+                    body="The note disappears for everyone on the team and cannot be restored. If you only want it out of the way, edit it instead."
+                    confirmLabel="Delete note"
+                    onConfirm={async () => {
                       const res = await fetch(`/api/website/clients/${clientId}/notes?noteId=${n.id}`, { method: 'DELETE' })
                       if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
+                      toast.success('Note deleted')
                       load()
                     }}
-                    aria-label="Delete note"
-                    className="ml-auto text-zinc-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 dark:text-zinc-600"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      aria-label="Delete note"
+                      className="ml-auto rounded p-2 text-zinc-400 transition-colors hover:text-red-500 dark:text-zinc-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </ConfirmAction>
                 </div>
                 {/* whitespace-pre-wrap so paragraphs survive as typed */}
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">

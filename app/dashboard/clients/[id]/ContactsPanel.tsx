@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Mail, Phone, Pencil, Plus, Star, Trash2, UserRound, X, Copy } from 'lucide-react'
+import ConfirmAction from '../../ConfirmAction'
 
 type Contact = {
   id: string
@@ -173,10 +174,17 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                       onClick={() => setDraft(c)} aria-label={`Edit ${c.name}`}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                      onClick={() => remove(c)} aria-label={`Remove ${c.name}`}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <ConfirmAction
+                      title={`Remove ${c.name} from this client?`}
+                      body="Their name, email and phone are deleted from this client's contacts. Nothing else changes, and you can add them again — but the details are not kept."
+                      confirmLabel="Remove contact"
+                      onConfirm={() => remove(c)}
+                    >
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:text-red-600"
+                        aria-label={`Remove ${c.name}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </ConfirmAction>
                   </div>
                 </div>
 

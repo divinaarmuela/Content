@@ -15,6 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Copy, Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, ExternalLink } from 'lucide-react'
+import ConfirmAction from './ConfirmAction'
 import { useRole } from './useRole'
 
 type Credential = {
@@ -228,7 +229,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
           </CardContent>
         </Card>
       ) : items.length > 0 && (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
@@ -315,15 +316,22 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                       </Button>
                       )}
                       {canEdit && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                        onClick={async () => {
+                      <ConfirmAction
+                        title={`Delete the ${c.platform} login?`}
+                        body="Everyone on the team loses this password — there is no copy, and it cannot be restored. If it has only changed, edit it instead."
+                        confirmLabel="Delete login"
+                        onConfirm={async () => {
                           const res = await fetch(`${endpoint}?credentialId=${c.id}`, { method: 'DELETE' })
                           if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
-                          toast.success('Credential removed')
+                          toast.success(`${c.platform} login deleted`)
                           load()
-                        }} aria-label="Delete">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        }}
+                      >
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:text-red-600"
+                          aria-label={`Delete the ${c.platform} login`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </ConfirmAction>
                       )}
                     </div>
                   </TableCell>
