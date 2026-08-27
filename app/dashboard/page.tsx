@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -9,11 +10,17 @@ import { Button } from '@/components/ui/button'
 import {
   ArrowRight, Inbox, Users, TrendingUp, CalendarClock,
   ClipboardList, PencilLine, Send, CheckCircle2, Film, HandHelping,
+  ChevronDown, ChevronLeft, ChevronRight, BarChart3,
 } from 'lucide-react'
 import Greeting from './Greeting'
 import { useProductionLive } from './production/useProductionLive'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
+import { compactCount } from '../lib/post-analytics-core'
+import {
+  expandLine, NO_AGREEMENT_LINE,
+  type MonthClientRow, type MonthStatus,
+} from '../lib/overview-month-core'
 
 type ItemLite = {
   id: string; title: string; status: ItemStatus; content_type: string
@@ -152,6 +159,238 @@ const PACE_DOT: Record<string, string> = {
   behind: 'bg-rose-500', tight: 'bg-amber-500', on_track: 'bg-emerald-500', met: 'bg-emerald-600',
 }
 
+const MONTH_CHIP: Record<MonthStatus, string> = {
+  short: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
+  at_risk: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
+  on_track: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
+  met: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+}
+
+const chipWords = (r: MonthClientRow) => (r.status === 'met' ? 'Met ✓' : r.status_label)
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-AU', {
+    timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short',
+  })
+
+/** The per-type promise: "Reels 2/4 · Graphics 3/3", short lines coloured. */
+function TypeChips({ row }: { row: MonthClientRow }) {
+  return (
+    <span className="flex flex-wrap gap-x-3 gap-y-1">
+      {row.lines.map(l => (
+        <span key={l.type}
+          className={`font-mono text-[11px] tabular-nums ${
+            l.posted >= l.promised ? 'text-zinc-400 dark:text-zinc-500'
+              : l.pace === 'behind' ? 'text-rose-600 dark:text-rose-400'
+                : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-zinc-500 dark:text-zinc-400'
+          }`}>
+          {expandLine(l)}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/**
+ * "This month across clients" — the owner's one screen.
+ *
+ * Every client the caller can see, in triage order: what they were promised,
+ * what actually went live, what is still moving, and what the month has done
+ * in views. The Agreement gaps card below is the alert — this is the ledger,
+ * so a client who is perfectly fine still appears, which is the whole point of
+ * asking "did everyone get their month?".
+ *
+ * Under 768px the table becomes cards: the same eight facts, stacked, because
+ * eight columns on a phone is a horizontal scroll nobody reads.
+ */
+function MonthAcrossClients() {
+  const router = useRouter()
+  const [back, setBack] = useState(0)                 // whole months before now
+  const [rows, setRows] = useState<MonthClientRow[] | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+
+  const now = new Date()
+  const target = new Date(now.getFullYear(), now.getMonth() - back, 1)
+  const month = target.getMonth() + 1
+  const year = target.getFullYear()
+
+  useEffect(() => {
+    let live = true
+    setRows(null)
+    fetch(`/api/overview/month?month=${month}&year=${year}`)
+      .then(r => (r.ok ? r.json() : { clients: [] }))
+      .then(j => { if (live) setRows(j.clients ?? []) })
+      .catch(() => { if (live) setRows([]) })
+    return () => { live = false }
+  }, [month, year])
+
+  const monthName = target.toLocaleDateString('en-AU', { month: 'long', year: back === 0 ? undefined : 'numeric' })
+  const openClient = (id: string) => router.push(`/dashboard/clients/${id}`)
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <BarChart3 className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> This month across clients
+        </CardTitle>
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Previous month"
+            onClick={() => setBack(b => Math.min(b + 1, 24))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[5.5rem] text-center font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+            {monthName}
+          </span>
+          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Next month"
+            disabled={back === 0} onClick={() => setBack(b => Math.max(0, b - 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-0">
+        {rows === null && <Skeleton className="h-40 w-full" />}
+        {rows !== null && rows.length === 0 && (
+          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
+            No active clients to report on.
+          </p>
+        )}
+
+        {/* ---- 768px and up: the table ---- */}
+        {rows !== null && rows.length > 0 && (
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 text-left dark:border-zinc-800">
+                  {['Client', 'Promised', 'Posted', 'Scheduled', 'In production', 'Status', 'Last post', 'Views'].map((h, i) => (
+                    <th key={h} className={`py-2 font-mono text-[10px] uppercase tracking-[0.14em] font-normal text-zinc-400 dark:text-zinc-500 ${i > 0 ? 'px-3' : 'pr-3'}`}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <MonthTableRow key={r.id} row={r}
+                    expanded={open === r.id}
+                    onToggle={() => setOpen(o => (o === r.id ? null : r.id))}
+                    onOpen={() => openClient(r.id)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ---- under 768px: the same eight facts as cards ---- */}
+        {rows !== null && rows.length > 0 && (
+          <div className="flex flex-col gap-2 md:hidden">
+            {rows.map(r => (r.has_agreement ? (
+              <button key={r.id} type="button" onClick={() => openClient(r.id)}
+                className="w-full rounded-lg border border-zinc-200 p-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/60">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 truncate text-sm font-medium">{r.name}</span>
+                  <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${MONTH_CHIP[r.status]}`}>
+                    {chipWords(r)}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-2 font-mono text-xs tabular-nums">
+                  {[
+                    ['Promised', r.promised], ['Posted', r.posted],
+                    ['Sched.', r.scheduled], ['In prod.', r.in_production],
+                  ].map(([label, v]) => (
+                    <div key={String(label)}>
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{label}</p>
+                      <p className="font-semibold">{v}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2"><TypeChips row={r} /></div>
+                <p className="mt-2 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                  {r.last_post ? `Last post ${shortDate(r.last_post.at)}` : 'No posts yet'}
+                  {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
+                </p>
+              </button>
+            ) : (
+              <Link key={r.id} href={`/dashboard/clients/${r.id}/agreement`}
+                className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-200 p-3 text-sm text-zinc-400 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-500 dark:hover:bg-zinc-800/60">
+                <span className="min-w-0 truncate font-medium">{r.name}</span>
+                <span className="ml-auto shrink-0 text-xs">{NO_AGREEMENT_LINE} →</span>
+              </Link>
+            )))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function MonthTableRow({ row, expanded, onToggle, onOpen }: {
+  row: MonthClientRow; expanded: boolean; onToggle: () => void; onOpen: () => void
+}) {
+  // no agreement on file: one muted row that is a to-do, not a measurement
+  if (!row.has_agreement) {
+    return (
+      <tr className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
+        <td className="py-2 pr-3 text-zinc-400 dark:text-zinc-500">{row.name}</td>
+        <td colSpan={7} className="px-3 py-2">
+          <Link href={`/dashboard/clients/${row.id}/agreement`}
+            className="text-xs text-zinc-400 underline-offset-4 hover:underline dark:text-zinc-500">
+            {NO_AGREEMENT_LINE} →
+          </Link>
+        </td>
+      </tr>
+    )
+  }
+  const num = 'px-3 py-2 font-mono tabular-nums'
+  return (
+    <>
+      <tr onClick={onOpen}
+        className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/60">
+        <td className="py-2 pr-3">
+          <span className="flex items-center gap-1.5">
+            <button type="button" aria-label={expanded ? 'Hide types' : 'Show types'}
+              aria-expanded={expanded}
+              onClick={e => { e.stopPropagation(); onToggle() }}
+              className="rounded p-0.5 text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300">
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+            </button>
+            <span className="truncate font-medium">{row.name}</span>
+          </span>
+        </td>
+        {/* the whole promise is in the title, so the breakdown is one hover
+            away as well as one click */}
+        <td className={`${num} font-semibold`} title={row.lines.map(expandLine).join(' · ')}>{row.promised}</td>
+        <td className={`${num} font-semibold`}>{row.posted}</td>
+        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.scheduled}</td>
+        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.in_production}</td>
+        <td className="px-3 py-2">
+          <Badge variant="outline" className={`shrink-0 font-normal ${MONTH_CHIP[row.status]}`}>
+            {chipWords(row)}
+          </Badge>
+        </td>
+        <td className="px-3 py-2 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+          {row.last_post
+            ? (row.last_post.item_id
+                ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
+                    className="underline-offset-4 hover:underline">{shortDate(row.last_post.at)}</Link>
+                : shortDate(row.last_post.at))
+            : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+        </td>
+        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>
+          {row.views === null ? <span className="text-zinc-300 dark:text-zinc-600">—</span> : compactCount(row.views)}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-b border-zinc-100 bg-zinc-50/60 dark:border-zinc-800/60 dark:bg-zinc-900/40">
+          <td />
+          <td colSpan={7} className="px-3 py-2"><TypeChips row={row} /></td>
+        </tr>
+      )}
+    </>
+  )
+}
+
 /** Cross-client "who's behind this month" — pull becomes push. */
 function AtRiskThisMonth() {
   const [rows, setRows] = useState<AtRiskClient[] | null>(null)
@@ -171,8 +410,11 @@ function AtRiskThisMonth() {
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <TrendingUp className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Agreement gaps this month
         </CardTitle>
-        <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400">
-          {new Date().toLocaleDateString('en-AU', { month: 'long' })}
+        {/* the table above is the ledger — every client, met or not. This card
+            is the alert: only what is still owed, and only where. Saying so
+            stops the two reading as the same list twice. */}
+        <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
+          Only what’s still owed
         </span>
       </CardHeader>
       <CardContent className="flex flex-col gap-1 pt-0">
@@ -356,6 +598,8 @@ export default function OverviewPage() {
             )}
           </div>
           <Pipeline pipeline={data.pipeline} />
+          {/* the ledger first, then the alert it summarises */}
+          <MonthAcrossClients />
           <AtRiskThisMonth />
           {(data.manager.my_tasks?.length ?? 0) > 0 && (
             <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
