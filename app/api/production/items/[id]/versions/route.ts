@@ -3,7 +3,7 @@ import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { addVersion } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
-import { actingRoles } from '../../../../../lib/workflow-core'
+import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
 import { mirrorVersion } from '../../../../../lib/gdrive-mirror'
 
 /** Append a new asset version (race-safe numbering). The editor HAT on this
@@ -24,6 +24,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'This job is assigned to someone else' }, { status: 403 })
     }
     const body = await req.json()
+    // a version is the WORK: the file uploaded here, or a link to somewhere it
+    // can be watched. The master-file link is optional — recording where the
+    // full-quality original is filed is useful, not a precondition — so the
+    // only thing refused is a version with nothing in it to look at.
+    const check = versionSatisfiesSubmission({
+      file_url: String(body.file_url ?? ''),
+      drive_url: String(body.drive_url ?? ''),
+      dropbox_url: String(body.dropbox_url ?? ''),
+    })
+    if (!check.ok) {
+      return NextResponse.json({ error: `Add ${check.missing.join(' and ')}` }, { status: 422 })
+    }
     const version = await addVersion(user, id, {
       file_url: body.file_url,
       dropbox_url: body.dropbox_url,

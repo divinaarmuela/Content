@@ -88,31 +88,32 @@ describe('availableTransitions', () => {
   })
 })
 
-describe('versionSatisfiesSubmission — doc §11 validation', () => {
-  it('passes with file upload + dropbox master', () => {
-    expect(versionSatisfiesSubmission({ file_url: 'https://x/y.mp4', dropbox_url: 'https://dropbox/z' }).ok).toBe(true)
+describe('versionSatisfiesSubmission — something to review, and nothing else', () => {
+  it('an uploaded file is enough on its own', () => {
+    // the in-app upload IS the path: demanding a second link to the same
+    // footage blocked "export, upload, submit", which is the whole job
+    expect(versionSatisfiesSubmission({ file_url: 'https://x/y.mp4' }).ok).toBe(true)
   })
-  it('passes with drive link + dropbox master (no upload)', () => {
-    expect(versionSatisfiesSubmission({ drive_url: 'https://drive/x', dropbox_url: 'https://dropbox/z' }).ok).toBe(true)
+  it('a review link is enough on its own', () => {
+    expect(versionSatisfiesSubmission({ drive_url: 'https://drive/x' }).ok).toBe(true)
+    expect(versionSatisfiesSubmission({ drive_url: 'https://youtu.be/abc' }).ok).toBe(true)
   })
-  it('fails without any reviewable asset, naming what is missing', () => {
-    const res = versionSatisfiesSubmission({ dropbox_url: 'https://dropbox/z' })
-    expect(res.ok).toBe(false)
-    if (!res.ok) expect(res.missing[0]).toMatch(/uploaded file or a Drive/)
-  })
-  it('fails without the master file, wherever the master lives', () => {
-    // the rule is that a full-quality original EXISTS and is filed; it used
-    // to name Dropbox, which left anyone whose master is in Drive nowhere to
-    // put it and nothing the message would accept
-    const res = versionSatisfiesSubmission({ file_url: 'https://x/y.mp4' })
-    expect(res.ok).toBe(false)
-    if (!res.ok) expect(res.missing[0]).toMatch(/master file/)
+  it('the master file link is optional, wherever the master lives', () => {
     expect(versionSatisfiesSubmission({
       file_url: 'https://x/y.mp4', dropbox_url: 'https://drive.google.com/file/abc',
     }).ok).toBe(true)
+    // …and a master link ALONE is still nothing to review
+    const res = versionSatisfiesSubmission({ dropbox_url: 'https://dropbox/z' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.missing[0]).toMatch(/uploaded file or a review link/)
+  })
+  it('fails with nothing attached at all, naming what is missing', () => {
+    const res = versionSatisfiesSubmission({})
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.missing).toHaveLength(1)
   })
   it('whitespace-only links do not count', () => {
-    expect(versionSatisfiesSubmission({ file_url: '  ', dropbox_url: ' ' }).ok).toBe(false)
+    expect(versionSatisfiesSubmission({ file_url: '  ', drive_url: ' ' }).ok).toBe(false)
   })
 })
 

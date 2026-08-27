@@ -183,6 +183,10 @@ export default function ItemDetailPage() {
 
   const [verDraft, setVerDraft] = useState({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
   const [uploading, setUploading] = useState(false)
+  /** the drop zone is the primary path; the two link fields are the exception,
+   *  so they stay folded away until someone actually wants one */
+  const [linksOpen, setLinksOpen] = useState(false)
+  const [dragging, setDragging] = useState(false)
   /** measured pixel size of the latest preview / freshly-uploaded file */
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null)
   const [draftDims, setDraftDims] = useState<{ w: number; h: number } | null>(null)
@@ -551,12 +555,11 @@ export default function ItemDetailPage() {
 
   /** What the version form is still missing, or null when it can be saved. */
   const versionMissing: string | null = (() => {
+    // one rule, the server's own: something to look at. The master link is
+    // not a precondition, and neither field is asterisked any more.
     if (!verDraft.file_url && !verDraft.drive_url) {
-      return isInternal
-        ? 'Add a link to the work, or upload a file.'
-        : 'Add a Drive link or upload a file.'
+      return 'Upload the file, or paste a link to it.'
     }
-    if (!isInternal && !verDraft.dropbox_url) return 'Add the master file link.'
     return null
   })()
 
@@ -757,8 +760,9 @@ export default function ItemDetailPage() {
   }
 
   const saveVersion = async () => {
-    if (!verDraft.file_url && !verDraft.drive_url) return toast.error(isInternal ? 'Upload a file or add a link to the work' : 'Upload a file or add a Drive link')
-    if (!isInternal && !verDraft.dropbox_url) return toast.error('The master file link is required')
+    if (!verDraft.file_url && !verDraft.drive_url) {
+      return toast.error('Upload the file, or paste a link to it')
+    }
     setBusy('version')
     try {
       const res = await fetch(`/api/production/items/${id}/versions`, {
@@ -770,6 +774,7 @@ export default function ItemDetailPage() {
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       toast.success(isInternal ? `Draft ${json.version_number} saved` : `Version v${json.version_number} added`)
       setVerDraft({ file_url: '', dropbox_url: '', drive_url: '', notes: '' })
+      setLinksOpen(false)
       // put it on the page NOW: "The work" and the Submit button both read
       // detail.versions, and a toast above an unchanged screen is how the
       // team learns to distrust the save
@@ -1216,45 +1221,90 @@ export default function ItemDetailPage() {
             {canAddVersion && (
               <>
                 <Separator />
-                <div className="flex flex-col gap-2.5">
+                <div className="flex flex-col gap-3">
                   <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{isInternal ? 'Attach the work' : 'New version'}</p>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
-                      <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : verDraft.file_url ? 'Replace file' : 'Upload file'}
-                    </Button>
-                    {verDraft.file_url && (
-                      <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-                        file ready ✓{draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
-                      </span>
+
+                  {/* THE path, not one of three: the export goes straight from
+                      the editor's machine into our storage, and everything the
+                      workflow needs follows from that. The links below are for
+                      the cases the upload cannot cover — a Google Doc, a cut
+                      that already lives somewhere the client watches it. */}
+                  <div
+                    onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={e => {
+                      e.preventDefault(); setDragging(false)
+                      const f = e.dataTransfer.files?.[0]
+                      if (f) uploadFile(f)
+                    }}
+                    onClick={() => fileRef.current?.click()}
+                    className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
+                      dragging
+                        ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
+                        : verDraft.file_url
+                          ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                          : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+                    }`}
+                  >
+                    <Upload className={`h-5 w-5 ${verDraft.file_url ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
+                    {uploading ? (
+                      <p className="text-sm font-medium">Uploading…</p>
+                    ) : verDraft.file_url ? (
+                      <>
+                        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                          File ready ✓{draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Click to replace it</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Drag the export here or choose a file</p>
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Any size — it goes straight to our storage.</p>
+                      </>
                     )}
                     {/* sr-only, not hidden: display:none file inputs can silently
                         refuse a programmatic .click() — same bug as the board's */}
                     <input ref={fileRef} type="file" accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
                       onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
                   </div>
-                  {!isInternal && (
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs">Master file link *</Label>
-                    <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
-                      onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      The full-quality original, kept where it can be found again.
-                      The review link above is the copy people watch.
-                    </p>
+
+                  {/* secondary, and closed until asked for. Both fields are
+                      optional: a version needs something to LOOK at, and the
+                      upload above is that. */}
+                  <div className="flex flex-col gap-2">
+                    <button type="button" onClick={() => setLinksOpen(v => !v)}
+                      className="flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
+                      <CircleDashed className={`h-3.5 w-3.5 transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
+                      Or paste a link instead
+                    </button>
+                    {linksOpen && (
+                      <div className="flex flex-col gap-2.5 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                        <div className="grid gap-1.5">
+                          <Label className="text-xs">
+                            {isInternal ? 'Link to the work' : 'Review link'}
+                          </Label>
+                          <Input value={verDraft.drive_url}
+                            placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/… or a YouTube link'}
+                            onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
+                          <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                            Where it can be watched, if it is not the file above.
+                          </p>
+                        </div>
+                        {!isInternal && (
+                          <div className="grid gap-1.5">
+                            <Label className="text-xs">Master file link</Label>
+                            <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
+                              onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
+                            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                              Optional — where the full-quality original is filed, if that is
+                              somewhere other than here.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  )}
-                  <div className="grid gap-1.5">
-                    {/* never "(optional)" on a field the save requires: an
-                        asterisk that lies teaches people to ignore every other
-                        one on the page */}
-                    <Label className="text-xs">
-                      {isInternal
-                        ? `Link to the work ${verDraft.file_url ? '' : '* (Google Doc, Drive, Notion — or upload a file)'}`
-                        : `Drive review link ${verDraft.file_url ? '' : '* (or upload a file)'}`}
-                    </Label>
-                    <Input value={verDraft.drive_url} placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/…'}
-                      onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
-                  </div>
+
                   <div className="grid gap-1.5">
                     <Label className="text-xs">Notes</Label>
                     <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}

@@ -315,16 +315,22 @@ export function whoseTurn(
   return { hat, mine, unassigned }
 }
 
-/** Doc 1 §11: an item can only be submitted when a reviewable asset exists —
- *  an uploaded file OR a review link — and the full-quality MASTER is filed
- *  somewhere it can be found again — Google Drive, in practice. The rule is
- *  that a master link exists, not where it points; the column is still called
- *  dropbox_url because it predates the move to Drive and renaming a live
- *  column is a migration, not a comment. */
+/**
+ * A version can be submitted when there is something to review: the file
+ * itself, uploaded here, or a link to it.
+ *
+ * The master-file link used to be required alongside. That rule came from an
+ * era when the cut lived in someone's Dropbox and we only ever held a pointer
+ * to it — the app now takes the upload itself, and demanding a second link to
+ * the same footage blocked the ordinary path: upload the export, press submit.
+ * The master link is still there for anyone who wants to record where the
+ * full-quality original is filed; it is no longer a gate. (The column is still
+ * called dropbox_url because renaming a live column is a migration, not a
+ * comment.)
+ */
 export function versionSatisfiesSubmission(v: { file_url?: string; drive_url?: string; dropbox_url?: string }): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = []
-  if (!v.file_url?.trim() && !v.drive_url?.trim()) missing.push('an uploaded file or a Drive review link')
-  if (!v.dropbox_url?.trim()) missing.push('the master file link')
+  if (!v.file_url?.trim() && !v.drive_url?.trim()) missing.push('an uploaded file or a review link')
   return missing.length === 0 ? { ok: true } : { ok: false, missing }
 }
 
