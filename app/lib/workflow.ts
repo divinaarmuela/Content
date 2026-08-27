@@ -7,12 +7,15 @@ import {
   actingRoles,
   checkTransitionAs,
   versionSatisfiesSubmission,
+  TRANSITIONS,
   TRANSITION_NOTIFICATIONS,
   CLIENT_LABELS,
   STATUS_LABELS,
   type ItemStatus,
   type Audience,
 } from './workflow-core'
+import type { Role } from './identity-core'
+import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
 import {
   briefSatisfiesSubmission, checkBriefTaskTransitionAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
@@ -312,6 +315,26 @@ export function notifyPublishQueued(
 }
 
 /**
+ * A move nobody pressed a button for.
+ *
+ * Instagram publishing a post at its scheduled time is a real event with a
+ * real consequence for the board, and it has no actor — inventing one (the
+ * scheduler who queued it three days ago) would put a person's name on
+ * something they did not do. So the system moves it, wearing a label that says
+ * where the news came from: "Posted by Instagram".
+ *
+ * A system actor wears no hat and is bound by `SYSTEM_EDGES` instead — it can
+ * only ever record what the provider already did.
+ */
+export type SystemActor = { system: true; label: string }
+export function systemActor(label: string): SystemActor {
+  return { system: true, label }
+}
+function isSystemActor(a: TeamUser | SystemActor): a is SystemActor {
+  return (a as SystemActor).system === true
+}
+
+/**
  * Execute a status transition with the full guarantee set:
  *  - legality + role permission from the pure state machine
  *  - requirement evidence (reviewable asset / schedule entry / live url)
@@ -322,10 +345,17 @@ export function notifyPublishQueued(
  *    from>to edge and version, so a retried request can't double-send).
  */
 export async function performTransition(
-  actor: TeamUser,
+  actor: TeamUser | SystemActor,
   item: ContentItem,
   to: ItemStatus,
   opts?: {
+    /** Hats the CALLER has already established by another route, merged into
+     *  the ones the item grants. The publish endpoint is the only user: it is
+     *  role-gated to schedulers, so anyone who got far enough to hand a post
+     *  to a client's live account holds the scheduling for it by definition —
+     *  refusing them the status change afterwards is the app disagreeing with
+     *  itself. */
+    grantedHats?: Role[]
     /** Chosen reviewers: when the actor picked who should hear about this,
      *  the manager audience becomes exactly those people (validated to be
      *  active managing roles) instead of everyone assigned. */
@@ -334,9 +364,20 @@ export async function performTransition(
     /** A note travelling with the transition (e.g. what to revise) — shown
      *  in the team's notification emails, never the client's. */
     note?: string
+    /** Audiences another notification in the same request already reached.
+     *  Queueing a post emails the people the scheduler picked, saying exactly
+     *  "this is scheduled"; the transition it performs would then say the same
+     *  thing again, to the same inboxes, in different words. */
+    skipAudiences?: Audience[]
   },
 ): Promise<ContentItem> {
   const from = item.status
+  const system = isSystemActor(actor)
+  const actorId = system ? null : actor.id
+  const actorName = system ? actor.label : actor.name
+  const actorEmail = system ? null : actor.email
+  /** how the emails name whoever did this — a person, or the channel itself */
+  const actorWord = actorName || actorEmail || 'MD Media'
 
   // a shoot-BRIEF task rides the same machine wearing its own words and
   // evidence: the "asset" under review is the brief itself, and "scheduled"
@@ -358,23 +399,42 @@ export async function performTransition(
   // rights follow ASSIGNMENT, not job title: the hats this actor wears on
   // THIS item decide the move, so an editor handed a scheduling job can
   // schedule it and an editor who holds nothing here can move nothing
-  const hats = actingRoles({ id: actor.id, role: actor.role }, item)
+  const hats = system
+    ? []
+    : [...new Set([
+      ...actingRoles({ id: actor.id, role: actor.role }, item),
+      ...(opts?.grantedHats ?? []),
+    ])]
 
-  const check = isBriefTask
-    ? checkBriefTaskTransitionAs(hats, from, to)
-    : isInternal ? checkTaskTransitionAs(hats, from, to)
-    : checkTransitionAs(hats, from, to)
+  // the system is not a role and cannot be given one — it may only record the
+  // two edges the provider itself decides, and nothing else, ever
+  const check = system
+    ? (() => {
+      if (!systemMayMove(from, to)) {
+        throw new AuthzError(`Nothing may move ${from} → ${to} automatically`, 403)
+      }
+      const rule = TRANSITIONS[from]?.[to]
+      if (!rule) throw new AuthzError(`No transition from ${from} to ${to}`, 400)
+      return { ok: true as const, rule }
+    })()
+    : isBriefTask
+      ? checkBriefTaskTransitionAs(hats, from, to)
+      : isInternal ? checkTaskTransitionAs(hats, from, to)
+      : checkTransitionAs(hats, from, to)
   if (!check.ok) throw new AuthzError(check.reason, 403)
 
-  if (isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
+  if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
       // "the brief page" is this page; the date lives on the SHOOT page
       throw new AuthzError('Lock the shoot date on the shoot page before booking it', 400)
     }
   }
 
-  // requirement evidence
-  if (check.rule.requires === 'reviewable_asset') {
+  // Requirement evidence — for people. The system's evidence is the post
+  // itself: the provider has already published it, and refusing to record that
+  // because a schedule row is missing would leave the board claiming a live
+  // post is still waiting.
+  if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
@@ -404,7 +464,7 @@ export async function performTransition(
   // cut the manager just rejected sends it round the loop unchanged; the
   // audit trail already knows when changes were asked for, so compare against
   // it. An item with no such record predates the trail — let it through.
-  if (!isBriefTask && from === 'revision_required' && to === 'revision_complete') {
+  if (!system && !isBriefTask && from === 'revision_required' && to === 'revision_complete') {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would
     // block the move forever with a message about a version nobody asked for
@@ -429,7 +489,7 @@ export async function performTransition(
       throw new AuthzError('Add a new version with the revisions first.', 400)
     }
   }
-  if (check.rule.requires === 'schedule_entry' && !isBriefTask) {
+  if (!system && check.rule.requires === 'schedule_entry' && !isBriefTask) {
     const { count } = await supabase
       .from('schedule_entries')
       .select('id', { count: 'exact', head: true })
@@ -437,7 +497,7 @@ export async function performTransition(
       .not('scheduled_at', 'is', null)
     if (!count) throw new AuthzError('Add at least one platform with a date/time before marking scheduled', 400)
   }
-  if (check.rule.requires === 'live_url') {
+  if (!system && check.rule.requires === 'live_url') {
     // a platform is "published" once it has a live link OR was marked posted
     // in-app (publish_status flips to 'published' either way) — Stories have
     // no link, so requiring a URL would strand them
@@ -463,18 +523,20 @@ export async function performTransition(
   }
 
   await logActivity({
-    actor,
+    // no actor_id for the system, and the label carries who told us instead —
+    // "Posted by Instagram" reads correctly in a trail of human names
+    actor: system ? null : actor,
     clientId: item.client_id,
     entityType: 'content_item',
     entityId: item.id,
     action: 'status_change',
     oldValue: from,
     newValue: to,
-    detail: check.rule.label,
+    detail: system ? actor.label : check.rule.label,
   })
 
   // approvals history for the decisions that matter
-  if (to === 'approved_for_scheduling' || to === 'client_changes_requested') {
+  if (!system && (to === 'approved_for_scheduling' || to === 'client_changes_requested')) {
     await supabase.from('approvals').insert({
       item_id: item.id,
       approval_type: actor.role === 'client' ? 'client' : from === 'client_review' ? 'client' : 'internal',
@@ -504,7 +566,8 @@ export async function performTransition(
   }
 
   // notifications — fire-and-forget; the outbox dedupe makes retries safe
-  const audiences = TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
+  const skip = new Set(opts?.skipAudiences ?? [])
+  const audiences = (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   const schedulerIds = (opts?.schedulerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
@@ -549,15 +612,15 @@ export async function performTransition(
         }
       }
       for (const person of people) {
-        if (person.id === actor.id) continue // don't notify yourself
+        if (actorId && person.id === actorId) continue // don't notify yourself
         const label = audience === 'client_users' ? CLIENT_LABELS[to] : check.rule.label
         const subject = audience === 'client_users'
           ? `${item.title} — ${label}`
           : `${check.rule.label}: ${item.title}`
         await notify({
-          actorName: actor.name,
-          actorEmail: actor.email,
-          actorClerkId: actor.clerk_user_id,
+          actorName,
+          actorEmail,
+          actorClerkId: system ? null : actor.clerk_user_id,
           eventType: `transition_${from}_${to}`,
           entityType: 'content_item',
           // keyed on THIS successful write (updated_at bumps on every update):
@@ -580,7 +643,7 @@ export async function performTransition(
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")
-              : `<p><strong>${item.title}</strong> moved from “${stageLabel(from)}” to “${stageLabel(to)}” by ${actor.name || actor.email}.</p>` +
+              : `<p><strong>${item.title}</strong> moved from “${stageLabel(from)}” to “${stageLabel(to)}” by ${actorWord}.</p>` +
                 (opts?.note?.trim() && audience !== 'client_users'
                   ? `<p><strong>Note:</strong><br>${escapeHtml(opts.note.trim()).replace(/\n/g, '<br>')}</p>`
                   : ''),

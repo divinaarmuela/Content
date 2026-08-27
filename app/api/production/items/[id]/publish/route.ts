@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyPublishQueued } from '../../../../../lib/workflow'
-import { planItemPublish, queueItemPublish } from '../../../../../lib/production-publish'
+import {
+  markScheduledAfterQueue, planItemPublish, queueItemPublish,
+} from '../../../../../lib/production-publish'
 import { announceItemChange } from '../../../../../lib/production-live'
+import { supabase } from '@/lib/supabase'
+import { getPublisher } from '../../../../../lib/publisher'
 
 /** What would be published for this item, and what is stopping it. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -64,8 +68,95 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
     }
 
+    // Handing a post to the provider IS scheduling it — the status follows in
+    // the same request rather than waiting for somebody to remember. Done
+    // after the notification fan-out so a slow transition never delays the
+    // "it's queued" email, and after the activity log so the trail reads in
+    // the order things happened.
+    const movedTo = await markScheduledAfterQueue(user, item, result.plan, body.publishNow === true)
+
+    announceItemChange({
+      item_id: id, client_id: item.client_id,
+      status: movedTo ?? item.status, kind: movedTo ? 'transition' : 'schedule',
+    })
+    return NextResponse.json({ jobId: result.id, status: movedTo ?? item.status })
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
+}
+
+/**
+ * Take a queued post back.
+ *
+ * Two different worlds, and the difference matters to whoever presses this:
+ * a job still QUEUED has not left the building, so cancelling it is complete.
+ * A job the provider is already holding (status 'scheduled') has to be pulled
+ * back THERE — and when that fails, we say so rather than showing a cancelled
+ * post that is still going to appear on the client's feed.
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await requireRole('scheduler')
+    if (!['scheduler', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    }
+    const { id } = await params
+    const item = await loadItemForUser(user, id)
+
+    const { data: job } = await supabase
+      .from('publish_jobs')
+      .select('id, status, provider_post_id')
+      .eq('content_item_id', id)
+      .in('status', ['queued', 'publishing', 'scheduled'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!job) return NextResponse.json({ error: 'Nothing is queued for this item' }, { status: 400 })
+    if (job.status === 'publishing') {
+      return NextResponse.json(
+        { error: 'It is being sent right now — wait for it to finish, then delete the post at the platform' },
+        { status: 409 },
+      )
+    }
+
+    // pull it back at the provider FIRST: a local row saying "cancelled" over
+    // a post the provider will still publish is the one outcome worth avoiding
+    let providerNote: string | null = null
+    if (job.status === 'scheduled' && job.provider_post_id) {
+      try {
+        await getPublisher().deletePost(job.provider_post_id as string)
+      } catch (e) {
+        providerNote = e instanceof Error ? e.message : 'The channel would not cancel it'
+        return NextResponse.json({
+          error: `Cancelled here, but ${providerNote}. Open the post at the platform and delete it there.`,
+        }, { status: 502 })
+      }
+    }
+
+    const { data: cancelled } = await supabase
+      .from('publish_jobs')
+      .update({ status: 'cancelled', error: null, updated_at: new Date().toISOString() })
+      .eq('id', job.id)
+      .eq('status', job.status)     // it may have gone out while we were asking
+      .select('id')
+      .maybeSingle()
+    if (!cancelled) {
+      return NextResponse.json(
+        { error: 'It moved on while you were cancelling — refresh to see where it got to' },
+        { status: 409 },
+      )
+    }
+
+    await logActivity({
+      actor: user, clientId: item.client_id,
+      entityType: 'content_item', entityId: id,
+      action: 'publish_cancelled',
+      detail: `publish job ${job.id}`,
+    })
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'schedule' })
-    return NextResponse.json({ jobId: result.id })
+    return NextResponse.json({ cancelled: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

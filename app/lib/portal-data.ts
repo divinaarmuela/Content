@@ -6,7 +6,7 @@ import {
   type CanvasCard, type ShotRow,
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
-import { planState, shootStatusLabel, type PlanState } from './portal-words'
+import { clientStatusWord, planState, shootStatusLabel, type PlanState } from './portal-words'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -191,7 +191,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       title: i.title,
       content_type: i.content_type,
       status,
-      status_label: CLIENT_LABELS[status],
+      // a booked post says so — see clientStatusWord
+      status_label: clientStatusWord(status, CLIENT_LABELS[status]),
       updated_at: i.updated_at,
       preview_url: clientFacing ? latest?.file_url || null : null,
       drive_url: clientFacing ? latest?.drive_url || null : null,

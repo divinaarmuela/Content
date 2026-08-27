@@ -32,6 +32,14 @@ export type PublishJob = {
   attempts: number
 }
 
+/** The platform names off a job's stored targets, however loosely typed. */
+function platformsOf(targets: unknown): string[] {
+  if (!Array.isArray(targets)) return []
+  return targets
+    .map(t => String((t as { platform?: unknown })?.platform ?? ''))
+    .filter(Boolean)
+}
+
 export async function queuePublishJob(input: {
   clientId?: string | null
   contentItemId?: string | null
@@ -143,7 +151,12 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
         // must reflect that this actually went out
         if (claimed.content_item_id) {
           const { recordPublishOnItem } = await import('./production-publish')
-          await recordPublishOnItem(claimed.content_item_id as string, null)
+          // the platforms travel with it so the audit trail can say WHO posted
+          // it — "Posted by Instagram", not "the system"
+          await recordPublishOnItem(
+            claimed.content_item_id as string, null,
+            (job.targets ?? []).map(t => t.platform),
+          )
         }
         return 'published'
       }
@@ -250,7 +263,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   // "scheduled" forever while the post is live
   const { data: jobs } = await supabase
     .from('publish_jobs')
-    .select('id, status, provider_post_id, content_item_id')
+    .select('id, status, provider_post_id, content_item_id, targets')
     .in('status', ['published', 'scheduled'])
     .gte('created_at', since)
     .not('provider_post_id', 'is', null)
@@ -281,7 +294,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
       }).eq('id', job.id).eq('status', 'scheduled')
       if (job.content_item_id) {
         const { recordPublishOnItem } = await import('./production-publish')
-        await recordPublishOnItem(job.content_item_id as string, url)
+        await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
       }
       changed++
       continue
@@ -306,11 +319,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
           .is('post_url', null)
         // the platform assigns the permalink after the fact; push it through
         // to the schedule entry so the client-facing live link is populated
-        const { data: full } = await supabase
-          .from('publish_jobs').select('content_item_id').eq('id', job.id).maybeSingle()
-        if (full?.content_item_id) {
+        if (job.content_item_id) {
           const { recordPublishOnItem } = await import('./production-publish')
-          await recordPublishOnItem(full.content_item_id as string, url)
+          await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
         }
       }
     }

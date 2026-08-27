@@ -48,6 +48,8 @@ import { lastList } from '../../lastList'
 import { activityLines, type ActivityRow } from '../../../lib/activity-core'
 import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
 import { ClaimButton } from '../ClaimButton'
+import PostingCard, { type PostingContext } from './PostingCard'
+import { choosePlatform, platformLabel } from '../../../lib/posting-card-core'
 import type { Role } from '../../../lib/identity-core'
 
 type Version = {
@@ -99,6 +101,11 @@ type Detail = {
   viewer_role: Role
   /** the hats this viewer wears ON THIS ITEM — the server's own reading */
   acting_roles?: Role[]
+  /** which platforms this item is aimed at, when somebody set them */
+  platform_targets?: string[] | null
+  /** connected accounts + the live publish job, loaded WITH the item so the
+   *  posting card knows its own state before anyone clicks anything */
+  posting?: PostingContext | null
 }
 
 const STATUS_TINT: Record<string, string> = {
@@ -219,28 +226,6 @@ export default function ItemDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  // connected social publishing (the Zernio integration): what WOULD go out
-  type PublishPlan = {
-    targets: { platform: string }[]
-    missing: string[]
-    scheduledFor: string | null
-    blocked: string | null
-  }
-  const [plan, setPlan] = useState<PublishPlan | null>(null)
-  const [planBusy, setPlanBusy] = useState(false)
-  const checkPlan = async () => {
-    setPlanBusy(true)
-    try {
-      const res = await fetch(`/api/production/items/${id}/publish`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not check channels')
-      setPlan(json)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not check channels')
-    } finally {
-      setPlanBusy(false)
-    }
-  }
   /** "Publish/queue → who should hear about it?" — the client's assigned
    *  account managers come pre-ticked; anyone managing can be added. */
   const [publishPick, setPublishPick] = useState<{ publishNow: boolean } | null>(null)
@@ -284,9 +269,12 @@ export default function ItemDetailPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Publish failed')
-      toast.success(publishNow ? 'Publishing now via connected accounts' : 'Queued for its scheduled time')
+      // the same request moved the item to Scheduled — say so, because that is
+      // the click the owner used to have to make afterwards
+      toast.success(publishNow
+        ? 'Publishing now — the status moves to Published when the channel confirms'
+        : 'Scheduled — it will post automatically, no further clicks')
       setPublishPick(null)
-      setPlan(null)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Publish failed')
@@ -315,7 +303,6 @@ export default function ItemDetailPage() {
   }
   const [commentVisibility, setCommentVisibility] = useState<'internal' | 'client'>('internal')
 
-  const [schedDraft, setSchedDraft] = useState({ platform: 'instagram', scheduled_at: '', live_url: '' })
 
   // guard against the stale-blur race: these fields are uncontrolled, and a
   // live refetch updates state without touching the DOM — so a plain
@@ -483,10 +470,37 @@ export default function ItemDetailPage() {
   // a brief task wears its own words, drops edges that make no sense for it
   // (a booked shoot never "publishes"), and judges roles by its OWN rules —
   // filtering through the base pipeline's roles first hid brief-legal buttons
-  const transitions = isBrief
+  const rawTransitions = isBrief
     ? availableBriefTaskTransitionsAs(hats, detail.status)
     : isInternal ? availableTaskTransitionsAs(hats, detail.status)
     : availableTransitionsAs(hats, detail.status)
+
+  /**
+   * Does this item post from the app?
+   *
+   * If the client's channel is connected, the posting card IS the action for
+   * "scheduled" and "published" — the app queues the post, the provider posts
+   * it, and both status changes happen on their own. Leaving the workflow
+   * buttons up beside that is what made the owner press "Mark scheduled" by
+   * hand after queueing: two buttons for one move, and only one of them real.
+   *
+   * When nothing is connected the buttons stay, saying plainly what they are:
+   * a human posting by hand, recording it afterwards.
+   */
+  const postingAccounts = detail.posting?.accounts ?? []
+  const postingPlatform = choosePlatform(
+    detail.platform_targets ?? [], postingAccounts.map(a => a.platform),
+  )
+  const postsFromApp = isAsset
+    && Boolean(detail.posting?.configured)
+    && postingAccounts.some(a => a.platform === postingPlatform)
+
+  const AUTO_EDGES: ItemStatus[] = ['scheduled', 'published']
+  const transitions = rawTransitions
+    .filter(t => !(postsFromApp && AUTO_EDGES.includes(t.to)))
+    .map(t => (isAsset && !postsFromApp && AUTO_EDGES.includes(t.to))
+      ? { ...t, label: `${t.label} (manual)` }
+      : t)
   // a brief hands its last stages to an account manager and then to nobody —
   // no scheduler is ever coming for a shoot
   const turns = isBrief ? BRIEF_STATUS_TURN : isInternal ? TASK_STATUS_TURN : STATUS_TURN
@@ -502,7 +516,15 @@ export default function ItemDetailPage() {
     },
     turns,
   )
-  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : isInternal ? TASK_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
+  const baseMeaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : isInternal ? TASK_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
+  // "Needs a posting time" and "waiting to go live" are both true, but neither
+  // says the thing that changed: nobody presses a status button any more
+  const meaning = !postsFromApp ? baseMeaning
+    : detail.status === 'approved_for_scheduling'
+      ? `Signed off. Pick a time under Posting — ${platformLabel(postingPlatform)} posts it for you.`
+      : detail.status === 'scheduled'
+        ? `Queued with ${platformLabel(postingPlatform)}. It posts itself, and this moves to Published when it does.`
+        : baseMeaning
 
   const schedulerIds = schedulerIdsOf(detail)
   const nameOf = (uid: string) => {
@@ -898,30 +920,57 @@ export default function ItemDetailPage() {
     }
   }
 
-  const saveSchedule = async (mode: 'date' | 'live' | 'posted') => {
+  /** The manual path — a platform, a time, a link, or "it went out". */
+  const saveManualSchedule = async (input: {
+    platform: string; whenIso?: string | null; liveUrl?: string; markPosted?: boolean
+  }) => {
     setBusy('schedule')
     try {
       const res = await fetch(`/api/production/items/${id}/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          platform: schedDraft.platform,
-          ...(schedDraft.scheduled_at ? { scheduled_at: new Date(schedDraft.scheduled_at).toISOString() } : {}),
-          ...(mode === 'live' && schedDraft.live_url ? { live_url: schedDraft.live_url } : {}),
-          ...(mode === 'posted' ? { mark_posted: true } : {}),
+          platform: input.platform,
+          ...(input.whenIso ? { scheduled_at: input.whenIso } : {}),
+          ...(input.liveUrl ? { live_url: input.liveUrl } : {}),
+          ...(input.markPosted ? { mark_posted: true } : {}),
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed')
-      toast.success(mode === 'live' ? 'Live link saved'
-        : mode === 'posted' ? 'Marked posted — no link'
-        : 'Date set — you can mark it scheduled now')
-      setSchedDraft(d => ({ ...d, live_url: '' }))
+      toast.success(input.liveUrl ? 'Live link saved'
+        : input.markPosted ? 'Marked posted — no link'
+        : 'Date set')
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setBusy(null)
     }
+  }
+
+  /**
+   * The app-posting path: record the time, then open "who should hear about
+   * it". Two steps because the provider needs the time from the schedule row,
+   * and one press because the operator is making one decision.
+   */
+  const postFromApp = async (platform: string, whenIso: string | null, publishNow: boolean) => {
+    setBusy('schedule')
+    try {
+      if (whenIso) {
+        const res = await fetch(`/api/production/items/${id}/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform, scheduled_at: whenIso }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save the time')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save the time')
+      setBusy(null)
+      return
+    }
+    setBusy(null)
+    await openPublishPick(publishNow)
   }
 
   return (
@@ -1609,7 +1658,7 @@ export default function ItemDetailPage() {
 
       {isAsset && (canSchedule || detail.schedule.length > 0) && (
         <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Scheduling</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm font-semibold">Posting</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-2.5 pt-0">
             {detail.schedule.map(s => (
               <div key={s.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
@@ -1631,114 +1680,22 @@ export default function ItemDetailPage() {
               </div>
             ))}
             {canSchedule && (
-              <div className="mt-1 grid gap-2.5">
-                <div className="grid grid-cols-2 gap-2">
-                  <Select value={schedDraft.platform} onValueChange={v => v && setSchedDraft(d => ({ ...d, platform: v }))}>
-                    {/* the trigger renders the item's own text, so it needs the
-                        same capitalisation the list has */}
-                    <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PLATFORMS.map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Input type="datetime-local" value={schedDraft.scheduled_at} className="font-mono text-xs"
-                    onChange={e => setSchedDraft(d => ({ ...d, scheduled_at: e.target.value }))} />
-                </div>
-                {/* the picker's field order is the BROWSER's locale and not
-                    ours to set — so never claim an order, just read the
-                    chosen moment back in words */}
-                <p className="-mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-                  {schedDraft.scheduled_at
-                    ? new Date(schedDraft.scheduled_at).toLocaleString('en-AU', {
-                      weekday: 'short', day: 'numeric', month: 'long', year: 'numeric',
-                      hour: 'numeric', minute: '2-digit',
-                    })
-                    : 'Pick a date and time — it is read back here in words.'}
-                </p>
-                <div className="flex gap-2">
-                  <Input value={schedDraft.live_url} placeholder="Live URL once posted"
-                    onChange={e => setSchedDraft(d => ({ ...d, live_url: e.target.value }))} />
-                  <Button size="sm" variant="outline" disabled={busy === 'schedule'} onClick={() => saveSchedule('date')}>Set date</Button>
-                  <Button size="sm" disabled={busy === 'schedule' || !schedDraft.live_url} onClick={() => saveSchedule('live')}>Save the live link</Button>
-                </div>
-                <div>
-                  <Button size="sm" variant="outline" className="w-fit" disabled={busy === 'schedule'} onClick={() => saveSchedule('posted')}>
-                    Mark as posted
-                  </Button>
-                  <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-                    For anything that went out without a link — a Story, or files handed over.
-                  </p>
-                </div>
-
-                {/* connected publishing: post through the client's linked
-                    social accounts instead of copying files by hand */}
-                {!canAutoPublish ? (
-                  <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-                    Publishing to the channels is done by the scheduling team; add the live link here once it&rsquo;s up.
-                  </p>
-                ) : (
-                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-                      Connected accounts
-                    </span>
-                    <Button variant="outline" size="sm" disabled={planBusy} onClick={checkPlan}>
-                      {planBusy ? 'Checking…' : plan ? 'Re-check' : 'Check channels'}
-                    </Button>
-                  </div>
-                  {plan && (
-                    <>
-                      {plan.blocked ? (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">{plan.blocked}</p>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {plan.targets.map(t => (
-                              <Badge key={t.platform} variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 font-normal capitalize text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
-                                <CheckCircle2 className="h-3 w-3" /> {t.platform}
-                              </Badge>
-                            ))}
-                            {plan.missing.map(p => (
-                              <Badge key={p} variant="outline" className="border-amber-200 bg-amber-50 font-normal capitalize text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">
-                                {p} — not connected
-                              </Badge>
-                            ))}
-                            {plan.targets.length === 0 && plan.missing.length === 0 && (
-                              <span className="text-xs text-zinc-400">No platform targets on this item.</span>
-                            )}
-                          </div>
-                          {plan.missing.length > 0 && (
-                            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                              Connect accounts on the client&rsquo;s <span className="font-medium">Social</span> tab to publish there automatically.
-                            </p>
-                          )}
-                          {plan.targets.length > 0 && (
-                            <>
-                              <div className="flex flex-wrap gap-2">
-                                <Button size="sm" disabled={busy !== null} onClick={() => void openPublishPick(true)}>
-                                  {busy === 'auto-publish' ? 'Working…' : 'Publish now'}
-                                </Button>
-                                {plan.scheduledFor && (
-                                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openPublishPick(false)}>
-                                    Queue for {new Date(plan.scheduledFor).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-                                  </Button>
-                                )}
-                              </div>
-                              {!plan.scheduledFor && (
-                                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                                  To post at a specific time: pick a date in the field above, press
-                                  <span className="font-medium"> Set date</span>, and a Queue button appears here.
-                                </p>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-                )}
-              </div>
+              <PostingCard
+                itemId={id}
+                clientId={detail.client_id}
+                clientName={detail.client_name ?? 'This client'}
+                clientUsers={detail.client_users ?? []}
+                platformTargets={detail.platform_targets ?? []}
+                caption={detail.caption}
+                posting={detail.posting ?? null}
+                entries={detail.schedule}
+                canAutoPublish={canAutoPublish}
+                platforms={PLATFORMS}
+                onPost={postFromApp}
+                onManual={saveManualSchedule}
+                onChanged={load}
+                busy={busy !== null}
+              />
             )}
           </CardContent>
         </Card>

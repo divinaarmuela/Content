@@ -29,6 +29,42 @@ export function contentTypePlural(type: string | null | undefined): string {
   return one ? `${one}s` : 'Other pieces'
 }
 
+/**
+ * The word on a piece's card.
+ *
+ * Rule 2 above still holds — internal churn is one calm state — but "Approved"
+ * on a piece that already has a posting time told the client less than we know.
+ * A booked post IS a different thing from an approved one to the person waiting
+ * for it: it has a date and a time, and saying so is the whole reassurance.
+ * Everything before their approval is unchanged.
+ */
+export function clientStatusWord(status: string, fallback: string): string {
+  return status === 'scheduled' ? 'Scheduled' : fallback
+}
+
+/**
+ * A posting time in the client's own words, in the agency's timezone.
+ *
+ * "Instagram · 27 Aug" left the client to guess the hour of a post they may
+ * want to be ready for. The zone is fixed to Melbourne deliberately: the time
+ * is a fact about when it goes out, not about where the reader happens to be
+ * sitting when they open the page.
+ */
+export function scheduledWhen(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  // en-AU renders "Thu, 27 Aug"; one comma in the line is enough, and it
+  // belongs before the time
+  const day = d.toLocaleDateString('en-AU', {
+    timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short',
+  }).replace(/,\s*/g, ' ').trim()
+  const time = d.toLocaleTimeString('en-AU', {
+    timeZone: 'Australia/Melbourne', hour: 'numeric', minute: '2-digit', hour12: true,
+  }).toLowerCase().replace(/\s+/g, ' ')
+  return `${day}, ${time}`
+}
+
 /** A shoot's stage, for a client who has never been on a film set. */
 export const SHOOT_STATUS_LABELS: Record<string, string> = {
   brief: 'Being planned',

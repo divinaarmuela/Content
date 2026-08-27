@@ -2,11 +2,15 @@ import 'server-only'
 import { announceItemChange } from './production-live'
 import { supabase } from '@/lib/supabase'
 import { queuePublishJob } from './publish'
+import { getPublisher } from './publisher'
 import {
   isPlatform, mediaTypeFor,
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
+import { performTransition, systemActor, type ContentItem } from './workflow'
+import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
+import type { TeamUser } from './authz'
 
 /**
  * The bridge from production to the outside world.
@@ -158,15 +162,79 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   return plan
 }
 
-/** Queue an approved item for publishing. Returns the job id. */
+/** Everything the posting card needs to know its own state, without a click. */
+export type PostingContext = {
+  /** is a provider configured at all */
+  configured: boolean
+  /** the client's live connected accounts */
+  accounts: { platform: string; username: string | null; name: string | null }[]
+  /** the item's most recent publish job, whatever became of it */
+  job: {
+    id: string
+    status: string
+    scheduled_for: string | null
+    permalink: string | null
+    error: string | null
+    published_at: string | null
+  } | null
+}
+
+/**
+ * Connected-accounts state, loaded WITH the item.
+ *
+ * The card used to need a "Check channels" click before it could say anything
+ * — which meant the default state of the most consequential card on the page
+ * was "I don't know". Two small indexed reads is a cheaper price than that.
+ */
+export async function loadPostingContext(
+  itemId: string, clientId: string,
+): Promise<PostingContext> {
+  const [accountsRes, jobRes] = await Promise.all([
+    supabase
+      .from('social_accounts')
+      .select('platform, username, name')
+      .eq('client_id', clientId)
+      .eq('active', true),
+    supabase
+      .from('publish_jobs')
+      .select('id, status, scheduled_for, permalink, error, published_at')
+      .eq('content_item_id', itemId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  return {
+    configured: getPublisher().configured(),
+    accounts: (accountsRes.data ?? []).map(a => ({
+      platform: String(a.platform).toLowerCase(),
+      username: (a.username as string) ?? null,
+      name: (a.name as string) ?? null,
+    })),
+    job: jobRes.data
+      ? {
+        id: jobRes.data.id as string,
+        status: jobRes.data.status as string,
+        scheduled_for: (jobRes.data.scheduled_for as string) ?? null,
+        permalink: (jobRes.data.permalink as string) ?? null,
+        error: (jobRes.data.error as string) ?? null,
+        published_at: (jobRes.data.published_at as string) ?? null,
+      }
+      : null,
+  }
+}
+
+/** Queue an approved item for publishing. Returns the job id and the plan it
+ *  was built from — the caller needs the targets to record what was scheduled
+ *  where, without planning the same item twice. */
 export async function queueItemPublish(
   itemId: string,
   opts: { publishNow?: boolean; createdBy?: string } = {}
-): Promise<{ id: string } | { error: string; issues?: string[] }> {
+): Promise<{ id: string; plan: ItemPublishPlan } | { error: string; issues?: string[] }> {
   const plan = await planItemPublish(itemId)
   if (plan.blocked) return { error: plan.blocked }
 
-  return queuePublishJob({
+  const queued = await queuePublishJob({
     clientId: plan.clientId,
     contentItemId: plan.itemId,
     caption: plan.caption,
@@ -175,6 +243,76 @@ export async function queueItemPublish(
     scheduledFor: opts.publishNow ? null : plan.scheduledFor,
     createdBy: opts.createdBy,
   })
+  if ('error' in queued) return queued
+  return { id: queued.id, plan }
+}
+
+/**
+ * Record what was just handed to the provider, per platform.
+ *
+ * The schedule row is the board's and the client portal's version of the same
+ * fact — "Instagram, Thursday 6pm". Queueing without writing it left the item
+ * queued at the provider and blank on every screen that reads schedule_entries,
+ * which is most of them. `onConflict` keeps a human-set time rather than
+ * stamping over it.
+ */
+async function recordQueuedSchedule(
+  itemId: string, targets: Target[], scheduledFor: string | null,
+): Promise<void> {
+  if (targets.length === 0) return
+  const when = scheduledFor ?? new Date().toISOString()
+  const { data: existing } = await supabase
+    .from('schedule_entries').select('platform, scheduled_at').eq('item_id', itemId)
+  const has = new Map((existing ?? []).map(r => [String(r.platform), r.scheduled_at]))
+
+  const rows = targets
+    // a platform that already carries a time keeps it — the queue used that
+    // same time, so rewriting it would only churn the row
+    .filter(t => !has.get(t.platform))
+    .map(t => ({ item_id: itemId, platform: t.platform, scheduled_at: when }))
+  if (rows.length === 0) return
+  const { error } = await supabase
+    .from('schedule_entries').upsert(rows, { onConflict: 'item_id,platform' })
+  if (error) console.error('could not record the queued schedule', itemId, error.message)
+}
+
+/**
+ * Queueing IS scheduling — so the status says so, in the same request.
+ *
+ * The owner queued a post and then had to press "Mark scheduled" by hand;
+ * forgetting meant the board said "Approved" about something already sitting
+ * in Instagram's scheduler. The person who queued it holds the scheduling hat
+ * by definition (the endpoint is scheduler-gated), so the move is theirs and it
+ * is logged as theirs.
+ *
+ * Idempotent: an item already past "Approved" returns null and moves nothing.
+ * Best-effort: a failed status change must never make a queued post look
+ * un-queued — the post is real either way.
+ */
+export async function markScheduledAfterQueue(
+  actor: TeamUser,
+  item: ContentItem,
+  plan: ItemPublishPlan,
+  publishNow: boolean,
+): Promise<ItemStatus | null> {
+  await recordQueuedSchedule(item.id, plan.targets, publishNow ? null : plan.scheduledFor)
+
+  const next = statusAfterQueue(item.status)
+  if (!next) return null
+  try {
+    const updated = await performTransition(actor, item, next, {
+      grantedHats: ['scheduler'],
+      // the publish route has already emailed the client's managers — the ones
+      // the scheduler picked — saying this is scheduled. The item's owner still
+      // hears it from here: nobody else tells the editor their piece is booked.
+      skipAudiences: ['account_managers'],
+    })
+    return updated.status
+  } catch (e) {
+    // 409 = somebody else moved it first, which is the outcome we wanted
+    console.error('could not mark the item scheduled after queueing', item.id, e)
+    return null
+  }
 }
 
 /**
@@ -187,7 +325,8 @@ export async function queueItemPublish(
  */
 export async function recordPublishOnItem(
   contentItemId: string,
-  permalink: string | null
+  permalink: string | null,
+  platforms: string[] = [],
 ): Promise<void> {
   try {
     const patch: Record<string, unknown> = {
@@ -197,27 +336,29 @@ export async function recordPublishOnItem(
     if (permalink) patch.live_url = permalink
 
     await supabase.from('schedule_entries').update(patch).eq('item_id', contentItemId)
-    // the post is already live on the platform, so record it — but capture the
-    // prior status so the audit trail has the single most consequential
-    // transition (every other status change writes a workflow_activity row)
-    const { data: before } = await supabase
-      .from('content_items').select('status, client_id').eq('id', contentItemId).maybeSingle()
-    const { data: updated } = await supabase
+
+    // The status change runs through the ordinary machine, wearing a system
+    // actor: the same optimistic-concurrency guard, the same workflow_activity
+    // row, the same notifications the team gets for every other move. The old
+    // code wrote content_items.status directly and hand-rolled the log entry,
+    // which meant "it went live" was the one transition that skipped every
+    // guarantee the rest of the workflow has.
+    const { data: row } = await supabase
       .from('content_items')
-      .update({ status: 'published', updated_at: new Date().toISOString() })
+      .select('id, client_id, batch_id, title, content_type, status, owner_id, caption, client_approval_required, current_version_number, scheduler_ids')
       .eq('id', contentItemId)
-      .select('client_id')
       .maybeSingle()
-    if (updated) {
-      await supabase.from('workflow_activity').insert({
-        actor_id: null, client_id: updated.client_id,
-        entity_type: 'content_item', entity_id: contentItemId,
-        action: 'status_change', old_value: before?.status ?? null, new_value: 'published',
-        detail: 'auto-published to connected account',
-      })
-      // open boards must hear about it, not wait for the 60s poll
-      announceItemChange({ item_id: contentItemId, client_id: updated.client_id, status: 'published', kind: 'transition' })
+    if (!row) return
+
+    const actor = systemActor(systemActorLabel(platforms))
+    let item = row as unknown as ContentItem
+    for (const to of systemPublishSteps(item.status)) {
+      item = await performTransition(actor, item, to)
     }
+    // open boards must hear about it, not wait for the 60s poll
+    announceItemChange({
+      item_id: contentItemId, client_id: item.client_id, status: item.status, kind: 'transition',
+    })
   } catch (e) {
     console.error('could not record publish on content item', contentItemId, e)
   }

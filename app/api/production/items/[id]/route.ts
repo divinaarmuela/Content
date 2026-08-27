@@ -5,6 +5,7 @@ import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
+import { loadPostingContext } from '../../../../lib/production-publish'
 import {
   itemMirrorProgress, mirrorRawAssets, newRawAssets, type RawAsset,
 } from '../../../../lib/gdrive-mirror'
@@ -95,8 +96,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .map(u => ({ name: u.name || u.email, email: u.email }))
     }
 
+    // The posting card's whole state — connected accounts and the live publish
+    // job — comes down with the item so the card knows what it is before
+    // anybody clicks "Check channels". Clients never see the plumbing, and a
+    // shoot brief has nothing to post.
+    const kindSlug = (kindRes.data?.work_kinds as { slug?: string } | null)?.slug ?? null
+    const usesMedia = (kindRes.data?.work_kinds as { uses_media?: boolean } | null)?.uses_media
+    const posting = user.role !== 'client' && kindSlug !== 'shoot_brief' && usesMedia !== false
+      ? await loadPostingContext(id, item.client_id as string)
+      : null
+
     return NextResponse.json({
       ...shaped,
+      posting,
       client_name: clientRes.data?.name ?? null,
       owner_name,
       managers,

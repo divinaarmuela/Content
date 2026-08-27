@@ -1,5 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { PLAN_STATE_LINE, planState } from '../app/lib/portal-words'
+import {
+  PLAN_STATE_LINE, clientStatusWord, planState, scheduledWhen,
+} from '../app/lib/portal-words'
+
+describe('clientStatusWord — a booked post says so', () => {
+  it('calls a scheduled piece Scheduled, not Approved', () => {
+    expect(clientStatusWord('scheduled', 'Approved')).toBe('Scheduled')
+  })
+
+  it('leaves every other stage exactly as the client label had it', () => {
+    expect(clientStatusWord('approved_for_scheduling', 'Approved')).toBe('Approved')
+    expect(clientStatusWord('published', 'Published')).toBe('Published')
+    expect(clientStatusWord('client_review', 'Needs your review')).toBe('Needs your review')
+    expect(clientStatusWord('draft_uploaded', 'In production')).toBe('In production')
+  })
+})
+
+describe('scheduledWhen — the day AND the hour, in Melbourne', () => {
+  it('reads back a posting time in the client’s words', () => {
+    // 13:30 Melbourne on Thursday 27 August 2026
+    expect(scheduledWhen('2026-08-27T03:30:00.000Z')).toBe('Thu 27 Aug, 1:30 pm')
+  })
+
+  it('is Melbourne’s clock, not the reader’s', () => {
+    // 09:00 Melbourne, expressed in UTC
+    expect(scheduledWhen('2026-08-26T23:00:00.000Z')).toBe('Thu 27 Aug, 9:00 am')
+  })
+
+  it('shows nothing rather than "Invalid Date"', () => {
+    expect(scheduledWhen(null)).toBeNull()
+    expect(scheduledWhen('')).toBeNull()
+    expect(scheduledWhen('not a date')).toBeNull()
+  })
+})
 
 describe('planState — the client’s own decision, said back to them', () => {
   it('an unshared plan has nothing to say, whatever the brief is doing', () => {

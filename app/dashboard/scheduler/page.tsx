@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
 import { STATUS_LABELS, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
+import { choosePlatform, platformLabel } from '../../lib/posting-card-core'
 import {
   canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
   type ScopeMode, type Viewer,
@@ -30,6 +31,8 @@ import { useRole } from '../useRole'
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
 type Item = {
   id: string
+  client_id?: string | null
+  platform_targets?: string[] | null
   title: string
   content_type: string
   status: ItemStatus
@@ -64,6 +67,9 @@ export default function SchedulerPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
+  /** which platforms each client has connected — so a row can say whether the
+   *  next move is "schedule it" or "we can't post for them yet" */
+  const [connected, setConnected] = useState<Record<string, string[]>>({})
 
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
@@ -119,6 +125,29 @@ export default function SchedulerPage() {
   }, [loadOrdered])
 
   useEffect(() => { load() }, [load])
+
+  // one call for every client's channels — the queue's whole job is telling a
+  // scheduler what to do next, and "send them a connect link" is a different
+  // job from "pick a time"
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/social/accounts', { cache: 'no-store' })
+        if (!res.ok) return
+        const json = await res.json()
+        const map: Record<string, string[]> = {}
+        for (const a of (json.accounts ?? []) as { client_id: string | null; platform: string; active: boolean }[]) {
+          if (!a.active || !a.client_id) continue
+          ;(map[a.client_id] ??= []).push(String(a.platform).toLowerCase())
+        }
+        if (!cancelled) setConnected(map)
+      } catch {
+        // the queue still works without it — every row falls back to "Open"
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // live queue: an approval lands in "To schedule" the moment the AM clicks it
   useProductionLive(load)
@@ -223,6 +252,12 @@ export default function SchedulerPage() {
                 const handedNames = schedulerIdsOf(item)
                   .map(id => nameById.get(id))
                   .filter((n): n is string => !!n)
+                // the row's next move follows the client's channels, not the
+                // status: an unconnected client needs a connect link before a
+                // posting time means anything
+                const clientChannels = connected[item.client_id ?? ''] ?? []
+                const platform = choosePlatform(item.platform_targets ?? [], clientChannels)
+                const postsFromApp = clientChannels.includes(platform)
                 return (
                   <TableRow key={item.id}>
                     <TableCell>
@@ -236,6 +271,19 @@ export default function SchedulerPage() {
                             you / Unassigned pills said it a second time, in
                             different words, on the same row. */}
                         <TurnChip status={item.status} item={item} viewer={viewer!} />
+                        {/* how this one goes out. "Queued · auto" is the whole
+                            point of the new flow being visible from the queue:
+                            nobody has to open the item to find out whether a
+                            human still owes it a click. */}
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                          postsFromApp
+                            ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400'
+                            : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                        }`}>
+                          {postsFromApp
+                            ? (item.status === 'approved_for_scheduling' ? 'Auto' : 'Queued · auto')
+                            : 'Manual'}
+                        </span>
                         {assignment === 'other' && handedNames.length > 0 && (
                           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                             Handed to {handedNames.join(', ')}
@@ -284,11 +332,16 @@ export default function SchedulerPage() {
                           && canClaimScheduler(item, viewer!) && (
                           <ClaimButton itemId={item.id} hat="scheduler" label="I’ll schedule this" onDone={load} />
                         )}
-                        <Button variant="outline" size="sm" asChild>
+                        <Button variant={lane === 'approved_for_scheduling' && postsFromApp ? 'default' : 'outline'} size="sm" asChild>
+                          {/* the click opens the item's posting card, which is
+                              where the one real action lives — the row names
+                              that action rather than describing a page */}
                           <Link href={`/dashboard/production/${item.id}`}>
-                            {/* the click opens the item so you can pick a
-                                platform and a time — it schedules nothing */}
-                            {lane === 'approved_for_scheduling' ? 'Set a date' : 'Open'} <ArrowRight className="h-3.5 w-3.5" />
+                            {lane !== 'approved_for_scheduling'
+                              ? 'Open'
+                              : postsFromApp
+                                ? `Schedule on ${platformLabel(platform)}`
+                                : 'Send connect link'} <ArrowRight className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
                       </div>
