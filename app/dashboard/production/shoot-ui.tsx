@@ -29,9 +29,10 @@ export const BATCH_STATUS_STYLE: Record<BatchStatus, string> = {
   wrapped: 'border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400',
 }
 
-export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
-  brief: 'In planning', locked: 'Date locked', shot: 'Shot', wrapped: 'Wrapped',
-}
+/** The words for those four stages live with the states themselves, in
+ *  batch-brief-core — re-exported here because this is where the surfaces
+ *  already reach for a shoot's presentation. */
+export { BATCH_STATUS_LABEL } from '../../lib/batch-brief-core'
 
 /** Priority flag colour. One copy, worn by every work card. */
 export const PRIORITY_TINT: Record<string, string> = {

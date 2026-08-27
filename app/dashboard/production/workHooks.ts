@@ -53,6 +53,45 @@ export function usePersistedScope(key: string, role: Role | null): [ScopeSet, (s
 }
 
 /**
+ * A choice from a fixed set, remembered between visits — Board vs Calendar,
+ * month vs week, a layer switched on.
+ *
+ * Same shape and same caution as the scope above: whatever is in storage is a
+ * guess, so a word we no longer understand falls back to the default rather
+ * than putting the page into a state it cannot draw. The read is in an effect
+ * because these pages prerender, and touching localStorage while the server
+ * is rendering is both a crash and a hydration mismatch.
+ */
+export function usePersistedChoice<T extends string>(
+  key: string, allowed: readonly T[], fallback: T,
+): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(fallback)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(key)
+      if (saved && (allowed as readonly string[]).includes(saved)) setValue(saved as T)
+    } catch { /* a blocked localStorage is not worth a broken page */ }
+    // `allowed` is a literal at every call site; keying on its contents keeps
+    // an inline array from re-running this on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, allowed.join(',')])
+
+  const set = useCallback((v: T) => {
+    setValue(v)
+    try { localStorage.setItem(key, v) } catch { /* private mode */ }
+  }, [key])
+
+  return [value, set]
+}
+
+/** On/off, remembered — a layer toggle is not a three-way choice. */
+export function usePersistedFlag(key: string, fallback = false): [boolean, (v: boolean) => void] {
+  const [value, set] = usePersistedChoice(key, ['on', 'off'] as const, fallback ? 'on' : 'off')
+  return [value === 'on', useCallback((v: boolean) => set(v ? 'on' : 'off'), [set])]
+}
+
+/**
  * id → display name for the people who can carry a job.
  *
  * `/api/team` is manager-gated, so this is asked for only when the viewer is

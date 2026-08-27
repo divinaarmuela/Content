@@ -16,6 +16,13 @@ export type BatchStatus = (typeof BATCH_STATUSES)[number]
 
 export type BatchTransitionRule = { roles: Role[]; label: string }
 
+/** The four stages, in the words the team uses for them. Lives here, with the
+ *  states themselves, so the shoots page and the calendars cannot drift into
+ *  two vocabularies for one status. */
+export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
+  brief: 'In planning', locked: 'Date locked', shot: 'Shot', wrapped: 'Wrapped',
+}
+
 export const BATCH_TRANSITIONS: Partial<Record<BatchStatus, Partial<Record<BatchStatus, BatchTransitionRule>>>> = {
   brief: {
     locked: { roles: ['editor', 'account_manager'], label: 'Lock shoot date' },
