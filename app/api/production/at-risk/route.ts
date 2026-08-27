@@ -7,6 +7,7 @@ import {
   type PaceStatus,
 } from '../../../lib/agreement-core'
 import { isInternalKind } from '../../../lib/task-kind-core'
+import { safeZone } from '../../../lib/timezone-core'
 
 /**
  * The cross-client "are we meeting the month" rollup. For every client the
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
     const daysInMonth = new Date(year, month, 0).getDate()
 
     const ids = await accessibleClientIds(user)
-    let clientsQ = supabase.from('clients').select('id, name').eq('status', 'active').order('name')
+    let clientsQ = supabase.from('clients').select('id, name, timezone').eq('status', 'active').order('name')
     if (ids !== null) clientsQ = clientsQ.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
     const { data: clients } = await clientsQ
     const clientIds = (clients ?? []).map(c => c.id)
@@ -72,7 +73,11 @@ export async function GET(req: Request) {
         .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
         .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
         .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
-      const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
+      // each client's month is counted on their own calendar — this rollup
+      // spans zones, so there is no single "this month" for the page
+      const progress = computeMonthlyProgress(
+        clientItems, batchesById, month, year, quotas, safeZone(client.timezone as string | null),
+      )
       const withPace = progress.map(p => ({
         type: p.type, label: p.label, quota: p.quota, delivered: p.delivered, planned: p.planned,
         in_production: p.in_production, approved: p.approved, scheduled: p.scheduled, posted: p.posted,

@@ -185,17 +185,17 @@ export default function ClientPortalPage() {
       </div>
 
       {data.changes_requested.length > 0 && (
-        <PortalSection title="Your changes are being made" items={data.changes_requested} empty="" />
+        <PortalSection title="Your changes are being made" items={data.changes_requested} empty="" tz={data.client.timezone} />
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." />
-        <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." />
+        <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." tz={data.client.timezone} />
+        <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." tz={data.client.timezone} />
       </div>
       {/* the portal cards are themed by --p-* variables; inside the dashboard
           shell they take the dashboard's own tokens */}
       <PortalSection title="Published" items={data.published}
         lines={publishedLines(data)}
-        empty="Published posts will appear here with live links." />
+        empty="Published posts will appear here with live links." tz={data.client.timezone} />
     </div>
   )
 }

@@ -13,6 +13,7 @@ import {
   monthTotals, typeTotals,
   type MonthTotals, type PostMetrics, type TypeTotals,
 } from './post-analytics-core'
+import { monthInZone, safeZone } from './timezone-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -85,7 +86,9 @@ export type PortalShoot = {
 }
 
 export type PortalData = {
-  client: { id: string; name: string }
+  /** `timezone` is the client's own — every posting time on the portal is
+   *  rendered in it, and "this month" is counted by its calendar. */
+  client: { id: string; name: string; timezone: string }
   /** the name of the account manager assigned to this client, when there is
    *  one — the portal says a person's name instead of an org-chart role */
   am_name: string | null
@@ -131,11 +134,18 @@ export async function accountManagerName(clientId: string): Promise<string | nul
 
 export async function getPortalData(clientId: string): Promise<PortalData | null> {
   const now = new Date()
-  const month = now.getMonth() + 1
-  const year = now.getFullYear()
 
-  const [clientRes, itemsRes, commitmentRes, brandRes, shootsRes, amRes] = await Promise.all([
-    supabase.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
+  // The zone has to be read BEFORE "this month" can be worked out: on the last
+  // night of a month the server's idea of the date and the client's are one
+  // day and one month apart, and the commitment tiles would show the wrong
+  // month's quota to the only person who cares about it.
+  const { data: clientRow } = await supabase
+    .from('clients').select('id, name, timezone').eq('id', clientId).maybeSingle()
+  if (!clientRow) return null
+  const tz = safeZone(clientRow.timezone as string | null)
+  const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
+
+  const [itemsRes, commitmentRes, brandRes, shootsRes, amRes] = await Promise.all([
     supabase
       .from('content_items')
       .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug, uses_media)')
@@ -163,7 +173,6 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // who the client actually deals with — read alongside everything else
     accountManagerName(clientId),
   ])
-  if (!clientRes.data) return null
   type KindRow = { slug?: string | null; uses_media?: boolean | null } | null
   // a shoot BRIEF is internal planning work riding the item pipeline — the
   // client sees the shoot in SHOOT PLANS, never as a mystery "other" card
@@ -316,7 +325,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   refreshStaleAnalyticsInBackground(clientId)
 
   return {
-    client: clientRes.data,
+    client: { id: clientRow.id as string, name: clientRow.name as string, timezone: tz },
     am_name: amRes,
     brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
@@ -330,8 +339,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     approved: bucket(['approved_for_scheduling']),
     scheduled: bucket(['scheduled']),
     published,
-    published_totals: monthTotals(publishedRows),
-    published_by_type: typeTotals(publishedRows),
+    // "this month" is the client's month, counted on the client's calendar —
+    // a post that went out at 11 pm on 31 August is August's, wherever the
+    // server happened to be standing
+    published_totals: monthTotals(publishedRows, now, tz),
+    published_by_type: typeTotals(publishedRows, now, tz),
     shoots,
   }
 }

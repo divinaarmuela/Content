@@ -71,6 +71,8 @@ describe('no raw database words reach the screen', () => {
       why: 'fallback for an unmapped analytics metric key, not an item status' },
     { file: 'app/lib/gmail-core.ts', contains: "replace(/-/g, '+').replace(/_/g",
       why: 'base64url → base64 decoding; nothing to do with words on screen' },
+    { file: 'app/lib/timezone-core.ts', contains: "last.replace(/_/g",
+      why: 'the city out of an IANA zone id — "Los_Angeles" is IANA\'s spelling of a place name, not a database status word' },
   ]
 
   const hits = sweep(/replace\(\/_\/g/)

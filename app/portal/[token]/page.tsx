@@ -144,17 +144,17 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
           // that the note landed — not their piece filed under "in production"
           <Reveal gate={false}>
             <PortalSection title="Your changes are being made" items={data.changes_requested}
-              empty="" token={token} />
+              empty="" token={token} tz={data.client.timezone} />
           </Reveal>
         )}
         <div className="grid gap-12 lg:grid-cols-2">
-          <Reveal gate={false}><PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." token={token} /></Reveal>
-          <Reveal gate={false} delay={120}><PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} /></Reveal>
+          <Reveal gate={false}><PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." token={token} tz={data.client.timezone} /></Reveal>
+          <Reveal gate={false} delay={120}><PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." token={token} tz={data.client.timezone} /></Reveal>
         </div>
         <Reveal gate={false}>
           <PortalSection title="Published" items={data.published}
             lines={publishedLines(data)}
-            empty="Published posts appear here with live links." token={token} />
+            empty="Published posts appear here with live links." token={token} tz={data.client.timezone} />
         </Reveal>
       </main>
 

@@ -335,7 +335,11 @@ export function ReviewCard({ item, token, amName, bare }: {
 
 /** A piece as a media card — the work stays visible at every stage, not
  *  just while it's being reviewed. No preview yet → a quiet dark slate. */
-export function PortalItemCard({ item, token }: { item: PortalItem; token?: string }) {
+export function PortalItemCard({ item, token, tz }: {
+  item: PortalItem; token?: string
+  /** the client's own zone — every posting time on the card is in it */
+  tz?: string
+}) {
   const typeLabel = contentTypeLabel(item.content_type)
   const slides = slidesFor(item)
   // a black slate reading "in the works" under the word "Approved" is a
@@ -399,7 +403,7 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
                 <CalendarDays className="h-3 w-3" />
                 {/* the hour matters to whoever is waiting for it — a date
                     alone made them ask us what time it goes out */}
-                {s.platform} · {scheduledWhen(s.scheduled_at)}
+                {s.platform} · {scheduledWhen(s.scheduled_at, tz)}
               </span>
             ))}
             {/* the title already IS that link once the piece is live — a
@@ -418,8 +422,10 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
   )
 }
 
-export function PortalSection({ title, items, empty, token, lines }: {
+export function PortalSection({ title, items, empty, token, lines, tz }: {
   title: string; items: PortalItem[]; empty: string; token?: string
+  /** the client's own zone, handed down to every card's posting time */
+  tz?: string
   /** one-line roll-ups printed under the heading — the month's totals */
   lines?: (string | null)[]
 }) {
@@ -441,7 +447,7 @@ export function PortalSection({ title, items, empty, token, lines }: {
       )}
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
-        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} token={token} />)}</div>}
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} token={token} tz={tz} />)}</div>}
     </div>
   )
 }

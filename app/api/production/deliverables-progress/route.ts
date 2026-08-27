@@ -6,6 +6,7 @@ import {
   computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines,
 } from '../../../lib/agreement-core'
 import { isInternalKind } from '../../../lib/task-kind-core'
+import { safeZone } from '../../../lib/timezone-core'
 
 /**
  * "Are we hitting Releeph's 20 graphics this month?" — one number set,
@@ -39,6 +40,13 @@ export async function GET(req: Request) {
       supabase.from('batches').select('id, month, year').eq('client_id', clientId).limit(200),
     ])
 
+    // which month a published item lands in is decided on the CLIENT's
+    // calendar: a post that went out at 11 pm on the 31st is that month's
+    // delivery, whatever UTC calls it
+    const { data: client } = await supabase
+      .from('clients').select('timezone').eq('id', clientId).maybeSingle()
+    const tz = safeZone(client?.timezone as string | null)
+
     const lines = normaliseDeliverableLines(agreement?.deliverable_lines)
     const quotas = effectiveQuotas('lines' in lines ? lines.lines : [], commitment ?? null)
     const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
@@ -48,7 +56,7 @@ export async function GET(req: Request) {
       // nor does a research/strategy task — the agreement is what gets posted
       .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
       .map(i => ({ ...i, published_at: liveAtFromEntries((i as { schedule_entries?: { published_at?: string | null }[] | null }).schedule_entries) }))
-    const per_type = computeMonthlyProgress(producedItems, batchesById, month, year, quotas)
+    const per_type = computeMonthlyProgress(producedItems, batchesById, month, year, quotas, tz)
 
     return NextResponse.json({ month, year, per_type, has_agreement: Boolean(agreement) })
   } catch (e) {

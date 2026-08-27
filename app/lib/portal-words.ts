@@ -9,6 +9,8 @@
  *      on the card, never as a second status word.
  */
 
+import { DEFAULT_TZ, formatInZone } from './timezone-core'
+
 /** A content type in the client's words. `null` = not a thing they ordered
  *  (an internal "other" bucket) — the caller hides the chip entirely. */
 const CONTENT_TYPE_LABELS: Record<string, string> = {
@@ -43,26 +45,20 @@ export function clientStatusWord(status: string, fallback: string): string {
 }
 
 /**
- * A posting time in the client's own words, in the agency's timezone.
+ * A posting time in the client's own words, on the client's own clock.
  *
  * "Instagram · 27 Aug" left the client to guess the hour of a post they may
- * want to be ready for. The zone is fixed to Melbourne deliberately: the time
- * is a fact about when it goes out, not about where the reader happens to be
- * sitting when they open the page.
+ * want to be ready for. The zone is the CLIENT's, not the reader's and not the
+ * agency's: the time is a fact about when the post reaches their audience, and
+ * a client in Manila reading "9:00 am" must be reading Manila's nine o'clock.
+ * Melbourne used to be hard-coded here on the assumption that every client was
+ * one — the default keeps that true for the ones who are.
  */
-export function scheduledWhen(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  // en-AU renders "Thu, 27 Aug"; one comma in the line is enough, and it
-  // belongs before the time
-  const day = d.toLocaleDateString('en-AU', {
-    timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short',
-  }).replace(/,\s*/g, ' ').trim()
-  const time = d.toLocaleTimeString('en-AU', {
-    timeZone: 'Australia/Melbourne', hour: 'numeric', minute: '2-digit', hour12: true,
-  }).toLowerCase().replace(/\s+/g, ' ')
-  return `${day}, ${time}`
+export function scheduledWhen(
+  iso: string | null | undefined,
+  tz: string = DEFAULT_TZ,
+): string | null {
+  return formatInZone(iso, tz, 'full')
 }
 
 /** A shoot's stage, for a client who has never been on a film set. */

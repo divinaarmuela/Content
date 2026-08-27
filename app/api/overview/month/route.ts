@@ -7,6 +7,7 @@ import {
   normaliseDeliverableLines, paceStatus,
 } from '../../../lib/agreement-core'
 import { isInternalKind } from '../../../lib/task-kind-core'
+import { safeZone } from '../../../lib/timezone-core'
 import { melbourneMonthKey, PORTAL_TZ } from '../../../lib/post-analytics-core'
 import {
   buildMonthRows, monthKeyOf,
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
     const monthKey = monthKeyOf(month, year)
 
     const ids = await accessibleClientIds(user)
-    let clientsQ = supabase.from('clients').select('id, name').eq('status', 'active').order('name')
+    let clientsQ = supabase.from('clients').select('id, name, timezone').eq('status', 'active').order('name')
     if (ids !== null) clientsQ = clientsQ.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
     const { data: clients } = await clientsQ
     const clientIds = (clients ?? []).map(c => c.id as string)
@@ -113,6 +114,9 @@ export async function GET(req: Request) {
     const inputs: MonthClientInput[] = (clients ?? []).map(client => {
       const id = client.id as string
       const name = client.name as string
+      // this client's month, on this client's calendar — the table spans
+      // zones, and a Manila client's August does not start when Melbourne's does
+      const tz = safeZone(client.timezone as string | null)
       const linesRes = normaliseDeliverableLines(agByClient.get(id)?.deliverable_lines)
       const agreementLines = 'lines' in linesRes ? linesRes.lines : []
       const quotas = effectiveQuotas(agreementLines, cmByClient.get(id) ?? null)
@@ -128,7 +132,7 @@ export async function GET(req: Request) {
       let lastPost: MonthClientInput['last_post'] = null
       for (const i of clientItems) {
         if (!i.published_at) continue
-        if (melbourneMonthKey(i.published_at) !== monthKey) continue
+        if (melbourneMonthKey(i.published_at, tz) !== monthKey) continue
         if (!lastPost || i.published_at > lastPost.at) {
           lastPost = { at: i.published_at, item_id: i.id, title: i.title }
         }
@@ -136,7 +140,7 @@ export async function GET(req: Request) {
 
       const analyticsRows = analyticsByClient.get(id) ?? []
       if (quotas.length === 0) {
-        return { id, name, has_agreement: false, lines: [], last_post: lastPost, analytics: analyticsRows }
+        return { id, name, has_agreement: false, lines: [], last_post: lastPost, analytics: analyticsRows, tz }
       }
 
       // pacing runs on the agreement's own clock: a deal signed mid-month is
@@ -146,7 +150,7 @@ export async function GET(req: Request) {
         (agByClient.get(id) as { start_date?: string | null } | undefined)?.start_date,
         month, year, { day: dayOfMonth, daysInMonth },
       )
-      const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas)
+      const progress = computeMonthlyProgress(clientItems, batchesById, month, year, quotas, tz)
       const lines: MonthTypeLine[] = progress.map(p => ({
         type: p.type,
         label: p.label,
@@ -162,7 +166,7 @@ export async function GET(req: Request) {
       }))
       return {
         id, name, has_agreement: true, not_started: window === null,
-        lines, last_post: lastPost, analytics: analyticsRows,
+        lines, last_post: lastPost, analytics: analyticsRows, tz,
       }
     })
 

@@ -59,6 +59,9 @@ export type MonthClientInput = {
   lines?: MonthTypeLine[]
   last_post?: LastPost | null
   analytics?: MonthAnalyticsRow[]
+  /** this client's own zone. The table spans clients, so there is no single
+   *  "this month" for the page — each row's month boundary is its own. */
+  tz?: string | null
 }
 
 /** One table row, ready to render. */
@@ -79,6 +82,9 @@ export type MonthClientRow = {
   last_post: LastPost | null
   /** null = nothing measured yet, which is NOT zero views */
   views: number | null
+  /** the client's own zone, so whoever renders this row's dates renders them
+   *  on the same calendar the row was counted on */
+  tz: string
 }
 
 /** "2026-08" for a month/year pair — the key `melbourneMonthKey` produces. */
@@ -193,7 +199,8 @@ export function buildMonthRow(
     status_label: monthStatusLabel(status, shortBy),
     lines,
     last_post: input.last_post ?? null,
-    views: sumMonthViews(input.analytics, monthKey, tz),
+    views: sumMonthViews(input.analytics, monthKey, input.tz || tz),
+    tz: input.tz || tz,
   }
 }
 

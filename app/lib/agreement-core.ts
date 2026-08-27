@@ -8,6 +8,8 @@
  * progress against it — all testable without a database.
  */
 
+import { DEFAULT_TZ, monthInZone } from './timezone-core'
+
 export const CONTENT_TYPES = ['reel', 'carousel', 'story', 'static', 'video', 'other'] as const
 export type ContentType = (typeof CONTENT_TYPES)[number]
 
@@ -102,20 +104,32 @@ export function effectiveQuotas(
   return out
 }
 
-/** Which month an item counts toward: the month it went LIVE if it has,
- *  else its shoot's month, then its due date, then when it was created.
- *  Footage shot in August and posted in November is November's delivery. */
+/**
+ * Which month an item counts toward: the month it went LIVE if it has, else
+ * its shoot's month, then its due date, then when it was created. Footage shot
+ * in August and posted in November is November's delivery.
+ *
+ * The month is counted on the CLIENT's calendar. A post that goes out at
+ * 11 pm on 31 August in Melbourne is 1 September in UTC — and counting it as
+ * September's would take a delivered item off the August quota the client was
+ * actually promised, on the one night of the month it matters. `due_date` is a
+ * plain calendar date with no zone at all, so it is read as written.
+ */
 export function monthOfItem(
   item: { published_at?: string | null; due_date?: string | null; created_at?: string | null },
   batch: { month?: number | null; year?: number | null } | null,
+  tz: string = DEFAULT_TZ,
 ): { month: number; year: number } | null {
-  const from = (iso: string) => {
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? null : { month: d.getUTCMonth() + 1, year: d.getUTCFullYear() }
+  const from = (iso: string) => monthInZone(iso, tz)
+  /** a bare 'YYYY-MM-DD' names a month outright — no instant, no zone, no
+   *  chance of a due date on the 1st being dragged back into last month */
+  const fromCalendarDate = (value: string) => {
+    const m = /^(\d{4})-(\d{2})/.exec(value.trim())
+    return m ? { month: Number(m[2]), year: Number(m[1]) } : from(value)
   }
   if (item.published_at) { const m = from(item.published_at); if (m) return m }
   if (batch?.month && batch?.year) return { month: batch.month, year: batch.year }
-  if (item.due_date) { const m = from(item.due_date); if (m) return m }
+  if (item.due_date) { const m = fromCalendarDate(item.due_date); if (m) return m }
   if (item.created_at) { const m = from(item.created_at); if (m) return m }
   return null
 }
@@ -194,6 +208,9 @@ export function computeMonthlyProgress(
   month: number,
   year: number,
   quotas: EffectiveQuota[],
+  /** the client's zone — which month a published item lands in is decided on
+   *  their calendar, not the server's */
+  tz: string = DEFAULT_TZ,
 ): MonthlyProgress[] {
   const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1)
   const planned = new Map<string, number>()
@@ -202,7 +219,7 @@ export function computeMonthlyProgress(
   const posted = new Map<string, number>()
   for (const item of items) {
     const batch = item.batch_id ? batchesById.get(item.batch_id) ?? null : null
-    const m = monthOfItem(item, batch)
+    const m = monthOfItem(item, batch, tz)
     if (!m || m.month !== month || m.year !== year) continue
     bump(planned, item.content_type)
     if (item.status === 'approved_for_scheduling') bump(approved, item.content_type)

@@ -16,15 +16,30 @@ describe('clientStatusWord — a booked post says so', () => {
   })
 })
 
-describe('scheduledWhen — the day AND the hour, in Melbourne', () => {
+describe('scheduledWhen — the day AND the hour, on the CLIENT’s clock', () => {
   it('reads back a posting time in the client’s words', () => {
     // 13:30 Melbourne on Thursday 27 August 2026
     expect(scheduledWhen('2026-08-27T03:30:00.000Z')).toBe('Thu 27 Aug, 1:30 pm')
   })
 
-  it('is Melbourne’s clock, not the reader’s', () => {
-    // 09:00 Melbourne, expressed in UTC
+  it('is Melbourne’s clock, not the reader’s, when no zone is given', () => {
+    // 09:00 Melbourne, expressed in UTC. Melbourne is the DEFAULT, not the
+    // rule — it keeps every client who was one reading exactly as before.
     expect(scheduledWhen('2026-08-26T23:00:00.000Z')).toBe('Thu 27 Aug, 9:00 am')
+  })
+
+  it('is the client’s own zone when they have one', () => {
+    // one instant, three audiences: each reads the hour their feed sees it
+    const iso = '2026-08-26T23:00:00.000Z'
+    expect(scheduledWhen(iso, 'Australia/Melbourne')).toBe('Thu 27 Aug, 9:00 am')
+    expect(scheduledWhen(iso, 'Asia/Manila')).toBe('Thu 27 Aug, 7:00 am')
+    expect(scheduledWhen(iso, 'America/Los_Angeles')).toBe('Wed 26 Aug, 4:00 pm')
+  })
+
+  it('follows the client’s daylight saving, not a fixed offset', () => {
+    // 9 am Melbourne in January is AEDT (+11); in August it is AEST (+10)
+    expect(scheduledWhen('2026-01-26T22:00:00.000Z', 'Australia/Melbourne')).toBe('Tue 27 Jan, 9:00 am')
+    expect(scheduledWhen('2026-08-26T23:00:00.000Z', 'Australia/Melbourne')).toBe('Thu 27 Aug, 9:00 am')
   })
 
   it('shows nothing rather than "Invalid Date"', () => {

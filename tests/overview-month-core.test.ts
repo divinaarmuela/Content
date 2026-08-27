@@ -168,6 +168,22 @@ describe('buildMonthRow', () => {
     expect(row.last_post?.item_id).toBe('i1')
   })
 
+  it('counts a row’s month on that client’s own calendar', () => {
+    // 2026-09-01T01:00Z is 9 am on 1 September in Manila and still 6 pm on
+    // 31 August in Los Angeles. The table spans zones, so “this month” is a
+    // per-row question and each row has to answer it for its own client.
+    const boundary = '2026-09-01T01:00:00.000Z'
+    const input = {
+      id: 'c9', name: 'Boundary Co', has_agreement: false,
+      analytics: [{ content_type: 'reel', published_at: boundary, views: 500 }],
+    }
+    expect(buildMonthRow({ ...input, tz: 'America/Los_Angeles' }, KEY).views).toBe(500)
+    expect(buildMonthRow({ ...input, tz: 'Asia/Manila' }, KEY).views).toBeNull()
+    // and the zone travels out on the row, so whoever renders its dates uses it
+    expect(buildMonthRow({ ...input, tz: 'Asia/Manila' }, KEY).tz).toBe('Asia/Manila')
+    expect(buildMonthRow(input, KEY).tz).toBe('Australia/Melbourne')
+  })
+
   it('treats an agreement with no lines as no agreement on file', () => {
     const row = buildMonthRow({ id: 'c2', name: 'Empty Co', has_agreement: true, lines: [] }, KEY)
     expect(row.has_agreement).toBe(false)

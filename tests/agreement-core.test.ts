@@ -81,8 +81,36 @@ describe('monthOfItem', () => {
     expect(monthOfItem({ due_date: '2026-10-02' }, { month: 9, year: 2026 }))
       .toEqual({ month: 9, year: 2026 })
     expect(monthOfItem({ due_date: '2026-10-02' }, null)).toEqual({ month: 10, year: 2026 })
-    expect(monthOfItem({ created_at: '2026-12-31T23:00:00Z' }, null)).toEqual({ month: 12, year: 2026 })
+    // 23:00 UTC on 31 December is already 10 am on 1 January in Melbourne,
+    // and the client's calendar is the one that counts
+    expect(monthOfItem({ created_at: '2026-12-31T23:00:00Z' }, null)).toEqual({ month: 1, year: 2027 })
     expect(monthOfItem({}, null)).toBeNull()
+  })
+
+  it('counts the month on the CLIENT’s calendar, not UTC’s', () => {
+    // a post that went out at 11 pm on 31 August in Melbourne is August's
+    // delivery — UTC calling it 1 September must not take it off the quota
+    const late = { published_at: '2026-08-31T13:00:00Z' }
+    expect(monthOfItem(late, null, 'Australia/Melbourne')).toEqual({ month: 8, year: 2026 })
+    expect(monthOfItem(late, null, 'Asia/Manila')).toEqual({ month: 8, year: 2026 })
+    // …and the same instant is genuinely still August in London
+    expect(monthOfItem(late, null, 'Europe/London')).toEqual({ month: 8, year: 2026 })
+
+    // the other side of the boundary: 9 am on 1 September in Manila is
+    // 31 August to a client in Los Angeles, and each is right about their own
+    const early = { published_at: '2026-09-01T01:00:00Z' }
+    expect(monthOfItem(early, null, 'Asia/Manila')).toEqual({ month: 9, year: 2026 })
+    expect(monthOfItem(early, null, 'America/Los_Angeles')).toEqual({ month: 8, year: 2026 })
+  })
+
+  it('reads a due date as the calendar date it is, in every zone', () => {
+    // due_date is a bare 'YYYY-MM-DD' with no instant behind it. Treating it
+    // as UTC midnight would drag the 1st of a month into the previous one for
+    // every client west of Greenwich.
+    for (const tz of ['Australia/Melbourne', 'Asia/Manila', 'America/Los_Angeles', 'Europe/London']) {
+      expect(monthOfItem({ due_date: '2026-10-01' }, null, tz), tz).toEqual({ month: 10, year: 2026 })
+      expect(monthOfItem({ due_date: '2026-10-31' }, null, tz), tz).toEqual({ month: 10, year: 2026 })
+    }
   })
 })
 
@@ -112,6 +140,21 @@ describe('computeMonthlyProgress', () => {
       { type: 'static', label: 'Graphics', quota: 20, planned: 3, delivered: 1, in_production: 0, approved: 1, scheduled: 1, posted: 1 },
       { type: 'reel', label: 'Reels', quota: 8, planned: 2, delivered: 1, in_production: 1, approved: 0, scheduled: 0, posted: 1 },
     ])
+  })
+
+  it('the month boundary is the client’s, so a late-night post stays in its month', () => {
+    // 2026-09-01T01:00Z: 9 am on 1 September in Manila, and still 6 pm on
+    // 31 August in Los Angeles. The same row belongs to different months for
+    // the two clients, and each client’s own quota has to be right.
+    const items = [{ content_type: 'reel', status: 'published', published_at: '2026-09-01T01:00:00Z' }]
+    const reels = [{ type: 'reel' as const, label: 'Reels', quota: 8 }]
+    const posted = (month: number, tz: string) =>
+      computeMonthlyProgress(items, new Map(), month, 2026, reels, tz)[0].posted
+
+    expect(posted(9, 'Asia/Manila')).toBe(1)
+    expect(posted(8, 'Asia/Manila')).toBe(0)
+    expect(posted(8, 'America/Los_Angeles')).toBe(1)
+    expect(posted(9, 'America/Los_Angeles')).toBe(0)
   })
 })
 
