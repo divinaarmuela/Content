@@ -18,6 +18,10 @@ import {
   choosePlatform, derivePostingState, platformLabel, postingPrimaryLabel,
   type PostingEntry, type PostingJob, type PostingJobStatus, type PostingState,
 } from '../../../lib/posting-card-core'
+import {
+  METRICS_PENDING_LINE, compactCount, metricCells, metricsPending, updatedAgo,
+  type PostMetrics,
+} from '../../../lib/post-analytics-core'
 
 export type PostingContext = {
   configured: boolean
@@ -26,6 +30,45 @@ export type PostingContext = {
     id: string; status: string; scheduled_for: string | null
     permalink: string | null; error: string | null; published_at: string | null
   } | null
+  metrics?: (Partial<PostMetrics> & {
+    sync_status: string | null; synced_at: string; post_url: string | null
+  }) | null
+}
+
+/**
+ * The live post's numbers, under its link.
+ *
+ * Deliberately the SAME shaping the client's portal uses, from the same pure
+ * module: a scheduler being asked "how did that one do?" and the client
+ * reading their own portal must never see two different answers.
+ */
+function PostedMetrics({ metrics }: { metrics: PostingContext['metrics'] }) {
+  const cells = metricCells(metrics)
+  if (metricsPending(metrics)) {
+    return (
+      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{METRICS_PENDING_LINE}</p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        {cells.map(c => (
+          <span key={c.key} className="flex items-baseline gap-1">
+            <span className="font-mono text-xs tabular-nums">{compactCount(c.value)}</span>
+            <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              {c.label}
+            </span>
+          </span>
+        ))}
+      </div>
+      {metrics?.synced_at && (
+        <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+          suppressHydrationWarning>
+          {updatedAgo(metrics.synced_at)}
+        </span>
+      )}
+    </div>
+  )
 }
 
 type Props = {
@@ -363,14 +406,17 @@ export default function PostingCard(props: Props) {
                   </span>
                 )}
               </div>
-              {state.permalink
+              {(state.permalink ?? posting?.metrics?.post_url)
                 ? (
-                  <a href={state.permalink} target="_blank" rel="noreferrer noopener"
+                  <a href={(state.permalink ?? posting?.metrics?.post_url)!} target="_blank" rel="noreferrer noopener"
                     className="flex w-fit items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-400">
                     See the post <ExternalLink className="h-3 w-3" />
                   </a>
                 )
                 : <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No link — a Story, or posted without one.</p>}
+              {/* a post recorded by hand was never handed to the provider, so
+                  there is nothing to have numbers about */}
+              {!state.manual && <PostedMetrics metrics={posting?.metrics ?? null} />}
             </>
           )}
 

@@ -211,6 +211,40 @@ export const publishPost = inngest.createFunction(
 )
 
 /**
+ * Refresh the per-post numbers every half hour.
+ *
+ * Per post, never the list: `/analytics` with no postId is a cached roll-up
+ * that lags the platform by an hour or more, so a client opening their portal
+ * would read yesterday's figures about this morning's Reel. Asking about ONE
+ * post answers live.
+ *
+ * Ninety days because a Reel keeps accumulating for weeks — a client looking
+ * back at last month should see what the work actually did, not what it had
+ * done by the second day. It also back-fills permalinks: the platform assigns
+ * a post's URL some time after our job flips to published, and
+ * reconcilePublishedJobs only looks back fourteen days. Without this pass a
+ * post whose link was null at flip time would never get one.
+ *
+ * Idempotent by construction: every write is an upsert on provider_post_id or
+ * a null-guarded back-fill, so a retry re-reads the same numbers and writes
+ * the same row.
+ */
+export const postAnalyticsRefresh = inngest.createFunction(
+  {
+    id: 'post-analytics-refresh',
+    name: 'Refresh per-post analytics',
+    triggers: [{ cron: 'TZ=Australia/Melbourne */30 * * * *' }],
+    retries: 1,
+    // one sweep at a time: two would ask the provider about the same posts
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run('refresh', async () => {
+    const { refreshRecentPostAnalytics } = await import('../lib/post-analytics')
+    return refreshRecentPostAnalytics()
+  })
+)
+
+/**
  * Backfill anything the Asana webhooks missed.
  *
  * Asana delivery is at-most-once and its /events history is only 24 hours, so
@@ -349,6 +383,7 @@ export const functions = [
   scanInboxOnDemand,
   publishDispatcher,
   publishPost,
+  postAnalyticsRefresh,
   asanaReconcile,
   brandScan,
 ]

@@ -10,6 +10,8 @@ import {
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
+import { analyticsForItems } from './post-analytics'
+import type { PostMetrics } from './post-analytics-core'
 import type { TeamUser } from './authz'
 
 /**
@@ -177,6 +179,15 @@ export type PostingContext = {
     error: string | null
     published_at: string | null
   } | null
+  /** how the live post is doing — the same numbers the client's portal shows,
+   *  so nobody has to open two screens to answer "how did it go" */
+  metrics: PostItemMetrics | null
+}
+
+export type PostItemMetrics = PostMetrics & {
+  sync_status: string | null
+  synced_at: string
+  post_url: string | null
 }
 
 /**
@@ -189,7 +200,7 @@ export type PostingContext = {
 export async function loadPostingContext(
   itemId: string, clientId: string,
 ): Promise<PostingContext> {
-  const [accountsRes, jobRes] = await Promise.all([
+  const [accountsRes, jobRes, analytics] = await Promise.all([
     supabase
       .from('social_accounts')
       .select('platform, username, name')
@@ -202,10 +213,21 @@ export async function loadPostingContext(
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    analyticsForItems([itemId]),
   ])
+
+  const a = analytics.get(itemId) ?? null
 
   return {
     configured: getPublisher().configured(),
+    metrics: a
+      ? {
+        views: a.views, reach: a.reach, impressions: a.impressions, likes: a.likes,
+        comments: a.comments, shares: a.shares, saves: a.saves,
+        engagement_rate: a.engagement_rate,
+        sync_status: a.sync_status, synced_at: a.synced_at, post_url: a.platform_post_url,
+      }
+      : null,
     accounts: (accountsRes.data ?? []).map(a => ({
       platform: String(a.platform).toLowerCase(),
       username: (a.username as string) ?? null,

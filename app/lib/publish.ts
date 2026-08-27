@@ -171,6 +171,20 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           attempts: job.attempts + 1,
           error: 'Provider reported an identical post already exists',
         })
+        // …and it must close the loop back into production exactly as
+        // 'published' does. It did not, which meant a duplicate left the post
+        // LIVE on the platform while the board and the client's portal both
+        // still said "Scheduled" — and nothing ever corrected it, because
+        // reconcilePublishedJobs does not look at duplicates either. The
+        // posting card has always called this state "Posted"; now every other
+        // screen agrees with it.
+        if (claimed.content_item_id) {
+          const { recordPublishOnItem } = await import('./production-publish')
+          await recordPublishOnItem(
+            claimed.content_item_id as string, null,
+            (job.targets ?? []).map(t => t.platform),
+          )
+        }
         return 'duplicate'
 
       case 'retryable':
