@@ -73,9 +73,13 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      // sticky: when the body scrolls (see DialogContent) the primary button
-      // stays on screen instead of sitting 1200px down a phone-sized form.
-      'sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t bg-popover px-6 py-4 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2',
+      // In normal flow, on purpose. A sticky footer with negative margins
+      // inside the scrolling grid looked right on a tall form and sat on top
+      // of the last field on a short one ("Plan a shoot": the buttons covered
+      // the Working title box). The body scrolls (DialogContent), so the
+      // buttons are always reachable — at the end of the form, where a person
+      // expects them.
+      'flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2',
       className
     )}
     {...props}
