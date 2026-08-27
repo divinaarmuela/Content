@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Check, Loader2, UserRoundPlus, X } from 'lucide-react'
+import { roleLabel } from '@/app/lib/identity-core'
 
 /**
  * Who runs this client, and the moment to decide it.
@@ -21,8 +22,6 @@ type Eligible = { id: string; name: string; email: string; role: string; client_
 
 const initials = (name: string, email: string) =>
   (name || email).split(/[\s@.]+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
-
-const roleLabel = (r: string) => r === 'super_admin' ? 'Director' : 'Account manager'
 
 export default function ManagersCard({ clientId, intakeComplete = false, hideWhenIdle = false }: {
   clientId: string

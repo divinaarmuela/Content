@@ -254,7 +254,7 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
               confirmLabel="Delete service"
               onConfirm={() => void onSave({ action: 'delete_service', id: service.id }, `${service.name} deleted`)}
             >
-              <button className="rounded p-2 text-zinc-400 hover:text-rose-600"
+              <button className="inline-flex items-center justify-center rounded p-2 text-zinc-400 hover:text-rose-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
                 aria-label={`Delete ${service.name}`}>
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -675,7 +675,7 @@ function ResourceRow({ resource, availability, onSave, busy }: {
           confirmLabel="Delete it"
           onConfirm={() => void onSave({ action: 'delete_resource', id: resource.id }, `${resource.label} deleted`)}
         >
-          <button className="ml-auto rounded p-2 text-zinc-400 hover:text-rose-600"
+          <button className="ml-auto inline-flex items-center justify-center rounded p-2 text-zinc-400 hover:text-rose-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
             aria-label={`Delete ${resource.label}`}><Trash2 className="h-3.5 w-3.5" /></button>
         </ConfirmAction>
       </div>

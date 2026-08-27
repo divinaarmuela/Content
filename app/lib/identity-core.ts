@@ -7,6 +7,28 @@
 export const TEAM_ROLES = ['scheduler', 'editor', 'account_manager', 'super_admin'] as const
 export type Role = 'super_admin' | 'account_manager' | 'editor' | 'scheduler' | 'client'
 
+/**
+ * The one spelling of each role a person reads on screen.
+ *
+ * Five files each carried their own copy — "Account manager", "account
+ * manager", a lowercase `role.replace('_', ' ')`, and "Director" for the
+ * super admin in one card while everything else said "Super admin". A role
+ * name is a name; it is spelled one way.
+ */
+export const ROLE_LABEL: Record<Role, string> = {
+  super_admin: 'Super admin',
+  account_manager: 'Account manager',
+  editor: 'Editor',
+  scheduler: 'Scheduler',
+  client: 'Client',
+}
+
+/** `ROLE_LABEL` for a string that may not be a known role — never an underscore. */
+export function roleLabel(role: string | null | undefined): string {
+  if (!role) return ''
+  return (ROLE_LABEL as Record<string, string>)[role] ?? role.split('_').join(' ')
+}
+
 /** Parse the SUPER_ADMIN_EMAILS env allowlist (comma separated, case/space tolerant). */
 export function parseAllowlist(raw: string | undefined): string[] {
   return (raw ?? '')

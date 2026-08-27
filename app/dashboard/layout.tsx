@@ -19,7 +19,7 @@ import UploadTray from './UploadTray'
 import NotificationBell from './NotificationBell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 import { techMailto } from '@/app/lib/support-core'
-import type { Role } from '@/app/lib/identity-core'
+import { roleLabel, type Role } from '@/app/lib/identity-core'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
  *  the dark tokens too, persists to localStorage, and cleans up on unmount so
@@ -351,7 +351,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             </Button>
             {role && role !== 'super_admin' && (
               <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-600">
-                {role.replace('_', ' ')}
+                {roleLabel(role)}
               </span>
             )}
             <NotificationBell />

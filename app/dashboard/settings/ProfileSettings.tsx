@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { COMMON_ZONES, zoneOption } from '@/app/lib/timezone-core'
+import { roleLabel } from '@/app/lib/identity-core'
 
 type Me = {
   id: string
@@ -178,8 +179,8 @@ export default function ProfileSettings() {
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
             Your access
           </span>
-          <Badge variant="outline" className="font-normal capitalize">
-            {me.role.replace('_', ' ')}
+          <Badge variant="outline" className="font-normal">
+            {roleLabel(me.role)}
           </Badge>
           <Badge variant="outline" className="font-normal capitalize">
             {me.employment_type}

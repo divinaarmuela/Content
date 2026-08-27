@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { COMMON_ZONES, formatInZone, zoneAbbrev, zoneLabel, zoneOption } from '../../lib/timezone-core'
 import { friendlyError } from '../../lib/support-core'
+import { roleLabel } from '../../lib/identity-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,13 +51,6 @@ type Invite = {
 type Assignment = { team_user_id: string; client_id: string; clients: { name: string } | null }
 type ClientRow = { id: string; name: string }
 
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super admin',
-  account_manager: 'Account manager',
-  editor: 'Editor',
-  scheduler: 'Scheduler',
-  client: 'Client',
-}
 const ROLE_STYLE: Record<string, string> = {
   super_admin:     'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
   account_manager: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
@@ -290,7 +284,7 @@ export default function TeamPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={ROLE_STYLE[inv.role] ?? ''}>{ROLE_LABEL[inv.role] ?? inv.role}</Badge>
+                    <Badge variant="outline" className={ROLE_STYLE[inv.role] ?? ''}>{roleLabel(inv.role)}</Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                     {new Date(inv.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
@@ -350,7 +344,7 @@ export default function TeamPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
+                    <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{roleLabel(m.role)}</Badge>
                   </TableCell>
                   <TableCell className="text-sm capitalize text-zinc-600 dark:text-zinc-400">{m.employment_type}</TableCell>
                   {/* the zone AND what o'clock it is there: "Asia/Manila" is a

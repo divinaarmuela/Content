@@ -35,6 +35,8 @@ const BLANK = { platform: '', label: '', username: '', secret: '', url: '', note
 
 /** Sentinel for the free-text escape in the platform Select. */
 const OTHER = '__other'
+/** a bare 14px glyph is not a tap target — this gives the finger 44px on touch */
+const ICON_TAP = 'inline-flex items-center justify-center rounded p-1 text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11'
 
 const SUGGESTED = [
   'Instagram', 'Facebook', 'Meta Business', 'Meta Ads', 'TikTok', 'LinkedIn',
@@ -267,7 +269,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                         </span>
                         <button onClick={() => { navigator.clipboard.writeText(c.username); toast.success('Username copied') }}
                           aria-label="Copy username"
-                          className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+                          className={ICON_TAP}>
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
@@ -284,13 +286,13 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                         </span>
                         <button onClick={() => reveal(c)}
                           aria-label={revealed[c.id] ? 'Hide password' : 'Reveal password'}
-                          className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+                          className={ICON_TAP}>
                           {revealed[c.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         </button>
                         {revealed[c.id] && (
                           <button onClick={() => { navigator.clipboard.writeText(revealed[c.id]); toast.success('Password copied') }}
                             aria-label="Copy password"
-                            className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+                            className={ICON_TAP}>
                             <Copy className="h-3 w-3" />
                           </button>
                         )}

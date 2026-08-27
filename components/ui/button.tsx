@@ -6,8 +6,17 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
 
+/**
+ * On a touch screen every button is at least 44px tall — Apple's and
+ * Google's floor for a fingertip. `h-9` (36px) and `h-8` (32px) stay for a
+ * mouse, where the layouts were designed at that density; the `pointer:
+ * coarse` media query is what tells the two apart. `min-h` beats an explicit
+ * `h-7` at a call site, so the handful of 28px icon buttons grow too.
+ */
+const TOUCH_TARGET = '[@media(pointer:coarse)]:min-h-11'
+
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 ${TOUCH_TARGET}`,
   {
     variants: {
       variant: {
@@ -26,7 +35,7 @@ const buttonVariants = cva(
         default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
-        icon: 'h-9 w-9',
+        icon: 'h-9 w-9 [@media(pointer:coarse)]:min-w-11',
       },
     },
     defaultVariants: {

@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/select'
 import { Check, Lock } from 'lucide-react'
 import { GRANTABLE_PAGES, defaultAllows } from '@/app/lib/page-access-core'
-import type { Role } from '@/app/lib/identity-core'
+import { ROLE_LABEL, type Role } from '@/app/lib/identity-core'
 
 /**
  * Open dashboard pages to one person.
@@ -24,13 +24,6 @@ type Member = {
   id: string; name: string; email: string; role: Role
   /** null until their first sign-in — set up now, arrives later */
   clerk_user_id: string | null
-}
-
-const ROLE_LABEL: Record<string, string> = {
-  scheduler: 'Scheduler',
-  editor: 'Editor',
-  account_manager: 'Account manager',
-  super_admin: 'Super admin',
 }
 
 export default function PageAccessSettings() {
@@ -260,7 +253,6 @@ export default function PageAccessSettings() {
                       ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
                       : 'cursor-pointer border-border hover:bg-muted/50')
                   }
-                  title={byDefault ? `${ROLE_LABEL[person.role]}s see this by default` : undefined}
                 >
                   {byDefault ? (
                     <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-emerald-600 text-white">
@@ -282,9 +274,11 @@ export default function PageAccessSettings() {
                     </span>
                     <span className="block font-mono text-[11px] text-muted-foreground">{page.href}</span>
                   </span>
+                  {/* was a hover-only title= — on a phone "by role" explained
+                      nothing. Now it says who sees it, in words, on the row. */}
                   {byDefault && (
-                    <span className="ml-auto shrink-0 text-[11px] text-emerald-700 dark:text-emerald-500">
-                      by role
+                    <span className="ml-auto shrink-0 text-right text-[11px] text-emerald-700 dark:text-emerald-500">
+                      every {ROLE_LABEL[person.role].toLowerCase()} sees this
                     </span>
                   )}
                 </label>

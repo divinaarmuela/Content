@@ -21,7 +21,7 @@ import {
   EMPTY_THROUGHPUT, sinceLabel, sortRows, splitByTurn, statusWordOf, throughputPeak,
   type HeldItem, type SortKey, type TeamActivityRow, type Throughput,
 } from '../../../lib/team-activity-core'
-import type { Role } from '../../../lib/identity-core'
+import { ROLE_LABEL as ALL_ROLE_LABEL, type Role } from '../../../lib/identity-core'
 
 type Payload = {
   rows: TeamActivityRow[]
@@ -31,11 +31,13 @@ type Payload = {
   clients: { id: string; name: string }[]
 }
 
+// the team roles only — this page's filter lists them, and a client is not a
+// team member
 const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super admin',
-  account_manager: 'Account manager',
-  editor: 'Editor',
-  scheduler: 'Scheduler',
+  super_admin: ALL_ROLE_LABEL.super_admin,
+  account_manager: ALL_ROLE_LABEL.account_manager,
+  editor: ALL_ROLE_LABEL.editor,
+  scheduler: ALL_ROLE_LABEL.scheduler,
 }
 
 const ROLE_STYLE: Record<string, string> = {
