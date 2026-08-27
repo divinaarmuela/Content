@@ -18,6 +18,9 @@ import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
 import { useRole } from '../useRole'
 import { uploadMedia } from '../uploadMedia'
+import ExportWarnings, {
+  exportWarningsFor, type ExportWarning,
+} from '../../components/media/ExportWarnings'
 
 export type ClientRow = { id: string; name: string }
 export type Batch = {
@@ -72,6 +75,7 @@ export default function NewItemDialog({
   const [draft, setDraft] = useState({ ...BLANK })
   const assetFileRef = useRef<HTMLInputElement>(null)
   const [assetBusy, setAssetBusy] = useState(false)
+  const [assetWarnings, setAssetWarnings] = useState<ExportWarning[]>([])
   // AI work-kind suggestion: fires ~1s after the title/brief stops changing;
   // only a hint — applying it is always the human's click
   const [kindHint, setKindHint] = useState<
@@ -86,6 +90,9 @@ export default function NewItemDialog({
   const onAssetFiles = async (files: FileList | null) => {
     if (!files?.length) return
     setAssetBusy(true)
+    // a header read on the chooser's own machine: says which of these will
+    // not preview in a browser, without standing in the way of any of them
+    void exportWarningsFor(Array.from(files)).then(setAssetWarnings)
     try {
       // straight to R2, same as deliverables — the API body cap never sees them
       for (const f of Array.from(files)) {
@@ -294,6 +301,7 @@ export default function NewItemDialog({
       onOpenChange(false)
       setDraft({ ...BLANK })
       setAdhocReason('')
+      setAssetWarnings([])
       setClientApproval(true)
       onCreated(Array.isArray(created) ? created : undefined)
     } catch (e) {
@@ -622,6 +630,7 @@ export default function NewItemDialog({
                 ))}
               </div>
             )}
+            <ExportWarnings items={assetWarnings} onDismiss={() => setAssetWarnings([])} />
             <input ref={assetFileRef} type="file" multiple className="hidden"
               onChange={e => void onAssetFiles(e.target.files)} />
             <Button type="button" variant="outline" size="sm" className="w-fit"

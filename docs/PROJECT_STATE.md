@@ -1,5 +1,19 @@
 # Project state — as at 19 August 2026
 
+## Video previews — 27 Aug
+
+A .mov exported with its `moov` atom AFTER `mdat` (no "fast start") makes a
+browser download the whole file — 184 MB — before frame one, which showed as a
+player spinning forever; HEVC and ProRes .mov files never decode in Chrome or
+Edge at all. `app/lib/video-probe-core.ts` reads the first 256 KB (ranged GET on
+R2, `Blob.slice` for a local file) and answers both questions; the item page,
+the portal carousel and the Files box now show a reason and a Download link
+instead of a spinner, and the uploader warns the editor at export time —
+warning only, never a block.
+Future: Cloudflare Stream would transcode every upload and make the whole
+problem disappear; that is the option to take when previews matter more than
+the per-minute cost.
+
 ## Instant post updates (Zernio webhook) — 27 Aug
 
 The dashboard used to learn a post was live from `reconcilePublishedJobs`, which

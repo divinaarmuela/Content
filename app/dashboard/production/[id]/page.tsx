@@ -9,6 +9,12 @@ import { useOrderedLoad } from '../../useOrderedLoad'
 import { useProductionLive } from '../useProductionLive'
 import { enqueueJobAssets } from '../../uploadQueue'
 import BrandCard from '../BrandCard'
+import SafeVideo from '../../../components/media/SafeVideo'
+import ExportWarnings, {
+  exportWarningsFor, type ExportWarning,
+} from '../../../components/media/ExportWarnings'
+import { looksLikeVideo, probeUrl } from '../../../lib/video-probe'
+import { formatFileSize } from '../../../lib/video-probe-core'
 import {
   DEFAULT_TZ, formatInZone, formatWithZone, viewerHint,
 } from '../../../lib/timezone-core'
@@ -176,23 +182,98 @@ function measureFile(file: File): Promise<{ w: number; h: number } | null> {
   })
 }
 
-function Media({ src, className, onDims }: {
+function Media({ src, className, driveUrl, onDims }: {
   src: string
   className?: string
+  /** offered on the notice when the file cannot play here */
+  driveUrl?: string | null
   /** reports the media's true pixel size once loaded — 1080 × 1350 etc. */
   onDims?: (d: { w: number; h: number }) => void
 }) {
   if (!src) return null
-  if (/\.(mp4|webm|mov)(\?|$)/i.test(src)) {
+  if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(src)) {
+    // never a bare <video>: a .mov exported with its index at the end spins
+    // here forever, and a spinner is indistinguishable from a broken app
     return (
-      <video src={src} controls playsInline className={className}
-        onLoadedMetadata={e => onDims?.({ w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })} />
+      <SafeVideo src={src} className={className} driveUrl={driveUrl} onDims={onDims}
+        noticeClassName="w-full" />
     )
   }
   // eslint-disable-next-line @next/next/no-img-element
   return (
     <img src={src} alt="" className={className}
       onLoad={e => onDims?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
+  )
+}
+
+/**
+ * One row of the Files box.
+ *
+ * The source files an editor works from are mostly footage, and "click the
+ * link and see what happens" is a 184 MB gamble. So each video is probed
+ * once: the ones that will actually play here grow a Play toggle (collapsed —
+ * six autoplaying rushes is not a file list), and the ones that will not stay
+ * a link, with their size and, for a team member, why.
+ */
+function RawFileRow({ file, canManage, onRemove }: {
+  file: { url: string; name: string }
+  canManage: boolean
+  onRemove?: () => void
+}) {
+  const [check, setCheck] = useState<{
+    playable: boolean; bytes: number | null; reason: string | null
+  } | null>(null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!looksLikeVideo(file.url)) return
+    let live = true
+    void probeUrl(file.url).then(c => {
+      if (!live) return
+      setCheck({
+        playable: !c.block && c.probe !== null && c.probe.container !== 'other',
+        bytes: c.bytes,
+        reason: c.block?.reason ?? null,
+      })
+    })
+    return () => { live = false }
+  }, [file.url])
+
+  const size = formatFileSize(check?.bytes)
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <a href={file.url} target="_blank" rel="noreferrer noopener"
+          className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
+          {file.name || file.url}
+        </a>
+        {size && (
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
+            {size}
+          </span>
+        )}
+        {check?.playable && (
+          <button type="button" onClick={() => setOpen(o => !o)}
+            className="shrink-0 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
+            {open ? 'Hide' : 'Play'}
+          </button>
+        )}
+        {canManage && onRemove && (
+          <button type="button" aria-label={`Remove ${file.name}`}
+            className="shrink-0 text-zinc-400 hover:text-red-500"
+            onClick={onRemove}>✕</button>
+        )}
+      </div>
+      {check?.reason && (
+        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+          Won&rsquo;t play here — {check.reason}. Download it to watch.
+        </p>
+      )}
+      {open && (
+        <SafeVideo src={file.url} preload="metadata"
+          className="max-h-72 w-full rounded-lg bg-zinc-950 object-contain" />
+      )}
+    </div>
   )
 }
 
@@ -223,6 +304,10 @@ export default function ItemDetailPage() {
   /** measured pixel size of the latest preview / freshly-uploaded file */
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null)
   const [draftDims, setDraftDims] = useState<{ w: number; h: number } | null>(null)
+  /** exports that will not preview in a browser — said next to the drop zone
+   *  they came from, and never in the way of the upload itself */
+  const [versionWarnings, setVersionWarnings] = useState<ExportWarning[]>([])
+  const [jobWarnings, setJobWarnings] = useState<ExportWarning[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [commentDraft, setCommentDraft] = useState('')
@@ -323,7 +408,10 @@ export default function ItemDetailPage() {
   const jobFileRef = useRef<HTMLInputElement>(null)
   const onJobFiles = (files: FileList | null) => {
     if (!files?.length) return
-    enqueueJobAssets(id, Array.from(files))
+    const chosen = Array.from(files)
+    // the probe runs beside the upload, not in front of it
+    void exportWarningsFor(chosen).then(setJobWarnings)
+    enqueueJobAssets(id, chosen)
     toast.success(`Uploading ${files.length} file${files.length > 1 ? 's' : ''} in the background — you can keep working`)
     if (jobFileRef.current) jobFileRef.current.value = ''
   }
@@ -813,6 +901,11 @@ export default function ItemDetailPage() {
     if (files.length > wanted.length) {
       toast.warning(`Only the first ${room} were added — a carousel takes ${MAX_SLIDES} slides`)
     }
+    // read 256 KB of each one's header locally: an export whose index is at
+    // the end, or that is HEVC/ProRes, uploads and posts fine but will not
+    // play in anybody's browser, and this is the only moment the person who
+    // made it is still in the room
+    void exportWarningsFor(wanted).then(setVersionWarnings)
     // measure the first one locally while it uploads — the "1080 × 1350"
     // badge needs no round-trip to the stored file
     if (slides.length === 0) {
@@ -863,6 +956,7 @@ export default function ItemDetailPage() {
       toast.success(isInternal ? `Draft ${json.version_number} saved` : `Version v${json.version_number} added`)
       setVerDraft({ dropbox_url: '', drive_url: '', notes: '' })
       setSlides([])
+      setVersionWarnings([])
       setLinksOpen(false)
       // put it on the page NOW: "The work" and the Submit button both read
       // detail.versions, and a toast above an unchanged screen is how the
@@ -1215,6 +1309,7 @@ export default function ItemDetailPage() {
         <Card className="overflow-hidden py-0">
           {latestSlides[0] && (
             <Media key={latestSlides[0].url} src={latestSlides[0].url}
+              driveUrl={latest.drive_url}
               className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
           )}
           {/* the whole carousel, in posting order — the first card is what the
@@ -1433,6 +1528,10 @@ export default function ItemDetailPage() {
                       }} />
                   </div>
 
+                  {/* it uploaded, it will post — it just will not play here */}
+                  <ExportWarnings items={versionWarnings}
+                    onDismiss={() => setVersionWarnings([])} />
+
                   {/* THE ORDER IS THE POST. A carousel is these files in this
                       sequence, so the sequence is something you can see and
                       drag rather than something implied by upload timing.
@@ -1633,25 +1732,17 @@ export default function ItemDetailPage() {
             {(detail.raw_assets?.length ?? 0) > 0 && (
               <div className="grid gap-1.5">
                 <Label className="text-xs">Files</Label>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                   {detail.raw_assets!.map(a => (
-                    <div key={a.url} className="flex items-center gap-2">
-                      <a href={a.url} target="_blank" rel="noreferrer noopener"
-                        className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
-                        {a.name || a.url}
-                      </a>
-                      {canManage && (
-                        <button type="button" aria-label={`Remove ${a.name}`}
-                          className="text-zinc-400 hover:text-red-500"
-                          onClick={() => {
-                            void saveField({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }, 'File removed')
-                          }}>✕</button>
-                      )}
-                    </div>
+                    <RawFileRow key={a.url} file={a} canManage={canManage}
+                      onRemove={() => {
+                        void saveField({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }, 'File removed')
+                      }} />
                   ))}
                 </div>
               </div>
             )}
+            <ExportWarnings items={jobWarnings} onDismiss={() => setJobWarnings([])} />
             {canManage && (
               <div>
                 <input ref={jobFileRef} type="file" multiple className="hidden"
@@ -1694,12 +1785,9 @@ export default function ItemDetailPage() {
             {(detail.raw_assets?.length ?? 0) > 0 && (
               <div className="grid gap-1.5">
                 <Label className="text-xs">Files</Label>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                   {detail.raw_assets!.map(a => (
-                    <a key={a.url} href={a.url} target="_blank" rel="noreferrer noopener"
-                      className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400">
-                      {a.name || a.url}
-                    </a>
+                    <RawFileRow key={a.url} file={a} canManage={false} />
                   ))}
                 </div>
               </div>

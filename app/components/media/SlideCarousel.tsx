@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import SafeVideo from './SafeVideo'
 import {
   SWIPE_THRESHOLD_PX, allSeen, clampIndex, counterLabel, markSeen,
   nextIndex, prevIndex, swipeDecision,
@@ -176,15 +177,19 @@ export default function SlideCarousel({
               }`}
             >
               {isVideo(s) ? (
-                <video
+                // a .mov whose index is at the end shows a client nothing but
+                // a spinner — SafeVideo turns that into a download link and
+                // words the client can act on
+                <SafeVideo
                   ref={el => { videos.current[i] = el }}
                   src={s.url}
-                  controls
-                  playsInline
+                  words="client"
                   // only the card in the frame is worth a network request
                   preload={current ? 'metadata' : 'none'}
+                  probe={current}
                   className={mediaClass}
-                  aria-label={alt || undefined}
+                  noticeClassName="w-full max-w-md rounded-lg"
+                  ariaLabel={alt || undefined}
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
