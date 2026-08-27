@@ -11,18 +11,12 @@ import {
 } from '@/components/ui/dialog'
 import { ExternalLink, CheckCircle2, MessageSquare } from 'lucide-react'
 import { CommitmentCards, PortalSection } from '../components/portal/PortalSections'
+import SlideCarousel from '../components/media/SlideCarousel'
+import { slidesFor } from '../lib/slide-carousel-core'
 import { publishedLines } from '../lib/post-analytics-core'
 import ShootSection from '../components/portal/ShootSection'
 import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'
-
-function Media({ src, className }: { src: string; className?: string }) {
-  if (/\.(mp4|webm|mov)(\?|$)/i.test(src)) {
-    return <video src={src} controls playsInline className={className} />
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className={className} />
-}
 
 export default function ClientPortalPage() {
   const [data, setData] = useState<(PortalData & { viewer_role: string }) | null>(null)
@@ -134,7 +128,12 @@ export default function ClientPortalPage() {
           )}
           {data.needs_review.map(item => (
             <div key={item.id} className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-              {item.preview_url && <Media src={item.preview_url} className="max-h-96 w-full bg-zinc-950 object-contain" />}
+              {/* the same viewer the share-link portal uses: a carousel is
+                  approved whole, so the whole thing has to be reachable from
+                  the button that approves it */}
+              <SlideCarousel slides={slidesFor(item)} aspect="natural" naturalMax="max-h-96"
+                mode="full" chromeClassName="px-3"
+                label={item.title} />
               <p className="px-3 pt-3 text-xs text-zinc-500 dark:text-zinc-400">{approveConsequence(data.am_name)}</p>
               {/* on a phone the title and three `size="sm"` buttons fought over
                   one 320px row; the buttons get their own full-width row and a

@@ -7,6 +7,8 @@ import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import CommentThread from '../../../../components/portal/CommentThread'
 import { ReviewCard } from '../../../../components/portal/PortalSections'
+import SlideCarousel from '../../../../components/media/SlideCarousel'
+import { slidesFor } from '../../../../lib/slide-carousel-core'
 import { contentTypeLabel } from '../../../../lib/portal-words'
 
 export const metadata: Metadata = {
@@ -25,6 +27,7 @@ export default async function PortalItemPage({ params }: { params: Promise<{ tok
   const data = await getPortalItemDetail(raw, id)
   if (!data) notFound()
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
+  const slides = slidesFor(data.item)
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -59,15 +62,12 @@ export default async function PortalItemPage({ params }: { params: Promise<{ tok
               look properly used to cost the client their two buttons */}
           {data.item.status === 'client_review' ? (
             <ReviewCard item={data.item} token={token} amName={data.am_name} bare />
-          ) : data.item.preview_url ? (
-            <div className="overflow-hidden rounded-xl" style={{ background: '#0a0a0a' }}>
-              {/\.(mp4|webm|mov)(\?|$)/i.test(data.item.preview_url) ? (
-                <video src={data.item.preview_url} controls playsInline preload="metadata" className="max-h-[70vh] w-full object-contain" />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={data.item.preview_url} alt="" className="max-h-[70vh] w-full object-contain" />
-              )}
-            </div>
+          ) : slides.length > 0 ? (
+            // the whole post at full size — the page the client opens when
+            // they want to look properly is where every card of a carousel is
+            <SlideCarousel slides={slides} aspect="natural" mode="full"
+              className="overflow-hidden rounded-xl"
+              label={`${data.item.title}${slides.length > 1 ? ` — ${slides.length} slides` : ''}`} />
           ) : null}
 
           <CommentThread token={token} kind="item" id={data.item.id} comments={data.comments} />

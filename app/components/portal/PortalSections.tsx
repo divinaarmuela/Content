@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CalendarDays, Check, ExternalLink, MessageSquare, Send } from 'lucide-react'
 import type { PortalData, PortalItem } from '../../lib/portal-data'
+import SlideCarousel from '../media/SlideCarousel'
+import { seenLabel, slidesFor } from '../../lib/slide-carousel-core'
 import {
   APPROVED_TOAST, approveConsequence, changesSentToast,
   contentTypeLabel, contentTypePlural, scheduledWhen,
@@ -132,49 +134,6 @@ function UpdatedAgo({ iso }: { iso: string }) {
   return <>{text ?? ''}</>
 }
 
-function Media({ src }: { src: string }) {
-  if (/\.(mp4|webm|mov)(\?|$)/i.test(src)) {
-    return <video src={src} controls playsInline className="h-full w-full object-contain" />
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className="h-full w-full object-contain" />
-}
-
-/**
- * "This is a carousel, and here is what is in it."
- *
- * A carousel arrives as one post of several cards, and a card showing only
- * the first one says the piece is a single image. Three thumbnails and a
- * remainder is the whole message — the piece's own page is where all of them
- * are — so it costs one row and never crowds the title.
- */
-function SlideStrip({ slides, total }: {
-  slides: { url: string; type: 'image' | 'video' }[]
-  total: number
-}) {
-  if (total < 2) return null
-  const rest = total - slides.length
-  return (
-    <div className="flex items-center gap-1.5 px-3 pt-2">
-      {slides.map((s, i) => (
-        <div key={s.url} className="h-9 w-9 shrink-0 overflow-hidden rounded" style={{ background: '#0a0a0a' }}>
-          {s.type === 'video'
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-            // eslint-disable-next-line @next/next/no-img-element
-            : <img src={s.url} alt={`Slide ${i + 1}`} className="h-full w-full object-cover" />}
-        </div>
-      ))}
-      {rest > 0 && (
-        <span className="font-mono text-[10px] opacity-50">+{rest}</span>
-      )}
-      <span className="ml-auto font-mono text-[10px] uppercase tracking-wider opacity-50">
-        {total} slides
-      </span>
-    </div>
-  )
-}
-
 /**
  * A piece awaiting the client's decision — preview large, decision obvious.
  * Approve is one click; Request changes asks for the note that makes the
@@ -190,6 +149,13 @@ export function ReviewCard({ item, token, amName, bare }: {
   const [busy, setBusy] = useState<string | null>(null)
   // null = the two buttons · 'changes' = request-changes note · 'approve' = approve-with-note
   const [mode, setMode] = useState<null | 'changes' | 'approve'>(null)
+  // which cards of a carousel this browser has actually had on screen. It is
+  // printed beside Approve and nothing more: approving is the client's call,
+  // and a portal that refuses the button until they have flicked through six
+  // images is a portal arguing with the person paying for the work.
+  const [seen, setSeen] = useState<number[]>([])
+  const slides = slidesFor(item)
+  const seenLine = seenLabel(seen, slides.length)
   // who at the client is speaking — asked once, remembered in this browser
   const [name, setName] = useState(() =>
     typeof window === 'undefined' ? '' : localStorage.getItem('mdm-portal-name') ?? '')
@@ -234,12 +200,18 @@ export function ReviewCard({ item, token, amName, bare }: {
 
   return (
     <div className="overflow-hidden rounded-xl" style={surface}>
-      {item.preview_url && (
-        <div className="max-h-[420px] w-full" style={{ background: '#0a0a0a' }}>
-          <Media src={item.preview_url} />
-        </div>
+      {slides.length > 0 && (
+        <SlideCarousel
+          slides={slides}
+          aspect="natural"
+          naturalMax="max-h-[420px]"
+          mode="full"
+          className="pb-1"
+          chromeClassName="px-4"
+          label={`${item.title} — ${slides.length} slides`}
+          onSeenChange={s => setSeen(s.seen)}
+        />
       )}
-      <SlideStrip slides={item.preview_slides ?? []} total={item.slide_count ?? 0} />
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -321,6 +293,14 @@ export function ReviewCard({ item, token, amName, bare }: {
                   >
                     Approve with a note
                   </button>
+                  {/* a carousel is approved whole — this says how much of it
+                      they have actually looked at. It never disables Approve;
+                      see the note on `seen`. */}
+                  {seenLine && (
+                    <span className="font-mono text-[10px] uppercase tracking-wider opacity-50">
+                      {seenLine}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -357,6 +337,7 @@ export function ReviewCard({ item, token, amName, bare }: {
  *  just while it's being reviewed. No preview yet → a quiet dark slate. */
 export function PortalItemCard({ item, token }: { item: PortalItem; token?: string }) {
   const typeLabel = contentTypeLabel(item.content_type)
+  const slides = slidesFor(item)
   // a black slate reading "in the works" under the word "Approved" is a
   // contradiction — the slate says whatever is true at this stage
   const slate = ['approved_for_scheduling', 'scheduled', 'published'].includes(item.status)
@@ -370,25 +351,29 @@ export function PortalItemCard({ item, token }: { item: PortalItem; token?: stri
     : null
   return (
     <div className="group overflow-hidden rounded-xl" style={surface}>
-      <div className="relative aspect-video w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
-        {item.preview_url ? (
-          /\.(mp4|webm|mov)(\?|$)/i.test(item.preview_url)
-            ? <video src={item.preview_url} controls playsInline preload="metadata" className="h-full w-full object-cover" />
-            // eslint-disable-next-line @next/next/no-img-element
-            : <img src={item.preview_url} alt="" className="h-full w-full object-cover" />
+      <div className="relative w-full overflow-hidden" style={{ background: '#0a0a0a' }}>
+        {slides.length > 0 ? (
+          // square, not 16:9: a Reel or a 4:5 carousel card cropped to a
+          // letterbox is the wrong half of the picture
+          <SlideCarousel slides={slides} aspect="square" mode="compact"
+            label={`${item.title}${slides.length > 1 ? ` — ${slides.length} slides` : ''}`} />
         ) : (
-          <div className="flex h-full w-full items-center justify-center px-3 text-center">
+          <div className="flex aspect-square w-full items-center justify-center px-3 text-center">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] opacity-30">{slate}</span>
           </div>
         )}
         {typeLabel && (
-          <span className="absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
+          <span className="absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
             style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
             {typeLabel}
           </span>
         )}
+        {slides.length > 1 && (
+          <span className="absolute right-2 top-2 z-10 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-white">
+            {slides.length} slides
+          </span>
+        )}
       </div>
-      <SlideStrip slides={item.preview_slides ?? []} total={item.slide_count ?? 0} />
       <div className="flex flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
           {liveUrl ? (

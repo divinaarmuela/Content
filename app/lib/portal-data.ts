@@ -33,6 +33,11 @@ export type PortalItem = {
   /** a carousel is one post of many cards — the card shows the first three
    *  and says how many there are. Empty for a single-file piece. */
   preview_slides: { url: string; type: 'image' | 'video' }[]
+  /** the WHOLE post, in posting order, so the portal can show it as the
+   *  carousel it is rather than card one plus a row of stamps. Single-file
+   *  pieces carry exactly one entry; a piece with no client-facing media
+   *  carries none. */
+  slides: { url: string; type: 'image' | 'video'; name: string }[]
   slide_count: number
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
   /** how the live post is doing, once the platform has counted it. Null on
@@ -233,6 +238,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       preview_url: clientFacing ? slides[0]?.url || latest?.file_url || null : null,
       drive_url: clientFacing ? latest?.drive_url || null : null,
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
+      slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       slide_count: slides.length,
       schedule: scheduleByItem.get(i.id) ?? [],
       metrics: a

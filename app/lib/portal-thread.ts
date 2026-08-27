@@ -112,6 +112,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       preview_url: slides[0]?.url ?? latest?.file_url ?? null,
       drive_url: latest?.drive_url ?? null,
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
+      slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       slide_count: slides.length,
       schedule: [],
       // this page is the conversation about one piece, not its scoreboard —
