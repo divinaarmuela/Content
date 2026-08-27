@@ -475,18 +475,9 @@ export default function AvailabilityView() {
                     <span className={`text-xs font-semibold uppercase tracking-wider ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
                       {dow}
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className="font-mono text-[11px] text-zinc-400">{day}</span>
-                      {canManage && <button
-                        type="button"
-                        onClick={() => setProposeDay(key)}
-                        title="Propose a shoot on this day"
-                        aria-label={`Propose a shoot on ${dow} ${day}`}
-                        className="rounded p-0.5 text-zinc-300 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>}
-                    </span>
+                    {/* the hover-only `+` that used to live here is now a
+                        labelled button at the foot of the card */}
+                    <span className="font-mono text-[11px] text-zinc-400">{day}</span>
                   </div>
                   {list.length === 0 && dayProposals.length === 0 ? (
                     <p className="my-auto text-center font-mono text-[11px] uppercase tracking-widest text-emerald-600/70 dark:text-emerald-500/60">
@@ -553,6 +544,21 @@ export default function AvailabilityView() {
                         </div>
                       ))}
                     </div>
+                  )}
+                  {/* The only way to propose a shoot used to be the 14px `+`
+                      above, which was invisible until hover — so on a phone
+                      the entire feature had no entry point, while the
+                      Proposals page told people to "send one from a free day
+                      in the Availability view". This is that entry point. */}
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setProposeDay(key)}
+                      className="mt-auto w-full justify-start text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Propose a shoot
+                    </Button>
                   )}
                 </CardContent>
               </Card>

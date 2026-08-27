@@ -391,7 +391,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                     </SelectContent>
                   </Select>
                   {canEdit && (
-                    <button type="button" className="opacity-0 transition-opacity group-hover:opacity-100"
+                    <button type="button" className="opacity-60 transition-opacity group-hover:opacity-100"
                       onClick={() => void patch('shot_list', shots.filter((_, j) => j !== i), true)}>
                       <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
                     </button>

@@ -7,9 +7,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink,
-  KeyRound, MessageSquare, XCircle,
+  KeyRound, MessageSquare, RefreshCw, XCircle,
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import { Button } from '@/components/ui/button'
 
 /* ── shapes (kept loose: the provider owns them) ───────────────────────── */
 
@@ -82,6 +83,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params)
   const [data, setData] = useState<Payload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -96,6 +98,28 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   }, [id])
 
   useEffect(() => { load() }, [load])
+
+  /** The same POST /api/social/connect the Connect dropdown uses, aimed at the
+   *  account already on screen. A full navigation, not a popup: the platforms'
+   *  consent screens refuse to be framed and popups get blocked. */
+  const reconnect = async () => {
+    if (!data) return
+    setReconnecting(true)
+    try {
+      const res = await fetch('/api/social/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: data.account.client_id, platform: data.account.platform }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not start the reconnection')
+      window.location.href = json.authUrl
+    } catch (e) {
+      console.error('[social] reconnect failed', e)
+      toast.error('We could not open the login screen. Try again in a moment.')
+      setReconnecting(false)
+    }
+  }
 
   if (error) {
     return (
@@ -124,6 +148,9 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   const token = health?.tokenStatus
   const scopes = Object.entries(health?.permissions ?? {})
   const missing = scopes.flatMap(([, list]) => list).filter(s => !s.granted && s.required)
+
+  // one condition behind the button and all three warnings
+  const needsReconnect = token?.valid === false || token?.needsRefresh === true || missing.length > 0
 
   const followerRow = followers?.accounts?.find(a => a._id === account.provider_account_id)
   const metrics = Object.entries(insights?.metrics ?? {})
@@ -166,12 +193,24 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               {' · '}connected {when(account.connected_at)}
             </p>
           </div>
-          <Link
-            href={`/dashboard/social/inbox?account=${encodeURIComponent(account.provider_account_id)}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-          >
-            <MessageSquare className="h-3.5 w-3.5" /> Inbox
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* This page told a scheduler THREE times, urgently, to reconnect
+                — and gave them no way to do it. The connect flow lived in a
+                dropdown on another page. It is the same call; it now lives
+                where the warning is. */}
+            {needsReconnect && (
+              <Button size="sm" onClick={() => void reconnect()} disabled={reconnecting}>
+                <RefreshCw className={`h-3.5 w-3.5 ${reconnecting ? 'animate-spin' : ''}`} />
+                {reconnecting ? 'Opening the login screen…' : 'Reconnect account'}
+              </Button>
+            )}
+            <Link
+              href={`/dashboard/social/inbox?account=${encodeURIComponent(account.provider_account_id)}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+            >
+              <MessageSquare className="h-3.5 w-3.5" /> Inbox
+            </Link>
+          </div>
         </CardContent>
       </Card>
 
@@ -190,8 +229,8 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               Access token expires {when(token.expiresAt)}
               {token.expiresIn && ` — ${token.expiresIn}`}.{' '}
               {urgent
-                ? 'Reconnect this account now. Once the token expires, scheduled posts fail silently.'
-                : 'Reconnect before then to keep publishing working — automatic refresh is not guaranteed.'}
+                ? 'Use Reconnect account above. Until you do, posts scheduled for this account will quietly fail to go out.'
+                : 'Reconnecting before then keeps posting working — it does not always renew on its own.'}
             </span>
           </div>
         )
@@ -200,10 +239,12 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       {missing.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {/* the raw scope strings ("instagram_manage_comments") meant
+              nothing to anyone reading this page; the instruction does */}
           <span>
-            Missing required permission{missing.length > 1 ? 's' : ''}:{' '}
-            <span className="font-mono">{missing.map(m => m.scope).join(', ')}</span>.
-            Reconnect the account and approve everything requested.
+            This account is missing {missing.length > 1 ? 'some of the permissions' : 'a permission'} we
+            need. Press <strong>Reconnect account</strong> above, and when the
+            login screen appears, tick every permission it asks for.
           </span>
         </div>
       )}

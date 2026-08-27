@@ -127,7 +127,7 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
               </span>
               {canManage && (
                 <button onClick={() => void remove(m)} aria-label={`Remove ${m.name || m.email}`}
-                  className="-mr-1 rounded-full p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100">
+                  className="-mr-1 rounded-full p-0.5 text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100">
                   <X className="h-3 w-3" />
                 </button>
               )}

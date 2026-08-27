@@ -89,7 +89,7 @@ export default function BrandCard({ clientId }: { clientId: string }) {
                       <p className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{c.hex}</p>
                       {c.usage && <p className="mt-0.5 truncate text-[11px] text-zinc-400 dark:text-zinc-500">{c.usage}</p>}
                     </div>
-                    <Copy className="mt-0.5 h-3 w-3 shrink-0 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600" />
+                    <Copy className="mt-0.5 h-3 w-3 shrink-0 text-zinc-300 opacity-60 transition-opacity group-hover:opacity-100 dark:text-zinc-600" />
                   </div>
                 </button>
               ))}
@@ -119,7 +119,7 @@ export default function BrandCard({ clientId }: { clientId: string }) {
                       )}
                     </p>
                   </div>
-                  <Copy className="mt-1 h-3 w-3 shrink-0 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600" />
+                  <Copy className="mt-1 h-3 w-3 shrink-0 text-zinc-300 opacity-60 transition-opacity group-hover:opacity-100 dark:text-zinc-600" />
                 </button>
               ))}
             </div>

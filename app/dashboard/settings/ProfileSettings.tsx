@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { COMMON_ZONES, zoneOption } from '@/app/lib/timezone-core'
 
 type Me = {
   id: string
@@ -28,11 +29,13 @@ type Me = {
   notification_prefs: Record<string, boolean>
 }
 
-const ZONES = [
-  'Australia/Melbourne', 'Australia/Sydney', 'Australia/Brisbane',
-  'Australia/Adelaide', 'Australia/Perth', 'Australia/Darwin', 'Australia/Hobart',
-  'Pacific/Auckland', 'Asia/Singapore', 'Asia/Kolkata', 'Europe/London', 'UTC',
-]
+/**
+ * One list, shared with Team. This page's own copy of it left out
+ * `Asia/Manila` — so half the team could not set the timezone that decides
+ * what counts as overdue for them, and Team's picker (super-admin only) was
+ * the only place it existed. Two lists WILL drift; there is now one.
+ */
+const ZONES = COMMON_ZONES
 
 /** "09:00:00" from Postgres, "09:00" from an <input type=time>. */
 const toTimeInput = (v: string) => (v || '').slice(0, 5)
@@ -141,7 +144,7 @@ export default function ProfileSettings() {
             >
               <SelectTrigger id="profile-timezone"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ZONES.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                {ZONES.map(z => <SelectItem key={z} value={z}>{zoneOption(z)}</SelectItem>)}
               </SelectContent>
             </Select>
             {localTime && (

@@ -139,7 +139,7 @@ export default function IntakeEditor({
                   onDragStart={() => setDrag({ kind: 'section', si })}
                   onDragEnd={() => { setDrag(null); setOver(null) }}
                   title="Drag to reorder this section"
-                  className="cursor-grab p-1 text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 active:cursor-grabbing"
+                  className="cursor-grab p-1 text-muted-foreground opacity-60 transition-opacity group-hover/section:opacity-100 active:cursor-grabbing"
                 >
                   <GripVertical className="h-4 w-4" />
                 </span>
@@ -151,7 +151,7 @@ export default function IntakeEditor({
                   onChange={e => patchSection(si, { title: e.target.value })}
                   className="h-8 flex-1 border-0 bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
                 />
-                <div className="flex opacity-0 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100">
+                <div className="flex opacity-60 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100">
                   <Button size="icon" variant="ghost" className="h-7 w-7" disabled={si === 0}
                     aria-label="Move section up"
                     onClick={() => setSections(moveItem(draft.sections, si, si - 1))}>
@@ -204,7 +204,7 @@ export default function IntakeEditor({
                       onDragStart={() => setDrag({ kind: 'block', si, bi })}
                       onDragEnd={() => { setDrag(null); setOver(null) }}
                       title="Drag to reorder this question"
-                      className="cursor-grab p-1 pt-2 text-muted-foreground opacity-0 transition-opacity group-hover/block:opacity-100 active:cursor-grabbing"
+                      className="cursor-grab p-1 pt-2 text-muted-foreground opacity-60 transition-opacity group-hover/block:opacity-100 active:cursor-grabbing"
                     >
                       <GripVertical className="h-4 w-4" />
                     </span>
@@ -266,7 +266,7 @@ export default function IntakeEditor({
                       })()}
                     </div>
 
-                    <div className="flex flex-col opacity-0 transition-opacity group-hover/block:opacity-100 focus-within:opacity-100">
+                    <div className="flex flex-col opacity-60 transition-opacity group-hover/block:opacity-100 focus-within:opacity-100">
                       <Button size="icon" variant="ghost" className="h-7 w-7" disabled={bi === 0}
                         aria-label="Move question up"
                         onClick={() => patchSection(si, { blocks: moveItem(section.blocks, bi, bi - 1) })}>

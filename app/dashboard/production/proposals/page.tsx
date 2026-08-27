@@ -108,7 +108,7 @@ export default function ProposalsPage() {
   }
 
   return (
-    <Card className="overflow-hidden py-0">
+    <Card className="py-0">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>

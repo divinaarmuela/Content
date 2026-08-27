@@ -347,7 +347,7 @@ function ChatList({ chats, activeId, onOpen, onAskDelete }: {
             {c.title}
           </button>
           <button onClick={() => onAskDelete(c)}
-            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+            className="shrink-0 rounded p-1 text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100"
             aria-label={`Delete "${c.title}"`}>
             <Trash2 className="h-3.5 w-3.5" />
           </button>

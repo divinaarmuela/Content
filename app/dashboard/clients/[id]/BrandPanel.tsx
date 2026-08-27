@@ -318,7 +318,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                         {isHex(c.hex) ? c.hex.toUpperCase() : 'no hex given'}{c.usage ? ` · ${c.usage}` : ''}
                       </span>
                     </span>
-                    <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
                   </button>
                 ))}
               </div>
@@ -352,7 +352,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                         {f.weights!.join(' · ')}
                       </span>
                     )}
-                    <Copy className={`h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 ${(f.weights?.length ?? 0) > 0 ? '' : 'ml-auto'}`} />
+                    <Copy className={`h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100 ${(f.weights?.length ?? 0) > 0 ? '' : 'ml-auto'}`} />
                   </button>
                 ))}
               </div>
