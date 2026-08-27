@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { resolveTeamUser, authzErrorResponse } from '@/app/lib/authz'
+import { isValidZone } from '@/app/lib/timezone-core'
 
 /**
  * The signed-in user's resolved identity.
@@ -63,7 +64,12 @@ export async function PATCH(req: Request) {
 
     const patch: Record<string, unknown> = {}
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim()
-    if (typeof body.timezone === 'string' && body.timezone) patch.timezone = body.timezone
+    // the browser syncs this on sign-in, so it arrives unattended — a zone
+    // the platform cannot format would silently become UTC in the overdue
+    // rollups that read it
+    if (typeof body.timezone === 'string' && isValidZone(body.timezone)) {
+      patch.timezone = body.timezone.trim()
+    }
     for (const k of ['workday_start', 'workday_end'] as const) {
       if (typeof body[k] === 'string' && body[k]) patch[k] = body[k]
     }

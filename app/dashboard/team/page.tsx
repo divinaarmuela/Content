@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { formatInZone, zoneAbbrev, zoneLabel } from '../../lib/timezone-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -121,6 +122,15 @@ export default function TeamPage() {
   // false until the server says otherwise — a flash of admin controls at
   // people who cannot use them is an invitation to a 403
   const [canManage, setCanManage] = useState(false)
+
+  /** ticking on the client only: every row shows the local time where that
+   *  person is, and a server-rendered clock would be wrong before it was read */
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const t = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteBusy, setInviteBusy] = useState(false)
@@ -342,7 +352,18 @@ export default function TeamPage() {
                     <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
                   </TableCell>
                   <TableCell className="text-sm capitalize text-zinc-600 dark:text-zinc-400">{m.employment_type}</TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{m.timezone}</TableCell>
+                  {/* the zone AND what o'clock it is there: "Asia/Manila" is a
+                      database value, "2:14 pm PHT" is the thing you actually
+                      wanted to know before pinging somebody. Kept out of the
+                      server render — the row's clock ticks in the browser. */}
+                  <TableCell className="text-xs text-zinc-500 dark:text-zinc-400" suppressHydrationWarning>
+                    <span className="font-mono">{zoneLabel(m.timezone)}</span>
+                    {now && (
+                      <span className="ml-1.5 font-mono tabular-nums opacity-70">
+                        {formatInZone(now, m.timezone, 'time')} {zoneAbbrev(m.timezone, now)}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex max-w-48 flex-wrap gap-1">
                       {clientsFor(m.id).slice(0, 3).map(n => (

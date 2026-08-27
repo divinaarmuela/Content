@@ -3,34 +3,31 @@
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRole } from './useRole'
+import { DEFAULT_TZ, greetingInZone } from '../lib/timezone-core'
 
-/**
- * Greets by the viewer's own clock.
- *
- * The hour comes from their `timezone` on team_users — the same field the
- * Team Activity rollup uses to decide what is overdue — not from the browser.
- * Those usually agree, but when someone is travelling or a contractor works
- * from another country, the browser is the wrong answer and their profile is
- * the one they set deliberately.
- */
-function partOfDay(hour: number): string {
-  if (hour < 5) return 'Still up'
-  if (hour < 12) return 'Good morning'
-  if (hour < 17) return 'Good afternoon'
-  if (hour < 21) return 'Good evening'
-  return 'Working late'
-}
-
-/** Hour of day in a given zone, falling back to the browser if it is invalid. */
-function hourIn(zone: string, now: Date): number {
+/** Where this browser thinks it is. Null when it will not say. */
+function browserZone(): string | null {
   try {
-    return Number(
-      new Intl.DateTimeFormat('en-AU', { timeZone: zone, hour: 'numeric', hour12: false }).format(now),
-    )
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
   } catch {
-    return now.getHours()
+    return null
   }
 }
+
+/**
+ * Greets by the viewer's own clock — the DEVICE's, first.
+ *
+ * This used to read `timezone` off the team_users profile, on the theory that
+ * a deliberately-set field beats a browser's guess. In practice the field held
+ * its default and the browser held the truth: a scheduler working from the
+ * Philippines was greeted "Working late … 09:02 pm" at seven in the evening,
+ * because the profile said Melbourne and nobody had ever changed it.
+ *
+ * The browser is where the person actually is, travelling or not. The profile
+ * is the fallback for the rare case the browser will not say, and it is kept
+ * in step with the browser on sign-in, so the server-side rollups that read it
+ * agree with what she sees here.
+ */
 
 export default function Greeting({ subtitle }: { subtitle: string }) {
   const { me, loading } = useRole()
@@ -51,9 +48,9 @@ export default function Greeting({ subtitle }: { subtitle: string }) {
     )
   }
 
-  const zone = me?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  const zone = browserZone() || me?.timezone || DEFAULT_TZ
   const firstName = (me?.name || '').trim().split(/\s+/)[0]
-  const hello = partOfDay(hourIn(zone, now))
+  const hello = greetingInZone(now, zone)
 
   let clock = ''
   try {
