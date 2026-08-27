@@ -48,9 +48,26 @@ export const TASKS_FOLDER = '_Tasks'
 /** Assets with no shoot behind them — client-sent footage, an ad-hoc edit. */
 export const NO_SHOOT_FOLDER = '_No shoot'
 
+/** Approved-and-dated work, filed by the month it goes out. */
+export const SCHEDULED_FOLDER = '_Scheduled'
+
+/** What the client sent us, filed by the day it arrived. */
+export const FROM_CLIENT_FOLDER = '_From client'
+
 /** A shoot's three working folders, in the order the work happens. */
 export const SHOOT_SUBFOLDERS = ['01 Raw', '02 Edits', '03 Final'] as const
 export const EDITS_FOLDER = SHOOT_SUBFOLDERS[1]
+export const FINAL_FOLDER = SHOOT_SUBFOLDERS[2]
+
+/**
+ * What a shoot-less item's finals folder is called.
+ *
+ * NOT `03 Final`: the numbered names exist to order the three stages of a
+ * shoot, and a shoot-less item has no `01 Raw` or `02 Edits` to be third
+ * after. A lone `03 Final` inside `_No shoot/{Item}` would be a number
+ * counting nothing.
+ */
+export const NO_SHOOT_FINAL_FOLDER = 'Final'
 
 /**
  * One safe folder name.
@@ -213,6 +230,95 @@ export function itemChain(
   client: string, shootFolder: string, itemFolder: string,
 ): string[] {
   return [...shootChains(client, shootFolder).edits, safeSegment(itemFolder)]
+}
+
+/**
+ * `{root}/{Client}/{Shoot}/03 Final` — where the approved cut is archived.
+ *
+ * The same folder the shoot already has, reached by name rather than by id,
+ * so an item approved long after its shoot still lands in the shoot's own
+ * finals rather than in a second one.
+ */
+export function shootFinalChain(client: string, shootFolder: string): string[] {
+  return shootChains(client, shootFolder).final
+}
+
+/**
+ * `{root}/{Client}/_No shoot/{Item}/Final` — finals for a shoot-less item.
+ *
+ * It hangs off the ITEM's own folder, not off a client-wide finals bin: with
+ * no shoot to group them, the deliverable is the only grouping there is.
+ */
+export function noShootFinalChain(client: string, itemFolder: string): string[] {
+  return [...noShootChain(client, itemFolder), NO_SHOOT_FINAL_FOLDER]
+}
+
+/**
+ * `{root}/{Client}/_Scheduled/{YYYY-MM}` — what goes out, by the month it
+ * goes out in.
+ *
+ * Deliberately per CLIENT and not per shoot: "what are we posting for them in
+ * September" is a question about a client and a month, and answering it from
+ * the shoot tree means opening every shoot. A month with nothing scheduled
+ * never gets a folder, because nothing is ever copied into it.
+ */
+export function scheduledChain(client: string, month: string): string[] {
+  return chain(client, SCHEDULED_FOLDER, month)
+}
+
+/** `YYYY-MM-DD` from an ISO date or timestamp, or null if it is not a date. */
+export function dayStamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso).trim())
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  const d = new Date(String(iso))
+  if (Number.isNaN(d.getTime())) return null
+  return [
+    d.getUTCFullYear(),
+    String(d.getUTCMonth() + 1).padStart(2, '0'),
+    String(d.getUTCDate()).padStart(2, '0'),
+  ].join('-')
+}
+
+/**
+ * `{root}/{Client}/_From client/{YYYY-MM-DD}` — what the client sent, by the
+ * day it arrived.
+ *
+ * By DAY rather than by month, and by day rather than by form: a client sends
+ * things in bursts — an intake form, then a folder of product photos a week
+ * later — and "the stuff they sent on the 14th" is how anyone refers to a
+ * burst afterwards. A form id would be accurate and unusable; a month would
+ * put three unrelated deliveries in one pile.
+ *
+ * Brand material is the deliberate exception and goes to `_Brand` instead
+ * (see `intakeFileTarget`): a logo is not a delivery, it is a long-lived
+ * reference, and hunting for it under the date it happened to arrive is
+ * exactly the filing this tree exists to avoid.
+ */
+export function fromClientChain(client: string, day: string): string[] {
+  return chain(client, FROM_CLIENT_FOLDER, day)
+}
+
+/**
+ * Which folder a client-submitted file belongs in.
+ *
+ * Read from the intake BLOCK it was uploaded against, not from the file's own
+ * name: the block is the question that was asked ("Logo files, brand colours
+ * and fonts"), and the question is what says whether the answer is brand
+ * material. A file called `logo.png` uploaded against "photos of your
+ * premises" is a photo of a sign.
+ */
+export function intakeFileTarget(
+  blockId: string | null | undefined, label?: string | null,
+): 'brand' | 'from_client' {
+  // underscores and dashes separate words in a block id (`logo_upload`), but
+  // a regex word boundary treats `_` as a letter — so they become spaces
+  // before anything is matched, or an underscored id would never match
+  const haystack = `${String(blockId ?? '')} ${String(label ?? '')}`
+    .toLowerCase().replace(/[_-]+/g, ' ')
+  return /\b(brand|logo|logos|font|fonts|typeface|guideline|guidelines|style ?guide)\b/.test(haystack)
+    ? 'brand'
+    : 'from_client'
 }
 
 /** The URL a person opens. The only folder URL form Drive publishes. */
