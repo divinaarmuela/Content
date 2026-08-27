@@ -17,6 +17,7 @@ import {
   type MonthTotals, type PostMetrics, type TypeTotals,
 } from './post-analytics-core'
 import { monthInZone, safeZone } from './timezone-core'
+import { normaliseProfile, toScanShape } from './brand-profile-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -147,7 +148,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // day and one month apart, and the commitment tiles would show the wrong
   // month's quota to the only person who cares about it.
   const { data: clientRow } = await supabase
-    .from('clients').select('id, name, timezone').eq('id', clientId).maybeSingle()
+    .from('clients').select('id, name, timezone, brand_profile').eq('id', clientId).maybeSingle()
   if (!clientRow) return null
   const tz = safeZone(clientRow.timezone as string | null)
   const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
@@ -362,7 +363,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   return {
     client: { id: clientRow.id as string, name: clientRow.name as string, timezone: tz },
     am_name: amRes,
-    brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
+    // the team's edited profile once it exists (in the scan's shape, which is
+    // what the theme reads), the raw scan until then
+    brand: clientRow.brand_profile
+      ? (toScanShape(normaliseProfile(clientRow.brand_profile)) as Record<string, unknown>)
+      : (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
     // a shoot plan waiting on the client is a thing waiting on the client. The

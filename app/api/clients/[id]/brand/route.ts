@@ -4,6 +4,7 @@ import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/
 import { signUpload } from '@/app/lib/storage'
 import { inngest } from '../../../../inngest/client'
 import { mirrorBrandDoc } from '../../../../lib/gdrive-mirror'
+import { normaliseProfile, toScanShape } from '../../../../lib/brand-profile-core'
 
 /**
  * Brand guidelines per client.
@@ -29,11 +30,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     // brand guide — schedulers write captions in the brand voice
     const user = await requireRole('scheduler')
     const { id } = await params
-    const { data } = await supabase.from('client_brand')
-      .select('profile, docs, updated_at, updated_by, scan_status, scan_done, scan_total, scan_message')
-      .eq('client_id', id).maybeSingle()
+    const [{ data }, { data: client }] = await Promise.all([
+      supabase.from('client_brand')
+        .select('profile, docs, updated_at, updated_by, scan_status, scan_done, scan_total, scan_message')
+        .eq('client_id', id).maybeSingle(),
+      supabase.from('clients').select('brand_profile').eq('id', id).maybeSingle(),
+    ])
     return NextResponse.json({
-      profile: data?.profile ?? null,
+      // the team's edited profile is the truth once it exists; the raw scan
+      // only until then. Served in the scan's shape so every existing reader
+      // (production brand card, portal theme) sees the edits at once.
+      profile: client?.brand_profile
+        ? toScanShape(normaliseProfile(client.brand_profile))
+        : data?.profile ?? null,
       docs: data?.docs ?? [],
       updated_at: data?.updated_at ?? null,
       // a scan running right now, so reopening the tab shows it rather than
@@ -125,6 +134,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { id } = await params
     const { error } = await supabase.from('client_brand').delete().eq('client_id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // the edited profile goes with it — "start over" means the whole thing
+    await supabase.from('clients')
+      .update({ brand_profile: null, brand_profile_updated_at: new Date().toISOString() })
+      .eq('id', id)
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
