@@ -471,6 +471,34 @@ export default function ItemDetailPage() {
     sync(captionRef.current, detail.caption ?? '')
   }, [detail])
 
+  /**
+   * Files that landed join the slide strip, in the order they were dropped.
+   *
+   * Driven by the queue rather than by the upload call, so a file that failed
+   * and was then RETRIED still makes it into the version. Without this, Retry
+   * would show a green tick on a slide the version was saved without.
+   *
+   * It lives ABOVE the `!detail` skeleton return below, as every hook must:
+   * a hook after that return is called on the second render and not the first,
+   * which is React error #310 and a blank "This page couldn't load" for every
+   * item. tests/hooks-order.test.ts fails if one is put back there.
+   */
+  useEffect(() => {
+    const landed = completedIn(versionGroup)
+    if (landed.length === 0) return
+    setSlides(s => {
+      const have = new Set(s.map(x => x.url))
+      const add = landed.filter(l => !have.has(l.url)).slice(0, MAX_SLIDES - s.length)
+      if (add.length === 0) return s
+      return [...s, ...add.map(l => ({
+        url: l.url,
+        name: l.name,
+        type: (looksLikeVideo(l.url) ? 'video' : 'image') as 'video' | 'image',
+        ...(l.bytes > 0 ? { bytes: l.bytes } : {}),
+      }))]
+    })
+  }, [versionUploads, versionGroup])
+
   if (!detail) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -867,29 +895,6 @@ export default function ItemDetailPage() {
       // toast would only repeat the half of it nobody can act on
     })
   }
-
-  /**
-   * Files that landed join the slide strip, in the order they were dropped.
-   *
-   * Driven by the queue rather than by the upload call, so a file that failed
-   * and was then RETRIED still makes it into the version. Without this, Retry
-   * would show a green tick on a slide the version was saved without.
-   */
-  useEffect(() => {
-    const landed = completedIn(versionGroup)
-    if (landed.length === 0) return
-    setSlides(s => {
-      const have = new Set(s.map(x => x.url))
-      const add = landed.filter(l => !have.has(l.url)).slice(0, MAX_SLIDES - s.length)
-      if (add.length === 0) return s
-      return [...s, ...add.map(l => ({
-        url: l.url,
-        name: l.name,
-        type: (looksLikeVideo(l.url) ? 'video' : 'image') as 'video' | 'image',
-        ...(l.bytes > 0 ? { bytes: l.bytes } : {}),
-      }))]
-    })
-  }, [versionUploads, versionGroup])
 
   const saveVersion = async () => {
     if (slides.length === 0 && !verDraft.drive_url) {
