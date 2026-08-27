@@ -23,15 +23,40 @@
  *   npm run check:mobile
  *   MOBILE_CHECK_URLS="https://…/portal/xxx,https://…/portal/xxx/item/yyy" npm run check:mobile
  *
+ * THE DASHBOARD — Editor, Scheduler, Production — behind a flag, because
+ * those pages need a signed-in session and this script launches a clean
+ * browser:
+ *
+ *   MOBILE_CHECK_DASHBOARD=1 MOBILE_CHECK_STORAGE_STATE=.mobile-check/auth.json npm run check:mobile
+ *
+ * The storage state is a Playwright `storageState()` JSON holding the Clerk
+ * session cookies of whoever is running the check. Make one once from a
+ * browser you are signed into (e.g. `npx playwright codegen --save-storage
+ * .mobile-check/auth.json https://app.mdmmarketing.com.au/dashboard`, sign
+ * in, close). It is git-ignored with the rest of .mobile-check/. With the
+ * flag on and NO state file, the dashboard pages are SKIPPED with a note —
+ * never run signed out, where every one of them is a sign-in page and the
+ * check would pass for the wrong reason.
+ *
  * Screenshots + a findings JSON land in .mobile-check/ (git-ignored).
  */
 
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { chromium } from 'playwright'
 
 /** the ZZ TEST client's portal — a real, safe page that needs no login */
 const DEFAULT_URL = 'https://app.mdmmarketing.com.au/portal/3ae353c7-c879-4db7-bf71-dec9657d40e3'
+
+const APP = process.env.MOBILE_CHECK_APP ?? 'https://app.mdmmarketing.com.au'
+/** the three work pages a first-day hire lives on */
+const DASHBOARD_URLS = [
+  `${APP}/dashboard/editor`,
+  `${APP}/dashboard/scheduler`,
+  `${APP}/dashboard/production`,
+]
+const CHECK_DASHBOARD = process.env.MOBILE_CHECK_DASHBOARD === '1'
+const STORAGE_STATE = process.env.MOBILE_CHECK_STORAGE_STATE ?? '.mobile-check/auth.json'
 
 const URLS = (process.env.MOBILE_CHECK_URLS ?? DEFAULT_URL)
   .split(',').map(s => s.trim()).filter(Boolean)
@@ -174,6 +199,19 @@ async function auditState(page, label, shotPath) {
 }
 
 async function main() {
+  // the auth state lives in OUT, so read it before OUT is wiped
+  let storageState = null
+  let dashboardNote = null
+  if (CHECK_DASHBOARD) {
+    try {
+      await access(path.resolve(process.cwd(), STORAGE_STATE))
+      storageState = path.resolve(process.cwd(), STORAGE_STATE)
+    } catch {
+      dashboardNote = `MOBILE_CHECK_DASHBOARD=1 but no session file at ${STORAGE_STATE} — the dashboard pages were SKIPPED. See the header of scripts/check-mobile.mjs for how to save one.`
+    }
+  }
+  const authed = storageState ? await import('node:fs/promises').then(fs => fs.readFile(storageState, 'utf8')).then(JSON.parse) : null
+
   await rm(OUT, { recursive: true, force: true })
   await mkdir(OUT, { recursive: true })
 
@@ -182,9 +220,15 @@ async function main() {
   /** states where no "Request changes" button existed to open */
   const skipped = []
 
-  for (const url of URLS) {
+  const runs = [
+    ...URLS.map(url => ({ url, auth: false })),
+    ...(CHECK_DASHBOARD && authed ? DASHBOARD_URLS.map(url => ({ url, auth: true })) : []),
+  ]
+
+  for (const { url, auth } of runs) {
     for (const vp of VIEWPORTS) {
       const context = await browser.newContext({
+        ...(auth ? { storageState: authed } : {}),
         viewport: { width: vp.width, height: vp.height },
         deviceScaleFactor: 2,
         isMobile: vp.width < 500,
@@ -209,8 +253,18 @@ async function main() {
       await page.waitForTimeout(1200) // scramble entrances settle
       await revealEverything(page)
 
+      // a dashboard page that bounced to sign-in is not a page to audit
+      if (auth && /sign-in|sign-up/.test(page.url())) {
+        skipped.push(`${url} @ ${vp.name} — the session file did not sign in (bounced to ${page.url()})`)
+        await context.close()
+        continue
+      }
+
       results.push(await auditState(page, `${url} @ ${vp.name}`,
         path.join(OUT, `${slug}--${vp.name}.png`)))
+
+      // dashboard pages have no client form to open — they are read only here
+      if (auth) { await context.close(); continue }
 
       // the request-changes form open — never Approve, never Send
       const trigger = page.getByRole('button', { name: /^request changes$/i }).first()
@@ -251,6 +305,7 @@ async function main() {
     console.log('        so the open-form state was NOT checked here:')
     for (const s of skipped) console.log(`          ${s}`)
   }
+  if (dashboardNote) console.log(`\n  NOTE  ${dashboardNote}`)
 
   await writeFile(path.join(OUT, 'findings.json'), JSON.stringify({ results, skippedFormState: skipped }, null, 2))
   console.log(`\n  ${results.length - failed}/${results.length} states clean.  Details: .mobile-check/findings.json\n`)

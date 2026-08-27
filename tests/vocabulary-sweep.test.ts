@@ -152,49 +152,35 @@ describe('the canonical words are the only words', () => {
     'Take this job',
     'Take this task',
     "I'll schedule this",
+    'I’ll schedule this',
     'Up for grabs',
     'master registry',
     'master database',
     'Briefs in flight',
     'pick up work',
+    // wave 2 — the words the three pages and the item page stopped using
+    'Briefs being planned',
+    'BRIEFS BEING PLANNED',
+    'Approved — to schedule',
+    'Assets in the edit',
+    'New content item',
+    'New brief task',
+    'Brief in progress',
+    'Submit brief for review',
+    'Brief revisions done',
+    'Choose who schedules',
   ]
 
   /**
    * The debt, not an excuse. Every entry is a real site this pass was not
-   * allowed to touch — the three role pages and the item detail page were
-   * being rewritten by someone else at the time. Fixing one makes the "no
-   * stale entries" test below fail, which is the point: the fix and the
-   * entry's removal ship together.
+   * allowed to touch. Fixing one makes the "no stale entries" test below
+   * fail, which is the point: the fix and the entry's removal ship together.
    */
   const KNOWN: Known[] = [
-    { file: 'app/dashboard/editor/page.tsx', contains: 'content item',
-      why: 'wave 2: the Editor board — "New content item" button' },
-    { file: 'app/dashboard/editor/page.tsx', contains: 'Take this job',
-      why: 'wave 2: the Editor board — claim button label' },
-    { file: 'app/dashboard/production/NewItemDialog.tsx', contains: 'content item',
-      why: 'wave 2: the create dialog title and its success toast' },
-    { file: 'app/dashboard/production/NewItemDialog.tsx', contains: 'brief task',
-      why: 'wave 2: the create dialog — "New brief task" and the comment explaining the shoot picker' },
-    { file: 'app/dashboard/production/NewItemDialog.tsx', contains: 'Brief task',
-      why: 'wave 2: the create dialog success toast' },
-    { file: 'app/dashboard/production/page.tsx', contains: 'content item',
-      why: 'wave 2: the Production board — a comment describing when items exist' },
-    { file: 'app/dashboard/production/page.tsx', contains: 'brief task',
-      why: 'wave 2: the Production board — chip label and surrounding copy' },
-    { file: 'app/dashboard/production/page.tsx', contains: 'Brief task',
-      why: 'wave 2: the Production board — the chip on a shoot-plan card' },
-    { file: 'app/dashboard/production/page.tsx', contains: 'Take this task',
-      why: 'wave 2: the Production board — claim button label' },
-    { file: 'app/dashboard/production/[id]/page.tsx', contains: 'Take this job',
-      why: 'wave 2: the item detail page — claim button label' },
-    { file: 'app/dashboard/production/[id]/page.tsx', contains: "I'll schedule this",
-      why: 'wave 2: the item detail page — the scheduler claim label' },
     { file: 'app/api/production/batches/[id]/route.ts', contains: 'content item',
       why: 'a 409 message and a file comment; the API vocabulary follows the screens, not the other way round' },
     { file: 'app/api/production/items/route.ts', contains: 'brief task',
       why: 'a 409 message and two comments on the create path' },
-    { file: 'app/dashboard/production/[id]/page.tsx', contains: 'content item',
-      why: 'wave 2: the item detail page — the shoot-booked line on a shoot plan' },
     { file: 'app/lib/brief-task-core.ts', contains: 'content item',
       why: 'the reason string on a blocked edge; it moves with the Production board' },
     { file: 'app/lib/production-publish.ts', contains: 'content item',
@@ -241,6 +227,57 @@ ${show(unexpected)}`).toEqual([])
     // only the constant's own explanation may still name the old spelling
     const others = sweep(/Briefs in flight/).filter(h => h.file !== 'app/lib/section-names.ts')
     expect(others).toEqual([])
+  })
+})
+
+describe('the columns say the status words, and the claim says one thing', () => {
+  it('every "approved" column is the status label, never the bare word "Approved"', async () => {
+    const { EDITOR_LANES, SCHEDULER_LANES } = await import('../app/lib/work-pages-core')
+    const { STATUS_LABELS } = await import('../app/lib/workflow-core')
+    expect(EDITOR_LANES.find(l => l.key === 'approved')?.title).toBe(STATUS_LABELS.approved_for_scheduling)
+    expect(SCHEDULER_LANES[0].title).toBe(STATUS_LABELS.approved_for_scheduling)
+    expect(STATUS_LABELS.approved_for_scheduling).not.toBe('Approved')
+  })
+
+  it('"Take this" is the only claim label in the tree', () => {
+    // every ClaimButton either takes the default or says exactly "Take this"
+    const hits = sweep(/<ClaimButton[^>]*label=/)
+    expect(hits.filter(h => !/label="Take this"/.test(h.text)), `other claim labels:\n${show(hits)}`).toEqual([])
+  })
+
+  it('the section people are sent to is the glossary word', () => {
+    const constant = readFileSync(join(process.cwd(), 'app', 'lib', 'section-names.ts'), 'utf8')
+    expect(constant).toMatch(/SHOOT_PLAN_SECTION = 'Shoot plans'/)
+  })
+
+  it('every work page and the item page carry a Getting started panel', () => {
+    for (const rel of [
+      'app/dashboard/editor/page.tsx',
+      'app/dashboard/scheduler/page.tsx',
+      'app/dashboard/production/page.tsx',
+      'app/dashboard/production/[id]/page.tsx',
+    ]) {
+      const src = readFileSync(join(process.cwd(), rel), 'utf8')
+      expect(src, `${rel} has no Getting started panel`).toMatch(/<GettingStarted /)
+    }
+  })
+
+  it('no developer word is shown on the work pages', () => {
+    // identifiers may say batch_id and uses_media all they like; what is
+    // banned is the word inside a string or a JSX text node — the part a
+    // person reads. Scoped to the three pages and the item page.
+    const jsxText = />[^<{}\n]*\b(ad-hoc|adhoc|reconcile)\b[^<{}\n]*</i
+    const stringLit = /["'][^"'\n]*\b(ad-hoc|adhoc|reconcile)\b[^"'\n]*["']/i
+    const hits = [...sweep(jsxText), ...sweep(stringLit)]
+      .filter(h => /app\/dashboard\/(editor|scheduler|production)\//.test(h.file))
+      .filter(h => !/^(import|\/\/|\*|\/\*)/.test(h.text))
+    expect(hits, `developer words on screen:\n${show(hits)}`).toEqual([])
+  })
+
+  it('nothing on the work pages is hover-only', () => {
+    const sites = sweep(/opacity-0 group-hover:opacity-100/)
+      .filter(h => /app\/dashboard\/(editor|scheduler|production)\//.test(h.file))
+    expect(sites, `hover-only controls:\n${show(sites)}`).toEqual([])
   })
 })
 
