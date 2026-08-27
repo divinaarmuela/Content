@@ -145,7 +145,7 @@ export async function GET() {
       let publishedWeek = 0
       const { data: entries } = await supabase
         .from('schedule_entries')
-        .select('id, item_id, platform, scheduled_at, live_url, published_at, content_items(id, title, client_id, clients(name))')
+        .select('id, item_id, platform, scheduled_at, live_url, published_at, content_items(id, title, client_id, clients(name, timezone))')
         // lower-bounded: without this, 200 historical rows fill the window
         // and both panels go permanently blank on a busy account
         .gte('scheduled_at', weekAgo)

@@ -26,7 +26,9 @@ export async function GET(req: Request) {
 
     let q = supabase
       .from('content_items')
-      .select('*, clients(name), batches(title, status, planned_deliverables), work_kinds(name, slug, color, uses_media)')
+      // clients.timezone rides along: every row that prints a posting time
+      // has to print it in the audience's zone, not the reader's
+      .select('*, clients(name, timezone), batches(title, status, planned_deliverables), work_kinds(name, slug, color, uses_media)')
       .order('updated_at', { ascending: false })
       .limit(500)
 

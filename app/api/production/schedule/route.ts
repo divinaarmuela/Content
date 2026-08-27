@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       .select(`
         id, item_id, platform, scheduled_at, publish_status, published_at,
         live_url, tool_url,
-        content_items ( id, title, status, content_type, client_id, clients ( name ) )
+        content_items ( id, title, status, content_type, client_id, clients ( name, timezone ) )
       `)
       .order('scheduled_at', { ascending: true })
       .limit(500)

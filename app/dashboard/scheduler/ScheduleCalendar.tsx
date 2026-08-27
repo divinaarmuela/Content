@@ -8,6 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import PlatformIcon from '../social/PlatformIcon'
 import { useProductionLive } from '../production/useProductionLive'
+import {
+  DEFAULT_TZ, dayKeyInZone, formatInZone, formatWithZone, viewerHint, zoneAbbrev,
+} from '../../lib/timezone-core'
 
 type Entry = {
   id: string
@@ -19,9 +22,12 @@ type Entry = {
   live_url: string | null
   content_items: {
     id: string; title: string; status: string; content_type: string
-    client_id: string; clients: { name: string } | null
+    client_id: string; clients: { name: string; timezone?: string | null } | null
   } | null
 }
+
+/** The zone a row's time belongs to — its client's, and never the browser's. */
+const tzOf = (e: Entry) => e.content_items?.clients?.timezone || DEFAULT_TZ
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -56,6 +62,11 @@ export default function ScheduleCalendar() {
   const [anchor, setAnchor] = useState(() => new Date())
   /** the viewer has moved the calendar themselves — stop steering it */
   const [pinned, setPinned] = useState(false)
+  /** the reader's own zone, for the "= your time" half of a tooltip */
+  const [viewerTz, setViewerTz] = useState<string | null>(null)
+  useEffect(() => {
+    try { setViewerTz(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { /* no hint */ }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -74,11 +85,21 @@ export default function ScheduleCalendar() {
   // live calendar: schedule entries appear as they are set, no reload
   useProductionLive(load)
 
+  /**
+   * Which cell a post sits in.
+   *
+   * The date of a post is the date in the AUDIENCE's zone. A 9 am Melbourne
+   * post is Thursday for the client and Wednesday night for a scheduler in
+   * Los Angeles; putting it on Wednesday because that is where the browser
+   * filed it would make the calendar disagree with the client's own portal
+   * about which day their post goes out.
+   */
   const byDay = useMemo(() => {
     const map = new Map<string, Entry[]>()
     for (const e of entries ?? []) {
       if (!e.scheduled_at) continue
-      const k = key(new Date(e.scheduled_at))
+      const k = dayKeyInZone(e.scheduled_at, tzOf(e))
+      if (!k) continue
       map.set(k, [...(map.get(k) ?? []), e])
     }
     return map
@@ -110,10 +131,11 @@ export default function ScheduleCalendar() {
 
   const unscheduled = (entries ?? []).filter(e => !e.scheduled_at).length
   // …and say how many of the total are in the month actually on screen
+  const anchorMonthKey = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`
   const inMonth = (entries ?? []).filter(e => {
     if (!e.scheduled_at) return false
-    const d = new Date(e.scheduled_at)
-    return d.getFullYear() === anchor.getFullYear() && d.getMonth() === anchor.getMonth()
+    // counted by the client's calendar, the same one the cells are filled from
+    return dayKeyInZone(e.scheduled_at, tzOf(e))?.slice(0, 7) === anchorMonthKey
   }).length
 
   if (entries === null) {
@@ -179,11 +201,17 @@ export default function ScheduleCalendar() {
                                 ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300'
                                 : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300'
                             }`}
-                            title={`${e.content_items?.title ?? 'Item'} · ${e.content_items?.clients?.name ?? ''}`}>
+                            title={[
+                              `${e.content_items?.title ?? 'Item'} · ${e.content_items?.clients?.name ?? ''}`,
+                              formatWithZone(e.scheduled_at, tzOf(e)),
+                              viewerHint(e.scheduled_at, tzOf(e), viewerTz),
+                            ].filter(Boolean).join(' · ')}>
                             <PlatformIcon platform={e.platform} size={12} />
                             <span className="truncate">
-                              {e.scheduled_at &&
-                                new Date(e.scheduled_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                              {/* the client's clock, and its letters, because a
+                                  cell reading "09:00" is a different post for
+                                  every country reading it */}
+                              {e.scheduled_at && `${formatInZone(e.scheduled_at, tzOf(e), 'time')} ${zoneAbbrev(tzOf(e), e.scheduled_at)}`}
                               {' '}
                               {e.content_items?.title ?? 'Untitled'}
                             </span>

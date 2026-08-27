@@ -19,6 +19,9 @@ import {
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { slideCountLabel } from '../../lib/version-files-core'
+import {
+  DEFAULT_TZ, formatInZone, formatWithZone, viewerHint, zoneAbbrev,
+} from '../../lib/timezone-core'
 import { useProductionLive } from '../production/useProductionLive'
 import { useOrderedLoad } from '../useOrderedLoad'
 import { defaultAllows } from '../../lib/page-access-core'
@@ -44,7 +47,7 @@ type Item = {
   slide_count?: number
   owner_id: string | null
   scheduler_ids?: unknown
-  clients: { name: string } | null
+  clients: { name: string; timezone?: string | null } | null
   work_kinds?: { slug?: string } | null
 }
 
@@ -74,6 +77,11 @@ export default function SchedulerPage() {
   /** which platforms each client has connected — so a row can say whether the
    *  next move is "schedule it" or "we can't post for them yet" */
   const [connected, setConnected] = useState<Record<string, string[]>>({})
+  /** where the reader is — for the "= your time" tooltips only */
+  const [viewerTz, setViewerTz] = useState<string | null>(null)
+  useEffect(() => {
+    try { setViewerTz(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { /* no hint */ }
+  }, [])
 
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
@@ -262,6 +270,9 @@ export default function SchedulerPage() {
                 const clientChannels = connected[item.client_id ?? ''] ?? []
                 const platform = choosePlatform(item.platform_targets ?? [], clientChannels)
                 const postsFromApp = clientChannels.includes(platform)
+                // …and its posting times follow the client's zone, per row:
+                // this queue mixes clients, so there is no one zone for the page
+                const itemTz = item.clients?.timezone || DEFAULT_TZ
                 return (
                   <TableRow key={item.id}>
                     <TableCell>
@@ -315,8 +326,16 @@ export default function SchedulerPage() {
                               <Badge variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">
                                 {e.platform}
                                 {e.scheduled_at && (
-                                  <span className="ml-1 font-mono text-[11px]">
-                                    {new Date(e.scheduled_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                                  // the audience's zone, with its letters: this
+                                  // queue is read by schedulers in more than
+                                  // one country, and a bare date is a date in
+                                  // whichever of them is holding the mouse
+                                  <span className="ml-1 font-mono text-[11px]"
+                                    title={[
+                                      formatWithZone(e.scheduled_at, itemTz),
+                                      viewerHint(e.scheduled_at, itemTz, viewerTz),
+                                    ].filter(Boolean).join(' ')}>
+                                    {formatInZone(e.scheduled_at, itemTz, 'short')} {zoneAbbrev(itemTz, e.scheduled_at)}
                                   </span>
                                 )}
                               </Badge>

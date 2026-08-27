@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, BarChart3,
 } from 'lucide-react'
 import Greeting from './Greeting'
+import { DEFAULT_TZ, formatInZone, formatWithZone } from '../lib/timezone-core'
 import { useProductionLive } from './production/useProductionLive'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -31,7 +32,10 @@ type ItemLite = {
 type LeadLite = { id: string; created_at: string; fname: string; lname: string; biz: string }
 type UpcomingEntry = {
   id: string; platform: string; scheduled_at: string | null; item_id: string
-  content_items: { id: string; title: string; clients: { name: string } | null } | null
+  content_items: {
+    id: string; title: string
+    clients: { name: string; timezone?: string | null } | null
+  } | null
 }
 
 type Overview = {
@@ -168,10 +172,9 @@ const MONTH_CHIP: Record<MonthStatus, string> = {
 
 const chipWords = (r: MonthClientRow) => (r.status === 'met' ? 'Met ✓' : r.status_label)
 
-const shortDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-AU', {
-    timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short',
-  })
+/** A client's last post, on that client's own calendar. */
+const shortDate = (iso: string, tz?: string | null) =>
+  formatInZone(iso, tz || DEFAULT_TZ, 'date') ?? ''
 
 /** The per-type promise: "Reels 2/4 · Graphics 3/3", short lines coloured. */
 function TypeChips({ row }: { row: MonthClientRow }) {
@@ -307,7 +310,7 @@ function MonthAcrossClients() {
                 </div>
                 <div className="mt-2"><TypeChips row={r} /></div>
                 <p className="mt-2 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                  {r.last_post ? `Last post ${shortDate(r.last_post.at)}` : 'No posts yet'}
+                  {r.last_post ? `Last post ${shortDate(r.last_post.at, r.tz)}` : 'No posts yet'}
                   {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
                 </p>
               </button>
@@ -373,8 +376,8 @@ function MonthTableRow({ row, expanded, onToggle, onOpen }: {
           {row.last_post
             ? (row.last_post.item_id
                 ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
-                    className="underline-offset-4 hover:underline">{shortDate(row.last_post.at)}</Link>
-                : shortDate(row.last_post.at))
+                    className="underline-offset-4 hover:underline">{shortDate(row.last_post.at, row.tz)}</Link>
+                : shortDate(row.last_post.at, row.tz))
             : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
         </td>
         <td className={`${num} text-zinc-500 dark:text-zinc-400`}>
@@ -569,8 +572,11 @@ export default function OverviewPage() {
                     <span className="ml-auto flex shrink-0 items-center gap-2">
                       <Badge variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">{e.platform}</Badge>
                       {e.scheduled_at && (
-                        <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                          {new Date(e.scheduled_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                        // when it reaches the AUDIENCE — this strip mixes
+                        // clients, so the zone comes from the row, not the page
+                        <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500"
+                          title={formatWithZone(e.scheduled_at, e.content_items?.clients?.timezone || DEFAULT_TZ) ?? undefined}>
+                          {formatInZone(e.scheduled_at, e.content_items?.clients?.timezone || DEFAULT_TZ, 'short')}
                         </span>
                       )}
                     </span>
