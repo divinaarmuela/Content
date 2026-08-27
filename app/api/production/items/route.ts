@@ -5,7 +5,7 @@ import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } fr
 import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
 import {
-  accessibleClientIds, assertUuid, assignedItemsFilter, canOpenBatch,
+  accessibleClientIds, assertUuid, assignedItemsFilter, canOpenBatch, openTaggedIds,
 } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
@@ -94,13 +94,8 @@ export async function GET(req: Request) {
     // badge is a smaller failure than a board that won't load.
     let rows: Record<string, unknown>[] = scoped
     try {
-      const { data: tagged, error: tagErr } = await supabase
-        .from('item_comments')
-        .select('item_id')
-        .eq('assigned_to', user.id)
-        .eq('resolved', false)
-      if (tagErr) throw new Error(tagErr.message)
-      const waiting = new Set((tagged ?? []).map(t => t.item_id as string))
+      // the same answer the Overview's "Waiting on you" reads
+      const waiting = new Set((await openTaggedIds(user)).items)
       rows = rows.map(r => ({ ...r, my_open_task: waiting.has(r.id as string) }))
     } catch {
       // leave the annotation off rather than fail the list

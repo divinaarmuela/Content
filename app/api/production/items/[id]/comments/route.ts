@@ -2,18 +2,25 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { isValidOwner } from '../../../../../lib/work-kinds-core'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { OPEN_ITEM_CTA } from '../../../../../lib/email-voice-core'
+import {
+  notifyTagged, resolveTags, settleTagNotifications, taggableTeam,
+} from '../../../../../lib/comment-tags'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /** Add a comment. Visibility is derived from the author's role, never
  *  client-chosen: clients always write client-visible comments; editors always
  *  write internal ones; AMs/admins choose. Client comments notify the AM only
- *  (doc 1 §8 — the gatekeeper rule). */
+ *  (doc 1 §8 — the gatekeeper rule).
+ *
+ *  Tagging: "@Name" in the text — or `assigned_to` / `mention_ids` sent by the
+ *  box — reaches ANY active team member, whoever the author is. The first
+ *  tagged person becomes the comment's assignee (the seat the "Waiting on
+ *  you" card and the board badge read); everyone tagged is emailed. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireSignedIn()
@@ -31,21 +38,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!parent) return NextResponse.json({ error: 'That comment is not on this item' }, { status: 400 })
       parentId = parent.id
     }
-    // an assignee must be an active, non-client team member (clients cannot assign)
-    let assignedTo: string | null = null
-    if (user.role !== 'client' && body.assigned_to) {
-      const { data: cand } = await supabase
-        .from('team_users').select('role, active_status').eq('id', body.assigned_to).maybeSingle()
-      if (!isValidOwner(cand)) return NextResponse.json({ error: 'That assignee is not a valid team member' }, { status: 400 })
-      assignedTo = String(body.assigned_to)
-    }
-    const ts = Number(body.video_timestamp_sec)
-    const videoTs = Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
 
     let visibility: 'internal' | 'client'
     if (user.role === 'client') visibility = 'client'
     else if (user.role === 'editor' || user.role === 'scheduler') visibility = 'internal'
     else visibility = body.visibility === 'client' ? 'client' : 'internal'
+
+    // who is tagged: the ids the box sent, plus whoever the text names —
+    // resolved against the live roster so only a real, active team member
+    // can ever be assigned (clients cannot tag)
+    const explicit = [
+      ...(Array.isArray(body.mention_ids) ? body.mention_ids.map(String) : []),
+      ...(body.assigned_to ? [String(body.assigned_to)] : []),
+    ]
+    const team = user.role === 'client' || visibility !== 'internal' ? [] : await taggableTeam()
+    const tagged = resolveTags(text, explicit, team, user.id)
+    if (user.role !== 'client' && explicit.length > 0 && tagged.length === 0 && !explicit.includes(user.id)) {
+      return NextResponse.json({ error: 'That person is not an active team member' }, { status: 400 })
+    }
+    const assignedTo = tagged[0]?.id ?? null
+
+    const ts = Number(body.video_timestamp_sec)
+    const videoTs = Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
 
     const { data: comment, error } = await supabase
       .from('item_comments')
@@ -91,8 +105,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           actorEmail: user.email,
           actorClerkId: user.clerk_user_id,
           eventType: 'client_comment',
-          entityType: 'item_comment',
-          entityId: comment.id,
+          entityType: 'content_item',
+          entityId: `${id}#${comment.id}`,
           recipientId: r.id,
           recipientEmail: r.email,
           subject: `The client commented on ${item.title}`,
@@ -100,7 +114,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             `The client commented on ${item.title}`,
             `<p>The client wrote:</p>` +
             `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
-            `<p><strong>What happens next:</strong> read it and, if changes are needed, leave the editor a note on the item — nobody else has been told yet.</p>`,
+            `<p><strong>What happens next:</strong> read it and, if changes are needed, tag the editor in a comment on the item — nobody else has been told yet.</p>`,
             OPEN_ITEM_CTA,
             `${DASHBOARD_URL}/dashboard/production/${id}`
           ),
@@ -108,34 +122,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // assigned internal task → notify the assignee
-    if (visibility === 'internal' && comment.assigned_to && comment.assigned_to !== user.id) {
-      const { data: assignee } = await supabase.from('team_users')
-        .select('id, email').eq('id', comment.assigned_to).eq('active_status', true).maybeSingle()
-      if (assignee) {
-        await notify({
-          actorName: user.name,
-          actorEmail: user.email,
-          actorClerkId: user.clerk_user_id,
-          eventType: 'comment_assigned',
-          entityType: 'item_comment',
-          entityId: comment.id,
-          recipientId: assignee.id,
-          recipientEmail: assignee.email,
-          // "Task on X", body = the raw comment and nothing else: it never
-          // said who wrote it, that it was for the reader, or what a "task"
-          // means here. It says all three now.
-          subject: `${user.name || user.email} left you a note on ${item.title}`,
-          bodyHtml: renderEmail(
-            `${user.name || user.email} left you a note on ${item.title}`,
-            `<p><strong>${escapeHtml(user.name || user.email)}</strong> asked you to look at something on <strong>${escapeHtml(item.title)}</strong>:</p>` +
-            `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
-            `<p><strong>What happens next:</strong> it stays on your list until you mark it done on the item.</p>`,
-            OPEN_ITEM_CTA,
-            `${DASHBOARD_URL}/dashboard/production/${id}`
-          ),
-        })
-      }
+    // tagged people → email + notification row + "Waiting on you"
+    if (visibility === 'internal' && tagged.length > 0) {
+      await notifyTagged({
+        actor: user, tagged, text,
+        target: { kind: 'item', id, title: String(item.title ?? 'an item') },
+        commentId: comment.id,
+      })
     }
 
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'comment' })
@@ -146,7 +139,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-/** Resolve/unresolve a comment. editor+. */
+/** Resolve/unresolve a comment. editor+. Resolving clears the tagged
+ *  person's bell for it too — the badge was the "you are needed" signal. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireRole('editor')
@@ -164,6 +158,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .select()
       .single()
     if (error) throw new Error(error.message)
+    if (body.resolved) await settleTagNotifications(id, String(body.comment_id))
+    announceItemChange({ item_id: id, client_id: String((data as { client_id?: string }).client_id ?? ''), status: 'draft_uploaded', kind: 'comment' })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

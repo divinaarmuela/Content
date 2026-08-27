@@ -10,6 +10,9 @@ import { upsertScheduleEntry } from '../../app/lib/schedule'
 import { checkBatchTransition } from '../../app/lib/batch-brief-core'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
+import { openTaggedIds, taggedItemIds } from '../../app/lib/production-access'
+import { notifyTagged, resolveTags, settleTagNotifications, taggableTeam } from '../../app/lib/comment-tags'
+import { notificationHref } from '../../app/lib/notification-words'
 
 /**
  * The assignment rules, played live against the real database.
@@ -619,6 +622,77 @@ describe('the other half of the rule: nothing is listed that will not open', () 
         await expect(loadItemForUser(editor, id), `listed but not openable: ${id}`)
           .resolves.toBeTruthy()
       }
+    })
+  })
+})
+
+describe('tagging: "@Name" reaches anyone on the team, and the tag is the assignment', () => {
+  let itemId: string, commentId: string
+
+  it('the account manager tags the editor by typing their name — the same rule the box and the route share', async () => {
+    itemId = await makeItem({ owner_id: null })
+    const team = await taggableTeam()
+    // every active non-client team member is taggable — the editor by NAME
+    const editorRow = team.find(t => t.id === editor.id)
+    expect(editorRow, 'the test editor must be active and taggable').toBeTruthy()
+    const text = `@${editorRow!.name} can you check the hook in the first two seconds?`
+    const tagged = resolveTags(text, [], team, am.id)
+    expect(tagged.map(t => t.id)).toEqual([editor.id])
+
+    // exactly what POST /comments writes, then notifies
+    const { data, error } = await supabase.from('item_comments').insert({
+      item_id: itemId, author_id: am.id, visibility: 'internal', body: text, assigned_to: tagged[0].id,
+    }).select('id').single()
+    if (error) throw new Error(error.message)
+    commentId = data.id
+    await notifyTagged({
+      actor: am, tagged, text,
+      target: { kind: 'item', id: itemId, title: 'E2E tagged item' },
+      commentId,
+    })
+  })
+
+  it('the editor gets a notification row that links to the item, an email, the badge and the "Waiting on you" card', async () => {
+    const rows = await until(
+      async () => (await supabase.from('notification_log')
+        .select('recipient_id, recipient_email, entity_type, entity_id, event_type, read_at')
+        .eq('entity_id', `${itemId}#${commentId}`)).data ?? [],
+      r => r.length > 0,
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].recipient_id).toBe(editor.id)
+    expect(rows[0].recipient_email.endsWith('.invalid')).toBe(true)
+    expect(rows[0].event_type).toBe('comment_assigned')
+    // the bell counts it (unread), and the Notifications page can open it
+    expect(rows[0].read_at).toBeNull()
+    expect(notificationHref(rows[0].entity_type, rows[0].entity_id)).toBe(`/dashboard/production/${itemId}`)
+
+    // the board badge and the Overview card read the same answer
+    const open = await openTaggedIds(editor)
+    expect(open.items).toContain(itemId)
+  })
+
+  it('the deep link opens for the editor even off the client team — and the item is listed for them', async () => {
+    await offClient(editor.id, async () => {
+      expect(await accessibleClientIds(editor)).not.toContain(TEST_CLIENT_ID)
+      expect(await taggedItemIds(editor)).toContain(itemId)
+      await expect(loadItemForUser(editor, itemId)).resolves.toBeTruthy()
+      expect(await listedFor(editor)).toContain(itemId)
+    })
+  })
+
+  it('marking it done clears the badge, the card and the bell', async () => {
+    // exactly what PATCH /comments does
+    await supabase.from('item_comments').update({ resolved: true }).eq('id', commentId)
+    await settleTagNotifications(itemId, commentId)
+
+    expect((await openTaggedIds(editor)).items).not.toContain(itemId)
+    const { data } = await supabase.from('notification_log')
+      .select('read_at').eq('entity_id', `${itemId}#${commentId}`).single()
+    expect(data?.read_at).not.toBeNull()
+    // the item stays openable: the deep link in the email must not rot
+    await offClient(editor.id, async () => {
+      await expect(loadItemForUser(editor, itemId)).resolves.toBeTruthy()
     })
   })
 })

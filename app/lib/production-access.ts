@@ -44,7 +44,41 @@ export async function canOpenBatch(
     .eq('batch_id', batch.id)
     .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
     .limit(1)
-  return (data?.length ?? 0) > 0
+  if ((data?.length ?? 0) > 0) return true
+  // tagged in the shoot's own comment thread: the email deep-links here, and
+  // a link to "you are not on this client" is worse than no link
+  return (await taggedBatchIds(user)).includes(batch.id)
+}
+
+/** Shoots this user was TAGGED on — a shoot comment assigned to them. Empty
+ *  (never an error) on a database where shoot_comment_tags.sql has not run. */
+export async function taggedBatchIds(user: TeamUser): Promise<string[]> {
+  if (user.role === 'client') return []
+  const { data, error } = await supabase
+    .from('batch_comments')
+    .select('batch_id')
+    .eq('assigned_to', user.id)
+    .limit(500)
+  if (error) return []
+  return [...new Set((data ?? []).map(r => r.batch_id as string).filter(Boolean))]
+}
+
+/**
+ * Where somebody is still WAITING on this user: the items and shoots with an
+ * unresolved comment tagged to them. The board badge, the Overview's
+ * "Waiting on you" card and the bell all read this one answer.
+ */
+export async function openTaggedIds(user: TeamUser): Promise<{ items: string[]; batches: string[] }> {
+  if (user.role === 'client') return { items: [], batches: [] }
+  const [items, batches] = await Promise.all([
+    supabase.from('item_comments').select('item_id').eq('assigned_to', user.id).eq('resolved', false).limit(500),
+    supabase.from('batch_comments').select('batch_id').eq('assigned_to', user.id).eq('resolved', false).limit(500),
+  ])
+  return {
+    items: [...new Set((items.data ?? []).map(r => r.item_id as string).filter(Boolean))],
+    // the shoot tags column may not exist yet — no rows, not an error
+    batches: batches.error ? [] : [...new Set((batches.data ?? []).map(r => r.batch_id as string).filter(Boolean))],
+  }
 }
 
 /**
@@ -58,7 +92,7 @@ export async function canOpenBatch(
 export async function heldBatchIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
   const me = assertUuid(user.id)
-  const [viaItems, owned] = await Promise.all([
+  const [viaItems, owned, tagged] = await Promise.all([
     supabase
       .from('content_items')
       .select('batch_id')
@@ -66,10 +100,12 @@ export async function heldBatchIds(user: TeamUser): Promise<string[]> {
       .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
       .limit(500),
     supabase.from('batches').select('id').eq('owner_id', user.id).limit(500),
+    taggedBatchIds(user),
   ])
   return [...new Set([
     ...(viaItems.data ?? []).map(r => r.batch_id as string),
     ...(owned.data ?? []).map(r => r.id as string),
+    ...tagged,
   ].filter(Boolean))]
 }
 

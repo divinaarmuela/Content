@@ -42,7 +42,13 @@ type UpcomingEntry = {
   } | null
 }
 
+/** items and shoots with an unresolved comment tagged to the viewer */
+type WaitingOnYou = {
+  items: ItemLite[]
+  shoots: { id: string; title: string; clients: { name: string } | null }[]
+}
 type Overview = {
+  waiting_on_you?: WaitingOnYou
   role: string
   name: string
   pipeline: Record<string, number>
@@ -568,6 +574,40 @@ export default function OverviewPage() {
           a real link, dismissed per person and per role */}
       {!loading && <GettingStarted role={(role ?? null) as Role | null} />}
 
+      {/* somebody tagged you and it is not done — every role, whatever the
+          client. The tag is the assignment; this is where it is answered. */}
+      {!loading && data?.waiting_on_you
+        && (data.waiting_on_you.items.length + data.waiting_on_you.shoots.length) > 0 && (
+        <Card className="border-amber-200 dark:border-amber-900">
+          <CardHeader className="flex-row items-center">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Waiting on you
+            </CardTitle>
+            <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
+              Someone tagged you. Open it and mark the note done when you have answered.
+            </span>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1 pt-0">
+            {data.waiting_on_you.items.map(i => (
+              <Link key={i.id} href={`/dashboard/production/${i.id}#comments`}
+                className="flex min-h-11 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
+                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{i.clients?.name ?? ''}</span>
+                <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              </Link>
+            ))}
+            {data.waiting_on_you.shoots.map(s => (
+              <Link key={s.id} href={`/dashboard/production/shoots/${s.id}#comments`}
+                className="flex min-h-11 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                <span className="min-w-0 truncate text-sm font-medium">{s.title}</span>
+                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{s.clients?.name ?? ''} · shoot</span>
+                <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Seven identical grey ghost links and no cue which to press. The one
           thing a manager should do first now says so, and says how many. */}
       {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
@@ -617,7 +657,7 @@ export default function OverviewPage() {
       {role === 'scheduler' && data?.scheduler && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Approved — to schedule" value={data.scheduler.to_schedule} loading={false} hint="Signed off, waiting on you" icon={ClipboardList} />
+            <Stat label={STATUS_LABELS.approved_for_scheduling} value={data.scheduler.to_schedule} loading={false} hint="Signed off, waiting on you" icon={ClipboardList} />
             <Stat label="Going out · 7 days" value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} loading={false} hint="Scheduled posts" icon={CalendarClock} />
             <Stat label="Published · 7 days" value={data.scheduler.published_week} loading={false} hint="Live this week" icon={CheckCircle2} />
             <Stat label="Scheduled total" value={data.pipeline.scheduled ?? 0} loading={false} hint="In the calendar" icon={Send} />

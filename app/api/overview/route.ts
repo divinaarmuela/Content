@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
-import { accessibleClientIds, assertUuid, assignedItemsFilter } from '../../lib/production-access'
+import {
+  accessibleClientIds, assertUuid, assignedItemsFilter, openTaggedIds,
+} from '../../lib/production-access'
 import { ITEM_STATUSES, SCHEDULER_STATUSES, schedulerIdsOf } from '../../lib/workflow-core'
 import { SHOOT_BRIEF_SLUG } from '../../lib/brief-task-core'
 import { isInternalKind } from '../../lib/task-kind-core'
@@ -81,6 +83,32 @@ export async function GET() {
     const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
     const weekAhead = new Date(Date.now() + 7 * 86_400_000).toISOString()
 
+    // "someone tagged you and it is not done": the items (and shoots) with
+    // an unresolved comment assigned to this person, whatever their role and
+    // whether or not they are on the client. Every role's Overview shows it.
+    const tagged = await openTaggedIds(user)
+    const taggedItems = items.filter(i => tagged.items.includes(i.id))
+    // an item off the roster is still theirs to answer — fetch the ones the
+    // scoped list above did not carry
+    const missing = tagged.items.filter(id => !items.some(i => i.id === id))
+    if (missing.length > 0) {
+      const { data: extra } = await supabase
+        .from('content_items')
+        .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name)')
+        .in('id', missing.map(assertUuid))
+      taggedItems.push(...((extra ?? []) as unknown as ItemLite[]))
+    }
+    let taggedShoots: { id: string; title: string; client_id: string; clients: { name: string } | null }[] = []
+    if (tagged.batches.length > 0) {
+      const { data: shoots } = await supabase
+        .from('batches').select('id, title, client_id, clients(name)').in('id', tagged.batches.map(assertUuid))
+      taggedShoots = (shoots ?? []) as unknown as typeof taggedShoots
+    }
+    const waitingOnYou = {
+      items: taggedItems.map(i => ({ ...i, tagged: true })),
+      shoots: taggedShoots,
+    }
+
     // nobody's job yet: the pool anyone may pick up. A shoot brief is never in
     // it (an account manager writes those), and neither is anything already
     // approved — that pool is the scheduler's, and it is a different seat.
@@ -114,6 +142,7 @@ export async function GET() {
         role: user.role,
         name: user.name,
         pipeline,
+        waiting_on_you: waitingOnYou,
         editor: {
           my_items: mine.length,
           in_internal_review: pool.filter(i => i.status === 'internal_review').length,
@@ -164,6 +193,7 @@ export async function GET() {
         role: user.role,
         name: user.name,
         pipeline,
+        waiting_on_you: waitingOnYou,
         scheduler: {
           to_schedule: queue.length,
           queue: queue.slice(0, 8),
@@ -220,6 +250,7 @@ export async function GET() {
       role: user.role,
       name: user.name,
       pipeline,
+      waiting_on_you: waitingOnYou,
       manager: {
         clients: (clientRows ?? []).length,
         // both stages that wait on a manager: the first look and the re-look

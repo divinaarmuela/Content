@@ -38,7 +38,7 @@ const PLAIN: Record<string, string> = {
   schedule_handoff: 'Ready for you to schedule',
   publish_queued: 'Queued to go out',
   client_comment: 'The client left a comment',
-  comment_assigned: 'Someone left you a note',
+  comment_assigned: 'Someone tagged you — waiting on you',
   approval_note: 'A note came with the approval',
   due_reminder: 'Due soon',
   prospect_auto_ingested: 'A new enquiry became a client',
