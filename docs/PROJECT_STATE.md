@@ -1,5 +1,23 @@
 # Project state — as at 19 August 2026
 
+## Dropbox — 27 Aug
+
+- **What it does.** Creating a shoot mints `{root}/{Client}/{YYYY-MM Title}` with
+  `01 Raw`, `02 Edits`, `03 Final`; creating an item mints `02 Edits/{Reel 01 - Title}`
+  (internal work goes to `{Client}/_Tasks/{Title}`) and prefills the item's
+  folder link. Hooks are fire-and-forget — Dropbox can never delay or fail a create.
+- **Configure.** Create a Dropbox app (scoped access, full Dropbox), then set
+  `DROPBOX_APP_KEY` and `DROPBOX_APP_SECRET` in Vercel. Both are read lazily, so
+  the build and the app work fine without them; the Integrations card just says
+  "not configured".
+- **Redirect URI** (must be added to the Dropbox app console, exactly):
+  `https://app.mdmmarketing.com.au/api/dropbox/callback`
+- **Scopes**: `account_info.read`, `files.metadata.read`, `files.metadata.write`,
+  `files.content.read`, `files.content.write`, `sharing.read`, `sharing.write`.
+- **Who connects.** A **super admin only**, from Settings → Integrations →
+  Dropbox → Connect. There is one connection for the whole agency, stored
+  encrypted in `dropbox_connection` (run `supabase/dropbox_connect.sql` first).
+
 ## Three pages (Production / Editor / Scheduler) — 26 Aug
 
 - One board became three, each answering one question. **Editor**
