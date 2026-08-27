@@ -6,7 +6,7 @@ import {
   type CanvasCard, type ShotRow,
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
-import { shootStatusLabel } from './portal-words'
+import { planState, shootStatusLabel, type PlanState } from './portal-words'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -47,6 +47,12 @@ export type PortalShoot = {
    *  decision has to be reachable somewhere, and the plan card is where the
    *  plan is. Null at every other stage. */
   awaiting_decision?: { item_id: string } | null
+  /** where the plan stands with the CLIENT — waiting on them, notes received,
+   *  approved, date confirmed. Their own last action, said back to them. */
+  plan_state: PlanState
+  /** the brief task behind this plan, whatever stage it is at — the card acts
+   *  on it, and only the client_review stage may act at all */
+  brief_item_id?: string | null
 }
 
 export type PortalData = {
@@ -61,6 +67,9 @@ export type PortalData = {
     quotas: { type: string; quota: number; published: number }[]
   } | null
   needs_review: PortalItem[]
+  /** shoot plans sitting with the client for approval — they need reviewing
+   *  too, and the hero counter counts both */
+  plans_awaiting: number
   /** the client asked for changes and the team is making them — its own pile,
    *  because "did my note land?" is the only question that matters then */
   changes_requested: PortalItem[]
@@ -133,11 +142,13 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const items = (itemsRes.data ?? []).filter(i => !isInternal(i as { work_kinds?: KindRow }))
   // …except when the plan is with the client: the brief stays out of the item
   // lists, but its decision has to reach the shoot card it belongs to
-  const briefAwaiting = new Map<string, string>()
+  const briefByBatch = new Map<string, { id: string; status: string }>()
   for (const i of itemsRes.data ?? []) {
     const row = i as { id: string; status: string; batch_id?: string | null; work_kinds?: { slug?: string } | null }
-    if (isBrief(row) && row.status === 'client_review' && row.batch_id) {
-      briefAwaiting.set(row.batch_id, row.id)
+    // the newest wins: items come back updated_at desc, so the first brief
+    // seen for a shoot is its current one
+    if (isBrief(row) && row.batch_id && !briefByBatch.has(row.batch_id)) {
+      briefByBatch.set(row.batch_id, { id: row.id, status: row.status })
     }
   }
 
@@ -211,6 +222,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
   const shoots: PortalShoot[] = (shootsRes.error ? [] : shootsRes.data ?? []).map(b => {
     const shared = b.shared_with_client === true
+    const brief = briefByBatch.get(b.id)
     return {
       id: b.id,
       title: b.title,
@@ -228,9 +240,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       details_shared: shared,
       // only a shared plan can be decided on — approving something you were
       // never shown is not a decision
-      awaiting_decision: shared && briefAwaiting.has(b.id)
-        ? { item_id: briefAwaiting.get(b.id)! }
+      awaiting_decision: shared && brief?.status === 'client_review'
+        ? { item_id: brief.id }
         : null,
+      plan_state: planState(brief?.status, b.status as string, shared),
+      brief_item_id: brief?.id ?? null,
     }
   })
 
@@ -240,6 +254,10 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     brand: (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
+    // a shoot plan waiting on the client is a thing waiting on the client. The
+    // hero counter read "NEEDS YOUR REVIEW 00" over a plan asking them to
+    // approve it, which is the page contradicting itself.
+    plans_awaiting: shoots.filter(s => s.plan_state === 'awaiting_you').length,
     changes_requested: bucket(['client_changes_requested']),
     in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete']),
     approved: bucket(['approved_for_scheduling']),

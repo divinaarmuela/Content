@@ -95,7 +95,10 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
               {[
                 // the counters, the headings and the chips are the SAME four
                 // words — a client counting "01" finds the section that says it
-                ['Needs your review', data.needs_review.length],
+                // a shoot plan waiting on them counts: the section below asks
+                // for a decision, and a counter reading 00 above it is the
+                // page telling the client there is nothing to do
+                ['Needs your review', data.needs_review.length + data.plans_awaiting],
                 ['In production', data.in_production.length + data.changes_requested.length],
                 ['Approved', data.approved.length + data.scheduled.length],
                 ['Published', data.published.length],

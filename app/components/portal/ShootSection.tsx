@@ -9,7 +9,8 @@ import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
 import type { PortalShoot } from '../../lib/portal-data'
 import {
-  approvePlanConsequence, changesSentToast, contentTypeLabel, contentTypePlural, PLAN_APPROVED_TOAST,
+  approvePlanConsequence, changesSentToast, contentTypeLabel, contentTypePlural,
+  PLAN_APPROVED_TOAST, PLAN_STATE_LINE, type PlanState,
 } from '../../lib/portal-words'
 
 const dateLabel = (d: string | null) =>
@@ -66,6 +67,23 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
   // the plan is with the client for a decision — the state machine says it is
   // their turn, so the two moves have to be here, on the plan
   const decide = shoot.awaiting_decision
+  /**
+   * What the card says about the client's own decision.
+   *
+   * `acted` is the optimistic half: the server has taken the decision but this
+   * page is still holding the data it was rendered with, and a client who has
+   * just pressed a button must not be shown the same button again. It wins
+   * over the server's answer until the reload brings one that agrees.
+   */
+  const [acted, setActed] = useState<PlanState>(null)
+  const server = shoot.plan_state ?? null
+  const state: PlanState = acted ?? server
+  /** their move AND a move they can actually make from this page */
+  const canAct = state === 'awaiting_you' && Boolean(token || loggedIn) && Boolean(decide)
+  /** "This plan is with you" with no buttons under it is a dead end — a
+   *  read-only viewer is shown nothing rather than an invitation they cannot
+   *  accept */
+  const showState = state !== null && (state !== 'awaiting_you' || canAct)
   const [mode, setMode] = useState<null | 'changes'>(null)
   const [note, setNote] = useState('')
   const [name, setName] = useState(() =>
@@ -108,6 +126,9 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
         if (!t.ok) throw new Error((await t.json()).error ?? 'Something went wrong')
       }
       toast.success(action === 'approve' ? PLAN_APPROVED_TOAST : changesSentToast(amName))
+      // the card answers immediately, and keeps answering after the reload:
+      // the server's own plan_state says the same thing from then on
+      setActed(action === 'approve' ? 'approved' : 'changes_sent')
       setNote('')
       setMode(null)
       router.refresh()
@@ -202,13 +223,17 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
         </div>
       )}
 
-      {(token || loggedIn) && decide && (
+      {/* what the client's own decision did, said back to them. The buttons
+          appear only while it is genuinely their move; every other state is a
+          sentence, because "I pressed the button, did it work?" is the only
+          question a portal has to be able to answer. */}
+      {showState && state !== null && (
         <div className="flex flex-col gap-3 border-t pt-4" style={{ borderColor: 'var(--p-border)' }}>
-          <p className="text-sm font-medium">
-            This plan is with you. Approve it, or tell us what to change.
-          </p>
-          {mode === null && <p className="text-xs opacity-60">{approvePlanConsequence}</p>}
-          {mode === 'changes' && (
+          <p className="text-sm font-medium">{PLAN_STATE_LINE[state]}</p>
+          {state === 'awaiting_you' && mode === null && (
+            <p className="text-xs opacity-60">{approvePlanConsequence}</p>
+          )}
+          {canAct && mode === 'changes' && (
             <div className="flex flex-col gap-2">
               {token && <input
                 value={name}
@@ -228,6 +253,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
               />
             </div>
           )}
+          {canAct && (
           <div className="flex flex-wrap items-center gap-2">
             {mode === null ? (
               <>
@@ -256,6 +282,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
               </>
             )}
           </div>
+          )}
         </div>
       )}
 

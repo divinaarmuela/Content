@@ -63,3 +63,62 @@ export const approvePlanConsequence =
 export const APPROVED_TOAST = 'Approved — it’s off to scheduling.'
 export const PLAN_APPROVED_TOAST = 'Plan approved — thank you.'
 export const changesSentToast = (amName?: string | null) => `Sent to ${amPhrase(amName)}.`
+
+/**
+ * What a shoot plan's card should say about the client's own decision.
+ *
+ * Acting on a plan used to leave no trace. "Request changes" sent the note and
+ * the card carried on inviting the same decision until a reload, after which
+ * it said nothing at all about it; "Approve the plan" left the card reading
+ * "Being planned", which is what it said before. The client's own action is
+ * the one thing a portal must always be able to show back to them.
+ *
+ * Read from the brief task's status, because that is where the decision
+ * actually lives — plus the shoot's own status for the last step, since the
+ * date being locked is what "we'll confirm the date shortly" was promising.
+ */
+export type PlanState =
+  /** it is the client's move: the two buttons belong on the card */
+  | 'awaiting_you'
+  /** they asked for changes and we are making them */
+  | 'changes_sent'
+  /** approved, date not locked yet */
+  | 'approved'
+  /** approved and booked */
+  | 'date_confirmed'
+  /** nothing to say — an unshared plan, or one that never reached them */
+  | null
+
+export function planState(
+  briefStatus: string | null | undefined,
+  shootStatus: string | null | undefined,
+  sharedWithClient: boolean,
+): PlanState {
+  // a plan they were never shown is not a plan they have a view on
+  if (!sharedWithClient) return null
+  const booked = shootStatus === 'locked' || shootStatus === 'shot' || shootStatus === 'wrapped'
+  switch (String(briefStatus ?? '')) {
+    case 'client_review':
+      return 'awaiting_you'
+    case 'client_changes_requested':
+    case 'revision_required':
+    case 'revision_complete':
+      return 'changes_sent'
+    case 'approved_for_scheduling':
+    case 'scheduled':
+    case 'published':
+      return booked ? 'date_confirmed' : 'approved'
+    default:
+      // draft_uploaded / internal_review / no brief at all: still ours. A
+      // booked shoot still says so — that is a fact about their diary.
+      return booked ? 'date_confirmed' : null
+  }
+}
+
+/** The line the card shows for each of those, in the client's own terms. */
+export const PLAN_STATE_LINE: Record<Exclude<PlanState, null>, string> = {
+  awaiting_you: 'This plan is with you. Approve it, or tell us what to change.',
+  changes_sent: 'We’ve got your notes — we’ll come back with an updated plan.',
+  approved: 'Approved ✓ — we’ll confirm the date shortly.',
+  date_confirmed: 'Approved ✓ — the date is confirmed.',
+}

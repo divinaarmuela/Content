@@ -6,7 +6,7 @@ import {
 } from './batch-brief-core'
 import { accountManagerName, type PortalItem, type PortalShoot } from './portal-data'
 import { isInternalKind } from './task-kind-core'
-import { shootStatusLabel } from './portal-words'
+import { planState, shootStatusLabel } from './portal-words'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -133,15 +133,17 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       .eq('batch_id', b.id)
       .order('created_at', { ascending: true })
       .limit(200),
-    // the plan's own brief task, when the decision is sitting with the client:
-    // the plan page has to carry the two moves the state machine says are theirs
+    // the plan's own brief task, at WHATEVER stage it is at: at client_review
+    // the page has to carry the two moves the state machine says are theirs,
+    // and at every other stage it has to say what became of the last one
     supabase.from('content_items')
-      .select('id, work_kinds(slug)')
-      .eq('batch_id', b.id).eq('client_id', client.id).eq('status', 'client_review')
-      .limit(5),
+      .select('id, status, work_kinds(slug)')
+      .eq('batch_id', b.id).eq('client_id', client.id)
+      .order('updated_at', { ascending: false })
+      .limit(10),
     accountManagerName(client.id),
   ])
-  const brief = ((briefRes.data ?? []) as { id: string; work_kinds: { slug?: string } | null }[])
+  const brief = ((briefRes.data ?? []) as { id: string; status: string; work_kinds: { slug?: string } | null }[])
     .find(r => (r.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief')
 
   return {
@@ -159,7 +161,9 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       shot_list: sanitiseShotList(b.shot_list),
       canvas_cards: (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
       details_shared: true, // this page only exists for shared shoots
-      awaiting_decision: brief ? { item_id: brief.id } : null,
+      awaiting_decision: brief?.status === 'client_review' ? { item_id: brief.id } : null,
+      plan_state: planState(brief?.status, b.status as string, true),
+      brief_item_id: brief?.id ?? null,
     },
     comments: ((commentsRes.error ? [] : commentsRes.data ?? []) as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow
