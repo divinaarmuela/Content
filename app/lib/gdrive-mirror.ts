@@ -1,4 +1,5 @@
 import 'server-only'
+import { after } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { inngest } from '../inngest/client'
 import {
@@ -108,9 +109,23 @@ export async function requestMirror(files: MirrorRequest[]): Promise<number> {
   }
 }
 
-/** Fire-and-forget, for request handlers. */
+/**
+ * Fire-and-forget, for request handlers.
+ *
+ * Through Next's `after()`, not a bare `void`: on Vercel a function that has
+ * sent its response can be frozen before a detached promise finishes, and a
+ * queue call that never left is a file that never reaches Drive — three raw
+ * files were dropped on an item and one arrived. `after()` keeps the function
+ * alive until the work is done; outside a request scope (tests, scripts) it
+ * throws, and the detached call is the fallback.
+ */
 export function mirrorFiles(files: MirrorRequest[]): void {
-  void requestMirror(files).catch(e => console.error('[gdrive] mirror request:', e))
+  const job = () => requestMirror(files).catch(e => console.error('[gdrive] mirror request:', e))
+  try {
+    after(job)
+  } catch {
+    void job()
+  }
 }
 
 // ── the callers' shapes ───────────────────────────────────────────────────
