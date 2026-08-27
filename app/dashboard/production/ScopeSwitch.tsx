@@ -30,8 +30,10 @@ export function ScopeSwitch({ scope, onChange, unassignedCount, unassignedHint }
     onChange(next)
   }
 
+  // 44px tall on a phone — these three are pressed more than anything else
+  // on the page; desktop keeps the compact row
   const pill = (active: boolean) =>
-    `rounded-md px-3 py-1.5 text-sm transition-colors ${
+    `min-h-11 rounded-md px-3 py-1.5 text-sm transition-colors md:min-h-8 ${
       active
         ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
         : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'

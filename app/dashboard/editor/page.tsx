@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +39,11 @@ import { usePersistedChoice, usePersistedScope, useTeamNames } from '../producti
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
+import { LaneBoard, type Lane } from '../production/LaneBoard'
+import GettingStarted from '../GettingStarted'
+import HelpHint from '../HelpHint'
+import { toastOpen } from '../toastLink'
+import { DRAFTING_LANE } from '../../lib/section-names'
 
 type Item = {
   id: string
@@ -99,14 +105,15 @@ function initialsOf(name: string): string {
 }
 
 /**
- * The Editor board: assets in the edit, and nothing else.
+ * The Editor board: items in the edit, and nothing else.
  *
  * The old single board showed every piece of work to everybody, so an editor
- * scrolled past shoot briefs and scheduled posts to find their own three jobs.
+ * scrolled past shoot plans and scheduled posts to find their own three jobs.
  * This page carries one question — what is mine to edit, and what is free to
  * pick up — and the scope switch is how you answer it.
  */
 export default function EditorPage() {
+  const router = useRouter()
   const [items, setItems] = useState<Item[] | null>(null)
   const [clients, setClients] = useState<ClientRow[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
@@ -190,12 +197,13 @@ export default function EditorPage() {
 
   useEffect(() => { load() }, [load])
 
-  // arriving from a brief's "Create items": dialog open, client+shoot preset
+  // arriving from a shoot's "Create items": dialog open, client+shoot preset
+  // (the old `new_for_batch` spelling still works — a bookmarked link is a link)
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
-    const forBatch = q.get('new_for_batch')
-    if (forBatch) {
-      setPreset({ batch_id: forBatch, client_id: q.get('client') ?? undefined })
+    const forShoot = q.get('new_for_shoot') ?? q.get('new_for_batch')
+    if (forShoot) {
+      setPreset({ batch_id: forShoot, client_id: q.get('client') ?? undefined })
       setNewOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,7 +314,8 @@ export default function EditorPage() {
         body: JSON.stringify({ owner_id: ownerId }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign it')
-      toast.success(`Assigned to ${nameById.get(ownerId) ?? 'them'}`)
+      const who = nameById.get(ownerId) ?? 'a teammate'
+      toastOpen(`Assigned to ${who} — they have been emailed`, `/dashboard/production/${itemId}`, router.push)
       void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign it')
@@ -339,8 +348,10 @@ export default function EditorPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Editor</h2>
+          {/* the purpose, in a new hire's words: what is here and what you do with it */}
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Assets in the edit — from first draft to client approval.
+            Every item <HelpHint term="item" /> being edited, from first cut to client
+            sign-off. Take one, attach your work, send it for review.
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -370,9 +381,11 @@ export default function EditorPage() {
               <CheckSquare className="h-4 w-4" /> {selectMode ? 'Cancel' : 'Select to delete'}
             </Button>
           )}
-          <Button size="sm" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> New</Button>
+          <Button size="sm" className="min-h-11 md:min-h-9" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> New item</Button>
         </div>
       </div>
+
+      {ready && <GettingStarted role={role} page="editor" />}
 
       <ShootChips batches={batches} clientFilter={clientFilter}
         value={batchFilter} onChange={setBatchFilter}
@@ -419,7 +432,7 @@ export default function EditorPage() {
                       ? 'Nothing is assigned to you right now.'
                       : 'Nothing is waiting to be picked up.'}
                 </p>
-                <Button variant="outline" size="sm" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
                   Show everyone&rsquo;s
                 </Button>
               </>
@@ -427,15 +440,15 @@ export default function EditorPage() {
               /* scope Everyone and still nothing — the first thing a new
                  account manager sees. A dead end needs a next step. */
               <>
-                <p className="font-medium text-zinc-700 dark:text-zinc-200">Nothing in the edit yet.</p>
+                <p className="font-medium text-zinc-700 dark:text-zinc-200">Nothing to edit yet.</p>
                 <p className="max-w-sm">
-                  Assets come from a shoot: Production → Create items, or add one here.
+                  When a shoot <HelpHint term="shoot" /> is locked, its items land here in {DRAFTING_LANE} — or create one now.
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button size="sm" onClick={() => setNewOpen(true)}>
-                    <Plus className="h-4 w-4" /> New content item
+                  <Button size="sm" className="min-h-11" onClick={() => setNewOpen(true)}>
+                    <Plus className="h-4 w-4" /> New item
                   </Button>
-                  <Button variant="outline" size="sm" asChild>
+                  <Button variant="outline" size="sm" className="min-h-11" asChild>
                     <Link href="/dashboard/production">Plan a shoot <ArrowRight className="h-3.5 w-3.5" /></Link>
                   </Button>
                 </div>
@@ -453,25 +466,28 @@ export default function EditorPage() {
           undatedLabel="No due date"
           legend={
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Every asset on its due date, coloured by the step it is on. Drag one to
+              Every item on its due date, coloured by the step it is on. Drag one to
               another day to move the date.
             </p>
           }
         />
       ) : (
-        <div className="w-full overflow-x-auto">
-          <div className="flex gap-3 pb-3">
-            {EDITOR_LANES.map(lane => {
+        <LaneBoard
+          ariaLabel="Editor columns"
+          // a phone opens on the viewer's own step: the first column with
+          // something that is theirs to move, else the first with anything
+          initialLane={EDITOR_LANES.find(l => visible.some(i => l.statuses.includes(i.status) && editorAssignment(i, viewer!) === 'mine'))?.key}
+          lanes={EDITOR_LANES.map((lane): Lane => {
               const colItems = visible.filter(i => lane.statuses.includes(i.status))
-              return (
-                <div key={lane.key} className="min-w-44 flex-1">
-                  <div className="mb-2 flex items-center gap-2 px-1">
-                    <span className={`h-2 w-2 rounded-full ${LANE_TINT[lane.key] ?? 'bg-zinc-400'}`} />
-                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{lane.title}</span>
-                    <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{colItems.length}</span>
-                  </div>
-                  <div className="flex min-h-24 flex-col gap-2">
-                    {colItems.map(item => {
+              return {
+                key: lane.key,
+                title: lane.title,
+                tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
+                count: colItems.length,
+                hint: lane.key === 'drafting' ? <HelpHint term="drafting" />
+                  : lane.key === 'approved' ? <HelpHint term="approved_for_scheduling" /> : undefined,
+                empty: filtering && visible.length === 0 ? 'Nothing for this client / shoot' : LANE_EMPTY[lane.key] ?? 'Nothing here.',
+                cards: colItems.map(item => {
                       const assignment = editorAssignment(item, viewer!)
                       const ownerName = item.owner_id ? nameById.get(item.owner_id) : undefined
                       return (
@@ -516,7 +532,8 @@ export default function EditorPage() {
                                   me?" — the old `you` pill said it twice. The
                                   initials answer a different question (who
                                   OWNS it, whoever's turn it is) and stay. */}
-                              <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName} />
+                              <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName}
+                                openTask={item.my_open_task} />
                               {assignment === 'other' && ownerName && (
                                 <span title={ownerName}
                                   className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
@@ -545,12 +562,12 @@ export default function EditorPage() {
                               // a control and not on the card
                               <div className="relative z-10 flex flex-wrap items-center gap-1.5">
                                 {canClaimEditor(item, viewer!) && (
-                                  <ClaimButton itemId={item.id} hat="editor" label="Take this job" onDone={load} />
+                                  <ClaimButton itemId={item.id} hat="editor" onDone={load} />
                                 )}
                                 {isManager && nameById.size > 0 && (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <Button size="sm" variant="outline">Assign…</Button>
+                                      <Button size="sm" variant="outline" className="min-h-11 md:min-h-8">Assign…</Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
                                       {[...nameById].map(([id, name]) => (
@@ -567,26 +584,16 @@ export default function EditorPage() {
                         </Card>
                       </div>
                       )
-                    })}
-                    {colItems.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
-                        {/* "Empty" under a column called Ready for review is a
-                            word, not information — say what is not there */}
-                        {filtering && visible.length === 0 ? 'Nothing for this client / shoot' : LANE_EMPTY[lane.key] ?? 'Nothing here.'}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
+                    }),
+              }
             })}
-          </div>
-        </div>
+        />
       )}
 
       {/* done, but kept visible: the two counts that belong to the next page */}
       {ready && canSeeScheduler && (
         <Link href="/dashboard/scheduler"
-          className="flex items-center gap-1.5 self-start rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100">
+          className="flex min-h-11 items-center gap-1.5 self-start rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100">
           <span className="font-mono font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{tail.scheduled}</span>
           scheduled ·
           <span className="font-mono font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{tail.published}</span>
@@ -601,15 +608,15 @@ export default function EditorPage() {
           <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
             {selectedIds.size} selected
           </span>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+          <Button size="sm" variant="ghost" className="min-h-11 px-2 text-xs"
             onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>
             Select all
           </Button>
-          <Button size="sm" variant="destructive" className="h-7 gap-1.5 px-3 text-xs"
+          <Button size="sm" variant="destructive" className="min-h-11 gap-1.5 px-3 text-xs"
             disabled={selectedIds.size === 0} onClick={() => setBulkOpen(true)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitSelect}>Cancel</Button>
+          <Button size="sm" variant="ghost" className="min-h-11 px-2 text-xs" onClick={exitSelect}>Cancel</Button>
         </div>
       )}
 

@@ -17,7 +17,7 @@ const HAT_WORD: Record<string, string> = {
  * you are the one holding it up. This does, in the three words that matter.
  * A published item has nobody's turn left, so it gets no chip at all.
  */
-export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
+export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTask }: {
   status: ItemStatus
   item: ActingItem
   viewer: { id: string; role: Role }
@@ -26,9 +26,20 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
    *  Production passes BRIEF_STATUS_TURN — otherwise a booked shoot would sit
    *  there waiting on a scheduler who is never coming. */
   turns?: Record<ItemStatus, Role | null>
-  /** a shoot brief cannot be claimed — only an account manager picks it up */
+  /** a shoot plan cannot be claimed — only an account manager picks it up */
   brief?: boolean
+  /** somebody tagged the viewer in a comment here and it is not done yet —
+   *  that outranks whose turn the STATUS says it is, because a question with
+   *  your name on it is your move whatever the stage */
+  openTask?: boolean
 }) {
+  if (openTask) {
+    return (
+      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+        Waiting on you — tagged
+      </span>
+    )
+  }
   const turn = whoseTurn(status, item, viewer, turns)
   if (turn.hat === null) return null
 
@@ -40,10 +51,10 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief }: {
     // by a manager (claim-core refuses to let anyone take one), and the
     // scheduling seat is schedulers-only, not "anyone".
     const word = brief
-      ? 'Unassigned — assign an account manager'
+      ? 'Nobody on it — assign an account manager'
       : turn.hat === 'scheduler'
-        ? 'Unassigned — any scheduler can take it'
-        : 'Unassigned — anyone can take it'
+        ? 'Nobody on it — any scheduler can take it'
+        : 'Nobody on it — anyone can take it'
     return (
       <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
         {word}
