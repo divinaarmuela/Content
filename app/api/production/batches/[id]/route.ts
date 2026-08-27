@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, roleSatisfies, authzErrorResponse } from '../../../../lib/authz'
-import { batchClientIds } from '../../../../lib/production-access'
+import { canOpenBatch } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
@@ -17,10 +17,10 @@ async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: stri
     .eq('id', id)
     .maybeSingle()
   if (!batch) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
-  const ids = await batchClientIds(user)
-  // ownership grants visibility too — the editor who created the shoot keeps it
-  if (ids !== null && !ids.includes(batch.client_id) && batch.owner_id !== user.id) {
-    return { response: NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 }) }
+  // client membership, having created the shoot, or holding a job on it
+  // (the brief task handed to someone off the client team) all open the plan
+  if (!(await canOpenBatch(user, batch))) {
+    return { response: NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 }) }
   }
   return { batch }
 }

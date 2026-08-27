@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
-import { accessibleClientIds } from '../../../../../lib/production-access'
+import { canOpenBatch } from '../../../../../lib/production-access'
 import { logActivity, notifyBatchTransition } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../../lib/gdrive-hooks'
@@ -25,9 +25,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: batch } = await supabase.from('batches').select('*').eq('id', id).maybeSingle()
     if (!batch) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    const ids = await accessibleClientIds(user)
-    if (ids !== null && !ids.includes(batch.client_id)) {
-      return NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 })
+    if (!(await canOpenBatch(user, batch))) {
+      return NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 })
     }
 
     const from = batch.status as BatchStatus

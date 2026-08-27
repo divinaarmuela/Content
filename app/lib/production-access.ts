@@ -21,6 +21,30 @@ export function assertUuid(id: string): string {
   return id
 }
 
+/**
+ * May this team user open a shoot?
+ *
+ * Client membership or having created the shoot — and, since 27 Aug,
+ * HOLDING A JOB ON IT: the brief task handed to a manager off the client
+ * team is the shoot's own plan, and "you are not assigned to this client"
+ * on the page that plan lives on made the assignment meaningless.
+ * Assignment is the grant, exactly as loadItemForUser already treats items.
+ */
+export async function canOpenBatch(
+  user: TeamUser,
+  batch: { id: string; client_id: string; owner_id?: string | null },
+): Promise<boolean> {
+  const ids = await batchClientIds(user)
+  if (ids === null || ids.includes(batch.client_id) || batch.owner_id === user.id) return true
+  const { data } = await supabase
+    .from('content_items')
+    .select('id')
+    .eq('batch_id', batch.id)
+    .or(`owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`)
+    .limit(1)
+  return (data?.length ?? 0) > 0
+}
+
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
 export async function accessibleClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null
