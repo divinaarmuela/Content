@@ -238,6 +238,38 @@ describe('payload → action', () => {
     }).action).toEqual({ kind: 'scheduled', postId: 'p', scheduledFor: '2026-08-28T09:00:00Z' })
   })
 
+  it('carries an externally-detected post through as its own action', () => {
+    // the provider's sync noticing a post somebody made in Instagram's own app
+    // — which is exactly what a scheduler posting by hand produces
+    const { action } = parseZernioEvent({
+      id: 'evt_ext',
+      event: 'post.external.created',
+      data: {
+        post: {
+          _id: 'ext_1', isExternal: true, platform: 'Instagram',
+          profileId: 'prof_1', publishedAt: '2026-08-26T09:00:00Z',
+          platformPostUrl: 'https://www.instagram.com/reel/ABC123/',
+        },
+      },
+    })
+    expect(action).toEqual({
+      kind: 'external_post',
+      postId: 'ext_1',
+      platform: 'instagram',
+      url: 'https://www.instagram.com/reel/ABC123/',
+      publishedAt: '2026-08-26T09:00:00Z',
+      profileId: 'prof_1',
+    })
+  })
+
+  it('leaves post.external.deleted alone — a post that happened, happened', () => {
+    // erasing last month's numbers because the client tidied their grid would
+    // rewrite a report already sent
+    expect(parseZernioEvent({
+      event: 'post.external.deleted', data: { post: { _id: 'ext_1' } },
+    }).action.kind).toBe('ignore')
+  })
+
   it('reads account.connected without confusing it with a disconnect', () => {
     const { action } = parseZernioEvent({
       id: 'evt_ac',
@@ -340,7 +372,10 @@ describe('payload → action', () => {
 
   it('ignores events we do not act on, rather than mistaking them for a publish', () => {
     for (const event of [
-      'webhook.test', 'post.external.created', 'post.platform.deleted',
+      // post.external.created used to be here; it is acted on now — a post made
+      // by hand on the platform may be one of ours, and the client is owed its
+      // numbers. post.external.deleted stays ignored on purpose.
+      'webhook.test', 'post.external.deleted', 'post.platform.deleted',
       'call.received', 'whatsapp.template.status_updated', 'verification.approved',
       'ad.status_changed', 'account.ads.initial_sync_completed', '',
     ]) {

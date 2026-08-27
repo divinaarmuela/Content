@@ -19,7 +19,7 @@ import {
   type PostingEntry, type PostingJob, type PostingJobStatus, type PostingState,
 } from '../../../lib/posting-card-core'
 import {
-  METRICS_PENDING_LINE, compactCount, metricCells, metricsPending, updatedAgo,
+  METRICS_PENDING_LINE, compactCount, isExternalRow, metricCells, metricsPending, updatedAgo,
   type PostMetrics,
 } from '../../../lib/post-analytics-core'
 
@@ -32,6 +32,7 @@ export type PostingContext = {
   } | null
   metrics?: (Partial<PostMetrics> & {
     sync_status: string | null; synced_at: string; post_url: string | null
+    source?: string | null
   }) | null
 }
 
@@ -42,7 +43,9 @@ export type PostingContext = {
  * module: a scheduler being asked "how did that one do?" and the client
  * reading their own portal must never see two different answers.
  */
-function PostedMetrics({ metrics }: { metrics: PostingContext['metrics'] }) {
+function PostedMetrics(
+  { metrics, platform }: { metrics: PostingContext['metrics']; platform: string },
+) {
   const cells = metricCells(metrics)
   if (metricsPending(metrics)) {
     return (
@@ -61,7 +64,18 @@ function PostedMetrics({ metrics }: { metrics: PostingContext['metrics'] }) {
           </span>
         ))}
       </div>
-      {metrics?.synced_at && (
+      <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+        suppressHydrationWarning>
+        {/* These numbers belong to a post this app never published. Saying so
+            is the difference between a figure and an unexplained figure: the
+            scheduler pasted a link, and this is what that link turned out to
+            be. The client's portal stays silent — how we found the numbers is
+            our business, not theirs. */}
+        {isExternalRow(metrics)
+          ? `Stats from ${platformLabel(platform)} · linked by URL`
+          : metrics?.synced_at ? updatedAgo(metrics.synced_at) : null}
+      </span>
+      {isExternalRow(metrics) && metrics?.synced_at && (
         <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
           suppressHydrationWarning>
           {updatedAgo(metrics.synced_at)}
@@ -134,6 +148,9 @@ export default function PostingCard(props: Props) {
   })
 
   const entry = entries.find(e => e.platform === platform) ?? null
+  // the row that says "this went out" — the same one derivePostingState reads,
+  // and the one carrying the outcome of the hunt for its numbers
+  const postedEntry = entries.find(e => e.publish_status === 'published') ?? null
   const [pickedWhen, setPickedWhen] = useState<string>(() => toLocalInput(entry?.scheduled_at ?? null))
   const [manual, setManual] = useState(false)
   const [manualPlatform, setManualPlatform] = useState(platform)
@@ -414,9 +431,22 @@ export default function PostingCard(props: Props) {
                   </a>
                 )
                 : <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No link — a Story, or posted without one.</p>}
-              {/* a post recorded by hand was never handed to the provider, so
-                  there is nothing to have numbers about */}
-              {!state.manual && <PostedMetrics metrics={posting?.metrics ?? null} />}
+              {/* A post recorded by hand was never handed to the provider — but
+                  the platform still counted it, and the provider's own list of
+                  posts made directly on the account is where those numbers
+                  come from. So a hand-posted item shows its figures like any
+                  other once its link has been matched, and says plainly when
+                  the link matched nothing. Before the first lookup lands there
+                  is nothing honest to say, so it says nothing. */}
+              {!state.manual
+                ? <PostedMetrics metrics={posting?.metrics ?? null} platform={state.platform} />
+                : posting?.metrics
+                  ? <PostedMetrics metrics={posting.metrics} platform={state.platform} />
+                  : postedEntry?.external_match_state === 'not_found' && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      Couldn&rsquo;t find this post on {label} — check the link.
+                    </p>
+                  )}
             </>
           )}
 

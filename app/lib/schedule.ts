@@ -5,6 +5,7 @@ import { actingRoles } from './workflow-core'
 import { logActivity } from './workflow'
 import { announceItemChange } from './production-live'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
+import { linkExternalPostSoon } from './external-post-match'
 
 export type ScheduleEntryInput = {
   platform?: unknown
@@ -88,6 +89,26 @@ export async function upsertScheduleEntry(
   // instead of leaving it claiming a post that is not happening then.
   if ('scheduled_at' in input && input.scheduled_at) {
     mirrorLatestVersionSoon(item.id, 'scheduled')
+  }
+
+  // Posted by hand: the client is owed the same numbers as an item we
+  // published ourselves. Nothing here holds a provider post id — there is no
+  // publish job — so the provider's own list of posts made directly on the
+  // platform is asked which post this link is, and the answer is cached as an
+  // ordinary post_analytics row. Detached: a scheduler saving a link must not
+  // wait on two provider round trips, and a provider outage must not turn
+  // saving a link into an error on their screen.
+  if (input.live_url || input.mark_posted === true) {
+    linkExternalPostSoon({
+      itemId: item.id,
+      clientId: item.client_id,
+      platform: String(patch.platform),
+      liveUrl: (input.live_url as string | null) ?? null,
+      at: (patch.published_at as string | undefined)
+        ?? (data?.published_at as string | null)
+        ?? (input.scheduled_at as string | null)
+        ?? null,
+    })
   }
 
   announceItemChange({

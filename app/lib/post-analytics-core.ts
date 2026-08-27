@@ -36,6 +36,19 @@ export type PostAnalyticsRow = PostMetrics & {
   sync_status: string | null
   published_at: string | null
   synced_at: string
+  /**
+   * Where this row came from: 'provider' (we published it) or 'external' (a
+   * human posted it on the platform and we matched their link to the post).
+   * Optional because the column arrived after the table did — a row read from
+   * an un-migrated database carries no source, and that reads as 'provider',
+   * which is what every row written before the migration was.
+   */
+  source?: string | null
+}
+
+/** Were these numbers found by matching a hand-posted link? */
+export function isExternalRow(row: { source?: string | null } | null | undefined): boolean {
+  return String(row?.source ?? '').toLowerCase() === 'external'
 }
 
 export const EMPTY_METRICS: PostMetrics = {

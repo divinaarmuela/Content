@@ -286,7 +286,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   if (!jobs?.length) return 0
 
   const publisher = getPublisher()
-  type Remote = { status?: string; platforms?: { platformPostUrl?: string | null }[] }
+  type Remote = { status?: string; platforms?: { platformPostUrl?: string | null; status?: string }[] }
   const all = await publisher.postAnalytics().catch(() => null) as {
     posts?: ({ _id?: string } & Remote)[]
   } | null

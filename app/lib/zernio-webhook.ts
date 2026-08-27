@@ -184,6 +184,29 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
         settled, `${action.platform}: ${action.error}`,
       )
     }
+    case 'external_post': {
+      // Somebody posted this in the platform's own app. If it is one of ours —
+      // a scheduler who posted by hand and pasted the link onto the item card —
+      // the client gets the same numbers as any other post. If it is not, this
+      // is one indexed read that matches nothing.
+      const { linkExternalPostFromWebhook } = await import('./external-post-match')
+      const { matched } = await linkExternalPostFromWebhook({
+        providerPostId: action.postId,
+        platform: action.platform,
+        url: action.url,
+        publishedAt: action.publishedAt,
+        profileId: action.profileId,
+      }).catch(e => {
+        console.error('could not link the external post', action.postId, e)
+        return { matched: null as string | null }
+      })
+      return done(
+        NextResponse.json({ ok: true, external: action.postId, matched }),
+        Boolean(matched),
+        matched ? `linked to item ${matched}` : 'not one of ours',
+      )
+    }
+
     case 'cancelled': {
       const settled = await postCancelled(action.postId)
       return done(NextResponse.json({ ok: true, cancelled: settled }), settled)

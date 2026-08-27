@@ -69,6 +69,8 @@ type Comment = {
 }
 type ScheduleEntry = {
   id: string; platform: string; scheduled_at: string | null; live_url: string | null; publish_status: string
+  /** did the hunt for this hand-posted link's numbers find the post? */
+  external_match_state?: string | null
 }
 type Reviewer = { id: string; name: string; email: string; role: string; assigned: boolean }
 

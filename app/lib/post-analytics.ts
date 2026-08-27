@@ -40,7 +40,14 @@ type PublishedJob = {
   targets: unknown
 }
 
-export type RefreshResult = { scanned: number; updated: number; linked: number }
+export type RefreshResult = {
+  scanned: number
+  updated: number
+  linked: number
+  /** posts published BY HAND: newly matched to a provider post, and re-read */
+  externalMatched: number
+  externalRefreshed: number
+}
 
 /** The platform names off a job's stored targets, however loosely typed. */
 function platformsOf(targets: unknown): string[] {
@@ -179,7 +186,9 @@ export async function refreshRecentPostAnalytics(days = 90, limit = 200): Promis
     .limit(limit)
 
   const rows = (jobs ?? []) as unknown as PublishedJob[]
-  const out: RefreshResult = { scanned: rows.length, updated: 0, linked: 0 }
+  const out: RefreshResult = {
+    scanned: rows.length, updated: 0, linked: 0, externalMatched: 0, externalRefreshed: 0,
+  }
   for (const job of rows) {
     try {
       const r = await refreshOnePost(job)
@@ -190,20 +199,51 @@ export async function refreshRecentPostAnalytics(days = 90, limit = 200): Promis
       console.error('post analytics refresh failed', job.provider_post_id, e)
     }
   }
+
+  // The posts nobody here published. They have no publish_jobs row, so the
+  // loop above cannot see them at all: this half both matches the ones that
+  // have never been matched (everything marked by hand before the feature
+  // shipped, and anything whose live lookup found nothing because the
+  // provider's own sync had not noticed the post yet) and re-reads the numbers
+  // of the ones that have. Isolated: a failure here leaves the ordinary result
+  // intact rather than losing a whole sweep of real posts.
+  try {
+    const { sweepExternalPosts } = await import('./external-post-match')
+    const external = await sweepExternalPosts()
+    out.externalMatched = external.matched
+    out.externalRefreshed = external.refreshed
+    out.scanned += external.scanned
+  } catch (e) {
+    console.error('external post sweep failed', e)
+  }
   return out
 }
 
 /** The cached rows for a set of content items, newest post per item. */
+const ANALYTICS_COLUMNS =
+  'item_id, provider_post_id, platform, platform_post_url, views, reach, impressions, likes, comments, shares, saves, engagement_rate, sync_status, published_at, synced_at'
+
 export async function analyticsForItems(itemIds: string[]): Promise<Map<string, PostAnalyticsRow>> {
   const out = new Map<string, PostAnalyticsRow>()
   if (itemIds.length === 0) return out
-  const { data, error } = await supabase
+  const read = (columns: string) => supabase
     .from('post_analytics')
-    .select('item_id, provider_post_id, platform, platform_post_url, views, reach, impressions, likes, comments, shares, saves, engagement_rate, sync_status, published_at, synced_at')
+    .select(columns)
     .in('item_id', itemIds)
     .order('published_at', { ascending: false, nullsFirst: false })
-  // the table may not be migrated yet — an un-migrated portal shows no numbers,
-  // which is exactly what it showed yesterday
+
+  // `source` arrived with post_analytics_external.sql. Asking for a column the
+  // table does not have yet fails the WHOLE select, which would take every
+  // number off every portal — so the un-migrated case falls back to the columns
+  // that have always been there rather than to silence.
+  let { data, error } = await read(`${ANALYTICS_COLUMNS}, source`) as unknown as
+    { data: Record<string, unknown>[] | null; error: { message: string } | null }
+  if (error && /source/i.test(error.message)) {
+    ({ data, error } = await read(ANALYTICS_COLUMNS) as unknown as
+      { data: Record<string, unknown>[] | null; error: { message: string } | null })
+  }
+  // the table may not be migrated at all — an un-migrated portal shows no
+  // numbers, which is exactly what it showed yesterday
   if (error || !data) return out
   for (const r of data) {
     const id = r.item_id as string

@@ -99,6 +99,19 @@ export type ZernioAction =
     }
   /** one platform inside a post failed permanently */
   | { kind: 'platform_failed'; postId: string; platform: string; error: string }
+  /**
+   * A post the provider found on a connected account that it did not publish —
+   * somebody posted it in Instagram's own app. It may be one of ours: a
+   * scheduler who posts by hand and pastes the link back onto the item card.
+   */
+  | {
+      kind: 'external_post'
+      postId: string
+      platform: string | null
+      url: string | null
+      publishedAt: string | null
+      profileId: string | null
+    }
   /** the publishing job was cancelled before anything went out */
   | { kind: 'cancelled'; postId: string }
   /** the provider has accepted and is holding the post */
@@ -392,6 +405,38 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
         platformPostId: str(block.platformPostId) || null,
         accountId: accountIdOf(account) || null,
         backfillOnly: event === 'post.tiktok.url_resolved',
+      },
+    }
+  }
+
+  /**
+   * The provider's background sync noticed a post nobody published through us.
+   *
+   * Usually genuinely somebody else's — the client posting their own lunch —
+   * and then there is nothing to do. But it is also exactly what a scheduler
+   * posting by hand produces, and when its URL is the one they pasted onto an
+   * item card the client is owed that post's numbers like any other. The
+   * matching is done downstream; this only carries the identifying facts.
+   *
+   * `post.external.deleted` is deliberately not handled: a post removed from
+   * the platform still happened, and erasing last month's numbers because the
+   * client tidied their grid would rewrite a report already sent.
+   */
+  if (event === 'post.external.created' || event === 'post.external.updated') {
+    const postId = postIdOf(post, data)
+    if (!postId) return ignore('no post id')
+    const account = accountRecord(root, data)
+    return {
+      eventId,
+      event,
+      action: {
+        kind: 'external_post',
+        postId,
+        platform: (str(post.platform) || str(data.platform) || str(account.platform))
+          .toLowerCase() || null,
+        url: permalinkOf(post, data),
+        publishedAt: str(post.publishedAt) || str(data.publishedAt) || null,
+        profileId: str(post.profileId) || str(data.profileId) || str(account.profileId) || null,
       },
     }
   }

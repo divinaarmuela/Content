@@ -34,6 +34,14 @@ export type PostingEntry = {
   live_url: string | null
   publish_status: string | null
   published_at?: string | null
+  /**
+   * For a post published BY HAND: did we manage to find it on the platform?
+   * 'matched' — its numbers are cached. 'not_found' — we looked and the link
+   * matched nothing, which is worth telling the scheduler. Absent means no
+   * lookup has happened, and the card says nothing rather than accusing a
+   * perfectly good link during the seconds before the first attempt lands.
+   */
+  external_match_state?: string | null
 }
 
 export type PostingInput = {

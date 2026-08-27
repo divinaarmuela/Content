@@ -196,6 +196,10 @@ export type PostItemMetrics = PostMetrics & {
   sync_status: string | null
   synced_at: string
   post_url: string | null
+  /** 'external' when these numbers came from matching a hand-posted link —
+   *  the card says so, because "where did this figure come from" is a fair
+   *  question about a post the app never published */
+  source?: string | null
 }
 
 /**
@@ -234,6 +238,7 @@ export async function loadPostingContext(
         comments: a.comments, shares: a.shares, saves: a.saves,
         engagement_rate: a.engagement_rate,
         sync_status: a.sync_status, synced_at: a.synced_at, post_url: a.platform_post_url,
+        source: a.source ?? null,
       }
       : null,
     accounts: (accountsRes.data ?? []).map(a => ({
