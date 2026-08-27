@@ -34,7 +34,18 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Upload, Send, CheckCircle2, CircleDashed } from 'lucide-react'
+import {
+  ArrowLeft, ArrowDown, ArrowUp, Upload, Send, CheckCircle2, CircleDashed, ExternalLink, MoreHorizontal,
+} from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import GettingStarted from '../../GettingStarted'
+import HelpHint from '../../HelpHint'
+import CollapsibleCard from '../../CollapsibleCard'
+import MentionBox from '../../MentionBox'
+import { toastOpen } from '../../toastLink'
+import { extractMentions } from '../../../lib/mention-core'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -79,6 +90,8 @@ type Version = {
 type Comment = {
   id: string; created_at: string; author_id: string | null; author_name?: string | null
   visibility: string; body: string; resolved: boolean
+  /** the person this note is for — tagged with "@Name" */
+  assigned_to?: string | null
 }
 type ScheduleEntry = {
   id: string; platform: string; scheduled_at: string | null; live_url: string | null; publish_status: string
@@ -394,9 +407,10 @@ export default function ItemDetailPage() {
       if (!res.ok) throw new Error(json.error ?? 'Publish failed')
       // the same request moved the item to Scheduled — say so, because that is
       // the click the owner used to have to make afterwards
-      toast.success(publishNow
-        ? 'Publishing now — the status moves to Published when the channel confirms'
-        : 'Scheduled — it will post automatically, no further clicks')
+      toastOpen(publishNow
+        ? 'Publishing now — this moves to Published when the channel confirms'
+        : 'Scheduled — it will post itself; it is on the posting calendar',
+        '/dashboard/scheduler/calendar', router.push)
       setPublishPick(null)
       await load()
     } catch (e) {
@@ -412,7 +426,6 @@ export default function ItemDetailPage() {
   const [editors, setEditors] = useState<{ id: string; name: string; email: string; role?: string }[]>([])
   const [schedPick, setSchedPick] = useState<{ to: ItemStatus; label: string } | 'handoff' | null>(null)
   const [schedChosen, setSchedChosen] = useState<Set<string>>(new Set())
-  const [commentAssignee, setCommentAssignee] = useState<string>('')
 
   // job-pack source file uploads — queued in the background so you can keep
   // working; the tray in the layout shows progress and the item live-refreshes
@@ -506,11 +519,12 @@ export default function ItemDetailPage() {
     if (!change || change.item_id === id) void load()
   }, [id, load]))
 
-  // managers can (re)assign the item's editor and hand out comment tasks —
-  // load the editor directory once the role is known
+  // the team directory: managers (re)assign from it, and EVERYONE on the
+  // team tags from it — "@Name" in a comment has to be able to name anybody,
+  // not just the client's roster. /api/team answers any team role.
   const viewerRole = detail?.viewer_role
   useEffect(() => {
-    if (viewerRole !== 'account_manager' && viewerRole !== 'super_admin') return
+    if (!viewerRole || viewerRole === 'client') return
     fetch('/api/team')
       .then(r => (r.ok ? r.json() : { members: [] }))
       .then(json => {
@@ -762,22 +776,27 @@ export default function ItemDetailPage() {
     return null
   }
 
-  /** What just happened, in the past tense, with who now has it. */
-  const successWord = (to: ItemStatus, label: string): string => {
+  /** What just happened, in the past tense, with who now has it — and where
+   *  it went, so the toast can carry an Open button to that place. */
+  const successWord = (to: ItemStatus, label: string, notifyIds?: string[]): { text: string; href: string } => {
     const client = detail.client_name ?? 'the client'
+    const named = (notifyIds ?? []).map(nameOf).filter(Boolean)
+    const reviewer = named.length > 0 ? named.join(', ') : 'an account manager'
+    const owner = detail.owner_name ?? 'the person on it'
+    const board = isAsset ? '/dashboard/editor' : '/dashboard/production'
     switch (to) {
-      case 'internal_review': return 'Sent for review — an account manager has it now'
-      case 'revision_required': return 'Sent back for changes — the person on it has been told'
-      case 'revision_complete': return 'Marked as revised — back with an account manager'
-      case 'client_review': return `Sent to ${client} — it is on their portal now`
-      case 'client_changes_requested': return "The client's changes are logged"
+      case 'internal_review': return { text: `Sent to ${reviewer} for review`, href: board }
+      case 'revision_required': return { text: `Sent back to ${owner} for changes — they have been told`, href: board }
+      case 'revision_complete': return { text: `Marked as revised — back with ${reviewer}`, href: board }
+      case 'client_review': return { text: `Sent to ${client} — it is on their portal now`, href: board }
+      case 'client_changes_requested': return { text: "The client's changes are logged", href: board }
       case 'approved_for_scheduling':
-        return isBrief ? 'Plan approved — lock the date, then book the shoot'
-          : isInternal ? 'Approved — this one is done'
-          : 'Approved — it is in the scheduler\'s queue'
-      case 'scheduled': return isBrief ? 'Shoot booked' : 'Marked scheduled'
-      case 'published': return 'Marked published'
-      default: return label
+        return isBrief ? { text: 'Plan approved — lock the date, then book the shoot', href: detail.batch?.id ? `/dashboard/production/shoots/${detail.batch.id}` : board }
+          : isInternal ? { text: 'Approved — this one is done', href: board }
+          : { text: 'Approved — it is in the Scheduler queue, under Needs a posting date', href: '/dashboard/scheduler' }
+      case 'scheduled': return isBrief ? { text: 'Shoot booked', href: board } : { text: 'Marked scheduled — it is on the posting calendar', href: '/dashboard/scheduler/calendar' }
+      case 'published': return { text: 'Marked published — it is under Published on the Scheduler', href: '/dashboard/scheduler' }
+      default: return { text: label, href: board }
     }
   }
 
@@ -797,9 +816,10 @@ export default function ItemDetailPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
-      // …in the past tense, with the consequence: a toast that just repeats
-      // the button reads like a prompt to do it again
-      toast.success(successWord(to, label))
+      // …in the past tense, with the consequence and a way to follow it: a
+      // toast that just repeats the button reads like a prompt to do it again
+      const done = successWord(to, label, notifyIds)
+      toastOpen(done.text, done.href, router.push)
       setReviewPick(null)
       setSchedPick(null)
       setRevisionAsk(null)
@@ -849,7 +869,8 @@ export default function ItemDetailPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not notify')
       const names = [...schedChosen].map(nameOf).filter(Boolean)
-      toast.success(names.length > 0 ? `Handed to ${names.join(', ')}` : 'Handed over')
+      toastOpen(names.length > 0 ? `Handed to ${names.join(', ')} to schedule — they have been emailed` : 'Handed over — they have been emailed',
+        '/dashboard/scheduler', router.push)
       setSchedPick(null)
       await load()
     } catch (e) {
@@ -1002,22 +1023,38 @@ export default function ItemDetailPage() {
     }
   }
 
+  /** the people "@Name" can reach — everyone active on the team but you */
+  const mentionable = editors
+    .filter(e => e.id !== detail?.viewer_id)
+    .map(e => ({ id: e.id, name: e.name || e.email }))
+
   const postComment = async () => {
     if (!commentDraft.trim()) return
     setBusy('comment')
     try {
+      // the words are the truth: whoever is "@"-named in the text is tagged.
+      // The server reads the same text with the same parser; the ids ride
+      // along so a name the server cannot resolve still reaches the person.
+      const tagged = commentVisibility === 'internal' ? extractMentions(commentDraft, mentionable) : []
       const res = await fetch(`/api/production/items/${id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           body: commentDraft,
           visibility: commentVisibility,
-          ...(commentVisibility === 'internal' && commentAssignee ? { assigned_to: commentAssignee } : {}),
+          ...(tagged.length ? { assigned_to: tagged[0].id, mention_ids: tagged.map(t => t.id) } : {}),
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Comment failed')
       setCommentDraft('')
-      setCommentAssignee('')
+      if (tagged.length > 0) {
+        const names = tagged.map(t => t.name).join(', ')
+        toast.success(`Posted — ${names} ${tagged.length === 1 ? 'has' : 'have'} been emailed and will see "Waiting on you"`)
+      } else if (commentVisibility === 'client') {
+        toast.success(`Posted — ${detail?.client_name ?? 'the client'} can read it on their portal`)
+      } else {
+        toast.success('Posted — managers can see it. Tag someone with @ to reach them.')
+      }
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Comment failed')
@@ -1033,6 +1070,7 @@ export default function ItemDetailPage() {
       body: JSON.stringify({ comment_id: c.id, resolved: !c.resolved }),
     })
     if (!res.ok) return toast.error('Update failed')
+    toast.success(c.resolved ? 'Reopened — it is back on their list' : 'Marked done — it is off their list')
     await load()
   }
 
@@ -1080,7 +1118,9 @@ export default function ItemDetailPage() {
         body: JSON.stringify({ owner_id: ownerId === 'none' ? null : ownerId }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign')
-      toast.success(ownerId === 'none' ? 'Unassigned' : 'Assigned')
+      toast.success(ownerId === 'none'
+        ? 'Nobody on it now — anyone can take it from the board'
+        : `Assigned to ${nameOf(ownerId) ?? 'them'} — they have been emailed the brief`)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign')
@@ -1162,251 +1202,359 @@ export default function ItemDetailPage() {
     await openPublishPick(publishNow)
   }
 
-  return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      {/* 1 — HEADER. What this is, and whose move it is. Said once. */}
-      <div className="flex flex-wrap items-start gap-3">
-        <Button variant="outline" size="sm" onClick={() => router.push(back.href)}>
-          <ArrowLeft className="h-4 w-4" /> {back.label}
-        </Button>
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">{detail.title}</h2>
-          {/* an asset has a content type; a brief and a task do not — a
-              research task is not "Other" and a shoot plan is not a Reel */}
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {detail.client_name ?? '—'} ·{' '}
-            {isBrief ? 'Shoot brief'
-              : isInternal ? (detail.work_kind?.name ?? 'Task')
-              : <span className="capitalize">{detail.content_type}</span>}
-            {isAsset && detail.current_version_number > 0 && (
-              <> · <span className="font-mono text-xs">v{detail.current_version_number}</span></>
-            )}
-          </p>
-          {isTeam && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {turn.hat === null ? 'Finished — nothing left to do.' : <>Waiting on <span className="font-medium text-zinc-700 dark:text-zinc-200">{turnText()}</span></>}
+  /** The header's second line: everything about the item that is a fact,
+   *  not a control — client, format, version, due date, priority. */
+  const overdue = detail.due_date
+    && new Date(detail.due_date) < new Date(new Date().toDateString())
+    && !['scheduled', 'published'].includes(detail.status)
+  const facts = [
+    detail.client_name ?? '—',
+    isBrief ? 'Shoot plan' : isInternal ? (detail.work_kind?.name ?? 'Task') : detail.content_type,
+    isAsset && detail.current_version_number > 0 ? `v${detail.current_version_number}` : null,
+    detail.due_date
+      ? `due ${new Date(detail.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`
+      : null,
+    detail.priority && detail.priority !== 'normal' ? `${detail.priority} priority` : null,
+  ].filter(Boolean)
+
+  const statusWord = role === 'client'
+    ? (detail.status_label ?? CLIENT_LABELS[detail.status])
+    : isInternal ? taskStatusLabel(detail.work_kind, detail.status, STATUS_LABELS[detail.status], { hasWork: detail.versions.length > 0 })
+    : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])
+
+  /** the one folder link — the pasted one wins over the one we made, because
+   *  a pasted one is a deliberate override */
+  const folderUrl = detail.raw_assets_url || detail.drive_url || null
+  /** has anyone tagged the viewer here and not yet marked it done? */
+  const openForMe = detail.comments.some(c => !c.resolved && c.assigned_to === detail.viewer_id)
+
+  /** The action buttons — drawn once in the card, once in the phone bar. */
+  const shown = [...(primary ? [primary] : []), ...secondary]
+  const hints = [...new Set(shown.map(t => blockedReason(t.to)).filter(Boolean))] as string[]
+  const press = (t: { to: ItemStatus; label: string }) =>
+    (t.to === 'internal_review' || t.to === 'revision_complete')
+      ? openReviewerPick(t)
+      // asking for changes deserves a WHY — the note rides the transition
+      // into the thread and the assignee's email
+      : (t.to === 'revision_required' || t.to === 'client_changes_requested')
+        ? (setRevisionAsk(t), setRevisionNote(''), setDialogError(null))
+        // anything that puts this in front of the CLIENT gets a confirm
+        // naming who it reaches — it is the riskiest move in the app
+        : t.to === 'client_review'
+          ? (setClientSend(t), setDialogError(null))
+          : doTransition(t.to, t.label)
+  const actionButton = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline', className = '') => (
+    <Button key={t.to} size="sm" variant={variant} className={`min-h-11 md:min-h-8 ${className}`}
+      // the biggest, bluest button on the page must not be a trapdoor into
+      // a corner toast telling you to go and do something else
+      disabled={busy !== null || blockedReason(t.to) !== null}
+      onClick={() => press(t)}>
+      {busy === t.to ? 'Working…' : t.label}
+    </Button>
+  )
+
+  /** the state of the version list, for the folded summary */
+  const versionSummary = detail.versions.length === 0
+    ? 'nothing yet'
+    : `${detail.versions.length} ${isInternal ? 'draft' : 'version'}${detail.versions.length === 1 ? '' : 's'}`
+
+  /** who holds which seat, for the People card */
+  const reviewerNames = (detail.managers ?? []).map(m => m.name).filter(Boolean)
+  const schedulerNames = schedulerIds.map(nameOf).filter((n): n is string => !!n)
+  const postingOpen = isAsset && (SCHEDULER_STATUSES.includes(detail.status) || detail.schedule.length > 0)
+
+  /** the version drop zone + form — inside "The work" */
+  const versionForm = canAddVersion && (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        {isInternal ? 'Attach the work' : detail.versions.length === 0 ? 'Add the first version' : `Add v${detail.current_version_number + 1}`}
+      </p>
+      {/* THE path, not one of three: the export goes straight from the
+          editor's machine into our storage. The links below are for the
+          cases the upload cannot cover. */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => {
+          e.preventDefault(); setDragging(false)
+          const f = Array.from(e.dataTransfer.files ?? [])
+          if (f.length) void uploadFiles(f)
+        }}
+        onClick={() => fileRef.current?.click()}
+        className={`flex min-h-11 cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
+          dragging
+            ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
+            : slides.length > 0
+              ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+              : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+        }`}
+      >
+        <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
+        {uploading ? (
+          <p className="text-sm font-medium">{overallProgress(versionUploads).label}</p>
+        ) : slides.length > 0 ? (
+          <>
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              {slideCountLabel(slides.length)} ready ✓
+              {slides.length === 1 && draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
             </p>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
-            {role === 'client'
-              ? (detail.status_label ?? CLIENT_LABELS[detail.status])
-              : isInternal ? taskStatusLabel(detail.work_kind, detail.status, STATUS_LABELS[detail.status], { hasWork: detail.versions.length > 0 }) : itemStatusLabel(detail.work_kind?.slug, detail.status, STATUS_LABELS[detail.status])}
-          </Badge>
-        </div>
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              {slides.length >= MAX_SLIDES ? `That is the most a carousel takes (${MAX_SLIDES})` : 'Tap to add more'}
+            </p>
+          </>
+        ) : (
+          <>
+            {/* the working half first: "choose" works everywhere, "drag" on a desk */}
+            <p className="text-sm font-medium">
+              {isCarousel ? 'Choose the cards, or drag them here' : 'Choose a file, or drag the export here'}
+            </p>
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              {isCarousel
+                ? `Any size, several at once — a carousel takes 2 to ${MAX_SLIDES} slides.`
+                : 'Any size — it goes straight to our storage.'}
+            </p>
+          </>
+        )}
+        {/* sr-only, not hidden: display:none file inputs can silently
+            refuse a programmatic .click() */}
+        <input ref={fileRef} type="file" multiple accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
+          onChange={e => {
+            const f = Array.from(e.target.files ?? [])
+            if (f.length) void uploadFiles(f)
+            e.target.value = ''
+          }} />
       </div>
 
-      {/* 2 — WHAT HAPPENS NEXT. The one button that matters, first on the
-          page rather than fourth, under three rows of who's-who. */}
-      {(transitions.length > 0 || turns[detail.status] !== null || (canManage && !isInternal)) && (() => {
-        // the button's own precondition, said before it is pressed rather
-        // than as a rejection afterwards
-        const shown = [...(primary ? [primary] : []), ...secondary]
-        // every reason a shown button cannot work yet, collected once
-        const hints = [...new Set(shown.map(t => blockedReason(t.to)).filter(Boolean))] as string[]
-        const button = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline') => (
-          <Button
-            key={t.to}
-            size="sm"
-            variant={variant}
-            // the biggest, bluest button on the page must not be a trapdoor
-            // into a corner toast telling you to go and do something else
-            disabled={busy !== null || blockedReason(t.to) !== null}
-            onClick={() =>
-              (t.to === 'internal_review' || t.to === 'revision_complete')
-                ? openReviewerPick(t)
-                // asking for changes deserves a WHY — the note rides the
-                // transition into the thread and the assignee's email
-                : (t.to === 'revision_required' || t.to === 'client_changes_requested')
-                  ? (setRevisionAsk(t), setRevisionNote(''), setDialogError(null))
-                  // anything that puts this in front of the CLIENT gets a
-                  // confirm naming who it reaches — it is the riskiest move
-                  // in the app and it used to fire on a single click
-                  : t.to === 'client_review'
-                    ? (setClientSend(t), setDialogError(null))
-                    // approving never auto-picks schedulers anymore — it's a
-                    // plain transition; the handoff card below is the one
-                    // deliberate place a human chooses who takes it
-                    : doTransition(t.to, t.label)
-            }
-          >
-            {busy === t.to ? 'Working…' : t.label}
-          </Button>
-        )
-        return (
-          <Card>
-            <CardContent className="flex flex-col gap-2.5 p-4">
-              {/* one sentence: where it is, what that means, whose move.
-                  The badge above says the state; this says the consequence. */}
-              <p className="text-sm">
-                <span className="font-medium">{meaning}</span>{' '}
-                {turn.hat !== null && (
-                  turn.mine
-                    ? <span className="text-emerald-700 dark:text-emerald-400">That&rsquo;s you.</span>
-                    : <span className="text-zinc-500 dark:text-zinc-400">Waiting on {turnText()}.</span>
-                )}
-              </p>
-              {transitions.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {primary && button(primary, 'default')}
-                  {secondary.map(t => button(t, 'outline'))}
-                </div>
-              )}
-              {hints.map(h => (
-                <p key={h} className="text-xs text-amber-600 dark:text-amber-400">{h}</p>
-              ))}
-              {/* the flag that decides whether "approve without the client"
-                  exists at all — a real control, not a caption */}
-              {canManage && !isInternal && (
-                <label className="flex items-center gap-2.5 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  <Switch
-                    checked={detail.client_approval_required !== false}
-                    disabled={busy !== null}
-                    onCheckedChange={v => void saveApproval(v)}
-                  />
-                  Needs client approval
-                  <span className="text-zinc-400 dark:text-zinc-500">
-                    — off means you can sign it off without sending it out.
-                  </span>
-                </label>
-              )}
-              {canManage && isInternal && (
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                  A task is finished in-house — approving it here is the end of it.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })()}
-
-      {/* 3 — the job's vital signs. Whose turn has moved up into the action;
-          this is the paperwork. */}
-      {isTeam && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <span className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Due</span>
-            {detail.due_date ? (
-              <span className={`font-medium ${new Date(detail.due_date) < new Date(new Date().toDateString()) && !['scheduled', 'published'].includes(detail.status) ? 'text-red-600 dark:text-red-400' : ''}`}>
-                {new Date(detail.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-            ) : <span className="text-zinc-400">not set</span>}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Priority</span>
-            <span className="font-medium capitalize">{detail.priority}</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Assigned to</span>
-            <span className="font-medium">{detail.owner_name ?? <span className="font-normal text-zinc-400">unassigned</span>}</span>
-          </span>
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-              Account manager{(detail.managers?.length ?? 0) > 1 ? 's' : ''}
-            </span>
-            <span className="truncate font-medium">
-              {(detail.managers?.length ?? 0) > 0
-                ? detail.managers!.map(m => m.name).join(', ')
-                : <span className="font-normal text-zinc-400">none assigned</span>}
-            </span>
-          </span>
+      {versionUploads.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+          <UploadOverall uploads={versionUploads} />
+          <UploadRows uploads={versionUploads} />
         </div>
       )}
+      <ExportWarnings items={versionWarnings} onDismiss={() => setVersionWarnings([])} />
 
-      {/* a brief's "approved" is a shoot to book, not a post to schedule */}
-      {isTeam && isBrief && detail.status === 'approved_for_scheduling' && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-3 p-4">
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              {['locked', 'shot'].includes(detail.batch?.status ?? '')
-                ? 'Date locked — you can book it.'
-                : 'The plan is approved. Lock the shoot date on the shoot page, then press Book the shoot.'}
-            </p>
-            {detail.batch?.id && (
-              <Button size="sm" variant="outline" className="ml-auto" asChild>
-                <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open the shoot page</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 4 — the latest cut, as big as it deserves */}
-      {latest && (latest.file_url || latest.drive_url) && (
-        <Card className="overflow-hidden py-0">
-          {latestSlides[0] && (
-            <Media key={latestSlides[0].url} src={latestSlides[0].url}
-              driveUrl={latest.drive_url}
-              className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
-          )}
-          {/* the whole carousel, in posting order — the first card is what the
-              feed shows, the rest are what the post actually is */}
-          {latestSlides.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto border-t border-zinc-100 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/50">
-              {latestSlides.map((s, i) => (
-                <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener"
-                  title={`Slide ${i + 1} of ${latestSlides.length} — ${s.name}`}
-                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 dark:border-zinc-700">
+      {/* THE ORDER IS THE POST. Arrows always, drag as the desk extra:
+          HTML5 drag never fires on a phone, and the remove button used to
+          be hover-only. */}
+      {slides.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap gap-2">
+            {slides.map((s, i) => (
+              <div key={s.url} className="flex flex-col items-center gap-1">
+                <div
+                  draggable
+                  onDragStart={() => setDragIndex(i)}
+                  onDragEnd={() => setDragIndex(null)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    e.preventDefault()
+                    if (dragIndex === null) return
+                    setSlides(list => reorder(list, dragIndex, i))
+                    setDragIndex(null)
+                  }}
+                  className={`relative h-24 w-24 shrink-0 cursor-grab overflow-hidden rounded-lg border-2 bg-zinc-950 active:cursor-grabbing ${
+                    dragIndex === i ? 'border-blue-400 opacity-50' : 'border-zinc-200 dark:border-zinc-700'
+                  }`}
+                  title={`Slide ${i + 1} of ${slides.length} — ${s.name}`}
+                >
                   {s.type === 'video'
                     // eslint-disable-next-line jsx-a11y/media-has-caption
                     ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
                     // eslint-disable-next-line @next/next/no-img-element
                     : <img src={s.url} alt="" className="h-full w-full object-cover" />}
-                  <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[10px] text-white">
-                    {i + 1}
+                  <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[10px] text-white">
+                    {i + 1} of {slides.length}
                   </span>
-                </a>
-              ))}
-            </div>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <button type="button" aria-label={`Move slide ${i + 1} earlier`} disabled={i === 0}
+                    onClick={() => setSlides(list => reorder(list, i, i - 1))}
+                    className="flex h-11 w-7 items-center justify-center text-zinc-500 disabled:opacity-30 md:h-8">
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" aria-label={`Move slide ${i + 1} later`} disabled={i === slides.length - 1}
+                    onClick={() => setSlides(list => reorder(list, i, i + 1))}
+                    className="flex h-11 w-7 items-center justify-center text-zinc-500 disabled:opacity-30 md:h-8">
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" aria-label={`Remove slide ${i + 1}`}
+                    onClick={() => setSlides(list => list.filter((_, n) => n !== i))}
+                    className="flex h-11 w-7 items-center justify-center text-zinc-500 hover:text-red-600 md:h-8">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {slides.length > 1 && (
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              This is the posting order. Use the arrows to change it before you save — after that, a new order means a new version.
+            </p>
           )}
-          <CardContent className="flex flex-wrap items-center gap-3 p-3">
-            <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-              {isInternal ? `Draft ${latest.version_number}` : `v${latest.version_number}`} · latest
-            </span>
-            {latestSlides.length > 1 && (
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                {slideCountLabel(latestSlides.length)}
+        </div>
+      )}
+
+      {/* secondary, and closed until asked for */}
+      <div className="flex flex-col gap-2">
+        <button type="button" onClick={() => setLinksOpen(v => !v)}
+          className="flex min-h-11 w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 md:min-h-6">
+          <CircleDashed className={`h-3.5 w-3.5 transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
+          Or paste a link instead
+        </button>
+        {linksOpen && (
+          <div className="flex flex-col gap-2.5 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">{isInternal ? 'Link to the work' : 'Review link'}</Label>
+              <Input value={verDraft.drive_url}
+                placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/… or a YouTube link'}
+                onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Where it can be watched, if it is not the file above.</p>
+            </div>
+            {!isInternal && (
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Master file link</Label>
+                <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
+                  onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  Optional — where the full-quality original is filed, if that is somewhere other than here.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label className="text-xs">Notes</Label>
+        <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}
+          onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Button size="sm" className="min-h-11 self-start md:min-h-8"
+          disabled={busy === 'version' || uploading || versionMissing !== null}
+          onClick={saveVersion}>
+          {busy === 'version' ? 'Saving…'
+            : uploading ? 'Waiting for the files…'
+            : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
+        </Button>
+        {versionMissing && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">{versionMissing}</p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mx-auto flex max-w-4xl flex-col gap-4 pb-24 md:pb-0">
+      {/* 1 — HEADER. What this is. The status once, as a badge; whose move
+          it is lives in the card below, once. */}
+      <div className="flex flex-wrap items-start gap-3">
+        <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={() => router.push(back.href)}>
+          <ArrowLeft className="h-4 w-4" /> {back.label}
+        </Button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold tracking-tight">{detail.title}</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {facts.map((f, i) => (
+              <span key={i}>
+                {i > 0 && ' · '}
+                <span className={f === facts[1] ? 'capitalize' : overdue && String(f).startsWith('due') ? 'font-medium text-red-600 dark:text-red-400' : ''}>{f}</span>
               </span>
+            ))}
+            {isBrief && <> <HelpHint term="shoot_plan" /></>}
+            {isAsset && <> <HelpHint term="item" /></>}
+          </p>
+        </div>
+        <Badge variant="outline" className={`self-center ${STATUS_TINT[detail.status] ?? ''}`}>
+          {statusWord}
+          {detail.status === 'approved_for_scheduling' && isAsset && <HelpHint term="approved_for_scheduling" className="-my-2" />}
+          {detail.status === 'draft_uploaded' && isAsset && <HelpHint term="drafting" className="-my-2" />}
+        </Badge>
+      </div>
+
+      {isTeam && <GettingStarted role={role} page="item" />}
+
+      {/* 2 — WHAT TO DO NOW. One sentence, one blue button, the reason it is
+          grey if it is grey. First on the page. */}
+      {isTeam && (transitions.length > 0 || turns[detail.status] !== null || openForMe) && (
+        <Card id="next" className="scroll-mt-4 border-zinc-300 dark:border-zinc-700">
+          <CardContent className="flex flex-col gap-2.5 p-4">
+            {openForMe && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                Someone tagged you in the comments below — it stays on your list until you mark it done.{' '}
+                <a href="#comments" className="font-medium underline">Read it</a>
+              </p>
             )}
-            {previewDims && previewDims.w > 0 && (
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                {previewDims.w} × {previewDims.h}
-              </span>
+            <p className="text-sm">
+              <span className="font-medium">{meaning}</span>{' '}
+              {turn.hat !== null && (
+                turn.mine
+                  ? <span className="text-emerald-700 dark:text-emerald-400">That&rsquo;s you.</span>
+                  : <span className="text-zinc-500 dark:text-zinc-400">Waiting on {turnText()}.</span>
+              )}
+            </p>
+            {transitions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {primary && actionButton(primary, 'default')}
+                {/* the rest go behind one ⋯ — one primary per card, and a
+                    row of four outline buttons was four primaries */}
+                {secondary.length === 1 && actionButton(secondary[0], 'outline')}
+                {secondary.length > 1 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="min-h-11 md:min-h-8" aria-label="Other moves" disabled={busy !== null}>
+                        <MoreHorizontal className="h-4 w-4" /> More
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {secondary.map(t => (
+                        <DropdownMenuItem key={t.to} className="min-h-11" disabled={blockedReason(t.to) !== null}
+                          onClick={() => press(t)}>
+                          {t.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {!primary && secondary.length === 0 && null}
+              </div>
             )}
-            {latest.drive_url && (
-              <a href={latest.drive_url} target="_blank" rel="noreferrer noopener" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
-                Open in Drive
-              </a>
-            )}
-            {isTeam && latest.dropbox_url && (
-              <a href={latest.dropbox_url} target="_blank" rel="noreferrer noopener" className="text-sm text-zinc-500 hover:underline dark:text-zinc-400">
-                Master file
-              </a>
+            {hints.map(h => (
+              <p key={h} className="text-xs text-amber-600 dark:text-amber-400">{h}</p>
+            ))}
+            {/* the flag that decides whether "approve without the client"
+                exists at all — the one place it is explained */}
+            {canManage && !isInternal && (
+              <label className="flex min-h-11 items-center gap-2.5 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+                <Switch
+                  checked={detail.client_approval_required !== false}
+                  disabled={busy !== null}
+                  onCheckedChange={v => void saveApproval(v)}
+                />
+                The client signs this off before it goes out
+              </label>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* 5 — THE WORK. A brief's is its page; everything else has versions. */}
+      {/* 3 — THE WORK. A plan's is its page; everything else has versions. */}
       {isTeam && isBrief && (
-        <Card>
+        <Card id="work" className="scroll-mt-4">
           <CardHeader className="flex-row items-center">
-            <CardTitle className="text-sm font-semibold">The brief</CardTitle>
-            {detail.batch?.id && detail.status !== 'approved_for_scheduling' && (
-              <Button size="sm" className="ml-auto" asChild>
-                <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open the shoot page</Link>
+            <CardTitle className="text-sm font-semibold">The plan</CardTitle>
+            {detail.batch?.id && (
+              <Button size="sm" variant="outline" className="ml-auto min-h-11 md:min-h-8" asChild>
+                <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open the shoot page <ExternalLink className="h-3.5 w-3.5" /></Link>
               </Button>
             )}
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              The concept and shot list live on the shoot page. A link to a plan written elsewhere goes here.
+            </p>
             <div className="grid gap-1.5">
-              <Label className="text-xs">
-                Brief link{briefHasContent ? '' : ' *'}
-                <span className="font-normal text-zinc-400">
-                  {' '}(Milanote or anywhere — or write the concept and shot list on the shoot page)
-                </span>
-              </Label>
+              <Label className="text-xs">Plan link{briefHasContent ? '' : ' *'}</Label>
               <div className="flex gap-2">
                 <Input
                   ref={briefUrlRef}
@@ -1417,14 +1565,12 @@ export default function ItemDetailPage() {
                   onBlur={e => {
                     const v = e.target.value.trim()
                     if (v === (focusVal.current.brief_url ?? '').trim()) return
-                    if (v !== (detail.brief_url ?? '')) {
-                      void saveField({ brief_url: v || null }, 'Brief link saved')
-                    }
+                    if (v !== (detail.brief_url ?? '')) void saveField({ brief_url: v || null }, 'Plan link saved')
                   }}
                 />
                 {detail.brief_url && (
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={detail.brief_url} target="_blank" rel="noreferrer noopener">Open brief ↗</a>
+                  <Button variant="outline" size="sm" className="min-h-11 md:min-h-9" asChild>
+                    <a href={detail.brief_url} target="_blank" rel="noreferrer noopener">Open ↗</a>
                   </Button>
                 )}
               </div>
@@ -1440,15 +1586,13 @@ export default function ItemDetailPage() {
                 onBlur={e => {
                   const v = e.target.value.trim()
                   if (v === (focusVal.current.brief ?? '').trim()) return
-                  if (v !== (detail.brief ?? '')) {
-                    void saveField({ brief: v || null }, 'Note saved')
-                  }
+                  if (v !== (detail.brief ?? '')) void saveField({ brief: v || null }, 'Note saved')
                 }}
               />
             </div>
             {detail.status === 'scheduled' && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Shoot booked — when it&rsquo;s shot, mark it shot on the shoot page and create the content items there.
+                Shoot booked — after the shoot, mark it shot on the shoot page and create the items there.
               </p>
             )}
           </CardContent>
@@ -1456,300 +1600,191 @@ export default function ItemDetailPage() {
       )}
 
       {!isBrief && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">{isInternal ? 'The work' : 'Versions'}</CardTitle></CardHeader>
+        <Card id="work" className="scroll-mt-4">
+          <CardHeader className="flex-row items-center gap-2">
+            <CardTitle className="text-sm font-semibold">{isInternal ? 'The work' : 'Versions'}</CardTitle>
+            <span className="text-xs text-zinc-400 dark:text-zinc-500">{versionSummary}</span>
+          </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
+            {/* the latest cut, as big as it deserves — and its facts on one
+                line: this IS the newest version, so the list below starts
+                from the one before it */}
+            {latest && (latest.file_url || latest.drive_url) && (
+              <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+                {latestSlides[0] && (
+                  <Media key={latestSlides[0].url} src={latestSlides[0].url}
+                    driveUrl={latest.drive_url}
+                    className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
+                )}
+                {latestSlides.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto border-t border-zinc-100 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/50">
+                    {latestSlides.map((s, i) => (
+                      <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener"
+                        title={`Slide ${i + 1} of ${latestSlides.length} — ${s.name}`}
+                        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 dark:border-zinc-700">
+                        {s.type === 'video'
+                          // eslint-disable-next-line jsx-a11y/media-has-caption
+                          ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          : <img src={s.url} alt="" className="h-full w-full object-cover" />}
+                        <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[10px] text-white">{i + 1}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 text-xs">
+                  <span className="font-medium">{isInternal ? `Draft ${latest.version_number}` : `v${latest.version_number}`} · latest</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {new Date(latest.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                  </span>
+                  {latestSlides.length > 1 && <span className="text-zinc-500 dark:text-zinc-400">{slideCountLabel(latestSlides.length)}</span>}
+                  {previewDims && previewDims.w > 0 && (
+                    <span className="font-mono tabular-nums text-zinc-500 dark:text-zinc-400">{previewDims.w} × {previewDims.h}</span>
+                  )}
+                  {latest.notes && <span className="truncate text-zinc-500 dark:text-zinc-400">{latest.notes}</span>}
+                  <span className="ml-auto flex gap-3">
+                    {latest.file_url && <a className="min-h-11 py-3 text-blue-600 hover:underline md:min-h-0 md:py-0 dark:text-blue-400" href={latest.file_url} target="_blank" rel="noreferrer noopener">Open file</a>}
+                    {latest.drive_url && <a className="min-h-11 py-3 text-blue-600 hover:underline md:min-h-0 md:py-0 dark:text-blue-400" href={latest.drive_url} target="_blank" rel="noreferrer noopener">Open in Drive</a>}
+                    {isTeam && latest.dropbox_url && <a className="min-h-11 py-3 text-zinc-500 hover:underline md:min-h-0 md:py-0 dark:text-zinc-400" href={latest.dropbox_url} target="_blank" rel="noreferrer noopener">Master file</a>}
+                  </span>
+                </div>
+              </div>
+            )}
             {detail.versions.length === 0 && (
               <p className="text-sm text-zinc-400 dark:text-zinc-500">
-                {isInternal ? 'Nothing attached yet — add a file or a link below, then submit it for review.' : 'No versions yet — add the first below.'}
+                {isInternal
+                  ? 'Nothing attached yet. Add a file or a link below, then send it for review.'
+                  : canAddVersion ? 'No versions yet. Drop the first cut below.' : 'No versions yet.'}
               </p>
             )}
-            {detail.versions.map(v => (
-              <div key={v.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                {/* a copywriter does not think in versions — a task counts drafts */}
-                <span className="font-mono text-xs font-semibold">
-                  {isInternal ? `Draft ${v.version_number}` : `v${v.version_number}`}
-                </span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {new Date(v.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                </span>
-                {/* a carousel is one post — say how many cards it is, or the
-                    row claims a six-slide version is the same as a one-file one */}
-                {slidesOf(v).length > 1 && (
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                    {slideCountLabel(slidesOf(v).length)}
-                  </span>
-                )}
-                {v.notes && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{v.notes}</span>}
-                <span className="ml-auto flex gap-2 text-xs">
-                  {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
-                  {v.drive_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
-                  {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">master</a>}
-                </span>
-              </div>
-            ))}
-
-            {canAddVersion && (
-              <>
-                <Separator />
-                <div className="flex flex-col gap-3">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{isInternal ? 'Attach the work' : 'New version'}</p>
-
-                  {/* THE path, not one of three: the export goes straight from
-                      the editor's machine into our storage, and everything the
-                      workflow needs follows from that. The links below are for
-                      the cases the upload cannot cover — a Google Doc, a cut
-                      that already lives somewhere the client watches it. */}
-                  <div
-                    onDragOver={e => { e.preventDefault(); setDragging(true) }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={e => {
-                      e.preventDefault(); setDragging(false)
-                      const f = Array.from(e.dataTransfer.files ?? [])
-                      if (f.length) void uploadFiles(f)
-                    }}
-                    onClick={() => fileRef.current?.click()}
-                    className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
-                      dragging
-                        ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
-                        : slides.length > 0
-                          ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
-                          : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
-                    }`}
-                  >
-                    <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
-                    {uploading ? (
-                      <p className="text-sm font-medium">
-                        {overallProgress(versionUploads).label}
-                      </p>
-                    ) : slides.length > 0 ? (
-                      <>
-                        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                          {slideCountLabel(slides.length)} ready ✓
-                          {slides.length === 1 && draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
-                        </p>
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                          {slides.length >= MAX_SLIDES
-                            ? `That is the most a carousel takes (${MAX_SLIDES})`
-                            : 'Click to add more'}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium">
-                          {isCarousel ? 'Drag the cards here or choose them' : 'Drag the export here or choose a file'}
-                        </p>
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                          {isCarousel
-                            ? `Any size, several at once — a carousel takes 2 to ${MAX_SLIDES} slides.`
-                            : 'Any size — it goes straight to our storage.'}
-                        </p>
-                      </>
-                    )}
-                    {/* sr-only, not hidden: display:none file inputs can silently
-                        refuse a programmatic .click() — same bug as the board's */}
-                    <input ref={fileRef} type="file" multiple accept={isInternal ? undefined : 'image/*,video/*'} className="sr-only"
-                      onChange={e => {
-                        const f = Array.from(e.target.files ?? [])
-                        if (f.length) void uploadFiles(f)
-                        e.target.value = ''
-                      }} />
-                  </div>
-
-                  {/* one row per file: name, size, bar, %, speed, time left,
-                      cancel — and on a failure, the reason and the file back */}
-                  {versionUploads.length > 0 && (
-                    <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
-                      <UploadOverall uploads={versionUploads} />
-                      <UploadRows uploads={versionUploads} />
+            {/* earlier versions, folded — the latest is above */}
+            {detail.versions.length > 1 && (
+              <details className="group">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 md:min-h-6">
+                  <CircleDashed className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                  {detail.versions.length - 1} earlier {isInternal ? 'draft' : 'version'}{detail.versions.length - 1 === 1 ? '' : 's'}
+                </summary>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {detail.versions.slice(1).map(v => (
+                    <div key={v.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                      <span className="font-mono text-xs font-semibold">{isInternal ? `Draft ${v.version_number}` : `v${v.version_number}`}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {new Date(v.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </span>
+                      {slidesOf(v).length > 1 && (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{slideCountLabel(slidesOf(v).length)}</span>
+                      )}
+                      {v.notes && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{v.notes}</span>}
+                      <span className="ml-auto flex gap-2 text-xs">
+                        {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
+                        {v.drive_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
+                        {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">master</a>}
+                      </span>
                     </div>
-                  )}
-
-                  {/* it uploaded, it will post — it just will not play here */}
-                  <ExportWarnings items={versionWarnings}
-                    onDismiss={() => setVersionWarnings([])} />
-
-                  {/* THE ORDER IS THE POST. A carousel is these files in this
-                      sequence, so the sequence is something you can see and
-                      drag rather than something implied by upload timing.
-                      HTML5 drag-and-drop, not a library: this is one strip. */}
-                  {slides.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex flex-wrap gap-2">
-                        {slides.map((s, i) => (
-                          <div
-                            key={s.url}
-                            draggable
-                            onDragStart={() => setDragIndex(i)}
-                            onDragEnd={() => setDragIndex(null)}
-                            onDragOver={e => e.preventDefault()}
-                            onDrop={e => {
-                              e.preventDefault()
-                              if (dragIndex === null) return
-                              setSlides(list => reorder(list, dragIndex, i))
-                              setDragIndex(null)
-                            }}
-                            className={`group relative h-24 w-24 shrink-0 cursor-grab overflow-hidden rounded-lg border-2 bg-zinc-950 active:cursor-grabbing ${
-                              dragIndex === i
-                                ? 'border-blue-400 opacity-50'
-                                : 'border-zinc-200 dark:border-zinc-700'
-                            }`}
-                            title={`Slide ${i + 1} of ${slides.length} — ${s.name}. Drag to reorder.`}
-                          >
-                            {s.type === 'video'
-                              // eslint-disable-next-line jsx-a11y/media-has-caption
-                              ? <video src={s.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                              // eslint-disable-next-line @next/next/no-img-element
-                              : <img src={s.url} alt="" className="h-full w-full object-cover" />}
-                            <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[10px] text-white">
-                              Slide {i + 1} of {slides.length}
-                            </span>
-                            <button
-                              type="button"
-                              aria-label={`Remove slide ${i + 1}`}
-                              onClick={() => setSlides(list => list.filter((_, n) => n !== i))}
-                              className="absolute right-1 top-1 rounded-full bg-black/70 px-1.5 text-xs leading-5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                        Drag the cards to set the posting order. Once this version is
-                        saved the order is fixed — reordering it later means saving a
-                        new version.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* secondary, and closed until asked for. Both fields are
-                      optional: a version needs something to LOOK at, and the
-                      upload above is that. */}
-                  <div className="flex flex-col gap-2">
-                    <button type="button" onClick={() => setLinksOpen(v => !v)}
-                      className="flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
-                      <CircleDashed className={`h-3.5 w-3.5 transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
-                      Or paste a link instead
-                    </button>
-                    {linksOpen && (
-                      <div className="flex flex-col gap-2.5 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                        <div className="grid gap-1.5">
-                          <Label className="text-xs">
-                            {isInternal ? 'Link to the work' : 'Review link'}
-                          </Label>
-                          <Input value={verDraft.drive_url}
-                            placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/… or a YouTube link'}
-                            onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
-                          <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                            Where it can be watched, if it is not the file above.
-                          </p>
-                        </div>
-                        {!isInternal && (
-                          <div className="grid gap-1.5">
-                            <Label className="text-xs">Master file link</Label>
-                            <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
-                              onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
-                            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                              Optional — where the full-quality original is filed, if that is
-                              somewhere other than here.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs">Notes</Label>
-                    <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}
-                      onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {/* a version saved mid-transfer is a version missing a
-                        slide, and nothing afterwards would say so */}
-                    <Button size="sm" className="self-start"
-                      disabled={busy === 'version' || uploading || versionMissing !== null}
-                      onClick={saveVersion}>
-                      {busy === 'version' ? 'Saving…'
-                        : uploading ? 'Waiting for the files…'
-                        : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
-                    </Button>
-                    {/* the precondition, said before the click rather than as a
-                        toast in the far corner afterwards */}
-                    {versionMissing && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">{versionMissing}</p>
-                    )}
-                  </div>
+                  ))}
                 </div>
-              </>
+              </details>
+            )}
+            {canAddVersion && detail.versions.length > 0 && <Separator />}
+            {versionForm}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 4 — PEOPLE. Who owns it, who reviews it, who posts it — each seat
+          once, each with its one control. Three cards and a meta row used
+          to say this in four places. */}
+      {isTeam && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm font-semibold">People</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-3 pt-0">
+            {/* the owner — who carries the work */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{isBrief ? 'Writing it' : isInternal ? 'Doing it' : 'Editing'}</span>
+              {canManage ? (
+                <Select
+                  value={detail.owner_id ?? 'none'}
+                  onValueChange={v => v && v !== (detail.owner_id ?? 'none') && saveOwner(v)}
+                >
+                  <SelectTrigger className="h-11 w-60 bg-white text-sm md:h-8 md:text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nobody yet — anyone can take it</SelectItem>
+                    {editors.map(e => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {(e.name || e.email) + (e.role && e.role !== 'editor' ? ` · ${ROLE_WORD[e.role] ?? e.role}` : '')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <span className="text-sm">
+                  {detail.owner_id === detail.viewer_id ? 'You' : detail.owner_name ?? <span className="text-zinc-400">nobody yet</span>}
+                </span>
+              )}
+              {canClaimEditor(workItem, viewer) && <ClaimButton itemId={id} hat="editor" onDone={load} />}
+            </div>
+            {/* the reviewer — the client's account manager(s) */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Reviewing</span>
+              <span className="text-sm">
+                {reviewerNames.length > 0 ? reviewerNames.join(', ') : <span className="text-zinc-400">no account manager on this client</span>}
+              </span>
+              {detail.client_approval_required !== false && !isInternal && (
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">then {detail.client_name ?? 'the client'} signs off</span>
+              )}
+            </div>
+            {/* the scheduling seat — assets only */}
+            {isAsset && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Posting</span>
+                <span className="text-sm">
+                  {schedulerIds.includes(detail.viewer_id ?? '') ? 'You'
+                    : schedulerNames.length > 0 ? schedulerNames.join(', ')
+                    : schedulerIds.length > 0 ? 'someone on the team'
+                    : <span className="text-zinc-400">{SCHEDULER_STATUSES.includes(detail.status) ? 'nobody yet — any scheduler can take it' : 'decided after approval'}</span>}
+                </span>
+                {canClaimScheduler(workItem, viewer) && <ClaimButton itemId={id} hat="scheduler" onDone={load} />}
+                {canManage && (detail.status === 'approved_for_scheduling' || detail.status === 'scheduled') && (
+                  <Button size="sm" variant="outline" className="min-h-11 md:min-h-8" disabled={busy !== null}
+                    onClick={() => {
+                      setSchedPick('handoff')
+                      setSchedChosen(new Set(
+                        schedulerIds.length > 0 ? schedulerIds : editors.filter(e => e.role === 'scheduler').map(e => e.id),
+                      ))
+                    }}>
+                    {schedulerIds.length === 0 ? 'Hand it to someone' : 'Change'}
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* 6 — what the editor works from. ASSETS only: a strategy doc has no
-          raw footage, so a research task gets the ask and its files instead. */}
-      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || detail.drive_url || (detail.raw_assets?.length ?? 0) > 0) && (
+      {/* 5 — FILES & FOLDER. What the editor works from: the brief, the one
+          folder link, the source files. A task gets the ask instead. */}
+      {isTeam && isAsset && (canManage || detail.brief || folderUrl || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
-            <CardTitle className="text-sm font-semibold">What the editor works from</CardTitle>
-            <div className="ml-auto flex items-center gap-2">
-              {/* the folder we made, alongside whatever link is on the record —
-                  they are usually the same, and when they are not, the pasted
-                  one is a deliberate override worth being able to see past */}
-              {detail.drive_url && detail.drive_url !== detail.raw_assets_url && (
-                <Button variant="outline" size="sm" asChild>
-                  <a href={detail.drive_url} target="_blank" rel="noreferrer noopener">
-                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open Drive folder
-                  </a>
-                </Button>
-              )}
-              {detail.raw_assets_url && (
-                <Button variant="outline" size="sm" asChild>
-                  <a href={detail.raw_assets_url} target="_blank" rel="noreferrer noopener">
-                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open the folder
-                  </a>
-                </Button>
-              )}
-            </div>
+            <CardTitle className="text-sm font-semibold">Files &amp; folder</CardTitle>
+            {folderUrl && (
+              <Button variant="outline" size="sm" className="ml-auto min-h-11 md:min-h-8" asChild>
+                <a href={folderUrl} target="_blank" rel="noreferrer noopener">
+                  Open the folder <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
-            {/* whether the folder actually HAS the work in it — the question
-                anyone about to click that link is really asking. Sits under
-                the link rather than beside it because it is an answer about
-                the link, not another control. */}
             {detail.drive_mirror?.line && (
-              <p className={`-mt-1 text-xs ${
-                detail.drive_mirror.copying
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-zinc-500 dark:text-zinc-400'
-              }`}>
+              <p className={`-mt-1 text-xs ${detail.drive_mirror.copying ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
                 {detail.drive_mirror.line}
               </p>
             )}
             {canManage ? (
               <>
-                <div className="grid gap-1.5">
-                  <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Google Drive)</span></Label>
-                  <Input
-                    ref={rawAssetsRef}
-                    // prefilled from the Drive folder we made for this item,
-                    // so the common case is already right; it only SAVES if
-                    // someone edits it, which keeps the record honest
-                    defaultValue={detail.raw_assets_url ?? detail.drive_url ?? ''}
-                    onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
-                    placeholder="https://drive.google.com/drive/folders/…"
-                    className="font-mono text-xs"
-                    onBlur={e => {
-                      const v = e.target.value.trim()
-                      if (v === (focusVal.current.raw_assets_url ?? '').trim()) return // nothing typed — never save
-                      if (v !== (detail.raw_assets_url ?? '')) {
-                        void saveField({ raw_assets_url: v || null }, 'Folder link saved')
-                      }
-                    }}
-                  />
-                </div>
                 <div className="grid gap-1.5">
                   <Label className="text-xs">Brief</Label>
                   <Textarea
@@ -1760,10 +1795,23 @@ export default function ItemDetailPage() {
                     placeholder="What the edit should be…"
                     onBlur={e => {
                       const v = e.target.value.trim()
-                      if (v === (focusVal.current.brief ?? '').trim()) return // nothing typed — never save
-                      if (v !== (detail.brief ?? '')) {
-                        void saveField({ brief: v || null }, 'Brief saved')
-                      }
+                      if (v === (focusVal.current.brief ?? '').trim()) return
+                      if (v !== (detail.brief ?? '')) void saveField({ brief: v || null }, 'Brief saved')
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Google Drive)</span></Label>
+                  <Input
+                    ref={rawAssetsRef}
+                    defaultValue={detail.raw_assets_url ?? detail.drive_url ?? ''}
+                    onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
+                    placeholder="https://drive.google.com/drive/folders/…"
+                    className="font-mono text-xs"
+                    onBlur={e => {
+                      const v = e.target.value.trim()
+                      if (v === (focusVal.current.raw_assets_url ?? '').trim()) return
+                      if (v !== (detail.raw_assets_url ?? '')) void saveField({ raw_assets_url: v || null }, 'Folder link saved')
                     }}
                   />
                 </div>
@@ -1772,20 +1820,15 @@ export default function ItemDetailPage() {
               detail.brief && <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.brief}</p>
             )}
             {(detail.raw_assets?.length ?? 0) > 0 && (
-              <div className="grid gap-1.5">
-                <Label className="text-xs">Files</Label>
-                <div className="flex flex-col gap-1.5">
-                  {detail.raw_assets!.map(a => (
-                    <RawFileRow key={a.url} file={a} canManage={canManage}
-                      onRemove={() => {
-                        void saveField({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }, 'File removed')
-                      }} />
-                  ))}
-                </div>
+              <div className="flex flex-col gap-1.5">
+                {detail.raw_assets!.map(a => (
+                  <RawFileRow key={a.url} file={a} canManage={canManage}
+                    onRemove={() => {
+                      void saveField({ raw_assets: (detail.raw_assets ?? []).filter(x => x.url !== a.url) }, 'File removed')
+                    }} />
+                ))}
               </div>
             )}
-            {/* these keep uploading if you navigate away — the tray follows
-                them — but while you are here, they are here */}
             {jobUploads.length > 0 && (
               <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
                 <UploadOverall uploads={jobUploads} />
@@ -1795,9 +1838,9 @@ export default function ItemDetailPage() {
             <ExportWarnings items={jobWarnings} onDismiss={() => setJobWarnings([])} />
             {canManage && (
               <div>
-                <input ref={jobFileRef} type="file" multiple className="hidden"
+                <input ref={jobFileRef} type="file" multiple className="sr-only"
                   onChange={e => onJobFiles(e.target.files)} />
-                <Button type="button" variant="outline" size="sm"
+                <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-8"
                   onClick={() => jobFileRef.current?.click()}>
                   <Upload className="h-3.5 w-3.5" /> Add files
                 </Button>
@@ -1807,7 +1850,6 @@ export default function ItemDetailPage() {
         </Card>
       )}
 
-      {/* a task's inputs are the ask and whatever came with it — no footage */}
       {isTeam && isInternal && (canManage || detail.brief || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">The ask</CardTitle></CardHeader>
@@ -1822,9 +1864,7 @@ export default function ItemDetailPage() {
                 onBlur={e => {
                   const v = e.target.value.trim()
                   if (v === (focusVal.current.brief ?? '').trim()) return
-                  if (v !== (detail.brief ?? '')) {
-                    void saveField({ brief: v || null }, 'Saved')
-                  }
+                  if (v !== (detail.brief ?? '')) void saveField({ brief: v || null }, 'Saved')
                 }}
               />
             ) : (
@@ -1833,164 +1873,68 @@ export default function ItemDetailPage() {
                 : <p className="text-sm text-zinc-400 dark:text-zinc-500">No brief written for this task.</p>
             )}
             {(detail.raw_assets?.length ?? 0) > 0 && (
-              <div className="grid gap-1.5">
-                <Label className="text-xs">Files</Label>
-                <div className="flex flex-col gap-1.5">
-                  {detail.raw_assets!.map(a => (
-                    <RawFileRow key={a.url} file={a} canManage={false} />
-                  ))}
-                </div>
+              <div className="flex flex-col gap-1.5">
+                {detail.raw_assets!.map(a => <RawFileRow key={a.url} file={a} canManage={false} />)}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* the client's brand guide travels with the job — editors cut to it,
-          schedulers caption in it; clients see their own portal instead */}
-      {isTeam && <BrandCard clientId={detail.client_id} />}
-
-      {/* 7 — the conversation. Last of the work, before the plumbing. */}
-      {canComment && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Comments</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-2.5 pt-0">
-            {detail.comments.length === 0 && (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">No comments yet.</p>
-            )}
-            {detail.comments.map(c => (
-              <div key={c.id} className="flex items-start gap-2.5 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button onClick={() => isTeam && toggleResolved(c)} disabled={!isTeam} aria-label={c.resolved ? 'Reopen' : 'Resolve'} className="mt-0.5">
-                  {c.resolved
-                    ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    : <CircleDashed className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className={`text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
-                  <p className="mt-0.5 flex items-center gap-2 font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">
-                    {c.author_name && <span className="text-zinc-500 dark:text-zinc-400">{c.author_name}</span>}
-                    {new Date(c.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                    {isTeam && c.visibility === 'client' && (
-                      <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal normal-case text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">visible to client</Badge>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))}
-            <div className="mt-1 flex flex-col gap-2">
-              <Textarea
-                rows={2}
-                value={commentDraft}
-                placeholder="Add a comment…"
-                onChange={e => setCommentDraft(e.target.value)}
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                {canManage && (
-                  <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    <Switch
-                      checked={commentVisibility === 'client'}
-                      onCheckedChange={v => setCommentVisibility(v ? 'client' : 'internal')}
-                    />
-                    Visible to client
-                  </label>
-                )}
-                {/* spec: "AM assigns editor task" — an internal comment
-                    with an assignee emails that editor as a task. It is
-                    also the ONLY way the comment reaches them: untagged
-                    internal notes stay between managers. */}
-                {canManage && commentVisibility === 'internal' && (
-                  <Select value={commentAssignee || 'none'} onValueChange={v => setCommentAssignee(v === 'none' ? '' : v ?? '')}>
-                    <SelectTrigger className="h-8 w-44 bg-white text-xs dark:bg-zinc-900">
-                      <SelectValue placeholder="Tag someone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Managers only</SelectItem>
-                      {/* the people already on the job come first — they're
-                          the natural suggestions for "this is for you" */}
-                      {(() => {
-                        const onJob = new Set([detail.owner_id, ...(detail.scheduler_ids ?? [])].filter(Boolean))
-                        return [...editors].sort((a, b) => Number(onJob.has(b.id)) - Number(onJob.has(a.id)))
-                          .map(e => (
-                            <SelectItem key={e.id} value={e.id}>
-                              {e.name || e.email}{onJob.has(e.id) ? ' · on this job' : ''}
-                            </SelectItem>
-                          ))
-                      })()}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Button size="sm" className="ml-auto" disabled={busy === 'comment' || !commentDraft.trim()} onClick={postComment}>
-                  <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
-                </Button>
-              </div>
-              {canManage && commentVisibility === 'internal' && (
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                  {commentAssignee
-                    ? 'They’ll be emailed and will see this on the card.'
-                    : 'Only managers see this. Tag someone to reach the person doing the work.'}
-                </p>
+      {/* 6 — POSTING. Only once the item is signed off: before that a
+          caption box and a platform picker are questions nobody can answer. */}
+      {isAsset && postingOpen && (canSchedule || canManage || detail.schedule.length > 0) && (
+        <Card id="posting" className="scroll-mt-4">
+          <CardHeader><CardTitle className="text-sm font-semibold">Posting</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-3 pt-0">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Caption</Label>
+              {canManage || canSchedule ? (
+                <Textarea
+                  ref={captionRef}
+                  rows={3}
+                  defaultValue={detail.caption ?? ''}
+                  onFocus={e => { focusVal.current.caption = e.target.value }}
+                  placeholder="The post text — published exactly as written here…"
+                  onBlur={e => {
+                    const v = e.target.value.trim()
+                    if (v === (focusVal.current.caption ?? '').trim()) return
+                    if (v !== (detail.caption ?? '')) void saveField({ caption: v || null }, 'Caption saved')
+                  }}
+                />
+              ) : detail.caption ? (
+                <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.caption}</p>
+              ) : (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500">No caption yet.</p>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 8 — SCHEDULING. Assets only: a brief books a shoot, a task ends. */}
-      {isTeam && isAsset && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Caption</CardTitle></CardHeader>
-          <CardContent className="pt-0">
-            {canManage || canSchedule ? (
-              <Textarea
-                ref={captionRef}
-                rows={3}
-                defaultValue={detail.caption ?? ''}
-                onFocus={e => { focusVal.current.caption = e.target.value }}
-                placeholder="The post text — published exactly as written here…"
-                onBlur={e => {
-                  const v = e.target.value.trim()
-                  if (v === (focusVal.current.caption ?? '').trim()) return // nothing typed — never save
-                  if (v !== (detail.caption ?? '')) {
-                    void saveField({ caption: v || null }, 'Caption saved')
-                  }
-                }}
-              />
-            ) : detail.caption ? (
-              <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.caption}</p>
-            ) : (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">No caption yet — the account manager writes the post text here.</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {isAsset && (canSchedule || detail.schedule.length > 0) && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Posting</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-2.5 pt-0">
-            {detail.schedule.map(s => (
-              <div key={s.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
-                <span className="capitalize">{s.platform}</span>
-                {s.scheduled_at && (
-                  <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400"
-                    title={viewerHint(s.scheduled_at, clientTz, viewerTz) ?? undefined}>
-                    {/* the client's zone with its letters attached: the same
-                        instant reads 9:00 here and 7:00 in Manila, and a bare
-                        "9:00" is how a post ends up two hours out */}
-                    {formatWithZone(s.scheduled_at, clientTz, 'short')}
-                  </span>
-                )}
-                <span className="ml-auto">
-                  {s.live_url
-                    ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
-                    : s.publish_status === 'published'
-                      // grey, not green: green + "POSTED" read as "already
-                      // live" on a post that had not gone out
-                      ? <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">marked posted — no link</span>
-                      : <span className="font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{publishStatusWord(s.publish_status)}</span>}
-                </span>
+            {detail.schedule.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {detail.schedule.map(s => (
+                  <div key={s.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
+                    <span className="capitalize">{s.platform}</span>
+                    {s.scheduled_at && (
+                      <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                        {formatWithZone(s.scheduled_at, clientTz, 'short')}
+                        {/* the reader's own clock, in words — a tooltip is
+                            dead on a phone, and this is the one line that
+                            tells a Manila scheduler the AU offset */}
+                        {viewerHint(s.scheduled_at, clientTz, viewerTz) && (
+                          <span className="ml-1 text-zinc-400">({viewerHint(s.scheduled_at, clientTz, viewerTz)})</span>
+                        )}
+                      </span>
+                    )}
+                    <span className="ml-auto">
+                      {s.live_url
+                        ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
+                        : s.publish_status === 'published'
+                          ? <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">posted — no link</span>
+                          : <span className="text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{publishStatusWord(s.publish_status)}</span>}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             {canSchedule && (
               <PostingCard
                 itemId={id}
@@ -2014,166 +1958,183 @@ export default function ItemDetailPage() {
         </Card>
       )}
 
-      {/* 9 — ASSIGNMENT & HANDOFF. Who carries this, and who takes it next. */}
-      {isTeam && (canManage || canClaimEditor(workItem, viewer) || canClaimScheduler(workItem, viewer)) && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Who&rsquo;s on it</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-3 pt-0">
-            {/* the manager says who's carrying this — the owner is who a
-                request for changes notifies, and whose page this item sits on */}
-            {canManage && (
-              <Select
-                value={detail.owner_id ?? 'none'}
-                onValueChange={v => v && v !== (detail.owner_id ?? 'none') && saveOwner(v)}
-              >
-                <SelectTrigger className="h-8 w-60 bg-white text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nobody yet — anyone can pick it up</SelectItem>
-                  {editors.map(e => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {(e.name || e.email) + (e.role && e.role !== 'editor' ? ` · ${ROLE_WORD[e.role] ?? e.role}` : '')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {/* nobody has it — take it rather than wait to be given it */}
-            {canClaimEditor(workItem, viewer) && (
-              <ClaimButton itemId={id} hat="editor" label="Take this job" onDone={load} />
-            )}
-            {canClaimScheduler(workItem, viewer) && (
-              <ClaimButton itemId={id} hat="scheduler" label="I'll schedule this" onDone={load} />
-            )}
-            {!canManage && detail.owner_name && (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Assigned to {detail.owner_name}.</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* a manager can draft the caption before approval — folded, so it is
+          not a second Posting card */}
+      {isAsset && !postingOpen && canManage && (
+        <CollapsibleCard title="Caption" summary={detail.caption ? 'written' : 'not written yet'}>
+          <Textarea
+            ref={captionRef}
+            rows={3}
+            defaultValue={detail.caption ?? ''}
+            onFocus={e => { focusVal.current.caption = e.target.value }}
+            placeholder="The post text — published exactly as written here…"
+            onBlur={e => {
+              const v = e.target.value.trim()
+              if (v === (focusVal.current.caption ?? '').trim()) return
+              if (v !== (detail.caption ?? '')) void saveField({ caption: v || null }, 'Caption saved')
+            }}
+          />
+        </CollapsibleCard>
       )}
 
-      {/* approved and nobody named: the manager picks the person who takes it,
-          rather than every scheduler hearing about every item */}
-      {isAsset && canManage
-        && (detail.status === 'approved_for_scheduling' || detail.status === 'scheduled') && (
-        /* a manager who handed it to themselves still gets to change their
-           mind — the card is theirs whether or not they hold the item */
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">Choose who schedules this</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-3 pt-0">
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              {schedulerIds.length === 0
-                ? 'Any scheduler can pick this up. Hand it to someone specific if you want one person on it.'
-                : `Handed to ${schedulerIds.map(nameOf).filter(Boolean).join(', ') || 'someone on the team'}.`}
-            </p>
-            <Button size="sm" variant="outline" className="ml-auto" disabled={busy !== null}
-              onClick={() => {
-                setSchedPick('handoff')
-                setSchedChosen(new Set(
-                  schedulerIds.length > 0
-                    ? schedulerIds
-                    : editors.filter(e => e.role === 'scheduler').map(e => e.id),
-                ))
-              }}>
-              {schedulerIds.length === 0 ? 'Hand it to someone' : 'Change'}
-            </Button>
-          </CardContent>
-        </Card>
+      {/* the client's brand guide travels with the job — folded: a
+          reference, not a step */}
+      {isTeam && (
+        <CollapsibleCard title="Brand" summary={`${detail.client_name ?? 'the client'}’s colours, fonts and voice`}>
+          <BrandCard clientId={detail.client_id} />
+        </CollapsibleCard>
       )}
 
-      {/* 10 — HISTORY. Every move the item made, and who made it. The rows
-          were always written; nothing ever showed them. */}
-      {isTeam && (() => {
-        const lines = activityLines(
-          detail.activity ?? [],
-          isBrief ? 'brief' : isInternal ? 'task' : 'asset',
-        )
-        return (
-          <Card>
-            <CardHeader><CardTitle className="text-sm font-semibold">History</CardTitle></CardHeader>
-            <CardContent className="flex flex-col gap-1 pt-0">
-              {lines.length === 0 ? (
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">
-                  Nothing recorded yet — every move from here is logged with who made it.
-                </p>
-              ) : lines.map(l => (
-                <div key={l.id} className="flex items-baseline gap-3 text-sm">
-                  <span className="text-zinc-600 dark:text-zinc-300">{l.text}</span>
-                  {/* History is about people, not about posts: "when did this
-                      happen" means on the reader's own clock, so it follows
-                      the browser rather than the client's zone. Rendered only
-                      once the browser has told us where it is — the server
-                      cannot know, and guessing produces a hydration mismatch. */}
-                  <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500"
-                    suppressHydrationWarning>
-                    {viewerTz ? formatInZone(l.at, viewerTz, 'long') : ''}
-                  </span>
+      {/* 7 — THE CONVERSATION. "@Name" reaches somebody; nothing else does. */}
+      {canComment && (
+        <Card id="comments" className="scroll-mt-4">
+          <CardHeader><CardTitle className="text-sm font-semibold">Comments</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-2.5 pt-0">
+            {detail.comments.length === 0 && (
+              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+                No comments yet. Type @ and a name to ask someone something — they get an email and it stays on their list until it is marked done.
+              </p>
+            )}
+            {detail.comments.map(c => {
+              const forMe = c.assigned_to === detail.viewer_id
+              const forName = c.assigned_to ? nameOf(c.assigned_to) : null
+              return (
+                <div key={c.id} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 ${
+                  forMe && !c.resolved ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20' : 'border-zinc-100 dark:border-zinc-800'
+                }`}>
+                  <button onClick={() => isTeam && toggleResolved(c)} disabled={!isTeam}
+                    aria-label={c.resolved ? 'Reopen' : 'Mark done'} title={c.resolved ? 'Reopen' : 'Mark done'}
+                    className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center">
+                    {c.resolved
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      : <CircleDashed className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className={`whitespace-pre-wrap text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+                      {c.author_name && <span className="text-zinc-500 dark:text-zinc-400">{c.author_name}</span>}
+                      <span suppressHydrationWarning>{viewerTz ? formatInZone(c.created_at, viewerTz, 'short') : ''}</span>
+                      {c.assigned_to && !c.resolved && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                          {forMe ? 'Waiting on you' : `Waiting on ${forName ?? 'someone'}`}
+                        </span>
+                      )}
+                      {isTeam && c.visibility === 'client' && (
+                        <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">visible to client</Badge>
+                      )}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+              )
+            })}
+            <div className="mt-1 flex flex-col gap-2">
+              <MentionBox
+                value={commentDraft}
+                onChange={setCommentDraft}
+                members={commentVisibility === 'internal' ? mentionable : []}
+                placeholder={commentVisibility === 'client' ? 'Write to the client…' : 'Add a comment — type @ to tag someone…'}
+                onSubmit={() => void postComment()}
+                disabled={busy === 'comment'}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                {canManage && (
+                  <label className="flex min-h-11 items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+                    <Switch
+                      checked={commentVisibility === 'client'}
+                      onCheckedChange={v => setCommentVisibility(v ? 'client' : 'internal')}
+                    />
+                    Visible to client
+                  </label>
+                )}
+                <Button size="sm" className="ml-auto min-h-11 md:min-h-8" disabled={busy === 'comment' || !commentDraft.trim()} onClick={postComment}>
+                  <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
+                </Button>
+              </div>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                {commentVisibility === 'client'
+                  ? `${detail.client_name ?? 'The client'} reads this on their portal.`
+                  : 'Managers see every comment. To reach anyone else, tag them with @ — they are emailed and it waits on them until it is marked done.'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 8 — HISTORY. Every move and who made it — folded, it is the record */}
+      {isTeam && (() => {
+        const lines = activityLines(detail.activity ?? [], isBrief ? 'brief' : isInternal ? 'task' : 'asset')
+        return (
+          <CollapsibleCard title="History" summary={lines.length === 0 ? 'nothing yet' : `${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}`}>
+            {lines.length === 0 ? (
+              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+                Nothing recorded yet — every move from here is logged with who made it.
+              </p>
+            ) : lines.map(l => (
+              <div key={l.id} className="flex items-baseline gap-3 text-sm">
+                <span className="text-zinc-600 dark:text-zinc-300">{l.text}</span>
+                <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500" suppressHydrationWarning>
+                  {viewerTz ? formatInZone(l.at, viewerTz, 'long') : ''}
+                </span>
+              </div>
+            ))}
+          </CollapsibleCard>
         )
       })()}
 
-      {/* 11 — the one thing that cannot be undone, at the bottom where a
-          destructive action belongs, never inline beside the title */}
+      {/* 9 — the one thing that cannot be undone, last and folded */}
       {canManage && (
-        <Card className="border-red-200 dark:border-red-950">
-          <CardContent className="flex flex-wrap items-center gap-3 p-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Delete this item</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Its versions, comments and schedule go with it — for everyone, including the client.
-              </p>
-            </div>
-            {/* CONTROLLED, and opened by a plain button. Radix's own trigger
-                TOGGLES the dialog, so a click that opened it and a stray
-                dismiss in the same gesture left it shut — which is exactly the
-                "click once to arm it, again for the dialog, a third to disarm"
-                behaviour people reported. A set is not a toggle. */}
-            <AlertDialog open={deleteOpen}
-              onOpenChange={o => { setDeleteOpen(o); if (!o) setDeleteConfirm('') }}>
-              <Button variant="outline" size="sm" className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400"
-                onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
-                <Trash2 className="h-3.5 w-3.5" /> Delete item
-              </Button>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete “{detail.title}”?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    The item and all its versions, comments, and schedule entries are removed
-                    for everyone, including the client&rsquo;s portal. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="grid gap-1.5">
-                  <Label className="text-xs">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
-                  <Input
-                    value={deleteConfirm}
-                    onChange={e => setDeleteConfirm(e.target.value)}
-                    placeholder="delete"
-                    autoComplete="off"
-                  />
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep it</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-red-600 hover:bg-red-700"
-                    disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
-                    onClick={async () => {
-                      const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
-                      if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
-                      toast.success('Item deleted')
-                      router.push(back.href)
-                    }}
-                  >
-                    Delete item
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
+        <CollapsibleCard title="Delete this item" summary="cannot be undone" className="border-red-200 dark:border-red-950">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Its versions, comments and posting times go with it — for everyone, including the client.
+          </p>
+          <AlertDialog open={deleteOpen}
+            onOpenChange={o => { setDeleteOpen(o); if (!o) setDeleteConfirm('') }}>
+            <Button variant="outline" size="sm" className="min-h-11 w-fit text-red-600 hover:text-red-700 md:min-h-8 dark:text-red-400"
+              onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete item
+            </Button>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete “{detail.title}”?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The item and all its versions, comments, and posting times are removed
+                  for everyone, including the client&rsquo;s portal. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
+                <Input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="delete" autoComplete="off" />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="min-h-11">Keep it</AlertDialogCancel>
+                <AlertDialogAction
+                  className="min-h-11 bg-red-600 hover:bg-red-700"
+                  disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
+                  onClick={async () => {
+                    const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
+                    if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
+                    toast.success('Item deleted')
+                    router.push(back.href)
+                  }}
+                >
+                  Delete item
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CollapsibleCard>
+      )}
+
+      {/* PHONE: the one button, always within thumb reach */}
+      {isTeam && primary && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 p-3 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+          <div className="mx-auto flex max-w-4xl items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {turn.mine ? 'Your move' : `Waiting on ${turnText()}`}
+            </span>
+            {actionButton(primary, 'default', 'shrink-0')}
+          </div>
+        </div>
       )}
 
       {/* who should review this? */}
@@ -2192,7 +2153,7 @@ export default function ItemDetailPage() {
             {reviewersFailed ? (
               <div className="flex flex-col items-center gap-2 py-4">
                 <p className="text-sm text-zinc-400 dark:text-zinc-500">Couldn&rsquo;t load reviewers — try again</p>
-                <Button variant="outline" size="sm" disabled={busy !== null}
+                <Button variant="outline" size="sm" className="min-h-11" disabled={busy !== null}
                   onClick={() => reviewPick && void openReviewerPick(reviewPick)}>
                   Try again
                 </Button>
@@ -2206,7 +2167,7 @@ export default function ItemDetailPage() {
             )}
             {(reviewers ?? []).map(r => (
               <label key={r.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={chosen.has(r.id)}
@@ -2219,8 +2180,6 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
-                  {/* two people called "MD Media" are two different mailboxes —
-                      the address is the only thing that tells them apart */}
                   <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
                   <span className="block text-xs text-zinc-400 dark:text-zinc-500">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
@@ -2236,13 +2195,13 @@ export default function ItemDetailPage() {
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
-            <Button
+            <Button variant="outline" className="min-h-11" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11"
               disabled={busy !== null || reviewers === null || reviewersFailed}
               onClick={() => reviewPick && doTransition(reviewPick.to, reviewPick.label, [...chosen])}
             >
               {busy !== null ? 'Working…'
-                : soloReviewer ? 'Submit and review it myself'
+                : soloReviewer ? 'Send it and review it myself'
                 : chosen.size > 0 ? `Send to ${chosen.size} reviewer${chosen.size > 1 ? 's' : ''}`
                 : 'Send'}
             </Button>
@@ -2271,7 +2230,7 @@ export default function ItemDetailPage() {
             <p className="text-zinc-500 dark:text-zinc-400">
               {isBrief
                 ? 'The plan becomes visible on their portal, where they can approve it or ask for changes.'
-                : 'The asset becomes visible on their portal, where they can approve it or ask for changes.'}
+                : 'The item becomes visible on their portal, where they can approve it or ask for changes.'}
             </p>
           </div>
           {dialogError && (
@@ -2280,8 +2239,8 @@ export default function ItemDetailPage() {
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setClientSend(null)} disabled={busy !== null}>Cancel</Button>
-            <Button disabled={busy !== null}
+            <Button variant="outline" className="min-h-11" onClick={() => setClientSend(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11" disabled={busy !== null}
               onClick={() => clientSend && doTransition(clientSend.to, clientSend.label)}>
               {busy !== null ? 'Working…' : 'Send'}
             </Button>
@@ -2297,8 +2256,7 @@ export default function ItemDetailPage() {
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Say what needs to change — it lands in the item&rsquo;s thread and the
-              assignee&rsquo;s email.
+              Say what needs to change — it lands in the comments and in {detail.owner_name ? `${detail.owner_name}’s` : 'the assignee’s'} email.
             </p>
             <textarea
               value={revisionNote}
@@ -2315,8 +2273,8 @@ export default function ItemDetailPage() {
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRevisionAsk(null)} disabled={busy !== null}>Cancel</Button>
-            <Button
+            <Button variant="outline" className="min-h-11" onClick={() => setRevisionAsk(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11"
               disabled={busy !== null}
               onClick={() => revisionAsk && doTransition(revisionAsk.to, revisionAsk.label, undefined, undefined, revisionNote)}
             >
@@ -2326,22 +2284,20 @@ export default function ItemDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* who's scheduling this? */}
+      {/* who posts this? */}
       <Dialog open={schedPick !== null} onOpenChange={o => !o && busy === null && setSchedPick(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{schedPick === 'handoff' ? 'Choose who schedules this' : 'Who’s scheduling this?'}</DialogTitle>
+            <DialogTitle>Who posts this?</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              They&rsquo;ll be emailed to schedule and publish it. Untick anyone who
+              They&rsquo;ll be emailed to set the posting time and put it out. Untick anyone who
               shouldn&rsquo;t hear about it.
             </p>
-            {/* anyone active on the team can be handed the scheduling — the
-                hat follows the assignment, not the job title */}
             {editors.map(s => (
               <label key={s.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={schedChosen.has(s.id)}
@@ -2354,16 +2310,14 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{s.name || s.email}</span>
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
-                    {ROLE_WORD[s.role ?? ''] ?? 'Team'}
-                  </span>
+                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">{ROLE_WORD[s.role ?? ''] ?? 'Team'}</span>
                 </span>
               </label>
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSchedPick(null)} disabled={busy !== null}>Cancel</Button>
-            <Button
+            <Button variant="outline" className="min-h-11" onClick={() => setSchedPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11"
               disabled={busy !== null || schedChosen.size === 0}
               onClick={() => {
                 if (schedPick === 'handoff') void sendHandoff()
@@ -2400,7 +2354,7 @@ export default function ItemDetailPage() {
             )}
             {(pubPeople ?? []).map(r => (
               <label key={r.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={pubChosen.has(r.id)}
@@ -2413,8 +2367,6 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
-                  {/* two people called "MD Media" are two different mailboxes —
-                      the address is the only thing that tells them apart */}
                   <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
                   <span className="block text-xs text-zinc-400 dark:text-zinc-500">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
@@ -2425,8 +2377,8 @@ export default function ItemDetailPage() {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPublishPick(null)} disabled={busy !== null}>Cancel</Button>
-            <Button
+            <Button variant="outline" className="min-h-11" onClick={() => setPublishPick(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11"
               disabled={busy !== null || pubPeople === null}
               onClick={() => publishPick && queuePublish(publishPick.publishNow, [...pubChosen])}
             >
