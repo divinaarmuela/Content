@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -35,6 +35,7 @@ import {
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from './useProductionLive'
+import { useOrderedLoad } from '../useOrderedLoad'
 import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
 import { usePersistedScope, useTeamNames } from './workHooks'
 import { useRole } from '../useRole'
@@ -154,35 +155,45 @@ export default function ProductionPage() {
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
 
-  const loadSeq = useRef(0)
-  const load = useCallback(async () => {
-    const seq = ++loadSeq.current
-    try {
+  /** The page, refetched with its answers kept in order — and never dropped.
+   *  One fetcher, one apply; see lib/load-order.ts for why "newest issued
+   *  wins" threw away every post-mutation refetch. */
+  const loadOrdered = useOrderedLoad<{
+    shoots: Shoot[]; clients?: ClientRow[]; items?: BriefTask[]
+  }>(
+    async () => {
       const [bRes, cRes, iRes] = await Promise.all([
         fetch('/api/production/batches', { cache: 'no-store' }),
         fetch('/api/website/clients'),
         fetch('/api/production/items', { cache: 'no-store' }),
       ])
-      if (seq !== loadSeq.current) return // an older answer must never win
-      if (bRes.ok) {
-        const rows: Shoot[] = await bRes.json()
-        // schema not migrated yet → rows have no status; show the setup card
-        setNeedsSchema(rows.length > 0 && rows.every(r => !r.status))
-        setShoots(rows)
-      } else setShoots([])
-      if (cRes.ok) setClients(((await cRes.json()) as ClientRow[]).filter(Boolean))
-      // every brief, not just the live ones: the flight list wants the active
-      // ones, but a shoot card still has to say "Shoot booked"
-      if (iRes.ok) {
-        const all = (await iRes.json()) as BriefTask[]
-        setBriefTasks(all.filter(isBriefTask))
-        setInternalTasks(all.filter(isInternalTask))
+      return {
+        shoots: bRes.ok ? (await bRes.json()) as Shoot[] : [],
+        clients: cRes.ok ? ((await cRes.json()) as ClientRow[]).filter(Boolean) : undefined,
+        // every brief, not just the live ones: the lanes want the active ones,
+        // but a shoot card still has to say "Shoot booked"
+        items: iRes.ok ? (await iRes.json()) as BriefTask[] : undefined,
       }
+    },
+    data => {
+      // schema not migrated yet → rows have no status; show the setup card
+      setNeedsSchema(data.shoots.length > 0 && data.shoots.every(r => !r.status))
+      setShoots(data.shoots)
+      if (data.clients) setClients(data.clients)
+      if (data.items) {
+        setBriefTasks(data.items.filter(isBriefTask))
+        setInternalTasks(data.items.filter(isInternalTask))
+      }
+    },
+  )
+  const load = useCallback(async () => {
+    try {
+      await loadOrdered()
     } catch {
       toast.error('Could not load shoots')
       setShoots([])
     }
-  }, [])
+  }, [loadOrdered])
   useEffect(() => { void load() }, [load])
   useProductionLive(useCallback(() => { void load() }, [load]))
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,7 @@ import {
   isAsset, unassignedCount, type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
+import { useOrderedLoad } from '../useOrderedLoad'
 import { useRole } from '../useRole'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
@@ -50,6 +51,16 @@ type Item = {
   clients: { name: string } | null
   batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   work_kinds?: { name: string; slug: string; color: string } | null
+}
+
+/** Everything one refetch of the board answers with, so the ordering guard has
+ *  a single value to accept or discard rather than four scattered setStates. */
+type BoardData = {
+  items?: Item[]
+  clients?: ClientRow[]
+  batches?: Batch[]
+  /** the production tables are not migrated yet — a state, not a failure */
+  noSchema?: boolean
 }
 
 /** One dot per lane, in the same order the work moves. */
@@ -120,29 +131,48 @@ export default function EditorPage() {
       .catch(() => setStrip([]))
   }, [clientFilter])
 
-  const loadSeq = useRef(0)
-  const load = useCallback(async () => {
-    const seq = ++loadSeq.current
-    try {
+  /**
+   * The board, refetched with its answers kept in order — and never dropped.
+   *
+   * One fetcher, one apply: with the setState calls buried in the fetch, an
+   * answer ruled "too old" had already half-written itself. See
+   * lib/load-order.ts for why "newest issued wins" lost every post-mutation
+   * refetch — including the one after "Create items", which is why new items
+   * did not appear until the board was reloaded by hand.
+   */
+  const loadOrdered = useOrderedLoad<BoardData>(
+    async () => {
       const [itemsRes, clientsRes, batchesRes] = await Promise.all([
         fetch('/api/production/items', { cache: 'no-store' }),
         fetch('/api/website/clients'),
         fetch('/api/production/batches'),
       ])
       if (!itemsRes.ok) {
-        const err = (await itemsRes.json()).error ?? ''
-        if (String(err).match(/relation|does not exist/i)) { setNeedsSchema(true); setItems([]); return }
+        const err = (await itemsRes.json().catch(() => ({}))).error ?? ''
+        if (String(err).match(/relation|does not exist/i)) return { noSchema: true }
         throw new Error(err || 'Failed to load items')
       }
-      if (seq !== loadSeq.current) return // an older answer must never win
-      setItems(await itemsRes.json())
-      if (clientsRes.ok) setClients(await clientsRes.json())
-      if (batchesRes.ok) setBatches(await batchesRes.json())
+      return {
+        items: await itemsRes.json(),
+        clients: clientsRes.ok ? await clientsRes.json() : undefined,
+        batches: batchesRes.ok ? await batchesRes.json() : undefined,
+      }
+    },
+    data => {
+      if (data.noSchema) { setNeedsSchema(true); setItems([]); return }
+      if (data.items) setItems(data.items)
+      if (data.clients) setClients(data.clients)
+      if (data.batches) setBatches(data.batches)
+    },
+  )
+  const load = useCallback(async () => {
+    try {
+      await loadOrdered()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load the editor board')
       setItems([])
     }
-  }, [])
+  }, [loadOrdered])
 
   useEffect(() => { load() }, [load])
 

@@ -16,7 +16,10 @@ export function ClaimButton({ itemId, hat, label, onDone }: {
   itemId: string
   hat: 'editor' | 'scheduler'
   label: string
-  onDone: () => void
+  /** the board's own reload. AWAITED: the button stays busy until the list it
+   *  sits in has actually caught up, so a card that should have moved on is
+   *  never left under a toast saying it did. */
+  onDone: () => void | Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
 
@@ -34,7 +37,7 @@ export function ClaimButton({ itemId, hat, label, onDone }: {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) toast.error(json?.error ?? 'Could not pick this up')
       else toast.success(hat === 'editor' ? "It's yours" : "You're scheduling this")
-      onDone()
+      await onDone()
     } catch {
       toast.error('Could not pick this up — please try again')
     } finally {

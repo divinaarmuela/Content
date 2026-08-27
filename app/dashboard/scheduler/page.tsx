@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ import {
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { useProductionLive } from '../production/useProductionLive'
+import { useOrderedLoad } from '../useOrderedLoad'
 import { defaultAllows } from '../../lib/page-access-core'
 import { ClaimButton } from '../production/ClaimButton'
 import { ScopeSwitch } from '../production/ScopeSwitch'
@@ -76,16 +77,20 @@ export default function SchedulerPage() {
   // may open it. No grants are loaded here, so this is the role default.
   const canSeeEditor = defaultAllows(me?.role ?? null, '/dashboard/editor')
 
-  const loadSeq = useRef(0)
-  const load = useCallback(async () => {
-    const seq = ++loadSeq.current
-    try {
+  /**
+   * The queue, refetched with its answers kept in order — and never dropped.
+   *
+   * One fetcher, one apply. "I'll schedule this" used to leave the card where
+   * it was: the claim announced itself, that hint issued a second refetch, and
+   * the old rule discarded the claim's own answer for being one ticket behind.
+   * See lib/load-order.ts.
+   */
+  const loadOrdered = useOrderedLoad<{ items: Item[]; schedules: Record<string, ScheduleEntry[]> }>(
+    async () => {
       const res = await fetch('/api/production/items', { cache: 'no-store' })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load queue')
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to load queue')
       const all: Item[] = await res.json()
-      if (seq !== loadSeq.current) return // an older answer must never win
-      setItems(all)
-      // fetch schedule entries for scheduled/published rows (small N, parallel).
+      // schedule entries for scheduled/published rows (small N, parallel).
       // a shoot brief rides this same status pipeline but is never scheduled,
       // so it never has entries to fetch — schedulerScope drops it on screen.
       const withSchedule = all
@@ -100,12 +105,18 @@ export default function SchedulerPage() {
           return [i.id, (d.schedule ?? []) as ScheduleEntry[]] as const
         })
       )
-      setSchedules(Object.fromEntries(entries))
+      return { items: all, schedules: Object.fromEntries(entries) }
+    },
+    data => { setItems(data.items); setSchedules(data.schedules) },
+  )
+  const load = useCallback(async () => {
+    try {
+      await loadOrdered()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load queue')
       setItems([])
     }
-  }, [])
+  }, [loadOrdered])
 
   useEffect(() => { load() }, [load])
 

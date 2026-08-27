@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { uploadMedia } from '../../uploadMedia'
+import { useOrderedLoad } from '../../useOrderedLoad'
 import { useProductionLive } from '../useProductionLive'
 import { enqueueJobAssets } from '../../uploadQueue'
 import BrandCard from '../BrandCard'
@@ -113,6 +114,10 @@ const STATUS_TINT: Record<string, string> = {
 }
 
 const PLATFORMS = ['instagram', 'tiktok', 'facebook', 'linkedin', 'youtube']
+
+/** The server refused to show us this item — as opposed to the network
+ *  hiccuping, which is not a reason to navigate anyone away from their work. */
+class UnreadableItem extends Error {}
 
 /** A schedule row's state, said in words rather than in database. */
 function publishStatusWord(status: string): string {
@@ -278,7 +283,7 @@ export default function ItemDetailPage() {
       toast.success(publishNow ? 'Publishing now via connected accounts' : 'Queued for its scheduled time')
       setPublishPick(null)
       setPlan(null)
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Publish failed')
     } finally {
@@ -315,37 +320,65 @@ export default function ItemDetailPage() {
   const focusVal = useRef<Record<string, string>>({})
 
   /**
-   * Refetch, with the answers kept in order.
+   * Refetch, with the answers kept in order — and never dropped.
    *
-   * THE BUG THIS FIXES. Three things call load(): a mutation finishing, the
-   * realtime hint, and the 60s poll. They overlap constantly, and HTTP gives
-   * no ordering guarantee — so a poll issued BEFORE a save could answer AFTER
-   * it and put the pre-save item straight back into state. The screen then
-   * told you to do the thing you had just done ("Nothing attached yet" under
-   * a toast reading "Version v1 added"), and every flag derived from `detail`
-   * — including which buttons are disabled — came from data that was already
-   * wrong. A stamped sequence makes a late answer a discarded answer.
+   * Three things reload this page: a mutation finishing, the realtime hint,
+   * and the 60s poll. They overlap constantly and HTTP gives no ordering
+   * guarantee, so the order has to be decided here rather than by whichever
+   * response happens to arrive first. `useOrderedLoad` does that, and — the
+   * part that matters — it never discards a fresh answer merely because a
+   * newer request was issued: every mutation's own write announces itself,
+   * which immediately issues that newer request, and the old rule threw the
+   * post-mutation answer away every single time. See lib/load-order.ts.
    */
-  const loadSeq = useRef(0)
+  const loadOrdered = useOrderedLoad<Detail>(
+    async () => {
+      // no-store: this is live workflow state, and a revalidation-free hit
+      // from the browser cache is the same stale-state bug by another route
+      const res = await fetch(`/api/production/items/${id}`, { cache: 'no-store' })
+      if (!res.ok) {
+        throw new UnreadableItem(
+          (await res.json().catch(() => ({}))).error ?? 'Failed to load item',
+        )
+      }
+      return await res.json() as Detail
+    },
+    setDetail,
+  )
   const load = useCallback(async () => {
-    const seq = ++loadSeq.current
-    // no-store: this is live workflow state, and a revalidation-free hit from
-    // the browser cache is the same stale-state bug by another route
-    const res = await fetch(`/api/production/items/${id}`, { cache: 'no-store' })
-    if (!res.ok) {
-      if (seq !== loadSeq.current) return
-      toast.error((await res.json()).error ?? 'Failed to load item')
+    try {
+      await loadOrdered()
+    } catch (e) {
+      // a dropped connection is not a missing item — only the server saying
+      // "you cannot read this" is grounds for leaving the page
+      if (!(e instanceof UnreadableItem)) return
+      toast.error(e.message)
       // no detail to ask where this came from — the editor board is where an
       // unreadable content item would have been listed
       router.push('/dashboard/editor')
-      return
     }
-    const json = await res.json()
-    if (seq !== loadSeq.current) return // a newer request already answered
-    setDetail(json)
-  }, [id, router])
+  }, [loadOrdered, router])
 
   useEffect(() => { load() }, [load])
+
+  /**
+   * Put a write's OWN answer on the page, now.
+   *
+   * The workflow routes return the row they just wrote. Merging the handful of
+   * fields the screen is keyed on — never the whole row, which carries fields
+   * this viewer's shaped payload deliberately omits — means the buttons agree
+   * with the toast in the same tick, whatever the refetch does afterwards.
+   */
+  const applyWrite = useCallback((row: unknown) => {
+    const r = row as Partial<Detail> | null
+    if (!r || typeof r !== 'object' || !r.status) return
+    setDetail(d => (d ? {
+      ...d,
+      status: r.status as ItemStatus,
+      owner_id: 'owner_id' in r ? r.owner_id ?? null : d.owner_id,
+      scheduler_ids: 'scheduler_ids' in r ? r.scheduler_ids ?? null : d.scheduler_ids,
+    } : d))
+  }, [])
 
   // live item: a comment, version, or status change from anyone else appears
   // without a reload. Only this item's hints trigger a refetch; the periodic
@@ -606,7 +639,12 @@ export default function ItemDetailPage() {
       setSchedPick(null)
       setRevisionAsk(null)
       setClientSend(null)
-      load()
+      // the route answers with the item it just wrote — put THAT on the page
+      // before the refetch, exactly as a version save does. Everything the
+      // header and the buttons read comes off `detail`, so a toast above an
+      // unchanged screen is how the team learns to distrust the button.
+      applyWrite(json)
+      await load()
     } catch (e) {
       // a dropped RESPONSE is not a failed request — check before alarming
       if (e instanceof TypeError) {
@@ -648,7 +686,7 @@ export default function ItemDetailPage() {
       const names = [...schedChosen].map(nameOf).filter(Boolean)
       toast.success(names.length > 0 ? `Handed to ${names.join(', ')}` : 'Handed over')
       setSchedPick(null)
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not notify')
     } finally {
@@ -738,7 +776,7 @@ export default function ItemDetailPage() {
         versions: [json as Version, ...d.versions],
         current_version_number: json.version_number ?? d.current_version_number,
       } : d))
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -762,7 +800,7 @@ export default function ItemDetailPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Comment failed')
       setCommentDraft('')
       setCommentAssignee('')
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Comment failed')
     } finally {
@@ -777,7 +815,7 @@ export default function ItemDetailPage() {
       body: JSON.stringify({ comment_id: c.id, resolved: !c.resolved }),
     })
     if (!res.ok) return toast.error('Update failed')
-    load()
+    await load()
   }
 
   /**
@@ -825,7 +863,7 @@ export default function ItemDetailPage() {
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign')
       toast.success(ownerId === 'none' ? 'Unassigned' : 'Assigned')
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign')
     } finally {
@@ -845,7 +883,7 @@ export default function ItemDetailPage() {
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save')
       toast.success(required ? 'The client will be asked to approve this' : 'This can be approved without the client')
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save')
     } finally {
@@ -871,7 +909,7 @@ export default function ItemDetailPage() {
         : mode === 'posted' ? 'Marked posted — no link'
         : 'Date set — you can mark it scheduled now')
       setSchedDraft(d => ({ ...d, live_url: '' }))
-      load()
+      await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
     } finally {
