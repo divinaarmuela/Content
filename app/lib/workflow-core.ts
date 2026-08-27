@@ -132,7 +132,10 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   revision_complete: 'Revised — check again',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
-  approved_for_scheduling: 'Approved',
+  // NOT "Approved": beside "Signed off. Needs a posting time." that read as
+  // finished, and the word already meant four different things across the
+  // app. The label states the outstanding action instead.
+  approved_for_scheduling: 'Needs a posting date',
   scheduled: 'Scheduled',
   published: 'Published',
 }

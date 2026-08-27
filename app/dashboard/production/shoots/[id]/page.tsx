@@ -30,6 +30,7 @@ import {
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
 } from '../../../../lib/batch-brief-core'
 import { TYPE_LABELS, type ContentType } from '../../../../lib/agreement-core'
+import { SHOOT_PLAN_SECTION } from '../../../../lib/section-names'
 
 type Batch = {
   id: string; client_id: string; title: string; status: BatchStatus
@@ -72,7 +73,7 @@ function stamp(iso: string | null) {
 /**
  * The shoot brief — a working surface, not a form. Everything saves on blur;
  * locking the date is the one ceremonial act, because it commits the team
- * and opens the shoot for content items.
+ * and opens the shoot for the items that come out of it.
  *
  * Known limitation (accepted for v1): concurrent shot-list edits are
  * last-write-wins; the realtime reload keeps the window small.
@@ -290,7 +291,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {isManager && batch.status !== 'wrapped' && !briefTask && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950/40">
           <p className="text-sm text-sky-900 dark:text-sky-200">
-            This shoot isn&rsquo;t on the pipeline yet — a brief task puts it through
+            Nothing has been written up for this shoot yet. A shoot plan is what the
+            client signs off before we film — writing one puts this shoot through
             review and books the date.
           </p>
           <Button size="sm" className="ml-auto" disabled={busy !== null}
@@ -312,16 +314,16 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   }] }),
                 })
                 const json = await res.json()
-                if (!res.ok) throw new Error(json.error ?? 'Could not create the brief task')
-                toast.success("Brief task created — it's on Production, under Briefs in flight")
+                if (!res.ok) throw new Error(json.error ?? 'Could not create the shoot plan')
+                toast.success(`Shoot plan created — it's on Production, under ${SHOOT_PLAN_SECTION}`)
                 void load()
               } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Could not create the brief task')
+                toast.error(e instanceof Error ? e.message : 'Could not create the shoot plan')
               } finally {
                 setBusy(null)
               }
             }}>
-            {busy === 'brief-task' ? 'Creating…' : 'Create brief task'}
+            {busy === 'brief-task' ? 'Creating…' : 'Write the shoot plan'}
           </Button>
         </div>
       )}
@@ -329,7 +331,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         {briefTask && (
           <Link href={`/dashboard/production/${briefTask.id}`}
             className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
-            Open the brief task →
+            Open the shoot plan →
           </Link>
         )}
         {/* only when the folder actually exists — an integration that is off
@@ -521,7 +523,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Production</p>
               {batch.status === 'brief' ? (
                 <p className="text-sm text-zinc-400 dark:text-zinc-500">
-                  Lock the shoot date to start creating content items.
+                  Lock the shoot date, and you can start creating items for it.
                 </p>
               ) : (
                 <>
@@ -675,8 +677,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 </span>
                 <span>{batch.clients?.name}{batch.location ? ` · ${batch.location}` : ''}</span>
                 <span>
-                  Locking commits the team to this date and opens the shoot for
-                  content items. Changing a locked date requires an account manager.
+                  Locking commits the team to this date and opens the shoot up for
+                  items. Changing a locked date needs an account manager.
                 </span>
               </div>
             </AlertDialogDescription>

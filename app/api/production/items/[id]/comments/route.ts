@@ -6,6 +6,7 @@ import { isValidOwner } from '../../../../../lib/work-kinds-core'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { announceItemChange } from '../../../../../lib/production-live'
+import { OPEN_ITEM_CTA } from '../../../../../lib/email-voice-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -94,11 +95,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           entityId: comment.id,
           recipientId: r.id,
           recipientEmail: r.email,
-          subject: `Client comment on ${item.title}`,
+          subject: `The client commented on ${item.title}`,
           bodyHtml: renderEmail(
-            `Client comment on ${item.title}`,
-            `<p>${escapeHtml(text.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">Review it and assign an editor task if changes are needed — the editor has not been notified.</p>`,
-            'Open item',
+            `The client commented on ${item.title}`,
+            `<p>The client wrote:</p>` +
+            `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
+            `<p><strong>What happens next:</strong> read it and, if changes are needed, leave the editor a note on the item — nobody else has been told yet.</p>`,
+            OPEN_ITEM_CTA,
             `${DASHBOARD_URL}/dashboard/production/${id}`
           ),
         })
@@ -119,11 +122,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           entityId: comment.id,
           recipientId: assignee.id,
           recipientEmail: assignee.email,
-          subject: `Task on ${item.title}`,
+          // "Task on X", body = the raw comment and nothing else: it never
+          // said who wrote it, that it was for the reader, or what a "task"
+          // means here. It says all three now.
+          subject: `${user.name || user.email} left you a note on ${item.title}`,
           bodyHtml: renderEmail(
-            `Task on ${item.title}`,
-            `<p>${escapeHtml(text.slice(0, 500))}</p>`,
-            'Open item',
+            `${user.name || user.email} left you a note on ${item.title}`,
+            `<p><strong>${escapeHtml(user.name || user.email)}</strong> asked you to look at something on <strong>${escapeHtml(item.title)}</strong>:</p>` +
+            `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
+            `<p><strong>What happens next:</strong> it stays on your list until you mark it done on the item.</p>`,
+            OPEN_ITEM_CTA,
             `${DASHBOARD_URL}/dashboard/production/${id}`
           ),
         })

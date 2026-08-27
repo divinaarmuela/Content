@@ -1,6 +1,9 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { notify, renderEmail, escapeHtml } from './mailer'
+import {
+  transitionSubject, whatHappensNext, longDate, OPEN_ITEM_CTA,
+} from './email-voice-core'
 import { AuthzError, type TeamUser } from './authz'
 import { announceItemChange } from './production-live'
 import {
@@ -19,6 +22,7 @@ import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
 import { formatWithZone, safeZone, zoneAbbrev, zoneLabel } from './timezone-core'
 import {
+  BRIEF_STATUS_TURN,
   briefSatisfiesSubmission, checkBriefTaskTransitionAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
 } from './brief-task-core'
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
@@ -163,17 +167,17 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       entityId: `${item.id}#${item.owner_id}#${item.updated_at ?? ''}`,
       recipientId: editor.id,
       recipientEmail: editor.email,
-      subject: `New job: ${item.title}`,
+      subject: `${item.title} is yours to make`,
       bodyHtml: renderEmail(
-        `New job: ${item.title}`,
+        `${item.title} is yours to make`,
         `<p><strong>${escapeHtml(item.title)}</strong> (${escapeHtml(item.content_type)}) has been assigned to you by ${escapeHtml(actor.name || actor.email)}.</p>` +
         (item.brief ? `<p><strong>Brief:</strong><br>${String(item.brief).slice(0, 2000).replace(/\n/g, '<br>')}</p>` : '') +
         (item.raw_assets_url ? `<p><strong>Raw assets folder:</strong> <a href="${escapeHtml(item.raw_assets_url)}">${escapeHtml(item.raw_assets_url)}</a></p>` : '') +
         ((item.raw_assets?.length ?? 0) > 0
           ? `<p><strong>Files:</strong><br>${item.raw_assets!.slice(0, 20).map(a => `<a href="${escapeHtml(a.url)}">${escapeHtml(a.name || a.url)}</a>`).join('<br>')}</p>`
           : '') +
-        (item.due_date ? `<p><strong>Due:</strong> ${item.due_date}</p>` : ''),
-        'Open the job',
+        (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
+        OPEN_ITEM_CTA,
         `${DASHBOARD_URL}/dashboard/production/${item.id}`
       ),
     })
@@ -222,7 +226,7 @@ export function notifyBatchTransition(
             `${label}: ${batch.title}`,
             `<p><strong>${escapeHtml(batch.title)}</strong> — ${label.toLowerCase()} by ${escapeHtml(actor.name || actor.email)}.</p>` +
             (when && to === 'locked' ? `<p><strong>Shoot date:</strong> ${when}</p>` : ''),
-            'Open the brief',
+            'Open the shoot plan',
             `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`
           ),
         })
@@ -262,11 +266,12 @@ export async function notifyScheduleHandoff(
     entityId: `${item.id}#handoff#${p.id}#v${item.current_version_number}`,
     recipientId: p.id,
     recipientEmail: p.email,
-    subject: `Please schedule: ${item.title}`,
+    subject: `${item.title} needs a posting date`,
     bodyHtml: renderEmail(
-      `Please schedule: ${item.title}`,
-      `<p><strong>${item.title}</strong> is approved and ${actor.name || actor.email} picked you to schedule it.</p>` +
-      (item.due_date ? `<p><strong>Due:</strong> ${item.due_date}</p>` : ''),
+      `${item.title} needs a posting date`,
+      `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>` +
+      `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext('approved_for_scheduling'))}</p>` +
+      (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
       'Open the item',
       `${DASHBOARD_URL}/dashboard/production/${item.id}`
     ),
@@ -323,7 +328,7 @@ export function notifyPublishQueued(
       subject: heading,
       bodyHtml: renderEmail(
         heading,
-        `<p><strong>${item.title}</strong> ${when} on the client's connected accounts, sent by ${actor.name || actor.email}.</p>`
+        `<p><strong>${escapeHtml(item.title)}</strong> ${when} on the client's connected accounts, sent by ${escapeHtml(actor.name || actor.email)}.</p>`
         // the zone is the client's, and the email says so outright — the
         // reader may well be in another one
         + (at ? `<p>Times are ${zoneLabel(tz)} time (${zoneAbbrev(tz, opts.scheduledFor)}), where the audience is.</p>` : ''),
@@ -634,9 +639,21 @@ export async function performTransition(
       for (const person of people) {
         if (actorId && person.id === actorId) continue // don't notify yourself
         const label = audience === 'client_users' ? CLIENT_LABELS[to] : check.rule.label
+        // The subject used to be the BUTTON THE SENDER PRESSED: "Ask for
+        // changes: Winter Reel 3" lands in the editor's inbox reading as an
+        // instruction to them, when it means the opposite. It now says what
+        // the RECIPIENT has to do, or plainly reports the new stage when the
+        // move is not theirs.
         const subject = audience === 'client_users'
           ? `${item.title} — ${label}`
-          : `${check.rule.label}: ${item.title}`
+          : transitionSubject({
+              title: item.title,
+              to,
+              stageLabel: stageLabel(to),
+              recipientRole: (person as { role?: Role }).role ?? null,
+              turns: isBriefTask ? BRIEF_STATUS_TURN : undefined,
+            })
+        const dueWords = longDate(item.due_date)
         await notify({
           actorName,
           actorEmail,
@@ -663,13 +680,17 @@ export async function performTransition(
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")
-              : `<p><strong>${item.title}</strong> moved from “${stageLabel(from)}” to “${stageLabel(to)}” by ${actorWord}.</p>` +
+              : `<p><strong>${escapeHtml(item.title)}</strong> moved from “${escapeHtml(stageLabel(from))}” to “${escapeHtml(stageLabel(to))}” by ${escapeHtml(actorWord)}.</p>` +
+                // it never said what the reader had to do, or by when,
+                // with the due date sitting right there in scope
+                `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext(to))}</p>` +
+                (dueWords ? `<p><strong>Due:</strong> ${escapeHtml(dueWords)}</p>` : '') +
                 (opts?.note?.trim() && audience !== 'client_users'
                   ? `<p><strong>Note:</strong><br>${escapeHtml(opts.note.trim()).replace(/\n/g, '<br>')}</p>`
                   : ''),
             // a client account cannot open the team dashboard — send them to
             // their portal; the team gets the item itself
-            audience === 'client_users' ? 'Open your portal' : 'Open the item',
+            audience === 'client_users' ? 'Open your portal' : OPEN_ITEM_CTA,
             audience === 'client_users'
               ? `${DASHBOARD_URL}/client`
               : `${DASHBOARD_URL}/dashboard/production/${item.id}`

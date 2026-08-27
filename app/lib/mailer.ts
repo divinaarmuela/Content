@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
 import { actorAlias, replyToFor } from './mailer-core'
+import { EMAIL_FOOTER, OPEN_ITEM_CTA } from './email-voice-core'
 
 /**
  * Notification outbox with exactly-once delivery, on a single transport.
@@ -146,10 +147,10 @@ export function renderEmail(title: string, bodyHtml: string, ctaLabel?: string, 
     <div style="padding:32px;">
       <h2 style="font-size:18px;margin:0 0 12px;letter-spacing:-0.02em;">${title}</h2>
       <div style="font-size:14px;line-height:1.6;color:#3f3f46;">${bodyHtml}</div>
-      ${ctaUrl ? `<a href="${ctaUrl}" style="display:inline-block;margin-top:20px;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">${ctaLabel ?? 'Open dashboard'}</a>` : ''}
+      ${ctaUrl ? `<a href="${ctaUrl}" style="display:inline-block;margin-top:20px;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">${ctaLabel ?? OPEN_ITEM_CTA}</a>` : ''}
     </div>
     <div style="padding:16px 32px;border-top:1px solid #e4e4e7;">
-      <p style="font-family:monospace;font-size:10px;letter-spacing:0.1em;color:#a1a1aa;margin:0;">get seen · get known · get booked</p>
+      <p style="font-size:12px;line-height:1.5;color:#71717a;margin:0;">${EMAIL_FOOTER}</p>
     </div>
   </div>`
 }

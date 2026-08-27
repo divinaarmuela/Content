@@ -32,7 +32,11 @@ const DEV_MARKERS: RegExp[] = [
   /\bSQL editor\b/i,
   /relation .* does not exist/i,
   /column .* does not exist/i,
-  /\b[A-Z][A-Z0-9]*_(KEY|TOKEN|URL|USER|SECRET|ID)\b/,
+  // SCREAMING_SNAKE env var names: ZERNIO_API_KEY, GMAIL_REFRESH_TOKEN,
+  // NEXT_PUBLIC_SUPABASE_URL. The inner class must allow underscores or
+  // anything with two of them slips through.
+  /\b[A-Z][A-Z0-9_]*_(KEY|TOKEN|URL|USER|SECRET|ID)\b/,
+  /\bnot configured\b/i,
   /\bINNGEST_/,
   /\bfetch failed\b/i,
   /\bECONN/,

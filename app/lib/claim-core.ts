@@ -50,7 +50,7 @@ export function claimDecision(
   hat: ClaimHat,
 ): ClaimDecision {
   if (viewer.role === 'client') {
-    return { ok: false, status: 403, error: 'Client accounts cannot pick up work' }
+    return { ok: false, status: 403, error: 'Client accounts cannot take on work' }
   }
   if (item.is_brief) {
     return { ok: false, status: 400, error: 'A shoot brief is owned by its account manager' }
@@ -62,7 +62,7 @@ export function claimDecision(
     }
     // a scheduler picking up someone's unstarted draft is not a thing
     if (viewer.role === 'scheduler') {
-      return { ok: false, status: 403, error: 'Editing work is handed to you, not picked up' }
+      return { ok: false, status: 403, error: 'Editing work is handed to you — you do not take it on yourself' }
     }
     return { ok: true }
   }

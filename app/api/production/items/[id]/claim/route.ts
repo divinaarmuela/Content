@@ -47,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const user = await requireSignedIn()
     if (user.role === 'client') {
-      return NextResponse.json({ error: 'Client accounts cannot pick up work' }, { status: 403 })
+      return NextResponse.json({ error: 'Client accounts cannot take on work' }, { status: 403 })
     }
     const { id } = await params
     const item = await loadItemForUser(user, id)

@@ -13,6 +13,8 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, BarChart3,
 } from 'lucide-react'
 import Greeting from './Greeting'
+import GettingStarted from './GettingStarted'
+import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
 import { DEFAULT_TZ, formatInZone, formatWithZone } from '../lib/timezone-core'
 import { useProductionLive } from './production/useProductionLive'
@@ -464,7 +466,11 @@ function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }
   ]
   return (
     <Card>
-      <CardContent className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4">
+      <CardContent className="flex flex-col gap-2 px-5 py-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+          Where everything is right now
+        </p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {STAGES.map(s => (
           <div key={s.key} className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${s.tint}`} />
@@ -474,6 +480,7 @@ function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }
               : <span className="font-mono text-sm font-semibold tabular-nums">{pipeline[s.key] ?? 0}</span>}
           </div>
         ))}
+        </div>
       </CardContent>
     </Card>
   )
@@ -500,11 +507,26 @@ export default function OverviewPage() {
   const subtitle =
     role === 'editor' ? 'Your production work, live.'
       : role === 'scheduler' ? 'What’s approved, scheduled, and going out — live.'
-        : 'Live numbers from the master database.'
+        : 'Where every client stands this month, live.'
 
   return (
     <div className="flex flex-col gap-4">
       <Greeting subtitle={subtitle} />
+
+      {/* the only onboarding in the product — three steps for this role, each
+          a real link, dismissed per person and per role */}
+      {!loading && <GettingStarted role={(role ?? null) as Role | null} />}
+
+      {/* Seven identical grey ghost links and no cue which to press. The one
+          thing a manager should do first now says so, and says how many. */}
+      {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
+        <Button size="sm" className="w-fit" asChild>
+          <Link href="/dashboard/editor">
+            Review {data!.manager!.needs_review.length} item{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      )}
 
       {/* one neutral skeleton until the role is known — branching while
           `loading` flashed the editor layout at every other role first */}
@@ -533,8 +555,8 @@ export default function OverviewPage() {
             </div>
             {/* the open pool: work nobody holds, one click from being yours */}
             {data!.editor!.unassigned && (
-              <ItemList title="Up for grabs" icon={HandHelping} items={data!.editor!.unassigned}
-                empty="Nothing waiting to be picked up." actionHref="/dashboard/editor" actionLabel="Open board" />
+              <ItemList title="Nobody has taken these yet" icon={HandHelping} items={data!.editor!.unassigned}
+                empty="Nothing is going spare." actionHref="/dashboard/editor" actionLabel="Open board" />
             )}
           </>
         )
@@ -616,7 +638,7 @@ export default function OverviewPage() {
             {/* the three stages whose turn is a MANAGER's — the same
                 population the stat above it counts */}
             <ItemList title="Waiting on you" icon={ClipboardList} items={data.manager.needs_review}
-              empty="Nothing waiting on you — the funnel is clear." actionHref="/dashboard/editor" actionLabel="Open board" />
+              empty="Nothing is waiting on you right now." actionHref="/dashboard/editor" actionLabel="Open board" />
             <div className="flex flex-col gap-4">
               {/* what is waiting on YOU, beside who else is behind */}
               <TeamLoadCard />

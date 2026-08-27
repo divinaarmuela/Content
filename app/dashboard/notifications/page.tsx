@@ -10,6 +10,9 @@ import {
   ArrowRight, Bell, BellOff, CalendarClock, CheckCircle2, ClipboardList,
   FileText, MessageSquare, UserPlus, XCircle,
 } from 'lucide-react'
+import { eventWords, notificationHref, EMAIL_FAILED_WORDS } from '@/app/lib/notification-words'
+import { LoadFailed } from '../NotSetUp'
+import HelpHint from '../HelpHint'
 
 /**
  * The person's real notification history — the same rows the email outbox
@@ -39,15 +42,8 @@ const ICON = (eventType: string) => {
   return Bell
 }
 
-/** Where a notification points: item events open the item. */
-const linkFor = (r: Row): string | null => {
-  if (r.entity_type === 'content_item') {
-    // entity ids carry suffixes like "#v2" / "#<owner>" for dedupe — strip them
-    const id = r.entity_id.split('#')[0]
-    return /^[0-9a-f-]{36}$/i.test(id) ? `/dashboard/production/${id}` : null
-  }
-  return null
-}
+/** Where a notification points. Every entity type has a destination now. */
+const linkFor = (r: Row): string | null => notificationHref(r.entity_type, r.entity_id)
 
 const when = (iso: string) => {
   const d = new Date(iso)
@@ -59,17 +55,23 @@ const when = (iso: string) => {
 
 export default function NotificationsPage() {
   const [rows, setRows] = useState<Row[] | null>(null)
+  // a server outage used to render as "Nothing yet", which is a lie about
+  // the state of the world, not a display bug
+  const [failed, setFailed] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    setFailed(null)
     try {
       const res = await fetch('/api/team/notifications')
-      if (!res.ok) { setRows([]); return }
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
       setRows((await res.json()).notifications ?? [])
       // seen = read: the badge clears, but rows keep their unread tint for
       // this visit so what was new is still visible
       void fetch('/api/team/notifications', { method: 'POST' }).catch(() => {})
-    } catch {
-      setRows([])
+    } catch (e) {
+      console.error('[notifications] load failed', e)
+      setFailed(e instanceof Error ? e.message : 'unknown')
+      setRows(null)
     }
   }, [])
   useEffect(() => { load() }, [load])
@@ -78,12 +80,19 @@ export default function NotificationsPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Notifications</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Everything the system has sent you — same record as your email inbox.
+        <p className="flex flex-wrap items-center text-sm text-zinc-500 dark:text-zinc-400">
+          Everything we have sent you — the same record as your email inbox.
+          Every row opens the item
+          <HelpHint term="item" />
+          or shoot
+          <HelpHint term="shoot" />
+          it is about.
         </p>
       </div>
 
-      {rows === null ? (
+      {failed ? (
+        <LoadFailed what="your notifications" detail={failed} onRetry={() => load()} />
+      ) : rows === null ? (
         <Card><CardContent className="flex flex-col gap-3 p-6">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
         </CardContent></Card>
@@ -110,14 +119,20 @@ export default function NotificationsPage() {
                   <Icon className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-sm ${r.read_at ? '' : 'font-medium'}`}>{r.subject}</p>
-                    <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                      {r.event_type.replace(/_/g, ' ')}
-                    </p>
+                    {/* the raw enum used to sit here in mono uppercase:
+                        "transition internal review", "prospect auto ingested" */}
+                    {eventWords(r.event_type) && (
+                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        {eventWords(r.event_type)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {r.status === 'failed' && (
                       <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 font-normal text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
-                        <XCircle className="h-3 w-3" /> email failed
+                        <XCircle className="h-3 w-3" />
+                        <span className="hidden sm:inline">{EMAIL_FAILED_WORDS}</span>
+                        <span className="sm:hidden">Not delivered</span>
                       </Badge>
                     )}
                     <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{when(r.created_at)}</span>

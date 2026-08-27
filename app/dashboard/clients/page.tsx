@@ -358,7 +358,7 @@ export default function ClientsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleting?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the client from the master registry. Website projects linked to it stay but lose the link. This can&apos;t be undone.
+              They disappear from every client list, and their website projects stay but lose the link back. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

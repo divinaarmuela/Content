@@ -18,7 +18,7 @@ describe('claimDecision — the editor seat', () => {
 
   it('refuses a scheduler — editing is handed out, not picked up', () => {
     const r = claimDecision(item('draft_uploaded'), who('scheduler'), 'editor')
-    expect(r).toEqual({ ok: false, status: 403, error: 'Editing work is handed to you, not picked up' })
+    expect(r).toEqual({ ok: false, status: 403, error: 'Editing work is handed to you — you do not take it on yourself' })
   })
 
   it('refuses anything already past editing', () => {
@@ -62,7 +62,7 @@ describe('claimDecision — the scheduler seat', () => {
 describe('claimDecision — the refusals that apply to both seats', () => {
   it('refuses every client account', () => {
     expect(claimDecision(item('draft_uploaded'), who('client'), 'editor'))
-      .toEqual({ ok: false, status: 403, error: 'Client accounts cannot pick up work' })
+      .toEqual({ ok: false, status: 403, error: 'Client accounts cannot take on work' })
     expect(claimDecision(item('approved_for_scheduling'), who('client'), 'scheduler').ok).toBe(false)
   })
 

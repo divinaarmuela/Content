@@ -35,11 +35,13 @@ export function ClaimButton({ itemId, hat, label, onDone }: {
         body: JSON.stringify({ hat }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) toast.error(json?.error ?? 'Could not pick this up')
-      else toast.success(hat === 'editor' ? "It's yours" : "You're scheduling this")
+      if (!res.ok) toast.error(json?.error ?? 'Could not take this on')
+      // one confirmation for one action: the two hats produced two different
+      // toasts for what a person experiences as the same thing
+      else toast.success("It's yours now")
       await onDone()
     } catch {
-      toast.error('Could not pick this up — please try again')
+      toast.error('Could not take this on — please try again')
     } finally {
       setBusy(false)
     }
