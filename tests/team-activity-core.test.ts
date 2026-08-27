@@ -37,7 +37,7 @@ describe('overlay — an item is read in its own vocabulary', () => {
 
   it('the status word is the item\'s own, never the raw status', () => {
     expect(statusWordOf(item({ status: 'internal_review' }))).toBe('Ready for review')
-    expect(statusWordOf(brief({ status: 'draft_uploaded' }))).toBe('Brief in progress')
+    expect(statusWordOf(brief({ status: 'draft_uploaded' }))).toBe('Plan being written')
     expect(statusWordOf(task({ status: 'approved_for_scheduling' }))).toBe('Done')
     // nothing anywhere prints an underscore
     for (const s of ['draft_uploaded', 'client_changes_requested'] as ItemStatus[]) {

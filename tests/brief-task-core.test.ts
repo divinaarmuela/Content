@@ -10,7 +10,7 @@ import { canCreateItemsUnder } from '../app/lib/batch-brief-core'
 
 describe('itemStatusLabel', () => {
   it('relabels only the shoot-brief kind', () => {
-    expect(itemStatusLabel('shoot_brief', 'draft_uploaded', 'Draft uploaded')).toBe('Brief in progress')
+    expect(itemStatusLabel('shoot_brief', 'draft_uploaded', 'Draft uploaded')).toBe('Plan being written')
     expect(itemStatusLabel('shoot_brief', 'scheduled', 'Scheduled')).toBe('Shoot booked')
     expect(itemStatusLabel('shoot_brief', 'published', 'Published')).toBe('Shoot booked')
     expect(itemStatusLabel('edit', 'draft_uploaded', 'Draft uploaded')).toBe('Draft uploaded')
@@ -22,7 +22,7 @@ describe('checkBriefTaskTransition', () => {
   it('overrides the submit edge with its own words, AM allowed', () => {
     const r = checkBriefTaskTransition('account_manager', 'draft_uploaded', 'internal_review')
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.rule.label).toBe('Submit brief for review')
+    if (r.ok) expect(r.rule.label).toBe('Send plan for review')
   })
 
   it('booking requires an account manager and carries the lock requirement', () => {
@@ -150,7 +150,7 @@ describe('briefSatisfiesSubmission', () => {
     expect(briefSatisfiesSubmission({}, { concept: 'Garden shoot, golden hour' }).ok).toBe(true)
     expect(briefSatisfiesSubmission({}, { shot_list: [{ id: 's1' }] }).ok).toBe(true)
     expect(briefSatisfiesSubmission({ brief_url: '  ' }, { concept: ' ', shot_list: [] }))
-      .toMatchObject({ ok: false, missing: expect.stringContaining('brief link') })
+      .toMatchObject({ ok: false, missing: expect.stringContaining('plan link') })
   })
 })
 
@@ -191,10 +191,10 @@ describe('plan-shaped wording on client-facing edges', () => {
 })
 
 describe('availableBriefTaskTransitions — buttons come from brief rules, not base roles', () => {
-  it('an account manager sees "Brief revisions done" on a brief', () => {
+  it('an account manager sees "Plan changes done" on a shoot plan', () => {
     const ts = availableBriefTaskTransitions('account_manager', 'revision_required')
     expect(ts.map(t => t.to)).toContain('revision_complete')
-    expect(ts.find(t => t.to === 'revision_complete')?.label).toBe('Brief revisions done')
+    expect(ts.find(t => t.to === 'revision_complete')?.label).toBe('Plan changes done')
   })
   it('a scheduler still sees nothing on a brief in revisions', () => {
     expect(availableBriefTaskTransitions('scheduler', 'revision_required')).toEqual([])

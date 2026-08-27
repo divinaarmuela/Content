@@ -43,9 +43,9 @@ const ARRIVED: Record<ActivityKind, Partial<Record<ItemStatus, string>>> = {
     published: 'Marked published',
   },
   brief: {
-    internal_review: 'Brief submitted for review',
-    revision_required: 'Brief changes requested',
-    revision_complete: 'Brief revisions done',
+    internal_review: 'Plan sent for review',
+    revision_required: 'Plan changes requested',
+    revision_complete: 'Plan changes done',
     client_review: 'Plan shared with the client',
     client_changes_requested: 'Client plan changes logged',
     approved_for_scheduling: 'Plan approved',

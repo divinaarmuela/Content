@@ -16,12 +16,14 @@ import {
 
 export const SHOOT_BRIEF_SLUG = 'shoot_brief'
 
-/** What each stage is CALLED for a brief task. */
+/** What each stage is CALLED for a shoot plan. One word for the thing —
+ *  "plan" — where the labels used to say "brief" for the first four stages
+ *  and "plan" for the rest, as if they were two documents. */
 export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
-  draft_uploaded: 'Brief in progress',
-  internal_review: 'Brief ready for review',
-  revision_required: 'Brief being revised',
-  revision_complete: 'Brief revised — check again',
+  draft_uploaded: 'Plan being written',
+  internal_review: 'Plan ready for review',
+  revision_required: 'Plan being revised',
+  revision_complete: 'Plan revised — check again',
   client_review: 'Plan with client',
   client_changes_requested: 'Client wants plan changes',
   approved_for_scheduling: 'Plan approved — book the shoot',
@@ -51,9 +53,9 @@ export const BRIEF_STATUS_TURN: Record<ItemStatus, Role | null> = {
 
 /** The same explanations, worded for a plan rather than a piece of content. */
 export const BRIEF_STATUS_MEANING: Record<ItemStatus, string> = {
-  draft_uploaded: 'The brief is still being written.',
+  draft_uploaded: 'The plan is still being written.',
   internal_review: 'Waiting for an account manager to check the plan.',
-  revision_required: 'Changes were asked for; the brief is being reworked.',
+  revision_required: 'Changes were asked for; the plan is being reworked.',
   revision_complete: 'The changes are in; an account manager needs to look again.',
   client_review: 'Waiting for the client to approve the plan or ask for changes.',
   client_changes_requested: 'An account manager decides: rework the plan, or reshare it as is.',
@@ -72,9 +74,9 @@ type Override = { label: string; roles: Role[]; requires?: 'batch_locked' } | { 
 /** Edges that behave differently for a brief task. Everything else falls
  *  through to checkTransition unchanged. */
 export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
-  'draft_uploaded>internal_review': { label: 'Submit brief for review', roles: ['editor', 'account_manager'] },
+  'draft_uploaded>internal_review': { label: 'Send plan for review', roles: ['editor', 'account_manager'] },
   'internal_review>revision_required': { label: 'Ask for changes', roles: ['account_manager'] },
-  'revision_required>revision_complete': { label: 'Brief revisions done', roles: ['editor', 'account_manager'] },
+  'revision_required>revision_complete': { label: 'Plan changes done', roles: ['editor', 'account_manager'] },
   // the content-pipeline words ("Send to client", "Approve for scheduling")
   // read wrong on a shoot PLAN — same edges, plan-shaped language
   'internal_review>client_review': { label: 'Share plan with client for approval', roles: ['account_manager'] },
@@ -152,5 +154,5 @@ export function briefSatisfiesSubmission(
   if (item.brief_url && String(item.brief_url).trim() !== '') return { ok: true }
   if (batch?.concept && String(batch.concept).trim() !== '') return { ok: true }
   if (Array.isArray(batch?.shot_list) && batch.shot_list.length > 0) return { ok: true }
-  return { ok: false, missing: 'Add a brief link, or write the concept or shot list on the shoot page' }
+  return { ok: false, missing: 'Add a plan link, or write the concept or shot list on the shoot page' }
 }

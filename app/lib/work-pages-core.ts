@@ -9,7 +9,7 @@
  * never the item that is plainly someone else's.
  */
 
-import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
+import { SCHEDULER_STATUSES, STATUS_LABELS, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
 import { isInternalKind, TASK_DONE_STATUSES } from './task-kind-core'
 import type { Role } from './identity-core'
@@ -88,7 +88,17 @@ export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] 
   { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
   { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
   { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
-  { key: 'approved', title: 'Approved', statuses: ['approved_for_scheduling'] },
+  // the status's own label, not "Approved": that word meant four things
+  // across the app and read as "finished" on a column of work still to post
+  { key: 'approved', title: STATUS_LABELS.approved_for_scheduling, statuses: ['approved_for_scheduling'] },
+]
+
+/** The Scheduler queue's three tabs — the same words the Editor board's last
+ *  column and the item's status badge use, so the hand-off says one thing. */
+export const SCHEDULER_LANES: { key: ItemStatus; title: string }[] = [
+  { key: 'approved_for_scheduling', title: STATUS_LABELS.approved_for_scheduling },
+  { key: 'scheduled', title: STATUS_LABELS.scheduled },
+  { key: 'published', title: STATUS_LABELS.published },
 ]
 
 /**
