@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, authzErrorResponse } from '../../../lib/authz'
-import { accessibleClientIds } from '../../../lib/production-access'
+import { visibleClientIds } from '../../../lib/production-access'
 import {
   computeMonthlyProgress, effectiveQuotas, liveAtFromEntries, normaliseDeliverableLines,
 } from '../../../lib/agreement-core'
@@ -25,7 +25,10 @@ export async function GET(req: Request) {
     const year = Number(url.searchParams.get('year')) || now.getFullYear()
     if (!clientId) return NextResponse.json({ error: 'client_id is required' }, { status: 400 })
 
-    const ids = await accessibleClientIds(user)
+    // the shoot page draws this strip under every deliverable, so whoever
+    // holds the shoot must be able to read it — visibleClientIds, not the
+    // client-team list. Counts only; it opens nothing.
+    const ids = await visibleClientIds(user)
     if (ids !== null && !ids.includes(clientId)) {
       return NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 })
     }

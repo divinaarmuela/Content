@@ -56,6 +56,7 @@ export const FROM_CLIENT_FOLDER = '_From client'
 
 /** A shoot's three working folders, in the order the work happens. */
 export const SHOOT_SUBFOLDERS = ['01 Raw', '02 Edits', '03 Final'] as const
+export const RAW_FOLDER = SHOOT_SUBFOLDERS[0]
 export const EDITS_FOLDER = SHOOT_SUBFOLDERS[1]
 export const FINAL_FOLDER = SHOOT_SUBFOLDERS[2]
 
@@ -68,6 +69,17 @@ export const FINAL_FOLDER = SHOOT_SUBFOLDERS[2]
  * counting nothing.
  */
 export const NO_SHOOT_FINAL_FOLDER = 'Final'
+
+/**
+ * What a shoot-less item's raw folder is called.
+ *
+ * `Raw`, not `01 Raw`, for the same reason its finals are `Final`: the numbers
+ * order the three stages of a shoot day, and an item with no shoot has no
+ * stages to order. What matters is that the footage an editor was GIVEN never
+ * shares a folder with the cuts they made from it — which is the mistake this
+ * whole target exists to undo.
+ */
+export const NO_SHOOT_RAW_FOLDER = 'Raw'
 
 /**
  * One safe folder name.
@@ -241,6 +253,30 @@ export function itemChain(
  */
 export function shootFinalChain(client: string, shootFolder: string): string[] {
   return shootChains(client, shootFolder).final
+}
+
+/**
+ * `{root}/{Client}/{Shoot}/01 Raw` — the footage a shoot produced.
+ *
+ * Everything shot on the day lands in ONE folder per shoot, not one per
+ * deliverable: the same clip is cut into three Reels, and filing it under the
+ * first item that happened to claim it hides it from the other two. Reached by
+ * name from the root, like the finals, so a raw file attached to an item long
+ * after the shoot still lands in that shoot's own raw folder.
+ */
+export function shootRawChain(client: string, shootFolder: string): string[] {
+  return shootChains(client, shootFolder).raw
+}
+
+/**
+ * `{root}/{Client}/_No shoot/{Item}/Raw` — given footage for a shoot-less item.
+ *
+ * It hangs off the ITEM's folder for the same reason its finals do: with no
+ * shoot to group them, the deliverable is the only grouping there is. What it
+ * must NOT be is the item folder itself, which is the editing bench.
+ */
+export function noShootRawChain(client: string, itemFolder: string): string[] {
+  return [...noShootChain(client, itemFolder), NO_SHOOT_RAW_FOLDER]
 }
 
 /**

@@ -2,14 +2,16 @@ import { describe, it, expect } from 'vitest'
 import {
   CHUNK_MULTIPLE, CHUNK_SIZE, contentRange, earliestScheduledMonth,
   emailDomain, fileNameFromUrl, isClientTarget, isMirrorTarget, isMirrorableUrl,
-  isTestAddress, memberPermissionDiff, membersNeedingPermission, mirrorProgress,
-  missingItemMirrors, receivedBytes, sharingSummary, statusRange, versionFileName,
-  wantedItemFiles, type SweepItem,
+  isTestAddress, memberPermissionDiff, membersNeedingPermission, mirrorKey,
+  mirrorProgress, misfiledRawMirrors, missingItemMirrors, receivedBytes,
+  sharingSummary, statusRange, versionFileName, wantedItemFiles,
+  type DriveFileRow, type SweepItem,
 } from '../app/lib/gdrive-mirror-core'
 import {
-  FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER, SCHEDULED_FOLDER, dayStamp,
-  fromClientChain, intakeFileTarget, noShootFinalChain, scheduledChain,
-  shootFinalChain,
+  FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
+  SCHEDULED_FOLDER, dayStamp, fromClientChain, intakeFileTarget,
+  noShootFinalChain, noShootRawChain, scheduledChain, shootFinalChain,
+  shootRawChain,
 } from '../app/lib/gdrive-core'
 
 describe('isMirrorableUrl', () => {
@@ -216,6 +218,35 @@ describe('intakeFileTarget', () => {
   })
 })
 
+describe('where raw footage goes', () => {
+  it('files a shoot’s footage in the SHOOT’s 01 Raw, not in any item folder', () => {
+    // `02 Edits/{Item}` is the bench — what the editor MADE. Source material
+    // dropped in beside the cuts is the bug this target exists to fix, and it
+    // also hid the day's footage from every other item cut from the shoot.
+    expect(shootRawChain('Stretchworks', '2026-08 Monday Martin Shoot'))
+      .toEqual(['Stretchworks', '2026-08 Monday Martin Shoot', RAW_FOLDER])
+    expect(RAW_FOLDER).toBe('01 Raw')
+  })
+
+  it('gives a shoot-less item its own Raw subfolder, unnumbered', () => {
+    // no shoot means no stages for `01`/`02`/`03` to order — but the footage
+    // still must not share a folder with the cuts made from it
+    expect(noShootRawChain('Stretchworks', 'Reel 01 - Hook'))
+      .toEqual(['Stretchworks', '_No shoot', 'Reel 01 - Hook', NO_SHOOT_RAW_FOLDER])
+    expect(NO_SHOOT_RAW_FOLDER).toBe('Raw')
+  })
+
+  it('is a real target, and one that belongs to a piece of work', () => {
+    expect(isMirrorTarget('raw')).toBe(true)
+    expect(isClientTarget('raw')).toBe(false)
+  })
+
+  it('keys a mirrored copy by the PAIR, since one URL can be two rows', () => {
+    expect(mirrorKey('raw', 'https://x/a.jpg'))
+      .not.toBe(mirrorKey('item', 'https://x/a.jpg'))
+  })
+})
+
 describe('client-scoped targets', () => {
   it('knows which targets belong to a client rather than a piece of work', () => {
     expect(isClientTarget('brand')).toBe(true)
@@ -413,6 +444,23 @@ describe('mirrorProgress', () => {
     expect(mirrorProgress(1, 1).line).toBe('Mirrored to Drive · 1 file')
   })
 
+  it('says where the raw files went, because they are not in the folder', () => {
+    // today's case: four files on the item, three of them raw footage that
+    // now lives in the shoot's `01 Raw` rather than beside the cuts
+    expect(mirrorProgress(4, 4, 3).line)
+      .toBe('Mirrored to Drive · 4 files (3 raw in 01 Raw)')
+    // a shoot-less deliverable keeps its footage in its own unnumbered `Raw`
+    expect(mirrorProgress(2, 2, 1, NO_SHOOT_RAW_FOLDER).line)
+      .toBe('Mirrored to Drive · 2 files (1 raw in Raw)')
+  })
+
+  it('says nothing about raw when there is none, and counts none while copying', () => {
+    expect(mirrorProgress(4, 4, 0).line).toBe('Mirrored to Drive · 4 files')
+    expect(mirrorProgress(4, 2, 2).line).toBe('Copying to Drive… 2 of 4')
+    // a raw count can never exceed what is actually done
+    expect(mirrorProgress(4, 4, 9).raw).toBe(4)
+  })
+
   it('reads as still copying while anything is outstanding', () => {
     // true whether the job is running, queued, or quietly failed
     const p = mirrorProgress(7, 5)
@@ -487,9 +535,10 @@ describe('the self-healing sweep — what should be in Drive and is not', () => 
     expect(files.map(f => f.name)).toEqual([
       'Shoot 01.mov', 'v1 - v1.mp4', 'v2 - 01 - a.jpg', 'v2 - 02 - b.jpg',
     ])
-    // everything lands in the item's own folder — finals and months are
-    // decided by approving and scheduling, never by a repair pass
-    expect([...new Set(files.map(f => f.target))]).toEqual(['item'])
+    // the job pack to `01 Raw`, the cuts to the item's own folder — and
+    // nothing to finals or a month, which are decided by approving and
+    // scheduling and never by a repair pass
+    expect(files.map(f => f.target)).toEqual(['raw', 'item', 'item', 'item'])
     expect([...new Set(files.map(f => f.item_id))]).toEqual(['item-1'])
   })
 
@@ -513,12 +562,27 @@ describe('the self-healing sweep — what should be in Drive and is not', () => 
   })
 
   it('subtracts what Drive already holds', () => {
-    const missing = missingItemMirrors([item()], [u('shoot-01.mov')])
+    const missing = missingItemMirrors([item()], [mirrorKey('raw', u('shoot-01.mov'))])
     expect(missing.map(f => f.source_url)).toEqual([u('cut.mp4')])
   })
 
   it('finds nothing when everything is there — the normal case', () => {
-    expect(missingItemMirrors([item()], [u('shoot-01.mov'), u('cut.mp4')])).toEqual([])
+    expect(missingItemMirrors([item()], [
+      mirrorKey('raw', u('shoot-01.mov')), mirrorKey('item', u('cut.mp4')),
+    ])).toEqual([])
+  })
+
+  it('does not count a raw copy as the edits copy, or the other way round', () => {
+    // the same clip in `01 Raw` says nothing about whether the version cut
+    // from it reached `02 Edits` — comparing bare URLs made one cancel the
+    // other and left a folder permanently one file short
+    const both = item({
+      raw_assets: [{ url: u('a.jpg'), name: 'a.jpg' }],
+      versions: [{ version_number: 1, file_url: u('a.jpg'), files: [] }],
+    })
+    expect(missingItemMirrors([both], []).map(f => f.target)).toEqual(['raw', 'item'])
+    expect(missingItemMirrors([both], [mirrorKey('raw', u('a.jpg'))])
+      .map(f => f.target)).toEqual(['item'])
   })
 
   it('asks again for a claim whose upload died', () => {
@@ -529,9 +593,9 @@ describe('the self-healing sweep — what should be in Drive and is not', () => 
       .toEqual([u('shoot-01.mov'), u('cut.mp4')])
   })
 
-  it('asks for one file once, however many versions carry it', () => {
+  it('asks for one file once per folder, however many versions carry it', () => {
     const missing = missingItemMirrors([item({
-      raw_assets: [{ url: u('a.jpg'), name: 'a.jpg' }],
+      raw_assets: [],
       versions: [
         { version_number: 1, file_url: u('a.jpg'), files: [] },
         { version_number: 2, file_url: u('a.jpg'), files: [] },
@@ -553,12 +617,105 @@ describe('the self-healing sweep — what should be in Drive and is not', () => 
   it('sweeps across items, and shrugs at nothing at all', () => {
     const missing = missingItemMirrors(
       [item(), item({ id: 'item-2', raw_assets: [{ url: u('x.jpg'), name: 'x.jpg' }], versions: [] })],
-      [u('shoot-01.mov'), u('cut.mp4')],
+      [mirrorKey('raw', u('shoot-01.mov')), mirrorKey('item', u('cut.mp4'))],
     )
     expect(missing).toEqual([
-      { item_id: 'item-2', source_url: u('x.jpg'), name: 'x.jpg', target: 'item' },
+      { item_id: 'item-2', source_url: u('x.jpg'), name: 'x.jpg', target: 'raw' },
     ])
     expect(missingItemMirrors(null, [])).toEqual([])
     expect(missingItemMirrors([{ id: 'x' }], [])).toEqual([])
+  })
+})
+
+describe('the raw files already in the wrong folder', () => {
+  const u = (n: string) => `https://media.mdmmarketing.com.au/1755043200000-k3f9a1-${n}`
+
+  // "May Shoot 05" as it actually is: three raw clips mirrored to `02 Edits`
+  // back when `item` was the only target there was
+  const item = (over: Partial<SweepItem> = {}): SweepItem => ({
+    id: 'item-1',
+    raw_assets: [
+      { url: u('a.mov'), name: 'a.mov' },
+      { url: u('b.mov'), name: 'b.mov' },
+      { url: u('c.mov'), name: 'c.mov' },
+    ],
+    versions: [{ version_number: 1, file_url: u('cut.mp4'), files: [] }],
+    ...over,
+  })
+
+  const row = (over: Partial<DriveFileRow> = {}): DriveFileRow => ({
+    id: 'row-a', item_id: 'item-1', source_url: u('a.mov'),
+    target: 'item', drive_file_id: 'gdrive-a',
+    ...over,
+  })
+
+  it('finds every raw asset filed under the edits target', () => {
+    const found = misfiledRawMirrors([item()], [
+      row(),
+      row({ id: 'row-b', source_url: u('b.mov'), drive_file_id: 'gdrive-b' }),
+      row({ id: 'row-c', source_url: u('c.mov'), drive_file_id: 'gdrive-c' }),
+      // the version's own file belongs in `02 Edits` and must stay
+      row({ id: 'row-cut', source_url: u('cut.mp4'), drive_file_id: 'gdrive-cut' }),
+    ])
+    expect(found.map(f => f.drive_file_id)).toEqual(['gdrive-a', 'gdrive-b', 'gdrive-c'])
+    expect(found[0]).toEqual({
+      id: 'row-a', item_id: 'item-1', source_url: u('a.mov'), drive_file_id: 'gdrive-a',
+    })
+  })
+
+  it('is idempotent — a row already rewritten is never looked at again', () => {
+    expect(misfiledRawMirrors([item()], [row({ target: 'raw' })])).toEqual([])
+    // and so are the copies that live in other folders by design
+    expect(misfiledRawMirrors([item()], [
+      row({ target: 'final' }), row({ target: 'scheduled' }),
+    ])).toEqual([])
+  })
+
+  it('leaves a file that is BOTH raw footage and a version exactly where it is', () => {
+    // an editor who uploads the client's clip back as v1 gives it two honest
+    // homes; moving the edits copy would delete a version from the bench
+    const both = item({
+      raw_assets: [{ url: u('a.mov'), name: 'a.mov' }],
+      versions: [{ version_number: 1, file_url: u('a.mov'), files: [] }],
+    })
+    expect(misfiledRawMirrors([both], [row()])).toEqual([])
+  })
+
+  it('never touches a claim whose upload died — there is no file to move', () => {
+    expect(misfiledRawMirrors([item()], [row({ drive_file_id: null })])).toEqual([])
+    expect(misfiledRawMirrors([item()], [row({ drive_file_id: '' })])).toEqual([])
+  })
+
+  it('only ever moves a file that is on THAT item’s job pack', () => {
+    // a row pointing at another item's asset, and a URL on no job pack at all
+    expect(misfiledRawMirrors([item()], [
+      row({ item_id: 'item-2' }),
+      row({ id: 'row-x', source_url: u('stranger.mov') }),
+    ])).toEqual([])
+  })
+
+  it('ignores a pasted link, which was never a file of ours', () => {
+    const linked = item({ raw_assets: [{ url: 'https://youtu.be/abc', name: 'brief' }] })
+    expect(misfiledRawMirrors([linked], [
+      row({ source_url: 'https://youtu.be/abc' }),
+    ])).toEqual([])
+  })
+
+  it('caps a run, and the rest are still misfiled next time', () => {
+    const many = item({
+      raw_assets: Array.from({ length: 12 }, (_, i) => ({ url: u(`f${i}.mov`), name: `f${i}` })),
+      versions: [],
+    })
+    const rows = Array.from({ length: 12 }, (_, i) =>
+      row({ id: `row-${i}`, source_url: u(`f${i}.mov`), drive_file_id: `gd-${i}` }))
+    expect(misfiledRawMirrors([many], rows, 5)).toHaveLength(5)
+    expect(misfiledRawMirrors([many], rows, 0)).toEqual([])
+    expect(misfiledRawMirrors([many], rows)).toHaveLength(12)
+  })
+
+  it('shrugs at nothing at all', () => {
+    expect(misfiledRawMirrors(null, null)).toEqual([])
+    expect(misfiledRawMirrors([{ id: 'x' }], [row()])).toEqual([])
+    expect(misfiledRawMirrors([item()], [])).toEqual([])
   })
 })

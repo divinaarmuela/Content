@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
-import { accessibleClientIds, assertUuid } from '../../lib/production-access'
+import { accessibleClientIds, assertUuid, assignedItemsFilter } from '../../lib/production-access'
 import { ITEM_STATUSES, SCHEDULER_STATUSES, schedulerIdsOf } from '../../lib/workflow-core'
 import { SHOOT_BRIEF_SLUG } from '../../lib/brief-task-core'
 import { isInternalKind } from '../../lib/task-kind-core'
@@ -43,10 +43,11 @@ export async function GET() {
       .order('updated_at', { ascending: false })
       .limit(500)
     if (clientIds !== null) {
-      // assignment grants visibility, same rule as the items API — owning the
-      // job, or being handed its scheduling
-      const me = assertUuid(user.id)
-      const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
+      // assignment grants visibility, the SAME rule as the items API and
+      // loadItemForUser: owning the job, holding its scheduling, being tagged
+      // on it, or holding the shoot it sits under. "Assigned to you" that
+      // omits a job you were assigned is the whole complaint.
+      const assigned = await assignedItemsFilter(user)
       itemsQ = clientIds.length === 0
         ? itemsQ.or(assigned)
         : itemsQ.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)

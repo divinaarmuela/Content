@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
-import { accessibleClientIds } from '../../../lib/production-access'
+import { accessibleClientIds, heldItemIds } from '../../../lib/production-access'
 
 /**
  * Everything with a scheduled time, for the calendar.
@@ -33,11 +33,16 @@ export async function GET(req: Request) {
     const { data, error } = await q
     if (error) throw new Error(error.message)
 
-    // scope after the join: the client id lives on the item, not the entry
+    // scope after the join: the client id lives on the item, not the entry.
+    // Assignment counts here too — a piece handed to someone off the client
+    // team has a slot on the calendar, and the person who has to post it was
+    // the one person who could not see when it goes out.
     const allowed = await accessibleClientIds(user)
+    const held = allowed === null ? new Set<string>() : new Set(await heldItemIds(user))
     const rows = (data ?? []).filter(r => {
       if (allowed === null) return true
-      const item = r.content_items as unknown as { client_id?: string } | null
+      const item = r.content_items as unknown as { id?: string; client_id?: string } | null
+      if (item?.id && held.has(item.id)) return true
       return item?.client_id ? allowed.includes(item.client_id) : false
     })
 

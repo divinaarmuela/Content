@@ -144,7 +144,9 @@ export default function EditorPage() {
     async () => {
       const [itemsRes, clientsRes, batchesRes] = await Promise.all([
         fetch('/api/production/items', { cache: 'no-store' }),
-        fetch('/api/website/clients'),
+        // scope=mine: the client filter and the New-work dialog offer the
+        // clients this person holds work for, assignments included
+        fetch('/api/website/clients?scope=mine'),
         fetch('/api/production/batches'),
       ])
       if (!itemsRes.ok) {

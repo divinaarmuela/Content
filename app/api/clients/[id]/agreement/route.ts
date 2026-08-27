@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
-import { accessibleClientIds } from '../../../../lib/production-access'
+import { accessibleClientIds, visibleClientIds } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import {
   normaliseDeliverableLines, normaliseServices, RETAINED_SERVICE_CATALOG,
@@ -13,8 +13,17 @@ import {
  * captions against it too); written by account managers.
  */
 
-async function assertClientAccess(user: Awaited<ReturnType<typeof requireRole>>, clientId: string) {
-  const ids = await accessibleClientIds(user)
+/** Reading is scoped by `visibleClientIds`: whoever holds a job for this
+ *  client is shown the deal it is measured against — the shoot page and the
+ *  item page both print the monthly quotas, and an assignee who was refused
+ *  them read "You are not assigned to this client" over their own work.
+ *  WRITING stays on `accessibleClientIds`: changing the deal is running the
+ *  client, and holding one job there is not that. */
+async function assertClientAccess(
+  user: Awaited<ReturnType<typeof requireRole>>, clientId: string,
+  opts: { write?: boolean } = {},
+) {
+  const ids = opts.write ? await accessibleClientIds(user) : await visibleClientIds(user)
   if (ids !== null && !ids.includes(clientId)) {
     return NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 })
   }
@@ -45,7 +54,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const user = await requireRole('account_manager')
     const { id } = await params
-    const denied = await assertClientAccess(user, id)
+    const denied = await assertClientAccess(user, id, { write: true })
     if (denied) return denied
 
     const body = await req.json()

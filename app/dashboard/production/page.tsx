@@ -176,7 +176,10 @@ export default function ProductionPage() {
     async () => {
       const [bRes, cRes, iRes] = await Promise.all([
         fetch('/api/production/batches', { cache: 'no-store' }),
-        fetch('/api/website/clients'),
+        // the clients this person actually works for — their team's, plus any
+        // they hold a shoot or an item on. The server decides; a client-side
+        // role guess is how the assignee got left out in the first place.
+        fetch('/api/website/clients?scope=mine'),
         fetch('/api/production/items', { cache: 'no-store' }),
       ])
       return {

@@ -2,8 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { supabase } from '../../lib/supabase'
 import type { TeamUser } from '../../app/lib/authz'
 import { performTransition, addVersion, type ContentItem } from '../../app/lib/workflow'
-import { loadItemForUser } from '../../app/lib/production-access'
+import {
+  accessibleClientIds, assignedItemsFilter, canOpenBatch, heldBatchIds,
+  loadItemForUser, shapeItemDetail, visibleClientIds,
+} from '../../app/lib/production-access'
 import { upsertScheduleEntry } from '../../app/lib/schedule'
+import { checkBatchTransition } from '../../app/lib/batch-brief-core'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
 
@@ -405,6 +409,217 @@ describe('who can even SEE an unclaimed item', () => {
     const { data: restored } = await supabase.from('team_user_clients')
       .select('client_id').eq('team_user_id', editor.id).eq('client_id', TEST_CLIENT_ID).maybeSingle()
     expect(restored, 'the editor’s client assignment must be restored').toBeTruthy()
+  })
+})
+
+/**
+ * Run `fn` with this person's whole-client assignment removed, then put the
+ * roster back exactly as it was — pass or fail.
+ *
+ * This is James's situation, made reproducible: an account manager who is not
+ * on the client's team, holding one job for that client. Nothing inside the
+ * window may FIRE a notification: with the AM off the roster, resolveAudience
+ * falls back to emailing every super admin, and those are real people. The
+ * assertions inside are authorization questions, which is where the bug was.
+ */
+async function offClient<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  const { data: link } = await supabase.from('team_user_clients')
+    .select('*').eq('team_user_id', userId).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+  try {
+    if (link) {
+      await supabase.from('team_user_clients')
+        .delete().eq('team_user_id', userId).eq('client_id', TEST_CLIENT_ID)
+    }
+    return await fn()
+  } finally {
+    if (link) await supabase.from('team_user_clients').upsert(link)
+  }
+}
+
+const batchRow = async (id: string) => {
+  const { data } = await supabase.from('batches')
+    .select('id, client_id, owner_id, status').eq('id', id).single()
+  return data as { id: string; client_id: string; owner_id: string | null; status: string }
+}
+
+/** The item list exactly as `GET /api/production/items` builds it — the same
+ *  two lines, so what this returns is what the person's board shows. */
+async function listedFor(user: TeamUser): Promise<string[]> {
+  const ids = await accessibleClientIds(user)
+  let q = supabase.from('content_items').select('id').limit(500)
+  if (ids !== null) {
+    const assigned = await assignedItemsFilter(user)
+    q = ids.length === 0
+      ? q.or(assigned)
+      : q.or(`client_id.in.(${ids.join(',')}),${assigned}`)
+  }
+  const { data } = await q
+  return (data ?? []).map(r => r.id as string)
+}
+
+describe('James: assigned the shoot brief, off the client team', () => {
+  let shootId: string, briefId: string, siblingId: string, strangerId: string
+
+  it('sets the scene — a shoot he owns, its brief, a sibling item, and one that is nothing to do with him', async () => {
+    const { data: batch, error } = await supabase.from('batches').insert({
+      client_id: TEST_CLIENT_ID,
+      title: `E2E James shoot ${new Date().toISOString()}`,
+      owner_id: am.id,
+      status: 'brief',
+      shoot_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+      concept: 'E2E visibility audit — nothing is booked with anybody',
+    }).select('id').single()
+    if (error) throw new Error(error.message)
+    shootId = batch.id
+    batches.push(shootId)
+
+    briefId = await makeItem({
+      owner_id: am.id, batch_id: shootId,
+      content_type: 'other', work_kind_id: SHOOT_BRIEF_KIND_ID,
+    })
+    // made from his shoot, but handed to nobody — the shoot page lists it
+    siblingId = await makeItem({ owner_id: null, batch_id: shootId })
+    // same client, no shoot, no assignment: the control
+    strangerId = await makeItem({ owner_id: null, batch_id: null })
+    expect([shootId, briefId, siblingId, strangerId].every(Boolean)).toBe(true)
+  })
+
+  it('opens the brief, opens its shoot, and is listed everywhere it appears', async () => {
+    await offClient(am.id, async () => {
+      // he really is off the team — otherwise this test proves nothing
+      expect(await accessibleClientIds(am)).not.toContain(TEST_CLIENT_ID)
+
+      // the brief itself: this much already worked
+      await expect(loadItemForUser(am, briefId)).resolves.toBeTruthy()
+
+      // the shoot page — "You are not assigned to this client" lived here
+      expect(await canOpenBatch(am, await batchRow(shootId))).toBe(true)
+      // …and a page you can open must be a page you can FIND
+      expect(await heldBatchIds(am)).toContain(shootId)
+
+      // the client's name, brand and agreement summary travel with the job:
+      // the shoot page prints the quotas under every deliverable
+      expect(await visibleClientIds(am)).toContain(TEST_CLIENT_ID)
+
+      // the Production briefs lane, the Editor board, the New-work Shoot
+      // dropdown — all one list query
+      const listed = await listedFor(am)
+      expect(listed).toContain(briefId)
+
+      // the shoot page LISTS the sibling item, so the sibling must open:
+      // a row that 404s on click is the same broken promise facing outward
+      expect(listed).toContain(siblingId)
+      await expect(loadItemForUser(am, siblingId)).resolves.toBeTruthy()
+
+      // …and nothing further. An item on the same client that he was handed
+      // nothing on is not his, and is not listed for him either.
+      await expect(loadItemForUser(am, strangerId)).rejects.toThrow(/not found/i)
+      expect(listed).not.toContain(strangerId)
+    })
+  })
+
+  it('may create items under the shoot he holds, edit the plan, and lock the date', async () => {
+    await offClient(am.id, async () => {
+      const batch = await batchRow(shootId)
+      // the gate `POST /api/production/items` runs for an off-client client_id
+      expect(await canOpenBatch(am, batch)).toBe(true)
+      // the gates the brief page's Save and "Lock shoot date" run
+      expect(checkBatchTransition(am.role, 'brief', 'locked').ok).toBe(true)
+
+      // the plan edit itself, through the same guard the PATCH route uses
+      const { error } = await supabase.from('batches')
+        .update({ location: 'E2E studio' }).eq('id', shootId)
+      expect(error).toBeNull()
+    })
+  })
+
+  it('and the roster is exactly as it was', async () => {
+    const { data } = await supabase.from('team_user_clients')
+      .select('client_id').eq('team_user_id', am.id).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+    expect(data, 'the account manager’s client assignment must be restored').toBeTruthy()
+  })
+})
+
+describe('an editor off the team, handed one item on the shoot', () => {
+  let shootId: string, itemId: string
+
+  it('opens the item, its shoot page and its Drive folder, and uploads a version', async () => {
+    const { data: batch, error } = await supabase.from('batches').insert({
+      client_id: TEST_CLIENT_ID,
+      title: `E2E off-team editor shoot ${new Date().toISOString()}`,
+      owner_id: am.id, status: 'locked',
+      locked_at: new Date().toISOString(), locked_by: am.id,
+    }).select('id').single()
+    if (error) throw new Error(error.message)
+    shootId = batch.id
+    batches.push(shootId)
+    itemId = await makeItem({
+      owner_id: editor.id, batch_id: shootId,
+      drive_url: 'https://drive.google.com/drive/folders/e2e-visibility-audit',
+    })
+
+    await offClient(editor.id, async () => {
+      expect(await accessibleClientIds(editor)).not.toContain(TEST_CLIENT_ID)
+      const item = await loadItemForUser(editor, itemId)
+      expect(item.id).toBe(itemId)
+
+      // the shoot the job sits on, and its place in the shoot list
+      expect(await canOpenBatch(editor, await batchRow(shootId))).toBe(true)
+      expect(await heldBatchIds(editor)).toContain(shootId)
+      expect(await listedFor(editor)).toContain(itemId)
+
+      // the job pack: the editor's hat carries the Drive folder link, which
+      // is the whole reason the assignment was made
+      const shaped = shapeItemDetail(editor, item, [], []) as Record<string, unknown>
+      expect(shaped.acting_roles).toContain('editor')
+      expect(shaped.drive_url).toBe('https://drive.google.com/drive/folders/e2e-visibility-audit')
+    })
+
+    // the upload itself runs with the roster intact: it fans out to the AM,
+    // and an unassigned client would send that fan-out to real super admins
+    expect((await addVersion(editor, itemId, v(1))).version_number).toBe(1)
+  })
+})
+
+describe('a scheduler handed an item off the client team', () => {
+  it('opens it and books a slot for it', async () => {
+    const id = await makeItem({ owner_id: editor.id })
+    await addVersion(editor, id, v(1))
+    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+
+    await offClient(scheduler.id, async () => {
+      await expect(loadItemForUser(scheduler, id)).resolves.toBeTruthy()
+      expect(await listedFor(scheduler)).toContain(id)
+      const entry = await upsertScheduleEntry(scheduler, await fresh(id), {
+        platform: 'instagram',
+        scheduled_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      })
+      expect(entry.scheduler_id).toBe(scheduler.id)
+    })
+  })
+})
+
+describe('the other half of the rule: nothing is listed that will not open', () => {
+  it('an unrelated editor gets a 404 — and never a row to click in the first place', async () => {
+    const id = await makeItem({ owner_id: am.id })
+    await offClient(editor.id, async () => {
+      await expect(loadItemForUser(editor, id)).rejects.toThrow(/not found/i)
+      expect(await listedFor(editor)).not.toContain(id)
+    })
+  })
+
+  it('every item an off-team person IS shown, they can open', async () => {
+    await offClient(editor.id, async () => {
+      const listed = await listedFor(editor)
+      // a bounded sample: the point is that the two answers agree, and the
+      // list query is capped at 500 rows across every client they touch
+      for (const id of listed.filter(i => created.includes(i))) {
+        await expect(loadItemForUser(editor, id), `listed but not openable: ${id}`)
+          .resolves.toBeTruthy()
+      }
+    })
   })
 })
 

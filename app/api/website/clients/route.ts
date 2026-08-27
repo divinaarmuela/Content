@@ -2,22 +2,39 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
+import { visibleClientIds } from '@/app/lib/production-access'
 
-/** Master client registry — dashboard only (Clerk-gated in middleware). */
-export async function GET() {
+/** Master client registry — dashboard only (Clerk-gated in middleware).
+ *
+ *  `?scope=mine` narrows it to the clients this person actually works for:
+ *  their client team PLUS the clients of every shoot and item assignment they
+ *  hold. That is the list the "New work" dialog must offer — the registry is
+ *  an admin surface, and a picker built from it either offers clients whose
+ *  create call 403s or (before `visibleClientIds`) omitted the very client
+ *  someone was handed a job on. */
+export async function GET(req: Request) {
   let mayShare = false
+  let scoped: string[] | null = null
   try {
     const user = await requireRole('scheduler')
     mayShare = roleSatisfies(user.role, 'account_manager')
+    if (new URL(req.url).searchParams.get('scope') === 'mine') {
+      scoped = await visibleClientIds(user)
+    }
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
 
-  const { data, error } = await supabase
+  let q = supabase
     .from('clients')
     .select('*')
     .order('created_at', { ascending: false })
+  if (scoped !== null) {
+    if (scoped.length === 0) return NextResponse.json([])
+    q = q.in('id', scoped)
+  }
+  const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Who runs each client, attached here rather than fetched per row: the list

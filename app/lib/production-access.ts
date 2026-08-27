@@ -36,29 +36,114 @@ export async function canOpenBatch(
 ): Promise<boolean> {
   const ids = await batchClientIds(user)
   if (ids === null || ids.includes(batch.client_id) || batch.owner_id === user.id) return true
+  if (user.role === 'client') return false
+  const me = assertUuid(user.id)
   const { data } = await supabase
     .from('content_items')
     .select('id')
     .eq('batch_id', batch.id)
-    .or(`owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`)
+    .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
     .limit(1)
   return (data?.length ?? 0) > 0
 }
 
 /**
- * Shoots this team user holds a job on — owner of an item under the shoot, or
- * handed its scheduling. These open the shoot for a person who is not on the
- * client team (see canOpenBatch), so every LIST of shoots must include them
- * too, or the person is told "you can open this" by a page they cannot find.
+ * Shoots this team user holds a stake in — one they OWN, or one carrying an
+ * item they own or were handed the scheduling of. These are exactly the
+ * shoots canOpenBatch opens for a person who is not on the client team, so
+ * every LIST of shoots must include them too, or the person is told "you can
+ * open this" by a page they cannot find. Owning the shoot was the case the
+ * first pass missed: canOpenBatch let the creator in, the list left them out.
  */
 export async function heldBatchIds(user: TeamUser): Promise<string[]> {
+  if (user.role === 'client') return []
+  const me = assertUuid(user.id)
+  const [viaItems, owned] = await Promise.all([
+    supabase
+      .from('content_items')
+      .select('batch_id')
+      .not('batch_id', 'is', null)
+      .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
+      .limit(500),
+    supabase.from('batches').select('id').eq('owner_id', user.id).limit(500),
+  ])
+  return [...new Set([
+    ...(viaItems.data ?? []).map(r => r.batch_id as string),
+    ...(owned.data ?? []).map(r => r.id as string),
+  ].filter(Boolean))]
+}
+
+/** Items this user was TAGGED on — a comment assigned to them. Being asked a
+ *  question about a piece is an assignment: the email deep-links straight to
+ *  it, and a link to a 404 is worse than no link. */
+export async function taggedItemIds(user: TeamUser): Promise<string[]> {
+  if (user.role === 'client') return []
+  const { data } = await supabase
+    .from('item_comments')
+    .select('item_id')
+    .eq('assigned_to', user.id)
+    .limit(500)
+  return [...new Set((data ?? []).map(r => r.item_id as string).filter(Boolean))]
+}
+
+/**
+ * ASSIGNMENT IS THE GRANT, as one PostgREST filter.
+ *
+ * Everything that opens an item for someone who is not on its client team:
+ * owning it, holding its scheduling, being tagged on it, or holding the shoot
+ * it sits under. `loadItemForUser` grants exactly this set one row at a time;
+ * every LIST has to use the same set, or a page shows a person less than the
+ * item page will let them open — which is the bug James hit — and a shoot page
+ * lists items whose detail page 404s, which is the same bug facing the other
+ * way.
+ */
+export async function assignedItemsFilter(user: TeamUser): Promise<string> {
+  const me = assertUuid(user.id)
+  const parts = [`owner_id.eq.${me}`, `scheduler_ids.cs.["${me}"]`]
+  const [batches, tagged] = await Promise.all([heldBatchIds(user), taggedItemIds(user)])
+  if (batches.length) parts.push(`batch_id.in.(${batches.map(assertUuid).join(',')})`)
+  if (tagged.length) parts.push(`id.in.(${tagged.map(assertUuid).join(',')})`)
+  return parts.join(',')
+}
+
+/** The item ids assignment opens, for the surfaces that filter in memory
+ *  (the schedule calendar joins through schedule_entries, so it cannot
+ *  express the rule as a query filter). */
+export async function heldItemIds(user: TeamUser): Promise<string[]> {
+  if (user.role === 'client') return []
   const { data } = await supabase
     .from('content_items')
-    .select('batch_id')
-    .not('batch_id', 'is', null)
-    .or(`owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`)
-    .limit(500)
-  return [...new Set((data ?? []).map(r => r.batch_id as string).filter(Boolean))]
+    .select('id')
+    .or(await assignedItemsFilter(user))
+    .limit(1000)
+  return (data ?? []).map(r => r.id as string)
+}
+
+/**
+ * Client ids a team member may see the CONTEXT of: the clients they are on,
+ * plus the clients of everything assignment already opens for them.
+ *
+ * `accessibleClientIds` answers "whose work is mine to run"; this answers
+ * "whose name, brand and agreement may I be shown". Being handed one shoot
+ * brief has to bring the client's name and deliverable quotas with it — the
+ * shoot page prints both — without making that client's whole portfolio
+ * yours. null stays null: super admins and schedulers are not client-scoped.
+ */
+export async function visibleClientIds(user: TeamUser): Promise<string[] | null> {
+  const base = await accessibleClientIds(user)
+  if (base === null || user.role === 'client') return base
+  const held = await heldBatchIds(user)
+  const [{ data: itemRows }, { data: batchRows }] = await Promise.all([
+    supabase.from('content_items').select('client_id').or(await assignedItemsFilter(user)).limit(1000),
+    held.length
+      ? supabase.from('batches').select('client_id').in('id', held)
+      : Promise.resolve({ data: [] as { client_id: string }[] }),
+  ])
+  return [...new Set([
+    ...base,
+    ...(itemRows ?? []).map(r => r.client_id as string),
+    ...(batchRows ?? []).map(r => r.client_id as string),
+  ].filter(Boolean))]
 }
 
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
@@ -114,17 +199,35 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
   }
   const clientIds = await accessibleClientIds(user)
   if (clientIds !== null && !clientIds.includes(item.client_id)) {
-    // ASSIGNMENT grants visibility: the person holding the job sees the job,
-    // with or without a whole-client assignment. Being handed the scheduling
-    // counts — without this, handing an item to someone off that client
-    // emailed them a link to a 404.
-    const assigned = user.role !== 'client'
-      && (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id))
-    if (!assigned) {
+    if (user.role === 'client' || !(await assignmentOpensItem(user, item))) {
       throw new AuthzError('Item not found', 404) // don't reveal existence
     }
   }
   return item
+}
+
+/**
+ * The four ways an assignment opens ONE item for someone off its client team.
+ *
+ * Held directly (owner, or handed the scheduling); tagged in a comment; or
+ * sitting under a shoot this person holds — because the shoot page lists
+ * every item on the shoot, and a list whose rows 404 on click is the same
+ * broken promise as a page that hides work you were given. Runs only on the
+ * deny path, so the common case still costs nothing.
+ */
+async function assignmentOpensItem(
+  user: TeamUser,
+  item: { id: string; batch_id?: string | null; owner_id?: string | null; scheduler_ids?: unknown },
+): Promise<boolean> {
+  if (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id)) return true
+  const { data: tag } = await supabase
+    .from('item_comments')
+    .select('id').eq('item_id', item.id).eq('assigned_to', user.id).limit(1)
+  if ((tag?.length ?? 0) > 0) return true
+  if (!item.batch_id) return false
+  const { data: batch } = await supabase
+    .from('batches').select('id, client_id, owner_id').eq('id', item.batch_id).maybeSingle()
+  return batch ? await canOpenBatch(user, batch) : false
 }
 
 type VersionRow = {

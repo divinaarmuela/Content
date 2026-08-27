@@ -4,7 +4,9 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/a
 import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
 import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
-import { accessibleClientIds, assertUuid, canOpenBatch } from '../../../lib/production-access'
+import {
+  accessibleClientIds, assertUuid, assignedItemsFilter, canOpenBatch,
+} from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
@@ -38,12 +40,12 @@ export async function GET(req: Request) {
         if (clientIds.length === 0) return NextResponse.json([])
         q = q.in('client_id', clientIds)
       } else {
-        // ASSIGNMENT grants visibility: whoever holds the job — as its owner
-        // or as one of the people handed its scheduling — sees it, whether or
-        // not they're assigned the whole client. `cs` is jsonb containment;
-        // scheduler_ids is a jsonb array of user ids.
-        const me = assertUuid(user.id)
-        const assigned = `owner_id.eq.${me},scheduler_ids.cs.["${me}"]`
+        // ASSIGNMENT grants visibility: whoever holds the job — owner, handed
+        // the scheduling, tagged on it, or holding the shoot it sits under —
+        // sees it, whether or not they're assigned the whole client. One
+        // filter, shared with loadItemForUser, so the list and the detail page
+        // can never disagree about what this person may open.
+        const assigned = await assignedItemsFilter(user)
         q = clientIds.length === 0
           ? q.or(assigned)
           : q.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)

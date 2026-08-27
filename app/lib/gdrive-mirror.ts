@@ -3,8 +3,8 @@ import { after } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { inngest } from '../inngest/client'
 import {
-  FINAL_FOLDER, NO_SHOOT_FINAL_FOLDER, brandChain, dayStamp, fromClientChain,
-  intakeFileTarget, scheduledChain,
+  FINAL_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
+  brandChain, dayStamp, fromClientChain, intakeFileTarget, scheduledChain,
 } from './gdrive-core'
 import {
   driveConfigured, ensureChain, ensureChainWithLink, rootFolderId,
@@ -12,9 +12,11 @@ import {
 import { copyDriveFile, driveFileUrl, moveDriveFile, uploadStreamToFolder } from './gdrive-files'
 import { ensureItemFoldersNow, ensureShootFoldersNow, type BatchLike, type ItemLike } from './gdrive-hooks'
 import {
-  earliestScheduledMonth, fileNameFromUrl, isClientTarget, isMirrorableUrl,
-  missingItemMirrors, mirrorProgress, versionFileName,
-  type MirrorTarget, type MirrorProgress, type SweepItem, type SweepVersion,
+  RAW_ASSET_TARGET, earliestScheduledMonth, fileNameFromUrl, isClientTarget,
+  isMirrorableUrl, mirrorKey, mirrorProgress, misfiledRawMirrors,
+  missingItemMirrors, versionFileName,
+  type DriveFileRow, type MirrorTarget, type MirrorProgress, type SweepItem,
+  type SweepVersion,
 } from './gdrive-mirror-core'
 import { slideFileName, slidesOf, type Slide } from './version-files-core'
 
@@ -152,13 +154,25 @@ export function newRawAssets(before: RawAsset[] | null, after: RawAsset[] | null
   })
 }
 
-/** Job-pack assets → the item's own Drive folder, under their own names. */
+/**
+ * Job-pack assets → the SHOOT's `01 Raw`, under their own names.
+ *
+ * Not the item's own folder, which is where they used to go and which was
+ * wrong: `02 Edits/{Item}` holds what the editor MADE, and dropping the source
+ * footage in beside the cuts is the complaint that started this — "you added
+ * to the wrong files, that's not the edited one". Raw material belongs to the
+ * shoot, once, where every item cut from that shoot can find it.
+ *
+ * The name is kept exactly as it was uploaded, with no version prefix: two
+ * items on one shoot attaching the same clip is normal, and the
+ * `(source_url, target)` claim already means the second one copies nothing.
+ */
 export function mirrorRawAssets(itemId: string, assets: RawAsset[]): void {
   mirrorFiles(assets.map(a => ({
     item_id: itemId,
     source_url: a.url,
     name: String(a.name ?? '').trim() || fileNameFromUrl(a.url),
-    target: 'item' as const,
+    target: RAW_ASSET_TARGET,
   })))
 }
 
@@ -353,21 +367,29 @@ async function targetFolder(
     return id ? { id } : { skip: 'no item folder' }
   }
 
-  if (target === 'final') {
+  // `raw` and `final` are the same shape: a folder of the SHOOT's, reached
+  // through the shoot's id, with the item's own folder as the fallback for a
+  // deliverable that has no shoot behind it
+  if (target === 'raw' || target === 'final') {
+    const sub = target === 'raw' ? RAW_FOLDER : FINAL_FOLDER
     if (item.batch_id) {
       const { data: batch } = await supabase.from('batches')
         .select('id, client_id, title, shoot_date, created_at, drive_folder_id')
         .eq('id', item.batch_id).maybeSingle()
       const shootId = batch ? await ensureShootFoldersNow(batch as BatchLike) : null
       if (!shootId) return { skip: 'no shoot folder' }
-      const made = await ensureChain(shootId, [FINAL_FOLDER])
+      const made = await ensureChain(shootId, [sub])
       return made.ok ? { id: made.id } : { skip: made.message }
     }
-    // shoot-less: finals hang off the item's own folder, because with no
-    // shoot to group them the deliverable is the only grouping there is
+    // shoot-less: both hang off the item's own folder, because with no shoot
+    // to group them the deliverable is the only grouping there is — and
+    // `Raw`/`Final` rather than `01 Raw`/`03 Final`, since there are no
+    // stages here for the numbers to order
     const id = await itemFolderId(item)
     if (!id) return { skip: 'no item folder' }
-    const made = await ensureChain(id, [NO_SHOOT_FINAL_FOLDER])
+    const made = await ensureChain(
+      id, [target === 'raw' ? NO_SHOOT_RAW_FOLDER : NO_SHOOT_FINAL_FOLDER],
+    )
     return made.ok ? { id: made.id } : { skip: made.message }
   }
 
@@ -456,15 +478,19 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
     }
   }
 
-  // the same bytes already in Drive for this item are copied server-side
-  // rather than dragged across the internet a second time
-  const { data: source } = req.target === 'item' ? { data: null } : await supabase
+  // the same bytes already in Drive under ANY other target are copied
+  // server-side rather than dragged across the internet a second time. Any,
+  // not `item`: since raw split off, a job-pack asset's first copy lives under
+  // `raw`, and a lookup fixed on `item` would re-upload a 2 GB clip to file it
+  // in the finals.
+  const { data: sources } = await supabase
     .from('drive_files')
     .select('drive_file_id')
     .eq('source_url', req.source_url)
-    .eq('target', 'item')
+    .neq('target', req.target)
     .not('drive_file_id', 'is', null)
-    .maybeSingle()
+    .limit(1)
+  const source = sources?.[0] ?? null
 
   const result = source?.drive_file_id
     ? await copyDriveFile(source.drive_file_id, req.name, folder.id)
@@ -503,6 +529,10 @@ export const MIRROR_SWEEP_CAP = 100
 /** Items examined per run. */
 const SWEEP_ITEM_LIMIT = 500
 
+/** Misfiled raw files moved per run. Every one is a Drive PATCH, and the rest
+ *  are still misfiled on the next pass — which is the point of a cap. */
+export const RAW_MIGRATION_CAP = 50
+
 export type MirrorSweepResult = {
   /** items examined */
   items: number
@@ -510,6 +540,83 @@ export type MirrorSweepResult = {
   missing: number
   /** …of those, how many were actually queued */
   queued: number
+  /** raw files moved out of `02 Edits` into `01 Raw` */
+  moved: number
+}
+
+/**
+ * Move the raw footage that is already in the wrong folder.
+ *
+ * A one-off correction that rides the sweep instead of being a script anybody
+ * has to remember to run, and instead of an Inngest function of its own —
+ * which would do nothing at all until the app was re-synced (CLAUDE.md trap
+ * 5b). It moves the Drive file with `addParents`/`removeParents` rather than
+ * copying it: the bytes are already in Drive and already correct, and a copy
+ * would leave the wrong one behind for somebody to open by mistake.
+ *
+ * Idempotent twice over. `misfiledRawMirrors` only picks rows still marked
+ * `target: 'item'`, so a row already rewritten is never looked at again; and if
+ * the process dies between the move and the rewrite, the next run asks Drive to
+ * move a file that is already there, which answers `moved: false` and falls
+ * straight through to the rewrite that was missed.
+ *
+ * A file that cannot be moved — deleted in Drive, permission revoked — is
+ * logged and skipped, never retried into a loop and never allowed to take the
+ * rest of the sweep down with it.
+ */
+async function migrateMisfiledRaw(
+  items: SweepItem[], rows: DriveFileRow[],
+): Promise<number> {
+  const misfiled = misfiledRawMirrors(items, rows, RAW_MIGRATION_CAP)
+  if (misfiled.length === 0) return 0
+
+  // one full read per ITEM, not per file: three misfiled clips on one item is
+  // the normal shape of this, and each needs the same folder resolved
+  const loaded = new Map<string, ItemRow | null>()
+  const itemRow = async (id: string): Promise<ItemRow | null> => {
+    if (!loaded.has(id)) loaded.set(id, await loadItem(id))
+    return loaded.get(id) ?? null
+  }
+
+  let moved = 0
+  for (const row of misfiled) {
+    const item = await itemRow(row.item_id)
+    if (!item) continue
+    try {
+      const folder = await targetFolder(item, 'raw')
+      if ('skip' in folder) {
+        console.error(`[gdrive] raw migration: ${row.source_url} — ${folder.skip}`)
+        continue
+      }
+      const res = await moveDriveFile(row.drive_file_id, folder.id)
+      if (!res.ok) {
+        console.error(`[gdrive] raw migration: ${row.source_url} — ${res.message}`)
+        continue
+      }
+      // the row IS the claim, so it is rewritten rather than re-inserted: a
+      // second row would hold the same drive_file_id under two targets and the
+      // next sweep would try to mirror the file again
+      const { error } = await supabase.from('drive_files')
+        .update({ target: 'raw' })
+        .eq('id', row.id)
+        .eq('target', 'item')
+      if (error) {
+        console.error(`[gdrive] raw migration: ${row.source_url} — ${error.message}`)
+        continue
+      }
+      // and in the caller's copy of the row, so the sweep that follows counts
+      // this file where it now lives instead of asking for it all over again
+      const live = rows.find(r => String(r?.id ?? '') === row.id)
+      if (live) live.target = 'raw'
+      moved++
+    } catch (e) {
+      console.error(`[gdrive] raw migration: ${row.source_url} —`, e)
+    }
+  }
+  if (moved > 0) {
+    console.log(`[gdrive] raw migration: moved ${moved} file(s) from 02 Edits into 01 Raw`)
+  }
+  return moved
 }
 
 /**
@@ -533,7 +640,7 @@ export async function sweepMissingMirrors(opts?: {
   days?: number
   cap?: number
 }): Promise<MirrorSweepResult> {
-  const empty: MirrorSweepResult = { items: 0, missing: 0, queued: 0 }
+  const empty: MirrorSweepResult = { items: 0, missing: 0, queued: 0, moved: 0 }
   if (!driveConfigured()) return empty
 
   const one = (opts?.itemIds ?? []).filter(Boolean).slice(0, 50)
@@ -559,11 +666,12 @@ export async function sweepMissingMirrors(opts?: {
       .in('item_id', ids),
     // a claim with no drive_file_id is an upload that DIED, and asking for it
     // again is exactly what the claim was left behind for — so only completed
-    // rows count as "already there"
+    // rows count as "already there". Both item-scoped targets, because a file
+    // in `01 Raw` and a file in `02 Edits` are different questions now.
     supabase.from('drive_files')
-      .select('source_url')
+      .select('id, item_id, source_url, target, drive_file_id')
       .in('item_id', ids)
-      .eq('target', 'item')
+      .in('target', ['item', 'raw'])
       .not('drive_file_id', 'is', null),
   ])
 
@@ -579,10 +687,21 @@ export async function sweepMissingMirrors(opts?: {
     raw_assets: Array.isArray(r.raw_assets) ? r.raw_assets : [],
     versions: versionsByItem.get(String(r.id)) ?? [],
   }))
-  const mirrored = (mirroredRes.data ?? []).map(r => String(r.source_url))
+  const rows = (mirroredRes.data ?? []) as DriveFileRow[]
+
+  // FIRST, put right what is in the wrong folder — before working out what is
+  // missing. A raw file sitting in `02 Edits` is already a completed row, so
+  // the arithmetic below would call it done and leave it there forever; moving
+  // it makes it a `raw` row, and the same pass then sees `01 Raw` as satisfied
+  // rather than queueing a second copy of a file Drive already holds.
+  const moved = await migrateMisfiledRaw(items, rows)
+
+  // `rows` is re-targeted in place by the migration, so a file moved a moment
+  // ago is counted where it now is rather than being queued for `01 Raw` again
+  const mirrored = rows.map(r => mirrorKey(String(r.target), String(r.source_url)))
 
   const missing = missingItemMirrors(items, mirrored, opts?.cap ?? MIRROR_SWEEP_CAP)
-  if (missing.length === 0) return { items: ids.length, missing: 0, queued: 0 }
+  if (missing.length === 0) return { items: ids.length, missing: 0, queued: 0, moved }
 
   const queued = await requestMirror(missing)
   // one line per run, and only when it found something — a sweep that finds
@@ -590,7 +709,7 @@ export async function sweepMissingMirrors(opts?: {
   console.log(
     `[gdrive] mirror sweep: ${missing.length} file(s) missing across ${ids.length} item(s), queued ${queued}`,
   )
-  return { items: ids.length, missing: missing.length, queued }
+  return { items: ids.length, missing: missing.length, queued, moved }
 }
 
 // ── what the item page says ───────────────────────────────────────────────
@@ -605,27 +724,44 @@ export async function sweepMissingMirrors(opts?: {
  * whether the job is running, queued, or has quietly failed — including the
  * case where a new Inngest function has not been re-synced and the events are
  * being dropped on the floor.
+ *
+ * Counted by (target, url) pair, not by url, because the item's files are in
+ * two folders now: the job pack in the shoot's `01 Raw` and the cuts in the
+ * item's own. The line says so, and names the folder the raw ones went to —
+ * `01 Raw` for a shoot, `Raw` for a deliverable that has no shoot behind it.
  */
 export async function itemMirrorProgress(
   itemId: string, rawAssets: RawAsset[] | null,
 ): Promise<MirrorProgress> {
   if (!driveConfigured()) return mirrorProgress(0, 0)
-  const [versionsRes, mirroredRes] = await Promise.all([
+  const [versionsRes, mirroredRes, itemRes] = await Promise.all([
     supabase.from('asset_versions').select('file_url, files').eq('item_id', itemId),
     supabase.from('drive_files')
-      .select('source_url')
+      .select('source_url, target')
       .eq('item_id', itemId)
-      .eq('target', 'item')
+      .in('target', ['item', 'raw'])
       .not('drive_file_id', 'is', null),
+    supabase.from('content_items').select('batch_id').eq('id', itemId).maybeSingle(),
   ])
+  // keyed by target: the same clip can be both raw footage and a version, and
+  // one copy arriving says nothing about the other
   const wanted = new Set<string>()
-  for (const a of rawAssets ?? []) if (isMirrorableUrl(a?.url)) wanted.add(a.url)
+  for (const a of rawAssets ?? []) {
+    if (isMirrorableUrl(a?.url)) wanted.add(mirrorKey(RAW_ASSET_TARGET, a.url))
+  }
   // every SLIDE counts: a six-card carousel with one card copied is not
   // "mirrored", and the line on the item page must not say it is
   for (const v of versionsRes.data ?? []) {
-    for (const s of slidesOf(v)) if (isMirrorableUrl(s.url)) wanted.add(s.url)
+    for (const s of slidesOf(v)) {
+      if (isMirrorableUrl(s.url)) wanted.add(mirrorKey('item', s.url))
+    }
   }
-  const done = (mirroredRes.data ?? [])
-    .filter(r => wanted.has(r.source_url as string)).length
-  return mirrorProgress(wanted.size, done)
+  const have = (mirroredRes.data ?? [])
+    .map(r => mirrorKey(String(r.target), String(r.source_url)))
+    .filter(k => wanted.has(k))
+  const rawDone = have.filter(k => k.startsWith(`${RAW_ASSET_TARGET} `)).length
+  return mirrorProgress(
+    wanted.size, have.length, rawDone,
+    itemRes.data?.batch_id ? RAW_FOLDER : NO_SHOOT_RAW_FOLDER,
+  )
 }
