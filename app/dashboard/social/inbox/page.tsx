@@ -17,6 +17,19 @@ import {
 } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
 import ConfirmAction from '../../ConfirmAction'
+import EmptyState from '../../EmptyState'
+
+/**
+ * Master/detail on a phone.
+ *
+ * Below `lg` the two columns stack, so tapping a conversation used to load
+ * the thread somewhere below the fold with nothing to say so and nothing to
+ * come back with. Now the list and the thread take turns: the list until
+ * something is picked, then the thread with a back arrow. On a wide screen
+ * both classes are inert and the two sit side by side as before.
+ */
+const listPane = (picked: boolean) => (picked ? 'hidden lg:block' : '')
+const threadPane = (picked: boolean) => (picked ? '' : 'hidden lg:block')
 
 type PostRow = {
   id: string
@@ -186,7 +199,7 @@ export default function InboxPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not send')
-      toast.success('Sent')
+      toast.success(`Message sent to ${convName(activeConvo)}`)
       setMsgDraft('')
       void openConvo(activeConvo)
     } catch (e) {
@@ -284,12 +297,16 @@ export default function InboxPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'That action was refused')
 
+      // every toast names the thing and where it went — "Done" told nobody
+      // what had happened
+      const who = `@${author(comment)}`
       toast.success(
-        action === 'reply' ? 'Reply posted'
-          : action === 'private_reply' ? 'Message sent'
-          : action === 'hide' ? 'Comment hidden'
-          : action === 'delete' ? 'Comment deleted'
-          : 'Done'
+        action === 'reply' ? `Reply to ${who} posted under the comment`
+          : action === 'private_reply' ? `Private message sent to ${who}`
+          : action === 'hide' ? `${who}'s comment hidden — only they can still see it`
+          : action === 'unhide' ? `${who}'s comment is visible again`
+          : action === 'delete' ? `${who}'s comment deleted from the post`
+          : `${who}'s comment updated`
       )
       setDraft(''); setDmDraft(''); setDmLink(''); setReplyTo(null); setDmTo(null)
       if (action === 'delete') setComments(cs => (cs ?? []).filter(c => c.id !== comment.id))
@@ -368,16 +385,24 @@ export default function InboxPage() {
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
         {/* ── conversations ── */}
-        <Card className="h-fit">
+        <Card className={`h-fit ${listPane(activeConvo !== null)}`}>
           <CardContent className="p-2">
             {visibleConvos === null ? (
               <div className="flex flex-col gap-2 p-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
               </div>
             ) : visibleConvos.length === 0 ? (
-              <p className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
-                No conversations yet — Instagram and Telegram DMs land here once people message the connected accounts.
-              </p>
+              <EmptyState
+                icon={MessageSquare}
+                title={acct === 'all' ? 'No direct messages yet' : 'No direct messages for this account'}
+                body={acct === 'all'
+                  ? 'When someone messages a connected Instagram or Telegram account, the conversation lands here and you answer it from this page.'
+                  : 'Nobody has messaged this account yet. Switch to “All accounts” to see every conversation.'}
+                actionLabel={acct === 'all' ? 'See connected accounts' : 'Show all accounts'}
+                onAction={acct === 'all' ? undefined : () => changeAccount('all')}
+                actionHref={acct === 'all' ? '/dashboard/social' : undefined}
+                className="border-0"
+              />
             ) : (
               <ul className="flex flex-col">
                 {visibleConvos.map(c => (
@@ -406,20 +431,32 @@ export default function InboxPage() {
         </Card>
 
         {/* ── thread ── */}
-        <Card>
+        <Card className={threadPane(activeConvo !== null)}>
           <CardContent className="p-4">
             {!activeConvo ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
                 <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">Choose a conversation to read and reply.</p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {visibleConvos && visibleConvos.length > 0
+                    ? 'Choose a conversation on the left to read and reply.'
+                    : 'Conversations open here.'}
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                <p className="border-b border-zinc-200 pb-2 text-sm font-medium dark:border-zinc-800">{convName(activeConvo)}</p>
+                <div className="flex items-center gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
+                  <Button variant="ghost" size="sm" className="-ml-2 lg:hidden"
+                    onClick={() => { setActiveConvo(null); setMessages(null) }}>
+                    <ArrowLeft className="h-4 w-4" /> All conversations
+                  </Button>
+                  <p className="min-w-0 truncate text-sm font-medium">{convName(activeConvo)}</p>
+                </div>
                 {messages === null ? (
                   <div className="flex flex-col gap-2">{[0, 1].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
                 ) : messages.length === 0 ? (
-                  <p className="py-6 text-xs text-zinc-500 dark:text-zinc-400">No messages loaded for this conversation.</p>
+                  <p className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                    Nothing in this conversation yet — write the first message below.
+                  </p>
                 ) : (
                   <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto">
                     {messages.map(m => (
@@ -451,16 +488,24 @@ export default function InboxPage() {
       ) : (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
         {/* ── posts ─────────────────────────────────────────────────── */}
-        <Card className="h-fit">
+        <Card className={`h-fit ${listPane(active !== null)}`}>
           <CardContent className="p-2">
             {visiblePosts === null ? (
               <div className="flex flex-col gap-2 p-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
               </div>
             ) : visiblePosts.length === 0 ? (
-              <p className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
-                No posts with comments yet.
-              </p>
+              <EmptyState
+                icon={MessageSquare}
+                title={acct === 'all' ? 'No comments to answer yet' : 'No comments on this account yet'}
+                body={acct === 'all'
+                  ? 'Posts appear here as soon as someone comments on them. Until then there is nothing to reply to — check the schedule to see what is going out next.'
+                  : 'Nothing has been commented on for this account yet. Switch to “All accounts” to see every post.'}
+                actionLabel={acct === 'all' ? 'Open the posting calendar' : 'Show all accounts'}
+                onAction={acct === 'all' ? undefined : () => changeAccount('all')}
+                actionHref={acct === 'all' ? '/dashboard/scheduler/calendar' : undefined}
+                className="border-0"
+              />
             ) : (
               <ul className="flex flex-col">
                 {visiblePosts.map(p => (
@@ -500,18 +545,24 @@ export default function InboxPage() {
         </Card>
 
         {/* ── thread ────────────────────────────────────────────────── */}
-        <Card>
+        <Card className={threadPane(active !== null)}>
           <CardContent className="p-4">
             {!active ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
                 <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  Choose a post to read and reply to its comments.
+                  {visiblePosts && visiblePosts.length > 0
+                    ? 'Choose a post on the left to read and reply to its comments.'
+                    : 'Comments open here.'}
                 </p>
               </div>
             ) : (
               <>
                 <div className="mb-3 flex items-start gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                  <Button variant="ghost" size="sm" className="-ml-2 lg:hidden" aria-label="Back to all posts"
+                    onClick={() => { setActive(null); setComments(null) }}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{active.content || '(no caption)'}</p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -520,8 +571,8 @@ export default function InboxPage() {
                   </div>
                   {active.permalink && (
                     <a href={active.permalink} target="_blank" rel="noopener noreferrer"
-                       className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                      <ExternalLink className="h-3.5 w-3.5" />
+                       className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                      <ExternalLink className="h-3.5 w-3.5" /> Open post
                     </a>
                   )}
                 </div>
@@ -531,8 +582,8 @@ export default function InboxPage() {
                     {[0, 1].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                   </div>
                 ) : comments.length === 0 ? (
-                  <p className="py-6 text-xs text-zinc-500 dark:text-zinc-400">
-                    No comments on this post.
+                  <p className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                    No comments on this post yet — nothing to answer here. Pick another post.
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-3">
