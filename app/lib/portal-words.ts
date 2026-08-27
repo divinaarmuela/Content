@@ -61,6 +61,40 @@ export function scheduledWhen(
   return formatInZone(iso, tz, 'full')
 }
 
+/**
+ * The one extra line a piece earns when it was taken back off the client's
+ * desk.
+ *
+ * A piece sitting with the client for review can be pulled back the moment a
+ * new cut is saved on it — the review card vanishes and the piece reappears
+ * under "In production". Without a word about it, the client's experience is
+ * that something they were asked to approve silently disappeared. This says
+ * what happened, in the only terms that matter to them: it's coming back.
+ *
+ * The rest of the internal churn stays one calm state, as it always has. This
+ * fires for exactly one situation — the last thing that happened to this piece
+ * was that it left THEIR review.
+ */
+export const UPDATING_AFTER_REVIEW_LINE =
+  'We’re updating this — a new version is on its way'
+
+export type LastStatusChange = {
+  old_value?: string | null
+  new_value?: string | null
+} | null | undefined
+
+export function progressLine(
+  status: string | null | undefined, lastChange: LastStatusChange,
+): string | null {
+  if (status !== 'internal_review') return null
+  // read from the item's own history rather than from a flag column: the move
+  // is already recorded there, and a second source of truth for the same fact
+  // is a second thing to get out of step
+  if (String(lastChange?.old_value ?? '') !== 'client_review') return null
+  if (String(lastChange?.new_value ?? '') !== 'internal_review') return null
+  return UPDATING_AFTER_REVIEW_LINE
+}
+
 /** A shoot's stage, for a client who has never been on a film set. */
 export const SHOOT_STATUS_LABELS: Record<string, string> = {
   brief: 'Being planned',

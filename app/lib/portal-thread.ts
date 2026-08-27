@@ -6,7 +6,7 @@ import {
 } from './batch-brief-core'
 import { accountManagerName, type PortalItem, type PortalShoot } from './portal-data'
 import { isInternalKind } from './task-kind-core'
-import { planState, shootStatusLabel } from './portal-words'
+import { planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
 
 /**
@@ -81,7 +81,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
 
   const status = item.status as ItemStatus
   const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
-  const [versionRes, commentsRes, amName] = await Promise.all([
+  const [versionRes, commentsRes, amName, lastMoveRes] = await Promise.all([
     clientFacing
       ? supabase.from('asset_versions').select('file_url, files, drive_url')
           .eq('item_id', item.id).order('version_number', { ascending: false }).limit(1).maybeSingle()
@@ -93,6 +93,17 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       .order('created_at', { ascending: true })
       .limit(200),
     accountManagerName(client.id),
+    // the piece may have been pulled back out of the client's own review by a
+    // new cut landing on it. This page is where they arrive from the email
+    // they were sent about it, so it is the last place that may go quiet.
+    status === 'internal_review'
+      ? supabase.from('workflow_activity')
+          .select('old_value, new_value')
+          .eq('entity_type', 'content_item').eq('entity_id', item.id)
+          .eq('action', 'status_change')
+          .order('created_at', { ascending: false })
+          .limit(1).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
   const latest = versionRes.data as { file_url?: string; files?: unknown; drive_url?: string } | null
   // the conversation is about the whole post: a carousel's cards belong on the
@@ -114,6 +125,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       slide_count: slides.length,
+      progress_line: progressLine(status, lastMoveRes.data),
       schedule: [],
       // this page is the conversation about one piece, not its scoreboard —
       // the numbers live on the card in the Published section

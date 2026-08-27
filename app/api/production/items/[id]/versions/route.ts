@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { addVersion } from '../../../../../lib/workflow'
+import { addVersion, performTransition, type ContentItem } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
 import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
@@ -60,7 +60,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // EVERY slide goes into the item's Drive folder, numbered in posting
     // order; a version that is only a pasted link has no bytes of ours to copy
     mirrorVersionSlides(id, version.version_number as number, slides)
-    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'version' })
+
+    // ── a new cut while the piece is WITH THE CLIENT ──
+    //
+    // The portal shows the latest client-facing version, so v2 saved now would
+    // appear in front of the client with nobody having looked at it — and the
+    // review card would go on inviting a decision about a piece that has since
+    // changed. The item comes back for the manager's check instead. Only from
+    // client_review: at client_changes_requested a new version is precisely
+    // what was asked for, and it stays where it is.
+    //
+    // Never fatal. The version is saved and mirrored either way; a failure
+    // here (a race with the manager's own click, most likely) leaves the item
+    // where it was rather than losing the upload.
+    let status = item.status as string
+    if (item.status === 'client_review') {
+      try {
+        const moved = await performTransition(user, item as ContentItem, 'internal_review')
+        status = moved.status
+      } catch (e) {
+        console.error('new version while with the client — could not send it back:', e)
+      }
+    }
+    announceItemChange({ item_id: id, client_id: item.client_id, status, kind: 'version' })
     return NextResponse.json(version, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

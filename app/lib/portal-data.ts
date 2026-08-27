@@ -7,7 +7,10 @@ import {
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
 import { slidesOf } from './version-files-core'
-import { clientStatusWord, planState, shootStatusLabel, type PlanState } from './portal-words'
+import {
+  clientStatusWord, planState, progressLine, shootStatusLabel,
+  type LastStatusChange, type PlanState,
+} from './portal-words'
 import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
 import {
   monthTotals, typeTotals,
@@ -40,6 +43,10 @@ export type PortalItem = {
    *  carries none. */
   slides: { url: string; type: 'image' | 'video'; name: string }[]
   slide_count: number
+  /** one sentence about where this piece actually is, when the status word
+   *  alone would leave the client wondering — a piece pulled back out of their
+   *  review says so. Null on everything else, which is nearly everything. */
+  progress_line: string | null
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
   /** how the live post is doing, once the platform has counted it. Null on
    *  anything not published, and on a post whose numbers have not arrived. */
@@ -196,7 +203,15 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   }
 
   const ids = items.map(i => i.id)
-  const [versionsRes, scheduleRes, analyticsByItem] = await Promise.all([
+  // a piece can be pulled back out of the client's review by a new version
+  // landing on it (workflow-core's one `auto` edge). "In production" is the
+  // honest word for where it then is, but on its own it is also the word for a
+  // piece they have never seen — so the last thing that happened to it is read
+  // back out of the trail, for the handful of items sitting at internal_review.
+  const backIds = items
+    .filter(i => (i.status as ItemStatus) === 'internal_review')
+    .map(i => i.id)
+  const [versionsRes, scheduleRes, analyticsByItem, activityRes] = await Promise.all([
     ids.length
       ? supabase
           .from('asset_versions')
@@ -213,12 +228,31 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // the cached per-post numbers; the cron keeps them fresh, and the
     // background refresh below shortens the wait for a post that just landed
     analyticsForItems(ids),
+    backIds.length
+      ? supabase
+          .from('workflow_activity')
+          .select('entity_id, old_value, new_value, created_at')
+          .eq('entity_type', 'content_item')
+          .eq('action', 'status_change')
+          .in('entity_id', backIds)
+          .order('created_at', { ascending: false })
+          // newest first, so the first row seen for an item IS its last move;
+          // a bound this generous only ever drops rows that could not have won
+          .limit(500)
+      : Promise.resolve({ data: [] as { entity_id: string; old_value: string | null; new_value: string | null }[] }),
   ])
 
   // latest version per item (rows are ordered desc — first wins)
   const latestByItem = new Map<string, { file_url: string; files?: unknown; drive_url: string }>()
   for (const v of versionsRes.data ?? []) {
     if (!latestByItem.has(v.item_id)) latestByItem.set(v.item_id, v)
+  }
+  // the LAST status change per item — rows come back newest first, first wins
+  const lastChangeByItem = new Map<string, LastStatusChange>()
+  for (const a of activityRes.data ?? []) {
+    if (!lastChangeByItem.has(a.entity_id)) {
+      lastChangeByItem.set(a.entity_id, { old_value: a.old_value, new_value: a.new_value })
+    }
   }
   const scheduleByItem = new Map<string, PortalItem['schedule']>()
   for (const s of scheduleRes.data ?? []) {
@@ -249,6 +283,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       slide_count: slides.length,
+      progress_line: progressLine(status, lastChangeByItem.get(i.id) ?? null),
       schedule: scheduleByItem.get(i.id) ?? [],
       metrics: a
         ? {

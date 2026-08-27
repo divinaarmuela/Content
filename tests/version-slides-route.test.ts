@@ -18,6 +18,9 @@ const addVersion = vi.fn(async (_actor: unknown, _id: string, links: Record<stri
   id: 'v-1', version_number: 3, ...links,
 }))
 const mirrorVersionSlides = vi.fn()
+const performTransition = vi.fn(async (_actor: unknown, it: { status: string }, to: string) => ({
+  ...it, status: to,
+}))
 
 vi.mock('../app/lib/authz', () => ({
   requireSignedIn: async () => ({ id: 'user-1', role: 'editor', email: 'e@x.invalid' }),
@@ -26,8 +29,9 @@ vi.mock('../app/lib/authz', () => ({
   }),
 }))
 vi.mock('../app/lib/production-access', () => ({ loadItemForUser: async () => item }))
-vi.mock('../app/lib/workflow', () => ({ addVersion }))
-vi.mock('../app/lib/production-live', () => ({ announceItemChange: vi.fn() }))
+vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition }))
+const announceItemChange = vi.fn()
+vi.mock('../app/lib/production-live', () => ({ announceItemChange }))
 vi.mock('../app/lib/gdrive-mirror', () => ({ mirrorVersionSlides }))
 
 const { POST } = await import('../app/api/production/items/[id]/versions/route')
@@ -46,7 +50,10 @@ const u = (n: string) => `https://media.mdmmarketing.com.au/${n}`
 beforeEach(() => {
   addVersion.mockClear()
   mirrorVersionSlides.mockClear()
+  performTransition.mockClear()
+  announceItemChange.mockClear()
   item.content_type = 'carousel'
+  item.status = 'draft_uploaded'
 })
 
 describe('POST /api/production/items/:id/versions — slides', () => {
@@ -107,5 +114,41 @@ describe('POST /api/production/items/:id/versions — slides', () => {
   it('caps a carousel at ten slides', async () => {
     await post({ files: Array.from({ length: 14 }, (_, i) => ({ url: u(`s${i}.jpg`) })) })
     expect((addVersion.mock.calls[0][2] as { files: unknown[] }).files).toHaveLength(10)
+  })
+})
+
+describe('POST /api/production/items/:id/versions — saving one while the client is looking', () => {
+  it('sends the piece back for the manager’s check', async () => {
+    item.status = 'client_review'
+    const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    // the version is saved FIRST — the move is a consequence of it, and an
+    // upload must never be lost to a status change that failed
+    expect(addVersion).toHaveBeenCalledTimes(1)
+    expect(performTransition).toHaveBeenCalledTimes(1)
+    expect(performTransition.mock.calls[0][2]).toBe('internal_review')
+    // the live hint carries where the item actually IS now, not where it was
+    expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'internal_review' })
+  })
+
+  it('leaves a piece the client already sent back alone', async () => {
+    // a new version at client_changes_requested is exactly what was asked for
+    item.status = 'client_changes_requested'
+    await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(performTransition).not.toHaveBeenCalled()
+    expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'client_changes_requested' })
+  })
+
+  it('moves nothing on an ordinary draft', async () => {
+    await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(performTransition).not.toHaveBeenCalled()
+  })
+
+  it('keeps the version even when the move loses a race', async () => {
+    item.status = 'client_review'
+    performTransition.mockRejectedValueOnce(new Error('someone else moved it'))
+    const { status, json } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    expect(json.version_number).toBe(3)
   })
 })

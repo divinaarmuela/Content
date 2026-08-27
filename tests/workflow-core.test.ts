@@ -376,6 +376,63 @@ describe('presentTransitions — one obvious button, or none', () => {
   })
 })
 
+describe('a new version while the piece is with the client', () => {
+  const EDGE = "New version — back for the manager's check"
+
+  it('the piece can come back off the client’s desk, and only from there', () => {
+    expect(checkTransition('editor', 'client_review', 'internal_review').ok).toBe(true)
+    expect(checkTransition('account_manager', 'client_review', 'internal_review').ok).toBe(true)
+    expect(TRANSITIONS.client_review?.internal_review?.label).toBe(EDGE)
+    // nowhere else: a piece the client has already sent back for changes is
+    // EXPECTING a new version, and must not be dragged sideways
+    expect(checkTransition('editor', 'client_changes_requested', 'internal_review').ok).toBe(false)
+    expect(checkTransition('editor', 'revision_required', 'internal_review').ok).toBe(false)
+    expect(checkTransition('editor', 'approved_for_scheduling', 'internal_review').ok).toBe(false)
+  })
+
+  it('the client cannot perform it, and neither can a scheduler', () => {
+    expect(checkTransition('client', 'client_review', 'internal_review').ok).toBe(false)
+    expect(checkTransition('scheduler', 'client_review', 'internal_review').ok).toBe(false)
+  })
+
+  it('it is never a button — not on any surface, not for anyone', () => {
+    const roles: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client']
+    for (const role of roles) {
+      expect(availableTransitions(role, 'client_review').map(t => t.to))
+        .not.toContain('internal_review')
+      expect(availableBriefTaskTransitionsAs([role], 'client_review').map(t => t.to))
+        .not.toContain('internal_review')
+    }
+    // the manager's two client-review choices are unchanged by its existence
+    expect(availableTransitionsAs(['account_manager'], 'client_review').map(t => t.label).sort())
+      .toEqual(["Log the client's approval", "Log the client's changes"])
+  })
+
+  it('the manager hears about it; the client is never told', () => {
+    const audiences = TRANSITION_NOTIFICATIONS['client_review>internal_review']
+    expect(audiences).toEqual(['account_managers'])
+    expect(audiences).not.toContain('client_users')
+  })
+
+  it('at that moment the client is urged to do nothing, and offered nothing', () => {
+    // the piece has left their review: the primary they had is gone with it
+    const roles = actingRoles(me('client'), { owner_id: THEM })
+    const outs = availableTransitionsAs(roles, 'internal_review')
+    expect(outs).toEqual([])
+    const p = presentTransitions(roles, 'internal_review', outs, { clientApprovalRequired: true })
+    expect(p).toEqual({ primary: null, secondary: [] })
+    // …where a moment earlier it was theirs to make
+    expect(presentTransitions(
+      roles, 'client_review', availableTransitionsAs(roles, 'client_review'),
+      { clientApprovalRequired: true },
+    ).primary?.label).toBe('Approve')
+  })
+
+  it('the client still reads one calm word for it', () => {
+    expect(CLIENT_LABELS.internal_review).toBe('In production')
+  })
+})
+
 describe('whoseTurn', () => {
   it('names the hat, whether it is mine, and whether the seat is empty', () => {
     expect(whoseTurn('internal_review', { owner_id: THEM }, me('account_manager')))

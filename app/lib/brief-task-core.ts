@@ -9,7 +9,10 @@
  */
 
 import type { Role } from './identity-core'
-import { checkTransitionAs, STATUS_TURN, TRANSITIONS, type ItemStatus, type TransitionCheck } from './workflow-core'
+import {
+  checkTransitionAs, offeredTransitionsFrom, STATUS_TURN, TRANSITIONS,
+  type ItemStatus, type TransitionCheck,
+} from './workflow-core'
 
 export const SHOOT_BRIEF_SLUG = 'shoot_brief'
 
@@ -126,8 +129,7 @@ export function checkBriefTaskTransition(role: Role, from: ItemStatus, to: ItemS
 export function availableBriefTaskTransitionsAs(
   roles: readonly Role[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
-  const outs = TRANSITIONS[from] ?? {}
-  return (Object.keys(outs) as ItemStatus[])
+  return offeredTransitionsFrom(from)
     .map(to => {
       const c = checkBriefTaskTransitionAs(roles, from, to)
       return c.ok ? { to, label: c.rule.label } : null

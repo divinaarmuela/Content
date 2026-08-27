@@ -396,6 +396,12 @@ export function PortalItemCard({ item, token, tz }: {
           <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-50">{item.status_label}</span>
         </div>
         {isPublished && <PostMetricsRow item={item} />}
+        {/* the piece was pulled back out of their review by a new cut — the
+            card that was asking them to approve it is gone, and saying nothing
+            about that reads as work disappearing */}
+        {item.progress_line && (
+          <p className="text-xs opacity-60">{item.progress_line}</p>
+        )}
         {(item.schedule.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (

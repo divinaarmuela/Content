@@ -26,6 +26,16 @@ type TransitionRule = {
    *  manager clicking "Approve" on the client's behalf is LOGGING the client's
    *  approval, not giving one */
   labelFor?: Partial<Record<Role, string>>
+  /**
+   * A move the APP makes, never a button.
+   *
+   * The machine may perform it and the History records it under this label,
+   * but no surface ever OFFERS it: it exists because something else happened
+   * (a version was saved), not because anyone decided to move the item. Listing
+   * it beside real decisions would invite a click for a reason only the app
+   * knows about, so `availableTransitions*` filter it out everywhere.
+   */
+  auto?: true
 }
 
 /** The funnel. Key: from-status → to-status → rule. Anything absent is illegal. */
@@ -49,6 +59,23 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     approved_for_scheduling: { roles: ['account_manager'], label: 'Approve without client' },
   },
   client_review: {
+    // A NEW VERSION LANDED WHILE THE CLIENT WAS LOOKING AT THE OLD ONE.
+    //
+    // The portal shows the latest client-facing version, so saving v2 on an
+    // item that is with the client puts v2 in front of them with nobody
+    // having checked it. The item comes back for the manager's check instead,
+    // and their review card disappears until it is sent again.
+    //
+    // `auto`: nobody presses this. The versions endpoint performs it as the
+    // version's author — who wears the editor hat on the item they just
+    // uploaded to — and an account manager saving a fix does the same.
+    // client_changes_requested is deliberately NOT given the same edge: a new
+    // version there is exactly what the client asked for.
+    internal_review: {
+      roles: ['editor', 'account_manager'],
+      label: "New version — back for the manager's check",
+      auto: true,
+    },
     client_changes_requested: {
       roles: ['client', 'account_manager'], label: 'Ask for changes',
       labelFor: { account_manager: "Log the client's changes" },
@@ -214,8 +241,21 @@ export function availableTransitionsAs(
 ): { to: ItemStatus; label: string; requires?: TransitionRequirement }[] {
   const outs = TRANSITIONS[from] ?? {}
   return (Object.entries(outs) as [ItemStatus, TransitionRule][])
+    // an `auto` edge is the app's move, not an offer — never a button, not
+    // even for a super admin
+    .filter(([, rule]) => !rule.auto)
     .filter(([, rule]) => roles.includes('super_admin') || rule.roles.some(r => roles.includes(r)))
     .map(([to, rule]) => ({ to, label: labelFor(rule, roles), requires: rule.requires }))
+}
+
+/** The to-statuses a surface may OFFER from here: every edge except the app's
+ *  own automatic ones. The task and brief vocabularies walk the funnel
+ *  themselves, and must not offer what the asset funnel does not. */
+export function offeredTransitionsFrom(from: ItemStatus): ItemStatus[] {
+  const outs = TRANSITIONS[from] ?? {}
+  return (Object.entries(outs) as [ItemStatus, TransitionRule][])
+    .filter(([, rule]) => !rule.auto)
+    .map(([to]) => to)
 }
 
 /** Single-hat wrappers — the shape the rest of the app already speaks. */
@@ -349,6 +389,11 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
+  // a new cut pulled the piece back off the client's desk: the manager has to
+  // know there is something to check, and the CLIENT must not be told that the
+  // thing they were reviewing has been taken away and re-made. They see it in
+  // the portal as "In production", which is all it is.
+  'client_review>internal_review': ['account_managers'],
   'client_changes_requested>revision_required': ['owner_editor'],
   'client_changes_requested>client_review': ['client_users', 'account_managers', 'owner_editor'],
   // approving prefers the people the approver picked, then the item's own

@@ -10,7 +10,7 @@
 
 import type { Role } from './identity-core'
 import {
-  checkTransitionAs, STATUS_MEANING, STATUS_TURN, TRANSITIONS,
+  checkTransitionAs, offeredTransitionsFrom, STATUS_MEANING, STATUS_TURN, TRANSITIONS,
   type ItemStatus, type TransitionCheck,
 } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
@@ -98,8 +98,7 @@ export function checkTaskTransitionAs(roles: readonly Role[], from: ItemStatus, 
 export function availableTaskTransitionsAs(
   roles: readonly Role[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
-  const outs = TRANSITIONS[from] ?? {}
-  return (Object.keys(outs) as ItemStatus[])
+  return offeredTransitionsFrom(from)
     .map(to => {
       const c = checkTaskTransitionAs(roles, from, to)
       return c.ok ? { to, label: c.rule.label } : null
