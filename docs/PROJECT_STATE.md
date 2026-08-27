@@ -1,5 +1,67 @@
 # Project state — as at 19 August 2026
 
+## Google Drive is now a mirror, not an index — 27 Aug
+
+The folder tree below created folders and links. This fills them: **every file
+that lands in our storage is copied into Drive**, so someone with nothing but
+Drive has the whole archive. Run `supabase/gdrive_mirror.sql`.
+
+**What goes where**
+
+| The file | Lands in |
+|---|---|
+| A job-pack asset dropped on an item | `{Client}/…/{Item}/` — the item's own folder |
+| A new version uploaded by the editor | the same folder, named `v3 - {their file name}` |
+| The latest version, on **Approved for scheduling** | the shoot's `03 Final/` — or `{Item}/Final/` for a shoot-less item |
+| The latest version, on **Scheduled** (and whenever a date is set or changed) | `{Client}/_Scheduled/{YYYY-MM}` — the month it **first** goes out |
+| Files a client uploads through an intake form | `{Client}/_From client/{YYYY-MM-DD}` |
+| Brand material — logos, fonts, a style guide — from intake **or** the brand-guidelines upload | `{Client}/_Brand/` |
+
+- **Never mirrored: a pasted link.** A version whose only content is a Drive,
+  YouTube or Vimeo URL has no file of ours behind it. Downloading one would
+  store an HTML page under a video's name, so nothing is queued and nothing
+  claims to have happened.
+- **A month that changes MOVES the file.** Pushing a post from August to
+  September re-parents it (`files.update` with add/removeParents) rather than
+  copying it, so `_Scheduled/2026-08` stops claiming a post that is not
+  happening then.
+- **Nothing is ever uploaded twice.** `drive_files` has
+  `unique (source_url, target)` and the row is claimed **before** the bytes
+  move, so a retry either finds the job done or finds its own unfinished claim.
+  Drive has no unique-name constraint, so without this a retried 2 GB transfer
+  would leave two indistinguishable files.
+- **Copy, not re-upload.** The approved cut is already in Drive from the item
+  folder, so `03 Final` and `_Scheduled` are made with `files.copy` — one
+  request that never leaves Google.
+- **Resumable upload, always** — streamed from R2 in 8 MB chunks, so a 2 GB
+  master never exists in memory. Drive's ceiling is 5 TB.
+- **The item page** says `Mirrored to Drive · 7 files` or
+  `Copying to Drive… 5 of 7` under the folder link, counted from `drive_files`.
+  Clients never see it — the job pack is internal.
+- **Drive not connected is a silent no-op**, logged once per process.
+
+**Personal-email team members.** The domain share covers the agency's Workspace
+and nobody else, so every active team member the domain grant does **not** cover
+(the freelance editor on Gmail) gets a `writer` permission of their own on the
+**root** folder and inherits down. Reconciled by `syncDriveMembers()` — given
+nothing, computes everything, idempotent — on Drive connect, on every team
+invite / role change / deactivation / removal, and from **Settings →
+Integrations → Google Drive → Re-share with team** (super admin). Clients never
+get a permission at any level, and a `.invalid` address is never shared with.
+
+> **After deploying: re-sync Inngest.** `drive/mirror.file` is a NEW function,
+> and Inngest Cloud only knows what it discovered at the last sync — until then
+> `inngest.send()` succeeds and the event is dropped, with no run and no error
+> (CLAUDE.md trap 5b). Every item page will read "Copying to Drive…" forever.
+> ```bash
+> curl -X PUT https://app.mdmmarketing.com.au/api/inngest   # {"modified":true}
+> ```
+
+**Not built, because there is nothing to build against:** the no-login portal
+(`/portal/[token]`) has no upload of any kind — clients approve, request changes
+and comment there, and that is all. The only route by which a client sends us a
+file is the intake form, which is covered above.
+
 ## Google Drive — 27 Aug
 
 Replaces the Dropbox integration built earlier the same day: same behaviour,
