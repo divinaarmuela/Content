@@ -9,8 +9,9 @@ import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { SectionHeading } from './PortalSections'
 import type { PortalShoot } from '../../lib/portal-data'
 import {
-  approvePlanConsequence, changesSentToast, contentTypeLabel, contentTypePlural,
-  PLAN_APPROVED_TOAST, PLAN_STATE_LINE, type PlanState,
+  APPROVE_PLAN_WITH_NOTE, approvePlanConsequence, changesSentToast, contentTypeLabel,
+  contentTypePlural, PLAN_APPROVED_TOAST, PLAN_NOTE_PLACEHOLDER, planStateLine,
+  type PlanState,
 } from '../../lib/portal-words'
 
 const dateLabel = (d: string | null) =>
@@ -84,44 +85,84 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
    *  read-only viewer is shown nothing rather than an invitation they cannot
    *  accept */
   const showState = state !== null && (state !== 'awaiting_you' || canAct)
-  const [mode, setMode] = useState<null | 'changes'>(null)
+  // null = the two buttons · 'changes' = the change request · 'approve' =
+  // approve-with-a-note, the same yes with something to say alongside it
+  const [mode, setMode] = useState<null | 'changes' | 'approve'>(null)
   const [note, setNote] = useState('')
+  /** they approved AND sent a note — the card owes them a word about both */
+  const [noted, setNoted] = useState(false)
   const [name, setName] = useState(() =>
     typeof window === 'undefined' ? '' : localStorage.getItem('mdm-portal-name') ?? '')
   const [busy, setBusy] = useState<string | null>(null)
 
-  const act = async (action: 'approve' | 'request_changes') => {
+  /** `withNote` is an approval that carries something the client typed: the
+   *  note is theirs to keep in the thread, and the approval itself is the
+   *  same approval the plain button performs. */
+  const act = async (action: 'approve' | 'request_changes', withNote = false) => {
     if ((!token && !loggedIn) || !decide) return
+    const text = note.trim()
     if (action === 'request_changes') {
-      if (!note.trim()) return toast.error('Write what should change first')
+      if (!text) return toast.error('Write what should change first')
       if (token && !name.trim()) return toast.error('Add your name so the team knows who asked')
+    }
+    if (withNote) {
+      if (!text) return toast.error('Write your note first, or approve without one')
+      if (token && !name.trim()) return toast.error('Add your name so the team knows who the note is from')
     }
     if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
     setBusy(action)
     try {
       if (token) {
+        if (withNote) {
+          // the note lands in the shoot's own thread — the same client-visible
+          // thread the team reads, through the route the portal already uses
+          // for it. It goes FIRST so that if the approval below then loses a
+          // race, what stands is a comment the client genuinely wrote, never a
+          // decision that never happened.
+          const c = await fetch('/api/portal/comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token, kind: 'shoot', id: shoot.id, body: text, author_name: name.trim(),
+            }),
+          })
+          if (!c.ok) throw new Error((await c.json()).error ?? 'Could not send your note')
+        }
         const res = await fetch('/api/portal/act', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, item_id: decide.item_id, action, comment: note, author_name: name.trim() }),
+          body: JSON.stringify({
+            token, item_id: decide.item_id, action, author_name: name.trim(),
+            // a change request's note IS the request, so it rides along and is
+            // filed on the plan. An approval's note is already in the shoot
+            // thread — it travels as `note` purely so the manager's approval
+            // email carries it, and is not filed twice.
+            comment: withNote ? '' : note,
+            note: withNote ? text : '',
+          }),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
       } else {
-        // signed-in client: the same two moves through the item API — the
-        // note goes first so the manager has the context with the status
-        if (note.trim()) {
+        // signed-in client: the same moves through the item API. There is no
+        // shoot page in this portal, so the plan's own thread is where the
+        // note belongs — the transition route files it client-visible and puts
+        // it in the manager's email, which is one call instead of two.
+        if (!withNote && text) {
           const c = await fetch(`/api/production/items/${decide.item_id}/comments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ body: note.trim() }),
+            body: JSON.stringify({ body: text }),
           })
           if (!c.ok) throw new Error((await c.json()).error ?? 'Could not send your note')
         }
         const t = await fetch(`/api/production/items/${decide.item_id}/transition`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested' }),
+          body: JSON.stringify({
+            to: action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested',
+            ...(withNote ? { note: text } : {}),
+          }),
         })
         if (!t.ok) throw new Error((await t.json()).error ?? 'Something went wrong')
       }
@@ -129,6 +170,7 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
       // the card answers immediately, and keeps answering after the reload:
       // the server's own plan_state says the same thing from then on
       setActed(action === 'approve' ? 'approved' : 'changes_sent')
+      setNoted(action === 'approve' && withNote)
       setNote('')
       setMode(null)
       router.refresh()
@@ -231,11 +273,11 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
           question a portal has to be able to answer. */}
       {showState && state !== null && (
         <div className="flex flex-col gap-3 border-t pt-4" style={{ borderColor: 'var(--p-border)' }}>
-          <p className="text-sm font-medium">{PLAN_STATE_LINE[state]}</p>
+          <p className="text-sm font-medium">{planStateLine(state, noted)}</p>
           {state === 'awaiting_you' && mode === null && (
             <p className="text-xs opacity-60">{approvePlanConsequence}</p>
           )}
-          {canAct && mode === 'changes' && (
+          {canAct && mode !== null && (
             <div className="flex flex-col gap-2">
               {token && <input
                 value={name}
@@ -249,7 +291,9 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
                 value={note}
                 autoFocus
                 onChange={e => setNote(e.target.value)}
-                placeholder="What should change? e.g. “Can we shoot the garden set in the morning instead?”"
+                placeholder={mode === 'changes'
+                  ? 'What should change? e.g. “Can we shoot the garden set in the morning instead?”'
+                  : PLAN_NOTE_PLACEHOLDER}
                 className="w-full rounded-lg p-3 text-sm outline-none"
                 style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
               />
@@ -269,13 +313,22 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
                   style={{ borderColor: 'var(--p-border)' }}>
                   Request changes
                 </button>
+                {/* the quiet third move: a yes that still has something to say.
+                    Full-height so it is as tappable as the other two. */}
+                <button type="button" disabled={busy !== null} onClick={() => setMode('approve')}
+                  className="portal-tap min-h-11 rounded-lg px-3 py-2.5 text-sm underline-offset-2 opacity-70 transition-opacity hover:underline hover:opacity-100 disabled:opacity-50">
+                  {APPROVE_PLAN_WITH_NOTE}
+                </button>
               </>
             ) : (
               <>
-                <button type="button" disabled={busy !== null} onClick={() => act('request_changes')}
-                  className="portal-tap rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                <button type="button" disabled={busy !== null}
+                  onClick={() => mode === 'changes' ? act('request_changes') : act('approve', true)}
+                  className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}>
-                  {busy === 'request_changes' ? 'Sending…' : 'Send'}
+                  {mode === 'changes'
+                    ? (busy === 'request_changes' ? 'Sending…' : 'Send')
+                    : <><Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve the plan'}</>}
                 </button>
                 <button type="button" disabled={busy !== null} onClick={() => { setMode(null); setNote('') }}
                   className="portal-tap rounded-lg border px-4 py-2.5 text-sm" style={{ borderColor: 'var(--p-border)' }}>

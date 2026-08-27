@@ -89,6 +89,11 @@ export async function POST(req: Request) {
 
     const action = String(body.action ?? '')
     const comment = String(body.comment ?? '').trim().slice(0, 4000)
+    // A note the client already filed somewhere else — the shoot's own thread,
+    // for an approved plan. It is NOT written to the item's thread a second
+    // time; it travels only so the manager's approval email carries the words
+    // that came with the yes.
+    const note = String(body.note ?? '').trim().slice(0, 2000)
     const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
     const speaker = authorName ? `${authorName} · ${client.name}` : client.name
     const actor = await portalActor(client.id, client.name)
@@ -106,7 +111,9 @@ export async function POST(req: Request) {
     let transitioned: { status?: string } | null = null
     if (action === 'approve' || action === 'request_changes') {
       const to = action === 'approve' ? 'approved_for_scheduling' : 'client_changes_requested'
-      transitioned = await performTransition(actor, item as ContentItem, to)
+      transitioned = await performTransition(actor, item as ContentItem, to, {
+        note: note || undefined,
+      })
     }
 
     // any note the client wrote lands in the thread, client-visible

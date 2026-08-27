@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PLAN_STATE_LINE, clientStatusWord, planState, scheduledWhen,
+  APPROVE_PLAN_WITH_NOTE, PLAN_APPROVED_WITH_NOTE_LINE, PLAN_NOTE_PLACEHOLDER,
+  PLAN_STATE_LINE, clientStatusWord, planState, planStateLine, scheduledWhen,
 } from '../app/lib/portal-words'
 
 describe('clientStatusWord — a booked post says so', () => {
@@ -88,5 +89,39 @@ describe('planState — the client’s own decision, said back to them', () => {
     }
     expect(PLAN_STATE_LINE.changes_sent).toContain('updated plan')
     expect(PLAN_STATE_LINE.approved).toContain('confirm the date')
+  })
+})
+
+describe('planStateLine — a plan approved WITH something to say', () => {
+  it('says both things happened: the approval and the note', () => {
+    expect(planStateLine('approved', true)).toBe(PLAN_APPROVED_WITH_NOTE_LINE)
+    expect(PLAN_APPROVED_WITH_NOTE_LINE).toContain('Approved')
+    expect(PLAN_APPROVED_WITH_NOTE_LINE).toContain('your note')
+  })
+
+  it('is the ordinary line when the approval carried nothing', () => {
+    expect(planStateLine('approved')).toBe(PLAN_STATE_LINE.approved)
+    expect(planStateLine('approved', false)).toBe(PLAN_STATE_LINE.approved)
+  })
+
+  it('never overrides a bigger fact about their diary', () => {
+    // the date being confirmed outranks a note they wrote on the way past
+    expect(planStateLine('date_confirmed', true)).toBe(PLAN_STATE_LINE.date_confirmed)
+    expect(planStateLine('awaiting_you', true)).toBe(PLAN_STATE_LINE.awaiting_you)
+    expect(planStateLine('changes_sent', true)).toBe(PLAN_STATE_LINE.changes_sent)
+  })
+
+  it('asks about the day, not about a file — a shoot is a diary entry', () => {
+    expect(PLAN_NOTE_PLACEHOLDER).toMatch(/before the day/i)
+    expect(APPROVE_PLAN_WITH_NOTE).toBe('Approve with a note')
+  })
+
+  it('every word on the plan card is a client word', () => {
+    const all = [
+      PLAN_APPROVED_WITH_NOTE_LINE, PLAN_NOTE_PLACEHOLDER, APPROVE_PLAN_WITH_NOTE,
+      ...Object.values(PLAN_STATE_LINE),
+    ].join(' ')
+    // no database status, no internal vocabulary
+    expect(all).not.toMatch(/_|brief|batch|client_review|approved_for_scheduling/i)
   })
 })

@@ -55,10 +55,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // managers and NEVER the editor directly (workflow-core), and a tagged
       // comment emails whoever it names. Leave it untagged so the rule holds.
       const clientChanges = item.status === 'client_review' && to === 'client_changes_requested'
+      // A client's note is a note to US, and visibility follows the author's
+      // role exactly as it does on the comments route: they must be able to see
+      // what they sent. A client also never assigns — a note filed against the
+      // editor would email them directly, past the gatekeeper.
+      const fromClient = user.role === 'client'
       await supabase.from('item_comments')
         .insert({
-          item_id: id, author_id: user.id, visibility: 'internal', body: note,
-          assigned_to: clientChanges ? null : item.owner_id ?? null,
+          item_id: id, author_id: user.id,
+          visibility: fromClient ? 'client' : 'internal', body: note,
+          assigned_to: fromClient || clientChanges ? null : item.owner_id ?? null,
         })
         .then(() => {}, () => {})
     }
