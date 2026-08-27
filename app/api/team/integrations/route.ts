@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
+import { dropboxStatus } from '@/app/lib/dropbox'
 
 /**
  * What is actually connected.
@@ -17,7 +18,11 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    await requireRole('account_manager')
+    const viewer = await requireRole('account_manager')
+    // ONE Dropbox connection serves the whole agency, so connecting and
+    // disconnecting are super-admin acts. Hiding the button is presentation;
+    // the routes enforce the same rule themselves.
+    const canConnect = viewer.role === 'super_admin'
 
     // counted rather than assumed; a missing table means zero, not a crash
     const count = async (table: string, filter?: (q: never) => unknown) => {
@@ -42,7 +47,28 @@ export async function GET() {
       count('asana_webhooks'),
     ])
 
+    const dropbox = await dropboxStatus()
+
     const integrations = [
+      {
+        key: 'dropbox',
+        name: 'Dropbox',
+        detail: 'The folder tree behind every shoot — raw, edits and finals.',
+        connected: dropbox.connected,
+        configured: dropbox.configured,
+        status: !dropbox.configured
+          ? 'Not configured — no app key or secret set'
+          : !dropbox.connected
+            ? 'Configured, but no account connected yet'
+            : `Connected as ${dropbox.account_email ?? 'an account'} · files under ${dropbox.root_path}`,
+        href: null,
+        // full navigation, not fetch: /api/dropbox/connect answers with a
+        // redirect to Dropbox's own consent screen
+        connect_href: dropbox.configured && !dropbox.connected && canConnect
+          ? '/api/dropbox/connect' : null,
+        disconnect_href: dropbox.connected && canConnect
+          ? '/api/dropbox/disconnect' : null,
+      },
       {
         key: 'zernio',
         name: 'Social publishing',

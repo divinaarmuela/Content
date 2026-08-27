@@ -42,6 +42,9 @@ type Batch = {
   share_board?: boolean | null
   board_name?: string | null
   month: number | null; year: number | null
+  /** the shoot's folder in Dropbox, minted when the shoot was created */
+  dropbox_path?: string | null
+  dropbox_url?: string | null
   clients: { name: string } | null
 }
 type ItemLite = { id: string; title: string; status: string; work_kinds?: { slug?: string } | null }
@@ -322,12 +325,22 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </Button>
         </div>
       )}
-      {briefTask && (
-        <Link href={`/dashboard/production/${briefTask.id}`}
-          className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
-          Open the brief task →
-        </Link>
-      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {briefTask && (
+          <Link href={`/dashboard/production/${briefTask.id}`}
+            className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
+            Open the brief task →
+          </Link>
+        )}
+        {/* only when the folder actually exists — an integration that is off
+            should leave no trace on this page at all */}
+        {batch.dropbox_url && (
+          <a href={batch.dropbox_url} target="_blank" rel="noreferrer noopener"
+            className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
+            Open Dropbox folder →
+          </a>
+        )}
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── working column ── */}

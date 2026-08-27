@@ -87,6 +87,8 @@ type Detail = {
   /** the client's portal accounts, so a send-to-client can name who it emails */
   client_users?: { name: string; email: string }[]
   raw_assets_url?: string | null; brief?: string | null
+  /** this deliverable's own folder — internal, so it never reaches a client */
+  dropbox_url?: string | null; dropbox_path?: string | null
   raw_assets?: { url: string; name: string }[] | null
   versions: Version[]; comments: Comment[]; schedule: ScheduleEntry[]
   /** the named audit trail — internal only, never in the client payload */
@@ -391,7 +393,7 @@ export default function ItemDetailPage() {
     }
     sync(briefUrlRef.current, detail.brief_url ?? '')
     sync(briefNoteRef.current, detail.brief ?? '')
-    sync(rawAssetsRef.current, detail.raw_assets_url ?? '')
+    sync(rawAssetsRef.current, detail.raw_assets_url ?? detail.dropbox_url ?? '')
     sync(jobBriefRef.current, detail.brief ?? '')
     sync(captionRef.current, detail.caption ?? '')
   }, [detail])
@@ -1237,17 +1239,29 @@ export default function ItemDetailPage() {
 
       {/* 6 — what the editor works from. ASSETS only: a strategy doc has no
           raw footage, so a research task gets the ask and its files instead. */}
-      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || (detail.raw_assets?.length ?? 0) > 0) && (
+      {isTeam && isAsset && (canManage || detail.brief || detail.raw_assets_url || detail.dropbox_url || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
             <CardTitle className="text-sm font-semibold">What the editor works from</CardTitle>
-            {detail.raw_assets_url && (
-              <Button variant="outline" size="sm" className="ml-auto" asChild>
-                <a href={detail.raw_assets_url} target="_blank" rel="noreferrer noopener">
-                  <Upload className="h-3.5 w-3.5 rotate-180" /> Open the folder
-                </a>
-              </Button>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {/* the folder we made, alongside whatever link is on the record —
+                  they are usually the same, and when they are not, the pasted
+                  one is a deliberate override worth being able to see past */}
+              {detail.dropbox_url && detail.dropbox_url !== detail.raw_assets_url && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={detail.dropbox_url} target="_blank" rel="noreferrer noopener">
+                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open Dropbox folder
+                  </a>
+                </Button>
+              )}
+              {detail.raw_assets_url && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={detail.raw_assets_url} target="_blank" rel="noreferrer noopener">
+                    <Upload className="h-3.5 w-3.5 rotate-180" /> Open the folder
+                  </a>
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {canManage ? (
@@ -1256,7 +1270,10 @@ export default function ItemDetailPage() {
                   <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Dropbox / Drive)</span></Label>
                   <Input
                     ref={rawAssetsRef}
-                    defaultValue={detail.raw_assets_url ?? ''}
+                    // prefilled from the Dropbox folder we made for this item,
+                    // so the common case is already right; it only SAVES if
+                    // someone edits it, which keeps the record honest
+                    defaultValue={detail.raw_assets_url ?? detail.dropbox_url ?? ''}
                     onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
                     placeholder="https://www.dropbox.com/…"
                     className="font-mono text-xs"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,9 @@ type Integration = {
   configured: boolean
   status: string
   href: string | null
+  /** present only where connecting is a thing the viewer may do */
+  connect_href?: string | null
+  disconnect_href?: string | null
 }
 
 /**
@@ -31,8 +34,9 @@ type Integration = {
  */
 export default function IntegrationsSettings() {
   const [items, setItems] = useState<Integration[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetch('/api/team/integrations')
       .then(async r => {
         const j = await r.json()
@@ -42,6 +46,37 @@ export default function IntegrationsSettings() {
       .then(setItems)
       .catch(e => { toast.error(e.message); setItems([]) })
   }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // The OAuth round trip comes back here with its result in the query string —
+  // Dropbox has no way to tell the page anything else. Read from the URL
+  // directly rather than useSearchParams: this is a one-shot read on mount,
+  // and it keeps the page out of the Suspense boundary that hook demands.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get('dropbox')
+    if (!result) return
+    const detail = params.get('detail')
+    if (result === 'ok') toast.success(detail ? `Dropbox connected as ${detail}` : 'Dropbox connected')
+    else toast.error(detail || 'Dropbox could not be connected')
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  async function disconnect(href: string) {
+    setBusy(href)
+    try {
+      const res = await fetch(href, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not disconnect')
+      toast.success('Disconnected. Folders already created are left alone.')
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not disconnect')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (!items) return <Skeleton className="h-80 w-full" />
 
@@ -76,6 +111,22 @@ export default function IntegrationsSettings() {
                   {it.status}
                 </p>
               </div>
+              {/* full navigation, not fetch: the connect route replies with a
+                  redirect to the provider's own consent screen */}
+              {it.connect_href && (
+                <Button size="sm" asChild>
+                  <a href={it.connect_href}>Connect</a>
+                </Button>
+              )}
+              {it.disconnect_href && (
+                <Button
+                  variant="outline" size="sm"
+                  disabled={busy === it.disconnect_href}
+                  onClick={() => void disconnect(it.disconnect_href!)}
+                >
+                  {busy === it.disconnect_href ? 'Disconnecting…' : 'Disconnect'}
+                </Button>
+              )}
               {it.href && (
                 <Button variant="outline" size="sm" asChild>
                   <Link href={it.href}>
