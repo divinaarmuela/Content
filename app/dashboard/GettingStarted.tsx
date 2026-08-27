@@ -4,45 +4,74 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Compass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { panelForRole, shouldShowGettingStarted } from '@/app/lib/getting-started-core'
+import {
+  dismissKey, panelForPage, shouldShowPagePanel, type GettingStartedPage,
+} from '@/app/lib/getting-started-core'
 import type { Role } from '@/app/lib/identity-core'
 
 /**
  * The first thing a new hire sees, and the only onboarding in the product.
  *
- * Three steps for their role, each ending in a real link — a tutorial that
- * cannot send you somewhere that does not exist. Dismissed per person AND per
- * role, so a promotion re-earns the panel once.
+ * Three steps for their role ON THIS PAGE, each ending in a real link — a
+ * tutorial that cannot send you somewhere that does not exist. Dismissed per
+ * person, per role AND per page, so a promotion re-earns each panel once.
  *
  * It renders nothing at all until the dismissal state is known, because a
  * panel that flashes in and vanishes on every page load is worse than no
  * panel. It also renders nothing for roles with no panel (clients).
+ *
+ * Storage is the team_users row (supabase/getting_started.sql and
+ * getting_started_pages.sql). If the pages column is not migrated yet the
+ * dismissal is remembered in this browser instead — "Got it" must always
+ * stick, or people stop pressing it.
  */
-export default function GettingStarted({ role }: { role: Role | null }) {
-  const [dismissedRole, setDismissedRole] = useState<string | null | undefined>(undefined)
+const LOCAL_KEY = 'md-getting-started-dismissed'
+
+function localDismissed(): string[] {
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]') } catch { return [] }
+}
+
+export default function GettingStarted({ role, page = 'overview' }: {
+  role: Role | null
+  page?: GettingStartedPage
+}) {
+  const [state, setState] = useState<{ dismissedRole: string | null; dismissedPages: string[] } | 'unknown' | undefined>(undefined)
   const [gone, setGone] = useState(false)
 
   useEffect(() => {
     let live = true
     fetch('/api/team/getting-started')
-      .then(r => r.ok ? r.json() : { dismissedRole: null })
-      .then(j => { if (live) setDismissedRole(j.dismissedRole ?? null) })
+      .then(r => r.ok ? r.json() : { dismissedRole: null, dismissedPages: [] })
+      .then(j => {
+        if (!live) return
+        setState({
+          dismissedRole: j.dismissedRole ?? null,
+          dismissedPages: [...(Array.isArray(j.dismissedPages) ? j.dismissedPages : []), ...localDismissed()],
+        })
+      })
       // help that cannot load is help that stays quiet
-      .catch(() => { if (live) setDismissedRole('unknown') })
+      .catch(() => { if (live) setState('unknown') })
     return () => { live = false }
   }, [])
 
-  const panel = panelForRole(role)
-  if (gone || panel === null || dismissedRole === undefined) return null
-  if (!shouldShowGettingStarted(role, dismissedRole)) return null
+  const panel = panelForPage(page, role)
+  if (gone || panel === null || role === null || state === undefined || state === 'unknown') return null
+  if (!shouldShowPagePanel(page, role, state.dismissedRole, state.dismissedPages)) return null
 
   const dismiss = () => {
     setGone(true)
-    void fetch('/api/team/getting-started', { method: 'POST' }).catch(() => {})
+    const key = dismissKey(page, role)
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify([...new Set([...localDismissed(), key])])) } catch { /* private mode */ }
+    void fetch('/api/team/getting-started', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page }),
+    }).catch(() => {})
   }
 
   return (
-    <section className="mb-5 rounded-xl border border-blue-200 bg-blue-50/60 p-4 sm:p-5 dark:border-blue-900 dark:bg-blue-950/30">
+    <section className="mb-1 rounded-xl border border-blue-200 bg-blue-50/60 p-4 sm:p-5 dark:border-blue-900 dark:bg-blue-950/30"
+      aria-label="Getting started">
       <div className="flex items-start gap-2.5">
         <Compass className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
         <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-200">{panel.heading}</h2>
@@ -69,7 +98,7 @@ export default function GettingStarted({ role }: { role: Role | null }) {
       </ol>
 
       <div className="mt-2 flex justify-end">
-        <Button variant="outline" size="sm" onClick={dismiss}>Got it</Button>
+        <Button variant="outline" size="sm" className="min-h-11" onClick={dismiss}>Got it</Button>
       </div>
     </section>
   )
