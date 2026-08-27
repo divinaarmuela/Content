@@ -111,6 +111,29 @@ export const TASK_LANES: { key: string; title: string; statuses: ItemStatus[] }[
   { key: 'done', title: 'Done', statuses: ['approved_for_scheduling', 'scheduled', 'published'] },
 ]
 
+/**
+ * The Production page's BRIEF columns — the Editor board's shape again, in the
+ * shoot plan's own vocabulary.
+ *
+ * A flat list of briefs said only that they existed. The whole point of these
+ * boards is that the column IS the step: a plan waiting on a manager and a
+ * plan waiting on the client are different problems, and a list put them in
+ * the same pile.
+ *
+ * There is no Done lane. A booked brief is a shoot, and it appears as one on
+ * the shoot cards below — `activeBriefTasks` drops it before it ever reaches a
+ * column here.
+ */
+export const BRIEF_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
+  { key: 'doing', title: 'Writing', statuses: ['draft_uploaded'] },
+  // revision_complete is "the changes are in, look again" — the same waiting
+  // room as a first submission, and the manager's move either way
+  { key: 'review', title: 'Ready for review', statuses: ['internal_review', 'revision_complete'] },
+  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'client_changes_requested'] },
+  { key: 'client', title: 'With client', statuses: ['client_review'] },
+  { key: 'approved', title: 'Approved — book the shoot', statuses: ['approved_for_scheduling'] },
+]
+
 export type Assignment = 'mine' | 'unassigned' | 'other'
 
 export function editorAssignment(i: WorkItem, v: Viewer): Assignment {

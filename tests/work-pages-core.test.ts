@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  EDITOR_LANES, TASK_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
+  BRIEF_LANES, EDITOR_LANES, TASK_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
   canClaimScheduler, defaultScope, editorAssignment, editorScope, editorTail, isBriefTask,
   isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
   schedulerScope, unassignedCount,
@@ -337,5 +337,44 @@ describe('recentlyDoneTasks', () => {
         work_kinds: { slug: 'copy', uses_media: false }, updated_at: null },
     ], now)
     expect(rows).toEqual([])
+  })
+})
+
+describe('BRIEF_LANES — the shoot plan as a board', () => {
+  it('covers every stage a live brief can be at, exactly once', () => {
+    const seen = BRIEF_LANES.flatMap(l => l.statuses)
+    expect(new Set(seen).size).toBe(seen.length)
+    // a booked brief is a SHOOT and leaves the board — activeBriefTasks drops
+    // it before it reaches a column, so it needs no lane
+    const live = ITEM_STATUSES.filter(s => s !== 'scheduled' && s !== 'published')
+    expect([...seen].sort()).toEqual([...live].sort())
+  })
+
+  it('reads in the plan’s own words, in the order the work moves', () => {
+    expect(BRIEF_LANES.map(l => l.title)).toEqual([
+      'Writing', 'Ready for review', 'Being revised', 'With client', 'Approved — book the shoot',
+    ])
+  })
+
+  it('a plan the client sent back sits with the team, not with the client', () => {
+    const lane = (s: ItemStatus) => BRIEF_LANES.find(l => l.statuses.includes(s))?.key
+    expect(lane('client_review')).toBe('client')
+    expect(lane('client_changes_requested')).toBe('revising')
+    expect(lane('revision_complete')).toBe('review')
+  })
+
+  it('shares its lane keys with the task board, so the colours agree', () => {
+    for (const key of ['doing', 'review', 'revising', 'client']) {
+      expect(BRIEF_LANES.some(l => l.key === key)).toBe(true)
+      expect(TASK_LANES.some(l => l.key === key)).toBe(true)
+    }
+  })
+
+  it('a booked brief never reaches a column', () => {
+    const rows = [
+      { id: 'a', status: 'draft_uploaded' as ItemStatus, owner_id: null, work_kinds: { slug: 'shoot_brief' } },
+      { id: 'b', status: 'scheduled' as ItemStatus, owner_id: null, work_kinds: { slug: 'shoot_brief' } },
+    ]
+    expect(activeBriefTasks(rows).map(r => r.id)).toEqual(['a'])
   })
 })

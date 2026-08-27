@@ -30,7 +30,7 @@ import { type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
 import { TASK_STATUS_TURN, taskStatusLabel } from '../../lib/task-kind-core'
 import {
-  TASK_LANES, activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
+  BRIEF_LANES, TASK_LANES, activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
   isBriefTask, isInternalTask, productionScope, recentlyDoneTasks, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
@@ -104,13 +104,25 @@ function briefChip(status: ItemStatus): string {
 
 const SCOPE_KEY = 'md-production-scope'
 
-/** One dot per task lane, in the order work moves. */
+/** One dot per lane, in the order work moves — the Editor board's colours,
+ *  because a lane called "Ready for review" should look the same everywhere
+ *  it appears. Shared by the brief board and the task board. */
 const LANE_TINT: Record<string, string> = {
   doing: 'bg-zinc-400',
   review: 'bg-blue-500',
   revising: 'bg-amber-500',
   client: 'bg-violet-500',
+  approved: 'bg-emerald-500',
   done: 'bg-emerald-500',
+}
+
+/** What is NOT in a brief column, in the column's own words. */
+const BRIEF_LANE_EMPTY: Record<string, string> = {
+  doing: 'Nothing being written.',
+  review: 'Nothing waiting on a manager.',
+  revising: 'No plans in revision.',
+  client: 'Nothing with a client.',
+  approved: 'Nothing to book.',
 }
 
 function whenShort(iso: string | null) {
@@ -324,6 +336,52 @@ export default function ProductionPage() {
   )
 
   /** One task card — the Editor board's card, in the task vocabulary. */
+  /** A brief on the brief board — the task card's twin, in the plan's own
+   *  words. A brief is never claimed (only an account manager picks one up),
+   *  so it carries the Assign… menu where a task carries "Take this task". */
+  const briefCard = (b: BriefTask) => (
+    <div key={b.id} className="relative">
+      <Card className="py-0 transition-shadow hover:shadow-md">
+        <CardContent className="flex flex-col gap-1.5 p-3">
+          {/* the whole card opens the brief task, as a stretched link rather
+              than a wrapper — the Assign… menu below is a button */}
+          <Link href={`/dashboard/production/${b.id}`} aria-label={b.title}
+            className="absolute inset-0 rounded-xl" />
+          <span className="text-sm font-medium leading-snug">{b.title}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+              {b.clients?.name ?? '—'}
+            </Badge>
+            <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+              {itemStatusLabel('shoot_brief', b.status, b.status)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {viewer && (
+              <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
+                ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
+            )}
+            {b.due_date && (
+              <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                <CalendarDays className="h-3 w-3" />
+                {whenShort(b.due_date)}
+              </span>
+            )}
+          </div>
+          {credits(b) && (
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(b)}</p>
+          )}
+          {!b.owner_id && (
+            // above the stretched link, so this is a click on a control
+            <div className="relative z-10 flex flex-wrap items-center gap-1.5">
+              {assignMenu(b.id)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
   const taskCard = (t: BriefTask, muted = false) => {
     const assignment = viewer ? editorAssignment(t, viewer) : 'other'
     return (
@@ -458,8 +516,15 @@ export default function ProductionPage() {
           <div>
             <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
               BRIEFS BEING PLANNED <span className="tabular-nums">{briefRows.length}</span>
+              {briefsInFilters.length > briefRows.length && (
+                <span className="ml-2 normal-case tracking-normal text-zinc-400 dark:text-zinc-500">
+                  ({briefsInFilters.length - briefRows.length} more outside this filter)
+                </span>
+              )}
             </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">Shoot plans still going through review.</p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              Shoot plans on their way to becoming shoots. A booked one moves down to the shoots.
+            </p>
           </div>
           {briefRows.length === 0 ? (
             /* when there is nothing at all on the page, the one empty card
@@ -472,48 +537,31 @@ export default function ProductionPage() {
               </Card>
             )
           ) : (
-            <div className="grid gap-2">
-              {briefRows.map(b => (
-                <div key={b.id} className="relative">
-                  <Card className="py-0 transition-shadow hover:shadow-md">
-                    <CardContent className="flex flex-wrap items-center gap-2 p-3">
-                      {/* the whole row opens the brief task, as a stretched link
-                          rather than a wrapper — controls may live inside it */}
-                      <Link href={`/dashboard/production/${b.id}`} aria-label={b.title}
-                        className="absolute inset-0 rounded-xl" />
-                      {/* the brief task and its shoot carry the same title;
-                          without a word for each, two identical rows sat on
-                          the page meaning different things */}
-                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
-                        Brief task
-                      </span>
-                      <span className="text-sm font-medium">{b.title}</span>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {b.clients?.name ?? 'Unassigned'}
-                      </span>
-                      <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                        {itemStatusLabel('shoot_brief', b.status, b.status)}
-                      </Badge>
-                      {viewer && (
-                        <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
-                          ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
-                      )}
-                      {!b.owner_id && (
-                        <span className="relative z-10">{assignMenu(b.id)}</span>
-                      )}
-                      {credits(b) && (
-                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(b)}</span>
-                      )}
-                      {b.due_date && (
-                        <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                          <CalendarDays className="h-3 w-3" />
-                          {whenShort(b.due_date)}
+            <div className="w-full overflow-x-auto">
+              <div className="flex gap-3 pb-3">
+                {BRIEF_LANES.map(lane => {
+                  const colItems = briefRows.filter(b => lane.statuses.includes(b.status))
+                  return (
+                    <div key={lane.key} className="min-w-44 flex-1">
+                      <div className="mb-2 flex items-center gap-2 px-1">
+                        <span className={`h-2 w-2 rounded-full ${LANE_TINT[lane.key] ?? 'bg-zinc-400'}`} />
+                        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{lane.title}</span>
+                        <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                          {colItems.length}
                         </span>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ))}
+                      </div>
+                      <div className="flex min-h-24 flex-col gap-2">
+                        {colItems.map(b => briefCard(b))}
+                        {colItems.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-300 dark:border-zinc-800 dark:text-zinc-600">
+                            {BRIEF_LANE_EMPTY[lane.key] ?? 'Nothing here.'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
