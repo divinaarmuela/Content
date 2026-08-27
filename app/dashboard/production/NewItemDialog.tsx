@@ -228,8 +228,10 @@ export default function NewItemDialog({
   const isTaskKind = presetKind === 'task'
   const hidesMedia = selectedKind ? !selectedKind.uses_media : false
 
-  /** an asset with no shoot behind it needs a reason, and the reason is logged */
-  const needsAdhocReason = !isBriefKind && !isTaskKind && isManager && !draft.batch_id
+  /** an asset with no shoot behind it needs a reason, and the reason is logged.
+   *  Editors too, not just managers: footage often arrives with no shoot — the
+   *  client sends it, an old shoot supplies it — and the editor is who has it. */
+  const needsAdhocReason = !isBriefKind && !isTaskKind && !draft.batch_id
   /** a non-manager with no locked shoot to pick cannot create an asset at all */
   const shootChoices = batches
     .filter(b => ['locked', 'shot'].includes(b.status ?? 'shot'))
@@ -240,7 +242,8 @@ export default function NewItemDialog({
     (!draft.client_id || b.client_id === draft.client_id)
     && (b.status ?? 'brief') !== 'wrapped'
     && !(briefedBatchIds ?? []).includes(b.id))
-  const blockedNoShoot = !isBriefKind && !isTaskKind && !isManager && shootChoices.length === 0
+  // nobody is blocked on "no shoot ready" any more — the no-shoot path is
+  // open to everyone who makes work, with a reason
 
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
@@ -248,7 +251,7 @@ export default function NewItemDialog({
       return toast.error('Add at least one deliverable — the brief is the promise of what gets made.')
     }
     if (needsAdhocReason && !adhocReason.trim()) {
-      return toast.error('Say why this has no shoot — it goes in the log.')
+      return toast.error('Say where the footage is from — it goes in the log.')
     }
     setNewBusy(true)
     try {
@@ -358,24 +361,25 @@ export default function NewItemDialog({
             <Select value={draft.batch_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'none' ? '' : v ?? '' }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {isManager && (
-                  <SelectItem value="none">Ad-hoc item (no shoot)</SelectItem>
-                )}
+                <SelectItem value="none">No shoot — footage from elsewhere</SelectItem>
                 {shootChoices.map(b => (
                   <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {needsAdhocReason && (
-              <Input value={adhocReason} placeholder="Why no shoot? (required — this is logged)"
-                onChange={e => setAdhocReason(e.target.value)} className="text-xs" />
-            )}
-            {blockedNoShoot && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                No shoot is ready for this client yet. Ask an account manager to lock a
-                shoot date, or plan one on{' '}
-                <a href="/dashboard/production" className="underline underline-offset-2">Production</a>.
-              </p>
+              <div className="grid gap-1">
+                <Label className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                  No shoot — where is the footage from? *
+                </Label>
+                <Input value={adhocReason} placeholder="Client sent phone footage via WeTransfer"
+                  onChange={e => setAdhocReason(e.target.value)} className="text-xs" />
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  Required, and logged — it is the answer to &ldquo;why is there no
+                  shoot?&rdquo; six months from now. Its folder goes under
+                  <span className="font-mono"> _No shoot</span> in Drive.
+                </p>
+              </div>
             )}
           </div>
           )}
@@ -558,8 +562,8 @@ export default function NewItemDialog({
           )}
           {!hidesMedia && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Folder link <span className="text-xs font-normal text-zinc-400">(Dropbox / Drive — what the editor works from)</span></Label>
-            <Input value={draft.raw_assets_url} placeholder="https://www.dropbox.com/…"
+            <Label>Folder link <span className="text-xs font-normal text-zinc-400">(Google Drive — what the editor works from)</span></Label>
+            <Input value={draft.raw_assets_url} placeholder="https://drive.google.com/drive/folders/…"
               onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-xs" />
           </div>
           )}
@@ -629,7 +633,7 @@ export default function NewItemDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
-          <Button onClick={createItems} disabled={newBusy || blockedNoShoot}>{newBusy ? 'Creating…' : isBriefKind ? 'Create brief task' : isTaskKind ? 'Create task' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
+          <Button onClick={createItems} disabled={newBusy}>{newBusy ? 'Creating…' : isBriefKind ? 'Create brief task' : isTaskKind ? 'Create task' : `Create ${draft.count > 1 ? draft.count + ' items' : 'item'}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

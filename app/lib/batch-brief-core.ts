@@ -4,8 +4,9 @@
  * A batch IS the shoot brief: it is planned (brief), its date is locked
  * (locked — the explicit commitment that opens production), it happens
  * (shot), and eventually it is wrapped. Content items may only be created
- * under a locked or shot brief; an account manager can go around the gate
- * for genuinely ad-hoc work, but must say why, and the reason is logged.
+ * under a locked or shot brief; anyone who makes work — editors and up — can
+ * go around the gate for genuinely ad-hoc work, but must say why, and the
+ * reason is logged.
  */
 
 import type { Role } from './identity-core'
@@ -73,8 +74,9 @@ export function batchSatisfiesLock(b: { title?: string | null; shoot_date?: stri
  *    Wrapped stays open on purpose: footage gets cut months later, and that
  *    work counts toward the month it goes live, not the shoot's month
  *  - under a brief still being planned: nobody — the point of the stage
- *  - with NO batch at all: account managers and up only, WITH a stated
- *    reason (supers included — auditability is the point, not trust)
+ *  - with NO batch at all: editors and up, WITH a stated reason (supers
+ *    included — auditability is the point, not trust). Footage often arrives
+ *    without a shoot, and the editor is who has it.
  */
 export function canCreateItemsUnder(
   batchStatus: BatchStatus | null,
@@ -96,7 +98,16 @@ export function canCreateItemsUnder(
   }
   if (batchStatus === 'locked' || batchStatus === 'shot' || batchStatus === 'wrapped') return true
   if (batchStatus === null) {
-    if (role !== 'account_manager' && role !== 'super_admin') return false
+    // Editors too, not just managers: plenty of work arrives with no shoot
+    // behind it at all — the client sends phone footage, or an old shoot
+    // supplies the raws — and the editor is the person who has it. Locking
+    // that behind a manager meant either a fake shoot brief or an item that
+    // could not be created at all, and the first is worse than the gate.
+    //
+    // The REASON stays mandatory for everyone, supers included: the point was
+    // never trust, it is that "why is there no shoot?" has a recorded answer.
+    // Schedulers and clients are still out — they do not create work.
+    if (role !== 'editor' && role !== 'account_manager' && role !== 'super_admin') return false
     return Boolean(adhoc?.reason && adhoc.reason.trim())
   }
   return false

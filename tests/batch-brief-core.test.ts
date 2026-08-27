@@ -89,13 +89,28 @@ describe('canCreateItemsUnder — the production gate', () => {
     }
   })
 
-  it('batchless items need an AM+ with a stated reason — supers included', () => {
-    expect(canCreateItemsUnder(null, 'editor', { reason: 'urgent' })).toBe(false)
+  it('batchless items need a stated reason from everyone — supers included', () => {
+    // the reason is the whole gate: it is what answers "why is there no
+    // shoot?" months later. No role is exempt from it.
     expect(canCreateItemsUnder(null, 'account_manager')).toBe(false)
     expect(canCreateItemsUnder(null, 'account_manager', { reason: '   ' })).toBe(false)
     expect(canCreateItemsUnder(null, 'account_manager', { reason: 'client emergency post' })).toBe(true)
     expect(canCreateItemsUnder(null, 'super_admin')).toBe(false)
     expect(canCreateItemsUnder(null, 'super_admin', { reason: 'launch-day extra' })).toBe(true)
+  })
+
+  it('lets an EDITOR create work with no shoot, given the reason', () => {
+    // footage arrives without a shoot all the time — the client sends phone
+    // footage, an old shoot supplies the raws — and the editor is who has it.
+    // Requiring a manager meant either a fake shoot brief or no item at all.
+    expect(canCreateItemsUnder(null, 'editor', { reason: 'client sent phone footage via WeTransfer' })).toBe(true)
+    expect(canCreateItemsUnder(null, 'editor')).toBe(false)
+    expect(canCreateItemsUnder(null, 'editor', { reason: '  ' })).toBe(false)
+  })
+
+  it('still keeps schedulers and clients out — they do not create work', () => {
+    expect(canCreateItemsUnder(null, 'scheduler', { reason: 'anything' })).toBe(false)
+    expect(canCreateItemsUnder(null, 'client', { reason: 'anything' })).toBe(false)
   })
 })
 
