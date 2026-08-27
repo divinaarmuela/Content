@@ -287,6 +287,9 @@ function PersonCard({ person, expanded, onToggle, days }: {
  */
 function TaskCalendar({ rows }: { rows: Row[] }) {
   const [anchor, setAnchor] = useState(() => new Date())
+  /** days whose "+N more" has been tapped open — those tasks were
+   *  otherwise unreachable from this view */
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
   const byDay = new Map<string, { task: Task; who: string }[]>()
   for (const person of rows) {
@@ -335,6 +338,12 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
         )}
       </div>
 
+      {/* the legend goes BEFORE the thing it explains — it used to sit under
+          ~500px of calendar, where a phone reads it last or never */}
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Open tasks by due date. Red is past due. Completed work isn’t shown here — use the People view for that.
+      </p>
+
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">
           <div className="grid grid-cols-7 gap-px rounded-t-lg bg-zinc-200 dark:bg-zinc-800">
@@ -360,25 +369,38 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
                     {d.getDate()}
                   </span>
                   <ul className="mt-1 flex flex-col gap-1">
-                    {items.slice(0, 3).map(({ task, who }) => (
+                    {(expanded.has(k) ? items : items.slice(0, 3)).map(({ task, who }) => (
                       <li key={task.gid}>
+                        {/* no title= — the whole name wraps, and the project
+                            is on its own line, so nothing needs a hover */}
                         <a
                           href={task.url ?? undefined}
                           target="_blank" rel="noreferrer noopener"
-                          title={`${task.name} — ${who}${task.project ? ` · ${task.project}` : ''}`}
-                          className={`block truncate rounded px-1 py-0.5 text-[11px] transition-colors ${
+                          className={`block rounded px-1 py-0.5 text-[11px] transition-colors ${
                             past
                               ? 'bg-red-50 text-red-800 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300'
                           }`}
                         >
-                          {task.name}
-                          <span className="text-zinc-400"> · {who.split(' ')[0]}</span>
+                          <span className="line-clamp-2">{task.name}</span>
+                          <span className="block truncate text-zinc-400">
+                            {who.split(' ')[0]}{task.project ? ` · ${task.project}` : ''}
+                          </span>
                         </a>
                       </li>
                     ))}
                     {items.length > 3 && (
-                      <li className="px-1 text-[11px] text-zinc-400">+{items.length - 3} more</li>
+                      <li>
+                        <button type="button"
+                          onClick={() => setExpanded(s => {
+                            const next = new Set(s)
+                            if (next.has(k)) next.delete(k); else next.add(k)
+                            return next
+                          })}
+                          className="w-full rounded px-1 py-0.5 text-left text-[11px] text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400">
+                          {expanded.has(k) ? 'Show fewer' : `+${items.length - 3} more`}
+                        </button>
+                      </li>
                     )}
                   </ul>
                 </div>
@@ -387,10 +409,6 @@ function TaskCalendar({ rows }: { rows: Row[] }) {
           </div>
         </div>
       </div>
-
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Open tasks by due date. Red is past due. Completed work isn’t shown here — use the People view for that.
-      </p>
     </div>
   )
 }

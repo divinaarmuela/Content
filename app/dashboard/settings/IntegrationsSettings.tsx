@@ -110,8 +110,11 @@ export default function IntegrationsSettings() {
       toast.success(`${label} copied`)
     } catch {
       // clipboard access can be refused outright; showing the value is the
-      // fallback that still lets somebody select it by hand
-      toast.error(value)
+      // fallback that still lets somebody select it by hand — but a red
+      // toast that is only the value reads as an error about the value
+      toast.error(`Couldn’t copy the ${label.toLowerCase()}`, {
+        description: `Select it and copy it by hand: ${value}`, duration: 15_000,
+      })
     }
   }
 

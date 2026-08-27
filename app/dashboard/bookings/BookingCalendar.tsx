@@ -31,6 +31,9 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
   /** the booking opened out beneath the grid — clicking a day's chip shows
    *  who it is and how to reach them, which the grid alone never did */
   const [open, setOpen] = useState<string | null>(null)
+  /** days whose "+N more" has been tapped open — the extra bookings were
+   *  simply not reachable before */
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
   const resources = useMemo(
     () => [...new Set(bookings.map(b => b.booking_resources?.label).filter((l): l is string => Boolean(l)))].sort(),
@@ -117,7 +120,10 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
           </div>
         ))}
         {cells.map((day, i) => {
-          const list = day ? byDay.get(`${cursor.y}-${cursor.m}-${day}`) ?? [] : []
+          const dayKey = `${cursor.y}-${cursor.m}-${day}`
+          const list = day ? byDay.get(dayKey) ?? [] : []
+          const showAll = expanded.has(dayKey)
+          const shownList = showAll ? list : list.slice(0, 4)
           return (
             <div key={i}
               className={`min-h-24 bg-white p-1.5 dark:bg-zinc-950 ${day ? '' : 'opacity-40'}`}>
@@ -131,14 +137,16 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                     {day}
                   </span>
                   <div className="mt-1 flex flex-col gap-1">
-                    {list.slice(0, 4).map(b => {
+                    {shownList.map(b => {
                       // an unpaid hold is somebody mid-checkout, not a booked
                       // session — it must never look identical to one
                       const held = b.status === 'pending'
                       return (
+                        // no title= — tapping the chip opens the full booking
+                        // below the grid, which is the tooltip that works on a phone
                         <button key={b.id} type="button"
                           onClick={() => setOpen(o => (o === b.id ? null : b.id))}
-                          title={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${b.booking_resources?.label ? ` · ${b.booking_resources.label}` : ''}${held ? ' · awaiting payment' : ''}`}
+                          aria-label={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${held ? ' · awaiting payment' : ''}`}
                           className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight ${
                             held
                               ? 'border border-dashed border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
@@ -151,7 +159,15 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                       )
                     })}
                     {list.length > 4 && (
-                      <span className="px-1 text-[10px] text-zinc-400">+{list.length - 4} more</span>
+                      <button type="button"
+                        onClick={() => setExpanded(s => {
+                          const next = new Set(s)
+                          if (next.has(dayKey)) next.delete(dayKey); else next.add(dayKey)
+                          return next
+                        })}
+                        className="w-full rounded px-1 py-0.5 text-left text-[10px] text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400">
+                        {showAll ? 'Show fewer' : `+${list.length - 4} more`}
+                      </button>
                     )}
                   </div>
                 </>
