@@ -17,7 +17,7 @@ import {
 import { Ban, Copy } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { CAL_TZ } from '../../../lib/gcal-core'
-import type { ShootStatus } from '../../../lib/shoot-core'
+import { PROPOSAL_TAG, type ShootStatus } from '../../../lib/shoot-core'
 import { useRole } from '../../useRole'
 
 type Proposal = {
@@ -138,8 +138,11 @@ export default function ProposalsPage() {
                   </p>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={`capitalize ${STATUS_STYLE[p.status]}`}>
-                    {p.status}
+                  {/* the raw enum, capitalised, used to sit here — the same
+                       record read "Pending" on this page and "awaiting reply"
+                       on Availability */}
+                  <Badge variant="outline" className={STATUS_STYLE[p.status]}>
+                    {PROPOSAL_TAG[p.status as ShootStatus] ?? p.status}
                   </Badge>
                 </TableCell>
                 <TableCell>

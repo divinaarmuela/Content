@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  ArrowLeft, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
+  ArrowLeft, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
 import { canSeeSubpage } from '@/app/lib/page-access-core'
@@ -83,13 +83,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const base = `/dashboard/clients/${clientId}`
   const ALL_TABS = [
     { key: null, href: base, label: 'Overview', icon: Users, exact: true },
+    // order is reach: at 390px about three and a half tabs are visible, and
+    // Agreement and Brand — the two an account manager opens most — used to be
+    // the two off the end of a bar with no cue that it scrolled
+    { key: '/dashboard/clients/:id/agreement', href: `${base}/agreement`, label: 'Agreement', icon: FileText },
+    { key: '/dashboard/clients/:id/brand', href: `${base}/brand`, label: 'Brand', icon: Palette },
     { key: '/dashboard/clients/:id/contacts', href: `${base}/contacts`, label: 'Contacts', icon: Users },
     { key: '/dashboard/clients/:id/notes', href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
-    { key: '/dashboard/clients/:id/credentials', href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
     { key: '/dashboard/clients/:id/social', href: `${base}/social`, label: 'Social', icon: Share2 },
     { key: '/dashboard/clients/:id/intake', href: `${base}/intake`, label: 'Intake', icon: ClipboardList },
-    { key: '/dashboard/clients/:id/brand', href: `${base}/brand`, label: 'Brand', icon: Palette },
-    { key: '/dashboard/clients/:id/agreement', href: `${base}/agreement`, label: 'Agreement', icon: FileText },
+    { key: '/dashboard/clients/:id/credentials', href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
   ]
   const TABS = ALL_TABS.filter(t => t.key === null || canSeeSubpage(role, t.key, granted))
 
@@ -134,7 +137,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       </div>
 
       {/* ── tabs, as links ── */}
-      <nav className="inline-flex h-9 w-fit max-w-full items-center justify-start overflow-x-auto rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+      {/* the fade is the only thing that says "there is more this way" — the
+          bar scrolled silently before, so half the tabs did not exist */}
+      <div className="relative max-w-full">
+      <nav className="inline-flex w-fit max-w-full items-center justify-start overflow-x-auto rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
         {TABS.map(t => {
           const Icon = t.icon
           const active = t.exact ? path === t.href : path.startsWith(t.href)
@@ -142,7 +148,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <Link
               key={t.href}
               href={t.href}
-              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all ${
                 active
                   ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
                   : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -153,6 +159,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           )
         })}
       </nav>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end rounded-r-lg bg-gradient-to-l from-zinc-100 to-transparent pr-1 text-zinc-400 dark:from-zinc-800"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </span>
+      </div>
 
       {children}
     </div>

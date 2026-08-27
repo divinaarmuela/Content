@@ -5,6 +5,20 @@
 
 export type ShootStatus = 'pending' | 'accepted' | 'declined' | 'cancelled'
 
+/**
+ * What a proposal's status is CALLED. Two pages rendered the same records in
+ * two vocabularies — Proposals capitalised the raw enum ("Pending",
+ * "Accepted") while Availability said "awaiting reply" and "confirmed" — so
+ * the same shoot read as two different things depending on which page you
+ * happened to open.
+ */
+export const PROPOSAL_TAG: Record<ShootStatus, string> = {
+  pending: 'awaiting reply',
+  accepted: 'confirmed',
+  declined: 'declined',
+  cancelled: 'cancelled',
+}
+
 /** The FIRST answer is final. The link is shared between several recipients,
  *  so a changeable answer would let someone with a stale tab silently reverse
  *  a teammate's booking. Changing plans goes through MD Media, who cancel and

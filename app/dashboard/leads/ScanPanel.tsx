@@ -59,8 +59,8 @@ type Conn = {
 
 const OUTCOME: Record<Outcome, { label: string; tone: string; Icon: typeof Inbox }> = {
   lead_created:      { label: 'Lead created',   tone: 'text-emerald-700 dark:text-emerald-400', Icon: UserPlus },
-  not_a_lead:        { label: 'Not a lead',     tone: 'text-zinc-500 dark:text-zinc-400',       Icon: MinusCircle },
-  prefiltered:       { label: 'Filtered out',   tone: 'text-amber-700 dark:text-amber-400',     Icon: Filter },
+  not_a_lead:        { label: 'Not an enquiry', tone: 'text-zinc-500 dark:text-zinc-400',       Icon: MinusCircle },
+  prefiltered:       { label: 'Not worth reading', tone: 'text-amber-700 dark:text-amber-400',     Icon: Filter },
   duplicate_sender:  { label: 'Already a lead', tone: 'text-sky-700 dark:text-sky-400',         Icon: MailCheck },
   already_processed: { label: 'Seen before',    tone: 'text-zinc-400 dark:text-zinc-500',       Icon: CheckCircle2 },
   needs_review:      { label: 'Needs review',   tone: 'text-violet-700 dark:text-violet-400',   Icon: Eye },
@@ -69,8 +69,8 @@ const OUTCOME: Record<Outcome, { label: string; tone: string; Icon: typeof Inbox
 
 const STATUS: Record<LogEntry['status'], { label: string; cls: string }> = {
   lead_created: { label: 'Lead created', cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
-  not_a_lead:   { label: 'Not a lead',   cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
-  skipped:      { label: 'Filtered',     cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
+  not_a_lead:   { label: 'Not an enquiry', cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
+  skipped:      { label: 'Not worth reading', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
   error:        { label: 'Error',        cls: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' },
   pending:      { label: 'In progress',  cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
   needs_review: { label: 'Needs review', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400' },
@@ -168,7 +168,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
 
           if (ev.type === 'mailbox_start') setPhase(`Reading ${ev.email} (${ev.index} of ${ev.total})`)
           else if (ev.type === 'listed')   setPhase(`${ev.count} recent message${ev.count === 1 ? '' : 's'} in ${ev.email}`)
-          else if (ev.type === 'message')  setPhase('Classifying messages…')
+          else if (ev.type === 'message')  setPhase('Checking messages…')
           else if (ev.type === 'done')     { setResult(ev.result); setPhase('') }
           else if (ev.type === 'fatal')    setFatal(ev.message)
 
@@ -202,7 +202,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
               <h3 className="text-sm font-semibold tracking-tight">Inbox scanner</h3>
             </div>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Reads recent mail, filters the obvious noise, and asks Claude whether
+              Reads recent mail, filters the obvious noise, and checks whether
               what is left is a genuine enquiry.
               {lastScan && (
                 <> Last checked <span title={absolute(lastScan)} className="underline decoration-dotted underline-offset-2">{relative(lastScan)}</span>.</>
@@ -312,10 +312,10 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
             </div>
             <dl className="grid grid-cols-2 divide-x divide-zinc-200 sm:grid-cols-4 dark:divide-zinc-800">
               {[
-                { k: 'Messages seen', v: result.scanned },
-                { k: 'Newly checked', v: result.claimed },
-                { k: 'Not leads',     v: result.skipped },
-                { k: 'Errors',        v: result.errors },
+                { k: 'Messages read',    v: result.scanned },
+                { k: 'Checked this run', v: result.claimed },
+                { k: 'Not enquiries',    v: result.skipped },
+                { k: 'Errors',           v: result.errors },
               ].map(s => (
                 <div key={s.k} className="px-3 py-2">
                   <dt className="text-xs text-zinc-500 dark:text-zinc-400">{s.k}</dt>
@@ -325,8 +325,9 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
             </dl>
             {result.claimed === 0 && result.scanned > 0 && (
               <p className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                Every message had already been checked by an earlier scan, so nothing
-                was sent to Claude. This is the normal result when scans run often.
+                Every message had already been checked by an earlier scan, so there
+                was nothing new to look at. This is the normal result when scans run
+                often.
               </p>
             )}
           </div>

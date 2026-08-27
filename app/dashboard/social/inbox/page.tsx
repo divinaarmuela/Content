@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, CalendarClock, ExternalLink, EyeOff, Loader2, MessageSquare,
+  ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
@@ -332,9 +332,9 @@ export default function InboxPage() {
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-        <Button size="sm" asChild>
-          <Link href="/dashboard/social"><CalendarClock className="h-4 w-4" /> Schedule a post</Link>
-        </Button>
+        {/* The one filled button used to read "Schedule a post" and link to
+            /dashboard/social — which is the channels LIST, not a scheduler. A
+            primary action that goes somewhere else is worse than none. */}
         {accounts.length > 0 && (
           <Select value={acct} onValueChange={changeAccount}>
             <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
@@ -352,13 +352,13 @@ export default function InboxPage() {
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`rounded-md px-3 py-1.5 text-sm capitalize transition-colors ${
+              className={`min-h-11 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 tab === t
                   ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
               }`}
             >
-              {t}
+              {t === 'comments' ? 'Comments' : 'Direct messages'}
             </button>
           ))}
         </div>

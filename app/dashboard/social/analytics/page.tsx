@@ -10,6 +10,9 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeft, Clock, ExternalLink, TrendingUp } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import { LoadFailed } from '../../NotSetUp'
+import { CAL_TZ } from '@/app/lib/gcal-core'
+import { zoneAbbrev, zoneLabel } from '@/app/lib/timezone-core'
 
 type Account = {
   id: string; client_id: string | null; platform: string
@@ -133,17 +136,23 @@ export default function SocialAnalyticsPage() {
     bestTimes?: unknown
   } | null>(null)
   const [clientId, setClientId] = useState<string>('all')
+  const [failed, setFailed] = useState<string | null>(null)
 
   // refetched per client: daily and best-times come from the provider already
   // scoped to that client's accounts, not filtered after the fact
   const load = useCallback(async () => {
+    setFailed(null)
     try {
       const res = await fetch(`/api/social/analytics${clientId === 'all' ? '' : `?clientId=${encodeURIComponent(clientId)}`}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load analytics')
       setData(json)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load analytics')
+      // a failed load used to leave the page on skeletons forever, which
+      // reads as "still thinking" and never stops
+      console.error('[analytics] load failed', e)
+      setFailed(e instanceof Error ? e.message : 'unknown')
+      toast.error('We couldn’t load the numbers. Try again in a moment.')
     }
   }, [clientId])
 
@@ -173,6 +182,15 @@ export default function SocialAnalyticsPage() {
 
     return { accounts, posts, totals, followers }
   }, [data, clientId])
+
+  if (failed && !data) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Back />
+        <LoadFailed what="the numbers for these accounts" detail={failed} onRetry={() => load()} />
+      </div>
+    )
+  }
 
   if (!data || !scoped) {
     return (
@@ -279,8 +297,13 @@ export default function SocialAnalyticsPage() {
             <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
               <Clock className="h-3.5 w-3.5 text-zinc-400" /> Best times to post
             </h3>
+            {/* For a Manila scheduler posting to an Australian audience, the
+                zone is the single most consequential fact on this page — and
+                nothing on screen named one. */}
             <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-              When your audience has engaged the most, from your connected accounts&rsquo; history.
+              When the audience has engaged most, from your connected accounts&rsquo;
+              history. Times are {zoneLabel(CAL_TZ)} ({zoneAbbrev(CAL_TZ)}) — where
+              the audience is, not where you are.
             </p>
             <BestTimes slots={bestSlots} />
           </CardContent>
@@ -392,7 +415,10 @@ function BestTimes({ slots }: { slots: BestSlot[] }) {
         ))}
       </div>
 
-      <div className="overflow-x-auto">
+      {/* 20x14px cells whose only content was a hover tooltip: on a phone
+          this was a grid of meaningless coloured squares. The ranked pills
+          above say the same thing in words, so below `md` they are all of it. */}
+      <div className="hidden overflow-x-auto md:block">
         <div className="min-w-[420px]">
           {DAY_LABEL.map((label, day) => (
             <div key={label} className="flex items-center gap-1.5 py-0.5">

@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { AlertTriangle, CheckCircle2, Loader2, Mail, ShieldAlert } from 'lucide-react'
+import { techMailto } from '@/app/lib/support-core'
 
 type Settings = {
   lookback_days: number
@@ -95,6 +96,16 @@ export default function ScannerSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [denied, setDenied] = useState(false)
+  /**
+   * The Mailboxes switches save the moment you flip them; everything in
+   * Scanning behaviour and both block-lists only change local state and need
+   * a Save button at the bottom of a THIRD, unrelated card. A person flips a
+   * switch (which takes), changes a threshold (which does not), and leaves.
+   * The page cannot un-mix its two save models today, so at the very least it
+   * says out loud that something is unsaved.
+   */
+  const [saved, setSaved] = useState<Settings | null>(null)
+  const dirty = !!settings && !!saved && JSON.stringify(settings) !== JSON.stringify(saved)
 
   const load = useCallback(async () => {
     try {
@@ -102,6 +113,7 @@ export default function ScannerSettings() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not load settings')
       const json = await res.json()
       setSettings(json.settings)
+      setSaved(json.settings)
       setSchedule(json.schedule ?? null)
       setMailboxes(json.mailboxes ?? [])
     } catch (e) {
@@ -131,6 +143,7 @@ export default function ScannerSettings() {
         throw new Error(json.error ?? 'Could not save')
       }
       setSettings(json.settings)
+      setSaved(json.settings)
       toast.success('Scanner settings saved')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save')
@@ -189,8 +202,8 @@ export default function ScannerSettings() {
         <CardContent className="flex flex-col">
           {mailboxes.length === 0 && (
             <p className="py-2 text-sm text-zinc-500 dark:text-zinc-400">
-              No mailboxes available yet. Connect a Google account, or set GMAIL_USER
-              and GMAIL_REFRESH_TOKEN on the server.
+              No mailboxes yet. Connect a Google account above — or ask us to
+              connect the shared agency inbox for you.
             </p>
           )}
           {mailboxes.map((m, i) => (
@@ -405,11 +418,10 @@ export default function ScannerSettings() {
                 <p className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    <strong>Not running yet.</strong> The schedule lives in Inngest,
-                    which is not connected — so no automatic scan has ever fired.
-                    Sync the app at <code>/api/inngest</code> and set
-                    INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY. Until then, use
-                    “Scan now” on the Leads page.
+                    <strong>Not running on its own yet.</strong> Automatic scanning
+                    has not been switched on for this workspace, so no scheduled
+                    scan has ever run. Until it is, press <strong>Scan now</strong> on
+                    the Leads page. <a className="underline" href={techMailto({ subject: 'Automatic inbox scanning is not running' })}>Tell MD Media tech</a>.
                   </span>
                 </p>
               )}
@@ -493,9 +505,18 @@ export default function ScannerSettings() {
               Only a super admin can change scanner settings.
             </p>
           ) : <span />}
-          <Button onClick={save} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : 'Save settings'}
-          </Button>
+          <div className="flex items-center gap-3">
+            {dirty && (
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                You have unsaved changes
+              </span>
+            )}
+            <Button onClick={save} disabled={saving || !dirty}>
+              {saving
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                : dirty ? 'Save changes' : 'Saved'}
+            </Button>
+          </div>
         </CardFooter>
       </Card>
     </div>

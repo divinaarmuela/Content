@@ -19,7 +19,7 @@ import {
 import {
   bucketByDay, calendarColors, dayKey, shiftWeek, weekOf, CAL_TZ, type CalEvent,
 } from '../../lib/gcal-core'
-import type { ShootStatus } from '../../lib/shoot-core'
+import { PROPOSAL_TAG, type ShootStatus } from '../../lib/shoot-core'
 import { useRole } from '../useRole'
 
 type Account = {
@@ -49,13 +49,6 @@ const PROPOSAL_STYLE: Record<ShootStatus, string> = {
   accepted: 'border border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
   declined: 'border border-red-200 bg-red-50/60 text-red-500 line-through dark:bg-red-950/20 dark:text-red-400/70 dark:border-red-900',
   cancelled: 'border border-zinc-200 bg-zinc-50 text-zinc-400 line-through dark:bg-zinc-900 dark:border-zinc-800',
-}
-
-const PROPOSAL_TAG: Record<ShootStatus, string> = {
-  pending: 'awaiting reply',
-  accepted: 'confirmed',
-  declined: 'declined',
-  cancelled: 'cancelled',
 }
 
 const fmtTime = (iso: string) =>
