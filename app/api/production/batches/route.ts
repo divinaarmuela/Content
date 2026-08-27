@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
-import { batchClientIds } from '../../../lib/production-access'
+import { batchClientIds, heldBatchIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
 import { onBatchCreated } from '../../../lib/gdrive-hooks'
@@ -20,8 +20,14 @@ export async function GET() {
       .limit(200)
     const clientIds = await batchClientIds(user)
     if (clientIds !== null) {
-      if (clientIds.length === 0) return NextResponse.json([])
-      q = q.in('client_id', clientIds)
+      // the shoots of my clients — plus any shoot I hold a job on, which
+      // opens for me (canOpenBatch) and so must be listed for me
+      const held = await heldBatchIds(user)
+      if (clientIds.length === 0 && held.length === 0) return NextResponse.json([])
+      const parts: string[] = []
+      if (clientIds.length) parts.push(`client_id.in.(${clientIds.join(',')})`)
+      if (held.length) parts.push(`id.in.(${held.join(',')})`)
+      q = q.or(parts.join(','))
     }
     const { data, error } = await q
     if (error) throw new Error(error.message)

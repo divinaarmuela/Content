@@ -45,6 +45,22 @@ export async function canOpenBatch(
   return (data?.length ?? 0) > 0
 }
 
+/**
+ * Shoots this team user holds a job on — owner of an item under the shoot, or
+ * handed its scheduling. These open the shoot for a person who is not on the
+ * client team (see canOpenBatch), so every LIST of shoots must include them
+ * too, or the person is told "you can open this" by a page they cannot find.
+ */
+export async function heldBatchIds(user: TeamUser): Promise<string[]> {
+  const { data } = await supabase
+    .from('content_items')
+    .select('batch_id')
+    .not('batch_id', 'is', null)
+    .or(`owner_id.eq.${user.id},scheduler_ids.cs.["${user.id}"]`)
+    .limit(500)
+  return [...new Set((data ?? []).map(r => r.batch_id as string).filter(Boolean))]
+}
+
 /** Client ids this team user may touch. null = unrestricted (super_admin). */
 export async function accessibleClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null

@@ -4,7 +4,7 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/a
 import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
 import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
-import { accessibleClientIds, assertUuid } from '../../../lib/production-access'
+import { accessibleClientIds, assertUuid, canOpenBatch } from '../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
     }
     const batchIds = [...new Set(items.map((it: { batch_id?: string }) => it.batch_id).filter(Boolean))] as string[]
     const { data: batchRows } = batchIds.length
-      ? await supabase.from('batches').select('id, client_id, status').in('id', batchIds)
+      ? await supabase.from('batches').select('id, client_id, status, owner_id').in('id', batchIds)
       : { data: [] }
     const batchById = new Map((batchRows ?? []).map(b => [b.id as string, b]))
 
@@ -215,7 +215,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'client_id and title are required on every item' }, { status: 400 })
       }
       if (clientIds !== null && !clientIds.includes(it.client_id)) {
-        return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
+        // off the client team, but holding a job on the shoot (the brief handed
+        // to a manager) — the shoot opens for them, so its items may be made
+        const heldShoot = it.batch_id ? batchById.get(it.batch_id) : null
+        const viaShoot = heldShoot
+          ? await canOpenBatch(user, heldShoot as { id: string; client_id: string; owner_id?: string | null })
+          : false
+        if (!viaShoot) {
+          return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
+        }
       }
       // the kind decides WHICH gate applies, so it resolves first: a shoot
       // BRIEF is the exception that may start from nothing — running the
