@@ -17,20 +17,24 @@ import {
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, CalendarDays, CheckSquare, Flag, Trash2, ArrowRight } from 'lucide-react'
+import { Plus, CalendarDays, CheckSquare, Flag, ListChecks, Trash2, ArrowRight } from 'lucide-react'
 import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { itemStatusLabel } from '../../lib/brief-task-core'
 import {
   EDITOR_LANES, canClaimEditor, editorAssignment, editorScope, editorTail,
   isAsset, unassignedCount, type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
+import {
+  dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
+} from '../../lib/work-calendar-core'
+import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
 import { useProductionLive } from '../production/useProductionLive'
 import { useOrderedLoad } from '../useOrderedLoad'
 import { useRole } from '../useRole'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
 import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
-import { usePersistedScope, useTeamNames } from '../production/workHooks'
+import { usePersistedChoice, usePersistedScope, useTeamNames } from '../production/workHooks'
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
@@ -82,6 +86,10 @@ const LANE_EMPTY: Record<string, string> = {
 }
 
 const SCOPE_KEY = 'md-editor-scope'
+const VIEW_KEY = 'md-editor-view'
+const RANGE_KEY = 'md-editor-cal-range'
+const VIEWS = ['board', 'calendar'] as const
+const RANGES = ['month', 'week'] as const
 
 /** Two letters for a colleague, when their whole name would crowd the card. */
 function initialsOf(name: string): string {
@@ -121,6 +129,10 @@ export default function EditorPage() {
   // it to be picked up
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
+  // lanes or dates — two readings of the same board, and which one you were
+  // on is worth remembering
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board')
+  const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
 
   const [strip, setStrip] = useState<{ type: string; label: string; quota: number; planned: number; delivered: number; in_production?: number; approved?: number; scheduled?: number; posted?: number }[] | null>(null)
   useEffect(() => {
@@ -219,6 +231,11 @@ export default function EditorPage() {
   // the scope is applied or both numbers are structurally zero
   const tail = editorTail(filtered)
 
+  /** The same rows the lanes are drawn from, filed by due date instead of by
+   *  step. The scope switch and the client / shoot chips have already had
+   *  their say, so the two views can never disagree about what is here. */
+  const calendar = eventsFor('editor', { items: visible })
+
   /* ── bulk select + delete: tick cards on the board instead of opening each ── */
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -247,6 +264,36 @@ export default function EditorPage() {
       void load()
     } finally {
       setBulkBusy(false)
+    }
+  }
+
+  /**
+   * Drag a card onto another day — the due date, moved.
+   *
+   * Optimistic, then reconciled: the card lands where it was dropped straight
+   * away, and the sequence-stamped `load()` (lib/load-order.ts) has the last
+   * word whichever way the server answers, so a refusal puts it back without
+   * any bookkeeping here. `canMove` only decides whether to offer the handle;
+   * the API is what actually enforces who may move a date, and its refusal is
+   * shown in its own words.
+   */
+  const moveEvent = async (e: CalEvent, day: string) => {
+    const patch = movePatch(e, day)
+    if (!patch) return
+    setItems(prev => (prev ?? []).map(i => (i.id === e.entityId ? { ...i, due_date: day } : i)))
+    try {
+      const res = await fetch(moveUrl(e), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not move it')
+      toast.success(`${e.title} → ${dayLabel(day)}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not move it')
+    } finally {
+      void load()
     }
   }
 
@@ -296,7 +343,18 @@ export default function EditorPage() {
             Assets in the edit — from first draft to client approval.
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* the lanes say whose step a job is on; the calendar says when it
+              is due. Same rows, same filters, two questions. */}
+          <ViewSwitch
+            label="How to show this board"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'board', label: 'Board', icon: ListChecks },
+              { value: 'calendar', label: 'Calendar', icon: CalendarDays },
+            ]}
+          />
           <ScopeSwitch scope={scope} onChange={setScope}
             unassignedCount={openPool} unassignedHint={unassignedHint} />
           <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
@@ -385,6 +443,21 @@ export default function EditorPage() {
             )}
           </CardContent>
         </Card>
+      ) : view === 'calendar' ? (
+        <WorkCalendar
+          events={calendar}
+          viewer={viewer}
+          view={range as CalendarView}
+          onViewChange={setRange}
+          onMove={moveEvent}
+          undatedLabel="No due date"
+          legend={
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Every asset on its due date, coloured by the step it is on. Drag one to
+              another day to move the date.
+            </p>
+          }
+        />
       ) : (
         <div className="w-full overflow-x-auto">
           <div className="flex gap-3 pb-3">

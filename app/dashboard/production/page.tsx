@@ -34,10 +34,14 @@ import {
   isBriefTask, isInternalTask, productionScope, recentlyDoneTasks, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
+import {
+  dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
+} from '../../lib/work-calendar-core'
+import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
 import { useProductionLive } from './useProductionLive'
 import { useOrderedLoad } from '../useOrderedLoad'
 import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
-import { usePersistedScope, useTeamNames } from './workHooks'
+import { usePersistedChoice, usePersistedScope, useTeamNames } from './workHooks'
 import { useRole } from '../useRole'
 import NewItemDialog, { type ClientRow } from './NewItemDialog'
 import { ClaimButton } from './ClaimButton'
@@ -103,6 +107,10 @@ function briefChip(status: ItemStatus): string {
 }
 
 const SCOPE_KEY = 'md-production-scope'
+const VIEW_KEY = 'md-production-view'
+const RANGE_KEY = 'md-production-cal-range'
+const VIEWS = ['board', 'calendar'] as const
+const RANGES = ['month', 'week'] as const
 
 /** One dot per lane, in the order work moves — the Editor board's colours,
  *  because a lane called "Ready for review" should look the same everywhere
@@ -166,6 +174,10 @@ export default function ProductionPage() {
   // names for "waiting on …" and the Assign… menu — managers only
   const nameById = useTeamNames(isManager)
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
+  // the board and the calendar are two readings of the same page, and which
+  // one you were on is worth remembering between visits
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board')
+  const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
 
   /** The page, refetched with its answers kept in order — and never dropped.
    *  One fetcher, one apply; see lib/load-order.ts for why "newest issued
@@ -267,6 +279,46 @@ export default function ProductionPage() {
   }
 
   /**
+   * Drag a card onto another day.
+   *
+   * The row moves on screen first, because a date that waits for a round trip
+   * before it lands makes the drag feel broken — and then `load()` has the
+   * last word either way. That is the sequence-stamped load from
+   * lib/load-order.ts: whatever the server actually did is what stays on
+   * screen, so a refusal puts the card back without any bookkeeping here.
+   *
+   * The server is the authority on WHO may do this; `canMove` only decides
+   * whether to offer a drag handle. A refusal is shown in the server's own
+   * words rather than a guess at what it objected to.
+   */
+  const moveEvent = async (e: CalEvent, day: string) => {
+    const patch = movePatch(e, day)
+    if (!patch) return
+    if (e.kind === 'shoot') {
+      setShoots(prev => (prev ?? []).map(s => (s.id === e.entityId ? { ...s, shoot_date: day } : s)))
+    } else {
+      const bump = (rows: BriefTask[]) =>
+        rows.map(t => (t.id === e.entityId ? { ...t, due_date: day } : t))
+      setBriefTasks(bump)
+      setInternalTasks(bump)
+    }
+    try {
+      const res = await fetch(moveUrl(e), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not move it')
+      toast.success(`${e.title} → ${dayLabel(day)}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not move it')
+    } finally {
+      void load()
+    }
+  }
+
+  /**
    * After creating something, make sure the person can SEE it.
    *
    * A task created with nobody on it is "unassigned"; if the remembered scope
@@ -317,6 +369,19 @@ export default function ProductionPage() {
   const openPool = viewer
     ? unassignedCount([...briefsInFilters, ...tasksInFilters], viewer, editorAssignment)
     : 0
+
+  /**
+   * The calendar, drawn from exactly the rows the board is drawn from.
+   *
+   * The scope switch and the client filter have already had their say above,
+   * so the two views cannot disagree about what is on this page — and shoots
+   * follow the page's own rule, which the line under the header states: the
+   * filter covers briefs and tasks, and shoots are always shown.
+   */
+  const calendar = eventsFor('production', {
+    batches: visible,
+    items: [...briefRows, ...taskRows, ...doneRows],
+  })
 
   // the whole page hangs off the viewer, so a missing account is not a slower
   // load — it is a different screen, and saying so beats a skeleton forever
@@ -446,6 +511,17 @@ export default function ProductionPage() {
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-zinc-500 dark:text-zinc-400">Shoots, briefs and tasks</p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* Board answers "whose step is this on"; Calendar answers "what is
+              happening on Thursday". Same rows, same filters, two questions. */}
+          <ViewSwitch
+            label="How to show this page"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'board', label: 'Board', icon: ListChecks },
+              { value: 'calendar', label: 'Calendar', icon: CalendarDays },
+            ]}
+          />
           {/* one place, always on screen — a control that moves with the data
               is a control nobody learns */}
           <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
@@ -513,6 +589,24 @@ export default function ProductionPage() {
         </Card>
       )}
 
+      {view === 'calendar' ? (
+        <WorkCalendar
+          events={calendar}
+          viewer={viewer}
+          view={range as CalendarView}
+          onViewChange={setRange}
+          onMove={moveEvent}
+          undatedLabel="No date yet"
+          legend={
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Shoots sit on their shoot date; briefs and tasks on their due date. Drag one
+              to another day to move it — a shoot whose date is locked moves from the shoot
+              page, with a reason.
+            </p>
+          }
+        />
+      ) : (
+        <>
       {/* the plans still being written, above the shoots they will become */}
       {briefsInFilters.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -756,6 +850,8 @@ export default function ProductionPage() {
             </div>
           )
         })
+      )}
+        </>
       )}
 
       <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
