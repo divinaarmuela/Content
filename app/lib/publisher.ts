@@ -527,16 +527,49 @@ export async function registerZernioWebhook(input: {
     return json
   }
 
-  const events = [...input.events]
   const name = input.name ?? 'MD Media dashboard'
+  let events = [...input.events]
 
-  // does one already exist for this exact URL?
+  /**
+   * Is this registration ours?
+   *
+   * Not string equality on the URL. The webhook was first registered BY HAND
+   * from Zernio's dashboard, and a hand-typed URL differs from ours in all the
+   * ways hand-typed URLs do: a trailing slash, a query string, `http`, or the
+   * other path that serves the same handler (`/api/zernio/webhook`). Every one
+   * of those would look like a different webhook, and "register" would quietly
+   * create a SECOND one — which does not fail, it just delivers every event
+   * twice from then on.
+   */
+  const ours = (raw: unknown): boolean => {
+    const value = String(raw ?? '').trim()
+    if (!value) return false
+    if (value === input.url) return true
+    try {
+      const a = new URL(value)
+      const b = new URL(input.url)
+      const path = (u: URL) => u.pathname.replace(/\/+$/, '')
+      return a.host === b.host
+        && (path(a) === path(b) || ['/api/zernio/webhook', '/api/social/webhook'].includes(path(a)))
+    } catch { return false }
+  }
+
+  // does one already exist for this endpoint?
   let existingId: string | null = null
   try {
     const list = await call('GET')
     const rows = (Array.isArray(list) ? list : list.webhooks ?? []) as Record<string, unknown>[]
-    const match = rows.find(w => String(w.url ?? '').trim() === input.url)
-    if (match) existingId = String(match._id ?? match.id ?? '') || null
+    const match = rows.find(w => ours(w.url))
+    if (match) {
+      existingId = String(match._id ?? match.id ?? '') || null
+      // UNION, never replace. The owner's hand-made registration may carry
+      // events we do not ask for (or ones added since), and a PUT sends the
+      // whole `events` array — so replacing it would silently UNSUBSCRIBE from
+      // whatever they had set up. Adding the missing events is the whole job
+      // this button has when a registration already exists.
+      const already = Array.isArray(match.events) ? match.events.map(String) : []
+      events = [...new Set([...already, ...events])]
+    }
   } catch {
     // listing is a courtesy; failing it should not block a first registration
   }

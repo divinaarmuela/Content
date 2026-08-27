@@ -5,6 +5,20 @@ import { storageBackend } from '@/app/lib/storage'
 import { driveStatus } from '@/app/lib/gdrive'
 import { driveMemberNote } from '@/app/lib/gdrive-members'
 import { zernioWebhookUrl } from '@/app/lib/zernio-webhook'
+import { webhookDeliveryStats } from '@/app/lib/zernio-events'
+
+/** "2 min ago" — the only form of this timestamp anybody reads off a card. */
+function sinceWords(iso: string | null): string {
+  if (!iso) return 'never'
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
+  if (!Number.isFinite(mins) || mins < 0) return 'just now'
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
 
 /**
  * What is actually connected.
@@ -48,6 +62,13 @@ export async function GET() {
         return (n ?? 0) > 0
       } catch { return false }
     })()
+
+    // …and is anything actually ARRIVING? A registration proves the button was
+    // pressed. It does not prove the URL is reachable, and Zernio disables a
+    // webhook after ten consecutive delivery failures without telling us — at
+    // which point a card reading "instant updates on" is confidently wrong.
+    // A delivery timestamp is the only honest answer.
+    const deliveries = await webhookDeliveryStats()
 
     const [socialAccounts, activeSocial, asanaProjects, asanaHooks] = await Promise.all([
       count('social_accounts'),
@@ -116,8 +137,11 @@ export async function GET() {
           : [
               `Connected · ${activeSocial} client account${activeSocial === 1 ? '' : 's'} linked, managed per client`,
               instantUpdates
-                ? 'Instant post updates on — the board hears the moment a post goes live'
-                : 'Instant post updates off — a published post is noticed within 10 minutes',
+                ? `Instant updates: on${deliveries.ever
+                    ? ` · last delivery ${sinceWords(deliveries.last_at)}`
+                      + ` · ${deliveries.today} event${deliveries.today === 1 ? '' : 's'} today`
+                    : ' · nothing delivered yet'}`
+                : 'Instant updates: off — a published post is noticed within 10 minutes',
             ].join(' · '),
         href: '/dashboard/social',
         // one press registers our webhook with the provider; pressing it again

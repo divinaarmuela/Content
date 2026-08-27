@@ -245,6 +245,47 @@ export const postAnalyticsRefresh = inngest.createFunction(
 )
 
 /**
+ * Fetch a post's first numbers ten minutes after it goes live.
+ *
+ * The `post.published` webhook says the exact moment a post landed, but the
+ * platforms do not have insights ready at that moment — Meta and TikTok both
+ * return zeroes for the first few minutes, and caching a row of zeroes is worse
+ * than having no row, because the portal then shows "0 views" about a Reel that
+ * is doing fine. Ten minutes is late enough for real figures and early enough
+ * that a client opening the portal after a morning post sees them.
+ *
+ * `step.sleep` is why this is an Inngest function rather than a `setTimeout`:
+ * the wait survives the deploy that lands in the middle of it.
+ *
+ * Idempotent twice over — `idempotency` collapses duplicate deliveries of the
+ * same post, and `refreshPostById` upserts on `provider_post_id`, so a replay
+ * re-reads the same numbers and writes the same row. The half-hourly sweep
+ * remains the backstop; this only shortens the first wait.
+ */
+export const postAnalyticsFirstFetch = inngest.createFunction(
+  {
+    id: 'post-analytics-first-fetch',
+    name: 'First analytics fetch after publish',
+    triggers: [{ event: 'app/social.post.published' }],
+    retries: 2,
+    concurrency: { limit: 5 },
+    idempotency: 'event.data.providerPostId',
+  },
+  async ({ event, step }) => {
+    const providerPostId = String(event.data?.providerPostId ?? '')
+    if (!providerPostId) return { skipped: 'no providerPostId' }
+
+    // the platform needs a few minutes before its insights mean anything
+    await step.sleep('let-the-platform-catch-up', '10m')
+
+    return step.run('fetch', async () => {
+      const { refreshPostById } = await import('../lib/post-analytics')
+      return { providerPostId, ...(await refreshPostById(providerPostId)) }
+    })
+  }
+)
+
+/**
  * Backfill anything the Asana webhooks missed.
  *
  * Asana delivery is at-most-once and its /events history is only 24 hours, so
@@ -384,6 +425,7 @@ export const functions = [
   publishDispatcher,
   publishPost,
   postAnalyticsRefresh,
+  postAnalyticsFirstFetch,
   asanaReconcile,
   brandScan,
 ]

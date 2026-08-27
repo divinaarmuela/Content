@@ -137,6 +137,28 @@ export async function refreshOnePost(job: PublishedJob): Promise<{ updated: bool
 }
 
 /**
+ * Refresh ONE post, named by the provider's post id.
+ *
+ * The webhook's entry point. `post.published` tells us the exact post that
+ * just went live, so the first set of numbers can be fetched for that post
+ * alone instead of waiting for the half-hourly sweep to come round to it. A
+ * post id with no job behind it is a no-op, not an error: the provider can
+ * publish posts that never came from this dashboard.
+ */
+export async function refreshPostById(
+  providerPostId: string,
+): Promise<{ updated: boolean; linked: boolean }> {
+  const { data } = await supabase
+    .from('publish_jobs')
+    .select('id, content_item_id, provider_post_id, permalink, published_at, targets')
+    .eq('provider_post_id', providerPostId)
+    .limit(1)
+  const job = (data ?? [])[0] as unknown as PublishedJob | undefined
+  if (!job) return { updated: false, linked: false }
+  return refreshOnePost(job)
+}
+
+/**
  * Refresh every post published in the last `days`.
  *
  * The window is generous on purpose: a Reel keeps accumulating views for

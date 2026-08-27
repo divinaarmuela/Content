@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -216,6 +216,42 @@ export default function InboxPage() {
   }, [])
 
   useEffect(() => { loadPosts() }, [loadPosts])
+
+  /**
+   * Instant updates, without polling the provider.
+   *
+   * This page reads its conversations and comments LIVE from Zernio, so a new
+   * DM changes nothing locally — and asking Zernio for the whole conversation
+   * list every thirty seconds, from every open tab, would spend their rate
+   * limit to discover that nothing happened.
+   *
+   * The webhook's delivery log is local and indexed, so THAT is what gets asked
+   * on the timer. Only when its timestamp moves is a real round trip spent. The
+   * page still loads normally on arrival, so an unmigrated log table or a
+   * webhook that has not been enabled degrades to exactly the old behaviour.
+   */
+  const seenAt = useRef<string | null>(null)
+  useEffect(() => {
+    let stopped = false
+    const tick = async () => {
+      try {
+        const since = seenAt.current
+        const res = await fetch(
+          `/api/social/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`)
+        if (!res.ok || stopped) return
+        const { last_at: latest } = await res.json() as { last_at: string | null }
+        if (stopped || !latest) return
+        // the first answer only establishes the baseline — the page has just
+        // loaded, so everything up to now is already on screen
+        const advanced = since !== null && latest !== since
+        seenAt.current = latest
+        if (advanced) void (tab === 'messages' ? loadConvos() : loadPosts())
+      } catch { /* offline, or the log table is not migrated — stay quiet */ }
+    }
+    void tick()
+    const timer = setInterval(tick, 30_000)
+    return () => { stopped = true; clearInterval(timer) }
+  }, [tab, loadConvos, loadPosts])
 
   const openPost = async (p: PostRow) => {
     setActive(p); setComments(null); setReplyTo(null); setDmTo(null)

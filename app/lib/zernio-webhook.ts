@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { decryptSecret } from './secret-box'
 import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
+import {
+  claimDelivery, finishDelivery, releaseDelivery,
+  platformPublished, platformFailed, postCancelled, postScheduledConfirmed,
+  accountConnected, reviewReceived, leadReceived,
+} from './zernio-events'
 
 /**
  * One handler for every Zernio webhook delivery.
@@ -128,15 +133,131 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
 
   const { event, eventId, action } = parseZernioEvent(body)
 
+  // ── the idempotency claim ────────────────────────────────────────────
+  // Zernio is at-least-once (7 attempts over ~51 hours), so a repeat is
+  // routine rather than exceptional. The unique index on the event id decides
+  // who does the work; every handler below is ALSO idempotent on its own, so
+  // an unmigrated log table degrades to yesterday's behaviour rather than to
+  // double-writes.
+  const claim = await claimDelivery(event || 'unknown', eventId)
+  if (claim.kind === 'duplicate') {
+    return NextResponse.json({ ok: true, duplicate: true })
+  }
+
+  const done = async (res: Response, handled: boolean, note?: string) => {
+    // A delivery we are about to refuse must NOT keep its claim: the provider
+    // redelivers it, the claim would make that redelivery look like a duplicate,
+    // and a transient database failure would become a permanent one.
+    if (!res.ok) await releaseDelivery(claim)
+    else await finishDelivery(claim, handled, note)
+    return res
+  }
+
   switch (action.kind) {
-    case 'published':  return published(action.postId, action.permalink, action.platforms)
-    case 'failed':     return failed(action.postId, action.error)
-    case 'account_inactive': return accountInactive(action.accountId)
+    case 'published': {
+      const res = await published(action.postId, action.permalink, action.platforms)
+      // The platform's own numbers are not available the instant it publishes —
+      // Meta and TikTok both need a few minutes before insights return anything
+      // but zeroes. Ten minutes later is early enough that a client opening the
+      // portal after a morning post sees real figures, and late enough that the
+      // figures are real.
+      if (res.ok) await scheduleFirstAnalyticsFetch(action.postId)
+      return done(res, res.ok, action.permalink ? 'permalink captured' : undefined)
+    }
+    case 'failed':
+      return done(await failed(action.postId, action.error), true, action.error)
+
+    case 'platform_published': {
+      const wrote = await platformPublished(action)
+      return done(
+        NextResponse.json({ ok: true, platform: action.platform, linked: wrote }),
+        wrote,
+        wrote
+          ? `${action.platform} → ${action.permalink}`
+          : action.backfillOnly ? 'no url yet' : 'no url on the event',
+      )
+    }
+    case 'platform_failed': {
+      const settled = await platformFailed(action)
+      return done(
+        NextResponse.json({ ok: true, platform: action.platform, failed: settled }),
+        settled, `${action.platform}: ${action.error}`,
+      )
+    }
+    case 'cancelled': {
+      const settled = await postCancelled(action.postId)
+      return done(NextResponse.json({ ok: true, cancelled: settled }), settled)
+    }
+    case 'scheduled': {
+      const known = await postScheduledConfirmed(action.postId)
+      return done(
+        NextResponse.json({ ok: true, known }), known,
+        known ? undefined : 'no job holds this post id',
+      )
+    }
+
+    case 'account_inactive':
+      return done(await accountInactive(action.accountId), true)
+    case 'account_connected': {
+      const synced = await accountConnected(action)
+      return done(
+        NextResponse.json({ ok: true, resynced: synced }), synced,
+        synced ? undefined : 'no client holds this profile yet',
+      )
+    }
+
+    // A comment and a DM both mean the same thing to this dashboard: the Inbox
+    // is now behind. The comment→DM automations themselves run INSIDE Zernio —
+    // we configure them through their API, we do not evaluate them — so there
+    // is no matcher here to run early, and pretending otherwise would risk
+    // sending a client's audience a second DM. Recording the delivery is what
+    // lets the Inbox refresh without polling the provider on a timer.
+    case 'comment':
+      return done(
+        NextResponse.json({ ok: true, comment: action.commentId }), true,
+        action.text ? action.text.slice(0, 200) : undefined,
+      )
+    case 'inbox':
+      return done(NextResponse.json({ ok: true, inbox: action.detail }), true)
+
+    case 'review': {
+      const told = await reviewReceived(action)
+      return done(NextResponse.json({ ok: true, notified: told }), told)
+    }
+    case 'lead': {
+      const told = await leadReceived(action)
+      return done(NextResponse.json({ ok: true, notified: told }), told)
+    }
+
     case 'ignore':
       // 200, never 4xx: an unrecognised payload answered with an error is
-      // redelivered for ~51 hours and still unrecognised every time
-      console.warn('zernio webhook ignored:', event, eventId, action.reason)
-      return NextResponse.json({ ok: true, ignored: action.reason })
+      // redelivered for ~51 hours and still unrecognised every time. One
+      // structured line so a new event that starts arriving is discoverable
+      // rather than invisible.
+      console.warn(JSON.stringify({
+        at: 'zernio.webhook', outcome: 'ignored', event, eventId, reason: action.reason,
+      }))
+      return done(NextResponse.json({ ok: true, ignored: action.reason }), false, action.reason)
+  }
+}
+
+/**
+ * Ask for this post's numbers in ten minutes' time.
+ *
+ * Fire-and-forget: Inngest being unreachable must not turn a delivery that
+ * already did its real work into a 500 the provider replays for two days. The
+ * half-hourly sweep still picks the post up regardless — this only shortens the
+ * wait for the first set of figures.
+ */
+async function scheduleFirstAnalyticsFetch(providerPostId: string): Promise<void> {
+  try {
+    const { inngest } = await import('@/app/inngest/client')
+    await inngest.send({
+      name: 'app/social.post.published',
+      data: { providerPostId },
+    })
+  } catch (e) {
+    console.error('could not schedule the first analytics fetch', providerPostId, e)
   }
 }
 

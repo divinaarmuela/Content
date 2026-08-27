@@ -12,18 +12,34 @@ keeps that path). `POST /api/zernio/webhook` is the same handler under the
 provider-shaped name. **Register one, not both.** Both are public — the
 signature is the authentication, not Clerk.
 
-**What it does.** `post.published` → the job goes `published` with
-`published_at` and the `platformPostUrl` permalink, then `recordPublishOnItem`
-walks the item scheduled → published as the system actor ("Posted by
-Instagram"), with the usual activity row and notifications. `post.failed` /
-`post.partial` → the job goes `failed` with the provider's reason and the item
-**stays Scheduled** — it is booked, it just did not go out. `account.*` →
-unchanged. Anything else is logged and answered 200.
+**What it does.** Every social feature that used to learn Zernio's state by
+polling now hears it first, with the poll kept as the backstop.
 
-Idempotent by conditional UPDATE, not by an event table: a delivery only acts
-if it moves a job out of `queued`/`publishing`/`scheduled`. Zernio is
-at-least-once and retries for ~51 hours, so this matters. The 10-minute
-reconcile stays as the backstop for deliveries that never arrive.
+| Event | What changes |
+|---|---|
+| `post.published` | job → `published` + permalink; `recordPublishOnItem` walks the item scheduled → published as the system actor ("Posted by Instagram"). Also asks Inngest for the post's first analytics read **10 minutes later** (`app/social.post.published` → `post-analytics-first-fetch`; the platforms return zeroes before that). |
+| `post.failed` / `post.partial` | job → `failed` with the provider's reason. The item **stays Scheduled** — it is booked, it just did not go out. |
+| `post.platform.published` | the per-platform live URL is written to `publish_jobs.permalink`, the matching `schedule_entries.live_url`, `post_analytics.platform_post_url` and `content_assets.post_url` — each `is(…, null)` guarded, so a link set by hand is never overwritten. Does **not** settle the job; the rollup owns that. |
+| `post.tiktok.url_resolved` | same path, back-fill only. TikTok hands over its public URL minutes after it reports the post published. |
+| `post.platform.failed` | job → `failed` with the platform's own words (`linkedin: Document too large`). |
+| `post.cancelled` | job → `cancelled` with a note the posting card renders, plus a `workflow_activity` row on the item. The item stays Scheduled. |
+| `post.scheduled` | confirmation only; nothing moves. |
+| `account.connected` | `syncSocialAccounts` for that client immediately, so the posting card stops saying "no account connected" about a channel that now works. |
+| `account.disconnected` | unchanged since 20 Aug. |
+| `comment.received`, `message.*`, `reaction.received`, `conversation.started` | recorded in `webhook_deliveries`. The Inbox reads its conversations **live** from Zernio, so there is no local store to write into — instead the page polls `/api/social/activity` (one indexed local query) every 30s and only spends a real provider round trip when the log's timestamp moves. **The comment→DM automations run inside Zernio**, not here; we configure them through their API and must not evaluate them a second time. |
+| `review.new` / `review.updated`, `lead.received` | a bell-only notification to the client's account managers (super admins if none assigned). Nothing more. A lead on a *client's* ad is deliberately **not** put into MD Media's own `leads` table. |
+| anything else | one structured log line and a 200. Never a 4xx: a non-2xx is redelivered for ~51 hours and is still unrecognised every time. |
+
+**Idempotency** is now `webhook_deliveries.provider_event_id` (unique) — an
+INSERT that either wins or does not, with no check-then-write window. Every
+handler is *also* independently idempotent (conditional UPDATE, or a
+null-guarded back-fill), so an unmigrated log table degrades to the old
+behaviour rather than to double-writes. A delivery about to be answered non-2xx
+**releases** its claim, so the provider's retry is not mistaken for a duplicate.
+
+The 10-minute reconcile, the half-hourly analytics sweep and loading the Inbox
+on visit all stay exactly as they were: the webhook is the fast path, not the
+only path.
 
 ### What the owner has to do
 
@@ -32,17 +48,32 @@ Either of these is a complete setup — the handler accepts both.
 1. **The button.** Settings → Integrations → Social publishing →
    **"Enable instant post updates"** (super-admin only). It registers the URL
    with Zernio, generates the signing secret, and stores it encrypted.
-   Requires `CREDENTIALS_KEY` (already set) and one-off SQL:
+   It now asks for the **whole** event list, and if a registration already
+   exists for this endpoint — including one made by hand, matched on host and
+   path rather than on an exact string, so a trailing slash or the
+   `/api/zernio/webhook` spelling still counts — it **PUTs that one and unions
+   the events in** rather than creating a second registration. (Zernio allows
+   50 webhooks and de-duplicates none of them: a second one means every event
+   delivered twice, forever, with no error anywhere.) Requires
+   `CREDENTIALS_KEY` (already set) and one-off SQL:
    ```sql
    -- Supabase SQL editor, idempotent
-   supabase/zernio_webhook.sql      -- creates provider_webhooks
+   supabase/zernio_webhook.sql       -- creates provider_webhooks
+   supabase/webhook_deliveries.sql   -- the idempotency key + the card's stats
    ```
 2. **By hand.** Add a webhook in the Zernio dashboard pointing at
    `https://app.mdmmarketing.com.au/api/social/webhook` (the card has a **Copy
-   webhook URL** button), subscribed to `post.published`, `post.failed`,
-   `post.partial`, `account.disconnected`, with a secret of your choosing —
-   then set that same value as **`ZERNIO_WEBHOOK_SECRET`** in Vercel (all
-   environments) and redeploy. No SQL needed.
+   webhook URL** button), subscribed to every event in `ZERNIO_WEBHOOK_EVENTS`
+   (`app/lib/zernio-webhook-core.ts`), with a secret of your choosing — then set
+   that same value as **`ZERNIO_WEBHOOK_SECRET`** in Vercel (all environments)
+   and redeploy. Pressing the button afterwards will find and extend that
+   registration rather than duplicate it.
+
+The Integrations card no longer claims "instant updates on" merely because a
+registration row exists — it reads `webhook_deliveries` and says
+*"Instant updates: on · last delivery 2 min ago · 14 events today"*. A webhook
+pointed at a stale URL, or auto-disabled by Zernio after ten consecutive
+delivery failures, used to look identical to a working one.
 
 With neither, the endpoint answers 503 and refuses every delivery: an open
 endpoint that can mark any client's post published would be worse than no

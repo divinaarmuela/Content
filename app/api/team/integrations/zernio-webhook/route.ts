@@ -76,8 +76,10 @@ export async function POST() {
       url: hook.url,
       events: hook.events,
       message: hook.created
-        ? `Instant post updates enabled — Zernio will now deliver to ${hook.url}`
-        : 'Instant post updates were already on; the registration was refreshed',
+        ? `Instant post updates enabled — Zernio will now deliver ${hook.events.length} `
+          + `event types to ${hook.url}`
+        : `Instant post updates were already on; the existing registration now covers `
+          + `${hook.events.length} event types`,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
