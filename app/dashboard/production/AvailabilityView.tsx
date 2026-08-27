@@ -21,6 +21,8 @@ import {
 } from '../../lib/gcal-core'
 import { PROPOSAL_TAG, type ShootStatus } from '../../lib/shoot-core'
 import { useRole } from '../useRole'
+import ConfirmAction from '../ConfirmAction'
+import EmptyState from '../EmptyState'
 
 type Account = {
   email: string
@@ -394,7 +396,8 @@ export default function AvailabilityView() {
             type="button"
             disabled={!canManage}
             onClick={() => canManage && patchAccount({ email: a.email, enabled: !a.enabled })}
-            title={canManage ? (a.enabled ? 'Hide this calendar' : 'Show this calendar') : undefined}
+            aria-pressed={a.enabled}
+            aria-label={`${a.email} — ${a.enabled ? 'shown, tap to hide' : 'hidden, tap to show'}`}
             className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
               a.enabled
                 ? 'border-zinc-300 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
@@ -406,6 +409,9 @@ export default function AvailabilityView() {
               style={{ background: a.enabled ? colors[a.email] : 'transparent', boxShadow: a.enabled ? 'none' : `inset 0 0 0 1.5px ${colors[a.email]}` }}
             />
             {a.email}
+            {/* the hover-only title= said "Hide this calendar" — a hidden
+                calendar now says so on the chip, where a finger can read it */}
+            {!a.enabled && <span className="text-[10px] uppercase tracking-wider">hidden</span>}
           </button>
         ))}
 
@@ -440,20 +446,15 @@ export default function AvailabilityView() {
           {Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-40 w-full" />)}
         </div>
       ) : connected.length === 0 ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="max-w-md text-sm text-zinc-500 dark:text-zinc-400">
-              No calendars connected yet. Connect hello@ and contact@ (sign in as each
-              account when Google asks) and the week fills in with everyone&rsquo;s commitments —
-              empty space is shootable time.
-            </p>
-            {canManage && (
-              <Button variant="outline" size="sm" asChild>
-                <a href="/api/gcal/connect"><CalendarPlus className="h-3.5 w-3.5" /> Connect a calendar</a>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={CalendarPlus}
+          title="No calendars connected yet"
+          body={canManage
+            ? 'Connect hello@ and contact@ (sign in as each account when Google asks) and the week fills in with everyone’s commitments — empty space is shootable time.'
+            : 'Once an editor or account manager connects the team calendars, the week fills in here. Empty space is shootable time.'}
+          actionLabel={canManage ? 'Connect a calendar' : undefined}
+          actionHref={canManage ? '/api/gcal/connect' : undefined}
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
           {days.map(key => {
@@ -483,9 +484,10 @@ export default function AvailabilityView() {
                           key={i}
                           className="rounded-md border-l-2 bg-zinc-50 px-2 py-1.5 dark:bg-zinc-800/60"
                           style={{ borderLeftColor: colors[e.calendar] }}
-                          title={`${e.title} — ${e.calendar}`}
                         >
-                          <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{e.title}</p>
+                          {/* the full title, wrapped — a truncated title with the
+                              rest in a hover tooltip is a title a phone never reads */}
+                          <p className="break-words text-xs font-medium text-zinc-800 dark:text-zinc-200">{e.title}</p>
                           <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
                             {e.allDay ? 'all day' : `${fmtTime(e.start)} – ${fmtTime(e.end)}`}
                           </p>
@@ -495,45 +497,54 @@ export default function AvailabilityView() {
                         <div
                           key={p.id}
                           className={`rounded-md px-2 py-1.5 ${PROPOSAL_STYLE[p.status]}`}
-                          title={[
-                            `${p.title} — ${p.clients?.name ?? ''} (${PROPOSAL_TAG[p.status]})`,
-                            p.location ? `Location: ${p.location}` : null,
-                            `Sent to: ${p.send_to}`,
-                            p.note ? `Note: ${p.note}` : null,
-                          ].filter(Boolean).join('\n')}
                         >
                           <div className="flex items-start justify-between gap-1">
-                            <p className="truncate text-xs font-medium">
+                            <p className="break-words text-xs font-medium">
                               {p.title}{p.clients?.name ? ` · ${p.clients.name}` : ''}
                             </p>
                             {canManage && p.status !== 'cancelled' && (
-                              <button
-                                type="button"
-                                title={p.status === 'accepted' ? 'Cancel this booked shoot' : 'Cancel this proposal'}
-                                aria-label={`Cancel ${p.title}`}
-                                onClick={async () => {
-                                  if (p.status === 'accepted' &&
-                                      !confirm(`Cancel the BOOKED shoot "${p.title}"? Everyone it was sent to gets a cancellation email.`)) return
+                              // the same styled dialog every other destructive
+                              // action in the app uses — this was the native
+                              // browser confirm(), and the pending case asked
+                              // nothing at all
+                              <ConfirmAction
+                                title={p.status === 'accepted'
+                                  ? `Cancel the booked shoot “${p.title}”?`
+                                  : `Cancel the proposal “${p.title}”?`}
+                                body={p.status === 'accepted'
+                                  ? `The shoot is booked. Everyone it was sent to (${p.send_to}) gets a cancellation email straight away, and the day opens up again. This cannot be undone — to move it instead, cancel and send a new proposal.`
+                                  : `The client has not answered yet. Their answer link stops working and they are told it was withdrawn. To change the time, send a new proposal from another day.`}
+                                confirmLabel={p.status === 'accepted' ? 'Cancel the shoot' : 'Cancel the proposal'}
+                                onConfirm={async () => {
                                   const res = await fetch(`/api/shoots/${p.id}`, {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ cancel: true }),
                                   })
-                                  if (res.ok) { toast.success('Cancelled — recipients emailed'); loadEvents() }
-                                  else toast.error('Could not cancel')
+                                  if (res.ok) { toast.success(`“${p.title}” cancelled — ${p.send_to} has been emailed`); loadEvents() }
+                                  else toast.error('Could not cancel — try again')
                                 }}
-                                className="shrink-0 opacity-50 transition-opacity hover:opacity-100"
                               >
-                                <X className="h-3 w-3" />
-                              </button>
+                                <button
+                                  type="button"
+                                  aria-label={p.status === 'accepted' ? `Cancel the booked shoot ${p.title}` : `Cancel the proposal ${p.title}`}
+                                  className="-m-1 inline-flex shrink-0 items-center justify-center rounded p-1 opacity-60 transition-opacity hover:opacity-100 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </ConfirmAction>
                             )}
                           </div>
                           <p className="font-mono text-[10px] opacity-80">
                             {fmtTime(p.starts_at)} – {fmtTime(p.ends_at)} · {PROPOSAL_TAG[p.status]}
                           </p>
                           {p.location && (
-                            <p className="truncate font-mono text-[10px] opacity-70">{p.location}</p>
+                            <p className="break-words font-mono text-[10px] opacity-70">{p.location}</p>
                           )}
+                          {/* who has it — this used to be hover-only, and "did
+                              the client get it?" is the first question asked */}
+                          <p className="break-words text-[10px] opacity-70">to {p.send_to}</p>
+                          {p.note && <p className="break-words text-[10px] opacity-70">{p.note}</p>}
                         </div>
                       ))}
                     </div>
@@ -574,18 +585,20 @@ export default function AvailabilityView() {
             {CAL_TZ.replace('_', ' ')}
           </Badge>
           {connected.map(a => (
-            <button
+            <ConfirmAction
               key={a.email}
-              type="button"
-              onClick={() => {
-                if (confirm(`Disconnect ${a.email}? Its events disappear until someone reconnects it.`)) {
-                  patchAccount({ email: a.email, disconnect: true })
-                }
-              }}
-              className="flex items-center gap-1 text-zinc-400 transition-colors hover:text-red-600"
+              title={`Disconnect ${a.email}?`}
+              body="Its events disappear from this week view until someone signs in to Google and connects it again. Nothing in the calendar itself is touched. To just hide it for now, tap its chip above instead."
+              confirmLabel="Disconnect"
+              onConfirm={() => patchAccount({ email: a.email, disconnect: true })}
             >
-              <Unplug className="h-3 w-3" /> disconnect {a.email}
-            </button>
+              <button
+                type="button"
+                className="flex min-h-11 items-center gap-1 text-zinc-400 transition-colors hover:text-red-600"
+              >
+                <Unplug className="h-3 w-3" /> disconnect {a.email}
+              </button>
+            </ConfirmAction>
           ))}
         </div>
       )}
