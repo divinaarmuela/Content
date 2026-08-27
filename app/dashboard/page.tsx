@@ -17,7 +17,7 @@ import GettingStarted from './GettingStarted'
 import { LoadFailed } from './NotSetUp'
 import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
-import { DEFAULT_TZ, formatInZone, formatWithZone } from '../lib/timezone-core'
+import { DEFAULT_TZ, formatInZone, viewerHint } from '../lib/timezone-core'
 import { useProductionLive } from './production/useProductionLive'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -148,8 +148,15 @@ function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: 
         {(items ?? []).map(i => (
           <Link key={i.id} href={`/dashboard/production/${i.id}`}
             className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-            <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
-            <span className="hidden truncate text-xs text-zinc-500 dark:text-zinc-400 sm:block">{i.clients?.name ?? ''}</span>
+            {/* the client name used to be `hidden sm:block`, so on a phone
+                every row lost which client it belonged to. The title is what
+                gives way now — the client is how you tell two reels apart. */}
+            <span className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
+              <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
+              {i.clients?.name && (
+                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{i.clients.name}</span>
+              )}
+            </span>
             <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${STATUS_BADGE[i.status] ?? ''}`}>
               {statusLabel(i)}
             </Badge>
@@ -377,9 +384,9 @@ function MonthTableRow({ row, expanded, onToggle, onOpen }: {
             <span className="truncate font-medium">{row.name}</span>
           </span>
         </td>
-        {/* the whole promise is in the title, so the breakdown is one hover
-            away as well as one click */}
-        <td className={`${num} font-semibold`} title={row.lines.map(expandLine).join(' · ')}>{row.promised}</td>
+        {/* the per-type breakdown is the chevron at the start of the row —
+            one tap, on any device, not a hover */}
+        <td className={`${num} font-semibold`}>{row.promised}</td>
         <td className={`${num} font-semibold`}>{row.posted}</td>
         <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.scheduled}</td>
         <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.in_production}</td>
@@ -441,25 +448,44 @@ function AtRiskThisMonth() {
           <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
             Every agreement is fully delivered this month. Nice.
           </p>
-        ) : owing.map(c => (
-          <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-zinc-400'}`} />
-            <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
-            <span className="ml-auto flex flex-wrap justify-end gap-1.5">
-              {c.lines.filter(l => l.delivered < l.quota).map(l => (
-                <span key={l.type}
-                  title={`${l.posted ?? l.delivered} posted · ${l.scheduled ?? 0} scheduled · ${l.approved ?? 0} approved · ${l.in_production ?? 0} in production`}
-                  className={`font-mono text-[11px] tabular-nums ${
-                    l.pace === 'behind' ? 'text-red-500 dark:text-red-400'
-                      : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-zinc-500 dark:text-zinc-400'
-                  }`}>
-                  {l.label} {l.delivered}/{l.quota}
-                </span>
-              ))}
+        ) : owing.map(c => {
+          const short = c.lines.filter(l => l.delivered < l.quota)
+          // what is still moving towards the gap — this sat in a hover-only
+          // title= per chip, which is where a phone never looks
+          const moving = short.reduce((acc, l) => ({
+            scheduled: acc.scheduled + (l.scheduled ?? 0),
+            approved: acc.approved + (l.approved ?? 0),
+            in_production: acc.in_production + (l.in_production ?? 0),
+          }), { scheduled: 0, approved: 0, in_production: 0 })
+          const movingWords = [
+            moving.scheduled > 0 ? `${moving.scheduled} scheduled` : null,
+            moving.approved > 0 ? `${moving.approved} approved` : null,
+            moving.in_production > 0 ? `${moving.in_production} in production` : null,
+          ].filter(Boolean).join(' · ')
+          return (
+          <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`} className="flex flex-col gap-0.5 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+            <span className="flex items-center gap-3">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-zinc-400'}`} />
+              <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
+              <span className="ml-auto flex flex-wrap justify-end gap-1.5">
+                {short.map(l => (
+                  <span key={l.type}
+                    className={`font-mono text-[11px] tabular-nums ${
+                      l.pace === 'behind' ? 'text-red-500 dark:text-red-400'
+                        : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-zinc-500 dark:text-zinc-400'
+                    }`}>
+                    {l.label} {l.delivered}/{l.quota}
+                  </span>
+                ))}
+              </span>
+            </span>
+            <span className="pl-5 text-[11px] text-zinc-400 dark:text-zinc-500">
+              {movingWords ? `On the way: ${movingWords}` : 'Nothing in the pipeline yet for what is still owed'}
             </span>
           </Link>
-        ))}
+          )
+        })}
       </CardContent>
     </Card>
   )
@@ -499,8 +525,20 @@ function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }
   )
 }
 
+/** Where this browser thinks it is. Null when it will not say. */
+function browserZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
 export default function OverviewPage() {
   const [data, setData] = useState<Overview | null>(null)
+  // resolved after mount: on the server there is no viewer to have a zone
+  const [viewerTz, setViewerTz] = useState<string | null>(null)
+  useEffect(() => { setViewerTz(browserZone()) }, [])
 
   const load = useCallback(async () => {
     try {
@@ -600,24 +638,34 @@ export default function OverviewPage() {
                 {data.scheduler.upcoming.length === 0 && (
                   <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">Nothing scheduled for the next 7 days.</p>
                 )}
-                {data.scheduler.upcoming.map(e => (
+                {data.scheduler.upcoming.map(e => {
+                  // when it reaches the AUDIENCE — this strip mixes clients,
+                  // so the zone comes from the row, not the page
+                  const tz = e.content_items?.clients?.timezone || DEFAULT_TZ
+                  // "= 1:00 pm your time" for a scheduler in Manila. This was a
+                  // hover-only title= — the one fact a phone user most needs.
+                  const mine = viewerHint(e.scheduled_at, tz, viewerTz)
+                  return (
                   <Link key={e.id} href={`/dashboard/production/${e.item_id}`}
                     className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <span className="min-w-0 truncate text-sm font-medium">{e.content_items?.title ?? '—'}</span>
-                    <span className="hidden truncate text-xs text-zinc-500 dark:text-zinc-400 sm:block">{e.content_items?.clients?.name ?? ''}</span>
-                    <span className="ml-auto flex shrink-0 items-center gap-2">
+                    <span className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
+                      <span className="min-w-0 truncate text-sm font-medium">{e.content_items?.title ?? '—'}</span>
+                      {e.content_items?.clients?.name && (
+                        <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{e.content_items.clients.name}</span>
+                      )}
+                    </span>
+                    <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-2">
                       <Badge variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">{e.platform}</Badge>
                       {e.scheduled_at && (
-                        // when it reaches the AUDIENCE — this strip mixes
-                        // clients, so the zone comes from the row, not the page
-                        <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500"
-                          title={formatWithZone(e.scheduled_at, e.content_items?.clients?.timezone || DEFAULT_TZ) ?? undefined}>
-                          {formatInZone(e.scheduled_at, e.content_items?.clients?.timezone || DEFAULT_TZ, 'short')}
+                        <span className="text-right font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                          {formatInZone(e.scheduled_at, tz, 'short')}
+                          {mine && <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 sm:inline sm:before:content-['_·_']">{mine}</span>}
                         </span>
                       )}
                     </span>
                   </Link>
-                ))}
+                  )
+                })}
               </CardContent>
             </Card>
           </div>
