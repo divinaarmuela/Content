@@ -15,6 +15,14 @@ import { LoadOrder } from '../lib/load-order'
  * superseded, so a mutation can `await load()` and know the screen has caught
  * up before it stops showing a spinner.
  *
+ * Overlapping calls are COALESCED, not multiplied: a load() issued while one
+ * is already in flight does not open a second fetch — it books ONE trailing
+ * refetch that starts after the in-flight one settles, and every further
+ * call made in the meantime shares it. The trailing fetch begins after each
+ * of those requests was made, so nothing it answers can be staler than what
+ * the caller asked about — and a mutation-then-realtime-hint pair costs two
+ * requests instead of N. Freshness is preserved; duplicates are not sent.
+ *
  * See `lib/load-order.ts` for why "newest issued wins" was not good enough.
  */
 export function useOrderedLoad<T>(
@@ -29,8 +37,12 @@ export function useOrderedLoad<T>(
   applyRef.current = apply
   const fetchRef = useRef(fetcher)
   fetchRef.current = fetcher
+  /** the fetch currently on the wire, if any */
+  const inFlight = useRef<Promise<void> | null>(null)
+  /** the one refetch booked to run after it, shared by every caller waiting */
+  const trailing = useRef<Promise<void> | null>(null)
 
-  return useCallback(async () => {
+  const run = useCallback(async () => {
     const seq = order.current!.begin()
     let settled
     try {
@@ -43,4 +55,25 @@ export function useOrderedLoad<T>(
     }
     if (settled.apply) applyRef.current(settled.value)
   }, [])
+
+  const load = useCallback((): Promise<void> => {
+    if (inFlight.current) {
+      // one trailing refetch serves every request made while this one flies;
+      // it starts AFTER the in-flight answer, so it is fresh for all of them
+      trailing.current ??= inFlight.current
+        .catch(() => { /* the first flight's failure is its own callers' news */ })
+        .then(() => {
+          trailing.current = null
+          return load()
+        })
+      return trailing.current
+    }
+    const flight = run().finally(() => {
+      if (inFlight.current === flight) inFlight.current = null
+    })
+    inFlight.current = flight
+    return flight
+  }, [run])
+
+  return load
 }
