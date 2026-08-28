@@ -15,6 +15,7 @@ import { slidesOf } from '../../../lib/version-files-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
 export async function GET(req: Request) {
+  const t0 = Date.now()
   try {
     // Every signed-in role may LIST; what they get back is scoped below.
     // `requireRole('client')` looked like "the lowest bar" but means the
@@ -64,6 +65,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await q
     if (error) throw new Error(error.message)
+    const tMain = Date.now()
 
     // a scheduler sees an unclaimed approved item (anyone can pick it up) or
     // one explicitly handed to them — never someone else's private handoff.
@@ -84,82 +86,95 @@ export async function GET(req: Request) {
       : (data ?? [])
 
     if (user.role === 'client') {
+      console.log(`[items] GET ${Date.now() - t0}ms (main ${tMain - t0}, annot 0)`)
       return NextResponse.json(
         (data ?? []).map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] })),
       )
     }
 
-    // "someone is waiting on YOU here" — an unresolved comment tagged to the
-    // viewer. One query for the whole list; best-effort, because a missing
-    // badge is a smaller failure than a board that won't load.
+    // ── The annotations, all at once ──
+    // Three best-effort passes decorate the list: "someone is waiting on YOU
+    // here" (an unresolved comment tagged to the viewer — the same answer the
+    // Overview's "Waiting on you" reads), the created-by / approved-by
+    // credits the cards show, and how many slides the latest version holds
+    // (a scheduler picking up a carousel needs to know it IS one — "v3" said
+    // nothing about whether the post is one card or six, and six is a
+    // different job). Awaited in sequence they added four DB round-trips to
+    // every board load; they are independent, so they run in ONE Promise.all.
+    // Each keeps its own try/catch: a missing badge, credit or count is a
+    // smaller failure than a board that will not load, and one slow
+    // annotation must never block the list.
     let rows: Record<string, unknown>[] = scoped
-    try {
-      // the same answer the Overview's "Waiting on you" reads
-      const waiting = new Set((await openTaggedIds(user)).items)
-      rows = rows.map(r => ({ ...r, my_open_task: waiting.has(r.id as string) }))
-    } catch {
-      // leave the annotation off rather than fail the list
-    }
-
-    // "who made this" and "who signed it off" — the audit trail the cards
-    // show. Best-effort like the tag badge: a missing credit is a smaller
-    // failure than a board that will not load.
-    try {
-      const ids = rows.map(r => r.id as string).slice(0, 300)
-      if (ids.length > 0) {
-        const { data: acts } = await supabase
-          .from('workflow_activity')
-          .select('entity_id, actor_id, action, new_value, created_at')
-          .eq('entity_type', 'content_item')
-          .in('entity_id', ids)
-          .in('action', ['created', 'status_change'])
-          .order('created_at', { ascending: true })
-          .limit(3000)
-        const actorIds = [...new Set((acts ?? []).map(a => a.actor_id).filter(Boolean))]
-        const { data: actors } = actorIds.length
-          ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
-          : { data: [] }
-        const nameOf = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
-        const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
-        for (const a of acts ?? []) {
-          const key = a.entity_id as string
-          const entry = byItem.get(key) ?? { created_by: null, approved_by: null }
-          const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
-          if (a.action === 'created') entry.created_by = who
-          // rows arrive oldest-first, so the last approval wins
-          else if (a.new_value === 'approved_for_scheduling') entry.approved_by = who
-          byItem.set(key, entry)
+    const ids = rows.map(r => r.id as string).slice(0, 300)
+    const [waiting, credits, slideCounts] = await Promise.all([
+      (async () => {
+        try {
+          return new Set((await openTaggedIds(user)).items)
+        } catch {
+          return null // leave the annotation off rather than fail the list
         }
-        rows = rows.map(r => ({ ...r, ...(byItem.get(r.id as string) ?? {}) }))
-      }
-    } catch {
-      // no credits rather than no board
-    }
-
-    // How many slides the latest version holds. A scheduler picking up a
-    // carousel needs to know it IS one — "v3" said nothing about whether the
-    // post is one card or six, and six is a different job. Best-effort, like
-    // the annotations above: a missing count is smaller than a dead queue.
-    try {
-      const ids = rows.map(r => r.id as string).slice(0, 300)
-      if (ids.length > 0) {
-        const { data: versions } = await supabase
-          .from('asset_versions')
-          .select('item_id, version_number, file_url, files')
-          .in('item_id', ids)
-          .order('version_number', { ascending: false })
-          .limit(2000)
-        // rows arrive newest-first, so the first seen for an item is its latest
-        const countByItem = new Map<string, number>()
-        for (const v of versions ?? []) {
-          const key = v.item_id as string
-          if (!countByItem.has(key)) countByItem.set(key, slidesOf(v).length)
+      })(),
+      (async () => {
+        try {
+          if (ids.length === 0) return null
+          const { data: acts } = await supabase
+            .from('workflow_activity')
+            .select('entity_id, actor_id, action, new_value, created_at')
+            .eq('entity_type', 'content_item')
+            .in('entity_id', ids)
+            .in('action', ['created', 'status_change'])
+            .order('created_at', { ascending: true })
+            .limit(3000)
+          const actorIds = [...new Set((acts ?? []).map(a => a.actor_id).filter(Boolean))]
+          const { data: actors } = actorIds.length
+            ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
+            : { data: [] }
+          const nameOf = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
+          const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
+          for (const a of acts ?? []) {
+            const key = a.entity_id as string
+            const entry = byItem.get(key) ?? { created_by: null, approved_by: null }
+            const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
+            if (a.action === 'created') entry.created_by = who
+            // rows arrive oldest-first, so the last approval wins
+            else if (a.new_value === 'approved_for_scheduling') entry.approved_by = who
+            byItem.set(key, entry)
+          }
+          return byItem
+        } catch {
+          return null // no credits rather than no board
         }
-        rows = rows.map(r => ({ ...r, slide_count: countByItem.get(r.id as string) ?? 0 }))
-      }
-    } catch {
-      // leave the count off rather than fail the list
-    }
+      })(),
+      (async () => {
+        try {
+          if (ids.length === 0) return null
+          // ONE asset_versions read serves the slide count; anything else that
+          // needs the latest version derives from the same rows in memory
+          const { data: versions } = await supabase
+            .from('asset_versions')
+            .select('item_id, version_number, file_url, files')
+            .in('item_id', ids)
+            .order('version_number', { ascending: false })
+            .limit(2000)
+          // rows arrive newest-first, so the first seen for an item is its latest
+          const countByItem = new Map<string, number>()
+          for (const v of versions ?? []) {
+            const key = v.item_id as string
+            if (!countByItem.has(key)) countByItem.set(key, slidesOf(v).length)
+          }
+          return countByItem
+        } catch {
+          return null // leave the count off rather than fail the list
+        }
+      })(),
+    ])
+    rows = rows.map(r => ({
+      ...r,
+      ...(waiting ? { my_open_task: waiting.has(r.id as string) } : {}),
+      ...(credits ? credits.get(r.id as string) ?? {} : {}),
+      ...(slideCounts ? { slide_count: slideCounts.get(r.id as string) ?? 0 } : {}),
+    }))
+    console.log(`[items] GET ${Date.now() - t0}ms (main ${tMain - t0}, annot ${Date.now() - tMain})`)
     return NextResponse.json(rows)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
