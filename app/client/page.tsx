@@ -15,8 +15,21 @@ import SlideCarousel from '../components/media/SlideCarousel'
 import { slidesFor } from '../lib/slide-carousel-core'
 import { publishedLines } from '../lib/post-analytics-core'
 import ShootSection from '../components/portal/ShootSection'
+import PortalTabbedView from '../components/portal/PortalTabbedView'
 import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel, scheduledWhen } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'
+
+/** The portal components are themed by --p-* variables; inside the dashboard
+ *  shell they take the dashboard's own tokens so they follow light/dark with
+ *  everything else. */
+const DASH_TOKENS: React.CSSProperties = {
+  ['--p-bg' as string]: 'hsl(var(--background))',
+  ['--p-ink' as string]: 'hsl(var(--foreground))',
+  ['--p-surface' as string]: 'hsl(var(--card))',
+  ['--p-border' as string]: 'hsl(var(--border))',
+  ['--p-accent' as string]: 'hsl(var(--primary))',
+  ['--p-accent-ink' as string]: 'hsl(var(--primary-foreground))',
+}
 
 export default function ClientPortalPage() {
   const [data, setData] = useState<(PortalData & { viewer_role: string }) | null>(null)
@@ -135,6 +148,10 @@ export default function ClientPortalPage() {
         </p>
       </div>
 
+      {/* an intake tab appears only when a form is toggled on; with none, this
+          renders the overview alone and the portal is unchanged */}
+      <PortalTabbedView intake={data.intake} themeStyle={DASH_TOKENS}>
+      <div className="flex flex-col gap-4">
       <CommitmentCards data={data} />
 
       {/* Needs review — the interactive heart of the portal */}
@@ -284,6 +301,8 @@ export default function ClientPortalPage() {
       <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
         <PortalHelpLine amName={data.am_name} className="text-zinc-500 opacity-100 dark:text-zinc-400" />
       </div>
+      </div>
+      </PortalTabbedView>
 
       {/* what should change about the POST? — the note rides the request */}
       <Dialog open={postChanging !== null} onOpenChange={o => !o && setPostChanging(null)}>

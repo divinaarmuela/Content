@@ -288,6 +288,35 @@ export async function setFormRecipients(formId: string, raw: unknown): Promise<s
   return notify_emails
 }
 
+/**
+ * Which of a client's forms are toggled to show on the client portal, as a
+ * { formId: boolean } map.
+ *
+ * Read TOLERANTLY and on its own: the show_on_portal column does not exist
+ * until supabase/intake_portal.sql is run by hand, and asking for a missing
+ * column fails the whole select. Kept out of COLS for exactly that reason — a
+ * failure here degrades to "nothing toggled on" (an empty map) rather than
+ * taking the intake panel down. Every id defaults to false at the call site.
+ */
+export async function getShowOnPortalFlags(clientId: string): Promise<Record<string, boolean>> {
+  const { data, error } = await supabase
+    .from('intake_forms').select('id, show_on_portal').eq('client_id', clientId)
+  if (error) return {}
+  const out: Record<string, boolean> = {}
+  for (const r of data ?? []) out[(r as { id: string }).id] = (r as { show_on_portal?: boolean }).show_on_portal === true
+  return out
+}
+
+/** Turn one form's portal visibility on or off. Unlike the read above this is
+ *  allowed to throw: it only runs from a deliberate super-admin click, and if
+ *  the column is not migrated yet the toast telling them so is the honest
+ *  outcome — the feature simply is not live until the SQL runs. */
+export async function setShowOnPortal(formId: string, value: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('intake_forms').update({ show_on_portal: value }).eq('id', formId)
+  if (error) throw new Error(error.message)
+}
+
 /** Everyone who could be picked in the recipients dropdown: the active team. */
 export async function listTeamRecipients(): Promise<{ name: string; email: string }[]> {
   const { data } = await supabase

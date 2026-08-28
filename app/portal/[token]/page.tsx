@@ -12,6 +12,7 @@ import {
 } from '../../components/portal/PortalSections'
 import { publishedLines } from '../../lib/post-analytics-core'
 import ShootSection from '../../components/portal/ShootSection'
+import PortalTabbedView from '../../components/portal/PortalTabbedView'
 
 export const metadata: Metadata = {
   title: 'Your content — MD Media',
@@ -135,6 +136,9 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
         </div>
       </header>
 
+      {/* an intake tab appears only when a form is toggled on; with none, this
+          renders the overview alone and the portal is unchanged */}
+      <PortalTabbedView intake={data.intake}>
       <main className="flex w-full flex-col gap-12 px-5 py-10 sm:gap-16 sm:px-10 sm:py-14">
         <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} amName={data.am_name} /></Reveal>
         {/* finished pieces whose FINAL POST — caption and timing — waits on
@@ -165,6 +169,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
             empty="Published posts appear here with live links." token={token} tz={data.client.timezone} />
         </Reveal>
       </main>
+      </PortalTabbedView>
 
       {/* pb-24 keeps the fixed mode pill off the last line of the page */}
       <footer className="px-5 pb-24 sm:px-10 sm:pb-10">

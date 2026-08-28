@@ -19,6 +19,7 @@ import {
 import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
 import { awaitsClientPostApproval } from './posting-approval-core'
+import { portalIntakeForms, type PortalIntakeForm } from './intake-portal-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -131,6 +132,30 @@ export type PortalData = {
    *  a graphic's reach are not the same number and must not be summed */
   published_by_type: TypeTotals[]
   shoots: PortalShoot[]
+  /** the client's own intake answers, but only the forms a manager toggled to
+   *  "show on the client portal" — most recent first. Empty for nearly every
+   *  client, and an empty list means the portal shows NO intake tab at all. */
+  intake: PortalIntakeForm[]
+}
+
+/**
+ * The client's toggled-on intake forms, read TOLERANTLY.
+ *
+ * The show_on_portal column does not exist until supabase/intake_portal.sql is
+ * run by hand, and filtering on a missing column fails the select. This is its
+ * OWN query, so that failure — or any error — degrades to "no intake tab"
+ * without touching the rest of the portal. The portal going down over exactly
+ * this kind of not-yet-migrated column has happened before.
+ */
+async function loadPortalIntake(clientId: string): Promise<PortalIntakeForm[]> {
+  const { data, error } = await supabase
+    .from('intake_forms')
+    .select('id, title, show_on_portal, submitted_at, created_at, definition, answers')
+    .eq('client_id', clientId)
+    .eq('show_on_portal', true)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  return portalIntakeForms((data ?? []) as unknown as Parameters<typeof portalIntakeForms>[0])
 }
 
 /** The first name of the manager this client deals with, or null. Shared by
@@ -171,7 +196,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const tz = safeZone(clientRow.timezone as string | null)
   const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
 
-  const [itemsRes, commitmentRes, brandRes, shootsRes, amRes] = await Promise.all([
+  const [itemsRes, commitmentRes, brandRes, shootsRes, amRes, intake] = await Promise.all([
     supabase
       .from('content_items')
       .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug, uses_media)')
@@ -198,6 +223,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       .limit(6),
     // who the client actually deals with — read alongside everything else
     accountManagerName(clientId),
+    // the toggled-on intake forms — its own tolerant query (see loadPortalIntake)
+    loadPortalIntake(clientId),
   ])
   type KindRow = { slug?: string | null; uses_media?: boolean | null } | null
   // a shoot BRIEF is internal planning work riding the item pipeline — the
@@ -429,6 +456,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     published_totals: monthTotals(publishedRows, now, tz),
     published_by_type: typeTotals(publishedRows, now, tz),
     shoots,
+    intake,
   }
 }
 

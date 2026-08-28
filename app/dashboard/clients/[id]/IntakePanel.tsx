@@ -34,6 +34,9 @@ type Form = {
   first_opened_at: string | null
   submitted_at: string | null
   notify_emails: string[] | null
+  /** the client sees this form's answers, read-only, under a tab on their
+   *  portal. Defaults false; degrades to false if the column is not migrated. */
+  show_on_portal: boolean
   definition: TemplateDefinition
   answers: Answers
   completion: Completion
@@ -192,6 +195,26 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     else toast.success(ok)
     await load(); setBusy(false)
     return res.ok
+  }
+
+  /** Flip one form's "show on the client portal" state. Optimistic — the switch
+   *  moves at once — then reconciled from the server; a failure (e.g. the column
+   *  is not migrated yet) reverts it and says why. */
+  const togglePortal = async (form: Form) => {
+    const next = !form.show_on_portal
+    setForms(prev => (prev ?? []).map(f => f.id === form.id ? { ...f, show_on_portal: next } : f))
+    const res = await fetch(`/api/clients/${clientId}/intake`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ form_id: form.id, action: 'set_portal', show_on_portal: next }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      toast.error(json.error ?? 'Could not change portal visibility')
+      setForms(prev => (prev ?? []).map(f => f.id === form.id ? { ...f, show_on_portal: !next } : f))
+      return
+    }
+    toast.success(next ? 'Answers now show on the client portal' : 'Hidden from the client portal')
+    await load(true)
   }
 
   const remove = async (form: Form, confirmed: boolean) => {
@@ -523,6 +546,39 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   })()}
                 </button>
               )
+            )}
+
+            {/* ── show the client their own answers, on their portal ── */}
+            {canManage && !isEditing && (
+              <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Show answers on the client portal</p>
+                  <p className="text-xs text-muted-foreground">
+                    The client sees a read-only copy under a tab on their portal.
+                    {form.status !== 'submitted' && ' Most useful once they’ve submitted.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.show_on_portal}
+                  aria-label="Show answers on the client portal"
+                  onClick={() => void togglePortal(form)}
+                  className={
+                    'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ' +
+                    (form.show_on_portal
+                      ? 'border-primary bg-primary'
+                      : 'border-border bg-muted')
+                  }
+                >
+                  <span
+                    className={
+                      'inline-block h-4 w-4 transform rounded-full bg-background shadow transition-transform ' +
+                      (form.show_on_portal ? 'translate-x-6' : 'translate-x-1')
+                    }
+                  />
+                </button>
+              </div>
             )}
 
             {/* ── answers live on their own page ── */}

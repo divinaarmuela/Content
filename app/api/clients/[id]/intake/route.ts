@@ -7,6 +7,7 @@ import {
   deleteIntakeForm, updateIntakeDefinition, renameIntakeForm,
   getIntakeDefaultRecipients, saveIntakeDefaultRecipients,
   setFormRecipients, listTeamRecipients,
+  getShowOnPortalFlags, setShowOnPortal,
 } from '../../../../lib/intake'
 import {
   completion, normaliseDefinition,
@@ -50,8 +51,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         })),
       })
     }
-    const [forms, team, defaultRecipients] = await Promise.all([
+    const [forms, team, defaultRecipients, portalFlags] = await Promise.all([
       listIntakeFormsForClient(id), listTeamRecipients(), getIntakeDefaultRecipients(),
+      // read tolerantly, out of band — a missing column degrades to "all off"
+      // rather than failing the whole panel
+      getShowOnPortalFlags(id),
     ])
 
     return NextResponse.json({
@@ -68,6 +72,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         first_opened_at: f.first_opened_at,
         submitted_at: f.submitted_at,
         notify_emails: f.notify_emails,
+        show_on_portal: portalFlags[f.id] ?? false,
         definition: f.definition,
         answers: f.answers,
         completion: completion(f.definition, f.answers),
@@ -158,6 +163,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       case 'rename':
         await renameIntakeForm(form.id, String(body?.title ?? ''))
+        return NextResponse.json({ ok: true })
+
+      case 'set_portal':
+        // show (or stop showing) this form's answers on the client's portal
+        await setShowOnPortal(form.id, Boolean(body?.show_on_portal))
         return NextResponse.json({ ok: true })
 
       case 'update_definition': {
