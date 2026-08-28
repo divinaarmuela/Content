@@ -404,6 +404,40 @@ export const brandScan = inngest.createFunction(
 )
 
 /**
+ * Enrich a client from a submitted intake form.
+ *
+ * A background job, not inline in the submit route: the route already runs at
+ * its 60s ceiling building the PDF and packing attachments, and this may make a
+ * Haiku call — work that must never delay or fail a client's submission. Fired
+ * best-effort by `app/intake.enrich.requested` after submit succeeds.
+ *
+ * Retries are safe by construction: every write is gated on a field being
+ * EMPTY (the contact is inserted only if none matches; each brand field is
+ * filled only if blank), so a re-run fills nothing already filled and never
+ * overwrites a hand edit — the same idempotency a re-submit relies on.
+ */
+export const intakeEnrich = inngest.createFunction(
+  {
+    id: 'intake-enrich',
+    name: 'Enrich client from intake',
+    triggers: [{ event: 'app/intake.enrich.requested' }],
+    retries: 1,
+    // one enrichment per client at a time: two would race on the stored brand
+    // profile, the same reason the brand scan is keyed on the client
+    concurrency: { limit: 2, key: 'event.data.client_id' },
+  },
+  async ({ event, step }) => {
+    const { form_id, client_id } = (event.data ?? {}) as Record<string, string>
+    if (!form_id || !client_id) return { skipped: 'missing form_id or client_id' }
+
+    return step.run('enrich', async () => {
+      const { enrichFromIntake } = await import('../lib/intake-enrich')
+      return enrichFromIntake({ formId: form_id, clientId: client_id })
+    })
+  }
+)
+
+/**
  * Due-date reminders — every weekday morning (Melbourne), whoever owns the
  * next move on an item that is due tomorrow, due today, or overdue gets one
  * email for it:
@@ -488,4 +522,5 @@ export const functions = [
   postAnalyticsFirstFetch,
   asanaReconcile,
   brandScan,
+  intakeEnrich,
 ]

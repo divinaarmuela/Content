@@ -122,6 +122,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     console.error('intake submit notification failed:', e)
   }
 
+  // Enrich the client from what they just told us — fill their primary contact
+  // and brand profile where those are still empty. Best-effort and off-request:
+  // a background Inngest function does the work (it may make a Haiku call), so a
+  // failure here can never delay or break the submission. The event is dropped
+  // silently until the function is synced into Inngest Cloud (CLAUDE.md trap 5b).
+  try {
+    await inngest.send({
+      name: 'app/intake.enrich.requested',
+      data: { form_id: form.id, client_id: form.client_id },
+    })
+  } catch (e) {
+    console.error('intake enrich dispatch failed:', e)
+  }
+
   void inngest.realtime.publish(intakeChannel.progress, {
     form_id: form.id,
     client_id: form.client_id,
