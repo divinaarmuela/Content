@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  ArrowLeft, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
+  ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
 import { canSeeSubpage } from '@/app/lib/page-access-core'
@@ -92,6 +92,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     { key: '/dashboard/clients/:id/notes', href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
     { key: '/dashboard/clients/:id/social', href: `${base}/social`, label: 'Social', icon: Share2 },
     { key: '/dashboard/clients/:id/intake', href: `${base}/intake`, label: 'Intake', icon: ClipboardList },
+    { key: '/dashboard/clients/:id/monthly', href: `${base}/monthly`, label: 'Monthly', icon: CalendarDays },
     { key: '/dashboard/clients/:id/credentials', href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
   ]
   const TABS = ALL_TABS.filter(t => t.key === null || canSeeSubpage(role, t.key, granted))

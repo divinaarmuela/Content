@@ -130,3 +130,32 @@ export const intakeChannel = channel({
     },
   },
 })
+
+/**
+ * Monthly-update progress — the twin of intakeChannel, for the recurring
+ * planning form. Its own channel rather than a topic on `intake`: they are
+ * different forms with different dashboard panels watching them, and keeping
+ * them apart means a monthly autosave never wakes an intake panel or vice
+ * versa. Same thin payload; subscribers filter on client_id and refetch through
+ * the authenticated API.
+ *
+ * NOTE: a NEW realtime channel is only known to Inngest Cloud after a re-sync.
+ * After deploying, register it with:
+ *   curl -X PUT https://app.mdmmarketing.com.au/api/inngest
+ * (or let the Inngest Vercel integration do it automatically on each deploy).
+ */
+export const monthlyChannel = channel({
+  name: 'monthly',
+  topics: {
+    progress: {
+      schema: z.object({
+        form_id: z.string(),
+        client_id: z.string(),
+        status: z.string(),
+        answered: z.number(),
+        total: z.number(),
+        ts: z.number(),
+      }),
+    },
+  },
+})
