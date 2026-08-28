@@ -278,7 +278,29 @@ export const postAnalyticsRefresh = inngest.createFunction(
       return sweepMissingPreviews()
     })
 
-    return { analytics, mirrors, previews }
+    // …and keep the database path warm. The first board load of the morning
+    // paid ~870ms for its opening select against ~180ms warm — a cold pooler
+    // connection, not a slow query. Three trivial primary-key reads against
+    // the tables every dashboard page opens with keep that path exercised
+    // between real requests, riding this cron for the same reason the sweeps
+    // do (a NEW function does nothing until re-synced — CLAUDE.md trap 5b).
+    // Best-effort: a failed warm-up must never fail the run it rides.
+    const warm = await step.run('keep-db-warm', async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase')
+        const started = Date.now()
+        await Promise.all([
+          supabase.from('content_items').select('id').limit(1),
+          supabase.from('team_users').select('id').limit(1),
+          supabase.from('batches').select('id').limit(1),
+        ])
+        return { ok: true, ms: Date.now() - started }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    return { analytics, mirrors, previews, warm }
   }
 )
 
