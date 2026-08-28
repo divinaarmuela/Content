@@ -383,7 +383,32 @@ export default function EditorPage() {
       })
       const json = await res.json().catch(() => null)
       if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not add it')
-      const made = Array.isArray(json) ? json[0] : null
+      const made = (Array.isArray(json) ? json[0] : null) as Partial<Item> & { id?: string } | null
+      // Optimistic: fold the new piece into its card AT ONCE, so the counter
+      // and per-format chips move the instant the add succeeds — the refetch
+      // below reconciles with the fully-joined row, but the person must never
+      // have to reload to see that their click worked.
+      if (made?.id) {
+        const optimistic: Item = {
+          id: made.id,
+          title: made.title ?? nextPieceTitle(card.group, card.count),
+          client_id: card.group.client_id,
+          batch_id: card.group.batch_id ?? null,
+          content_type: contentType ?? card.group.content_type,
+          status: (made.status ?? 'draft_uploaded') as ItemStatus,
+          priority: made.priority ?? 'normal',
+          due_date: made.due_date ?? null,
+          current_version_number: made.current_version_number ?? 0,
+          owner_id: made.owner_id ?? null,
+          group_id: card.group.id,
+          clients: null,
+          batches: null,
+        }
+        setItems(prev => {
+          const list = prev ?? []
+          return list.some(i => i.id === optimistic.id) ? list : [optimistic, ...list]
+        })
+      }
       toastOpen(
         `${made?.title ?? 'Piece'} added — ${card.count + 1} of ${card.target}`,
         made?.id ? `/dashboard/production/${made.id}` : '/dashboard/editor',

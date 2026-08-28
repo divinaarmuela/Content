@@ -551,7 +551,33 @@ export default function ProductionPage() {
       })
       const json = await res.json().catch(() => null)
       if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not add it')
-      const made = Array.isArray(json) ? json[0] : null
+      const made = (Array.isArray(json) ? json[0] : null) as Partial<BriefTask> & { id?: string } | null
+      // Optimistic: fold the new piece into its card AT ONCE so the counter
+      // moves the instant the add succeeds; the refetch below reconciles with
+      // the fully-joined row. No reload needed to see the click worked.
+      if (made?.id) {
+        const optimistic: BriefTask = {
+          id: made.id,
+          title: made.title ?? nextPieceTitle(card.group, card.count),
+          client_id: card.group.client_id,
+          batch_id: null,
+          status: (made.status ?? 'draft_uploaded') as ItemStatus,
+          due_date: made.due_date ?? null,
+          owner_id: made.owner_id ?? null,
+          group_id: card.group.id,
+          clients: null,
+          work_kinds: card.group.work_kinds
+            ? {
+                name: card.group.work_kinds.name ?? '',
+                slug: card.group.work_kinds.slug ?? '',
+                color: card.group.work_kinds.color ?? 'zinc',
+                uses_media: card.group.work_kinds.uses_media ?? false,
+              }
+            : undefined,
+          current_version_number: made.current_version_number ?? 0,
+        }
+        setInternalTasks(prev => (prev.some(i => i.id === optimistic.id) ? prev : [optimistic, ...prev]))
+      }
       toastOpen(
         `${made?.title ?? 'Piece'} added — ${card.count + 1} of ${card.target}`,
         made?.id ? `/dashboard/production/${made.id}` : '/dashboard/production',
