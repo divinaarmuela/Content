@@ -51,6 +51,7 @@ import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
 import { LaneBoard, type Lane } from './LaneBoard'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
+import AddPieceDialog, { type AddPieceTarget } from './AddPieceDialog'
 import GettingStarted from '../GettingStarted'
 import HelpHint from '../HelpHint'
 import { toastOpen } from '../toastLink'
@@ -151,7 +152,8 @@ export default function ProductionPage() {
    *  SQL has run; the endpoint degrades to [] on a missing table. */
   const [groups, setGroups] = useState<DeliverableGroup[]>([])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  const [addingTo, setAddingTo] = useState<string | null>(null)
+  /** the group the "add a piece" dialog is collecting content for */
+  const [pieceTarget, setPieceTarget] = useState<AddPieceTarget | null>(null)
   /** the task quota card about to be deleted — irreversible, so confirmed */
   const [groupToDelete, setGroupToDelete] = useState<GroupCard<BriefTask> | null>(null)
   const [deletingGroup, setDeletingGroup] = useState(false)
@@ -536,62 +538,36 @@ export default function ProductionPage() {
     )
   }
 
-  /** "Add the next piece" — one real task, filed into the group. */
-  const addNextPiece = async (card: GroupCard<BriefTask>) => {
-    setAddingTo(card.group.id)
-    try {
-      const res = await fetch('/api/production/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [{
-          client_id: card.group.client_id,
-          batch_id: null,
-          group_id: card.group.id,
-          title: nextPieceTitle(card.group, card.count),
-          content_type: 'other',
-          ...(card.group.work_kind_id ? { work_kind_id: card.group.work_kind_id } : {}),
-        }] }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not add it')
-      const made = (Array.isArray(json) ? json[0] : null) as Partial<BriefTask> & { id?: string } | null
-      // Optimistic: fold the new piece into its card AT ONCE so the counter
-      // moves the instant the add succeeds; the refetch below reconciles with
-      // the fully-joined row. No reload needed to see the click worked.
-      if (made?.id) {
-        const optimistic: BriefTask = {
-          id: made.id,
-          title: made.title ?? nextPieceTitle(card.group, card.count),
-          client_id: card.group.client_id,
-          batch_id: null,
-          status: (made.status ?? 'draft_uploaded') as ItemStatus,
-          due_date: made.due_date ?? null,
-          owner_id: made.owner_id ?? null,
-          group_id: card.group.id,
-          clients: null,
-          work_kinds: card.group.work_kinds
-            ? {
-                name: card.group.work_kinds.name ?? '',
-                slug: card.group.work_kinds.slug ?? '',
-                color: card.group.work_kinds.color ?? 'zinc',
-                uses_media: card.group.work_kinds.uses_media ?? false,
-              }
-            : undefined,
-          current_version_number: made.current_version_number ?? 0,
-        }
-        setInternalTasks(prev => (prev.some(i => i.id === optimistic.id) ? prev : [optimistic, ...prev]))
-      }
-      toastOpen(
-        `${made?.title ?? 'Piece'} added — ${card.count + 1} of ${card.target}`,
-        made?.id ? `/dashboard/production/${made.id}` : '/dashboard/production',
-        router.push,
-      )
-      void load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not add it')
-    } finally {
-      setAddingTo(null)
+  /** Open the "add a piece" dialog for a task group — the task is created only
+   *  once a file or link is provided there, never on this click. */
+  const openAddPiece = (card: GroupCard<BriefTask>) => {
+    setPieceTarget({
+      group_id: card.group.id,
+      client_id: card.group.client_id,
+      batch_id: null,
+      content_type: 'other',
+      work_kind_id: card.group.work_kind_id ?? null,
+      title: nextPieceTitle(card.group, card.count),
+    })
+  }
+
+  /** The dialog created a real task (item + its first version). Fold it into
+   *  its card AT ONCE, then reconcile with the fully-joined row. */
+  const applyCreatedPiece = (raw: Record<string, unknown> & { id: string }) => {
+    const optimistic: BriefTask = {
+      id: raw.id,
+      title: String(raw.title ?? ''),
+      client_id: String(raw.client_id ?? ''),
+      batch_id: (raw.batch_id as string | null) ?? null,
+      status: (raw.status as ItemStatus) ?? 'draft_uploaded',
+      due_date: (raw.due_date as string | null) ?? null,
+      owner_id: (raw.owner_id as string | null) ?? null,
+      group_id: (raw.group_id as string | null) ?? null,
+      clients: null,
+      current_version_number: Number(raw.current_version_number ?? 0),
     }
+    setInternalTasks(prev => (prev.some(i => i.id === optimistic.id) ? prev : [optimistic, ...prev]))
+    void load()
   }
 
   /** Delete a task quota card. Pieces are detached server-side and stay on the
@@ -675,10 +651,9 @@ export default function ProductionPage() {
             )}
             {!card.full && (
               <Button size="sm" className="min-h-11 w-fit md:min-h-8"
-                disabled={addingTo === card.group.id}
-                onClick={() => void addNextPiece(card)}>
+                onClick={() => openAddPiece(card)}>
                 <Plus className="h-3.5 w-3.5" />
-                {addingTo === card.group.id ? 'Adding…' : addNextLabel(card.group)}
+                {addNextLabel(card.group)}
               </Button>
             )}
           </CardContent>
@@ -1009,6 +984,12 @@ export default function ProductionPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AddPieceDialog
+        open={pieceTarget !== null}
+        onOpenChange={o => { if (!o) setPieceTarget(null) }}
+        target={pieceTarget}
+        onCreated={applyCreatedPiece}
+      />
       <AlertDialog open={groupToDelete !== null} onOpenChange={o => { if (!o && !deletingGroup) setGroupToDelete(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>

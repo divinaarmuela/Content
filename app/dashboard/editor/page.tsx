@@ -39,6 +39,7 @@ import { useOrderedLoad } from '../useOrderedLoad'
 import { useRole } from '../useRole'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
+import AddPieceDialog, { type AddPieceTarget } from '../production/AddPieceDialog'
 import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from '../production/workHooks'
 import { ScopeSwitch } from '../production/ScopeSwitch'
@@ -130,7 +131,8 @@ export default function EditorPage() {
   const [groups, setGroups] = useState<DeliverableGroup[]>([])
   /** which quota cards are open, listing their pieces */
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  const [addingTo, setAddingTo] = useState<string | null>(null)
+  /** the group + format the "add a piece" dialog is collecting content for */
+  const [pieceTarget, setPieceTarget] = useState<AddPieceTarget | null>(null)
   /** the quota card the person is about to delete — irreversible, so confirmed */
   const [groupToDelete, setGroupToDelete] = useState<GroupCard<Item> | null>(null)
   const [deletingGroup, setDeletingGroup] = useState(false)
@@ -366,63 +368,42 @@ export default function EditorPage() {
     }
   }
 
-  /** "Add the next reel" — one real item, filed into the group. On a mixed
-   *  card the caller passes which format is being added; a single-format card
-   *  uses the group's one type. */
-  const addNextPiece = async (card: GroupCard<Item>, contentType?: string) => {
-    setAddingTo(card.group.id)
-    try {
-      const res = await fetch('/api/production/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [{
-          client_id: card.group.client_id,
-          batch_id: card.group.batch_id ?? null,
-          group_id: card.group.id,
-          title: nextPieceTitle(card.group, card.count),
-          content_type: contentType ?? card.group.content_type,
-          ...(card.group.work_kind_id ? { work_kind_id: card.group.work_kind_id } : {}),
-        }] }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not add it')
-      const made = (Array.isArray(json) ? json[0] : null) as Partial<Item> & { id?: string } | null
-      // Optimistic: fold the new piece into its card AT ONCE, so the counter
-      // and per-format chips move the instant the add succeeds — the refetch
-      // below reconciles with the fully-joined row, but the person must never
-      // have to reload to see that their click worked.
-      if (made?.id) {
-        const optimistic: Item = {
-          id: made.id,
-          title: made.title ?? nextPieceTitle(card.group, card.count),
-          client_id: card.group.client_id,
-          batch_id: card.group.batch_id ?? null,
-          content_type: contentType ?? card.group.content_type,
-          status: (made.status ?? 'draft_uploaded') as ItemStatus,
-          priority: made.priority ?? 'normal',
-          due_date: made.due_date ?? null,
-          current_version_number: made.current_version_number ?? 0,
-          owner_id: made.owner_id ?? null,
-          group_id: card.group.id,
-          clients: null,
-          batches: null,
-        }
-        setItems(prev => {
-          const list = prev ?? []
-          return list.some(i => i.id === optimistic.id) ? list : [optimistic, ...list]
-        })
-      }
-      toastOpen(
-        `${made?.title ?? 'Piece'} added — ${card.count + 1} of ${card.target}`,
-        made?.id ? `/dashboard/production/${made.id}` : '/dashboard/editor',
-        router.push,
-      )
-      void load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not add it')
-    } finally {
-      setAddingTo(null)
+  /** Open the "add a piece" dialog for one format — the piece is created only
+   *  once a file or link is provided there, never on this click. */
+  const openAddPiece = (card: GroupCard<Item>, contentType: string) => {
+    setPieceTarget({
+      group_id: card.group.id,
+      client_id: card.group.client_id,
+      batch_id: card.group.batch_id ?? null,
+      content_type: contentType,
+      work_kind_id: card.group.work_kind_id ?? null,
+      title: nextPieceTitle(card.group, card.count),
+    })
+  }
+
+  /** The dialog created a real piece (item + its first version). Fold it into
+   *  its card AT ONCE, then reconcile with the fully-joined row. */
+  const applyCreatedPiece = (raw: Record<string, unknown> & { id: string }) => {
+    const optimistic: Item = {
+      id: raw.id,
+      title: String(raw.title ?? ''),
+      client_id: String(raw.client_id ?? ''),
+      batch_id: (raw.batch_id as string | null) ?? null,
+      content_type: String(raw.content_type ?? 'reel'),
+      status: (raw.status as ItemStatus) ?? 'draft_uploaded',
+      priority: String(raw.priority ?? 'normal'),
+      due_date: (raw.due_date as string | null) ?? null,
+      current_version_number: Number(raw.current_version_number ?? 0),
+      owner_id: (raw.owner_id as string | null) ?? null,
+      group_id: (raw.group_id as string | null) ?? null,
+      clients: null,
+      batches: null,
     }
+    setItems(prev => {
+      const list = prev ?? []
+      return list.some(i => i.id === optimistic.id) ? list : [optimistic, ...list]
+    })
+    void load()
   }
 
   /** Delete a quota card. Its pieces are detached server-side and stay on the
@@ -544,15 +525,15 @@ export default function EditorPage() {
               owed.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="min-h-11 w-fit md:min-h-8" disabled={addingTo === card.group.id}>
+                    <Button size="sm" className="min-h-11 w-fit md:min-h-8">
                       <Plus className="h-3.5 w-3.5" />
-                      {addingTo === card.group.id ? 'Adding…' : 'Add the next piece'}
+                      Add the next piece
                       <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     {owed.map(t => (
-                      <DropdownMenuItem key={t} onSelect={() => void addNextPiece(card, t)}>
+                      <DropdownMenuItem key={t} onSelect={() => openAddPiece(card, t)}>
                         {addTypeLabel(t)}
                       </DropdownMenuItem>
                     ))}
@@ -561,10 +542,9 @@ export default function EditorPage() {
               )
             ) : (!card.full && (
               <Button size="sm" className="min-h-11 w-fit md:min-h-8"
-                disabled={addingTo === card.group.id}
-                onClick={() => void addNextPiece(card)}>
+                onClick={() => openAddPiece(card, card.group.content_type)}>
                 <Plus className="h-3.5 w-3.5" />
-                {addingTo === card.group.id ? 'Adding…' : addNextLabel(card.group)}
+                {addNextLabel(card.group)}
               </Button>
             ))}
           </CardContent>
@@ -913,6 +893,12 @@ export default function EditorPage() {
         clients={clients}
         batches={batches}
         team={team}
+      />
+      <AddPieceDialog
+        open={pieceTarget !== null}
+        onOpenChange={o => { if (!o) setPieceTarget(null) }}
+        target={pieceTarget}
+        onCreated={applyCreatedPiece}
       />
       <AlertDialog open={groupToDelete !== null} onOpenChange={o => { if (!o && !deletingGroup) setGroupToDelete(null) }}>
         <AlertDialogContent>
