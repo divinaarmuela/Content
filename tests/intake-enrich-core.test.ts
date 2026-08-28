@@ -3,6 +3,7 @@ import {
   parsePrimaryContact, deriveContact, deriveVoiceTone, splitWords, extractHandles,
   deriveBrandFill, planEnrichment, answerText, TONE_PHRASES,
   extractEmail, extractPhone, deriveContactFromFreeText,
+  nameFromEmail, isBadName, cleanContactName,
   toLabeledAnswers, selectRelevantAnswers, missingTargets,
   type LabeledAnswer,
 } from '../app/lib/intake-enrich-core'
@@ -67,16 +68,39 @@ describe('extractEmail / extractPhone', () => {
   })
 })
 
+describe('nameFromEmail / isBadName / cleanContactName — the name guard', () => {
+  it('derives a proper name from the email local-part', () => {
+    expect(nameFromEmail('cadell@tkbg.com')).toBe('Cadell')
+    expect(nameFromEmail('jordan.wilson@tkbg.com.au')).toBe('Jordan Wilson')
+    expect(nameFromEmail('info@tkbg.com')).toBe('')       // generic mailbox
+    expect(nameFromEmail('')).toBe('')
+  })
+  it('rejects pronouns, fragments, @/digits and over-long runs', () => {
+    expect(isBadName('Myself and Cadell for')).toBe(true)  // pronoun + filler
+    expect(isBadName('We are the founders')).toBe(true)
+    expect(isBadName('jordan@tkbg.com')).toBe(true)        // has @
+    expect(isBadName('Team 2024')).toBe(true)              // has digit
+    expect(isBadName('One Two Three Four Five')).toBe(true) // >4 words
+    expect(isBadName('Jordan Wilson')).toBe(false)
+    expect(isBadName('Cadell')).toBe(false)
+  })
+  it('keeps a good name, replaces a bad one with the email-derived name', () => {
+    expect(cleanContactName('Jordan Wilson', 'jordan@tkbg.com')).toBe('Jordan Wilson')
+    expect(cleanContactName('Myself and Cadell for', 'cadell@tkbg.com')).toBe('Cadell')
+    expect(cleanContactName('We', 'info@tkbg.com')).toBe('') // nothing sensible → blank
+  })
+})
+
 describe('deriveContactFromFreeText — the ongoing/Turnkey free-text contact', () => {
-  it('parses a clean name + phone + email blob', () => {
+  it('parses a clean name + phone + email blob unchanged', () => {
     const c = deriveContactFromFreeText('Jordan Wilson\n0488 420 104\njordan@tkbg.com.au')
     expect(c).toEqual({ name: 'Jordan Wilson', role: '', email: 'jordan@tkbg.com.au', phone: '0488 420 104', notes: '' })
   })
-  it('still extracts email + phone when two people are named in prose', () => {
+  it('extracts the REAL name (not the leading sentence) when two people are named in prose', () => {
     const c = deriveContactFromFreeText('Myself and Cadell for day to day content discussions, 0490376772 cadell@tkbg.com')
+    expect(c?.name).toBe('Cadell')            // NOT "Myself and Cadell for"
     expect(c?.email).toBe('cadell@tkbg.com')
     expect(c?.phone).toBe('0490376772')
-    expect(c?.name).toBeTruthy() // a best-effort name; the AI refines this when it runs
   })
   it('returns null when there is neither a name nor an email', () => {
     expect(deriveContactFromFreeText('   ')).toBeNull()

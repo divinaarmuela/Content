@@ -84,6 +84,19 @@ export async function runBrandScan(input: {
     })
     if (error) throw new Error(error.message)
 
+    // Fold the scan's colours/fonts into the client's EDITABLE profile, filling
+    // only what is still empty. Without this a scan's palette stays in the raw
+    // row above and never reaches the Brand tab once the profile is non-null
+    // (e.g. after intake enrichment wrote the voice) — it would wait for someone
+    // to open the panel and accept a proposal. Best-effort: a fold failure must
+    // not fail a completed scan.
+    try {
+      const { applyScanToEditableProfile } = await import('./brand-profile')
+      await applyScanToEditableProfile(clientId, profile, by || 'brand scan')
+    } catch (e) {
+      console.error('brand scan: fold into editable profile failed:', e)
+    }
+
     await report('done', 1, 1)
     return { pages }
   } catch (e) {

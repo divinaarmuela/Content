@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  applyProposal, asHandle, asHashtag, emptyProfile, fromScan, guessColourRole, moveItem,
-  normaliseHex, normaliseProfile, profileHasContent, proposeFromScan, scanIsUnreviewed,
-  toScanShape, validateProfile, MAX_ITEMS,
+  applyProposal, asHandle, asHashtag, emptyProfile, foldScanIntoProfile, fromScan,
+  guessColourRole, moveItem, normaliseHex, normaliseProfile, profileHasContent,
+  proposeFromScan, scanIsUnreviewed, toScanShape, validateProfile, MAX_ITEMS,
 } from '../app/lib/brand-profile-core'
 import { pickPortalTheme } from '../app/lib/portal-theme'
 
@@ -193,5 +193,56 @@ describe('small helpers', () => {
     expect(asHashtag('##Sale now')).toBe('#Salenow')
     expect(asHandle('@@md')).toBe('@md')
     expect(asHashtag('  ')).toBe('')
+  })
+})
+
+describe('foldScanIntoProfile — a brand-guide scan lands colours/fonts, fill-if-empty', () => {
+  // the Turnkey_Brand_Manual palette + fonts, as a correct scan would return them
+  const turnkeyScan = {
+    summary: 'Considered, premium, local builder.',
+    colors: [
+      { name: 'Gold', hex: '#957B60', usage: 'primary' },
+      { name: 'Black', hex: '#000000', usage: 'text' },
+      { name: 'White', hex: '#FFFFFF', usage: 'background' },
+    ],
+    fonts: [
+      { family: 'GTF Solina Medium', usage: 'headlines' },
+      { family: 'GTF Solina Regular', usage: 'body copy' },
+      { family: 'Helvetica Bold Condensed', usage: 'labels' },
+    ],
+  }
+
+  it('folds the labelled palette + fonts into an empty profile', () => {
+    const { profile, changed } = foldScanIntoProfile(emptyProfile(), turnkeyScan)
+    expect(changed).toBe(true)
+    const hexes = profile.colours.map(c => c.hex)
+    expect(hexes).toContain('#957B60')
+    expect(hexes).toContain('#000000')
+    expect(hexes).toContain('#FFFFFF')
+    const fonts = profile.fonts.map(f => f.name)
+    expect(fonts.some(n => /GTF Solina/i.test(n))).toBe(true)
+    expect(fonts.some(n => /Helvetica/i.test(n))).toBe(true)
+    // a heading and a body role are assigned
+    expect(profile.fonts.some(f => f.role === 'heading')).toBe(true)
+    expect(profile.fonts.some(f => f.role === 'body')).toBe(true)
+  })
+
+  it('never overwrites colours/fonts that already exist', () => {
+    const current = normaliseProfile({
+      ...emptyProfile(),
+      colours: [{ name: 'Brand blue', hex: '#112233', role: 'primary' }],
+      fonts: [{ name: 'Existing Sans', role: 'heading' }],
+      // already-filled voice, so the only thing the scan could add is colours/fonts
+      voice: { summary: 'Hand-written summary.', tone: 'Set', dos: ['x'], donts: ['y'] },
+    })
+    const { profile, changed } = foldScanIntoProfile(current, turnkeyScan)
+    expect(changed).toBe(false)
+    expect(profile.colours.map(c => c.hex)).toEqual(['#112233'])
+    expect(profile.fonts.map(f => f.name)).toEqual(['Existing Sans'])
+  })
+
+  it('does nothing for an empty scan', () => {
+    expect(foldScanIntoProfile(emptyProfile(), null).changed).toBe(false)
+    expect(foldScanIntoProfile(emptyProfile(), {}).changed).toBe(false)
   })
 })

@@ -250,6 +250,35 @@ export function fromScan(scan: ScanProfile | null | undefined, scannedAt: string
   })
 }
 
+/**
+ * Fold a scan result into an existing editable profile, filling ONLY the
+ * fields that are still empty — never overwriting a hand edit. This is what
+ * makes a brand-guide scan actually reach the Brand tab: `fromScan` seeds the
+ * profile only on the very first read (while the column is null), but once the
+ * profile exists (e.g. intake enrichment has written voice/tone), a later scan's
+ * colours and fonts would otherwise sit unused in the raw scan row. Returns the
+ * merged profile and whether anything changed. Pure — the caller does the write.
+ */
+export function foldScanIntoProfile(
+  current: BrandProfile, scan: ScanProfile | null | undefined, scannedAt: string | null = null,
+): { profile: BrandProfile; changed: boolean } {
+  const incoming = fromScan(scan, scannedAt)
+  const out: BrandProfile = {
+    ...current,
+    colours: [...current.colours], fonts: [...current.fonts], logo_rules: [...current.logo_rules],
+    voice: { ...current.voice, dos: [...current.voice.dos], donts: [...current.voice.donts] },
+  }
+  let changed = false
+  if (out.colours.length === 0 && incoming.colours.length) { out.colours = incoming.colours; changed = true }
+  if (out.fonts.length === 0 && incoming.fonts.length) { out.fonts = incoming.fonts; changed = true }
+  if (out.logo_rules.length === 0 && incoming.logo_rules.length) { out.logo_rules = incoming.logo_rules; changed = true }
+  if (!out.voice.tone.trim() && incoming.voice.tone) { out.voice.tone = incoming.voice.tone; changed = true }
+  if (!out.voice.summary.trim() && incoming.voice.summary) { out.voice.summary = incoming.voice.summary; changed = true }
+  if (out.voice.dos.length === 0 && incoming.voice.dos.length) { out.voice.dos = incoming.voice.dos; changed = true }
+  if (out.voice.donts.length === 0 && incoming.voice.donts.length) { out.voice.donts = incoming.voice.donts; changed = true }
+  return { profile: normaliseProfile(out), changed }
+}
+
 /** The profile in the scan's shape, for code that still reads that. */
 export function toScanShape(p: BrandProfile): ScanProfile {
   const out: ScanProfile = {}

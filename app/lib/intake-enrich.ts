@@ -8,10 +8,11 @@ import { listIntakeFiles, type IntakeForm } from './intake'
 import { intakeFileTarget } from './gdrive-core'
 import { mirrorBrandDoc } from './gdrive-mirror'
 import { loadBrandProfile } from './brand-profile'
-import { normaliseProfile, type BrandFile, type BrandProfile } from './brand-profile-core'
+import { normaliseProfile, fromScan, type BrandFile, type BrandProfile } from './brand-profile-core'
+import type { BrandProfile as ScanProfile } from './brand-core'
 import {
   deriveContact, deriveBrandFill, planEnrichment, toLabeledAnswers,
-  deriveContactFromFreeText, answerText, CONTACT_SOURCE_IDS,
+  deriveContactFromFreeText, cleanContactName, answerText, CONTACT_SOURCE_IDS,
   type DerivedContact, type LabeledAnswer,
 } from './intake-enrich-core'
 import type { Answers, TemplateDefinition } from './intake-core'
@@ -238,10 +239,15 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
   if (!contactResolved) {
     let candidate: DerivedContact | null = null
     if (extracted && (extracted.contact.name.trim() || extracted.contact.email.trim())) {
+      const email = extracted.contact.email.trim()
+      // guard the model's name too: reject a pronoun-led sentence fragment and
+      // fall back to the email-derived name, so "Myself and Cadell for" can
+      // never reach the contacts list even if the model returns it
+      const name = cleanContactName(extracted.contact.name.trim(), email)
       candidate = {
-        name: extracted.contact.name.trim() || extracted.contact.email.trim(),
+        name: name || email,
         role: extracted.contact.role.trim(),
-        email: extracted.contact.email.trim(),
+        email,
         phone: extracted.contact.phone.trim(),
         notes: '',
       }
@@ -304,17 +310,21 @@ async function maybeDelegateBrandScan(clientId: string, brandFiles: BrandFile[])
 
   const [{ data: client }, { data: brand }] = await Promise.all([
     supabase.from('clients').select('brand_profile').eq('id', clientId).maybeSingle(),
-    supabase.from('client_brand').select('profile, docs, scan_status').eq('client_id', clientId).maybeSingle(),
+    supabase.from('client_brand').select('profile, scan_status').eq('client_id', clientId).maybeSingle(),
   ])
 
-  // already has a brand → don't re-scan
-  const prof = normaliseProfile((client?.brand_profile as unknown) ?? {})
-  if (prof.colours.length > 0 || prof.fonts.length > 0) return 'skipped'
-  const scanProfile = (brand?.profile ?? null) as Record<string, unknown> | null
-  if (scanProfile && Object.keys(scanProfile).length > 0) return 'skipped'
-  // a scan already run or in flight → don't queue another
-  if (brand?.scan_status && ['queued', 'scanning', 'done'].includes(String(brand.scan_status))) return 'skipped'
-  if (Array.isArray(brand?.docs) && brand.docs.length > 0) return 'skipped'
+  // Skip only when the client ALREADY HAS a real palette — colours or fonts in
+  // either the editable profile or the raw scan row. A stale "done" status with
+  // ZERO colours must NOT block a re-scan: that is exactly the state a first
+  // empty scan leaves behind, and a manual "Fill contacts & brand" re-click has
+  // to be able to force the extraction to run again.
+  const editable = normaliseProfile((client?.brand_profile as unknown) ?? {})
+  if (editable.colours.length > 0 || editable.fonts.length > 0) return 'skipped'
+  // the raw scan row is in scan shape (colors / fonts.family) — convert it
+  const rawScan = fromScan((brand?.profile ?? null) as ScanProfile | null)
+  if (rawScan.colours.length > 0 || rawScan.fonts.length > 0) return 'skipped'
+  // only a scan CURRENTLY in flight blocks another — never a finished/failed one
+  if (brand?.scan_status && ['queued', 'scanning'].includes(String(brand.scan_status))) return 'skipped'
 
   // mark it queued before dispatching, exactly like the brand panel's action,
   // so the panel shows a scan in flight immediately
@@ -367,6 +377,8 @@ async function extractAll(relevant: LabeledAnswer[]): Promise<ExtractionT | null
       'Normalise as you go: ' +
       'if a person is named with a title, split it into name and role; ' +
       'pull an email and a phone number from anywhere in the text; ' +
+      'for the contact name, extract the ACTUAL person\'s name — if the answer is a rambling sentence, find the real name (prefer the proper name that matches the email local-part, e.g. cadell@… → "Cadell"); ' +
+      'NEVER return a pronoun ("Myself", "Me", "We", "I", "Our") or a sentence fragment as a name — leave the name empty rather than guess; ' +
       'if two or more people are named, choose the single clearest PRIMARY day-to-day contact; ' +
       'return social handles as clean "@handle" values, one per platform, and strip any full URL down to the handle — never return a raw URL; ' +
       'give the tone as a short phrase even if it was described in a paragraph. ' +

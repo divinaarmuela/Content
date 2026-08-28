@@ -104,23 +104,71 @@ export function extractPhone(text: string): string {
   return m ? m[0].replace(/\s+/g, ' ').trim() : ''
 }
 
+/** Generic mailbox local-parts that are not a person's name. */
+const GENERIC_LOCALS = new Set([
+  'info', 'admin', 'hello', 'contact', 'team', 'sales', 'enquiries', 'enquiry',
+  'office', 'mail', 'support', 'accounts', 'hi', 'marketing', 'bookings',
+])
+
+/** A proper name from an email local-part, or '' when it is generic/unusable.
+ *  "cadell@tkbg.com" → "Cadell"; "jordan.wilson@…" → "Jordan Wilson";
+ *  "info@…" → "". */
+export function nameFromEmail(email: string): string {
+  const local = (email.split('@')[0] ?? '').replace(/\+.*$/, '')
+  const cleaned = local.replace(/[0-9]+/g, '').replace(/[._-]+/g, ' ').trim()
+  if (!cleaned) return ''
+  if (GENERIC_LOCALS.has(cleaned.toLowerCase().replace(/\s+/g, ''))) return ''
+  return cleaned.split(/\s+/)
+    .map(w => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ''))
+    .join(' ').trim()
+}
+
+const PRONOUN_RE = /^(i|me|my|myself|we|us|our|ours|the)\b/i
+/** Sentence-filler words that never appear inside a real person's name. */
+const NAME_FILLER = new Set(['and', 'for', 'to', 'of', 'with', 'our', 'we', 'us', 'day', 'the', 'a', 'an', 'in', 'on', 'at'])
+
+/** Is this string obviously NOT a person's name? Rejects a pronoun-led sentence
+ *  ("Myself and Cadell for…"), anything with an @ or a digit, a run longer than
+ *  four words, or a fragment carrying a lowercase filler word. */
+export function isBadName(name: string): boolean {
+  const s = (name ?? '').trim()
+  if (!s) return true
+  if (/[@0-9]/.test(s)) return true
+  if (PRONOUN_RE.test(s)) return true
+  const words = s.split(/\s+/)
+  if (words.length > 4) return true
+  if (words.some(w => NAME_FILLER.has(w.toLowerCase()))) return true
+  return false
+}
+
+/** A trustworthy contact name: the given name if it passes muster, else the
+ *  name implied by the email local-part, else ''. This is the guard that keeps
+ *  a sentence fragment ("Myself and Cadell for") out of the contacts list. */
+export function cleanContactName(raw: string, email: string): string {
+  const s = (raw ?? '').trim()
+  if (!isBadName(s)) return s
+  return nameFromEmail(email ?? '')
+}
+
 /**
  * Last-resort deterministic contact from a free-text blob (e.g. Turnkey's
  * "Jordan Wilson\n0488 420 104\njordan@tkbg.com.au"). Used only when the model
- * is unavailable — email and phone are reliable by regex; the name is the first
- * line that is neither, capped so a "Myself and Cadell for day-to-day…" clause
- * does not become a paragraph. The AI does this far better when it runs.
+ * is unavailable — email and phone are reliable by regex. The name is the first
+ * line that is neither, but validated through cleanContactName: a rambling
+ * "Myself and Cadell for day-to-day…" is rejected and the name is taken from
+ * the email local-part ("Cadell") instead. The AI does this better when it runs.
  */
 export function deriveContactFromFreeText(text: string): DerivedContact | null {
   const email = extractEmail(text)
   const phone = extractPhone(text)
-  let name = ''
+  let candidate = ''
   for (const raw of text.split(/[\n,]/)) {
     const c = raw.trim()
     if (!c || extractEmail(c) || /\d{5,}/.test(c)) continue
-    name = c.replace(/\s+/g, ' ').split(' ').slice(0, 4).join(' ')
+    candidate = c.replace(/\s+/g, ' ').split(' ').slice(0, 4).join(' ')
     break
   }
+  const name = cleanContactName(candidate, email)
   if (!name && !email) return null
   return { name, role: '', email, phone, notes: '' }
 }

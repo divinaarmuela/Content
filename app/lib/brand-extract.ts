@@ -73,11 +73,19 @@ const PROFILE_SCHEMA = {
 }
 
 const PROMPT =
-  'These are a client\'s brand guidelines. Extract the brand profile: every typeface with its ' +
-  'usage and weights, every colour with hex where stated (convert CMYK/Pantone only when the ' +
-  'document gives the conversion), logo usage rules, tone of voice, imagery direction, and ' +
-  'explicit dos and don\'ts. The pages are images, so read them visually. Be faithful to the ' +
-  'document; never invent values it does not contain.'
+  'These are a client\'s brand guidelines. Extract the brand profile in full.\n' +
+  'COLOURS: capture EVERY colour in the palette. A palette page usually lists each swatch with ' +
+  'its label and codes — a HEX (#RRGGBB), and/or RGB and CMYK values. Record the HEX for each; ' +
+  'if only RGB is given, convert it to HEX; if only CMYK/Pantone is given, convert only when the ' +
+  'document itself provides the conversion. Include neutrals like black (#000000) and white ' +
+  '(#FFFFFF) when they are part of the palette. Do not skip a colour just because it is a plain ' +
+  'labelled value rather than a big swatch.\n' +
+  'FONTS: capture EVERY named typeface with its usage (headline / body / caption) and any weights. ' +
+  'Use the human-facing family name as written (e.g. "GTF Solina Medium", "Helvetica Bold ' +
+  'Condensed"), not just an embedded PostScript name.\n' +
+  'Also capture logo usage rules, tone of voice, imagery direction, and explicit dos and don\'ts. ' +
+  'The pages may be flat images, so read them VISUALLY as well as any selectable text. Be faithful ' +
+  'to the document; never invent values it does not contain.'
 
 export async function pdfPageCount(bytes: Buffer): Promise<number> {
   try {

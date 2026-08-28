@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ClipboardList, Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
+import { ClipboardList, Copy, ExternalLink, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import EmptyState from '../../EmptyState'
 import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-core'
 import { publicUrl } from '@/app/lib/public-url'
@@ -102,6 +102,8 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Form | null>(null)
+  // forms whose enrichment is running right now — drives the "Scanning…" state
+  const [enriching, setEnriching] = useState<Set<string>>(new Set())
 
   const load = useCallback(async (quiet = false) => {
     const res = await fetch(`/api/clients/${clientId}/intake`)
@@ -198,20 +200,45 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   }
 
   /** Run the enrichment on demand: fill any still-empty contact and brand
-   *  fields from this submitted form. Optimistic toast, since the real work runs
-   *  in the background Inngest function — the fields appear on the Contacts and
-   *  Brand tabs once it lands. Safe to click repeatedly: it never overwrites. */
+   *  fields from this submitted form. The real work runs in the background
+   *  Inngest function, so we show an honest "Scanning…" state on the card while
+   *  it runs and clear it when it settles — reusing the brand-scan heartbeat
+   *  (client_brand.scan_status) for the long part, the brand-guide PDF scan.
+   *  Best-effort throughout; safe to click repeatedly, it never overwrites. */
   const enrich = async (form: Form) => {
+    setEnriching(prev => new Set(prev).add(form.id))
     toast.message('Scanning… we’ll fill any empty contact and brand fields', {
-      description: 'This runs in the background; only blank fields are filled, never your edits.',
+      description: 'Only blank fields are filled, never your edits.',
     })
-    const res = await fetch(`/api/clients/${clientId}/intake`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ form_id: form.id, action: 'enrich' }),
-    })
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}))
-      toast.error(json.error ?? 'Could not start the scan')
+    try {
+      const res = await fetch(`/api/clients/${clientId}/intake`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ form_id: form.id, action: 'enrich' }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json.error ?? 'Could not start the scan')
+        return
+      }
+      // Watch the brand-scan heartbeat. A brand-guide PDF is the slow part
+      // (vision extraction, ~30s+); the contact/voice fill is near-instant. We
+      // wait until a scan we saw start has finished, or ~8s for the no-PDF case,
+      // capped at two minutes so a stuck scan never spins forever.
+      const started = Date.now()
+      let sawScan = false
+      while (Date.now() - started < 120_000) {
+        await new Promise(r => setTimeout(r, 3000))
+        const status = await fetch(`/api/clients/${clientId}/brand`)
+          .then(r => (r.ok ? r.json() : null)).then(b => b?.scan?.status as string | undefined)
+          .catch(() => undefined)
+        if (status === 'queued' || status === 'scanning') { sawScan = true; continue }
+        if (sawScan) break                          // the PDF scan finished
+        if (Date.now() - started > 8000) break       // no PDF — quick fields are done
+      }
+      toast.success('Done — check the Contacts and Brand tabs')
+      await load(true)
+    } finally {
+      setEnriching(prev => { const next = new Set(prev); next.delete(form.id); return next })
     }
   }
 
@@ -463,10 +490,12 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   </Button>
                 )}
                 {form.status === 'submitted' && (
-                  <Button size="sm" variant="secondary" disabled={busy}
+                  <Button size="sm" variant="secondary" disabled={busy || enriching.has(form.id)}
                     title="Only fills fields that are still empty; never overwrites"
                     onClick={() => void enrich(form)}>
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Fill contacts &amp; brand from this
+                    {enriching.has(form.id)
+                      ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Scanning…</>
+                      : <><Sparkles className="mr-1.5 h-3.5 w-3.5" /> Fill contacts &amp; brand from this</>}
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" disabled={busy}
