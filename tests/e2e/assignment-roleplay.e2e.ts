@@ -7,7 +7,10 @@ import {
   loadItemForUser, shapeItemDetail, visibleClientIds,
 } from '../../app/lib/production-access'
 import { upsertScheduleEntry } from '../../app/lib/schedule'
-import { checkBatchTransition } from '../../app/lib/batch-brief-core'
+import { canCreateItemsUnder, checkBatchTransition } from '../../app/lib/batch-brief-core'
+import { canEditItemFields, roleMayCreateItems, taskExemptFromClientScope } from '../../app/lib/item-edit-core'
+import { groupCard, groupLine, nextPieceTitle } from '../../app/lib/deliverable-group-core'
+import type { ItemStatus } from '../../app/lib/workflow-core'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
 import { openTaggedIds, taggedItemIds } from '../../app/lib/production-access'
@@ -290,7 +293,7 @@ describe('a shoot brief never reaches the Scheduler', () => {
 
   it('books only once the shoot date is locked, and never publishes', async () => {
     await expect(performTransition(am, await fresh(briefId), 'scheduled'))
-      .rejects.toThrow(/lock the shoot date/i)
+      .rejects.toThrow(/book the shoot/i)
 
     await supabase.from('batches')
       .update({ status: 'locked', locked_at: new Date().toISOString(), locked_by: am.id })
@@ -694,6 +697,121 @@ describe('tagging: "@Name" reaches anyone on the team, and the tag is the assign
     await offClient(editor.id, async () => {
       await expect(loadItemForUser(editor, itemId)).resolves.toBeTruthy()
     })
+  })
+})
+
+describe('any team role creates work — the owner\'s rule, on real rows', () => {
+  it('a SCHEDULER creates an item, holds it, and their board lists it', async () => {
+    // the gate the POST route runs, from the scheduler's seat
+    expect(canCreateItemsUnder('locked', scheduler.role)).toBe(true)
+    expect(canCreateItemsUnder(null, scheduler.role, { reason: 'client emergency story' })).toBe(true)
+    expect(roleMayCreateItems(scheduler.role)).toBe(true)
+
+    const id = await makeItem({ owner_id: scheduler.id })
+    await expect(loadItemForUser(scheduler, id)).resolves.toBeTruthy()
+    expect(await listedFor(scheduler)).toContain(id)
+  })
+
+  it('an EDITOR raises a TASK for a client they are NOT on — tasks are internal work', async ctx => {
+    // a real task kind: no media, not the shoot plan. Without one seeded the
+    // rule cannot be played live — skip rather than invent global data.
+    const { data: kinds } = await supabase
+      .from('work_kinds')
+      .select('id, slug, uses_media')
+      .eq('uses_media', false)
+      .neq('slug', 'shoot_brief')
+      .limit(1)
+    const taskKind = kinds?.[0]
+    if (!taskKind) return ctx.skip()
+
+    // the exemption the POST route applies: a task skips the client-team check
+    expect(taskExemptFromClientScope(taskKind)).toBe(true)
+    expect(taskExemptFromClientScope({ slug: 'edit', uses_media: true })).toBe(false)
+
+    await offClient(editor.id, async () => {
+      expect(await accessibleClientIds(editor)).not.toContain(TEST_CLIENT_ID)
+      // the task really lands, and its creator can open and find it
+      const id = await makeItem({
+        owner_id: editor.id, batch_id: null,
+        content_type: 'other', work_kind_id: taskKind.id,
+      })
+      await expect(loadItemForUser(editor, id)).resolves.toBeTruthy()
+      expect(await listedFor(editor)).toContain(id)
+    })
+  })
+
+  it('an AM and a super admin may edit someone else\'s item; a bystander may not', async () => {
+    const id = await makeItem({ owner_id: editor.id })
+    const item = await fresh(id)
+
+    // the rule the PATCH route runs (item-edit-core), against a real row
+    expect(canEditItemFields(am, item)).toBe(true)
+    const superAdmin = { ...am, id: '00000000-0000-4000-8000-00000000e2e0', role: 'super_admin' as const }
+    expect(canEditItemFields(superAdmin, item)).toBe(true)
+    expect(canEditItemFields(editor, item)).toBe(true)          // their own
+    expect(canEditItemFields(scheduler, item)).toBe(false)      // handed nothing
+    expect(canEditItemFields({ id: 'x', role: 'client' }, item)).toBe(false)
+
+    // …and the AM's edit actually lands and is readable back
+    await expect(loadItemForUser(am, id)).resolves.toBeTruthy()
+    const { error } = await supabase.from('content_items')
+      .update({ priority: 'high' }).eq('id', id)
+    expect(error).toBeNull()
+    expect((await fresh(id) as ContentItem & { priority?: string }).priority).toBe('high')
+
+    // anyone HANDED the scheduling edits their own too, whatever the title
+    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    expect(canEditItemFields(scheduler, await fresh(id))).toBe(true)
+  })
+})
+
+describe('a quota group of 5 fills as pieces are added', () => {
+  let groupId: string | null = null
+
+  afterAll(async () => {
+    if (groupId) await supabase.from('deliverable_groups').delete().eq('id', groupId)
+  })
+
+  it('one group, target 5: 0 of 5 → 2 of 5 → full at 5', async ctx => {
+    // the table ships with supabase/deliverable_groups.sql — skip cleanly on
+    // a database where it has not been run yet
+    const probe = await supabase.from('deliverable_groups').select('id').limit(1)
+    if (probe.error && /does not exist|relation|could not find the table|schema cache/i.test(probe.error.message)) return ctx.skip()
+
+    const { data: group, error } = await supabase.from('deliverable_groups').insert({
+      client_id: TEST_CLIENT_ID,
+      content_type: 'reel',
+      title: `E2E quota reels ${new Date().toISOString()}`,
+      target: 5,
+      created_by: am.id,
+    }).select().single()
+    if (error) throw new Error(error.message)
+    groupId = group.id
+
+    const cardFor = async () => {
+      const { data } = await supabase.from('content_items')
+        .select('id, status, group_id').eq('group_id', group.id)
+      return groupCard(group, (data ?? []) as { id: string; status: ItemStatus; group_id: string }[])
+    }
+    expect((await cardFor()).count).toBe(0)
+
+    // "Add the next reel", twice — titles numbered from what exists
+    for (let n = 0; n < 2; n++) {
+      const title = nextPieceTitle(group, n)
+      expect(title.endsWith(String(n + 1).padStart(2, '0'))).toBe(true)
+      await makeItem({ owner_id: editor.id, group_id: group.id, title })
+    }
+    const two = await cardFor()
+    expect(two.count).toBe(2)
+    expect(two.target).toBe(5)
+    expect(two.full).toBe(false)
+    expect(groupLine(two)).toContain('2 of 5')
+
+    // three more and the promise is met
+    for (let n = 2; n < 5; n++) {
+      await makeItem({ owner_id: editor.id, group_id: group.id, title: nextPieceTitle(group, n) })
+    }
+    expect((await cardFor()).full).toBe(true)
   })
 })
 
