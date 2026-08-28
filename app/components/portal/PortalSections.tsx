@@ -9,7 +9,7 @@ import type { PortalData, PortalItem } from '../../lib/portal-data'
 import SlideCarousel from '../media/SlideCarousel'
 import { seenLabel, slidesFor } from '../../lib/slide-carousel-core'
 import {
-  APPROVED_TOAST, approveConsequence, changesSentToast,
+  APPROVED_TOAST, amPhrase, approveConsequence, changesSentToast,
   contentTypeLabel, contentTypePlural, scheduledWhen,
 } from '../../lib/portal-words'
 import {
@@ -326,6 +326,7 @@ export function ReviewCard({ item, token, amName, bare }: {
                 </>
               )}
             </div>
+            <PortalHelpLine amName={amName} />
           </>
         )}
       </div>
@@ -454,6 +455,209 @@ export function PortalSection({ title, items, empty, token, lines, tz }: {
       {items.length === 0
         ? <p className="rounded-xl px-4 py-6 text-center text-sm opacity-50" style={surface}>{empty}</p>
         : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(i => <PortalItemCard key={i.id} item={i} token={token} tz={tz} />)}</div>}
+    </div>
+  )
+}
+
+/**
+ * Who to reach when something is unclear — always visible, in the client's
+ * words. The name is their own account manager when there is one; the inbox
+ * is there either way, so the line never dead-ends.
+ */
+export function PortalHelpLine({ amName, className = '' }: { amName?: string | null; className?: string }) {
+  return (
+    <p className={`text-xs opacity-60 ${className}`}>
+      Questions? Contact {amPhrase(amName)}{' '}or{' '}
+      <a href="mailto:contact@mdmmarketing.com.au" className="portal-tap underline underline-offset-2">
+        contact@mdmmarketing.com.au
+      </a>
+      .
+    </p>
+  )
+}
+
+/**
+ * A finished piece whose FINAL POST is waiting on the client: the media, the
+ * caption exactly as it will publish, and when it goes out — with Approve /
+ * Request changes. Distinct from approving the piece earlier: that was the
+ * work; this is the caption and timing.
+ */
+export function PostReviewCard({ item, token, amName, tz }: {
+  item: PortalItem; token?: string; amName?: string | null; tz?: string
+}) {
+  const router = useRouter()
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [mode, setMode] = useState<null | 'changes'>(null)
+  const slides = slidesFor(item)
+  const [name, setName] = useState(() =>
+    typeof window === 'undefined' ? '' : localStorage.getItem('mdm-portal-name') ?? '')
+
+  const act = async (action: 'approve_post' | 'request_post_changes') => {
+    if (!token) return
+    if (action === 'request_post_changes') {
+      if (!note.trim()) return toast.error('Write what should change first')
+      if (!name.trim()) return toast.error('Add your name so the team knows who asked')
+    }
+    if (name.trim()) localStorage.setItem('mdm-portal-name', name.trim())
+    setBusy(action)
+    try {
+      const res = await fetch('/api/portal/act', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, item_id: item.id, action, comment: note, author_name: name.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      toast.success(action === 'approve_post'
+        ? 'Post approved — it will go out as planned.'
+        : changesSentToast(amName))
+      setNote('')
+      setMode(null)
+      router.refresh()
+    } catch (e) {
+      if (e instanceof TypeError) {
+        toast.message('Connection hiccup — refreshing to check…')
+        router.refresh()
+      } else {
+        toast.error(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const times = item.schedule.filter(s => s.scheduled_at && !s.live_url)
+  return (
+    <div className="overflow-hidden rounded-xl" style={surface}>
+      {slides.length > 0 && (
+        <SlideCarousel
+          slides={slides}
+          aspect="natural"
+          naturalMax="max-h-[420px]"
+          mode="full"
+          className="pb-1"
+          chromeClassName="px-4"
+          label={`${item.title} — ${slides.length} slides`}
+        />
+      )}
+      <div className="flex flex-col gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-base font-semibold" style={{ fontFamily: 'var(--p-heading-font, inherit)' }}>{item.title}</p>
+          <p className="font-mono text-[10px] uppercase tracking-wider opacity-50">
+            {[contentTypeLabel(item.content_type), 'Final post'].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+
+        {/* the caption, word for word — this is the thing being approved */}
+        <div className="rounded-lg px-3 py-2.5" style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)' }}>
+          <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.14em] opacity-45">The caption, as it will post</p>
+          {item.caption?.trim()
+            ? <p className="whitespace-pre-wrap text-sm">{item.caption}</p>
+            : <p className="text-sm opacity-50">No caption — it would go out with just the title.</p>}
+        </div>
+
+        {times.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {times.map(s => (
+              <span key={s.platform} className="flex items-center gap-1 font-mono text-[10px] uppercase opacity-60">
+                <CalendarDays className="h-3 w-3" />
+                {s.platform} · {scheduledWhen(s.scheduled_at, tz)}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {token && (
+          <>
+            <p className="text-xs opacity-60">
+              You approved this piece already — this is the caption and timing, exactly as it will post.
+            </p>
+            {mode === 'changes' && (
+              <div className="flex flex-col gap-2">
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Your name"
+                  className="min-h-11 w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-56"
+                  style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
+                />
+                <textarea
+                  rows={3}
+                  value={note}
+                  autoFocus
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="What should change? e.g. “Take out the second hashtag, and post it Friday morning instead.”"
+                  className="w-full rounded-lg p-3 text-sm outline-none"
+                  style={{ background: 'var(--p-bg, #fafafa)', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {mode === null ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => act('approve_post')}
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
+                  >
+                    <Check className="h-4 w-4" /> {busy === 'approve_post' ? 'Approving…' : 'Approve this post'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => setMode('changes')}
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+                    style={{ background: 'transparent', border: '1px solid var(--p-border, #e4e4e7)', color: 'var(--p-ink, #18181b)' }}
+                  >
+                    <MessageSquare className="h-4 w-4" /> Request changes
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => act('request_post_changes')}
+                    className="portal-tap flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style={{ background: 'var(--p-accent, #18181b)', color: 'var(--p-accent-ink, #ffffff)' }}
+                  >
+                    <Send className="h-4 w-4" /> {busy ? 'Sending…' : 'Send'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => { setMode(null); setNote('') }}
+                    className="portal-tap rounded-lg px-3 py-2 text-sm opacity-60 hover:opacity-100"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
+            <PortalHelpLine amName={amName} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The final posts waiting on the client, as their own pile under the review
+ *  queue. Draws nothing when there are none — an empty card would only ask a
+ *  question nobody is being asked. */
+export function PostReviewSection({ items, token, amName, tz }: {
+  items: PortalItem[]; token?: string; amName?: string | null; tz?: string
+}) {
+  if (items.length === 0) return null
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionHeading count={items.length}>Ready to post — needs your OK</SectionHeading>
+      <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+        {items.map(i => <PostReviewCard key={i.id} item={i} token={token} amName={amName} tz={tz} />)}
+      </div>
     </div>
   )
 }

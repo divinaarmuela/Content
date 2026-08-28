@@ -3,7 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceItemChange } from '../../../lib/production-live'
-import type { TeamUser } from '../../../lib/authz'
+import { actOnPostingApproval } from '../../../lib/posting-approval'
+import { AuthzError, type TeamUser } from '../../../lib/authz'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -103,6 +104,40 @@ export async function POST(req: Request) {
     }
     if (action === 'request_changes' && !comment) {
       return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
+    }
+
+    // ── the FINAL POST — the caption and timing, distinct from the asset
+    //    the client approved earlier. Their yes (or their note) lands on the
+    //    same columns the dashboard's gate uses, through the same function,
+    //    wearing the client hat. ──
+    if (action === 'approve_post' || action === 'request_post_changes') {
+      if (action === 'request_post_changes' && !comment) {
+        return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
+      }
+      try {
+        await actOnPostingApproval(actor, item as never, {
+          action: action === 'approve_post' ? 'approve' : 'request_changes',
+          note: comment || undefined,
+        })
+      } catch (err) {
+        if (err instanceof AuthzError) {
+          return NextResponse.json({ error: err.message }, { status: err.status })
+        }
+        throw err
+      }
+      // whatever they wrote also reaches the thread, client-visible, and the
+      // client's managers — the same promise every portal note gets
+      if (comment) {
+        await supabase.from('item_comments').insert({
+          item_id: item.id,
+          author_id: actor.id,
+          visibility: 'client',
+          body: authorName ? `${comment}\n— ${authorName}` : comment,
+        })
+        await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+          console.error('portal manager notify error:', e))
+      }
+      return NextResponse.json({ ok: true })
     }
 
     // for approve/request_changes, validate the transition FIRST: a refused

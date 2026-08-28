@@ -18,6 +18,7 @@ import {
 } from './post-analytics-core'
 import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
+import { awaitsClientPostApproval } from './posting-approval-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -49,6 +50,9 @@ export type PortalItem = {
    *  review says so. Null on everything else, which is nearly everything. */
   progress_line: string | null
   schedule: { platform: string; scheduled_at: string | null; live_url: string | null }[]
+  /** the post text, exactly as it will publish — carried ONLY on a card that
+   *  is asking the client to approve the final post; absent everywhere else */
+  caption?: string | null
   /** how the live post is doing, once the platform has counted it. Null on
    *  anything not published, and on a post whose numbers have not arrived. */
   metrics: PortalItemMetrics | null
@@ -107,6 +111,10 @@ export type PortalData = {
     quotas: { type: string; quota: number; published: number }[]
   } | null
   needs_review: PortalItem[]
+  /** approved pieces whose FINAL POST — the caption and the timing — is
+   *  waiting on the client's sign-off. Distinct from needs_review: the work
+   *  was approved earlier; this is the post as it will actually appear. */
+  post_approvals: PortalItem[]
   /** shoot plans sitting with the client for approval — they need reviewing
    *  too, and the hero counter counts both */
   plans_awaiting: number
@@ -359,6 +367,31 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     }
   })
 
+  // ── posts waiting on the client's FINAL sign-off (caption + timing) ──
+  // Read in its own query so the page never depends on columns that may not
+  // exist yet: on a database without supabase/posting_approval.sql this
+  // select errors and the pile is simply empty — today's behaviour.
+  const approvalCandidates = items
+    .filter(i => ['approved_for_scheduling', 'scheduled'].includes(i.status as string))
+    .map(i => i.id)
+  const captionByAwaiting = new Map<string, string | null>()
+  if (approvalCandidates.length > 0) {
+    const { data: gateRows, error: gateErr } = await supabase
+      .from('content_items')
+      .select('id, status, caption, posting_approval_state, posting_client_required')
+      .in('id', approvalCandidates)
+    if (!gateErr) {
+      for (const r of gateRows ?? []) {
+        if (awaitsClientPostApproval(r)) {
+          captionByAwaiting.set(r.id as string, (r.caption as string | null) ?? null)
+        }
+      }
+    }
+  }
+  const post_approvals: PortalItem[] = items
+    .filter(i => captionByAwaiting.has(i.id))
+    .map(i => ({ ...toPortal(i), caption: captionByAwaiting.get(i.id) ?? null }))
+
   const published = bucket(['published'])
   // published_at comes from the POST, not the item: an item's updated_at moves
   // every time anyone touches it, and "this month" must mean the month it went
@@ -380,6 +413,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       : (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
+    post_approvals,
     // a shoot plan waiting on the client is a thing waiting on the client. The
     // hero counter read "NEEDS YOUR REVIEW 00" over a plan asking them to
     // approve it, which is the page contradicting itself.

@@ -8,7 +8,7 @@ import Rule from '../../components/lama/Rule'
 import { Scramble } from '../../components/lama/Scramble'
 import PortalShell from '../../components/portal/PortalShell'
 import {
-  CommitmentCards, PortalSection, ReviewSection,
+  CommitmentCards, PortalHelpLine, PortalSection, PostReviewSection, ReviewSection,
 } from '../../components/portal/PortalSections'
 import { publishedLines } from '../../lib/post-analytics-core'
 import ShootSection from '../../components/portal/ShootSection'
@@ -101,7 +101,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
                 // a shoot plan waiting on them counts: the section below asks
                 // for a decision, and a counter reading 00 above it is the
                 // page telling the client there is nothing to do
-                ['Needs your review', data.needs_review.length + data.plans_awaiting],
+                ['Needs your review', data.needs_review.length + data.plans_awaiting + data.post_approvals.length],
                 ['In production', data.in_production.length + data.changes_requested.length],
                 // one counter, both piles — a fifth column breaks the 2×2 a
                 // phone gets, and the cards below say which of them are booked
@@ -137,6 +137,14 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
 
       <main className="flex w-full flex-col gap-12 px-5 py-10 sm:gap-16 sm:px-10 sm:py-14">
         <Reveal gate={false}><ReviewSection items={data.needs_review} token={token} amName={data.am_name} /></Reveal>
+        {/* finished pieces whose FINAL POST — caption and timing — waits on
+            the client. Their own pile: approving a post is a different
+            decision from approving the work, and the card says so. */}
+        {data.post_approvals.length > 0 && (
+          <Reveal gate={false}>
+            <PostReviewSection items={data.post_approvals} token={token} amName={data.am_name} tz={data.client.timezone} />
+          </Reveal>
+        )}
         <Reveal gate={false}><ShootSection shoots={data.shoots} clientName={data.client.name} token={token} amName={data.am_name} /></Reveal>
         <Reveal gate={false}><CommitmentCards data={data} /></Reveal>
         {data.changes_requested.length > 0 && (
@@ -161,6 +169,7 @@ export default async function SharedPortalPage({ params }: { params: Promise<{ t
       {/* pb-24 keeps the fixed mode pill off the last line of the page */}
       <footer className="px-5 pb-24 sm:px-10 sm:pb-10">
         <Rule className="mb-6 bg-current opacity-30" once />
+        <PortalHelpLine amName={data.am_name} className="mb-3" />
         <p className="text-[10px] uppercase tracking-[0.14em] opacity-40" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
           MD Media · get seen · get known · get booked
         </p>
