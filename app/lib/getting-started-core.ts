@@ -18,9 +18,12 @@ export type GettingStartedStep = {
   title: string
   /** one sentence of why/how, in plain words */
   body: string
-  /** the link that actually does it. Never "go and find it". */
-  href: string
-  linkLabel: string
+  /** the link that actually does it. Never "go and find it". Optional: a
+   *  purely explanatory step (one that would only point at the page it is
+   *  already on) omits it, so three explanatory steps do not read as three
+   *  competing buttons. */
+  href?: string
+  linkLabel?: string
 }
 
 export type GettingStartedPanel = {
@@ -134,22 +137,16 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
   heading: 'Production, in three steps',
   steps: [
     {
-      title: 'Plan a shoot',
-      body: 'A shoot is one filming day. Press New → Plan a shoot, pick the client, give it a working title.',
-      href: '/dashboard/production',
-      linkLabel: 'Plan a shoot',
+      title: 'Make a shoot plan',
+      body: 'Press New → New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
     },
     {
-      title: 'Write the shoot plan, get it signed off',
-      body: 'The plan is what the client approves before we film. Write it on the shoot page, send it for review, then share it with the client.',
-      href: '/dashboard/production',
-      linkLabel: 'See shoot plans',
+      title: 'Get it signed off',
+      body: 'Send the plan for review, then share it with the client. Cards move left to right across the board as they get approved.',
     },
     {
-      title: 'Book the shoot, then create the items',
-      body: 'On the shoot page: book the shoot (that sets the date), and after the shoot press Create items. Those items land on the Editor board.',
-      href: '/dashboard/production',
-      linkLabel: 'Open a shoot',
+      title: 'Book the date, then add the pieces',
+      body: 'Open the plan to book the filming date. After the shoot, add the reels and carousels — they land on the Editor board.',
     },
   ],
 }

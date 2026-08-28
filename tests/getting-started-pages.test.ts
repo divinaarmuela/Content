@@ -22,7 +22,7 @@ describe('Getting started, per page', () => {
     expect(panelForPage('editor', 'editor')).toBe(panelForRole('editor'))
     expect(panelForPage('editor', 'account_manager')?.heading).toMatch(/reviewers/)
     expect(panelForPage('scheduler', 'scheduler')).toBe(panelForRole('scheduler'))
-    expect(panelForPage('production', 'account_manager')?.steps[0].title).toBe('Plan a shoot')
+    expect(panelForPage('production', 'account_manager')?.steps[0].title).toBe('Make a shoot plan')
     expect(panelForPage('production', 'editor')?.steps[1].body).toMatch(/Take this/)
   })
 
@@ -41,8 +41,13 @@ describe('Getting started, per page', () => {
       for (const s of panel.steps) {
         expect(s.title.length).toBeGreaterThan(3)
         expect(s.body.length).toBeGreaterThan(20)
-        expect(s.href).toMatch(/^(\/dashboard|#)/)
-        expect(s.linkLabel.length).toBeGreaterThan(3)
+        // a step's link is optional — a purely explanatory step (one that
+        // would only point at the page it is already on) carries neither
+        // href nor label; when it has one, both are present and real
+        if (s.href !== undefined || s.linkLabel !== undefined) {
+          expect(s.href).toMatch(/^(\/dashboard|#)/)
+          expect(s.linkLabel!.length).toBeGreaterThan(3)
+        }
         expect(`${s.title} ${s.body}`, `${page}/${role}: ${s.title}`).not.toMatch(JARGON)
       }
     }

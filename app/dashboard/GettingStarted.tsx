@@ -87,12 +87,14 @@ export default function GettingStarted({ role, page = 'overview' }: {
               {step.title}
             </p>
             <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{step.body}</p>
-            <Link
-              href={step.href}
-              className="mt-auto inline-flex min-h-11 items-center gap-1 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-            >
-              {step.linkLabel} <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+            {step.href && step.linkLabel && (
+              <Link
+                href={step.href}
+                className="mt-auto inline-flex min-h-11 items-center gap-1 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
+              >
+                {step.linkLabel} <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            )}
           </li>
         ))}
       </ol>

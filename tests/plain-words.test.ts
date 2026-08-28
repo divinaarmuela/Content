@@ -123,8 +123,10 @@ describe('getting started', () => {
       expect(panel, `${role} has no panel`).not.toBeNull()
       expect(panel!.steps).toHaveLength(3)
       for (const step of panel!.steps) {
-        expect(step.href.startsWith('/dashboard')).toBe(true)
-        expect(step.linkLabel.length).toBeGreaterThan(0)
+        // the overview role panels always end each step in a real link
+        expect(step.href, `${role} step has no href`).toBeDefined()
+        expect(step.href!.startsWith('/dashboard')).toBe(true)
+        expect(step.linkLabel!.length).toBeGreaterThan(0)
       }
     }
   })

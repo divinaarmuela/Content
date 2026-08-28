@@ -10,9 +10,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
-import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -167,9 +164,6 @@ export default function ProductionPage() {
   // the board. `?comments=<itemId>` opens it on load (notification links).
   const commentsDrawer = useCommentsDrawer()
 
-  const [newOpen, setNewOpen] = useState(false)
-  const [newBusy, setNewBusy] = useState(false)
-  const [draft, setDraft] = useState({ client_id: '', title: '' })
   const [briefOpen, setBriefOpen] = useState(false)
 
   const { me, role, loading, can } = useRole()
@@ -253,24 +247,6 @@ export default function ProductionPage() {
       toast.error(e instanceof Error ? e.message : 'Could not delete the shoot')
     } finally {
       setDelBusy(false)
-    }
-  }
-
-  const create = async () => {
-    if (!draft.client_id || !draft.title.trim()) { toast.error('Client and a working title are required'); return }
-    setNewBusy(true)
-    try {
-      const res = await fetch('/api/production/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: draft.client_id, title: draft.title.trim() }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not create the shoot')
-      router.push(`/dashboard/production/shoots/${json.id}`)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create the shoot')
-      setNewBusy(false)
     }
   }
 
@@ -762,26 +738,17 @@ export default function ProductionPage() {
                 <Button size="sm" className="min-h-11 md:min-h-9"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                {/* the one line that lets a new hire choose: the two words
-                    this menu turns on, defined where the choice is made */}
+                {/* one line of context: a shoot plan IS the shoot — there is
+                    no separate "make a shoot" step to get wrong */}
                 <p className="px-2 py-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  A shoot is the filming day. A shoot plan is what the client signs off before it.
+                  A shoot plan is the concept and shot list for a filming day. Making it sets up the shoot too.
                 </p>
                 {canPlan && (
-                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setNewOpen(true)}>
-                    <CalendarDays className="mt-0.5 h-4 w-4" />
-                    <span className="flex flex-col">
-                      Plan a shoot
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">a filming day — date, location, shot list</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                {isManager && (
                   <DropdownMenuItem className="min-h-11 items-start" onClick={() => setBriefOpen(true)}>
                     <FileText className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
-                      Write a shoot plan
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">the concept the client signs off before we film</span>
+                      New shoot plan
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">the plan the client signs off — creates the shoot with it</span>
                     </span>
                   </DropdownMenuItem>
                 )}
@@ -843,7 +810,7 @@ export default function ProductionPage() {
             <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
               {outOfScope > 0
                 ? 'Work is being planned, but none of it is yours.'
-                : 'A shoot is one filming day. Plan the first one — pick the client and give it a working title — and the shoot page opens.'}
+                : 'Start with a shoot plan — the concept and shot list for a filming day. Making it sets up the shoot too.'}
             </p>
             {/* planning is always a valid next move for whoever can plan —
                 whatever the reason the page is empty */}
@@ -853,7 +820,7 @@ export default function ProductionPage() {
                   Show everyone&rsquo;s
                 </Button>
               )}
-              {canPlan && <Button size="sm" className="min-h-11" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> Plan a shoot</Button>}
+              {canPlan && <Button size="sm" className="min-h-11" onClick={() => setBriefOpen(true)}><Plus className="h-4 w-4" /> New shoot plan</Button>}
             </div>
           </CardContent>
         </Card>
@@ -940,41 +907,6 @@ export default function ProductionPage() {
 
       {/* the side drawer: this board's cards open it via the comment button */}
       <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
-
-      <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Plan a shoot</DialogTitle>
-            <DialogDescription>
-              A shoot is one day of filming. Next you write its shoot plan on the shoot
-              page and send that to the client to sign off.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Client</label>
-              <Select value={draft.client_id} onValueChange={v => v && setDraft(d => ({ ...d, client_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Pick a client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Working title</label>
-              <Input value={draft.title} placeholder="e.g. September studio day"
-                onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && create()} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className="min-h-11" onClick={() => setNewOpen(false)} disabled={newBusy}>Cancel</Button>
-            <Button className="min-h-11" onClick={create} disabled={newBusy || !draft.client_id || !draft.title.trim()}>
-              {newBusy ? 'Creating…' : 'Create the shoot'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* the SHOOT PLAN — the reviewable plan that rides the item pipeline.
           presetKind locks the kind: without it the dialog filters it out. */}

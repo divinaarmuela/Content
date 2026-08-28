@@ -728,7 +728,7 @@ export default function ItemDetailPage() {
       case 'client_review': return { text: `Sent to ${client} — it is on their portal now`, href: board }
       case 'client_changes_requested': return { text: "The client's changes are logged", href: board }
       case 'approved_for_scheduling':
-        return isBrief ? { text: 'Plan approved — lock the date, then book the shoot', href: detail.batch?.id ? `/dashboard/production/shoots/${detail.batch.id}` : board }
+        return isBrief ? { text: 'Plan approved — book the date on the shoot page', href: detail.batch?.id ? `/dashboard/production/shoots/${detail.batch.id}` : board }
           : isInternal ? { text: 'Approved — this one is done', href: board }
           : { text: 'Approved — it is in the Scheduler queue, under Needs a posting date', href: '/dashboard/scheduler' }
       case 'scheduled': return isBrief ? { text: 'Shoot booked', href: board } : { text: 'Marked scheduled — it is on the posting calendar', href: '/dashboard/scheduler/calendar' }

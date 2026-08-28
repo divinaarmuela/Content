@@ -17,7 +17,7 @@ const VIEWS = [
     href: '/dashboard/production',
     label: 'Shoots',
     icon: Camera,
-    blurb: 'Plan a shoot, write its shoot plan, get it signed off, lock the date.',
+    blurb: 'Create a shoot plan, get it signed off, then book the date.',
   },
   {
     href: '/dashboard/production/availability',
