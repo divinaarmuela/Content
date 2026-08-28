@@ -13,7 +13,8 @@ import type { BrandProfile as ScanProfile } from './brand-core'
 import {
   deriveContact, deriveBrandFill, planEnrichment, toLabeledAnswers,
   deriveContactFromFreeText, cleanContactName, answerText, CONTACT_SOURCE_IDS,
-  type DerivedContact, type LabeledAnswer,
+  matchesExisting, legacyContactFromClient,
+  type DerivedContact, type LabeledAnswer, type ContactLike,
 } from './intake-enrich-core'
 import type { Answers, TemplateDefinition } from './intake-core'
 
@@ -86,23 +87,29 @@ async function brandFilesFor(form: IntakeForm): Promise<BrandFile[]> {
 }
 
 /**
- * Insert one primary contact, but only if the client has none matching. Match
- * on email (case-insensitive), else on name — so a re-submit never doubles a
- * person. `is_primary` is set only when the client has no primary yet; the
- * partial unique index otherwise 409s, and we fall back to a non-primary row.
- * Returns whether a contact was created or already existed.
+ * Add a contact ONLY if no matching person already exists — anywhere. The
+ * dedupe set is built from BOTH sources: the client's `client_contacts` rows and
+ * any `extraMatch` the caller passes (the legacy contact carried on the clients
+ * row). Matching is by email (case-insensitive) OR name (partial — "Justin"
+ * matches "Justin Smith"); a hit means the person is already on file and we do
+ * NOTHING — never overwrite, never duplicate. Existing records always win.
+ *
+ * A genuinely new person is inserted with `is_primary` set only when the client
+ * has no primary yet; the partial unique index otherwise 409s and we fall back
+ * to a non-primary row. Returns whether a row was created or already existed.
  */
-async function upsertPrimaryContact(clientId: string, contact: DerivedContact): Promise<'created' | 'exists'> {
+async function insertContactIfMissing(
+  clientId: string, contact: DerivedContact, extraMatch: ContactLike[] = [],
+): Promise<'created' | 'exists'> {
   const { data: existing } = await supabase
     .from('client_contacts').select('id, name, email, is_primary').eq('client_id', clientId)
   const rows = existing ?? []
 
-  const email = contact.email.trim().toLowerCase()
-  const name = contact.name.trim().toLowerCase()
-  const match = rows.find(r =>
-    (email && String(r.email ?? '').trim().toLowerCase() === email) ||
-    (!email && name && String(r.name ?? '').trim().toLowerCase() === name))
-  if (match) return 'exists'
+  const dedupeSet: ContactLike[] = [
+    ...rows.map(r => ({ name: r.name as string | null, email: r.email as string | null })),
+    ...extraMatch,
+  ]
+  if (matchesExisting({ name: contact.name, email: contact.email }, dedupeSet)) return 'exists'
 
   const hasPrimary = rows.some(r => r.is_primary === true)
   const base = {
@@ -191,24 +198,42 @@ export async function enrichFromIntake(
   }
   const labeled: LabeledAnswer[] = toLabeledAnswers(answers, labels)
 
-  // ── contact: deterministic fast-path (the structured primary_contact block) ──
-  const derived = deriveContact(answers)
-  let contactResolved = false
-  if (derived) {
+  // ── contacts ──
+  // The client may already have contacts from onboarding: rows in
+  // client_contacts AND a legacy single contact carried on the clients row
+  // itself. Both are the source of truth — the enrichment respects them, never
+  // overwrites them, and only ADDS a genuinely new person.
+  const { data: clientRow } = await supabase
+    .from('clients').select('contact_name, email, phone').eq('id', clientId).maybeSingle()
+  const legacy = legacyContactFromClient(clientRow)
+  // every intake/AI insert dedupes against the legacy contact too, in case the
+  // seed below could not run (best-effort) — so it can never be duplicated
+  const legacyMatch: ContactLike[] = legacy ? [{ name: legacy.name, email: legacy.email }] : []
+
+  // Seed the legacy onboarding contact into client_contacts if it is not there
+  // yet, so it shows on the Contacts tab and becomes the anchor everything else
+  // dedupes against. is_primary only if the client has no primary yet.
+  if (legacy) {
     try {
-      result.contact = await upsertPrimaryContact(clientId, derived)
-      contactResolved = true
+      const seeded = await insertContactIfMissing(clientId, legacy)
+      if (result.contact === 'none') result.contact = seeded
     } catch (e) {
-      console.error('intake enrich: contact insert failed:', e)
+      console.error('intake enrich: legacy contact seed failed:', e)
     }
   }
-  // an existing contact also counts as resolved — nothing to fill
-  if (!contactResolved) {
-    const { data: anyContact } = await supabase
-      .from('client_contacts').select('id').eq('client_id', clientId).limit(1)
-    if (anyContact && anyContact.length > 0) {
-      contactResolved = true
-      if (result.contact === 'none') result.contact = 'exists'
+
+  // The intake's own structured primary_contact block (rebrand/launch/one_off).
+  // `intakeContactDone` means the intake's contact is handled — so the AI is not
+  // asked to find one; the existence of a legacy/other contact does NOT set it,
+  // because a DIFFERENT person named in the intake should still be added.
+  const derived = deriveContact(answers)
+  let intakeContactDone = false
+  if (derived) {
+    try {
+      result.contact = await insertContactIfMissing(clientId, derived, legacyMatch)
+      intakeContactDone = true
+    } catch (e) {
+      console.error('intake enrich: contact insert failed:', e)
     }
   }
 
@@ -235,7 +260,7 @@ export async function enrichFromIntake(
   const loaded = await loadBrandProfile(clientId, 'intake enrichment')
   const currentProfile = loaded?.profile ?? normaliseProfile({})
   const afterDeterministic = deriveBrandFill(answers, brandFiles, currentProfile).profile
-  const plan = planEnrichment(afterDeterministic, contactResolved, labeled)
+  const plan = planEnrichment(afterDeterministic, intakeContactDone, labeled)
 
   let extracted: ExtractionT | null = null
   if (plan.aiNeeded) {
@@ -248,8 +273,9 @@ export async function enrichFromIntake(
   }
 
   // ── contact from the AI (any template), else a deterministic free-text
-  //    fallback over day_to_day_contact — only when nothing resolved one ──
-  if (!contactResolved) {
+  //    fallback over day_to_day_contact — only when the intake's own contact
+  //    was not already handled structurally ──
+  if (!intakeContactDone) {
     let candidate: DerivedContact | null = null
     if (extracted && (extracted.contact.name.trim() || extracted.contact.email.trim())) {
       const email = extracted.contact.email.trim()
@@ -268,10 +294,12 @@ export async function enrichFromIntake(
       const srcText = CONTACT_SOURCE_IDS.map(id => answerText(answers, id)).filter(Boolean).join('\n')
       candidate = srcText ? deriveContactFromFreeText(srcText) : null
     }
+    // insertContactIfMissing dedupes against the legacy contact AND the existing
+    // rows, so an AI-extracted person who matches someone already on file (by
+    // email OR name) is discarded — the on-file record is untouched, no dup.
     if (candidate) {
       try {
-        result.contact = await upsertPrimaryContact(clientId, candidate)
-        contactResolved = true
+        result.contact = await insertContactIfMissing(clientId, candidate, legacyMatch)
       } catch (e) {
         console.error('intake enrich: contact insert (AI/fallback) failed:', e)
       }

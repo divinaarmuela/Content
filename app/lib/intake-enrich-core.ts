@@ -173,6 +173,63 @@ export function deriveContactFromFreeText(text: string): DerivedContact | null {
   return { name, role: '', email, phone, notes: '' }
 }
 
+// ── contact dedupe against what already exists ──────────────────────────────
+
+/** The two fields we dedupe on. Covers a `client_contacts` row and the legacy
+ *  single contact carried on the `clients` table itself. */
+export type ContactLike = { name?: string | null; email?: string | null }
+
+/** A name, folded to a stable comparison key. */
+export function nameKey(s: string | null | undefined): string {
+  return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Do these two names refer to the same person? Exact after folding, OR a partial
+ * where every token of the shorter name appears in the longer — so "Justin"
+ * matches "Justin Smith" (and "Smith" does too), while "Justin Jones" does NOT
+ * match "Justin Smith". Token-based, so it never false-matches "Sam" to
+ * "Samantha".
+ */
+export function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = nameKey(a), nb = nameKey(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
+  const ta = na.split(' '), tb = nb.split(' ')
+  const [short, longSet] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)]
+  return short.every(t => longSet.has(t))
+}
+
+/**
+ * Does this candidate already exist among the given contacts? Email is the
+ * strong signal — a case-insensitive match on a non-empty email is a match. Name
+ * is the fallback signal, matched partially (see namesMatch). A hit on EITHER
+ * counts, so an AI-extracted person who shares an email OR a name with someone
+ * already on file is recognised as the same person and left untouched.
+ */
+export function matchesExisting(candidate: ContactLike, existing: ContactLike[]): boolean {
+  const email = String(candidate.email ?? '').trim().toLowerCase()
+  for (const r of existing) {
+    const re = String(r.email ?? '').trim().toLowerCase()
+    if (email && re && re === email) return true
+    if (namesMatch(candidate.name, r.name)) return true
+  }
+  return false
+}
+
+/** The legacy single contact carried on the `clients` row (from onboarding),
+ *  as a DerivedContact, or null when there is nothing there. This is the
+ *  existing record the enrichment must respect and never overwrite. */
+export function legacyContactFromClient(
+  row: { contact_name?: string | null; email?: string | null; phone?: string | null } | null | undefined,
+): DerivedContact | null {
+  const name = String(row?.contact_name ?? '').trim()
+  const email = String(row?.email ?? '').trim()
+  const phone = String(row?.phone ?? '').trim()
+  if (!name && !email) return null
+  return { name, role: '', email, phone, notes: '' }
+}
+
 // ── brand (deterministic fast-path) ─────────────────────────────────────────
 
 /** The three tone options become a short phrase. An unrecognised (custom-

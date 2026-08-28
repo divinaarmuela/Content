@@ -4,6 +4,7 @@ import {
   deriveBrandFill, planEnrichment, answerText, TONE_PHRASES,
   extractEmail, extractPhone, deriveContactFromFreeText,
   nameFromEmail, isBadName, cleanContactName,
+  namesMatch, matchesExisting, legacyContactFromClient,
   toLabeledAnswers, selectRelevantAnswers, missingTargets,
   type LabeledAnswer,
 } from '../app/lib/intake-enrich-core'
@@ -104,6 +105,51 @@ describe('deriveContactFromFreeText — the ongoing/Turnkey free-text contact', 
   })
   it('returns null when there is neither a name nor an email', () => {
     expect(deriveContactFromFreeText('   ')).toBeNull()
+  })
+})
+
+describe('contact dedupe against existing + legacy — existing records always win', () => {
+  const justinLegacy = legacyContactFromClient({
+    contact_name: 'Justin', email: 'justin@tkbg.com.au', phone: '0499906615',
+  })
+
+  it('reads the legacy single contact off the clients row', () => {
+    expect(justinLegacy).toEqual({ name: 'Justin', role: '', email: 'justin@tkbg.com.au', phone: '0499906615', notes: '' })
+    expect(legacyContactFromClient({})).toBeNull()
+    expect(legacyContactFromClient(null)).toBeNull()
+  })
+
+  it('namesMatch catches partials but not different people', () => {
+    expect(namesMatch('Justin', 'Justin Smith')).toBe(true)   // first-name → full name
+    expect(namesMatch('justin smith', 'JUSTIN')).toBe(true)   // case-insensitive, either order
+    expect(namesMatch('Smith', 'Justin Smith')).toBe(true)    // surname → full name
+    expect(namesMatch('Justin Jones', 'Justin Smith')).toBe(false) // shared first name only
+    expect(namesMatch('Sam', 'Samantha')).toBe(false)         // not a token subset
+    expect(namesMatch('', 'Justin')).toBe(false)
+  })
+
+  it('(a) an intake naming a DIFFERENT person is new — not a dup of the legacy contact', () => {
+    const jordan = { name: 'Jordan Wilson', email: 'jordan@tkbg.com.au' }
+    expect(matchesExisting(jordan, [{ name: justinLegacy!.name, email: justinLegacy!.email }])).toBe(false)
+  })
+
+  it('(b) an intake with the SAME email as the legacy contact matches — no dup', () => {
+    const sameEmail = { name: 'J. Newname', email: 'JUSTIN@tkbg.com.au' } // different name, same email, diff case
+    expect(matchesExisting(sameEmail, [{ name: justinLegacy!.name, email: justinLegacy!.email }])).toBe(true)
+  })
+
+  it('(c) an AI-extracted contact matching by email OR name yields a match (zero changes)', () => {
+    const existing = [
+      { name: 'Justin Smith', email: 'justin@tkbg.com.au' },
+      { name: 'Priya Patel', email: 'priya@tkbg.com.au' },
+    ]
+    // matches by email (different name)
+    expect(matchesExisting({ name: 'Someone Else', email: 'justin@tkbg.com.au' }, existing)).toBe(true)
+    // matches by name (no/other email)
+    expect(matchesExisting({ name: 'Justin', email: '' }, existing)).toBe(true)
+    expect(matchesExisting({ name: 'Priya Patel', email: 'different@x.invalid' }, existing)).toBe(true)
+    // genuinely new person — no match
+    expect(matchesExisting({ name: 'Dana Cole', email: 'dana@x.invalid' }, existing)).toBe(false)
   })
 })
 
