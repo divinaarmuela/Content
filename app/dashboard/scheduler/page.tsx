@@ -33,6 +33,7 @@ import { TurnChip } from '../production/TurnChip'
 import { AccountUnavailable } from '../production/shoot-ui'
 import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { useRole } from '../useRole'
+import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
 type Item = {
@@ -85,6 +86,10 @@ export default function SchedulerPage() {
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
+
+  // the comments drawer: read and answer an item's comments without leaving
+  // the queue. `?comments=<itemId>` opens it on load (notification links).
+  const commentsDrawer = useCommentsDrawer()
 
   // only a manager may read the team list — everyone else gets the fact
   // without the name, which is all the row needs to say
@@ -181,6 +186,7 @@ export default function SchedulerPage() {
   // the queue is drawn per viewer, so no viewer is a different screen — not a
   // slower load. A skeleton that never resolves tells the user nothing.
   if (!loading && !viewer) return <AccountUnavailable />
+
 
   /** The one thing to do with this row, named by what happens. */
   const rowAction = (item: Item) => {
@@ -305,13 +311,17 @@ export default function SchedulerPage() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task} />
+                    <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task}
+                      onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
                     {entries.map(e => (
                       <Badge key={e.platform} variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">
                         {e.platform}
                         {e.scheduled_at && <span className="ml-1 font-mono text-[11px] normal-case">{formatInZone(e.scheduled_at, itemTz, 'short')} {zoneAbbrev(itemTz, e.scheduled_at)}</span>}
                       </Badge>
                     ))}
+                    {/* the conversation, right here — the drawer, not a page trip */}
+                    <CommentsButton className="ml-auto" tagged={item.my_open_task} title={item.title}
+                      onOpen={() => commentsDrawer.open(item.id, item.title)} />
                   </div>
                   {item.caption && <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">{item.caption}</p>}
                   <div className="flex flex-col gap-2">
@@ -366,7 +376,8 @@ export default function SchedulerPage() {
                             one the other two work pages use. The parallel
                             you / Unassigned pills said it a second time, in
                             different words, on the same row. */}
-                        <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task} />
+                        <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task}
+                          onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
                         {/* how this one goes out — in words, not "Auto" /
                             "Manual": nobody has to open the item to find out
                             whether a human still owes it a click. */}
@@ -431,6 +442,10 @@ export default function SchedulerPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {/* the conversation, right here — the drawer, not a
+                            page trip */}
+                        <CommentsButton tagged={item.my_open_task} title={item.title}
+                          onOpen={() => commentsDrawer.open(item.id, item.title)} />
                         {/* ONE primary per row: take it if nobody has, else
                             the posting action. Both filled at once was two
                             blue buttons asking two different questions. */}
@@ -462,6 +477,9 @@ export default function SchedulerPage() {
         </Card>
         </>
       )}
+
+      {/* the side drawer: this queue's rows open it via the comment button */}
+      <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
     </div>
   )
 }

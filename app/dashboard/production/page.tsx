@@ -53,6 +53,7 @@ import { ClaimButton } from './ClaimButton'
 import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
 import { LaneBoard, type Lane } from './LaneBoard'
+import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 import GettingStarted from '../GettingStarted'
 import HelpHint from '../HelpHint'
 import { toastOpen } from '../toastLink'
@@ -161,6 +162,10 @@ export default function ProductionPage() {
   const [doneOpen, setDoneOpen] = useState(false)
   /** closed shoots in the strip — hidden until asked for */
   const [closedOpen, setClosedOpen] = useState(false)
+
+  // the comments drawer: read and answer an item's comments without leaving
+  // the board. `?comments=<itemId>` opens it on load (notification links).
+  const commentsDrawer = useCommentsDrawer()
 
   const [newOpen, setNewOpen] = useState(false)
   const [newBusy, setNewBusy] = useState(false)
@@ -456,6 +461,7 @@ export default function ProductionPage() {
               {viewer && (
                 <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
                   openTask={b.my_open_task}
+                  onOpenComments={() => commentsDrawer.open(b.id, b.title)}
                   ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
               )}
               {(shoot?.shoot_date || b.due_date) && (
@@ -464,6 +470,9 @@ export default function ProductionPage() {
                   {whenShort(shoot?.shoot_date ?? b.due_date)}
                 </span>
               )}
+              {/* the conversation, right here — the drawer, not a page trip */}
+              <CommentsButton className="ml-auto" tagged={b.my_open_task} title={b.title}
+                onOpen={() => commentsDrawer.open(b.id, b.title)} />
             </div>
             {credits(b) && (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(b)}</p>
@@ -517,6 +526,7 @@ export default function ProductionPage() {
               {viewer && (
                 <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
                   openTask={t.my_open_task}
+                  onOpenComments={() => commentsDrawer.open(t.id, t.title)}
                   ownerName={t.owner_id ? nameById.get(t.owner_id) : undefined} />
               )}
               {t.due_date && (
@@ -525,6 +535,9 @@ export default function ProductionPage() {
                   {whenShort(t.due_date)}
                 </span>
               )}
+              {/* the conversation, right here — the drawer, not a page trip */}
+              <CommentsButton className="ml-auto" tagged={t.my_open_task} title={t.title}
+                onOpen={() => commentsDrawer.open(t.id, t.title)} />
             </div>
             {credits(t) && (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(t)}</p>
@@ -924,6 +937,9 @@ export default function ProductionPage() {
           )}
         </>
       )}
+
+      {/* the side drawer: this board's cards open it via the comment button */}
+      <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
 
       <Dialog open={newOpen} onOpenChange={o => !newBusy && setNewOpen(o)}>
         <DialogContent className="sm:max-w-md">

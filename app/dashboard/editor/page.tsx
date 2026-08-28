@@ -44,6 +44,7 @@ import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
+import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 import GettingStarted from '../GettingStarted'
 import HelpHint from '../HelpHint'
 import { toastOpen } from '../toastLink'
@@ -135,6 +136,10 @@ export default function EditorPage() {
 
   const [newOpen, setNewOpen] = useState(false)
   const [preset, setPreset] = useState<{ client_id?: string; batch_id?: string } | undefined>()
+
+  // the comments drawer: read and answer an item's comments without leaving
+  // the board. `?comments=<itemId>` opens it on load (notification links).
+  const commentsDrawer = useCommentsDrawer()
 
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
@@ -661,13 +666,18 @@ export default function EditorPage() {
                                   initials answer a different question (who
                                   OWNS it, whoever's turn it is) and stay. */}
                               <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName}
-                                openTask={item.my_open_task} />
+                                openTask={item.my_open_task}
+                                onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
                               {assignment === 'other' && ownerName && (
                                 <span title={ownerName}
                                   className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                                   {initialsOf(ownerName)}
                                 </span>
                               )}
+                              {/* the conversation, right here — the drawer,
+                                  not a trip to the item page */}
+                              <CommentsButton className="ml-auto" tagged={item.my_open_task} title={item.title}
+                                onOpen={() => commentsDrawer.open(item.id, item.title)} />
                             </div>
                             {(item.due_date || item.status === 'revision_required' || item.status === 'client_changes_requested') && (
                               <div className="flex items-center gap-2">
@@ -770,6 +780,9 @@ export default function EditorPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* the side drawer: this board's cards open it via the comment button */}
+      <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
 
       <NewItemDialog
         open={newOpen}

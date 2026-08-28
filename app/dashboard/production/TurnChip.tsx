@@ -17,7 +17,7 @@ const HAT_WORD: Record<string, string> = {
  * you are the one holding it up. This does, in the three words that matter.
  * A published item has nobody's turn left, so it gets no chip at all.
  */
-export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTask }: {
+export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTask, onOpenComments }: {
   status: ItemStatus
   item: ActingItem
   viewer: { id: string; role: Role }
@@ -32,10 +32,21 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTa
    *  that outranks whose turn the STATUS says it is, because a question with
    *  your name on it is your move whatever the stage */
   openTask?: boolean
+  /** when given, the "tagged" pill opens that comment right here (the
+   *  drawer) instead of being a label you have to chase to another page */
+  onOpenComments?: () => void
 }) {
   if (openTask) {
-    return (
-      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+    const pill = 'rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+    return onOpenComments ? (
+      <button type="button"
+        onClick={e => { e.preventDefault(); e.stopPropagation(); onOpenComments() }}
+        aria-label="Someone tagged you in a comment — read it"
+        className={`relative z-10 -my-1 min-h-11 underline-offset-2 hover:underline md:my-0 md:min-h-0 ${pill}`}>
+        Waiting on you — tagged
+      </button>
+    ) : (
+      <span className={pill}>
         Waiting on you — tagged
       </span>
     )
