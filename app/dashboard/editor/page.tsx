@@ -18,9 +18,13 @@ import {
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, CalendarDays, CheckSquare, Flag, ListChecks, Trash2, ArrowRight } from 'lucide-react'
+import { Plus, CalendarDays, CheckSquare, ChevronDown, ChevronUp, Flag, ListChecks, Trash2, ArrowRight } from 'lucide-react'
 import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { itemStatusLabel } from '../../lib/brief-task-core'
+import {
+  addNextLabel, groupLine, isTaskGroup, nextPieceTitle, splitByGroup,
+  type DeliverableGroup, type GroupCard,
+} from '../../lib/deliverable-group-core'
 import {
   EDITOR_LANES, canClaimEditor, editorAssignment, editorScope, editorTail,
   isAsset, unassignedCount, type ScopeMode, type Viewer,
@@ -58,6 +62,8 @@ type Item = {
   owner_id: string | null
   scheduler_ids?: unknown
   my_open_task?: boolean
+  /** the quota group this piece belongs to, when it was made inside one */
+  group_id?: string | null
   clients: { name: string } | null
   batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   work_kinds?: { name: string; slug: string; color: string } | null
@@ -69,6 +75,8 @@ type BoardData = {
   items?: Item[]
   clients?: ClientRow[]
   batches?: Batch[]
+  /** quota groups — "5 reels" as one card. Empty until the SQL has run. */
+  groups?: DeliverableGroup[]
   /** the production tables are not migrated yet — a state, not a failure */
   noSchema?: boolean
 }
@@ -117,6 +125,10 @@ export default function EditorPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [clients, setClients] = useState<ClientRow[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
+  const [groups, setGroups] = useState<DeliverableGroup[]>([])
+  /** which quota cards are open, listing their pieces */
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [addingTo, setAddingTo] = useState<string | null>(null)
   const [clientFilter, setClientFilter] = useState<string>('all')
   const [batchFilter, setBatchFilter] = useState<string>('all')
   const [needsSchema, setNeedsSchema] = useState(false)
@@ -163,12 +175,15 @@ export default function EditorPage() {
    */
   const loadOrdered = useOrderedLoad<BoardData>(
     async () => {
-      const [itemsRes, clientsRes, batchesRes] = await Promise.all([
+      const [itemsRes, clientsRes, batchesRes, groupsRes] = await Promise.all([
         fetch('/api/production/items', { cache: 'no-store' }),
         // scope=mine: the client filter and the New-work dialog offer the
         // clients this person holds work for, assignments included
         fetch('/api/website/clients?scope=mine'),
         fetch('/api/production/batches'),
+        // quota groups — the endpoint answers [] on a database where the
+        // table has not been created yet, so this can never break the board
+        fetch('/api/production/groups', { cache: 'no-store' }),
       ])
       if (!itemsRes.ok) {
         const err = (await itemsRes.json().catch(() => ({}))).error ?? ''
@@ -179,6 +194,7 @@ export default function EditorPage() {
         items: await itemsRes.json(),
         clients: clientsRes.ok ? await clientsRes.json() : undefined,
         batches: batchesRes.ok ? await batchesRes.json() : undefined,
+        groups: groupsRes.ok ? await groupsRes.json() : [],
       }
     },
     data => {
@@ -186,6 +202,7 @@ export default function EditorPage() {
       if (data.items) setItems(data.items)
       if (data.clients) setClients(data.clients)
       if (data.batches) setBatches(data.batches)
+      if (data.groups) setGroups(Array.isArray(data.groups) ? data.groups : [])
     },
   )
   const load = useCallback(async () => {
@@ -225,6 +242,22 @@ export default function EditorPage() {
   const scoped = viewer ? editorScope(all, viewer, scope) : []
   const visible = scoped.filter(inFilters)
   const filtered = all.filter(inFilters)
+
+  // quota cards: grouped pieces fold into ONE card per group ("Reels · 2 of
+  // 5") and never render individually. Groups follow the client / shoot
+  // chips; the scope pills govern the pieces inside them. With the groups
+  // table not migrated yet the list is [] and every card is a plain card.
+  const groupsInFilters = groups.filter(g =>
+    !isTaskGroup(g) // task groups live on the Production board
+    && (clientFilter === 'all' || g.client_id === clientFilter)
+    && (batchFilter === 'all' || (g.batch_id ?? null) === batchFilter))
+  // the card counts EVERY piece the group holds — published ones included,
+  // whatever the scope pills say — or "3 of 5" would shrink back to "1 of 5"
+  // the moment two pieces went live. The pieces drawn as plain cards still
+  // obey the scope.
+  const { groupCards } = splitByGroup(filtered, groupsInFilters)
+  const groupedIds = new Set(groupCards.flatMap(c => c.items.map(i => i.id)))
+  const plainItems = visible.filter(i => !groupedIds.has(i.id))
 
   // the pool anyone may pick up — briefs are never in it, and neither is
   // anything already approved: that seat belongs to the scheduler
@@ -324,6 +357,96 @@ export default function EditorPage() {
     }
   }
 
+  /** "Add the next reel" — one real item, filed into the group. */
+  const addNextPiece = async (card: GroupCard<Item>) => {
+    setAddingTo(card.group.id)
+    try {
+      const res = await fetch('/api/production/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{
+          client_id: card.group.client_id,
+          batch_id: card.group.batch_id ?? null,
+          group_id: card.group.id,
+          title: nextPieceTitle(card.group, card.count),
+          content_type: card.group.content_type,
+          ...(card.group.work_kind_id ? { work_kind_id: card.group.work_kind_id } : {}),
+        }] }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not add it')
+      const made = Array.isArray(json) ? json[0] : null
+      toastOpen(
+        `${made?.title ?? 'Piece'} added — ${card.count + 1} of ${card.target}`,
+        made?.id ? `/dashboard/production/${made.id}` : '/dashboard/editor',
+        router.push,
+      )
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not add it')
+    } finally {
+      setAddingTo(null)
+    }
+  }
+
+  /** A quota card: the promise, how full it is, and the one next action. */
+  const renderGroupCard = (card: GroupCard<Item>) => {
+    const open = openGroups.has(card.group.id)
+    const pct = Math.min(100, Math.round((card.count / card.target) * 100))
+    return (
+      <div key={`group-${card.group.id}`}>
+        <Card className="py-0 transition-shadow hover:shadow-md">
+          <CardContent className="flex flex-col gap-2 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
+              <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
+                onClick={() => setOpenGroups(prev => {
+                  const next = new Set(prev)
+                  if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
+                  return next
+                })}
+                className="flex h-8 w-8 shrink-0 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
+            {/* the small filled bar — how much of the promise exists */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
+                {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
+              </Badge>
+              <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{card.group.content_type}</span>
+            </div>
+            {open && (
+              <div className="flex flex-col gap-1">
+                {card.items.length === 0 && (
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">No pieces yet — add the first one below.</p>
+                )}
+                {card.items.map(i => (
+                  <Link key={i.id} href={`/dashboard/production/${i.id}`}
+                    className="flex min-h-8 items-center justify-between gap-2 rounded px-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                    <span className="truncate">{i.title}</span>
+                    <span className="shrink-0 text-zinc-400 dark:text-zinc-500">{STATUS_LABELS[i.status]}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {!card.full && (
+              <Button size="sm" className="min-h-11 w-fit md:min-h-8"
+                disabled={addingTo === card.group.id}
+                onClick={() => void addNextPiece(card)}>
+                <Plus className="h-3.5 w-3.5" />
+                {addingTo === card.group.id ? 'Adding…' : addNextLabel(card.group)}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   if (needsSchema) {
     return (
       <Card className="border-dashed shadow-none">
@@ -417,7 +540,7 @@ export default function EditorPage() {
         <div className="flex gap-3 overflow-x-hidden">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
         </div>
-      ) : scoped.length === 0 ? (
+      ) : scoped.length === 0 && groupCards.length === 0 ? (
         /* the scope itself is empty — a real "there is nothing here". A client
            or shoot chip matching nothing is not that, and keeps its board. */
         <Card className="border-dashed shadow-none">
@@ -480,16 +603,19 @@ export default function EditorPage() {
           // something that is theirs to move, else the first with anything
           initialLane={EDITOR_LANES.find(l => visible.some(i => l.statuses.includes(i.status) && editorAssignment(i, viewer!) === 'mine'))?.key}
           lanes={EDITOR_LANES.map((lane): Lane => {
-              const colItems = visible.filter(i => lane.statuses.includes(i.status))
+              const colItems = plainItems.filter(i => lane.statuses.includes(i.status))
+              // a quota card sits in the lane of its least-finished piece —
+              // the work still owed — and in Drafting while it is empty
+              const colGroups = groupCards.filter(c => lane.statuses.includes(c.laneStatus))
               return {
                 key: lane.key,
                 title: lane.title,
                 tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
-                count: colItems.length,
+                count: colItems.length + colGroups.length,
                 hint: lane.key === 'drafting' ? <HelpHint term="drafting" />
                   : lane.key === 'approved' ? <HelpHint term="approved_for_scheduling" /> : undefined,
-                empty: filtering && visible.length === 0 ? 'Nothing for this client / shoot' : LANE_EMPTY[lane.key] ?? 'Nothing here.',
-                cards: colItems.map(item => {
+                empty: filtering && visible.length === 0 && groupCards.length === 0 ? 'Nothing for this client / shoot' : LANE_EMPTY[lane.key] ?? 'Nothing here.',
+                cards: [...colGroups.map(renderGroupCard), ...colItems.map(item => {
                       const assignment = editorAssignment(item, viewer!)
                       const ownerName = item.owner_id ? nameById.get(item.owner_id) : undefined
                       return (
@@ -586,7 +712,7 @@ export default function EditorPage() {
                         </Card>
                       </div>
                       )
-                    }),
+                    })],
               }
             })}
         />

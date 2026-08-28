@@ -139,7 +139,7 @@ describe('brief wording never speaks about scheduling', () => {
   it('every stage explains itself as a plan', () => {
     for (const s of ITEM_STATUSES) expect(BRIEF_STATUS_MEANING[s]).toBeTruthy()
     expect(BRIEF_STATUS_MEANING.approved_for_scheduling)
-      .toBe('The plan is signed off. Lock the shoot date, then book it.')
+      .toBe('The plan is signed off. Book the shoot — pick the date on the shoot page.')
     expect(BRIEF_STATUS_MEANING.scheduled).toBe('The shoot is booked.')
   })
 })

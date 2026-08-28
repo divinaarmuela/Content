@@ -686,7 +686,7 @@ export default function ItemDetailPage() {
     .map(a => a.created_at).sort().pop() ?? null
   const blockedReason = (to: ItemStatus): string | null => {
     if (to === 'internal_review' && isBrief && !briefHasContent) {
-      return 'Add a brief link, or fill in the concept or shot list on the shoot page.'
+      return 'Add a plan link, or fill in the concept or shot list on the shoot page.'
     }
     if (to === 'internal_review' && !isBrief && detail.versions.length === 0) {
       return isInternal
@@ -701,7 +701,7 @@ export default function ItemDetailPage() {
       return 'Add a platform with a date below first.'
     }
     if (to === 'scheduled' && isBrief && !['locked', 'shot'].includes(detail.batch?.status ?? '')) {
-      return 'Lock the shoot date on the shoot page first.'
+      return 'Book the shoot on its page first — the date is set there.'
     }
     if (to === 'published' && isAsset && detail.schedule.every(s => s.publish_status !== 'published')) {
       return 'Add a live link, or mark a platform posted, below first.'
@@ -1030,7 +1030,7 @@ export default function ItemDetailPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign')
       toast.success(ownerId === 'none'
         ? 'Nobody on it now — anyone can take it from the board'
-        : `Assigned to ${nameOf(ownerId) ?? 'them'} — they have been emailed the brief`)
+        : `Assigned to ${nameOf(ownerId) ?? 'them'} — they have been emailed the job details`)
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign')
@@ -1688,7 +1688,7 @@ export default function ItemDetailPage() {
             {canManage ? (
               <>
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">Brief</Label>
+                  <Label className="text-xs">Editing notes</Label>
                   <Textarea
                     ref={jobBriefRef}
                     rows={3}
@@ -1698,7 +1698,7 @@ export default function ItemDetailPage() {
                     onBlur={e => {
                       const v = e.target.value.trim()
                       if (v === (focusVal.current.brief ?? '').trim()) return
-                      if (v !== (detail.brief ?? '')) void saveField({ brief: v || null }, 'Brief saved')
+                      if (v !== (detail.brief ?? '')) void saveField({ brief: v || null }, 'Notes saved')
                     }}
                   />
                 </div>
@@ -1772,7 +1772,7 @@ export default function ItemDetailPage() {
             ) : (
               detail.brief
                 ? <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.brief}</p>
-                : <p className="text-sm text-zinc-400 dark:text-zinc-500">No brief written for this task.</p>
+                : <p className="text-sm text-zinc-400 dark:text-zinc-500">No notes written for this task.</p>
             )}
             {(detail.raw_assets?.length ?? 0) > 0 && (
               <div className="flex flex-col gap-1.5">

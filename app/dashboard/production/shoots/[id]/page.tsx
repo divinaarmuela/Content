@@ -18,10 +18,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, Plus, Trash2, X, FileDown,
+  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, MoreHorizontal, Plus, Trash2, X, FileDown,
 } from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useProductionLive } from '../../useProductionLive'
-import { BATCH_STATUS_LABEL, BATCH_STATUS_STYLE } from '../../shoot-ui'
+import { BATCH_STATUS_STYLE } from '../../shoot-ui'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import BriefComments from './BriefComments'
 import LocationSearch from './LocationSearch'
@@ -29,8 +32,9 @@ import {
   availableBatchTransitions, sanitiseCanvasCards,
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
 } from '../../../../lib/batch-brief-core'
+import { SHOWN_SHOOT_LABEL, shownShootState } from '../../../../lib/shoot-lifecycle-core'
+import { createCoalescer } from '../../../../lib/coalesce-core'
 import { TYPE_LABELS, type ContentType } from '../../../../lib/agreement-core'
-import { SHOOT_PLAN_SECTION } from '../../../../lib/section-names'
 
 type Batch = {
   id: string; client_id: string; title: string; status: BatchStatus
@@ -170,12 +174,59 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       return false
     }
     const json = await res.json()
-    setBatch(b => (b ? { ...b, ...json } : b))
+    // the shot list renders from LOCAL state and saves through the coalescer
+    // below — a server echo from some other field's save is never newer than
+    // what the person is typing, so it must not overwrite it
+    const { shot_list: _echo, ...rest } = json as Record<string, unknown>
+    void _echo
+    setBatch(b => (b ? { ...b, ...rest } : b))
     setLastEdited({ name: 'you', at: new Date().toISOString() })
     setSaveState('saved')
     window.setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 2000)
     void quiet
     return true
+  }
+
+  /**
+   * The shot list, made instant.
+   *
+   * Every tick, rename and delete used to PATCH the whole array and wait for
+   * the answer before the screen moved — and the input remounted on the echo,
+   * dropping focus mid-word. Now the edit lands in local state immediately,
+   * the screen renders from that, and ONE debounced PATCH (~600ms after the
+   * typing pauses) sends the latest array — ten quick edits, one request.
+   * The response is not merged back over the list (local is newer or equal);
+   * a refusal reloads the truth. Concurrent editors stay last-write-wins, as
+   * the note at the top of this file already accepts.
+   */
+  const saveShotList = useCallback(async (list: ShotRow[]) => {
+    pending.current += 1
+    setSaveState('saving')
+    const res = await fetch(`/api/production/batches/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shot_list: list }),
+    })
+    pending.current = Math.max(0, pending.current - 1)
+    if (!res.ok) {
+      setSaveState('idle')
+      toast.error((await res.json().catch(() => ({}))).error ?? 'Could not save the shot list')
+      void load()
+      return
+    }
+    setLastEdited({ name: 'you', at: new Date().toISOString() })
+    setSaveState('saved')
+    window.setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 2000)
+  }, [id, load])
+  const saveShotListRef = useRef(saveShotList)
+  useEffect(() => { saveShotListRef.current = saveShotList }, [saveShotList])
+  const shotSaver = useRef<ReturnType<typeof createCoalescer<ShotRow[]>> | null>(null)
+  if (!shotSaver.current) shotSaver.current = createCoalescer<ShotRow[]>(list => { void saveShotListRef.current(list) }, 600)
+  // leaving the page saves whatever is still pending
+  useEffect(() => () => shotSaver.current?.flush(), [])
+  const editShots = (next: ShotRow[]) => {
+    setBatch(b => (b ? { ...b, shot_list: next } : b))
+    shotSaver.current?.push(next)
   }
 
   const transition = async (to: BatchStatus, label: string) => {
@@ -191,7 +242,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
       setLockOpen(false)
       toast.success(to === 'locked'
-        ? `Shoot locked for ${longDate(json.shoot_date)}. You can create its items now.`
+        ? `Shoot booked for ${longDate(json.shoot_date)}. You can create its items now.`
         : `${label} — done`)
       void load()
     } catch (e) {
@@ -212,15 +263,17 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   }
 
   const briefTask = items.find(i => i.work_kinds?.slug === 'shoot_brief') ?? null
-  // "Book the shoot" moves the BRIEF to scheduled; the batch keeps its own
-  // status. Without reading it back here the shoot never said it was booked.
-  const booked = briefTask?.status === 'scheduled' || briefTask?.status === 'published'
-  /** what this shoot actually PRODUCED — its own brief is not a deliverable */
+  /** what this shoot actually PRODUCED — its own plan is not a deliverable */
   const deliverableItems = items.filter(i => i.work_kinds?.slug !== 'shoot_brief')
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
-  const primary = transitions.find(t => t.to === (batch.status === 'brief' ? 'locked' : 'shot'))
+  // ONE primary action: Book the shoot. "Shot" is derived from the calendar
+  // (shownShootState) — no button; closing and undoing live in the ⋯ menu.
+  const primary = transitions.find(t => t.to === 'locked')
+  const quiet = transitions.filter(t => t.to !== 'locked' && t.to !== 'shot')
+  const state = shownShootState(batch)
+  const stateStyle = { planning: 'brief', booked: 'locked', shot: 'shot', closed: 'wrapped' } as const
   const progressFor = (type: string) => (progress ?? []).find(p => p.type === type)
 
   return (
@@ -239,28 +292,36 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           onBlur={e => { const v = e.target.value.trim(); if (v && v !== batch.title) void patch('title', v) }}
           className="min-w-0 flex-1 bg-transparent text-2xl font-semibold tracking-tight outline-none focus:border-b focus:border-zinc-300 disabled:opacity-100 dark:focus:border-zinc-700"
         />
-        <Badge variant="outline" className={`font-normal ${BATCH_STATUS_STYLE[batch.status]}`}>
-          {BATCH_STATUS_LABEL[batch.status]}
+        {/* what actually happened, derived from the calendar — a booked shoot
+            whose date has passed says "Shot" with nobody pressing anything */}
+        <Badge variant="outline" className={`font-normal ${BATCH_STATUS_STYLE[stateStyle[state]]}`}>
+          {SHOWN_SHOOT_LABEL[state]}
         </Badge>
-        {/* the brief said "Shoot booked" while the shoot itself said nothing —
-            one job, two pages, and they have to agree */}
-        {booked && (
-          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-normal text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
-            Booked
-          </Badge>
-        )}
         {primary && (
           <Button size="sm" disabled={busy !== null}
-            onClick={() => primary.to === 'locked' ? setLockOpen(true) : void transition(primary.to, primary.label)}
-            title={primary.to === 'locked' && !batch.shoot_date ? 'Set a shoot date first' : undefined}>
-            {primary.to === 'locked' && <Lock className="h-3.5 w-3.5" />} {primary.label}
+            onClick={() => setLockOpen(true)}
+            title={!batch.shoot_date ? 'Set a shoot date first' : undefined}>
+            <Lock className="h-3.5 w-3.5" /> {primary.label}
           </Button>
         )}
-        {/* "Wrap" was unpredictable from the label — say what it does */}
-        {isManager && transitions.some(t => t.to === 'wrapped') && (
-          <Button size="sm" variant="outline" disabled={busy !== null}
-            title="Everything from this shoot is delivered. It moves to WRAPPED and stops appearing as live work."
-            onClick={() => void transition('wrapped', 'Close this shoot')}>Close this shoot</Button>
+        {/* the exceptions — closing early, undoing a booking, reopening — live
+            in a quiet ⋯ menu so the page carries one obvious action */}
+        {isManager && quiet.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400" aria-label="More actions for this shoot">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {quiet.map(t => (
+                <DropdownMenuItem key={t.to} disabled={busy !== null}
+                  onClick={() => void transition(t.to, t.label)}>
+                  {t.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {isManager && items.length === 0 && (
           <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400"
@@ -297,12 +358,12 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </p>
           <Button size="sm" className="ml-auto" disabled={busy !== null}
             onClick={async () => {
-              setBusy('brief-task')
+              setBusy('plan-task')
               try {
                 const kindsRes = await fetch('/api/production/work-kinds?active=1')
                 const kinds = kindsRes.ok ? (await kindsRes.json()).kinds ?? [] : []
                 const briefKind = kinds.find((k: { slug: string }) => k.slug === 'shoot_brief')
-                if (!briefKind) throw new Error('The Shoot brief work type is missing')
+                if (!briefKind) throw new Error('The shoot plan work type is missing')
                 const res = await fetch('/api/production/items', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -315,7 +376,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 })
                 const json = await res.json()
                 if (!res.ok) throw new Error(json.error ?? 'Could not create the shoot plan')
-                toast.success(`Shoot plan created — it's on Production, under ${SHOOT_PLAN_SECTION}`)
+                toast.success('Shoot plan created — it is on the Production board')
                 void load()
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Could not create the shoot plan')
@@ -323,7 +384,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 setBusy(null)
               }
             }}>
-            {busy === 'brief-task' ? 'Creating…' : 'Write the shoot plan'}
+            {busy === 'plan-task' ? 'Creating…' : 'Write the shoot plan'}
           </Button>
         </div>
       )}
@@ -376,16 +437,18 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               {shots.map((shot, i) => (
                 <div key={shot.id} className="group flex items-center gap-2">
                   <input type="checkbox" checked={shot.done} disabled={!canEdit}
-                    onChange={e => void patch('shot_list', shots.map((s, j) => j === i ? { ...s, done: e.target.checked } : s), true)}
+                    onChange={e => editShots(shots.map((s, j) => j === i ? { ...s, done: e.target.checked } : s))}
                     className="h-4 w-4 shrink-0 accent-blue-600" />
-                  <Input key={`${shot.id}:${shot.text}`} defaultValue={shot.text} disabled={!canEdit}
+                  {/* keyed by the shot's id ONLY — keying on the text remounted
+                      the field on every echo and dropped focus mid-word */}
+                  <Input key={shot.id} defaultValue={shot.text} disabled={!canEdit}
                     className="h-8 border-transparent bg-transparent px-1 text-sm shadow-none hover:border-zinc-200 dark:hover:border-zinc-800"
                     onBlur={e => {
                       const v = e.target.value.trim()
-                      if (v !== shot.text) void patch('shot_list', v === '' ? shots.filter((_, j) => j !== i) : shots.map((s, j) => j === i ? { ...s, text: v } : s), true)
+                      if (v !== shot.text) editShots(v === '' ? shots.filter((_, j) => j !== i) : shots.map((s, j) => j === i ? { ...s, text: v } : s))
                     }} />
                   <Select value={shot.type ?? 'none'}
-                    onValueChange={v => void patch('shot_list', shots.map((s, j) => j === i ? { ...s, ...(v === 'none' ? { type: undefined } : { type: v }) } : s), true)}>
+                    onValueChange={v => editShots(shots.map((s, j) => j === i ? { ...s, ...(v === 'none' ? { type: undefined } : { type: v }) } : s))}>
                     <SelectTrigger className="h-8 w-28 border-transparent text-xs shadow-none"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Any use</SelectItem>
@@ -394,7 +457,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </Select>
                   {canEdit && (
                     <button type="button" className="opacity-60 transition-opacity group-hover:opacity-100"
-                      onClick={() => void patch('shot_list', shots.filter((_, j) => j !== i), true)}>
+                      onClick={() => editShots(shots.filter((_, j) => j !== i))}>
                       <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
                     </button>
                   )}
@@ -402,7 +465,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               ))}
               {canEdit && (
                 <Button size="sm" variant="ghost" className="w-fit text-zinc-500"
-                  onClick={() => void patch('shot_list', [...shots, { id: Math.random().toString(36).slice(2, 10), text: 'New shot', done: false }], true)}>
+                  onClick={() => editShots([...shots, { id: Math.random().toString(36).slice(2, 10), text: 'New shot', done: false }])}>
                   <Plus className="h-3.5 w-3.5" /> Add shot
                 </Button>
               )}
@@ -435,7 +498,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </span>
                   {batch.locked_at && (
                     <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
-                      Locked by {lockedByName ?? 'the team'} · {stamp(batch.locked_at)}
+                      Booked by {lockedByName ?? 'the team'} · {stamp(batch.locked_at)}
                     </span>
                   )}
                   {isManager && batch.status !== 'wrapped' && (
@@ -523,7 +586,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Production</p>
               {batch.status === 'brief' ? (
                 <p className="text-sm text-zinc-400 dark:text-zinc-500">
-                  Lock the shoot date, and you can start creating items for it.
+                  Book the shoot, and you can start creating items for it.
                 </p>
               ) : (
                 <>
@@ -598,7 +661,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="w-fit" asChild>
                   <a href={`/api/production/batches/${batch.id}/pdf`} download>
-                    <FileDown className="h-3.5 w-3.5" /> Download brief PDF
+                    <FileDown className="h-3.5 w-3.5" /> Download the plan PDF
                   </a>
                 </Button>
                 {portalToken && (
@@ -665,11 +728,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         />
       </div>
 
-      {/* ── the lock ceremony ── */}
+      {/* ── the booking ceremony ── */}
       <AlertDialog open={lockOpen} onOpenChange={o => busy === null && setLockOpen(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Lock this shoot date?</AlertDialogTitle>
+            <AlertDialogTitle>Book this shoot?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="flex flex-col gap-3">
                 <span className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -677,8 +740,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 </span>
                 <span>{batch.clients?.name}{batch.location ? ` · ${batch.location}` : ''}</span>
                 <span>
-                  Locking commits the team to this date and opens the shoot up for
-                  items. Changing a locked date needs an account manager.
+                  Booking commits the team to this date and opens the shoot up for
+                  items. Changing a booked date needs an account manager.
                 </span>
               </div>
             </AlertDialogDescription>
@@ -702,19 +765,19 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   toast.error('Set the shoot date first — it is the field above this button.')
                   return
                 }
-                void transition('locked', 'Lock shoot date')
+                void transition('locked', 'Book the shoot')
               }}>
-              {busy === 'locked' ? 'Locking…' : 'Lock date'}
+              {busy === 'locked' ? 'Booking…' : 'Book the shoot'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── AM changes a locked date, with a reason ── */}
+      {/* ── AM changes a booked date, with a reason ── */}
       <AlertDialog open={dateOpen} onOpenChange={o => busy === null && setDateOpen(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Change a locked date?</AlertDialogTitle>
+            <AlertDialogTitle>Change a booked date?</AlertDialogTitle>
             <AlertDialogDescription>
               The team committed to {longDate(batch.shoot_date)}. Say why it&rsquo;s moving — the change is logged.
             </AlertDialogDescription>
@@ -752,13 +815,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── delete an unlocked, empty brief ── */}
+      {/* ── delete an unbooked, empty shoot ── */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete &ldquo;{batch.title}&rdquo;?</AlertDialogTitle>
             <AlertDialogDescription>
-              The brief, its shot list, and its references go. This cannot be undone.
+              The shoot plan, its shot list, and its references go. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -768,7 +831,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 e.preventDefault()
                 const res = await fetch(`/api/production/batches/${id}`, { method: 'DELETE' })
                 if (!res.ok) { toast.error((await res.json()).error ?? 'Could not delete'); return }
-                toast.success('Brief deleted')
+                toast.success('Shoot deleted')
                 router.push('/dashboard/production')
               }}>
               Delete

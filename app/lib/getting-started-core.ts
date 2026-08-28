@@ -98,7 +98,7 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
     },
     {
       title: 'Plan the next shoot',
-      body: 'In Production, plan a shoot, write the shoot plan, share it with the client, then lock the date.',
+      body: 'In Production, plan a shoot, write the shoot plan, share it with the client, then book the shoot.',
       href: '/dashboard/production',
       linkLabel: 'Go to Production',
     },
@@ -117,7 +117,7 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
     },
     {
       title: 'Nobody on it? Give it to someone',
-      body: 'Cards with no owner show "Take this" and "Assign…". Assign hands it to a named editor and emails them the brief.',
+      body: 'Cards with no owner show "Take this" and "Assign…". Assign hands it to a named editor and emails them the job.',
       href: '/dashboard/editor',
       linkLabel: 'Find unassigned items',
     },
@@ -146,8 +146,8 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
       linkLabel: 'See shoot plans',
     },
     {
-      title: 'Lock the date, then create the items',
-      body: 'On the shoot page: lock the date, and after the shoot press Create items. Those items land on the Editor board.',
+      title: 'Book the shoot, then create the items',
+      body: 'On the shoot page: book the shoot (that sets the date), and after the shoot press Create items. Those items land on the Editor board.',
       href: '/dashboard/production',
       linkLabel: 'Open a shoot',
     },
@@ -171,7 +171,7 @@ const PRODUCTION_FOR_EDITORS: GettingStartedPanel = {
     },
     {
       title: 'Items come from a shoot',
-      body: 'Once a shoot is locked, its items are created from the shoot page and appear on your Editor board.',
+      body: 'Once a shoot is booked, its items are created from the shoot page and appear on your Editor board.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },

@@ -179,8 +179,6 @@ describe('the canonical words are the only words', () => {
   const KNOWN: Known[] = [
     { file: 'app/api/production/batches/[id]/route.ts', contains: 'content item',
       why: 'a 409 message and a file comment; the API vocabulary follows the screens, not the other way round' },
-    { file: 'app/api/production/items/route.ts', contains: 'brief task',
-      why: 'a 409 message and two comments on the create path' },
     { file: 'app/lib/brief-task-core.ts', contains: 'content item',
       why: 'the reason string on a blocked edge; it moves with the Production board' },
     { file: 'app/lib/production-publish.ts', contains: 'content item',
@@ -227,6 +225,51 @@ ${show(unexpected)}`).toEqual([])
     // only the constant's own explanation may still name the old spelling
     const others = sweep(/Briefs in flight/).filter(h => h.file !== 'app/lib/section-names.ts')
     expect(others).toEqual([])
+  })
+})
+
+describe('"brief" is retired — the word is "shoot plan"', () => {
+  /**
+   * One document, one name. "Brief" survived in half the copy long after the
+   * glossary settled on "shoot plan", so the same thing had two names
+   * depending on which button you were reading. This sweeps every string a
+   * PERSON reads on the three work pages for the word — identifiers
+   * (brief_url, shoot_brief, isBriefKind) never match because the word
+   * boundary stops at underscores, and the bare status value 'brief' (the
+   * batches.status enum) is excluded as a code value, not copy.
+   */
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*/g, '$1 ')
+
+  const KNOWN: Known[] = []
+
+  const hits: Hit[] = []
+  for (const file of FILES) {
+    const rel = relative(process.cwd(), file).split(sep).join('/')
+    if (!/app\/dashboard\/(editor|scheduler|production)\//.test(rel)) continue
+    const flat = stripComments(readFileSync(file, 'utf8'))
+    // every quoted string literal on the pages that reads as COPY: it has a
+    // space in it, or is the bare word itself. Paths ("…/batch-brief-core"),
+    // svg ids ("url(#brief-arrowhead)") and enum values ('brief') never do.
+    for (const m of flat.matchAll(/(["'])((?:(?!\1)[^\n])*)\1/g)) {
+      const lit = m[2]
+      const readsAsCopy = lit.includes(' ') || /^briefs?$/i.test(lit)
+      if (lit === 'brief') continue // the batches.status enum value
+      if (readsAsCopy && /\bbriefs?\b/i.test(lit)) hits.push({ file: rel, line: 0, text: `"${lit}"` })
+    }
+    // …and every JSX text node
+    for (const m of flat.matchAll(/>([^<{}\n]*\bbriefs?\b[^<{}\n]*)</gi)) {
+      hits.push({ file: rel, line: 0, text: `>${m[1].trim()}<` })
+    }
+  }
+  const { unexpected, stale } = split(hits, KNOWN)
+
+  it('no user-facing "brief" is left on the work pages', () => {
+    expect(unexpected, `"brief" copy still on screen (the word is "shoot plan"):\n${show(unexpected)}`).toEqual([])
+  })
+
+  it('the known list has no stale entries — remove one when its site is fixed', () => {
+    expect(stale.map(s => `${s.file} — ${s.contains}`), 'these no longer match; delete them from KNOWN').toEqual([])
   })
 })
 

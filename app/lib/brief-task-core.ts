@@ -59,7 +59,7 @@ export const BRIEF_STATUS_MEANING: Record<ItemStatus, string> = {
   revision_complete: 'The changes are in; an account manager needs to look again.',
   client_review: 'Waiting for the client to approve the plan or ask for changes.',
   client_changes_requested: 'An account manager decides: rework the plan, or reshare it as is.',
-  approved_for_scheduling: 'The plan is signed off. Lock the shoot date, then book it.',
+  approved_for_scheduling: 'The plan is signed off. Book the shoot — pick the date on the shoot page.',
   scheduled: 'The shoot is booked.',
   published: 'The shoot is booked.',
 }

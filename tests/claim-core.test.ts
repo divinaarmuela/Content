@@ -68,7 +68,7 @@ describe('claimDecision — the refusals that apply to both seats', () => {
 
   it('refuses a shoot brief — it belongs to the manager who wrote it', () => {
     expect(claimDecision(item('draft_uploaded', true), who('editor'), 'editor'))
-      .toEqual({ ok: false, status: 400, error: 'A shoot brief is owned by its account manager' })
+      .toEqual({ ok: false, status: 400, error: 'A shoot plan is owned by its account manager' })
     expect(claimDecision(item('approved_for_scheduling', true), who('scheduler'), 'scheduler').ok).toBe(false)
   })
 })

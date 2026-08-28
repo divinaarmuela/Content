@@ -17,7 +17,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
-import { DRAFTING_LANE, SHOOT_PLAN_SECTION, TASK_SECTION } from '../../lib/section-names'
+import { DRAFTING_LANE } from '../../lib/section-names'
 import { useRole } from '../useRole'
 import { useIsMobile } from '../useIsMobile'
 import { toastOpen } from '../toastLink'
@@ -192,6 +192,22 @@ export default function NewItemDialog({
       ))
       .catch(() => setFetchedTeam([]))
   }, [open, isManager, teamProp])
+  // a TASK is internal work, not client-confidential: the dropdown offers
+  // EVERY active client, not just the ones this person is rostered on — the
+  // owner's rule ("any team member, any client"). Shoots and items keep the
+  // scoped list the page passed in. Fetched once, on first task-dialog open.
+  const [allClients, setAllClients] = useState<(ClientRow & { status?: string })[]>([])
+  const allClientsFetchedRef = useRef(false)
+  useEffect(() => {
+    if (!open || presetKind !== 'task' || allClientsFetchedRef.current) return
+    allClientsFetchedRef.current = true
+    fetch('/api/website/clients')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: (ClientRow & { status?: string })[]) => setAllClients(
+        (Array.isArray(rows) ? rows : []).filter(c => (c.status ?? 'active') === 'active'),
+      ))
+      .catch(() => setAllClients([]))
+  }, [open, presetKind])
   const kindsFetchedRef = useRef(false)
   useEffect(() => {
     // the kinds shape the form, so they load on first open — not on a page
@@ -316,7 +332,59 @@ export default function NewItemDialog({
     }
     setNewBusy(true)
     try {
-      const count = isBriefKind || isTaskKind ? 1 : Math.min(Math.max(1, draft.count), 30)
+      // a quantity applies to assets AND tasks — "5 write-ups" is one promise
+      let count = isBriefKind ? 1 : Math.min(Math.max(1, draft.count), 30)
+
+      // ── a QUANTITY is a promise, not N cards ──
+      // "5 reels" makes ONE group with target 5: the board shows one card
+      // ("Reels · 0 of 5") that fills as pieces are added. If the groups
+      // table is not migrated yet the server says so, and we fall back to
+      // creating the numbered items exactly as before — never a dead end.
+      // Attached files or a folder link mean the WORK already exists, not
+      // just the promise — those still create the numbered items directly.
+      if (count > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim()) {
+        const res = await fetch('/api/production/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: draft.client_id,
+            batch_id: isTaskKind ? null : draft.batch_id || null,
+            content_type: isTaskKind ? 'other' : draft.content_type,
+            title: draft.title.trim(),
+            target: count,
+            // a task group remembers its kind, so every piece added later is
+            // a task too — never an asset that would reach the Scheduler
+            ...(isTaskKind ? { work_kind_id: draft.work_kind_id || defaultKind?.id || undefined } : {}),
+            adhoc_reason: adhocReason.trim() || undefined,
+          }),
+        })
+        const json = await res.json().catch(() => null)
+        if (res.ok) {
+          toastOpen(
+            `"${draft.title.trim()}" created — one card, 0 of ${count}. Add pieces from the ${isTaskKind ? 'Production' : 'Editor'} board.`,
+            isTaskKind ? '/dashboard/production' : '/dashboard/editor', router.push,
+          )
+          onOpenChange(false)
+          setDraft({ ...BLANK })
+          setAdhocReason('')
+          setAssetWarnings([])
+          setClientApproval(true)
+          setStep('details')
+          onCreated()
+          return
+        }
+        // 503 = the table is not migrated; 404/405 = the endpoint is not
+        // deployed yet. Either way the feature is off — fall back: a task
+        // becomes ONE task, assets become the numbered items as before.
+        if (![503, 404, 405].includes(res.status)) {
+          throw new Error(json?.error ?? 'Could not create the group')
+        }
+        if (isTaskKind) count = 1
+      }
+
+      // a task that did not become a group is always ONE task — attached
+      // files belong to it, and five copies of a file help nobody
+      if (isTaskKind) count = 1
       const payload = Array.from({ length: count }, (_, i) => ({
         client_id: draft.client_id,
         batch_id: draft.batch_id || null,
@@ -349,8 +417,8 @@ export default function NewItemDialog({
       // where it went, and a way to go there: one item opens itself, several
       // open the board they landed on
       const firstId = Array.isArray(created) && created[0]?.id ? String(created[0].id) : null
-      const message = isTaskKind ? `Task created — it is on Production, under ${TASK_SECTION}`
-        : isBriefKind ? `Shoot plan created — it is on Production, under ${SHOOT_PLAN_SECTION}`
+      const message = isTaskKind ? 'Task created — it is on the Production board'
+        : isBriefKind ? 'Shoot plan created — it is on the Production board'
         : count === 1 ? `Item created — it is on the Editor board, in ${DRAFTING_LANE}`
         : `${count} items created — they are on the Editor board, in ${DRAFTING_LANE}`
       const href = count === 1 && firstId
@@ -391,7 +459,9 @@ export default function NewItemDialog({
   const showDetails = !mobile || !hasFilesStep || step === 'details'
   const showFiles = hasFilesStep && (!mobile || step === 'files')
   const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task' : draft.count > 1 ? `${draft.count} items` : 'item'
-  const createLabel = isBriefKind ? 'Create the shoot plan' : isTaskKind ? 'Create the task' : `Create ${what}`
+  const createLabel = isBriefKind ? 'Create the shoot plan'
+    : isTaskKind ? (draft.count > 1 ? `Create it — 0 of ${draft.count}` : 'Create the task')
+    : `Create ${what}`
 
   return (
     <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null); setNewKindName(null); setStep('details') }}>
@@ -417,9 +487,16 @@ export default function NewItemDialog({
             <Select value={draft.client_id} onValueChange={v => v && setDraft(d => ({ ...d, client_id: v, batch_id: '' }))}>
               <SelectTrigger><SelectValue placeholder="Choose client" /></SelectTrigger>
               <SelectContent>
-                {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                {(isTaskKind && allClients.length > 0 ? allClients : clients).map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {isTaskKind && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                A task can be for any client — it never leaves the team.
+              </p>
+            )}
           </div>
           {/* a plan belongs to a shoot. Without this picker "New shoot plan"
               silently created a SECOND shoot beside the one already there. */}
@@ -512,11 +589,16 @@ export default function NewItemDialog({
                 : 'Shown in words once picked.'}
             </p>
           </div>
-          {!isBriefKind && !isTaskKind && (
+          {!isBriefKind && (
           <div className="grid gap-1.5">
-            <Label>How many items? <span className="text-xs font-normal text-zinc-400">(titles are numbered 01, 02…)</span></Label>
+            <Label>{isTaskKind ? 'How many pieces?' : 'How many items?'} <span className="text-xs font-normal text-zinc-400">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
             <Input type="number" min={1} max={30} value={draft.count}
               onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
+            {isTaskKind && draft.count > 1 && (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                One card on the Production board with {draft.count} pieces inside. Attached files make it a single task instead.
+              </p>
+            )}
           </div>
           )}
           {selectableKinds.length > 0 && presetKind !== 'shoot_brief' && (
@@ -694,7 +776,7 @@ export default function NewItemDialog({
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Brief'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the plan)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
+            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Editing notes'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the plan)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
             <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
           </div>

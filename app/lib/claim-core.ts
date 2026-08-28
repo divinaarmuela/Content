@@ -53,7 +53,7 @@ export function claimDecision(
     return { ok: false, status: 403, error: 'Client accounts cannot take on work' }
   }
   if (item.is_brief) {
-    return { ok: false, status: 400, error: 'A shoot brief is owned by its account manager' }
+    return { ok: false, status: 400, error: 'A shoot plan is owned by its account manager' }
   }
 
   if (hat === 'editor') {
