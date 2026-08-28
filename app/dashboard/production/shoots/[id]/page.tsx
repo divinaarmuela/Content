@@ -404,7 +404,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           the plan lives on ONE page: write it above, send it for review here,
           the client decides on their portal, then Book the shoot. */}
       {briefTask && (
-        <PlanReviewCard briefItemId={briefTask.id} onChanged={load} />
+        <PlanReviewCard
+          briefItemId={briefTask.id}
+          // the LIVE plan content, so "Send plan for review" enables the moment
+          // the concept is written or a shot is added — no reload needed
+          planHasContent={Boolean((batch.concept ?? '').trim() || (batch.shot_list?.length ?? 0) > 0)}
+          onChanged={load}
+        />
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">

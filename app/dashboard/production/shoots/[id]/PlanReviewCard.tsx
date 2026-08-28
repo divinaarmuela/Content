@@ -59,8 +59,16 @@ type BriefDetail = {
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
-export default function PlanReviewCard({ briefItemId, onChanged }: {
+export default function PlanReviewCard({ briefItemId, planHasContent, onChanged }: {
   briefItemId: string
+  /**
+   * The shoot page's LIVE concept-or-shot-list state, lifted in so "Send plan
+   * for review" re-derives the moment the user writes the concept or adds a
+   * shot — the card fetches the brief once on mount, and that stale snapshot
+   * used to keep the button greyed until a full reload. undefined = the parent
+   * did not pass it, and the card falls back to its own fetched snapshot.
+   */
+  planHasContent?: boolean
   /** reload the shoot page so its own state (booked chip, items) keeps up */
   onChanged: () => void
 }) {
@@ -128,7 +136,11 @@ export default function PlanReviewCard({ briefItemId, onChanged }: {
     return 'the account manager'
   }
 
-  const briefHasContent = Boolean(
+  // the SAME rule the server enforces (brief-task-core's briefSatisfiesSubmission:
+  // a plan link OR concept OR a shot). `planHasContent` is the parent's live
+  // concept/shot-list state, so the button reacts as the user writes — the
+  // fetched snapshot is only the fallback for the plan link and first paint.
+  const briefHasContent = planHasContent === true || Boolean(
     detail.brief_url?.trim()
     || detail.batch?.concept?.trim()
     || (detail.batch?.shot_list?.length ?? 0) > 0,
