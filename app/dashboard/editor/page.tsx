@@ -22,7 +22,8 @@ import { Plus, CalendarDays, CheckSquare, ChevronDown, ChevronUp, Flag, ListChec
 import { SCHEDULER_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { itemStatusLabel } from '../../lib/brief-task-core'
 import {
-  addNextLabel, groupLine, isTaskGroup, nextPieceTitle, splitByGroup,
+  addNextLabel, addTypeLabel, formatBreakdown, formatChip, groupLine, isMixedGroup,
+  isTaskGroup, mixedGroupLine, nextPieceTitle, remainingTypes, splitByGroup,
   type DeliverableGroup, type GroupCard,
 } from '../../lib/deliverable-group-core'
 import {
@@ -362,8 +363,10 @@ export default function EditorPage() {
     }
   }
 
-  /** "Add the next reel" — one real item, filed into the group. */
-  const addNextPiece = async (card: GroupCard<Item>) => {
+  /** "Add the next reel" — one real item, filed into the group. On a mixed
+   *  card the caller passes which format is being added; a single-format card
+   *  uses the group's one type. */
+  const addNextPiece = async (card: GroupCard<Item>, contentType?: string) => {
     setAddingTo(card.group.id)
     try {
       const res = await fetch('/api/production/items', {
@@ -374,7 +377,7 @@ export default function EditorPage() {
           batch_id: card.group.batch_id ?? null,
           group_id: card.group.id,
           title: nextPieceTitle(card.group, card.count),
-          content_type: card.group.content_type,
+          content_type: contentType ?? card.group.content_type,
           ...(card.group.work_kind_id ? { work_kind_id: card.group.work_kind_id } : {}),
         }] }),
       })
@@ -394,16 +397,30 @@ export default function EditorPage() {
     }
   }
 
-  /** A quota card: the promise, how full it is, and the one next action. */
+  /** A quota card: the promise, how full it is, and the one next action.
+   *  A MIXED card (2 reels + 2 carousels + 2 videos) shows the title, the
+   *  aggregate "3 of 6", a per-format breakdown, and an "Add the next piece"
+   *  menu of the formats still owed. A single-format card keeps its one line
+   *  and one button, exactly as before. */
   const renderGroupCard = (card: GroupCard<Item>) => {
     const open = openGroups.has(card.group.id)
     const pct = Math.min(100, Math.round((card.count / card.target) * 100))
+    const mixed = isMixedGroup(card.group)
+    const breakdown = mixed ? formatBreakdown(card.group, card.items) : []
+    const owed = mixed ? remainingTypes(card.group, card.items) : []
     return (
       <div key={`group-${card.group.id}`}>
         <Card className="py-0 transition-shadow hover:shadow-md">
           <CardContent className="flex flex-col gap-2 p-3">
             <div className="flex items-start justify-between gap-2">
-              <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
+              {mixed ? (
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium leading-snug">{card.group.title}</span>
+                  <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{mixedGroupLine(card.group, card.items)}</span>
+                </div>
+              ) : (
+                <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
+              )}
               <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
                 onClick={() => setOpenGroups(prev => {
                   const next = new Set(prev)
@@ -418,11 +435,29 @@ export default function EditorPage() {
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
               <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
             </div>
+            {/* per-format progress: Reels 2/2 ✓ · Carousels 1/2 · Videos 0/2 */}
+            {mixed && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {breakdown.map(f => {
+                  const chip = formatChip(f)
+                  return (
+                    <span key={f.type}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.done
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'}`}>
+                      {chip.label}{chip.done ? ' ✓' : ''}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
                 {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
               </Badge>
-              <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{card.group.content_type}</span>
+              {!mixed && (
+                <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{card.group.content_type}</span>
+              )}
             </div>
             {open && (
               <div className="flex flex-col gap-1">
@@ -432,20 +467,48 @@ export default function EditorPage() {
                 {card.items.map(i => (
                   <Link key={i.id} href={`/dashboard/production/${i.id}`}
                     className="flex min-h-8 items-center justify-between gap-2 rounded px-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <span className="truncate">{i.title}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 truncate">
+                      {mixed && (
+                        <span className="shrink-0 rounded bg-zinc-100 px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                          {i.content_type}
+                        </span>
+                      )}
+                      <span className="truncate">{i.title}</span>
+                    </span>
                     <span className="shrink-0 text-zinc-400 dark:text-zinc-500">{STATUS_LABELS[i.status]}</span>
                   </Link>
                 ))}
               </div>
             )}
-            {!card.full && (
+            {mixed ? (
+              // driven by what each FORMAT still owes, not the aggregate count —
+              // six reels on a 2+2+2 card have not filled the carousels
+              owed.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="min-h-11 w-fit md:min-h-8" disabled={addingTo === card.group.id}>
+                      <Plus className="h-3.5 w-3.5" />
+                      {addingTo === card.group.id ? 'Adding…' : 'Add the next piece'}
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {owed.map(t => (
+                      <DropdownMenuItem key={t} onSelect={() => void addNextPiece(card, t)}>
+                        {addTypeLabel(t)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )
+            ) : (!card.full && (
               <Button size="sm" className="min-h-11 w-fit md:min-h-8"
                 disabled={addingTo === card.group.id}
                 onClick={() => void addNextPiece(card)}>
                 <Plus className="h-3.5 w-3.5" />
                 {addingTo === card.group.id ? 'Adding…' : addNextLabel(card.group)}
               </Button>
-            )}
+            ))}
           </CardContent>
         </Card>
       </div>

@@ -17,6 +17,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
+import { plannedSummary, plannedTarget } from '../../lib/deliverable-group-core'
 import { DRAFTING_LANE } from '../../lib/section-names'
 import { useRole } from '../useRole'
 import { useIsMobile } from '../useIsMobile'
@@ -51,6 +52,9 @@ const BLANK = {
   client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
   owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', brief_url: '',
   deliverables: [] as { type: string; qty: number }[],
+  // one deliverable card can hold a MIX of formats — 2 reels + 2 carousels +
+  // 2 videos. One row {reel,1} is the plain single-item default.
+  formats: [{ type: 'reel', qty: 1 }] as { type: string; qty: number }[],
   raw_assets: [] as { url: string; name: string }[],
 }
 
@@ -332,15 +336,25 @@ export default function NewItemDialog({
     }
     setNewBusy(true)
     try {
+      // a regular item card can hold a MIX of formats (2 reels + 2 carousels +
+      // 2 videos); each row's type repeated qty times is the pieces in order.
+      // Tasks and briefs keep their single count.
+      const isRegular = !isBriefKind && !isTaskKind
+      const formatSeq: string[] = isRegular
+        ? draft.formats.flatMap(f => Array.from({ length: Math.max(1, Math.floor(f.qty) || 1) }, () => f.type))
+        : []
       // a quantity applies to assets AND tasks — "5 write-ups" is one promise
-      let count = isBriefKind ? 1 : Math.min(Math.max(1, draft.count), 30)
+      let count = isBriefKind ? 1
+        : isRegular ? Math.min(Math.max(1, formatSeq.length), 30)
+        : Math.min(Math.max(1, draft.count), 30)
+      const typeAt = (i: number) => isTaskKind ? 'other' : isRegular ? (formatSeq[i] ?? formatSeq[0] ?? 'reel') : draft.content_type
 
       // ── a QUANTITY is a promise, not N cards ──
-      // "5 reels" makes ONE group with target 5: the board shows one card
-      // ("Reels · 0 of 5") that fills as pieces are added. If the groups
-      // table is not migrated yet the server says so, and we fall back to
-      // creating the numbered items exactly as before — never a dead end.
-      // Attached files or a folder link mean the WORK already exists, not
+      // "2 reels + 2 carousels + 2 videos" makes ONE group with target 6: the
+      // board shows one card ("… 0 of 6") that fills as pieces are added. If
+      // the groups table is not migrated yet the server says so, and we fall
+      // back to creating the numbered items exactly as before — never a dead
+      // end. Attached files or a folder link mean the WORK already exists, not
       // just the promise — those still create the numbered items directly.
       if (count > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim()) {
         const res = await fetch('/api/production/groups', {
@@ -349,9 +363,13 @@ export default function NewItemDialog({
           body: JSON.stringify({
             client_id: draft.client_id,
             batch_id: isTaskKind ? null : draft.batch_id || null,
-            content_type: isTaskKind ? 'other' : draft.content_type,
+            content_type: isTaskKind ? 'other' : isRegular ? (draft.formats[0]?.type ?? 'reel') : draft.content_type,
             title: draft.title.trim(),
             target: count,
+            // the mix of formats, so the card fills per type. Single-format
+            // regular items send one row; the server tolerates the column
+            // being absent and falls back to a single-format group.
+            ...(isRegular ? { planned: draft.formats } : {}),
             // a task group remembers its kind, so every piece added later is
             // a task too — never an asset that would reach the Scheduler
             ...(isTaskKind ? { work_kind_id: draft.work_kind_id || defaultKind?.id || undefined } : {}),
@@ -389,7 +407,7 @@ export default function NewItemDialog({
         client_id: draft.client_id,
         batch_id: draft.batch_id || null,
         title: count === 1 ? draft.title.trim() : `${draft.title.trim()} ${String(i + 1).padStart(2, '0')}`,
-        content_type: isTaskKind ? 'other' : draft.content_type,
+        content_type: typeAt(i),
         priority: draft.priority,
         due_date: draft.due_date || null,
         ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
@@ -458,9 +476,15 @@ export default function NewItemDialog({
   const hasFilesStep = !hidesMedia || isTaskKind
   const showDetails = !mobile || !hasFilesStep || step === 'details'
   const showFiles = hasFilesStep && (!mobile || step === 'files')
-  const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task' : draft.count > 1 ? `${draft.count} items` : 'item'
+  // for a regular item the promise is the formats list; a mix of 6 pieces with
+  // no files makes ONE card, so the button says so
+  const regularTotal = plannedTarget(draft.formats)
+  const regularCard = regularTotal > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim()
+  const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task'
+    : regularTotal > 1 ? `${regularTotal} items` : 'item'
   const createLabel = isBriefKind ? 'Create the shoot plan'
     : isTaskKind ? (draft.count > 1 ? `Create it — 0 of ${draft.count}` : 'Create the task')
+    : regularCard ? `Create the card — 0 of ${regularTotal}`
     : `Create ${what}`
 
   return (
@@ -468,7 +492,7 @@ export default function NewItemDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item{draft.count > 1 ? 's' : ''} <HelpHint term="item" /></>}
+            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item{regularTotal > 1 ? 's' : ''} <HelpHint term="item" /></>}
           </DialogTitle>
           <DialogDescription className="text-xs">
             {isBriefKind ? 'The concept and shot list the client signs off before we film. * required'
@@ -552,20 +576,52 @@ export default function NewItemDialog({
           </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Title * {draft.count > 1 && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
+            <Label>Title * {(draft.count > 1 || regularTotal > 1) && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
             <Input value={draft.title} placeholder={isTaskKind ? "e.g. Competitor research — October" : isBriefKind ? "e.g. October clinic day" : "e.g. May shoot — BTS reel"} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
+          {/* ONE card, a MIX of formats. One row {reel,1} = a single plain
+              item, exactly as before; add rows to promise 2 reels + 2
+              carousels + 2 videos in one card that fills up per type. */}
           {!isBriefKind && !isTaskKind && (
-          <div className="grid gap-1.5">
-            <Label>Format</Label>
-            <Select value={draft.content_type} onValueChange={v => v && setDraft(d => ({ ...d, content_type: v }))}>
-              {/* the trigger renders the item's own text — capitalising only
-                  the list left `reel` showing in the closed control */}
-              <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>Formats <span className="text-xs font-normal text-zinc-400">(what this card is — add a row for each kind)</span></Label>
+            {draft.formats.map((f, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Select value={f.type} onValueChange={v => v && setDraft(d => ({
+                  ...d, formats: d.formats.map((x, j) => j === i ? { ...x, type: v } : x),
+                }))}>
+                  <SelectTrigger className="flex-1 capitalize"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Input type="number" min={1} max={30} value={f.qty} className="w-20 text-center font-mono"
+                  aria-label="How many"
+                  onChange={e => setDraft(d => ({
+                    ...d, formats: d.formats.map((x, j) => j === i ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x),
+                  }))} />
+                {draft.formats.length > 1 && (
+                  <button type="button" aria-label="Remove format"
+                    onClick={() => setDraft(d => ({ ...d, formats: d.formats.filter((_, j) => j !== i) }))}
+                    className="flex h-11 w-11 items-center justify-center text-zinc-400 hover:text-red-500">&#10005;</button>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="ghost" size="sm" className="w-fit text-zinc-500"
+              onClick={() => setDraft(d => ({ ...d, formats: [...d.formats, { type: 'reel', qty: 1 }] }))}>
+              <Plus className="h-3.5 w-3.5" /> Add another format
+            </Button>
+            {/* live plain-words summary — the whole promise in one line */}
+            {plannedTarget(draft.formats) > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim() && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                One card — {plannedSummary(draft.formats)}. Add pieces on the Editor board.
+              </p>
+            )}
+            {plannedTarget(draft.formats) > 1 && (draft.raw_assets.length > 0 || draft.raw_assets_url.trim()) && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {plannedTarget(draft.formats)} items — attached files make each piece now, not one card.
+              </p>
+            )}
           </div>
           )}
           <div className="grid gap-1.5">
@@ -589,12 +645,12 @@ export default function NewItemDialog({
                 : 'Shown in words once picked.'}
             </p>
           </div>
-          {!isBriefKind && (
+          {isTaskKind && (
           <div className="grid gap-1.5">
-            <Label>{isTaskKind ? 'How many pieces?' : 'How many items?'} <span className="text-xs font-normal text-zinc-400">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
+            <Label>How many pieces? <span className="text-xs font-normal text-zinc-400">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
             <Input type="number" min={1} max={30} value={draft.count}
               onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
-            {isTaskKind && draft.count > 1 && (
+            {draft.count > 1 && (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
                 One card on the Production board with {draft.count} pieces inside. Attached files make it a single task instead.
               </p>
