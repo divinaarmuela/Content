@@ -10,7 +10,9 @@ import { mirrorBrandDoc } from './gdrive-mirror'
 import { loadBrandProfile } from './brand-profile'
 import { normaliseProfile, type BrandFile, type BrandProfile } from './brand-profile-core'
 import {
-  deriveContact, deriveBrandFill, planEnrichment, type DerivedContact,
+  deriveContact, deriveBrandFill, planEnrichment, toLabeledAnswers,
+  deriveContactFromFreeText, answerText, CONTACT_SOURCE_IDS,
+  type DerivedContact, type LabeledAnswer,
 } from './intake-enrich-core'
 import type { Answers, TemplateDefinition } from './intake-core'
 
@@ -30,12 +32,24 @@ import type { Answers, TemplateDefinition } from './intake-core'
 
 const anthropic = new Anthropic() // reads ANTHROPIC_API_KEY
 
+/** One comprehensive, Zod-validated extraction. Every field is optional in
+ *  spirit — empty string / empty array whenever the answers do not clearly
+ *  contain it. The model is told to clean and normalise, never to invent. */
 const Extraction = z.object({
-  voice_summary: z.string().describe(
-    'A warm, 1-2 sentence summary of the brand voice and personality, drawn ONLY from what the client wrote. Empty string if there is nothing to summarise.',
-  ),
-  contact_name: z.string().describe('Full name of the primary contact if one appears in the answers, else empty'),
-  contact_email: z.string().describe('Email address of the primary contact if one appears in the answers, else empty'),
+  contact: z.object({
+    name: z.string().describe('Full name of the single PRIMARY day-to-day contact, if a person is clearly named. If two or more people are named, pick the clearest primary. Empty if none.'),
+    role: z.string().describe('Their job title or role, if given (e.g. "Managing Director"), else empty'),
+    email: z.string().describe('Their email address, pulled from anywhere in the text, else empty'),
+    phone: z.string().describe('Their phone number, pulled from anywhere in the text, else empty'),
+  }),
+  handles: z.array(z.string()).describe('Social media handles, cleaned to "@handle" form, one per platform. Strip full URLs down to the handle. NEVER return a raw URL. Empty array if none.'),
+  voice: z.object({
+    tone: z.string().describe('The brand tone of voice as a SHORT phrase (e.g. "Warm and family"), even if the client described it in a paragraph. Empty if not stated.'),
+    dos: z.array(z.string()).describe('Words/qualities the brand SHOULD feel like — short words or phrases. Empty array if none.'),
+    donts: z.array(z.string()).describe('Words/qualities the brand should NEVER feel like. Empty array if none.'),
+    summary: z.string().describe('A warm, 1-2 sentence summary of the brand voice and personality, drawn ONLY from what the client wrote. Empty if there is nothing to summarise.'),
+  }),
+  tagline: z.string().describe('An explicit tagline or signature phrase, if the client gave one, else empty'),
 })
 type ExtractionT = z.infer<typeof Extraction>
 
@@ -167,7 +181,14 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
   if (!form) return result
   const answers = (form.answers ?? {}) as Answers
 
-  // ── contact (deterministic) ──
+  // question labels, so the AI understands each answer regardless of template
+  const labels = new Map<string, string>()
+  for (const section of (form.definition as TemplateDefinition).sections) {
+    for (const block of section.blocks) labels.set(block.id, block.label ?? '')
+  }
+  const labeled: LabeledAnswer[] = toLabeledAnswers(answers, labels)
+
+  // ── contact: deterministic fast-path (the structured primary_contact block) ──
   const derived = deriveContact(answers)
   let contactResolved = false
   if (derived) {
@@ -178,7 +199,7 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
       console.error('intake enrich: contact insert failed:', e)
     }
   }
-  // even with no derived contact, an existing one counts as resolved
+  // an existing contact also counts as resolved — nothing to fill
   if (!contactResolved) {
     const { data: anyContact } = await supabase
       .from('client_contacts').select('id').eq('client_id', clientId).limit(1)
@@ -193,45 +214,62 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
     return [] as BrandFile[]
   })
 
-  // ── decide whether the AI is worth a call ──
+  // ── decide whether the ONE Haiku call is worth making ──
+  // Plan against the profile AS IT WILL BE after the deterministic fill, so the
+  // AI is only asked for what the fast-path could not supply. If a target is
+  // still empty AND a relevant answer exists → call once; otherwise skip.
   const loaded = await loadBrandProfile(clientId, 'intake enrichment')
   const currentProfile = loaded?.profile ?? normaliseProfile({})
-  const plan = planEnrichment(answers, currentProfile, contactResolved)
+  const afterDeterministic = deriveBrandFill(answers, brandFiles, currentProfile).profile
+  const plan = planEnrichment(afterDeterministic, contactResolved, labeled)
 
   let extracted: ExtractionT | null = null
   if (plan.aiNeeded) {
     try {
-      extracted = await extractFuzzy(plan.voiceSources, plan.aiContactNeeded ? plan.extras : [])
+      extracted = await extractAll(plan.relevant)
       result.ai = 'called'
     } catch (e) {
       console.error('intake enrich: AI extraction failed:', e)
     }
   }
 
-  // ── an AI-found contact, only when nothing resolved one already ──
-  if (!contactResolved && extracted && (extracted.contact_name.trim() || extracted.contact_email.trim())) {
-    try {
-      result.contact = await upsertPrimaryContact(clientId, {
-        name: extracted.contact_name.trim(),
-        role: '',
-        email: extracted.contact_email.trim(),
-        phone: '',
+  // ── contact from the AI (any template), else a deterministic free-text
+  //    fallback over day_to_day_contact — only when nothing resolved one ──
+  if (!contactResolved) {
+    let candidate: DerivedContact | null = null
+    if (extracted && (extracted.contact.name.trim() || extracted.contact.email.trim())) {
+      candidate = {
+        name: extracted.contact.name.trim() || extracted.contact.email.trim(),
+        role: extracted.contact.role.trim(),
+        email: extracted.contact.email.trim(),
+        phone: extracted.contact.phone.trim(),
         notes: '',
-      })
-    } catch (e) {
-      console.error('intake enrich: AI contact insert failed:', e)
+      }
+    } else {
+      const srcText = CONTACT_SOURCE_IDS.map(id => answerText(answers, id)).filter(Boolean).join('\n')
+      candidate = srcText ? deriveContactFromFreeText(srcText) : null
+    }
+    if (candidate) {
+      try {
+        result.contact = await upsertPrimaryContact(clientId, candidate)
+        contactResolved = true
+      } catch (e) {
+        console.error('intake enrich: contact insert (AI/fallback) failed:', e)
+      }
     }
   }
 
-  // ── brand write (deterministic fill + AI voice summary), rev-guarded ──
-  const aiSummary = plan.aiVoiceNeeded ? (extracted?.voice_summary.trim() ?? '') : ''
+  // ── brand write: deterministic fill + the AI's cleaned fields, all
+  //    fill-only-if-empty, normalised, rev-guarded ──
   try {
     result.brand = await writeBrandProfile(clientId, current => {
-      const { profile, changed: detChanged } = deriveBrandFill(answers, brandFiles, current)
-      let changed = detChanged
-      if (aiSummary && !profile.voice.summary.trim()) {
-        profile.voice = { ...profile.voice, summary: aiSummary }
-        changed = true
+      const det = deriveBrandFill(answers, brandFiles, current)
+      let { profile } = det
+      let changed = det.changed
+      if (extracted) {
+        const add = applyAiBrand(profile, extracted)
+        profile = add.profile
+        changed = changed || add.changed
       }
       return { profile, changed }
     })
@@ -293,34 +331,47 @@ async function maybeDelegateBrandScan(clientId: string, brandFiles: BrandFile[])
   return 'queued'
 }
 
-/** One Haiku call for the fuzzy bits. Reuses the email-lead pattern: parse into
- *  a Zod schema, empty-string discipline for unknowns, best-effort. Sends ONLY
- *  the relevant answers, never the whole form. */
-async function extractFuzzy(
-  voiceSources: { id: string; text: string }[],
-  extras: { id: string; text: string }[],
-): Promise<ExtractionT | null> {
-  const parts: string[] = []
-  if (voiceSources.length) {
-    parts.push(
-      'Free-text answers about the brand (for the voice summary):\n' +
-      voiceSources.map(a => `- ${a.text}`).join('\n'),
-    )
+/** Fold the AI's cleaned fields into the profile, fill-only-if-empty. Returns a
+ *  new profile and whether anything changed. normaliseProfile (in the writer)
+ *  does the final cleaning — @-prefixing handles, deduping, capping. */
+function applyAiBrand(profile: BrandProfile, ai: ExtractionT): { profile: BrandProfile; changed: boolean } {
+  const out: BrandProfile = {
+    ...profile,
+    handles: [...profile.handles],
+    voice: { ...profile.voice, dos: [...profile.voice.dos], donts: [...profile.voice.donts] },
   }
-  if (extras.length) {
-    parts.push(
-      'Other answers (a primary contact name/email may be somewhere in here):\n' +
-      extras.map(a => `- ${a.id}: ${a.text}`).join('\n'),
-    )
-  }
+  let changed = false
+  if (!out.voice.tone.trim() && ai.voice.tone.trim()) { out.voice.tone = ai.voice.tone.trim(); changed = true }
+  if (out.voice.dos.length === 0 && ai.voice.dos.length) { out.voice.dos = ai.voice.dos; changed = true }
+  if (out.voice.donts.length === 0 && ai.voice.donts.length) { out.voice.donts = ai.voice.donts; changed = true }
+  if (!out.voice.summary.trim() && ai.voice.summary.trim()) { out.voice.summary = ai.voice.summary.trim(); changed = true }
+  if (out.handles.length === 0 && ai.handles.length) { out.handles = ai.handles; changed = true }
+  if (!out.notes.trim() && ai.tagline.trim()) { out.notes = `Tagline: ${ai.tagline.trim()}`; changed = true }
+  return { profile: out, changed }
+}
+
+/**
+ * The one smart Haiku call. Reuses the email-lead pattern (messages.parse + a
+ * Zod schema, empty for unknowns, best-effort). Sends the relevant answers WITH
+ * their question labels — so the model works across every template — and asks
+ * for one clean, structured, normalised extraction. Never the whole form.
+ */
+async function extractAll(relevant: LabeledAnswer[]): Promise<ExtractionT | null> {
+  const body = relevant.map(a => `Q: ${a.label || a.id}\nA: ${a.value}`).join('\n\n')
   const response = await anthropic.messages.parse({
     model: 'claude-haiku-4-5',
-    max_tokens: 512,
+    max_tokens: 800,
     system:
-      'You help MD Media, a Melbourne marketing agency, tidy up a new client intake. ' +
-      'Write a short brand-voice summary from what the client actually wrote, and extract a primary contact name/email only if one is genuinely present. ' +
-      'Never invent anything — use empty strings for anything not clearly in the text.',
-    messages: [{ role: 'user', content: parts.join('\n\n') || '(no answers)' }],
+      'You clean up a new client\'s intake answers for MD Media, a Melbourne marketing agency. ' +
+      'From the questions and answers below, extract ONLY what is clearly present — NEVER invent or infer beyond the text. ' +
+      'Normalise as you go: ' +
+      'if a person is named with a title, split it into name and role; ' +
+      'pull an email and a phone number from anywhere in the text; ' +
+      'if two or more people are named, choose the single clearest PRIMARY day-to-day contact; ' +
+      'return social handles as clean "@handle" values, one per platform, and strip any full URL down to the handle — never return a raw URL; ' +
+      'give the tone as a short phrase even if it was described in a paragraph. ' +
+      'Use empty strings and empty arrays for anything not clearly there. Prefer precision over guessing.',
+    messages: [{ role: 'user', content: `Client intake answers (question → answer):\n\n${body || '(no answers)'}` }],
     output_config: { format: zodOutputFormat(Extraction) },
   })
   return response.parsed_output ?? null

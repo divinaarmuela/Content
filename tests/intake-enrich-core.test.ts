@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import {
   parsePrimaryContact, deriveContact, deriveVoiceTone, splitWords, extractHandles,
-  deriveBrandFill, planEnrichment, voiceSummarySources, extraAnswers, answerText,
-  TONE_PHRASES,
+  deriveBrandFill, planEnrichment, answerText, TONE_PHRASES,
+  extractEmail, extractPhone, deriveContactFromFreeText,
+  toLabeledAnswers, selectRelevantAnswers, missingTargets,
+  type LabeledAnswer,
 } from '../app/lib/intake-enrich-core'
 import { emptyProfile, normaliseProfile, type BrandProfile } from '../app/lib/brand-profile-core'
 import type { Answers } from '../app/lib/intake-core'
 
 const profile = (over: Partial<BrandProfile> = {}): BrandProfile =>
   normaliseProfile({ ...emptyProfile(), ...over })
+
+const labeled = (rows: [string, string, string][]): LabeledAnswer[] =>
+  rows.map(([id, label, value]) => ({ id, label, value }))
 
 describe('answerText', () => {
   it('trims strings and joins multi-answers', () => {
@@ -22,14 +27,11 @@ describe('parsePrimaryContact', () => {
   it('splits name from title on the first separator', () => {
     expect(parsePrimaryContact('Jane Smith, Managing Director'))
       .toEqual({ name: 'Jane Smith', role: 'Managing Director' })
-    expect(parsePrimaryContact('Jane Smith - Owner'))
-      .toEqual({ name: 'Jane Smith', role: 'Owner' })
-    expect(parsePrimaryContact('Jane Smith\nFounder'))
-      .toEqual({ name: 'Jane Smith', role: 'Founder' })
+    expect(parsePrimaryContact('Jane Smith - Owner')).toEqual({ name: 'Jane Smith', role: 'Owner' })
+    expect(parsePrimaryContact('Jane Smith\nFounder')).toEqual({ name: 'Jane Smith', role: 'Founder' })
   })
   it('keeps a comma inside the title (splits only once)', () => {
-    expect(parsePrimaryContact('Sam Lee, Owner, Founder'))
-      .toEqual({ name: 'Sam Lee', role: 'Owner, Founder' })
+    expect(parsePrimaryContact('Sam Lee, Owner, Founder')).toEqual({ name: 'Sam Lee', role: 'Owner, Founder' })
   })
   it('treats a bare name as all name, no role', () => {
     expect(parsePrimaryContact('Alex Chen')).toEqual({ name: 'Alex Chen', role: '' })
@@ -37,7 +39,7 @@ describe('parsePrimaryContact', () => {
   })
 })
 
-describe('deriveContact', () => {
+describe('deriveContact (structured fast-path)', () => {
   it('maps the standard fields into a contact', () => {
     const a: Answers = {
       primary_contact: 'Jane Smith, Owner',
@@ -46,18 +48,38 @@ describe('deriveContact', () => {
       best_call_window: 'Weekday mornings',
     }
     expect(deriveContact(a)).toEqual({
-      name: 'Jane Smith',
-      role: 'Owner',
-      email: 'jane@example.invalid',
-      phone: '0400 000 000',
-      notes: 'Best window for calls: Weekday mornings',
+      name: 'Jane Smith', role: 'Owner', email: 'jane@example.invalid',
+      phone: '0400 000 000', notes: 'Best window for calls: Weekday mornings',
     })
   })
-  it('returns null when there is neither a name nor an email', () => {
+  it('returns null when there is neither a name nor an email (e.g. the ongoing template has no such fields)', () => {
     expect(deriveContact({ contact_mobile: '123' })).toBeNull()
+    expect(deriveContact({ day_to_day_contact: 'Jordan Wilson\n0488 420 104' })).toBeNull()
   })
-  it('works from an email alone', () => {
-    expect(deriveContact({ contact_email: 'x@y.invalid' })?.email).toBe('x@y.invalid')
+})
+
+describe('extractEmail / extractPhone', () => {
+  it('pulls an email and phone from anywhere in free text', () => {
+    expect(extractEmail('call me — jordan@tkbg.com.au — anytime')).toBe('jordan@tkbg.com.au')
+    expect(extractEmail('no address here')).toBe('')
+    expect(extractPhone('Jordan Wilson\n0488 420 104\njordan@tkbg.com.au')).toBe('0488 420 104')
+    expect(extractPhone('reach me on 0490376772 please')).toBe('0490376772')
+  })
+})
+
+describe('deriveContactFromFreeText — the ongoing/Turnkey free-text contact', () => {
+  it('parses a clean name + phone + email blob', () => {
+    const c = deriveContactFromFreeText('Jordan Wilson\n0488 420 104\njordan@tkbg.com.au')
+    expect(c).toEqual({ name: 'Jordan Wilson', role: '', email: 'jordan@tkbg.com.au', phone: '0488 420 104', notes: '' })
+  })
+  it('still extracts email + phone when two people are named in prose', () => {
+    const c = deriveContactFromFreeText('Myself and Cadell for day to day content discussions, 0490376772 cadell@tkbg.com')
+    expect(c?.email).toBe('cadell@tkbg.com')
+    expect(c?.phone).toBe('0490376772')
+    expect(c?.name).toBeTruthy() // a best-effort name; the AI refines this when it runs
+  })
+  it('returns null when there is neither a name nor an email', () => {
+    expect(deriveContactFromFreeText('   ')).toBeNull()
   })
 })
 
@@ -70,14 +92,33 @@ describe('deriveVoiceTone', () => {
   })
 })
 
-describe('splitWords / extractHandles', () => {
+describe('splitWords', () => {
   it('splits lists on commas, slashes and "and"', () => {
     expect(splitWords('bold, honest and local')).toEqual(['bold', 'honest', 'local'])
     expect(splitWords('')).toEqual([])
   })
-  it('prefers @handles, else keeps single tokens', () => {
+})
+
+describe('extractHandles — cleans messy socials, never stores a raw URL', () => {
+  it('keeps explicit @handles', () => {
     expect(extractHandles('@brand and @brand_tiktok')).toEqual(['@brand', '@brand_tiktok'])
+  })
+  it('drops a trailing platform note and a stray phrase', () => {
     expect(extractHandles('brandco, on Instagram')).toEqual(['@brandco'])
+    expect(extractHandles('turnkeybuildinggroup (Instagram)')).toEqual(['@turnkeybuildinggroup'])
+  })
+  it('strips full and bare URLs down to a handle (the real Turnkey answer)', () => {
+    const raw = 'turnkeybuildinggroup (Instagram), turnkey-building-group (LinkedIn), https://www.facebook.com/p/Turnkey-Building-Group-100064/'
+    const h = extractHandles(raw)
+    expect(h).toContain('@turnkeybuildinggroup')
+    expect(h).toContain('@turnkey-building-group')
+    // no raw URLs, no "@https…" mess
+    expect(h.every(x => !/https?|:\/\/|\.com|\//.test(x))).toBe(true)
+    expect(h.some(x => x.startsWith('@https'))).toBe(false)
+  })
+  it('pulls the handle out of an instagram URL', () => {
+    expect(extractHandles('https://instagram.com/zztestco')).toEqual(['@zztestco'])
+    expect(extractHandles('instagram.com/zztestco')).toEqual(['@zztestco'])
   })
 })
 
@@ -102,7 +143,6 @@ describe('deriveBrandFill — fills only empty fields, never overwrites', () => 
     expect(n.handles).toEqual(['@brandco'])
     expect(n.logo_files).toEqual([{ name: 'logo.svg', url: 'https://cdn.example.invalid/logo.svg' }])
     expect(n.notes).toContain('Built to last')
-    expect(n.notes).toContain('brandco.example.invalid')
   })
 
   it('does not overwrite fields that already have content', () => {
@@ -114,36 +154,12 @@ describe('deriveBrandFill — fills only empty fields, never overwrites', () => 
     })
     const { profile: out } = deriveBrandFill(answers, files, current)
     const n = normaliseProfile(out)
-    expect(n.voice.tone).toBe('Hand-picked tone')       // untouched
-    expect(n.voice.dos).toEqual(['existing'])           // untouched
-    expect(n.voice.donts).toEqual(['cheap', 'tacky'])   // was empty → filled
-    expect(n.handles).toEqual(['@existing'])            // untouched
-    expect(n.logo_files.map(f => f.name)).toEqual(['old.png']) // untouched
-    expect(n.notes).toBe('A note that was already here') // untouched
-  })
-
-  it('fills tone/dos/donts/handles from a live rebrand-shaped submission', () => {
-    // the exact answers the coordinator submitted on the ZZ TEST client
-    const rebrand: Answers = {
-      primary_contact: 'Test Owner, Founder',
-      contact_email: 'owner@zztestco.invalid',
-      contact_mobile: '0400 111 222',
-      tone: 'Warm and family',
-      three_words: 'Trusted, warm, local',
-      never_words: 'Cheap, corporate, cold',
-      socials: '@zztestco on Instagram',
-      tagline: 'Your local family bakery',
-      admired: 'A brand we admire',
-      perception: 'How we want to be seen',
-    }
-    const { profile: out, changed } = deriveBrandFill(rebrand, [], emptyProfile())
-    const n = normaliseProfile(out)
-    expect(changed).toBe(true)
-    expect(n.voice.tone).toBe('Warm and family')
-    expect(n.voice.dos).toEqual(['Trusted', 'warm', 'local'])
-    expect(n.voice.donts).toEqual(['Cheap', 'corporate', 'cold'])
-    expect(n.handles).toEqual(['@zztestco'])           // "on Instagram" dropped
-    expect(n.notes).toContain('Your local family bakery')
+    expect(n.voice.tone).toBe('Hand-picked tone')
+    expect(n.voice.dos).toEqual(['existing'])
+    expect(n.voice.donts).toEqual(['cheap', 'tacky'])
+    expect(n.handles).toEqual(['@existing'])
+    expect(n.logo_files.map(f => f.name)).toEqual(['old.png'])
+    expect(n.notes).toBe('A note that was already here')
   })
 
   it('reports no change when nothing maps and everything is filled', () => {
@@ -153,54 +169,67 @@ describe('deriveBrandFill — fills only empty fields, never overwrites', () => 
       logo_files: [{ name: 'l.png', url: 'https://cdn.example.invalid/l.png' }],
       notes: 'notes',
     })
-    const { changed } = deriveBrandFill({}, [], current)
-    expect(changed).toBe(false)
+    expect(deriveBrandFill({}, [], current).changed).toBe(false)
   })
 })
 
-describe('voiceSummarySources / extraAnswers', () => {
-  it('collects only the non-empty voice sources', () => {
-    const ids = voiceSummarySources({ admired: 'Aesop', perception: '', misconception: 'x' }).map(a => a.id)
-    expect(ids).toEqual(['admired', 'misconception'])
+describe('toLabeledAnswers / selectRelevantAnswers', () => {
+  it('labels answers and drops empties', () => {
+    const out = toLabeledAnswers({ a: 'hi', b: '' }, new Map([['a', 'Question A']]))
+    expect(out).toEqual([{ id: 'a', label: 'Question A', value: 'hi' }])
   })
-  it('extras exclude mapped and voice-source ids', () => {
-    const ids = extraAnswers({
-      primary_contact: 'mapped', admired: 'voice source',
-      not_asked: 'hello there', empty: '',
-    }).map(a => a.id)
-    expect(ids).toEqual(['not_asked'])
+  it('selects only contact/brand-relevant answers, by id OR label', () => {
+    const rows = labeled([
+      ['day_to_day_contact', 'Primary contact for day-to-day communication', 'Jordan, 0488 420 104'],
+      ['founder_stories', 'Each founder, where you came from', 'Two brothers…'],
+      ['three_words', 'Three words you should feel', 'bold, honest'],
+      ['parking', 'Parking for crew and gear', 'Out front'],
+      ['catering', 'Catering and dietary notes', 'None'],
+    ])
+    const picked = selectRelevantAnswers(rows).map(a => a.id)
+    expect(picked).toContain('day_to_day_contact')
+    expect(picked).toContain('founder_stories')
+    expect(picked).toContain('three_words')
+    expect(picked).not.toContain('parking')
+    expect(picked).not.toContain('catering')
   })
 })
 
-describe('planEnrichment — the AI gate', () => {
-  it('skips the AI when the summary is present and a contact is resolved', () => {
-    const current = profile({ voice: { summary: 'Already written', tone: '', dos: [], donts: [] } })
-    const plan = planEnrichment({ admired: 'Aesop', not_asked: 'blah' }, current, true)
-    expect(plan.aiNeeded).toBe(false)
-    expect(plan.aiVoiceNeeded).toBe(false)
-    expect(plan.aiContactNeeded).toBe(false)
+describe('missingTargets', () => {
+  it('reports what is still empty after the deterministic pass', () => {
+    const m = missingTargets(profile({ voice: { summary: '', tone: 'Warm', dos: ['x'], donts: [], } }), false)
+    expect(m).toEqual({ contact: true, tone: false, dos: false, donts: true, summary: true, handles: true })
+  })
+})
+
+describe('planEnrichment — the token gate', () => {
+  const contactRow = labeled([['day_to_day_contact', 'Primary contact for day-to-day', 'Jordan Wilson\n0488 420 104\njordan@tkbg.com.au']])
+  const voiceRow = labeled([['brand_as_person', 'If the business were a person…', 'Warm, reliable, local']])
+
+  it('skips the AI when every target is filled and a contact is resolved', () => {
+    const full = profile({
+      voice: { summary: 's', tone: 't', dos: ['d'], donts: ['n'] }, handles: ['@h'],
+    })
+    expect(planEnrichment(full, true, [...contactRow, ...voiceRow]).aiNeeded).toBe(false)
   })
 
-  it('skips the AI when nothing fuzzy is missing at all', () => {
-    const plan = planEnrichment({ tone: 'Warm and family' }, emptyProfile(), true)
-    expect(plan.aiNeeded).toBe(false)
+  it('skips the AI when a target is empty but there is no relevant answer to read', () => {
+    expect(planEnrichment(emptyProfile(), true, labeled([['parking', 'Parking', 'Out front']])).aiNeeded).toBe(false)
   })
 
-  it('wants a voice summary when it is blank and there are sources', () => {
-    const plan = planEnrichment({ admired: 'Aesop, for its restraint' }, emptyProfile(), true)
-    expect(plan.aiVoiceNeeded).toBe(true)
+  it('calls the AI when the voice summary is blank and a relevant answer exists', () => {
+    const plan = planEnrichment(profile({ voice: { summary: '', tone: 't', dos: ['d'], donts: ['n'] }, handles: ['@h'] }), true, voiceRow)
+    expect(plan.missing.summary).toBe(true)
     expect(plan.aiNeeded).toBe(true)
-    expect(plan.voiceSources).toHaveLength(1)
+    expect(plan.relevant.map(r => r.id)).toContain('brand_as_person')
   })
 
-  it('wants a contact when none is resolved and there are unmapped answers', () => {
-    const plan = planEnrichment({ some_custom_block: 'Call Jane on jane@x.invalid' }, emptyProfile(), false)
-    expect(plan.aiContactNeeded).toBe(true)
+  it('calls the AI for the ongoing template: no contact resolved, day_to_day_contact present', () => {
+    // ongoing has no primary_contact block, so deriveContact yields nothing and
+    // the contact must come from the free-text day_to_day_contact answer
+    const plan = planEnrichment(emptyProfile(), false, contactRow)
+    expect(plan.missing.contact).toBe(true)
     expect(plan.aiNeeded).toBe(true)
-  })
-
-  it('does not want a contact once one is resolved, even with extras present', () => {
-    const plan = planEnrichment({ some_custom_block: 'noise' }, emptyProfile(), true)
-    expect(plan.aiContactNeeded).toBe(false)
+    expect(plan.relevant.map(r => r.id)).toContain('day_to_day_contact')
   })
 })

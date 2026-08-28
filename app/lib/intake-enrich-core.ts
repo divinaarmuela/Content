@@ -1,16 +1,22 @@
 /**
  * Pure intake → client enrichment core — no I/O, fully unit-testable.
  *
- * When an intake form is submitted we fill in the client's primary CONTACT and
+ * When an intake form is submitted we fill the client's primary CONTACT and
  * their BRAND profile from the answers, but ONLY where those are still empty —
- * a re-submit, or a later run, must never overwrite a hand edit. This file owns
- * two decisions and nothing else:
- *   1. the deterministic mapping (a stable intake block id → a field), and
- *   2. the gate that decides whether the one small AI call is worth making.
+ * a re-submit, or a later run, must never overwrite a hand edit.
+ *
+ * Two layers:
+ *   1. a DETERMINISTIC fast-path for the truly 1:1 fields (the tone SELECT, an
+ *      explicit "Full name, Title" primary_contact, three_words → dos, etc.).
+ *      These cost nothing.
+ *   2. a SMART layer — one Haiku call — for everything fuzzy or template-
+ *      specific: a contact buried in prose, socials given as URLs, tone
+ *      described in a paragraph, a voice summary. This file decides WHEN that
+ *      call is worth making (only when a target is still empty AND a plausible
+ *      source answer exists) and prepares the labelled answers it is fed.
  *
  * Everything here is a pure function over the answers and the CURRENT profile.
- * The database work (reading the profile, inserting the contact, the rev-guarded
- * write) lives in intake-enrich.ts.
+ * The database work and the model call live in intake-enrich.ts.
  */
 
 import type { Answers } from './intake-core'
@@ -27,22 +33,22 @@ export function answerText(answers: Answers, id: string): string {
   return String(v ?? '').trim()
 }
 
-/** The block ids this module reads deterministically. Anything NOT in here is
- *  an "extra" answer the AI may be asked to mine for a name/email when a
- *  template was custom-edited and the standard contact fields are blank. */
+/** The block ids the deterministic pass reads 1:1. Not load-bearing for the AI,
+ *  which works off question LABELS so it is template-agnostic. */
 export const MAPPED_IDS = new Set<string>([
   'primary_contact', 'contact_email', 'contact_mobile', 'best_call_window',
+  'day_to_day_contact',
   'three_words', 'never_words', 'tone', 'tagline', 'socials',
   'brand_files', 'public_name', 'website',
 ])
 
-/** The free-text answers that feed the voice summary. Spans templates: the
- *  first two are on rebrand/launch, the last three on the ongoing retainer. */
-export const VOICE_SOURCE_IDS = [
-  'admired', 'perception', 'brand_as_person', 'misconception', 'one_thing_remembered',
-] as const
+/** Free-text blocks that hold a contact but not in tidy fields — the ongoing
+ *  retainer template has no primary_contact/contact_email at all; the person
+ *  lives in `day_to_day_contact` as name + phone + email run together. Used for
+ *  the deterministic fallback when the model is unavailable. */
+export const CONTACT_SOURCE_IDS = ['day_to_day_contact'] as const
 
-// ── contact ─────────────────────────────────────────────────────────────────
+// ── contact (deterministic fast-path) ───────────────────────────────────────
 
 export type DerivedContact = {
   name: string
@@ -66,8 +72,9 @@ export function parsePrimaryContact(raw: string): { name: string; role: string }
   }
 }
 
-/** The primary contact the standard fields describe, or null when there is
- *  nothing usable (no name AND no email). */
+/** The primary contact the STANDARD structured fields describe, or null when
+ *  there is nothing usable. The ongoing template has none of these fields — its
+ *  contact is handled by the AI / free-text fallback below. */
 export function deriveContact(answers: Answers): DerivedContact | null {
   const { name, role } = parsePrimaryContact(answerText(answers, 'primary_contact'))
   const email = answerText(answers, 'contact_email')
@@ -83,10 +90,45 @@ export function deriveContact(answers: Answers): DerivedContact | null {
   }
 }
 
-// ── brand ───────────────────────────────────────────────────────────────────
+/** The first email anywhere in a blob of text, else ''. */
+export function extractEmail(text: string): string {
+  const m = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)
+  return m ? m[0] : ''
+}
 
-/** The three tone options become a short phrase the brand card can show. An
- *  unrecognised (custom-edited) value is passed through as itself. */
+/** The first phone-looking run of digits anywhere in the text, else ''. Kept
+ *  loose (spaces, +, brackets, dashes) so an Australian mobile written any of
+ *  the usual ways is caught. */
+export function extractPhone(text: string): string {
+  const m = text.match(/\+?\d[\d\s()-]{6,}\d/)
+  return m ? m[0].replace(/\s+/g, ' ').trim() : ''
+}
+
+/**
+ * Last-resort deterministic contact from a free-text blob (e.g. Turnkey's
+ * "Jordan Wilson\n0488 420 104\njordan@tkbg.com.au"). Used only when the model
+ * is unavailable — email and phone are reliable by regex; the name is the first
+ * line that is neither, capped so a "Myself and Cadell for day-to-day…" clause
+ * does not become a paragraph. The AI does this far better when it runs.
+ */
+export function deriveContactFromFreeText(text: string): DerivedContact | null {
+  const email = extractEmail(text)
+  const phone = extractPhone(text)
+  let name = ''
+  for (const raw of text.split(/[\n,]/)) {
+    const c = raw.trim()
+    if (!c || extractEmail(c) || /\d{5,}/.test(c)) continue
+    name = c.replace(/\s+/g, ' ').split(' ').slice(0, 4).join(' ')
+    break
+  }
+  if (!name && !email) return null
+  return { name, role: '', email, phone, notes: '' }
+}
+
+// ── brand (deterministic fast-path) ─────────────────────────────────────────
+
+/** The three tone options become a short phrase. An unrecognised (custom-
+ *  edited) value passes through as itself. */
 export const TONE_PHRASES: Record<string, string> = {
   'Warm and family': 'Warm and family',
   'Aspirational and premium': 'Aspirational and premium',
@@ -108,25 +150,73 @@ export function splitWords(raw: string): string[] {
     .filter(Boolean)
 }
 
-/** Pull handle-like tokens out of the socials answer. Prefer explicit @handles;
- *  otherwise take comma/newline-separated single tokens (a phrase like "on
- *  Instagram" is not a handle and is dropped rather than mangled). */
-export function extractHandles(raw: string): string[] {
-  const ats = raw.match(/@[A-Za-z0-9_.]+/g)
-  if (ats && ats.length) return ats
-  return raw
-    .split(/[,\n]/)
-    .map(s => s.trim())
-    .filter(s => s && !/\s/.test(s))
-    .map(asHandle)
-    .filter(Boolean)
+/** Turn one URL (with or without a protocol) into a bare handle: the first
+ *  meaningful path segment, skipping Facebook's `p`/`pages`/`profile.php`
+ *  wrappers, else the domain's second-level name. */
+function handleFromUrl(raw: string): string {
+  let u: URL
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+  } catch {
+    return ''
+  }
+  const parts = u.pathname.split('/').filter(Boolean)
+  if (parts.length === 0) {
+    const host = u.hostname.replace(/^www\./i, '')
+    return host.split('.')[0] ?? ''
+  }
+  let seg = parts[0]
+  if (/^(p|pages|people|profile\.php)$/i.test(seg) && parts[1]) seg = parts[1]
+  try { seg = decodeURIComponent(seg) } catch { /* leave as-is */ }
+  return seg.replace(/^@/, '').trim()
 }
 
-/** Additive, empty-only merge: returns a copy of `current` with the intake's
- *  brand answers folded into the fields that are STILL empty, plus a flag
- *  saying whether anything was actually filled. Never overwrites. `voice.summary`
- *  is deliberately not touched here — it is the one AI-derived field and is
- *  merged separately by the caller. */
+/** One socials segment → its handles. Handles a URL (stripped to its @handle),
+ *  explicit @mentions, or a bare name with a trailing "(Instagram)" / "on
+ *  Instagram" note. A leftover phrase (no handle in it) is dropped, never
+ *  stored as a raw URL. */
+function handlesFromSegment(seg: string): string[] {
+  let s = seg.trim()
+  if (!s) return []
+  // a URL anywhere in the segment → one handle from it
+  const url = s.match(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S+/i)
+  if (url) {
+    const h = handleFromUrl(url[0])
+    return h ? [asHandle(h)].filter(Boolean) : []
+  }
+  // explicit @handles win
+  const ats = s.match(/@[A-Za-z0-9_.]+/g)
+  if (ats && ats.length) return ats.map(asHandle).filter(Boolean)
+  // drop a trailing platform note, then require a single clean token
+  s = s.replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+on\s+[a-z0-9 ]+$/i, '').trim()
+  if (!s || /\s/.test(s)) return []
+  const h = asHandle(s)
+  return h ? [h] : []
+}
+
+/** Clean handles out of a socials answer, which in the wild is a mix of
+ *  @handles, bare names with "(Instagram)" labels, and full profile URLs. One
+ *  per platform, deduped, never a raw URL. */
+export function extractHandles(raw: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const seg of raw.split(/[,\n;]+/)) {
+    for (const h of handlesFromSegment(seg)) {
+      const key = h.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(h)
+    }
+  }
+  return out
+}
+
+/**
+ * Additive, empty-only merge of the DETERMINISTIC brand answers into `current`,
+ * plus a flag saying whether anything was filled. Never overwrites. The fuzzy
+ * fields (voice.summary, and anything the AI cleans up) are folded in
+ * separately by the caller.
+ */
 export function deriveBrandFill(
   answers: Answers,
   brandFiles: BrandFile[],
@@ -172,64 +262,87 @@ export function deriveBrandFill(
   return { profile: out, changed }
 }
 
-// ── the AI gate ─────────────────────────────────────────────────────────────
+// ── the AI gate (smart layer) ───────────────────────────────────────────────
 
-/** The relevant free-text answers, condensed into the prompt for the voice
- *  summary. Empty when nothing worth summarising was written. */
-export function voiceSummarySources(answers: Answers): { id: string; text: string }[] {
-  return VOICE_SOURCE_IDS
-    .map(id => ({ id, text: answerText(answers, id) }))
-    .filter(a => a.text.length > 0)
-}
+export type LabeledAnswer = { id: string; label: string; value: string }
 
-/** The unmapped free-text answers — where a name/email would hide if a template
- *  were custom-edited so the standard contact fields no longer exist. Capped so
- *  one odd form cannot balloon the prompt. */
-export function extraAnswers(answers: Answers, max = 12): { id: string; text: string }[] {
-  const out: { id: string; text: string }[] = []
+/** The answers as {id, label, value}, dropping empties. The AI is fed labels,
+ *  not ids, so it understands any template's wording. */
+export function toLabeledAnswers(answers: Answers, labels: Map<string, string>): LabeledAnswer[] {
+  const out: LabeledAnswer[] = []
   for (const [id, raw] of Object.entries(answers ?? {})) {
-    if (MAPPED_IDS.has(id) || (VOICE_SOURCE_IDS as readonly string[]).includes(id)) continue
-    const text = Array.isArray(raw) ? raw.map(String).join(', ').trim() : String(raw ?? '').trim()
-    if (!text) continue
-    out.push({ id, text: text.slice(0, 500) })
-    if (out.length >= max) break
+    const value = Array.isArray(raw)
+      ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
+      : String(raw ?? '').trim()
+    if (!value) continue
+    out.push({ id, label: labels.get(id) ?? id, value })
   }
   return out
 }
 
+const CONTACT_HINT = /contact|people|person|founder|owner|team|approv|sign|coordinat|day.to.day|manage|director|principal|reach/i
+const BRAND_HINT = /voice|tone|word|feel|brand|admire|percept|position|remember|misconcep|social|instagram|handle|tagline|slogan|comms|communicat|personality|story|mission|value|describe/i
+
+/** The answers worth sending to the model: anything whose id OR question label
+ *  looks contact- or brand/voice-related, capped and truncated so one odd form
+ *  cannot balloon the prompt. Label-driven, so it works on every template. */
+export function selectRelevantAnswers(labeled: LabeledAnswer[], max = 24): LabeledAnswer[] {
+  const out: LabeledAnswer[] = []
+  for (const a of labeled) {
+    const hay = `${a.id} ${a.label}`
+    if (CONTACT_HINT.test(hay) || BRAND_HINT.test(hay)) {
+      out.push({ ...a, value: a.value.slice(0, 600) })
+      if (out.length >= max) break
+    }
+  }
+  return out
+}
+
+export type MissingTargets = {
+  contact: boolean
+  tone: boolean
+  dos: boolean
+  donts: boolean
+  summary: boolean
+  handles: boolean
+}
+
+/** What is STILL empty after the deterministic pass — the fields the AI could
+ *  usefully fill. */
+export function missingTargets(profile: BrandProfile, contactResolved: boolean): MissingTargets {
+  return {
+    contact: !contactResolved,
+    tone: !profile.voice.tone.trim(),
+    dos: profile.voice.dos.length === 0,
+    donts: profile.voice.donts.length === 0,
+    summary: !profile.voice.summary.trim(),
+    handles: profile.handles.length === 0,
+  }
+}
+
 export type EnrichmentPlan = {
-  /** condense the free-text into voice.summary — summary blank AND sources exist */
-  aiVoiceNeeded: boolean
-  /** mine the unmapped answers for a name/email — no contact resolved AND extras exist */
-  aiContactNeeded: boolean
-  /** true when EITHER fuzzy job is worth a model call; false → skip the AI entirely */
+  /** true when SOME target is still empty AND there is a plausible source to
+   *  read from — the only case where the model is worth calling. */
   aiNeeded: boolean
-  voiceSources: { id: string; text: string }[]
-  extras: { id: string; text: string }[]
+  missing: MissingTargets
+  /** the labelled answers to feed the one Haiku call */
+  relevant: LabeledAnswer[]
 }
 
 /**
  * Decide whether the one Haiku call is worth making. This is the whole token
- * saving: when the voice summary is already written (or nothing was said) AND a
- * contact is resolved deterministically, the model is never called.
- *
- * @param contactResolved a primary contact already exists or was derived from
- *        the standard fields — so the AI is not needed to find one.
+ * saving: pass the profile AFTER the deterministic fill, and when nothing is
+ * still missing (or there is no relevant answer to read), the model is never
+ * called.
  */
 export function planEnrichment(
-  answers: Answers,
-  current: BrandProfile,
+  profileAfterDeterministic: BrandProfile,
   contactResolved: boolean,
+  labeled: LabeledAnswer[],
 ): EnrichmentPlan {
-  const voiceSources = voiceSummarySources(answers)
-  const extras = extraAnswers(answers)
-  const aiVoiceNeeded = !current.voice.summary.trim() && voiceSources.length > 0
-  const aiContactNeeded = !contactResolved && extras.length > 0
-  return {
-    aiVoiceNeeded,
-    aiContactNeeded,
-    aiNeeded: aiVoiceNeeded || aiContactNeeded,
-    voiceSources,
-    extras,
-  }
+  const missing = missingTargets(profileAfterDeterministic, contactResolved)
+  const anyMissing =
+    missing.contact || missing.tone || missing.dos || missing.donts || missing.summary || missing.handles
+  const relevant = selectRelevantAnswers(labeled)
+  return { aiNeeded: anyMissing && relevant.length > 0, missing, relevant }
 }
