@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -26,6 +27,21 @@ import {
   DEFAULT_TZ, formatWithZone, fromZonedInput, toZonedInput, viewerHint,
   zoneAbbrev, zoneLabel,
 } from '../../../lib/timezone-core'
+import {
+  SEND_LABEL, WAITING_LINE, approvalStep,
+  type ApprovalStep, type PostingApprovalState,
+} from '../../../lib/posting-approval-core'
+import type { Role } from '../../../lib/identity-core'
+
+/** the final-post gate, as the item API hands it over. `supported` is false on
+ *  a database the migration has not reached — the card then draws none of it. */
+export type PostingApproval = {
+  supported: boolean
+  state: PostingApprovalState | null
+  client_required: boolean
+  note: string | null
+  approved_at: string | null
+}
 
 export type PostingContext = {
   configured: boolean
@@ -106,6 +122,14 @@ type Props = {
   entries: PostingEntry[]
   /** may this person publish to the client's live accounts? */
   canAutoPublish: boolean
+  /** the final-post gate — null on payloads from before it existed */
+  approval?: PostingApproval | null
+  /** the hats the viewer wears ON THIS ITEM — decides send vs approve */
+  hats?: readonly Role[]
+  /** the piece itself, for the preview the approver signs off */
+  previewSlides?: { url: string; type: 'image' | 'video'; name?: string }[]
+  /** perform one approval action, then refresh the item */
+  onApproval?: (action: 'send' | 'approve' | 'request_changes', opts?: { note?: string; client_too?: boolean }) => Promise<void>
   platforms: readonly string[]
   /** save a platform + time on the item, then open the notify picker */
   onPost: (platform: string, whenIso: string | null, publishNow: boolean) => Promise<void>
@@ -138,6 +162,7 @@ export default function PostingCard(props: Props) {
   const {
     itemId, clientId, clientName, clientUsers, platformTargets, caption,
     posting, entries, canAutoPublish, platforms, onPost, onManual, onChanged, busy,
+    approval, hats, previewSlides, onApproval,
   } = props
   const tz = props.clientTz || DEFAULT_TZ
 
@@ -168,6 +193,13 @@ export default function PostingCard(props: Props) {
   const [confirmInvite, setConfirmInvite] = useState(false)
   const [working, setWorking] = useState<string | null>(null)
   const [rescheduling, setRescheduling] = useState(false)
+  /** the send-for-approval preview is open (the sender's confirm) */
+  const [sendOpen, setSendOpen] = useState(false)
+  /** "Client approves the final post too" */
+  const [clientToo, setClientToo] = useState(approval?.client_required === true)
+  /** the approver's request-changes note */
+  const [approvalNote, setApprovalNote] = useState('')
+  const [approvalMode, setApprovalMode] = useState<null | 'changes'>(null)
 
   const label = platformLabel(platform)
   const primary = postingPrimaryLabel(state)
@@ -315,6 +347,195 @@ export default function PostingCard(props: Props) {
     </button>
   )
 
+  /**
+   * ── the final-post gate ──
+   * 'open' either because the post is approved, or because the gate does not
+   * exist on this database yet (approval.supported false / no handler) — in
+   * which case the card behaves exactly as it did before the gate was built.
+   */
+  const gate: ApprovalStep = approval?.supported && onApproval
+    ? approvalStep(approval.state, hats ?? [])
+    : 'open'
+
+  const doApproval = async (
+    action: 'send' | 'approve' | 'request_changes', opts?: { note?: string; client_too?: boolean },
+  ) => {
+    if (!onApproval) return
+    setWorking('approval')
+    try {
+      await onApproval(action, opts)
+      setSendOpen(false)
+      setApprovalMode(null)
+      setApprovalNote('')
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  /** THE POST, as it will actually appear — what gets approved. The same
+   *  facts the approver's email carries: media, caption word for word, the
+   *  channel, and the hour in the client's zone. */
+  const firstSlide = (previewSlides ?? [])[0] ?? null
+  const previewPanel = (
+    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+      {firstSlide && (
+        <div className="max-h-64 w-full overflow-hidden bg-zinc-950">
+          {firstSlide.type === 'video' ? (
+            <video src={firstSlide.url} muted playsInline controls preload="metadata" className="max-h-64 w-full object-contain" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={firstSlide.url} alt="" className="max-h-64 w-full object-contain" />
+          )}
+        </div>
+      )}
+      {(previewSlides?.length ?? 0) > 1 && (
+        <p className="border-b border-zinc-100 px-3 py-1.5 text-[11px] text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+          {previewSlides!.length} slides — the first is shown; they post in the order under Versions.
+        </p>
+      )}
+      <div className="flex flex-col gap-2 p-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <PlatformIcon platform={platform} size={16} />
+          <span className="font-medium text-zinc-700 dark:text-zinc-200">{label}</span>
+          {posting?.accounts.find(a => a.platform === platform)?.username && (
+            <span className="font-mono">@{posting!.accounts.find(a => a.platform === platform)!.username}</span>
+          )}
+          <span>·</span>
+          <span>{whenIso ? <>{when(whenIso)} {hint(whenIso) && <span className="text-zinc-400">({hint(whenIso)})</span>}</> : 'posts as soon as it is queued'}</span>
+        </div>
+        <div>
+          <p className="mb-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-400">The caption, exactly as it will post</p>
+          {caption?.trim()
+            ? <p className="whitespace-pre-wrap text-sm">{caption}</p>
+            : <p className="text-sm text-zinc-400">No caption — it would go out with the title as its text.</p>}
+        </div>
+      </div>
+    </div>
+  )
+
+  /** the disabled queue button + the one line explaining it, while the gate
+   *  is anything but approved */
+  const waitingRow = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" disabled title={WAITING_LINE}>
+        {isPast ? `Post now on ${label}` : `Schedule on ${label}`}
+      </Button>
+      <span className="text-xs text-amber-600 dark:text-amber-400">{WAITING_LINE}</span>
+    </div>
+  )
+
+  /** what the gate asks THIS viewer to do, drawn inside the ready state */
+  const approvalBlock = gate === 'open' ? null : (
+    <div className="flex flex-col gap-2.5">
+      {gate === 'resend' && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <strong>Changes were asked for on this post.</strong>
+            {approval?.note && <><br />“{approval.note}”</>}
+            <br />Update the caption or the media, then send it for approval again.
+          </span>
+        </div>
+      )}
+
+      {(gate === 'send' || gate === 'resend') && (
+        sendOpen ? (
+          <>
+            <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+              This is what gets approved — check it reads exactly right:
+            </p>
+            {previewPanel}
+            <label className="flex min-h-11 items-center gap-2.5 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+              <Switch checked={clientToo} onCheckedChange={setClientToo} />
+              {clientName} approves the final post too (it appears on their portal)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={busy || working !== null} onClick={() => void doApproval('send', { client_too: clientToo })}>
+                {working === 'approval' ? 'Sending…' : clientToo ? 'Send to the account manager & the client' : 'Send it for approval'}
+              </Button>
+              <Button size="sm" variant="ghost" disabled={working !== null} onClick={() => setSendOpen(false)}>
+                Not yet
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" disabled={busy || working !== null || !caption?.trim()} onClick={() => setSendOpen(true)}>
+                {SEND_LABEL}
+              </Button>
+              {manualLink}
+            </div>
+            {!caption?.trim() && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Write the caption first — the caption is what gets approved.
+              </p>
+            )}
+          </div>
+        )
+      )}
+
+      {gate === 'waiting' && (
+        <>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            The post is with {approval?.client_required ? `the account manager and ${clientName}` : 'the account manager'} for
+            final sign-off. Nothing goes out until someone approves it.
+          </p>
+          {previewPanel}
+        </>
+      )}
+
+      {gate === 'decide' && (
+        <>
+          <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            This post needs your sign-off — the caption and timing, exactly as it will appear:
+          </p>
+          {previewPanel}
+          {approval?.client_required && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {clientName} was asked to approve it too — it is on their portal.
+            </p>
+          )}
+          {approvalMode === 'changes' && (
+            <textarea
+              rows={3}
+              value={approvalNote}
+              autoFocus
+              onChange={e => setApprovalNote(e.target.value)}
+              placeholder="What should change before it goes out?"
+              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+            />
+          )}
+          <div className="flex flex-wrap gap-2">
+            {approvalMode === null ? (
+              <>
+                <Button size="sm" disabled={busy || working !== null} onClick={() => void doApproval('approve')}>
+                  {working === 'approval' ? 'Working…' : 'Approve the post'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={working !== null} onClick={() => setApprovalMode('changes')}>
+                  Request changes
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" disabled={busy || working !== null || !approvalNote.trim()}
+                  onClick={() => void doApproval('request_changes', { note: approvalNote })}>
+                  {working === 'approval' ? 'Sending…' : 'Send the changes'}
+                </Button>
+                <Button size="sm" variant="ghost" disabled={working !== null}
+                  onClick={() => { setApprovalMode(null); setApprovalNote('') }}>
+                  Cancel
+                </Button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {waitingRow}
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-3">
       {!canAutoPublish ? (
@@ -380,18 +601,30 @@ export default function PostingCard(props: Props) {
                     : 'Leave it empty to post as soon as you press the button.'}
                 </p>
               </div>
-              {!caption?.trim() && (
+              {!caption?.trim() && gate === 'open' && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   There is no caption yet — it will go out with the title as its text.
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" disabled={busy}
-                  onClick={() => void onPost(platform, whenIso, isPast)}>
-                  {busy ? 'Working…' : isPast ? `Post now on ${label}` : `Schedule on ${label}`}
-                </Button>
-                {manualLink}
-              </div>
+              {gate === 'open' ? (
+                <>
+                  {/* the gate has been through and said yes — the queue is open */}
+                  {approval?.supported && approval.state === 'approved' && (
+                    <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Final post approved
+                      {approval.approved_at ? ` — ${when(approval.approved_at)}` : ''}.
+                      Changing the caption or the media will need a fresh approval.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" disabled={busy}
+                      onClick={() => void onPost(platform, whenIso, isPast)}>
+                      {busy ? 'Working…' : isPast ? `Post now on ${label}` : `Schedule on ${label}`}
+                    </Button>
+                    {manualLink}
+                  </div>
+                </>
+              ) : approvalBlock}
             </>
           )}
 

@@ -14,6 +14,7 @@ import {
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
 import { STATUS_LABELS, STATUS_MEANING, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
 import { choosePlatform, platformLabel } from '../../lib/posting-card-core'
+import { approvalChip } from '../../lib/posting-approval-core'
 import {
   SCHEDULER_LANES, canClaimScheduler, schedulerAssignment, schedulerScope, unassignedCount,
   type ScopeMode, type Viewer,
@@ -50,6 +51,9 @@ type Item = {
   slide_count?: number
   owner_id: string | null
   scheduler_ids?: unknown
+  /** the final-post gate — absent on a database without the migration, and
+   *  the row then wears no chip at all */
+  posting_approval_state?: string | null
   clients: { name: string; timezone?: string | null } | null
   work_kinds?: { slug?: string } | null
   /** somebody tagged the viewer in a comment here and it is not done */
@@ -187,6 +191,18 @@ export default function SchedulerPage() {
   // slower load. A skeleton that never resolves tells the user nothing.
   if (!loading && !viewer) return <AccountUnavailable />
 
+  /** Where the FINAL POST stands — the caption-and-timing sign-off. Rows the
+   *  gate never touched (and databases without the migration) wear nothing. */
+  const gateChip = (item: Item) => {
+    const chip = approvalChip(item.posting_approval_state)
+    if (!chip) return null
+    const tint = chip.tone === 'approved'
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+      : chip.tone === 'changes'
+        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+        : 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400'
+    return <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tint}`}>{chip.label}</span>
+  }
 
   /** The one thing to do with this row, named by what happens. */
   const rowAction = (item: Item) => {
@@ -313,6 +329,7 @@ export default function SchedulerPage() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <TurnChip status={item.status} item={item} viewer={viewer!} openTask={item.my_open_task}
                       onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
+                    {gateChip(item)}
                     {entries.map(e => (
                       <Badge key={e.platform} variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">
                         {e.platform}
@@ -390,6 +407,7 @@ export default function SchedulerPage() {
                             ? (item.status === 'approved_for_scheduling' ? 'Posts itself' : 'Queued — posts itself')
                             : 'Posted by hand'}
                         </span>
+                        {gateChip(item)}
                         {assignment === 'other' && handedNames.length > 0 && (
                           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                             Handed to {handedNames.join(', ')}

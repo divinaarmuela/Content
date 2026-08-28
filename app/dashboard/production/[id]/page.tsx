@@ -75,8 +75,9 @@ import { lastList } from '../../lastList'
 import { activityLines, type ActivityRow } from '../../../lib/activity-core'
 import { backLinkFor, canClaimEditor, canClaimScheduler } from '../../../lib/work-pages-core'
 import { ClaimButton } from '../ClaimButton'
-import PostingCard, { type PostingContext } from './PostingCard'
+import PostingCard, { type PostingApproval, type PostingContext } from './PostingCard'
 import { choosePlatform, platformLabel } from '../../../lib/posting-card-core'
+import { approvalChip } from '../../../lib/posting-approval-core'
 import type { Role } from '../../../lib/identity-core'
 
 type Version = {
@@ -142,6 +143,9 @@ type Detail = {
   /** connected accounts + the live publish job, loaded WITH the item so the
    *  posting card knows its own state before anyone clicks anything */
   posting?: PostingContext | null
+  /** the final-post gate — supported=false until the migration has run,
+   *  and the page then draws nothing new at all */
+  posting_approval?: PostingApproval | null
 }
 
 const STATUS_TINT: Record<string, string> = {
@@ -1087,6 +1091,33 @@ export default function ItemDetailPage() {
     }
   }
 
+  /** One final-post approval action → the route → refresh. The card decides
+   *  WHICH action this viewer may take; the server checks it again. */
+  const actOnApproval = async (
+    action: 'send' | 'approve' | 'request_changes',
+    opts?: { note?: string; client_too?: boolean },
+  ) => {
+    try {
+      const res = await fetch(`/api/production/items/${id}/posting-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...opts }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Something went wrong')
+      toast.success(action === 'send'
+        ? opts?.client_too
+          ? `Sent for approval — the account manager has been emailed, and it is on ${detail?.client_name ?? 'the client'}’s portal too`
+          : 'Sent for approval — the account manager has been emailed'
+        : action === 'approve'
+          ? 'Post approved — it can be queued now'
+          : 'Sent back — whoever is scheduling it has been told what to change')
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
   /**
    * The app-posting path: record the time, then open "who should hear about
    * it". Two steps because the provider needs the time from the schedule row,
@@ -1787,7 +1818,21 @@ export default function ItemDetailPage() {
           caption box and a platform picker are questions nobody can answer. */}
       {isAsset && postingOpen && (canSchedule || canManage || detail.schedule.length > 0) && (
         <Card id="posting" className="scroll-mt-4">
-          <CardHeader><CardTitle className="text-sm font-semibold">Posting</CardTitle></CardHeader>
+          <CardHeader className="flex-row items-center gap-2">
+            <CardTitle className="text-sm font-semibold">Posting</CardTitle>
+            {/* where the final post stands — drawn only once the gate has
+                actually been used on this item */}
+            {(() => {
+              const chip = approvalChip(detail.posting_approval?.state)
+              if (!chip) return null
+              const tint = chip.tone === 'approved'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400'
+                : chip.tone === 'changes'
+                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
+                  : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400'
+              return <Badge variant="outline" className={`font-normal ${tint}`}>{chip.label}</Badge>
+            })()}
+          </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             <div className="grid gap-1.5">
               <Label className="text-xs">Caption</Label>
@@ -1849,6 +1894,10 @@ export default function ItemDetailPage() {
                 posting={detail.posting ?? null}
                 entries={detail.schedule}
                 canAutoPublish={canAutoPublish}
+                approval={detail.posting_approval ?? null}
+                hats={hats}
+                previewSlides={latestSlides.map(s => ({ url: s.url, type: s.type, name: s.name }))}
+                onApproval={actOnApproval}
                 platforms={PLATFORMS}
                 onPost={postFromApp}
                 onManual={saveManualSchedule}
