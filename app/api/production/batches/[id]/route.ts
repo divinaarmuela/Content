@@ -85,7 +85,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // an AM changing a LOCKED date is its own audited act, with a reason
     if (body.action === 'change_date') {
       if (!roleSatisfies(user.role, 'account_manager')) {
-        return NextResponse.json({ error: 'Only an account manager can change a locked date' }, { status: 403 })
+        return NextResponse.json({ error: 'Only an account manager can change a booked date' }, { status: 403 })
       }
       const reason = String(body.reason ?? '').trim()
       const newDate = String(body.shoot_date ?? '').trim()
@@ -158,7 +158,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // freely editable while still a plan; once locked, the date is a
       // commitment and moves only through change_date above
       if (batch.status !== 'brief') {
-        return NextResponse.json({ error: 'The date is locked — use "Change date" (account managers)' }, { status: 409 })
+        return NextResponse.json({ error: 'The shoot is booked — use "Change date" (account managers)' }, { status: 409 })
       }
       const d = body.shoot_date ? String(body.shoot_date) : ''
       if (d) {

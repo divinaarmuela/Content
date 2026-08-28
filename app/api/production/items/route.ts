@@ -4,6 +4,7 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/a
 import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
 import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
+import { taskExemptFromClientScope } from '../../../lib/item-edit-core'
 import {
   accessibleClientIds, assertUuid, assignedItemsFilter, canOpenBatch, openTaggedIds,
 } from '../../../lib/production-access'
@@ -182,10 +183,12 @@ export async function GET(req: Request) {
   }
 }
 
-/** Create one or many items (batch upload of a shoot). editor+. */
+/** Create one or many items (batch upload of a shoot). Any team role — the
+ *  'scheduler' floor is the lowest team bar: it admits every team role and no
+ *  client. What each role may create is the shoot gate's business below. */
 export async function POST(req: Request) {
   try {
-    const user = await requireRole('editor')
+    const user = await requireRole('scheduler')
     const body = await req.json()
     const items = Array.isArray(body.items) ? body.items : [body]
     if (items.length === 0 || items.length > 50) {
@@ -221,12 +224,36 @@ export async function POST(req: Request) {
       : { data: [] }
     const batchById = new Map((batchRows ?? []).map(b => [b.id as string, b]))
 
+    // quota groups: a piece may land inside a deliverable_groups row — the
+    // "Reels · 2 of 5" card. Validate every named group once.
+    const groupIds = [...new Set(items.map((it: { group_id?: string }) => it.group_id).filter(Boolean))] as string[]
+    const { data: groupRows } = groupIds.length
+      ? await supabase.from('deliverable_groups').select('id, client_id, batch_id, title, target').in('id', groupIds)
+      : { data: [] }
+    const groupById = new Map((groupRows ?? []).map(gr => [gr.id as string, gr]))
+
     const rows = []
     for (const it of items) {
       if (!it.client_id || !it.title) {
         return NextResponse.json({ error: 'client_id and title are required on every item' }, { status: 400 })
       }
-      if (clientIds !== null && !clientIds.includes(it.client_id)) {
+      // the kind decides WHICH gate applies, so it resolves first: a shoot
+      // BRIEF is the exception that may start from nothing — running the
+      // produced-item gate before knowing the kind rejected every brief
+      const kind = resolveKindForWrite(kinds, it.work_kind_id)
+      if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
+      const kindRow = kinds.find(k => k.id === kind.id) ?? null
+      const kindSlug = kindRow?.slug ?? null
+      // research / strategy / copy: nothing to shoot, nothing to post — the
+      // shoot gate is about assets and does not apply
+      const isInternal = kindSlug !== 'shoot_brief' && kindRow?.uses_media === false
+      if (
+        clientIds !== null && !clientIds.includes(it.client_id)
+        // a TASK is internal work, not client-confidential — any team member
+        // may raise one for any client (the owner's rule). Shoots, plans and
+        // assets keep the scoped list: they carry unreleased material.
+        && !taskExemptFromClientScope(kindRow)
+      ) {
         // off the client team, but holding a job on the shoot (the brief handed
         // to a manager) — the shoot opens for them, so its items may be made
         const heldShoot = it.batch_id ? batchById.get(it.batch_id) : null
@@ -237,15 +264,18 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
         }
       }
-      // the kind decides WHICH gate applies, so it resolves first: a shoot
-      // BRIEF is the exception that may start from nothing — running the
-      // produced-item gate before knowing the kind rejected every brief
-      const kind = resolveKindForWrite(kinds, it.work_kind_id)
-      if (!kind.ok) return NextResponse.json({ error: kind.reason }, { status: 400 })
-      const kindSlug = kinds.find(k => k.id === kind.id)?.slug ?? null
-      // research / strategy / copy: nothing to shoot, nothing to post — the
-      // shoot gate is about assets and does not apply
-      const isInternal = kindSlug !== 'shoot_brief' && kinds.find(k => k.id === kind.id)?.uses_media === false
+
+      // a named group must exist and belong to the same client — and joining
+      // one is itself the recorded reason the piece may exist without a shoot:
+      // the promise was logged when the group was made
+      const group = it.group_id ? groupById.get(String(it.group_id)) : null
+      if (it.group_id && !group) {
+        return NextResponse.json({ error: 'That group no longer exists' }, { status: 400 })
+      }
+      if (group && group.client_id !== it.client_id) {
+        return NextResponse.json({ error: 'That group belongs to a different client' }, { status: 403 })
+      }
+      const itemAdhocReason = adhocReason || (group ? `piece of the planned group "${group.title}"` : '')
 
       if (it.batch_id) {
         const batch = batchById.get(it.batch_id)
@@ -258,9 +288,9 @@ export async function POST(req: Request) {
         const batchStatus = it.batch_id
           ? ((batchById.get(it.batch_id)?.status ?? null) as BatchStatus | null)
           : null
-        if (it.batch_id ? !canCreateItemsUnder(batchStatus, user.role) : !canCreateItemsUnder(null, user.role, { reason: adhocReason })) {
+        if (it.batch_id ? !canCreateItemsUnder(batchStatus, user.role) : !canCreateItemsUnder(null, user.role, { reason: itemAdhocReason })) {
           return NextResponse.json(
-            { error: 'Content items need a locked shoot. Lock the shoot date on its brief first.' },
+            { error: 'Items need a booked shoot. Book the shoot on its page first — or say where the footage is from.' },
             { status: 422 },
           )
         }
@@ -276,7 +306,7 @@ export async function POST(req: Request) {
           user.role, undefined, 'shoot_brief',
         )) {
           return NextResponse.json(
-            { error: 'Shoot briefs are created by account managers, on a shoot still in planning' },
+            { error: 'Shoot plans are created by account managers, on a shoot that is not finished' },
             { status: 403 },
           )
         }
@@ -306,7 +336,10 @@ export async function POST(req: Request) {
             }
           : {}),
         client_id: it.client_id,
-        batch_id: kindSlug === 'shoot_brief' ? briefBatchId : isInternal ? null : (it.batch_id ?? null),
+        // a grouped piece rides its group: the card carries the shoot, so the
+        // piece inherits it when the caller named none
+        ...(group ? { group_id: group.id } : {}),
+        batch_id: kindSlug === 'shoot_brief' ? briefBatchId : isInternal ? null : (it.batch_id ?? group?.batch_id ?? null),
         title: String(it.title),
         content_type: kindSlug === 'shoot_brief' || isInternal ? 'other' : (it.content_type ?? 'reel'),
         platform_targets: Array.isArray(it.platform_targets) ? it.platform_targets : [],
@@ -330,7 +363,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabase.from('content_items').insert(rows).select()
     if (error) {
       if (/content_items_one_brief_per_batch_uidx/.test(error.message)) {
-        return NextResponse.json({ error: 'This shoot already has a brief task' }, { status: 409 })
+        return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
       }
       throw new Error(error.message)
     }

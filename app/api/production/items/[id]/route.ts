@@ -5,6 +5,7 @@ import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
+import { canEditItemFields } from '../../../../lib/item-edit-core'
 import { loadPostingContext } from '../../../../lib/production-publish'
 import { DEFAULT_TZ } from '../../../../lib/timezone-core'
 import {
@@ -137,26 +138,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-/** Edit item fields. AM+ (editors edit via versions/comments, not metadata). */
+/** Edit item fields. Managers edit anything; everyone else edits their OWN —
+ *  the item they hold, or were handed the scheduling of (item-edit-core). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // metadata edits are manager work — except the CAPTION, which is the
-    // scheduler's post text: they may polish it without touching anything else
     const body = await req.json()
     const keys = Object.keys(body ?? {})
+    // the CAPTION is the scheduler's post text: whoever holds the scheduling
+    // may polish it without touching anything else
     const captionOnly = keys.length === 1 && keys[0] === 'caption'
-    // the BRIEF fields are the evidence a shoot brief is submitted with, and
-    // the brief's own submit edge is open to its editor-owner — so an owner
+    // the PLAN fields are the evidence a shoot plan is submitted with, and
+    // the plan's own submit edge is open to its editor-owner — so an owner
     // who is not an account manager must be able to fill them in
     const briefOnly = keys.length > 0 && keys.every(k => k === 'brief_url' || k === 'brief')
     // the due date is the one planning field the person DOING the work may
     // move — the calendar lets an owner drag their own item to another day
     const dueOnly = keys.length > 0 && keys.every(k => k === 'due_date')
     // 'scheduler' is the lowest team floor: it admits every team role and no
-    // client. The per-item hat check below is the real gate.
-    const user = captionOnly || briefOnly || dueOnly
-      ? await requireRole('scheduler')
-      : await requireRole('account_manager')
+    // client. The per-item check below is the real gate.
+    const user = await requireRole('scheduler')
     const { id } = await params
     const current = await loadItemForUser(user, id)
     if (
@@ -165,8 +165,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       && !actingRoles({ id: user.id, role: user.role }, current).includes('editor')
     ) {
       return NextResponse.json({
-        error: dueOnly ? 'Only the person holding this item can move its due date' : 'This brief is assigned to someone else',
+        error: dueOnly ? 'Only the person holding this item can move its due date' : 'This shoot plan is assigned to someone else',
       }, { status: 403 })
+    }
+    // general fields: managers edit anything; the owner and anyone handed the
+    // scheduling edit their own; nobody else edits anything
+    if (!captionOnly && !briefOnly && !dueOnly && !canEditItemFields(user, current)) {
+      return NextResponse.json({ error: 'Only whoever holds this item — or a manager — can edit it' }, { status: 403 })
     }
     // 'scheduler' as a floor admits editors — the caption IS the published post
     // text, so it belongs to whoever holds the SCHEDULING here (the hat, not

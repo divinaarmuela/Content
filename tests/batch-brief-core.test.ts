@@ -49,12 +49,13 @@ describe('batchSatisfiesLock', () => {
 describe('canCreateItemsUnder — the production gate', () => {
   const roles: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
 
-  it('opens locked and shot briefs to item-creating roles only', () => {
+  it('opens locked and shot briefs to every team role — never a client', () => {
+    // the owner's rule: "scheduler/editor can create production items too"
     for (const status of ['locked', 'shot'] as const) {
       expect(canCreateItemsUnder(status, 'editor')).toBe(true)
       expect(canCreateItemsUnder(status, 'account_manager')).toBe(true)
       expect(canCreateItemsUnder(status, 'super_admin')).toBe(true)
-      expect(canCreateItemsUnder(status, 'scheduler')).toBe(false)
+      expect(canCreateItemsUnder(status, 'scheduler')).toBe(true)
       expect(canCreateItemsUnder(status, 'client')).toBe(false)
     }
   })
@@ -108,8 +109,12 @@ describe('canCreateItemsUnder — the production gate', () => {
     expect(canCreateItemsUnder(null, 'editor', { reason: '  ' })).toBe(false)
   })
 
-  it('still keeps schedulers and clients out — they do not create work', () => {
-    expect(canCreateItemsUnder(null, 'scheduler', { reason: 'anything' })).toBe(false)
+  it('opens the no-shoot path to schedulers too — with the same mandatory reason', () => {
+    expect(canCreateItemsUnder(null, 'scheduler', { reason: 'client emergency story' })).toBe(true)
+    expect(canCreateItemsUnder(null, 'scheduler')).toBe(false)
+  })
+
+  it('still keeps clients out — they never create work', () => {
     expect(canCreateItemsUnder(null, 'client', { reason: 'anything' })).toBe(false)
   })
 })

@@ -20,20 +20,23 @@ export type BatchTransitionRule = { roles: Role[]; label: string }
  *  states themselves, so the shoots page and the calendars cannot drift into
  *  two vocabularies for one status. */
 export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
-  brief: 'In planning', locked: 'Date locked', shot: 'Shot', wrapped: 'Wrapped',
+  brief: 'In planning', locked: 'Booked', shot: 'Shot', wrapped: 'Closed',
 }
 
 export const BATCH_TRANSITIONS: Partial<Record<BatchStatus, Partial<Record<BatchStatus, BatchTransitionRule>>>> = {
   brief: {
-    locked: { roles: ['editor', 'account_manager'], label: 'Lock shoot date' },
+    // booking = committing to the date. One action, one word, everywhere.
+    locked: { roles: ['editor', 'account_manager'], label: 'Book the shoot' },
   },
   locked: {
-    brief: { roles: ['account_manager'], label: 'Unlock' },
+    brief: { roles: ['account_manager'], label: 'Undo the booking' },
+    // kept for the data model; the surfaces DERIVE "Shot" from the calendar
+    // (shoot-lifecycle-core) instead of offering this as a button
     shot: { roles: ['editor', 'account_manager'], label: 'Mark as shot' },
-    wrapped: { roles: ['account_manager'], label: 'Wrap shoot' },
+    wrapped: { roles: ['account_manager'], label: 'Close shoot' },
   },
   shot: {
-    wrapped: { roles: ['account_manager'], label: 'Wrap shoot' },
+    wrapped: { roles: ['account_manager'], label: 'Close shoot' },
   },
   // a shoot wrapped by mistake must be recoverable — without this edge a
   // mis-click freezes it forever (no route can move it, no items can be filed)
@@ -91,7 +94,9 @@ export function canCreateItemsUnder(
   adhoc?: { reason: string },
   kindSlug?: string,
 ): boolean {
-  if (role === 'client' || role === 'scheduler') return false
+  // every TEAM role makes work — the owner's rule, verbatim: "scheduler/editor
+  // can create production items too". Only clients never create.
+  if (role === 'client') return false
   // a shoot-BRIEF task is how a shoot begins — it may start from nothing
   // (its shoot is created with it) or attach to a still-planning brief;
   // account managers own that act
@@ -113,8 +118,6 @@ export function canCreateItemsUnder(
     //
     // The REASON stays mandatory for everyone, supers included: the point was
     // never trust, it is that "why is there no shoot?" has a recorded answer.
-    // Schedulers and clients are still out — they do not create work.
-    if (role !== 'editor' && role !== 'account_manager' && role !== 'super_admin') return false
     return Boolean(adhoc?.reason && adhoc.reason.trim())
   }
   return false

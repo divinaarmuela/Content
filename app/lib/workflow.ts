@@ -5,7 +5,8 @@ import {
   transitionSubject, whatHappensNext, longDate, OPEN_ITEM_CTA,
 } from './email-voice-core'
 import { AuthzError, type TeamUser } from './authz'
-import { announceItemChange } from './production-live'
+import { announceBatchChange, announceItemChange } from './production-live'
+import { shouldAutoWrap } from './shoot-lifecycle-core'
 import {
   actingRoles,
   checkTransitionAs,
@@ -171,7 +172,7 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       bodyHtml: renderEmail(
         `${item.title} is yours to make`,
         `<p><strong>${escapeHtml(item.title)}</strong> (${escapeHtml(item.content_type)}) has been assigned to you by ${escapeHtml(actor.name || actor.email)}.</p>` +
-        (item.brief ? `<p><strong>Brief:</strong><br>${String(item.brief).slice(0, 2000).replace(/\n/g, '<br>')}</p>` : '') +
+        (item.brief ? `<p><strong>Notes:</strong><br>${String(item.brief).slice(0, 2000).replace(/\n/g, '<br>')}</p>` : '') +
         (item.raw_assets_url ? `<p><strong>Raw assets folder:</strong> <a href="${escapeHtml(item.raw_assets_url)}">${escapeHtml(item.raw_assets_url)}</a></p>` : '') +
         ((item.raw_assets?.length ?? 0) > 0
           ? `<p><strong>Files:</strong><br>${item.raw_assets!.slice(0, 20).map(a => `<a href="${escapeHtml(a.url)}">${escapeHtml(a.name || a.url)}</a>`).join('<br>')}</p>`
@@ -204,7 +205,7 @@ export function notifyBatchTransition(
       owner_id: batch.owner_id ?? null, caption: null,
       client_approval_required: false, current_version_number: 0,
     }
-    const label = to === 'locked' ? 'Shoot date locked' : to === 'shot' ? 'Shoot marked as shot' : `Shoot ${to}`
+    const label = to === 'locked' ? 'Shoot booked' : to === 'shot' ? 'Shoot marked as shot' : `Shoot ${to}`
     const when = batch.shoot_date
       ? new Date(batch.shoot_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'long', day: 'numeric', month: 'long' })
       : null
@@ -369,6 +370,44 @@ function isSystemActor(a: TeamUser | SystemActor): a is SystemActor {
  *  - audit log + exactly-once notifications (dedupe key includes the
  *    from>to edge and version, so a retried request can't double-send).
  */
+/**
+ * Wrap a shoot whose every produced piece is published — the derivation
+ * shoot-lifecycle-core states, applied. Optimistic concurrency: the status
+ * filter on the UPDATE means two publishes racing here wrap it exactly once,
+ * and a shoot someone reopened stays reopened.
+ */
+async function autoWrapBatch(batchId: string, byWord: string): Promise<void> {
+  try {
+    const [{ data: batch }, { data: siblings }] = await Promise.all([
+      supabase.from('batches').select('id, client_id, status').eq('id', batchId).maybeSingle(),
+      supabase.from('content_items')
+        .select('status, work_kinds(slug)')
+        .eq('batch_id', batchId)
+        .limit(200),
+    ])
+    if (!batch) return
+    if (!shouldAutoWrap(batch.status as 'brief' | 'locked' | 'shot' | 'wrapped',
+      (siblings ?? []) as { status: string; work_kinds?: { slug?: string } | null }[])) return
+    const { data: wrapped } = await supabase
+      .from('batches')
+      .update({ status: 'wrapped' })
+      .eq('id', batchId)
+      .in('status', ['locked', 'shot'])
+      .select('id')
+      .maybeSingle()
+    if (!wrapped) return
+    await logActivity({
+      actor: null, clientId: batch.client_id,
+      entityType: 'batch', entityId: batchId,
+      action: 'status_change', oldValue: batch.status, newValue: 'wrapped',
+      detail: `closed itself — every piece is published (last one by ${byWord})`,
+    })
+    announceBatchChange({ batch_id: batchId, client_id: batch.client_id, status: 'wrapped', kind: 'transition' })
+  } catch (e) {
+    console.error('autoWrapBatch: could not close the shoot', e instanceof Error ? e.message : e)
+  }
+}
+
 export async function performTransition(
   actor: TeamUser | SystemActor,
   item: ContentItem,
@@ -451,7 +490,7 @@ export async function performTransition(
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
       // "the brief page" is this page; the date lives on the SHOOT page
-      throw new AuthzError('Lock the shoot date on the shoot page before booking it', 400)
+      throw new AuthzError('Book the shoot on its page first — the date is set there', 400)
     }
   }
 
@@ -578,6 +617,15 @@ export async function performTransition(
     const { error: shareErr } = await supabase.from('batches')
       .update({ shared_with_client: true }).eq('id', item.batch_id)
     if (shareErr) console.error('share plan with client: could not flag the shoot', shareErr.message)
+  }
+
+  // ── the shoot closes itself ──
+  // The last piece going live is the moment a shoot is finished; nobody
+  // should have to remember a "Wrapped" button the day after. Best-effort and
+  // fire-and-forget: a shoot that cannot wrap right now wraps on the next
+  // publish, and a failure here never touches the publish itself.
+  if (to === 'published' && item.batch_id) {
+    void autoWrapBatch(item.batch_id, actorName || 'the app')
   }
 
   // ── the archive follows the decision ──

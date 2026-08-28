@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { canOpenBatch } from '../../../../../lib/production-access'
-import { logActivity, notifyBatchTransition } from '../../../../../lib/workflow'
+import { logActivity, notifyBatchTransition, performTransition } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../../lib/gdrive-hooks'
 import {
@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .select().maybeSingle()
     if (error) throw new Error(error.message)
     if (!updated) {
-      return NextResponse.json({ error: 'Someone else moved this brief — refresh and try again' }, { status: 409 })
+      return NextResponse.json({ error: 'Someone else moved this shoot — refresh and try again' }, { status: 409 })
     }
 
     await logActivity({
@@ -65,6 +65,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       entityType: 'batch', entityId: id,
       action: 'status_change', oldValue: from, newValue: to, detail: check.rule.label,
     })
+
+    // ── booking is ONE action ──
+    // "Book the shoot" = set the date + lock it. The shoot's approved plan
+    // used to need a second click on its own page to move to "Shoot booked";
+    // now the lock carries it. Best-effort: a plan not yet approved, or a
+    // locker whose role may not book (the plan's own rule), simply leaves the
+    // plan where it is — the lock itself already succeeded.
+    if (to === 'locked') {
+      const { data: planRows } = await supabase
+        .from('content_items')
+        .select('*, work_kinds!inner(slug)')
+        .eq('batch_id', id)
+        .eq('status', 'approved_for_scheduling')
+        .eq('work_kinds.slug', 'shoot_brief')
+        .limit(1)
+      const plan = planRows?.[0]
+      if (plan) {
+        try {
+          await performTransition(user, plan as Parameters<typeof performTransition>[1], 'scheduled')
+        } catch {
+          // the plan stays at approved; booking it stays available on its page
+        }
+      }
+    }
     notifyBatchTransition(user, updated, from, to)
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: to, kind: 'transition' })
     // locking is the moment the date becomes a fact — and the shoot folder is
