@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -41,7 +41,7 @@ import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/ca
 import { useProductionLive } from './useProductionLive'
 import { useOrderedLoad } from '../useOrderedLoad'
 import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
-import { usePersistedChoice, usePersistedScope, useTeamNames } from './workHooks'
+import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from './workHooks'
 import { useRole } from '../useRole'
 import NewItemDialog, { type ClientRow } from './NewItemDialog'
 import { ClaimButton } from './ClaimButton'
@@ -185,8 +185,10 @@ export default function ProductionPage() {
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 
-  // names for "waiting on …" and the Assign… menu — managers only
-  const nameById = useTeamNames(isManager)
+  // names for "waiting on …" and the Assign… menu — managers only. One
+  // `/api/team` fetch, shared with the two New-work dialogs below.
+  const team = useTeamMembers(isManager)
+  const nameById = useMemo(() => teamNameMap(team), [team])
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // the board and the calendar are two readings of the same page, and which
   // one you were on is worth remembering between visits
@@ -926,6 +928,7 @@ export default function ProductionPage() {
         clients={clients}
         batches={shoots ?? []}
         briefedBatchIds={[...briefByBatch.keys()]}
+        team={team}
       />
 
       {/* a TASK: research, strategy, copy — no shoot, no post, ends at Done */}
@@ -936,6 +939,7 @@ export default function ProductionPage() {
         presetKind="task"
         clients={clients}
         batches={shoots ?? []}
+        team={team}
       />
 
       <AlertDialog open={!!toDelete} onOpenChange={o => !delBusy && !o && setToDelete(null)}>

@@ -23,6 +23,7 @@ import { useIsMobile } from '../useIsMobile'
 import { toastOpen } from '../toastLink'
 import HelpHint from '../HelpHint'
 import { completedIn, uploadFiles } from '../uploadQueue'
+import type { TeamMember } from './workHooks'
 import { UploadOverall, UploadRows, useUploadGroup } from '../UploadRows'
 import ExportWarnings, {
   exportWarningsFor, type ExportWarning,
@@ -63,7 +64,7 @@ const BLANK = {
  * hint, the uploads, the manager-only fields.
  */
 export default function NewItemDialog({
-  open, onOpenChange, onCreated, presetKind, preset, clients, batches, briefedBatchIds,
+  open, onOpenChange, onCreated, presetKind, preset, clients, batches, briefedBatchIds, team: teamProp,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -76,6 +77,9 @@ export default function NewItemDialog({
   batches: Batch[]
   /** shoots that already have a shoot plan — they cannot take a second one */
   briefedBatchIds?: string[]
+  /** the assignable members the PAGE already fetched (useTeamMembers) — pass
+   *  it so the dialog does not ask `/api/team` a second time */
+  team?: TeamMember[]
 }) {
   const router = useRouter()
   const [newBusy, setNewBusy] = useState(false)
@@ -168,26 +172,37 @@ export default function NewItemDialog({
   // job-pack email (brief + raw assets + due date)
   const { can } = useRole()
   const isManager = can('account_manager')
-  const [team, setTeam] = useState<{ id: string; name: string; email: string; role: string }[]>([])
+  // the page usually hands the team in (it fetched `/api/team` already); the
+  // fetch below is only the fallback for a caller that has none — and it
+  // never fires while the dialog is closed
+  const [fetchedTeam, setFetchedTeam] = useState<TeamMember[]>([])
+  const team = teamProp ?? fetchedTeam
   const [kinds, setKinds] = useState<{ id: string; slug: string; name: string; color: string; uses_media: boolean; default_roles: string[]; active: boolean }[]>([])
+  const teamFetchedRef = useRef(false)
   useEffect(() => {
-    if (!isManager) return
+    if (!open || !isManager || teamProp || teamFetchedRef.current) return
+    teamFetchedRef.current = true
     fetch('/api/team')
       .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => setTeam(
+      .then(json => setFetchedTeam(
         (json.members ?? [])
           // anyone on the team can carry a task — clients never
           .filter((m: { role: string; active_status?: boolean }) => m.role !== 'client' && m.active_status !== false)
-          .map((m: { id: string; name: string; email: string; role: string }) => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
+          .map((m: TeamMember) => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
       ))
-      .catch(() => setTeam([]))
-  }, [isManager])
+      .catch(() => setFetchedTeam([]))
+  }, [open, isManager, teamProp])
+  const kindsFetchedRef = useRef(false)
   useEffect(() => {
+    // the kinds shape the form, so they load on first open — not on a page
+    // that merely renders the (closed) dialog
+    if (!open || kindsFetchedRef.current) return
+    kindsFetchedRef.current = true
     fetch('/api/production/work-kinds?active=1')
       .then(r => (r.ok ? r.json() : null))
       .then(j => setKinds(j?.kinds ?? []))
       .catch(() => {})
-  }, [])
+  }, [open])
 
   /** Mint a task type from here and select it. Tasks have nothing to post, so
    *  the new kind uses no media — that is what keeps it off the Scheduler and

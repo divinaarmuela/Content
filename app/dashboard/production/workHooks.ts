@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { defaultScope, restoredChoice, type ScopeMode, type ScopeSet } from '../../lib/work-pages-core'
 import type { Role } from '../../lib/identity-core'
 
@@ -100,33 +100,52 @@ export function usePersistedFlag(key: string, fallback = false): [boolean, (v: b
   return [value === 'on', useCallback((v: boolean) => set(v ? 'on' : 'off'), [set])]
 }
 
+/** A colleague who can carry a job — what the pages and the New-work dialog
+ *  both need to know about them. */
+export type TeamMember = { id: string; name: string; email: string; role: string }
+
 /**
- * id → display name for the people who can carry a job.
+ * The people who can carry a job, fetched once per page.
  *
  * `/api/team` is manager-gated, so this is asked for only when the viewer is
- * one; everyone else gets an empty map and the surfaces say what is true
+ * one; everyone else gets an empty list and the surfaces say what is true
  * without naming anybody. Clients never carry a task and neither do
  * deactivated accounts, so neither is in here.
+ *
+ * The page that holds this list passes it into NewItemDialog rather than the
+ * dialog fetching `/api/team` a second time — one request per board load,
+ * not one per surface.
  */
-export function useTeamNames(enabled: boolean): Map<string, string> {
-  const [names, setNames] = useState<Map<string, string>>(new Map())
+export function useTeamMembers(enabled: boolean): TeamMember[] {
+  const [members, setMembers] = useState<TeamMember[]>([])
 
   useEffect(() => {
-    if (!enabled) { setNames(new Map()); return }
+    if (!enabled) { setMembers([]); return }
     let cancelled = false
     fetch('/api/team')
       .then(r => (r.ok ? r.json() : { members: [] }))
-      .then((json: { members?: { id: string; name: string; email: string; role: string; active_status?: boolean }[] }) => {
+      .then((json: { members?: (TeamMember & { active_status?: boolean })[] }) => {
         if (cancelled) return
-        setNames(new Map(
+        setMembers(
           (json.members ?? [])
             .filter(m => m.role !== 'client' && m.active_status !== false)
-            .map(m => [m.id, m.name || m.email]),
-        ))
+            .map(m => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
+        )
       })
-      .catch(() => { if (!cancelled) setNames(new Map()) })
+      .catch(() => { if (!cancelled) setMembers([]) })
     return () => { cancelled = true }
   }, [enabled])
 
-  return names
+  return members
+}
+
+/** id → display name, derived from the members list. */
+export function teamNameMap(members: TeamMember[]): Map<string, string> {
+  return new Map(members.map(m => [m.id, m.name || m.email]))
+}
+
+/** id → display name for the people who can carry a job. See useTeamMembers. */
+export function useTeamNames(enabled: boolean): Map<string, string> {
+  const members = useTeamMembers(enabled)
+  return useMemo(() => teamNameMap(members), [members])
 }

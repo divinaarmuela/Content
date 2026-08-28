@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -35,7 +35,7 @@ import { useRole } from '../useRole'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
 import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
-import { usePersistedChoice, usePersistedScope, useTeamNames } from '../production/workHooks'
+import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from '../production/workHooks'
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
@@ -133,8 +133,10 @@ export default function EditorPage() {
   const canSeeScheduler = defaultAllows(me?.role ?? null, '/dashboard/scheduler')
 
   // managers can hand a loose job to somebody by name instead of waiting for
-  // it to be picked up
-  const nameById = useTeamNames(isManager)
+  // it to be picked up — one `/api/team` fetch, shared with the New-work
+  // dialog below instead of being fetched twice per board load
+  const team = useTeamMembers(isManager)
+  const nameById = useMemo(() => teamNameMap(team), [team])
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // lanes or dates — two readings of the same board, and which one you were
   // on is worth remembering
@@ -650,6 +652,7 @@ export default function EditorPage() {
         preset={preset}
         clients={clients}
         batches={batches}
+        team={team}
       />
     </div>
   )
