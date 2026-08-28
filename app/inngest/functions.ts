@@ -427,12 +427,17 @@ export const intakeEnrich = inngest.createFunction(
     concurrency: { limit: 2, key: 'event.data.client_id' },
   },
   async ({ event, step }) => {
-    const { form_id, client_id } = (event.data ?? {}) as Record<string, string>
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const form_id = String(data.form_id ?? '')
+    const client_id = String(data.client_id ?? '')
+    // a manual "Fill contacts & brand" click sets force → re-run the brand scan
+    // even if a prior one finished empty
+    const force = data.force === true || data.force === 'true'
     if (!form_id || !client_id) return { skipped: 'missing form_id or client_id' }
 
     return step.run('enrich', async () => {
       const { enrichFromIntake } = await import('../lib/intake-enrich')
-      return enrichFromIntake({ formId: form_id, clientId: client_id })
+      return enrichFromIntake({ formId: form_id, clientId: client_id, force })
     })
   }
 )

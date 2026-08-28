@@ -174,8 +174,10 @@ async function writeBrandProfile(
   return 'unchanged'
 }
 
-export async function enrichFromIntake(input: { formId: string; clientId: string }): Promise<EnrichResult> {
-  const { formId, clientId } = input
+export async function enrichFromIntake(
+  input: { formId: string; clientId: string; force?: boolean },
+): Promise<EnrichResult> {
+  const { formId, clientId, force = false } = input
   const result: EnrichResult = { contact: 'none', brand: 'unchanged', ai: 'skipped', brand_scan: 'skipped' }
 
   const form = await loadForm(formId, clientId)
@@ -214,6 +216,17 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
     console.error('intake enrich: brand files failed:', e)
     return [] as BrandFile[]
   })
+
+  // ── hand any brand-guide PDF to the EXISTING deep scanner ──
+  // Done EARLY and in its own best-effort block so nothing in the AI/contact/
+  // brand steps below can prevent the scan from being dispatched. Extracting a
+  // palette from a 34-page guide is minutes of vision calls; that scanner
+  // already exists, so we only hand it the document.
+  try {
+    result.brand_scan = await maybeDelegateBrandScan(clientId, brandFiles, force)
+  } catch (e) {
+    console.error('intake enrich: brand scan delegation failed:', e)
+  }
 
   // ── decide whether the ONE Haiku call is worth making ──
   // Plan against the profile AS IT WILL BE after the deterministic fill, so the
@@ -283,17 +296,6 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
     console.error('intake enrich: brand write failed:', e)
   }
 
-  // ── a brand-guide PDF is deep-scanned by the EXISTING pipeline, not here ──
-  // Linking the files into logo_files (above) is cheap; extracting colours,
-  // fonts and logo rules from a 34-page guide is minutes of vision calls, and
-  // that scanner already exists and is proven. We only hand it the document —
-  // never re-implement PDF reading in the enrichment.
-  try {
-    result.brand_scan = await maybeDelegateBrandScan(clientId, brandFiles)
-  } catch (e) {
-    console.error('intake enrich: brand scan delegation failed:', e)
-  }
-
   return result
 }
 
@@ -304,7 +306,9 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
  * there is no PDF, when the client already has colours or fonts, or when a scan
  * has already run or is in flight (so a re-run never re-scans a done client).
  */
-async function maybeDelegateBrandScan(clientId: string, brandFiles: BrandFile[]): Promise<'queued' | 'skipped'> {
+async function maybeDelegateBrandScan(
+  clientId: string, brandFiles: BrandFile[], force = false,
+): Promise<'queued' | 'skipped'> {
   const pdf = brandFiles.find(f => /\.pdf(\?|$)/i.test(f.url) || /\.pdf$/i.test(f.name))
   if (!pdf) return 'skipped'
 
@@ -313,18 +317,31 @@ async function maybeDelegateBrandScan(clientId: string, brandFiles: BrandFile[])
     supabase.from('client_brand').select('profile, scan_status').eq('client_id', clientId).maybeSingle(),
   ])
 
-  // Skip only when the client ALREADY HAS a real palette — colours or fonts in
-  // either the editable profile or the raw scan row. A stale "done" status with
-  // ZERO colours must NOT block a re-scan: that is exactly the state a first
-  // empty scan leaves behind, and a manual "Fill contacts & brand" re-click has
-  // to be able to force the extraction to run again.
   const editable = normaliseProfile((client?.brand_profile as unknown) ?? {})
-  if (editable.colours.length > 0 || editable.fonts.length > 0) return 'skipped'
-  // the raw scan row is in scan shape (colors / fonts.family) — convert it
-  const rawScan = fromScan((brand?.profile ?? null) as ScanProfile | null)
-  if (rawScan.colours.length > 0 || rawScan.fonts.length > 0) return 'skipped'
-  // only a scan CURRENTLY in flight blocks another — never a finished/failed one
-  if (brand?.scan_status && ['queued', 'scanning'].includes(String(brand.scan_status))) return 'skipped'
+
+  if (force) {
+    // A deliberate staff re-click FORCES the scan whenever the palette is not
+    // yet complete: dispatch if colours OR fonts are still empty, ignoring any
+    // prior "done" status and any voice/summary already present. Only skip when
+    // a real palette already exists (colours AND fonts), or a scan is in flight.
+    if (editable.colours.length > 0 && editable.fonts.length > 0) {
+      console.log(`intake enrich: brand scan skipped (force) — client ${clientId} already has colours+fonts`)
+      return 'skipped'
+    }
+    if (brand?.scan_status === 'scanning' || brand?.scan_status === 'queued') {
+      console.log(`intake enrich: brand scan skipped (force) — a scan is already in flight for ${clientId}`)
+      return 'skipped'
+    }
+    console.log(`intake enrich: FORCING brand scan for ${clientId} (colours=${editable.colours.length}, fonts=${editable.fonts.length}, status=${brand?.scan_status ?? 'none'})`)
+  } else {
+    // Auto-on-submit keeps a lighter gate: skip if a real palette already exists
+    // anywhere, or a scan has run/is running. A stale finished-but-empty scan
+    // still does not block, so the auto path can extract on first submit.
+    if (editable.colours.length > 0 || editable.fonts.length > 0) return 'skipped'
+    const rawScan = fromScan((brand?.profile ?? null) as ScanProfile | null)
+    if (rawScan.colours.length > 0 || rawScan.fonts.length > 0) return 'skipped'
+    if (brand?.scan_status && ['queued', 'scanning'].includes(String(brand.scan_status))) return 'skipped'
+  }
 
   // mark it queued before dispatching, exactly like the brand panel's action,
   // so the panel shows a scan in flight immediately

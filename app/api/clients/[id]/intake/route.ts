@@ -162,9 +162,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             { status: 409 },
           )
         }
+        // force:true — a deliberate staff click re-runs the brand-guide scan
+        // even when a prior scan finished empty, so a stuck client can be fixed
         await inngest.send({
           name: 'app/intake.enrich.requested',
-          data: { form_id: form.id, client_id: id },
+          data: { form_id: form.id, client_id: id, force: true },
         })
         return NextResponse.json({ ok: true, queued: true })
       }

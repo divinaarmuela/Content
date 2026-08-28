@@ -114,6 +114,7 @@ async function splitByPages(bytes: Buffer, pageCount: number): Promise<Buffer[]>
  *  itself already lives in our own storage. */
 async function scanOnePart(
   anthropic: Anthropic, part: Buffer, name: string, previous: BrandProfile | null,
+  prompt: string = PROMPT,
 ): Promise<BrandProfile> {
   const uploaded = await anthropic.beta.files.upload({
     file: await toFile(part, name, { type: 'application/pdf' }),
@@ -139,7 +140,7 @@ async function scanOnePart(
         role: 'user',
         content: [
           { type: 'document', source: { type: 'file', file_id: uploaded.id } },
-          { type: 'text', text: PROMPT + mergeNote },
+          { type: 'text', text: prompt + mergeNote },
         ],
       }],
     })
@@ -152,6 +153,20 @@ async function scanOnePart(
       .catch(e => console.error('brand scratch file delete failed:', e))
   }
 }
+
+/** Laser-focused second pass for when the main extraction comes back with no
+ *  colours or no fonts. A brand deck lists its palette and typography as literal
+ *  TEXT ("#957B60  RGB 149 123 96  CMYK 0 17 36 42", "GTF Solina — Medium"), so
+ *  this tells the model to read that text verbatim rather than infer from
+ *  swatches — the exact failure seen where a page listing "#957B60" returned
+ *  nothing. */
+const PALETTE_PROMPT =
+  'Look ONLY at the COLOUR PALETTE and TYPOGRAPHY pages of this brand document. ' +
+  'These pages list their values as TEXT — read that text literally, do not infer from swatches alone. ' +
+  'Return EVERY colour as a HEX string like #957B60: if a swatch shows RGB (e.g. "149 123 96"), convert it to HEX; ' +
+  'if it shows CMYK or Pantone, convert only when a HEX or RGB is also given; include neutrals like black (#000000) and white (#FFFFFF) when they appear. ' +
+  'Return EVERY font family name exactly as written (e.g. "GTF Solina Medium", "GTF Solina Regular", "Helvetica Bold Condensed") with its usage. ' +
+  'Do not skip a value because it is small label text rather than a large swatch. Never invent a value the pages do not contain.'
 
 /**
  * Extract a profile from a whole document.
@@ -174,5 +189,21 @@ export async function extractBrandProfile(
     profile = mergeProfiles(profile, extracted)
     await onProgress?.(i + 1, parts.length)
   }
+
+  // Belt-and-braces: if the main pass found no palette or no fonts, run one more
+  // pass over the first part that reads the palette/typography TEXT verbatim.
+  // This is what makes a page literally listing "#957B60 / GTF Solina Medium"
+  // land, instead of the model returning an empty palette from the swatches.
+  const noColours = (profile?.colors?.length ?? 0) === 0
+  const noFonts = (profile?.fonts?.length ?? 0) === 0
+  if ((noColours || noFonts) && parts.length > 0) {
+    try {
+      const palette = await scanOnePart(anthropic, parts[0], 'brand-palette.pdf', profile, PALETTE_PROMPT)
+      profile = mergeProfiles(profile, palette)
+    } catch (e) {
+      console.error('brand palette fallback pass failed:', e)
+    }
+  }
+
   return profile ?? {}
 }
