@@ -28,6 +28,7 @@ import { BATCH_STATUS_STYLE } from '../../shoot-ui'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import BriefComments from './BriefComments'
 import LocationSearch from './LocationSearch'
+import PlanReviewCard from './PlanReviewCard'
 import {
   availableBatchTransitions, sanitiseCanvasCards,
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
@@ -388,22 +389,23 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </Button>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {briefTask && (
-          <Link href={`/dashboard/production/${briefTask.id}`}
-            className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
-            Open the shoot plan →
-          </Link>
-        )}
-        {/* only when the folder actually exists — an integration that is off
-            should leave no trace on this page at all */}
-        {batch.drive_url && (
+      {/* only when the folder actually exists — an integration that is off
+          should leave no trace on this page at all */}
+      {batch.drive_url && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <a href={batch.drive_url} target="_blank" rel="noreferrer noopener"
             className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
             Open Drive folder →
           </a>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* THE review lifecycle — the "what's the next move" card, moved here so
+          the plan lives on ONE page: write it above, send it for review here,
+          the client decides on their portal, then Book the shoot. */}
+      {briefTask && (
+        <PlanReviewCard briefItemId={briefTask.id} onChanged={load} />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── working column ── */}
@@ -559,7 +561,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       <p className={`font-mono text-[10.5px] ${over ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}`}>
                         {over
                           ? `Exceeds the monthly agreement by ${prog.planned + d.qty - prog.quota}`
-                          : `Covers ${Math.min(d.qty, prog.quota)} of ${prog.quota} ${prog.label}`}
+                          : `Covers ${Math.min(d.qty, prog.quota)} of this month's ${prog.quota} ${prog.label} for this client`}
                       </p>
                     )}
                   </div>
@@ -647,10 +649,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       disabled={!batch.shared_with_client}
                       onCheckedChange={async v => {
                         const ok = await patch('share_board', v)
-                        if (ok) toast.success(v ? 'Board is visible to the client' : 'Board hidden — the client sees the plan only')
+                        if (ok) toast.success(v ? 'Moodboard is visible to the client' : 'Moodboard hidden — the client sees the plan only')
                       }}
                     />
-                    Also show the planning board
+                    <span>
+                      Also show the moodboard
+                      <span className="block text-[11px] text-zinc-400">The images-and-notes board below. Off means the client sees just the written plan.</span>
+                    </span>
                   </label>
                 </>
               ) : (

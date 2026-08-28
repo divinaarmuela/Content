@@ -415,10 +415,11 @@ export default function ProductionPage() {
       <div key={b.id} className="relative">
         <Card className="py-0 transition-shadow hover:shadow-md">
           <CardContent className="flex flex-col gap-1.5 p-3">
-            {/* the whole card opens the plan, as a stretched link rather
-                than a wrapper — the buttons below are buttons */}
-            <Link href={`/dashboard/production/${b.id}`} aria-label={b.title}
-              className="absolute inset-0 rounded-xl" />
+            {/* the whole card opens the plan on its SHOOT page — plan and shoot
+                are one page now. Falls back to the item page for the rare brief
+                with no shoot behind it (never a dead link). */}
+            <Link href={b.batch_id ? `/dashboard/production/shoots/${b.batch_id}` : `/dashboard/production/${b.id}`}
+              aria-label={b.title} className="absolute inset-0 rounded-xl" />
             <div className="flex items-center gap-2">
               <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
                 Shoot plan

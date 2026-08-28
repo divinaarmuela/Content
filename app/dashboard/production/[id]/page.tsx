@@ -402,6 +402,17 @@ export default function ItemDetailPage() {
 
   useEffect(() => { load() }, [load])
 
+  // A shoot plan lives on its SHOOT page now — the two pages used to ping-pong,
+  // so a shoot_brief item just forwards to its shoot, keeping old links and
+  // notifications working. Only shoot_brief WITH a batch redirects; tasks and
+  // normal content items are untouched, and a brief with no batch falls through
+  // to this page as a safe fallback (never a 404).
+  useEffect(() => {
+    if (detail?.work_kind?.slug === SHOOT_BRIEF_SLUG && detail.batch?.id) {
+      router.replace(`/dashboard/production/shoots/${detail.batch.id}`)
+    }
+  }, [detail?.work_kind?.slug, detail?.batch?.id, router])
+
   /**
    * Put a write's OWN answer on the page, now.
    *
@@ -509,6 +520,16 @@ export default function ItemDetailPage() {
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-32 w-full" />
+      </div>
+    )
+  }
+
+  // the redirect above is on its way — don't flash the full brief item page
+  if (detail.work_kind?.slug === SHOOT_BRIEF_SLUG && detail.batch?.id) {
+    return (
+      <div className="mx-auto flex max-w-4xl flex-col gap-4">
+        <Skeleton className="h-8 w-64" />
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">Opening the shoot page…</p>
       </div>
     )
   }
