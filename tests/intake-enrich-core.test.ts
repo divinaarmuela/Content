@@ -122,6 +122,30 @@ describe('deriveBrandFill — fills only empty fields, never overwrites', () => 
     expect(n.notes).toBe('A note that was already here') // untouched
   })
 
+  it('fills tone/dos/donts/handles from a live rebrand-shaped submission', () => {
+    // the exact answers the coordinator submitted on the ZZ TEST client
+    const rebrand: Answers = {
+      primary_contact: 'Test Owner, Founder',
+      contact_email: 'owner@zztestco.invalid',
+      contact_mobile: '0400 111 222',
+      tone: 'Warm and family',
+      three_words: 'Trusted, warm, local',
+      never_words: 'Cheap, corporate, cold',
+      socials: '@zztestco on Instagram',
+      tagline: 'Your local family bakery',
+      admired: 'A brand we admire',
+      perception: 'How we want to be seen',
+    }
+    const { profile: out, changed } = deriveBrandFill(rebrand, [], emptyProfile())
+    const n = normaliseProfile(out)
+    expect(changed).toBe(true)
+    expect(n.voice.tone).toBe('Warm and family')
+    expect(n.voice.dos).toEqual(['Trusted', 'warm', 'local'])
+    expect(n.voice.donts).toEqual(['Cheap', 'corporate', 'cold'])
+    expect(n.handles).toEqual(['@zztestco'])           // "on Instagram" dropped
+    expect(n.notes).toContain('Your local family bakery')
+  })
+
   it('reports no change when nothing maps and everything is filled', () => {
     const current = profile({
       voice: { summary: 's', tone: 't', dos: ['d'], donts: ['n'] },

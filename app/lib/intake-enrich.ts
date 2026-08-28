@@ -3,8 +3,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { supabase } from '@/lib/supabase'
+import { inngest } from '../inngest/client'
 import { listIntakeFiles, type IntakeForm } from './intake'
 import { intakeFileTarget } from './gdrive-core'
+import { mirrorBrandDoc } from './gdrive-mirror'
 import { loadBrandProfile } from './brand-profile'
 import { normaliseProfile, type BrandFile, type BrandProfile } from './brand-profile-core'
 import {
@@ -41,6 +43,8 @@ export type EnrichResult = {
   contact: 'created' | 'exists' | 'none'
   brand: 'updated' | 'unchanged'
   ai: 'called' | 'skipped'
+  /** whether a brand-guide PDF was handed to the existing deep scanner */
+  brand_scan: 'queued' | 'skipped'
 }
 
 /** The intake answers + definition + template for one form, or null. */
@@ -119,13 +123,23 @@ async function writeBrandProfile(
   build: (current: BrandProfile) => { profile: BrandProfile; changed: boolean },
 ): Promise<'updated' | 'unchanged'> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const loaded = await loadBrandProfile(clientId, 'intake enrichment')
-    if (!loaded) return 'unchanged'
-    const current = loaded.profile
+    // Read the ACTUAL persisted column, not loadBrandProfile — that returns a
+    // synthetic rev of 1 for an unsaved profile while the column is still null,
+    // and guarding on rev=1 against a null column matches zero rows, so the
+    // write silently never lands. The guard must reflect what is really stored:
+    // a null column (never saved) vs the exact rev of an existing profile.
+    const { data: row } = await supabase
+      .from('clients').select('brand_profile').eq('id', clientId).maybeSingle()
+    if (!row) return 'unchanged'
+
+    const raw = (row as { brand_profile: unknown }).brand_profile
+    const hadProfile = raw != null
+    const current = normaliseProfile(raw ?? {})
     const { profile, changed } = build(current)
     if (!changed) return 'unchanged'
 
-    const seen = current.rev
+    // normaliseProfile carries a stored rev through; 0 means the column is null
+    const seen = hadProfile ? current.rev : 0
     const next: BrandProfile = { ...normaliseProfile(profile), rev: seen + 1 }
     let q = supabase.from('clients')
       .update({
@@ -134,8 +148,9 @@ async function writeBrandProfile(
         brand_profile_updated_by: 'intake enrichment',
       })
       .eq('id', clientId)
-    // the row must still be at the revision we merged from; rev 0 = never saved
-    q = seen > 0 ? q.eq('brand_profile->>rev', String(seen)) : q.is('brand_profile', null)
+    // the row must still be where we merged from: a null column stays null, an
+    // existing one stays at its rev — a concurrent scan or edit fails the guard
+    q = hadProfile ? q.eq('brand_profile->>rev', String(seen)) : q.is('brand_profile', null)
     const { data, error } = await q.select('id')
     if (error) throw new Error(error.message)
     if (data && data.length > 0) return 'updated'
@@ -146,7 +161,7 @@ async function writeBrandProfile(
 
 export async function enrichFromIntake(input: { formId: string; clientId: string }): Promise<EnrichResult> {
   const { formId, clientId } = input
-  const result: EnrichResult = { contact: 'none', brand: 'unchanged', ai: 'skipped' }
+  const result: EnrichResult = { contact: 'none', brand: 'unchanged', ai: 'skipped', brand_scan: 'skipped' }
 
   const form = await loadForm(formId, clientId)
   if (!form) return result
@@ -224,7 +239,58 @@ export async function enrichFromIntake(input: { formId: string; clientId: string
     console.error('intake enrich: brand write failed:', e)
   }
 
+  // ── a brand-guide PDF is deep-scanned by the EXISTING pipeline, not here ──
+  // Linking the files into logo_files (above) is cheap; extracting colours,
+  // fonts and logo rules from a 34-page guide is minutes of vision calls, and
+  // that scanner already exists and is proven. We only hand it the document —
+  // never re-implement PDF reading in the enrichment.
+  try {
+    result.brand_scan = await maybeDelegateBrandScan(clientId, brandFiles)
+  } catch (e) {
+    console.error('intake enrich: brand scan delegation failed:', e)
+  }
+
   return result
+}
+
+/**
+ * If the client uploaded a brand-guide PDF and has no extracted brand yet, hand
+ * it to the existing `app/brand.scan.requested` pipeline — the same dispatch the
+ * brand panel's "scan" action uses. Best-effort and heavily gated: skipped when
+ * there is no PDF, when the client already has colours or fonts, or when a scan
+ * has already run or is in flight (so a re-run never re-scans a done client).
+ */
+async function maybeDelegateBrandScan(clientId: string, brandFiles: BrandFile[]): Promise<'queued' | 'skipped'> {
+  const pdf = brandFiles.find(f => /\.pdf(\?|$)/i.test(f.url) || /\.pdf$/i.test(f.name))
+  if (!pdf) return 'skipped'
+
+  const [{ data: client }, { data: brand }] = await Promise.all([
+    supabase.from('clients').select('brand_profile').eq('id', clientId).maybeSingle(),
+    supabase.from('client_brand').select('profile, docs, scan_status').eq('client_id', clientId).maybeSingle(),
+  ])
+
+  // already has a brand → don't re-scan
+  const prof = normaliseProfile((client?.brand_profile as unknown) ?? {})
+  if (prof.colours.length > 0 || prof.fonts.length > 0) return 'skipped'
+  const scanProfile = (brand?.profile ?? null) as Record<string, unknown> | null
+  if (scanProfile && Object.keys(scanProfile).length > 0) return 'skipped'
+  // a scan already run or in flight → don't queue another
+  if (brand?.scan_status && ['queued', 'scanning', 'done'].includes(String(brand.scan_status))) return 'skipped'
+  if (Array.isArray(brand?.docs) && brand.docs.length > 0) return 'skipped'
+
+  // mark it queued before dispatching, exactly like the brand panel's action,
+  // so the panel shows a scan in flight immediately
+  await supabase.from('client_brand').upsert({
+    client_id: clientId, scan_status: 'queued', scan_done: 0, scan_total: 1, scan_message: null,
+  })
+  await inngest.send({
+    name: 'app/brand.scan.requested',
+    data: { clientId, url: pdf.url, filename: pdf.name, by: 'intake enrichment' },
+  })
+  // the guide belongs in the client's _Brand folder; idempotent by
+  // unique(source_url, target), so a file already mirrored on submit is a no-op
+  mirrorBrandDoc(clientId, pdf.url, pdf.name)
+  return 'queued'
 }
 
 /** One Haiku call for the fuzzy bits. Reuses the email-lead pattern: parse into

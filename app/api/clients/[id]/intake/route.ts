@@ -13,6 +13,7 @@ import {
   completion, normaliseDefinition,
   type TemplateKey, type TemplateDefinition,
 } from '../../../../lib/intake-core'
+import { inngest } from '../../../../inngest/client'
 
 /**
  * Intake forms for one client.
@@ -147,6 +148,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       case 'mark_sent':
         await markIntakeSent(form.id)
         return NextResponse.json({ ok: true })
+
+      case 'enrich': {
+        // Manually run the same enrichment the submit route fires — for a form
+        // submitted before this feature existed, or where the auto-run missed.
+        // Only a submitted form has answers to enrich from. The work itself runs
+        // in the `intake-enrich` Inngest function; this only dispatches. Safe to
+        // click repeatedly: every write is gated on a field being empty, so it
+        // never overwrites a hand edit.
+        if (form.status !== 'submitted') {
+          return NextResponse.json(
+            { error: 'This form has not been submitted yet, so there are no answers to fill from.' },
+            { status: 409 },
+          )
+        }
+        await inngest.send({
+          name: 'app/intake.enrich.requested',
+          data: { form_id: form.id, client_id: id },
+        })
+        return NextResponse.json({ ok: true, queued: true })
+      }
 
       case 'set_recipients': {
         // `emails: null` means "go back to inheriting the default"

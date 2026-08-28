@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ClipboardList, Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ClipboardList, Copy, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import EmptyState from '../../EmptyState'
 import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-core'
 import { publicUrl } from '@/app/lib/public-url'
@@ -195,6 +195,24 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     else toast.success(ok)
     await load(); setBusy(false)
     return res.ok
+  }
+
+  /** Run the enrichment on demand: fill any still-empty contact and brand
+   *  fields from this submitted form. Optimistic toast, since the real work runs
+   *  in the background Inngest function — the fields appear on the Contacts and
+   *  Brand tabs once it lands. Safe to click repeatedly: it never overwrites. */
+  const enrich = async (form: Form) => {
+    toast.message('Scanning… we’ll fill any empty contact and brand fields', {
+      description: 'This runs in the background; only blank fields are filled, never your edits.',
+    })
+    const res = await fetch(`/api/clients/${clientId}/intake`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ form_id: form.id, action: 'enrich' }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      toast.error(json.error ?? 'Could not start the scan')
+    }
   }
 
   /** Flip one form's "show on the client portal" state. Optimistic — the switch
@@ -442,6 +460,13 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <Button size="sm" variant="secondary" disabled={busy}
                     onClick={() => void patch({ form_id: form.id, action: 'reopen' }, 'Reopened for edits')}>
                     <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reopen
+                  </Button>
+                )}
+                {form.status === 'submitted' && (
+                  <Button size="sm" variant="secondary" disabled={busy}
+                    title="Only fills fields that are still empty; never overwrites"
+                    onClick={() => void enrich(form)}>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Fill contacts &amp; brand from this
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" disabled={busy}
