@@ -6,6 +6,8 @@ import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-acc
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
 import { canEditItemFields } from '../../../../lib/item-edit-core'
+import { stateAfterPostEdit } from '../../../../lib/posting-approval-core'
+import { readPostingApproval } from '../../../../lib/posting-approval'
 import { loadPostingContext } from '../../../../lib/production-publish'
 import { DEFAULT_TZ } from '../../../../lib/timezone-core'
 import {
@@ -114,6 +116,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({
       ...shaped,
       posting,
+      // the final-post gate, read tolerantly off the '*' row: supported=false
+      // on a database the migration has not reached, and the card then draws
+      // nothing new at all
+      posting_approval: user.role === 'client' ? null : readPostingApproval(item),
       client_name: clientRes.data?.name ?? null,
       client_timezone: (clientRes.data?.timezone as string | null) || DEFAULT_TZ,
       owner_name,
@@ -222,6 +228,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'No editable fields in request' }, { status: 400 })
     }
 
+    // A caption approved and THEN changed must never post silently: editing
+    // the post text after its final sign-off flips the gate back to pending,
+    // so the changed words get looked at again. Only on a database that has
+    // the column (the '*' row carries the key once the migration has run) —
+    // anywhere else this whole block is a no-op.
+    const approvalReset = 'caption' in patch
+      && 'posting_approval_state' in current
+      && (patch.caption ?? null) !== ((current as Record<string, unknown>).caption ?? null)
+      ? stateAfterPostEdit((current as Record<string, unknown>).posting_approval_state)
+      : null
+    if (approvalReset) {
+      patch.posting_approval_state = approvalReset
+      patch.posting_approved_by = null
+      patch.posting_approved_at = null
+    }
+
     const { data, error } = await supabase
       .from('content_items').update(patch).eq('id', id).select().single()
     if (error) throw new Error(error.message)
@@ -230,6 +252,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       entityType: 'content_item', entityId: id,
       action: 'updated', detail: Object.keys(patch).join(', '),
     })
+    // the History has to say WHY the approval vanished — a chip that flips
+    // from "Approved to post" to "Waiting on approval" with no line about it
+    // reads as the app losing the answer
+    if (approvalReset) {
+      await logActivity({
+        actor: user, clientId: data.client_id,
+        entityType: 'content_item', entityId: id,
+        action: 'posting_approval_reset', detail: 'caption changed after approval',
+      })
+    }
     // (re)assignment is a handoff: email the editor their job pack
     if ('owner_id' in patch && patch.owner_id) notifyJobAssigned(user, data)
     // every new file lands in the item's Drive folder too — queued, never

@@ -12,6 +12,8 @@ import { DEFAULT_TZ, safeZone } from './timezone-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
+import { publishBlockReason } from './posting-approval-core'
+import { postingApprovalStateOf } from './posting-approval'
 import { analyticsForItems } from './post-analytics'
 import type { PostMetrics } from './post-analytics-core'
 import type { TeamUser } from './authz'
@@ -111,6 +113,14 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   const status = item.status as string
   if (!['approved_for_scheduling', 'scheduled', 'published'].includes(status)) {
     plan.blocked = `This item is "${STATUS_LABELS[status as ItemStatus] ?? status}" — it has not been approved for scheduling yet`
+  }
+
+  // …and the POST itself — the caption, the media, the hour — has its own
+  // sign-off once the final-post gate has been used on this item. Read
+  // tolerantly: a database without the column answers null, which is "the
+  // gate is not in use", and nothing changes.
+  if (!plan.blocked) {
+    plan.blocked = publishBlockReason(await postingApprovalStateOf(itemId))
   }
 
   // newest version wins; that is the one reviewers signed off

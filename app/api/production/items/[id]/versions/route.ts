@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { addVersion, performTransition, type ContentItem } from '../../../../../lib/workflow'
+import { addVersion, logActivity, performTransition, type ContentItem } from '../../../../../lib/workflow'
+import { supabase } from '@/lib/supabase'
+import { stateAfterPostEdit } from '../../../../../lib/posting-approval-core'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
 import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
@@ -66,6 +68,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // is asked for the moment the version is saved rather than when somebody
     // opens it.
     previewVideos(slides.map(s => s.url))
+
+    // ── the media changed after the POST was approved ──
+    //
+    // The final-post sign-off was given to pictures that no longer exist: a
+    // new version on an approved post flips the gate back to pending, exactly
+    // as editing the caption does. Tolerant and best-effort — the '*' row only
+    // carries the key on a migrated database, and a failure here must never
+    // lose the upload.
+    const resetTo = 'posting_approval_state' in item
+      ? stateAfterPostEdit((item as Record<string, unknown>).posting_approval_state)
+      : null
+    if (resetTo) {
+      const { error: resetErr } = await supabase
+        .from('content_items')
+        .update({ posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null })
+        .eq('id', id)
+        .eq('posting_approval_state', 'approved')
+      if (!resetErr) {
+        await logActivity({
+          actor: user, clientId: item.client_id,
+          entityType: 'content_item', entityId: id,
+          action: 'posting_approval_reset', detail: `new version v${version.version_number} after approval`,
+        })
+      }
+    }
 
     // ── a new cut while the piece is WITH THE CLIENT ──
     //

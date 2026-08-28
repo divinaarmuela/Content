@@ -97,6 +97,18 @@ export function describeActivity(row: ActivityRow, kind: ActivityKind): string |
         : `Taken by ${who}`
     case 'schedule_handoff':
       return `Handed to a scheduler by ${who}`
+    // ── the final-post gate: who asked, who answered, and why an answer
+    //    was ever taken back ──
+    case 'posting_approval_sent':
+      return `Post sent for final approval by ${who}`
+    case 'posting_approved':
+      return `Final post approved by ${who}`
+    case 'posting_changes_requested':
+      return row.detail
+        ? `Post changes asked for by ${who} — “${String(row.detail).slice(0, 120)}”`
+        : `Post changes asked for by ${who}`
+    case 'posting_approval_reset':
+      return `Post edited after approval by ${who} — needs approving again`
     default:
       // 'updated', 'comment_added', 'deleted' and anything new: not history,
       // or told better somewhere else on the page

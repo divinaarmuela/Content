@@ -29,7 +29,11 @@ vi.mock('../app/lib/authz', () => ({
   }),
 }))
 vi.mock('../app/lib/production-access', () => ({ loadItemForUser: async () => item }))
-vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition }))
+vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition, logActivity: vi.fn() }))
+// the route now touches supabase directly for the final-post approval reset —
+// stubbed for the same import-time reason as the Drive mirror. The fixture
+// item carries no posting_approval_state key, so the reset never runs here.
+vi.mock('../lib/supabase', () => ({ supabase: {} }))
 const announceItemChange = vi.fn()
 vi.mock('../app/lib/production-live', () => ({ announceItemChange }))
 vi.mock('../app/lib/gdrive-mirror', () => ({ mirrorVersionSlides }))
