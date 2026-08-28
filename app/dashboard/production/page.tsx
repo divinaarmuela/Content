@@ -152,6 +152,9 @@ export default function ProductionPage() {
   const [groups, setGroups] = useState<DeliverableGroup[]>([])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const [addingTo, setAddingTo] = useState<string | null>(null)
+  /** the task quota card about to be deleted — irreversible, so confirmed */
+  const [groupToDelete, setGroupToDelete] = useState<GroupCard<BriefTask> | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
   const [clientFilter, setClientFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [needsSchema, setNeedsSchema] = useState(false)
@@ -591,6 +594,28 @@ export default function ProductionPage() {
     }
   }
 
+  /** Delete a task quota card. Pieces are detached server-side and stay on the
+   *  board as plain cards; drop the group and unlink its pieces optimistically. */
+  const deleteGroupCard = async (card: GroupCard<BriefTask>) => {
+    setDeletingGroup(true)
+    try {
+      const res = await fetch(`/api/production/groups/${card.group.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not delete the card')
+      setGroups(prev => prev.filter(g => g.id !== card.group.id))
+      setInternalTasks(prev => prev.map(i => (i.group_id === card.group.id ? { ...i, group_id: null } : i)))
+      toast.success(card.count
+        ? `Card deleted — ${card.count} piece${card.count === 1 ? '' : 's'} kept on the board`
+        : 'Card deleted')
+      setGroupToDelete(null)
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete the card')
+    } finally {
+      setDeletingGroup(false)
+    }
+  }
+
   /** A task quota card: the promise, how full it is, and the pieces inside. */
   const taskGroupCard = (card: GroupCard<BriefTask>) => {
     const open = openGroups.has(card.group.id)
@@ -601,15 +626,22 @@ export default function ProductionPage() {
           <CardContent className="flex flex-col gap-2 p-3">
             <div className="flex items-start justify-between gap-2">
               <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
-              <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
-                onClick={() => setOpenGroups(prev => {
-                  const next = new Set(prev)
-                  if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
-                  return next
-                })}
-                className="flex h-8 w-8 shrink-0 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
-                {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
+              <div className="flex shrink-0 items-center">
+                <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
+                  onClick={() => setOpenGroups(prev => {
+                    const next = new Set(prev)
+                    if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
+                    return next
+                  })}
+                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                  {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+                <button type="button" aria-label="Delete this card"
+                  onClick={() => setGroupToDelete(card)}
+                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             {/* the small filled bar — how much of the promise exists */}
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
@@ -973,6 +1005,27 @@ export default function ProductionPage() {
               className="bg-rose-600 hover:bg-rose-700"
               onClick={e => { e.preventDefault(); void remove() }}>
               {delBusy ? 'Deleting…' : 'Delete shoot'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={groupToDelete !== null} onOpenChange={o => { if (!o && !deletingGroup) setGroupToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {groupToDelete && groupToDelete.count > 0
+                ? `This removes the promise. The ${groupToDelete.count} piece${groupToDelete.count === 1 ? '' : 's'} already made will stay on the board as ${groupToDelete.count === 1 ? 'its' : 'their'} own card${groupToDelete.count === 1 ? '' : 's'}. This can’t be undone.`
+                : 'This removes the promise. This can’t be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingGroup}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingGroup}
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={e => { e.preventDefault(); if (groupToDelete) void deleteGroupCard(groupToDelete) }}>
+              {deletingGroup ? 'Deleting…' : 'Delete this card'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

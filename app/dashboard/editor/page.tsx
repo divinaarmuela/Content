@@ -131,6 +131,9 @@ export default function EditorPage() {
   /** which quota cards are open, listing their pieces */
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const [addingTo, setAddingTo] = useState<string | null>(null)
+  /** the quota card the person is about to delete — irreversible, so confirmed */
+  const [groupToDelete, setGroupToDelete] = useState<GroupCard<Item> | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
   const [clientFilter, setClientFilter] = useState<string>('all')
   const [batchFilter, setBatchFilter] = useState<string>('all')
   const [needsSchema, setNeedsSchema] = useState(false)
@@ -422,6 +425,29 @@ export default function EditorPage() {
     }
   }
 
+  /** Delete a quota card. Its pieces are detached server-side and stay on the
+   *  board as plain cards; here we just drop the group and unlink its pieces
+   *  optimistically so the card vanishes at once. */
+  const deleteGroupCard = async (card: GroupCard<Item>) => {
+    setDeletingGroup(true)
+    try {
+      const res = await fetch(`/api/production/groups/${card.group.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not delete the card')
+      setGroups(prev => prev.filter(g => g.id !== card.group.id))
+      setItems(prev => (prev ?? []).map(i => (i.group_id === card.group.id ? { ...i, group_id: null } : i)))
+      toast.success(card.count
+        ? `Card deleted — ${card.count} piece${card.count === 1 ? '' : 's'} kept on the board`
+        : 'Card deleted')
+      setGroupToDelete(null)
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete the card')
+    } finally {
+      setDeletingGroup(false)
+    }
+  }
+
   /** A quota card: the promise, how full it is, and the one next action.
    *  A MIXED card (2 reels + 2 carousels + 2 videos) shows the title, the
    *  aggregate "3 of 6", a per-format breakdown, and an "Add the next piece"
@@ -446,15 +472,22 @@ export default function EditorPage() {
               ) : (
                 <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
               )}
-              <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
-                onClick={() => setOpenGroups(prev => {
-                  const next = new Set(prev)
-                  if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
-                  return next
-                })}
-                className="flex h-8 w-8 shrink-0 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
-                {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
+              <div className="flex shrink-0 items-center">
+                <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
+                  onClick={() => setOpenGroups(prev => {
+                    const next = new Set(prev)
+                    if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
+                    return next
+                  })}
+                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                  {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+                <button type="button" aria-label="Delete this card"
+                  onClick={() => setGroupToDelete(card)}
+                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             {/* the small filled bar — how much of the promise exists */}
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
@@ -881,6 +914,27 @@ export default function EditorPage() {
         batches={batches}
         team={team}
       />
+      <AlertDialog open={groupToDelete !== null} onOpenChange={o => { if (!o && !deletingGroup) setGroupToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {groupToDelete && groupToDelete.count > 0
+                ? `This removes the promise. The ${groupToDelete.count} piece${groupToDelete.count === 1 ? '' : 's'} already made will stay on the board as ${groupToDelete.count === 1 ? 'its' : 'their'} own card${groupToDelete.count === 1 ? '' : 's'}. This can’t be undone.`
+                : 'This removes the promise. This can’t be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingGroup}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingGroup}
+              onClick={e => { e.preventDefault(); if (groupToDelete) void deleteGroupCard(groupToDelete) }}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600">
+              {deletingGroup ? 'Deleting…' : 'Delete this card'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
