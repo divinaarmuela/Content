@@ -226,20 +226,40 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
 
   const soloReviewer = reviewers?.length === 0 && !reviewersFailed && hats.includes('account_manager')
 
-  const press = (t: { to: ItemStatus; label: string }) =>
-    (t.to === 'internal_review' || t.to === 'revision_complete')
-      ? void openReviewerPick(t)
+  /**
+   * The words on the buttons — plain, and distinct from each other. The
+   * transition each one fires is unchanged (keyed on `to`); only the label a
+   * person reads is remapped:
+   *   - the two SEND steps stop sounding alike (teammate-check vs client-signoff)
+   *   - at the "with client" stage, the client-decision edges read as decisions
+   *     ("Client approved it" / "Client asked for changes"), not as "Log the …"
+   */
+  const labelFor = (t: { to: ItemStatus; label: string }): string => {
+    if (t.to === 'internal_review') return 'Send to a teammate to check'
+    if (t.to === 'client_review') return 'Send to the client to sign off'
+    if (t.to === 'approved_for_scheduling' && detail.status === 'client_review') return 'Client approved it'
+    if (t.to === 'client_changes_requested') return 'Client asked for changes'
+    return t.label
+  }
+
+  const press = (t: { to: ItemStatus; label: string }) => {
+    // the dialogs and toast read this label; `to` (the actual transition) is
+    // untouched, so the plain wording never changes what the button does
+    const d = { to: t.to, label: labelFor(t) }
+    return (t.to === 'internal_review' || t.to === 'revision_complete')
+      ? void openReviewerPick(d)
       : (t.to === 'revision_required' || t.to === 'client_changes_requested')
-        ? (setRevisionAsk(t), setRevisionNote(''), setDialogError(null))
+        ? (setRevisionAsk(d), setRevisionNote(''), setDialogError(null))
         : t.to === 'client_review'
-          ? (setClientSend(t), setDialogError(null))
-          : void doTransition(t.to, t.label)
+          ? (setClientSend(d), setDialogError(null))
+          : void doTransition(t.to, d.label)
+  }
 
   const actionButton = (t: { to: ItemStatus; label: string }, variant: 'default' | 'outline') => (
     <Button key={t.to} size="sm" variant={variant} className="min-h-11 md:min-h-8"
       disabled={busy !== null || blockedReason(t.to) !== null}
       onClick={() => press(t)}>
-      {busy === t.to ? 'Working…' : t.label}
+      {busy === t.to ? 'Working…' : labelFor(t)}
     </Button>
   )
 
@@ -247,8 +267,14 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
   // page so nothing that used to live on the item page's thread is lost. The
   // client conversation stays in the Comments box below (the portal thread).
   const reviewNotes = (detail.comments ?? []).filter(c => c.visibility === 'internal').slice(0, 4)
-  const hints = [...new Set([...(primary ? [primary] : []), ...secondary]
-    .map(t => blockedReason(t.to)).filter(Boolean))] as string[]
+  const shownEdges = [...(primary ? [primary] : []), ...secondary]
+  const hints = [...new Set(shownEdges.map(t => blockedReason(t.to)).filter(Boolean))] as string[]
+  // at the "with client" stage the two decisions come from the SAME presented
+  // edges the menu drew — approve (→ approved_for_scheduling) and changes
+  // (→ client_changes_requested) — just surfaced as buttons instead of hidden
+  const clientReview = detail.status === 'client_review'
+  const clientApprove = clientReview ? shownEdges.find(t => t.to === 'approved_for_scheduling') : undefined
+  const clientChanges = clientReview ? shownEdges.find(t => t.to === 'client_changes_requested') : undefined
 
   return (
     <>
@@ -265,7 +291,23 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
                 : <span className="text-zinc-500 dark:text-zinc-400">Waiting on {turnText()}.</span>
             )}
           </p>
-          {transitions.length > 0 && (
+          {clientReview ? (
+            // WITH THE CLIENT: the two decisions a person actually records must
+            // be on the card face, not buried under "More". Same transitions as
+            // before — approve → approved_for_scheduling, changes → the revision
+            // note dialog → client_changes_requested.
+            (clientApprove || clientChanges) && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  {clientApprove && actionButton(clientApprove, 'default')}
+                  {clientChanges && actionButton(clientChanges, 'outline')}
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  The client can also approve on their own portal — these are for when they tell you by phone or email.
+                </p>
+              </>
+            )
+          ) : transitions.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {primary && actionButton(primary, 'default')}
               {secondary.length === 1 && actionButton(secondary[0], 'outline')}
@@ -280,7 +322,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
                     {secondary.map(t => (
                       <DropdownMenuItem key={t.to} disabled={blockedReason(t.to) !== null}
                         onClick={() => press(t)}>
-                        {t.label}
+                        {labelFor(t)}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
