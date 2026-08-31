@@ -18,9 +18,23 @@ import { sizeLimitFor, type AssetProbe } from './media-fit-core'
 
 const MB = 1024 * 1024
 
-/** Channels whose limit the SHARED video breaks, and that have no file of
- *  their own yet. Only a lone video qualifies: a carousel's slides are not one
- *  file to shrink. */
+/**
+ * The size past which the provider, in practice, does not deliver.
+ *
+ * TikTok says 4 GB and LinkedIn says 5 GB, and both are true of the platform.
+ * Neither is true of the trip through the provider: twice in one day a 2 GB
+ * master to TikTok and LinkedIn sat at "processing" and "pending" for good —
+ * once as a timeout, once never resolving — while the 11 MB copy sent to
+ * Instagram in the same post was live in two minutes. So the copy goes to
+ * every channel the master is too big to MOVE, not only the ones it is too
+ * big to accept. YouTube is the exception: it took the 2 GB master every time,
+ * and a Short or a long-form upload deserves the full file.
+ */
+export const PRACTICAL_RELAY_MB = 500
+
+/** Channels the SHARED video is too big for — by the platform's rule or by
+ *  what the provider can actually move — that have no file of their own yet.
+ *  Only a lone video qualifies: a carousel's slides are not one file to shrink. */
 export function channelsNeedingCopy(input: {
   probes: AssetProbe[]
   platforms: Platform[]
@@ -33,7 +47,9 @@ export function channelsNeedingCopy(input: {
   return input.platforms.filter(p => {
     if (input.own?.[p]?.length) return false
     const limit = sizeLimitFor(p, 'video', input.kinds?.[p])
-    return limit !== null && video.bytes! > limit.maxMB * MB
+    const platformMax = limit?.maxMB ?? Infinity
+    const practicalMax = p === 'youtube' ? Infinity : PRACTICAL_RELAY_MB
+    return video.bytes! > Math.min(platformMax, practicalMax) * MB
   })
 }
 
