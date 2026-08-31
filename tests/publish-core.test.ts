@@ -470,3 +470,50 @@ describe('Instagram has no feed video, so the menu does not offer one', () => {
     expect(availableKinds('instagram', one).includes('feed')).toBe(false)
   })
 })
+
+describe('a channel with its own media and words', () => {
+  // a twelve-minute cut for YouTube and a ninety-second one for Instagram used
+  // to be two posts; Zernio takes customMedia / customContent per platform
+  it('puts the override on that platform entry only, and leaves the shared set as the default', () => {
+    const body = buildPostBody({
+      caption: 'long caption for everyone', media: vid(1), scheduledFor: null,
+      targets: [
+        { platform: 'youtube', accountId: 'y' },
+        { platform: 'instagram', accountId: 'i', options: { media: [{ url: 'https://x/short.mp4', type: 'video' }] } },
+        { platform: 'twitter', accountId: 't', options: { caption: 'short one', longVideo: true } },
+      ],
+    })
+    expect(body.mediaItems).toEqual(vid(1))
+    expect(body.platforms[0]).toEqual({ platform: 'youtube', accountId: 'y' })
+    expect(body.platforms[1].customMedia).toEqual([{ url: 'https://x/short.mp4', type: 'video' }])
+    expect(body.platforms[1].customContent).toBeUndefined()
+    expect(body.platforms[2].customContent).toBe('short one')
+    expect(body.platforms[2].platformSpecificData).toEqual({ longVideo: true })
+  })
+
+  it('never sends longVideo anywhere but X — Meta 400s an unknown field', () => {
+    expect(toPlatformData({ longVideo: true }, 'instagram')).toBeNull()
+    expect(toPlatformData({ longVideo: true }, 'twitter')).toEqual({ longVideo: true })
+  })
+
+  it('validates each channel on what IT receives', () => {
+    // 500 characters breaks X's 280 — unless X has its own shorter caption
+    const long = 'x'.repeat(500)
+    expect(validatePost({ caption: long, media: [], platforms: ['twitter', 'linkedin'] })
+      .map(i => i.platform)).toEqual(['twitter'])
+    expect(validatePost({
+      caption: long, media: [], platforms: ['twitter', 'linkedin'],
+      captionByPlatform: { twitter: 'short' },
+    })).toEqual([])
+    // five images break X's four — unless X gets its own single image
+    expect(validatePost({
+      caption: 'a', media: img(5), platforms: ['twitter'],
+      mediaByPlatform: { twitter: img(1) },
+    })).toEqual([])
+    // and an override that is itself wrong is caught, on that channel
+    expect(validatePost({
+      caption: 'a', media: img(1), platforms: ['twitter'],
+      mediaByPlatform: { twitter: img(5) },
+    })[0].problem).toMatch(/5 images/)
+  })
+})

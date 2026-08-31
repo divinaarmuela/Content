@@ -72,6 +72,17 @@ export default function ComposeDialog({
   /** channels that have been set away from the default above. Absent = follow
    *  it; the map only ever holds a deliberate choice. */
   const [perKind, setPerKind] = useState<Partial<Record<Platform, PostKind>>>({})
+  /** A channel's OWN files and words, replacing the shared ones for that
+   *  channel only. The feature behind "what about a video over 90 seconds":
+   *  the twelve-minute cut goes to YouTube and the ninety-second one to
+   *  Instagram in ONE post, instead of two. Zernio carries it as customMedia
+   *  and customContent on the platform entry. */
+  const [perMedia, setPerMedia] = useState<Partial<Record<Platform, MediaItem[]>>>({})
+  const [perProbes, setPerProbes] = useState<Partial<Record<Platform, AssetProbe[]>>>({})
+  const [perCaption, setPerCaption] = useState<Partial<Record<Platform, string>>>({})
+  const [customising, setCustomising] = useState<Partial<Record<Platform, boolean>>>({})
+  /** X Premium lifts the 140s / 512 MB cap, but only if asked */
+  const [longVideo, setLongVideo] = useState(false)
   const [shareToFeed, setShareToFeed] = useState(true)
   const [firstComment, setFirstComment] = useState('')
   const [collaborators, setCollaborators] = useState('')
@@ -148,8 +159,11 @@ export default function ComposeDialog({
   const issues = useMemo(
     () => (platforms.length === 0 && !caption && media.length === 0
       ? []
-      : validatePost({ caption, media, platforms, kinds })),
-    [caption, media, platforms, kinds]
+      : validatePost({
+          caption, media, platforms, kinds,
+          mediaByPlatform: perMedia, captionByPlatform: perCaption,
+        })),
+    [caption, media, platforms, kinds, perMedia, perCaption]
   )
   const warnings = useMemo(
     () => (platforms.length === 0 ? [] : postWarnings({ caption, media, kinds })),
@@ -167,12 +181,16 @@ export default function ComposeDialog({
    * post, and whether the trade is acceptable is the operator's call.
    */
   const blockedOn = useMemo(() => {
-    if (platforms.length === 0 || probes.length === 0) return []
-    const findings = assessAssets({ probes, platforms, kinds })
+    if (platforms.length === 0) return []
+    // each channel judged on the files IT gets
+    const findings = platforms.flatMap(p => {
+      const own = perProbes[p]?.length ? perProbes[p]! : probes
+      return own.length ? assessAssets({ probes: own, platforms: [p], kinds }) : []
+    })
     return verdictByPlatform(findings, platforms)
       .filter(v => v.level === 'blocked')
       .map(v => PLATFORM_MEDIA[v.platform].label)
-  }, [probes, platforms, kinds])
+  }, [probes, perProbes, platforms, kinds])
 
   // a settled-but-failed upload is not "still uploading", so it let a post go
   // out one file short with nothing but a dismissed toast to show for it
@@ -182,8 +200,11 @@ export default function ComposeDialog({
   // posting short-form, not only when every one of them is
   const isReel = platforms.some(p => kinds[p] === 'reel')
 
-  const limit = platforms.length
-    ? Math.min(...platforms.map(p => PLATFORM_RULES[p].captionMax))
+  // the shared caption only has to fit the channels that USE it — one with
+  // its own words is measured against its own words
+  const sharedCaptionPlatforms = platforms.filter(p => !perCaption[p]?.trim())
+  const limit = sharedCaptionPlatforms.length
+    ? Math.min(...sharedCaptionPlatforms.map(p => PLATFORM_RULES[p].captionMax))
     : null
 
   /** Only when EVERY channel is a Story is the caption genuinely unused. One
@@ -195,6 +216,7 @@ export default function ComposeDialog({
     clearGroup(uploadGroup)
     setSelected([]); setCaption(''); setMedia([]); setProbes([]); setPosters({}); setWhen('')
     setKind('auto'); setPerKind({}); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
+    setPerMedia({}); setPerProbes({}); setPerCaption({}); setCustomising({}); setLongVideo(false)
     setLinkItemId('')
     setStep(0)
   }
@@ -210,6 +232,23 @@ export default function ComposeDialog({
    * Measuring runs alongside the transfer rather than before it, because the
    * measurement reads the local file and has no reason to make the bytes wait.
    */
+  /** The same trip as `upload`, landing on ONE channel's own list. */
+  const uploadFor = (p: Platform, files: FileList) => {
+    for (const file of Array.from(files)) {
+      const measuring = probeFile(file)
+      uploadFiles([file], { group: uploadGroup, purpose: 'social' }).done
+        .then(async rows => {
+          const landed = rows[0]
+          if (!landed) return
+          const { poster, ...probe } = await measuring
+          setPerMedia(m => ({ ...m, [p]: [...(m[p] ?? []), { url: landed.url, type: probe.type }] }))
+          setPerProbes(m => ({ ...m, [p]: [...(m[p] ?? []), { ...probe, url: landed.url }] }))
+          if (poster) setPosters(x => ({ ...x, [landed.url]: poster }))
+        })
+        .catch(e => toast.error(e instanceof Error ? e.message : `Could not upload ${file.name}`))
+    }
+  }
+
   const upload = (files: FileList) => {
     for (const file of Array.from(files)) {
       const measuring = probeFile(file)
@@ -246,12 +285,17 @@ export default function ComposeDialog({
           targets: chosen.map(a => {
             // each channel carries its OWN type — the payload has always had
             // room for it, only the composer was collapsing them into one
-            const target = isPlatform(a.platform) ? resolveKind(a.platform) : undefined
+            const p = isPlatform(a.platform) ? a.platform : null
+            const target = p ? resolveKind(p) : undefined
             return {
             platform: a.platform,
             accountId: a.provider_account_id,
             options: {
               ...(target ? { kind: target } : {}),
+              // this channel's own files and words, when it has them
+              ...(p && perMedia[p]?.length ? { media: perMedia[p] } : {}),
+              ...(p && perCaption[p]?.trim() ? { caption: perCaption[p]!.trim() } : {}),
+              ...(p === 'twitter' && longVideo ? { longVideo: true } : {}),
               ...(target === 'reel' ? { shareToFeed } : {}),
               ...(firstComment.trim() ? { firstComment: firstComment.trim() } : {}),
               ...(collaborators.trim()
@@ -523,9 +567,89 @@ export default function ComposeDialog({
                         </Select>
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">
                           {overridden
-                            ? `${PLATFORM_MEDIA[p].label} has no ${kindLabel(p, kind).toLowerCase()} — posting ${postingAs(p, resolved, media[0]?.type ?? 'video')}`
-                            : postingAs(p, resolved, media[0]?.type ?? 'video')}
+                            ? `${PLATFORM_MEDIA[p].label} has no ${kindLabel(p, kind).toLowerCase()} — posting ${postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}`
+                            : postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}
                         </span>
+                        {/* own files and words for this channel alone */}
+                        <button
+                          type="button"
+                          onClick={() => setCustomising(c => {
+                            const on = !c[p]
+                            if (!on) {
+                              // switching it off puts the channel back on the shared set
+                              setPerMedia(m => { const { [p]: _d, ...rest } = m; return rest })
+                              setPerProbes(m => { const { [p]: _d, ...rest } = m; return rest })
+                              setPerCaption(m => { const { [p]: _d, ...rest } = m; return rest })
+                            }
+                            return { ...c, [p]: on }
+                          })}
+                          className={`ml-auto text-xs underline decoration-dotted ${
+                            customising[p] || perMedia[p]?.length || perCaption[p]
+                              ? 'text-zinc-900 dark:text-zinc-100'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                          }`}
+                        >
+                          {customising[p] ? 'Use the shared files and caption' : 'Own files or caption'}
+                        </button>
+
+                        {customising[p] && (
+                          <div className="mt-1 grid w-full gap-2 rounded-md border border-dashed border-zinc-300 p-2 dark:border-zinc-700">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {(perMedia[p] ?? []).map((m, i) => (
+                                <div key={m.url} className="relative">
+                                  {m.type === 'image' || posters[m.url] ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={posters[m.url] ?? m.url} alt="" className="h-12 w-12 rounded object-cover" />
+                                  ) : (
+                                    <div className="flex h-12 w-12 items-center justify-center rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800">video</div>
+                                  )}
+                                  <button type="button" aria-label="Remove"
+                                    onClick={() => {
+                                      setPerMedia(x => ({ ...x, [p]: (x[p] ?? []).filter((_, j) => j !== i) }))
+                                      setPerProbes(x => ({ ...x, [p]: (x[p] ?? []).filter(q => q.url !== m.url) }))
+                                    }}
+                                    className="absolute -right-1.5 -top-1.5 rounded-full bg-zinc-900 p-0.5 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              <input id={`own-media-${p}`} type="file" multiple accept="image/*,video/*" className="sr-only"
+                                onChange={e => { if (e.target.files) uploadFor(p, e.target.files); e.target.value = '' }} />
+                              <Label htmlFor={`own-media-${p}`}
+                                className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                                <ImagePlus className="h-3.5 w-3.5" />
+                                {perMedia[p]?.length ? 'Add another' : `Files just for ${PLATFORM_MEDIA[p].label}`}
+                              </Label>
+                              {!perMedia[p]?.length && (
+                                <span className="text-[11px] text-zinc-400">Until you add one, it gets the shared files.</span>
+                              )}
+                            </div>
+                            <div className="grid gap-1">
+                              <div className="flex items-center">
+                                <Label htmlFor={`own-caption-${p}`} className="text-xs">Caption just for {PLATFORM_MEDIA[p].label}</Label>
+                                <span className={`ml-auto font-mono text-[11px] tabular-nums ${
+                                  (perCaption[p]?.length ?? 0) > PLATFORM_RULES[p].captionMax ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'
+                                }`}>
+                                  {perCaption[p]?.length ?? 0}/{PLATFORM_RULES[p].captionMax}
+                                </span>
+                              </div>
+                              <Textarea id={`own-caption-${p}`} rows={2} value={perCaption[p] ?? ''}
+                                onChange={e => setPerCaption(m => ({ ...m, [p]: e.target.value }))}
+                                placeholder="Leave empty to use the shared caption" />
+                            </div>
+                            {p === 'twitter' && (
+                              <div className="flex items-start gap-3">
+                                <Switch id="x-long" checked={longVideo} onCheckedChange={setLongVideo} />
+                                <div>
+                                  <Label htmlFor="x-long" className="text-xs">Long video (X Premium)</Label>
+                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                    Lifts the 140-second / 512 MB cap. Only works if this X account has Premium — otherwise the post is refused.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -585,7 +709,7 @@ export default function ComposeDialog({
 
               {/* what each platform will do to these exact files — shown here,
                   while the file can still be swapped for a better export */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} />
 
 
               <div className="grid gap-1.5">
@@ -702,7 +826,7 @@ export default function ComposeDialog({
 
               {/* the verdict again at the last moment, without the detail —
                   the breakdown lives on the Content step, next to the files */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} compact />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} compact />
 
               {warnings.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">

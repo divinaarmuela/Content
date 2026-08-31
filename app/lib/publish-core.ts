@@ -129,27 +129,33 @@ export function validatePost(input: {
   platforms: Platform[]
   /** intent per platform, when the caller has one */
   kinds?: Partial<Record<Platform, PostKind>>
+  /** a channel with its own media is judged on that, not on the shared set */
+  mediaByPlatform?: Partial<Record<Platform, MediaItem[]>>
+  /** …and likewise its own caption */
+  captionByPlatform?: Partial<Record<Platform, string>>
 }): ValidationIssue[] {
   const issues: ValidationIssue[] = []
-  const images = input.media.filter(m => m.type === 'image').length
-  const videos = input.media.filter(m => m.type === 'video').length
-  const docs   = input.media.filter(m => m.type === 'document').length
 
   if (input.platforms.length === 0) {
     return [{ platform: 'instagram', problem: 'No platform selected' }]
   }
 
   for (const p of input.platforms) {
+    const caption = input.captionByPlatform?.[p] ?? input.caption
+    const media = input.mediaByPlatform?.[p] ?? input.media
+    const images = media.filter(m => m.type === 'image').length
+    const videos = media.filter(m => m.type === 'video').length
+    const docs   = media.filter(m => m.type === 'document').length
     const r = PLATFORM_RULES[p]
     if (!r) { issues.push({ platform: p, problem: `Unsupported platform "${p}"` }); continue }
 
-    if (input.caption.length > r.captionMax) {
+    if (caption.length > r.captionMax) {
       issues.push({
         platform: p,
-        problem: `Caption is ${input.caption.length} characters; ${p} allows ${r.captionMax}`,
+        problem: `Caption is ${caption.length} characters; ${p} allows ${r.captionMax}`,
       })
     }
-    if (r.requiresMedia && input.media.length === 0) {
+    if (r.requiresMedia && media.length === 0) {
       issues.push({ platform: p, problem: `${p} requires at least one image or video` })
     }
     // a carousel is measured as a carousel: one ceiling for the whole set,
@@ -191,19 +197,19 @@ export function validatePost(input: {
       // advice on a platform that has no Stories to put the item in
       if (!r.stories) {
         issues.push({ platform: p, problem: `${p} has no Stories — pick a different post type for it` })
-      } else if (input.media.length !== 1) {
+      } else if (media.length !== 1) {
         issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
       }
     }
     if (kind === 'carousel') {
       if (r.carousel === 0) {
         issues.push({ platform: p, problem: `${p} does not post carousels` })
-      } else if (input.media.length < 2) {
+      } else if (media.length < 2) {
         issues.push({ platform: p, problem: 'A carousel needs at least two items' })
-      } else if (input.media.length > r.carousel) {
+      } else if (media.length > r.carousel) {
         issues.push({
           platform: p,
-          problem: `${input.media.length} slides; ${p} allows ${r.carousel} in one carousel`,
+          problem: `${media.length} slides; ${p} allows ${r.carousel} in one carousel`,
         })
       }
     }
@@ -223,6 +229,17 @@ export type PostKind = 'feed' | 'reel' | 'story' | 'carousel'
 
 export type PostOptions = {
   kind?: PostKind
+  /**
+   * This channel's OWN media, replacing the shared set for this channel only
+   * — Zernio's `customMedia`. The reason it exists: a twelve-minute cut for
+   * YouTube and a ninety-second one for Instagram used to be two posts.
+   */
+  media?: MediaItem[]
+  /** …and its own caption — `customContent`. X takes 280 characters where
+   *  LinkedIn takes 3,000, and one caption cannot serve both. */
+  caption?: string
+  /** X Premium only: lift the 140-second / 512 MB cap. Sent as `longVideo`. */
+  longVideo?: boolean
   /** Reels: also show in the main feed. */
   shareToFeed?: boolean
   /** Posted automatically once the post is live — the usual place for hashtags. */
@@ -336,6 +353,8 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   const out: Record<string, unknown> = {}
   if (o.kind === 'story') out.contentType = 'story'
   if (o.kind === 'reel' && platform === 'facebook') out.contentType = 'reel'
+  // an unknown field is a 400 from Meta, so this goes only where it exists
+  if (o.longVideo && platform === 'twitter') out.longVideo = true
   if (o.shareToFeed !== undefined) out.shareToFeed = o.shareToFeed
   if (o.firstComment) out.firstComment = o.firstComment
   if (o.collaborators?.length) out.collaborators = o.collaborators.slice(0, 3)
@@ -369,6 +388,10 @@ export type ZernioPostBody = {
     platform: Platform
     accountId: string
     platformSpecificData?: Record<string, unknown>
+    /** replaces `mediaItems` for this platform only */
+    customMedia?: MediaItem[]
+    /** replaces `content` for this platform only */
+    customContent?: string
   }[]
   mediaItems?: MediaItem[]
   scheduledFor?: string
@@ -424,6 +447,8 @@ export function buildPostBody(input: {
         platform: t.platform,
         accountId: t.accountId,
         ...(data ? { platformSpecificData: data } : {}),
+        ...(t.options?.media?.length ? { customMedia: t.options.media } : {}),
+        ...(t.options?.caption?.trim() ? { customContent: t.options.caption } : {}),
       }
     }),
   }

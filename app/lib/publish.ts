@@ -56,9 +56,18 @@ export async function queuePublishJob(input: {
   // carry each target's intent into validation, so a Reel with a still image
   // or a Story with a carousel is refused here rather than by the platform
   const kinds: Partial<Record<Platform, PostKind>> = {}
-  for (const t of input.targets) if (t.options?.kind) kinds[t.platform] = t.options.kind
+  const mediaByPlatform: Partial<Record<Platform, MediaItem[]>> = {}
+  const captionByPlatform: Partial<Record<Platform, string>> = {}
+  for (const t of input.targets) {
+    if (t.options?.kind) kinds[t.platform] = t.options.kind
+    // a channel with its own media or words is judged on THOSE
+    if (t.options?.media?.length) mediaByPlatform[t.platform] = t.options.media
+    if (t.options?.caption?.trim()) captionByPlatform[t.platform] = t.options.caption
+  }
 
-  const issues = validatePost({ caption: input.caption, media: input.media, platforms, kinds })
+  const issues = validatePost({
+    caption: input.caption, media: input.media, platforms, kinds, mediaByPlatform, captionByPlatform,
+  })
   if (issues.length > 0) {
     return {
       error: 'This post is not valid for every selected platform',
@@ -123,10 +132,25 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     const media = await relayMedia(job.media ?? [])
     if (media !== job.media) await settle({ media })
 
+    // a channel's own media has to make the same trip — it is the same kind
+    // of URL the provider cannot fetch — and is persisted for the same reason
+    const targets: Target[] = []
+    let targetsChanged = false
+    for (const t of (job.targets ?? []) as Target[]) {
+      if (t.options?.media?.length) {
+        const own = await relayMedia(t.options.media)
+        if (own !== t.options.media) targetsChanged = true
+        targets.push({ ...t, options: { ...t.options, media: own } })
+      } else {
+        targets.push(t)
+      }
+    }
+    if (targetsChanged) await settle({ targets })
+
     const outcome = await publisher.createPost({
       caption: job.caption,
       media,
-      targets: job.targets ?? [],
+      targets,
       scheduledFor: job.scheduled_for,
       timezone: job.timezone,
       requestId: job.request_id,   // ← layer 2, stable across retries

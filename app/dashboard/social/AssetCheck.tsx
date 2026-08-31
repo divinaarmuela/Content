@@ -11,7 +11,7 @@
  * only place that can be caught is here, while the file is still replaceable.
  */
 
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { AlertTriangle, Check, Crop, FileCog, Gauge, HelpCircle, XCircle } from 'lucide-react'
 import PlatformIcon from './PlatformIcon'
 import type { Platform, PostKind } from '../../lib/publish-core'
@@ -67,17 +67,24 @@ function assetLine(probe: AssetProbe): string {
 }
 
 export default function AssetCheck({
-  probes, platforms, kinds, compact = false,
+  probes, platforms, kinds, overrides, compact = false,
 }: {
   probes: AssetProbe[]
   platforms: Platform[]
   kinds?: Partial<Record<Platform, PostKind>>
+  /** a channel given its own files is checked against THOSE, not the shared set */
+  overrides?: Partial<Record<Platform, AssetProbe[]>>
   /** the Review step wants the verdict without the per-asset breakdown */
   compact?: boolean
 }) {
+  // each channel is judged on the files it will actually receive
+  const probesOf = useCallback(
+    (p: Platform) => overrides?.[p]?.length ? overrides[p]! : probes,
+    [overrides, probes],
+  )
   const findings = useMemo(
-    () => assessAssets({ probes, platforms, kinds }),
-    [probes, platforms, kinds],
+    () => platforms.flatMap(p => assessAssets({ probes: probesOf(p), platforms: [p], kinds })),
+    [probesOf, platforms, kinds],
   )
   const verdicts = useMemo(
     () => verdictByPlatform(findings, platforms),
@@ -86,10 +93,13 @@ export default function AssetCheck({
   // a row for every asset on every channel — a channel that is fine has to say
   // so out loud, or it looks the same as a channel nobody checked
   const outcomes = useMemo(
-    () => assetOutcomes({ probes, platforms, kinds }),
-    [probes, platforms, kinds],
+    () => platforms.flatMap(p => assetOutcomes({ probes: probesOf(p), platforms: [p], kinds })),
+    [probesOf, platforms, kinds],
   )
-  const missing = useMemo(() => unmeasured(probes), [probes])
+  const missing = useMemo(
+    () => unmeasured([...probes, ...Object.values(overrides ?? {}).flat()]),
+    [probes, overrides],
+  )
   // the export brief, off the same rules the check is decided by — useful
   // BEFORE a file exists, which is the moment it can still be exported right
   const specs = useMemo(
@@ -182,7 +192,7 @@ export default function AssetCheck({
               {rows.map(row => {
                 const rowTone = TONE[row.level]
                 const RowIcon = rowTone.icon
-                const probe = probes[row.asset - 1]
+                const probe = probesOf(row.platform)[row.asset - 1]
                 return (
                   <li
                     key={row.asset}
