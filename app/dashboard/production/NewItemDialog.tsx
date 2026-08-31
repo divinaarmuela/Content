@@ -196,14 +196,26 @@ export default function NewItemDialog({
       ))
       .catch(() => setFetchedTeam([]))
   }, [open, isManager, teamProp])
-  // a TASK is internal work, not client-confidential: the dropdown offers
+  // A TASK is internal work, not client-confidential: the dropdown offers
   // EVERY active client, not just the ones this person is rostered on — the
-  // owner's rule ("any team member, any client"). Shoots and items keep the
-  // scoped list the page passed in. Fetched once, on first task-dialog open.
+  // owner's rule ("any team member, any client").
+  //
+  // A SHOOT PLAN is the same, and used not to be. The page passes the list it
+  // built from `/api/website/clients?scope=mine`, which for an account manager
+  // is their `team_user_clients` roster plus whatever they already hold. But
+  // planning a shoot is precisely how work for a NEW client begins — and that
+  // client is, by definition, not yet on anybody's roster, so the one role
+  // allowed to create a plan could not find them in the picker. Nothing was
+  // forbidding it: `canCreateItemsUnder` asks for the account_manager role and
+  // nothing about which client. The permission was there; the list was not.
+  //
+  // Ordinary items keep the scoped list — those attach to work that already
+  // exists, so the client is already on it. Fetched once, on first open.
+  const wantsEveryClient = presetKind === 'task' || presetKind === 'shoot_brief'
   const [allClients, setAllClients] = useState<(ClientRow & { status?: string })[]>([])
   const allClientsFetchedRef = useRef(false)
   useEffect(() => {
-    if (!open || presetKind !== 'task' || allClientsFetchedRef.current) return
+    if (!open || !wantsEveryClient || allClientsFetchedRef.current) return
     allClientsFetchedRef.current = true
     fetch('/api/website/clients')
       .then(r => (r.ok ? r.json() : []))
@@ -211,7 +223,7 @@ export default function NewItemDialog({
         (Array.isArray(rows) ? rows : []).filter(c => (c.status ?? 'active') === 'active'),
       ))
       .catch(() => setAllClients([]))
-  }, [open, presetKind])
+  }, [open, wantsEveryClient])
   const kindsFetchedRef = useRef(false)
   useEffect(() => {
     // the kinds shape the form, so they load on first open — not on a page
@@ -511,16 +523,25 @@ export default function NewItemDialog({
             <Select value={draft.client_id} onValueChange={v => v && setDraft(d => ({ ...d, client_id: v, batch_id: '' }))}>
               <SelectTrigger><SelectValue placeholder="Choose client" /></SelectTrigger>
               <SelectContent>
-                {(isTaskKind && allClients.length > 0 ? allClients : clients).map(c => (
+                {/* the full registry where the work can be for anyone, and
+                    the page's scoped list otherwise. Falling back to `clients`
+                    matters: the registry call can fail, and a picker with the
+                    roster in it beats a picker with nothing in it. */}
+                {(wantsEveryClient && allClients.length > 0 ? allClients : clients).map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {isTaskKind && (
+            {isTaskKind ? (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
                 A task can be for any client — it never leaves the team.
               </p>
-            )}
+            ) : isBriefKind ? (
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                Any client — planning a shoot is often the first work a new
+                client has, so this is not limited to the ones you run.
+              </p>
+            ) : null}
           </div>
           {/* a plan belongs to a shoot. Without this picker "New shoot plan"
               silently created a SECOND shoot beside the one already there. */}
