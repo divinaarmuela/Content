@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, formatOf,
-  kindLabel, postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
+  effectiveKind, kindLabel, postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
 } from '../app/lib/media-fit-core'
 import { SUPPORTED_PLATFORMS } from '../app/lib/publish-core'
@@ -411,5 +411,40 @@ describe('the platform names its own post types', () => {
         expect(kindLabel(p, k), `${p}/${k}`).toBeTruthy()
       }
     }
+  })
+})
+
+describe('a "feed" video on Instagram is a Reel, and is judged as one', () => {
+  // the case that got through: a 2 GB landscape master sent as "feed" passed
+  // the feed rules and Instagram refused it — because since 2023 Instagram
+  // publishes every single video as a Reel, and the provider does the same
+  it('applies Reel rules to a lone video labelled feed', () => {
+    const findings = assessAssets({
+      probes: [reel({ width: 1920, height: 1080, bytes: 2048 * MB, seconds: 240 })],
+      platforms: ['instagram'],
+      kinds: { instagram: 'feed' },
+    })
+    const heads = findings.map(f => f.headline)
+    expect(heads).toContain('Too long')                      // 240s vs 90s
+    expect(findings.some(f => f.level === 'blocked')).toBe(true)
+  })
+
+  it('and passes a properly cut vertical one, feed or reel', () => {
+    for (const kind of ['feed', 'reel', undefined] as const) {
+      expect(assessAssets({
+        probes: [reel()],
+        platforms: ['instagram'],
+        kinds: kind ? { instagram: kind } : undefined,
+      })).toEqual([])
+    }
+  })
+
+  it('names it a Reel in the sentence too, so the label never lies', () => {
+    expect(postingAs('instagram', 'feed', 'video')).toBe('an Instagram Reel')
+    expect(postingAs('instagram', undefined, 'video')).toBe('an Instagram Reel')
+    expect(postingAs('instagram', 'feed', 'image')).toBe('an Instagram feed post')
+    expect(effectiveKind('instagram', 'video', 'feed')).toBe('reel')
+    expect(effectiveKind('instagram', 'image', 'feed')).toBe('feed')
+    expect(effectiveKind('tiktok', 'video', 'feed')).toBe('feed')
   })
 })

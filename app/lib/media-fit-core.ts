@@ -355,11 +355,29 @@ function ruleFor(platform: Platform, type: MediaType, kind: PostKind | undefined
     : type === 'video' ? spec.video
     : spec.document
   if (!base) return null
+  const effective = effectiveKind(platform, type, kind)
   // a carousel is still a feed asset; only Reels and Stories change the rules
-  const override = kind && kind !== 'feed' && kind !== 'carousel'
-    ? spec.byKind?.[kind]?.[type === 'video' ? 'video' : 'image']
+  const override = effective && effective !== 'feed' && effective !== 'carousel'
+    ? spec.byKind?.[effective]?.[type === 'video' ? 'video' : 'image']
     : undefined
   return override ? { ...base, ...override } : base
+}
+
+/**
+ * What the platform will actually MAKE of this, whatever the label says.
+ *
+ * On Instagram there is no such thing as a feed video any more: since 2023
+ * every single-video post is published as a Reel, and the provider does the
+ * same — one video becomes a Reel. So a file sent as "feed" is judged by Reel
+ * rules (9:16, 90 seconds, 300 MB), and the check that took "feed" at its word
+ * passed a 2 GB landscape master that Instagram then refused. The label is the
+ * operator's; the outcome is the platform's, and the check reads the outcome.
+ */
+export function effectiveKind(
+  platform: Platform, type: MediaType, kind: PostKind | undefined,
+): PostKind | undefined {
+  if (platform === 'instagram' && type === 'video' && (kind === undefined || kind === 'feed')) return 'reel'
+  return kind
 }
 
 function kindWord(kind: PostKind | undefined): string {
@@ -598,9 +616,10 @@ export function postingAs(platform: Platform, kind: PostKind | undefined, type: 
   switch (platform) {
     case 'instagram':
       return kind === 'story' ? 'an Instagram Story'
-        : kind === 'reel' ? 'an Instagram Reel'
         : kind === 'carousel' ? 'a slide in an Instagram carousel'
-        : video ? 'an Instagram feed video' : 'an Instagram feed post'
+        // a lone video IS a Reel on Instagram, whatever it was labelled
+        : kind === 'reel' || video ? 'an Instagram Reel'
+        : 'an Instagram feed post'
     case 'facebook':
       return kind === 'story' ? 'a Facebook Story'
         : kind === 'reel' ? 'a Facebook Reel'
