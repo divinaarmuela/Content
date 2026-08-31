@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
 import { isSettled } from '../../lib/upload-progress-core'
-import { probeFile } from './probeMedia'
+import { probeFile, probeUrl } from './probeMedia'
 import AssetCheck from './AssetCheck'
-import { channelsNeedingCopy, copyWords, probeForCopy, type CopyState } from '../../lib/shrink-core'
+import { channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, type CopyState } from '../../lib/shrink-core'
 import {
   assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
@@ -250,10 +250,18 @@ export default function ComposeDialog({
     if (!copy || copy.state.status !== 'ready' || copy.forUrl !== sharedVideoUrl) return
     const original = probes[0]
     const ready = copy.state
-    for (const p of needingCopy) {
-      setPerMedia(m => (m[p]?.length ? m : { ...m, [p]: [{ url: ready.url, type: 'video' }] }))
-      setPerProbes(m => (m[p]?.length ? m : { ...m, [p]: [probeForCopy(original, ready)] }))
-    }
+    let cancelled = false
+    // measure the copy ITSELF — its real resolution and length, off the file,
+    // so an 11 MB result is explained by the row rather than taken on trust
+    void probeUrl(ready.url).then(measured => {
+      if (cancelled) return
+      const probe = { ...probeForCopy(original, ready), ...measured }
+      for (const p of needingCopy) {
+        setPerMedia(m => (m[p]?.length ? m : { ...m, [p]: [{ url: ready.url, type: 'video' }] }))
+        setPerProbes(m => (m[p]?.length ? m : { ...m, [p]: [probe] }))
+      }
+    })
+    return () => { cancelled = true }
   }, [copy, needingCopy, probes, sharedVideoUrl])
 
   const copyPending = needingCopy.length > 0 && copy?.state.status !== 'ready'
@@ -644,6 +652,12 @@ export default function ComposeDialog({
                             copy?.state.status === 'failed' ? 'text-red-700 dark:text-red-300' : 'text-sky-700 dark:text-sky-300'
                           }`}>
                             {copyWords(PLATFORM_MEDIA[p].label, copy?.forUrl === sharedVideoUrl ? copy?.state : undefined)}
+                            {/* and what it actually measures, off the file */}
+                            {perProbes[p]?.[0]?.width && (
+                              <span className="ml-1 font-mono text-zinc-500 dark:text-zinc-400">
+                                · {copyMeasureWords(perProbes[p]![0])}
+                              </span>
+                            )}
                           </span>
                         )}
                         {/* own files and words for this channel alone */}

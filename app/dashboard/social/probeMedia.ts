@@ -126,3 +126,38 @@ export async function probeFile(
   const measured = type === 'video' ? await measureVideo(file) : await measureImage(file)
   return { ...base, ...measured }
 }
+
+/**
+ * Measure a video we only have a URL for — the smaller copy Stream hands back.
+ *
+ * A <video> reads metadata cross-origin without CORS, so the copy's REAL
+ * width, height and length come off the file itself rather than being
+ * inferred from the master it was made from. That is the difference between
+ * "1080p, we assume" and "720p, actually", and the row must say the second
+ * when it is true.
+ */
+export function probeUrl(url: string): Promise<{ width?: number; height?: number; seconds?: number }> {
+  return new Promise(resolve => {
+    const video = document.createElement('video')
+    let settled = false
+    const done = (out: { width?: number; height?: number; seconds?: number }) => {
+      if (settled) return
+      settled = true
+      video.removeAttribute('src')
+      resolve(out)
+    }
+    const timer = setTimeout(() => done({}), TIMEOUT_MS)
+    video.preload = 'metadata'
+    video.muted = true
+    video.onerror = () => { clearTimeout(timer); done({}) }
+    video.onloadedmetadata = () => {
+      clearTimeout(timer)
+      done({
+        width: video.videoWidth || undefined,
+        height: video.videoHeight || undefined,
+        seconds: Number.isFinite(video.duration) ? video.duration : undefined,
+      })
+    }
+    video.src = url
+  })
+}

@@ -84,3 +84,12 @@ export function copyWords(platformLabel: string, state: CopyState | undefined): 
   const size = state.bytes !== null ? `${Math.round(state.bytes / MB)} MB` : '1080p'
   return `${platformLabel} gets a smaller copy (${size}) — the full file goes to the rest`
 }
+
+/** The copy, measured: "1080 x 1920 · 14s · 11 MB". What answers "11 MB?". */
+export function copyMeasureWords(probe: { width?: number; height?: number; seconds?: number; bytes?: number }): string {
+  const parts: string[] = []
+  if (probe.width && probe.height) parts.push(`${probe.width} x ${probe.height}`)
+  if (probe.seconds !== undefined) parts.push(`${Math.round(probe.seconds)}s`)
+  if (probe.bytes !== undefined) parts.push(`${Math.round(probe.bytes / MB)} MB`)
+  return parts.join(' · ')
+}
