@@ -6,7 +6,10 @@ import { UploadRows, useUploadGroup } from '../UploadRows'
 import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile } from './probeMedia'
 import AssetCheck from './AssetCheck'
-import { kindLabel, postingAs, PLATFORM_MEDIA, type AssetProbe } from '../../lib/media-fit-core'
+import {
+  assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
+  type AssetProbe,
+} from '../../lib/media-fit-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -150,6 +153,28 @@ export default function ComposeDialog({
     [caption, media, kinds, platforms]
   )
 
+  /**
+   * Channels where a file will simply be refused.
+   *
+   * `issues` is counts and caption length; it cannot see the file, so a 600 MB
+   * video or a .avi passed it and the panel said "Will not post" beside a fully
+   * enabled Publish button. A verdict that the platform REFUSES the post is not
+   * an advisory — it is the same class of fact as "too many images", and it
+   * belongs on the same gate. Cropping and re-encoding stay advisory: those
+   * post, and whether the trade is acceptable is the operator's call.
+   */
+  const blockedOn = useMemo(() => {
+    if (platforms.length === 0 || probes.length === 0) return []
+    const findings = assessAssets({ probes, platforms, kinds })
+    return verdictByPlatform(findings, platforms)
+      .filter(v => v.level === 'blocked')
+      .map(v => PLATFORM_MEDIA[v.platform].label)
+  }, [probes, platforms, kinds])
+
+  // a settled-but-failed upload is not "still uploading", so it let a post go
+  // out one file short with nothing but a dismissed toast to show for it
+  const failedUploads = uploads.filter(u => u.status === 'failed').length
+
   // the Reel options — cover frame, share to feed — apply if ANY channel is
   // posting short-form, not only when every one of them is
   const isReel = platforms.some(p => kinds[p] === 'reel')
@@ -202,7 +227,7 @@ export default function ComposeDialog({
 
   const submit = async (publishNow: boolean) => {
     if (chosen.length === 0) return toast.error('Choose at least one channel')
-    if (issues.length > 0) return toast.error('Fix the problems listed before publishing')
+    if (stopper) return toast.error(stopper)
     if (!publishNow && !when) return toast.error('Pick a date and time, or publish now')
 
     setBusy(true)
@@ -266,6 +291,15 @@ export default function ComposeDialog({
       setBusy(false)
     }
   }
+
+  /** Why the buttons are off, said on the button itself — a disabled control
+   *  with no reason is the most frustrating thing in a form. */
+  const stopper =
+    failedUploads > 0 ? `${failedUploads} file${failedUploads === 1 ? '' : 's'} failed to upload — retry or remove ${failedUploads === 1 ? 'it' : 'them'}`
+    : blockedOn.length > 0 ? `${blockedOn.join(' and ')} will refuse a file in this post — swap it before sending`
+    : issues.length > 0 ? 'Fix the problems listed before publishing'
+    : uploading ? 'Waiting for the uploads to finish'
+    : null
 
   // what each step needs before it will let you move on
   const canAdvance =
@@ -694,10 +728,13 @@ export default function ComposeDialog({
               {/* a post sent mid-transfer goes out without the file still
                   moving, and nothing afterwards says which one was missing */}
               <Button variant="outline" onClick={() => submit(false)}
-                disabled={busy || uploading || issues.length > 0 || !when}>
+                title={stopper ?? undefined}
+                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0 || !when}>
                 Schedule
               </Button>
-              <Button onClick={() => submit(true)} disabled={busy || uploading || issues.length > 0}>
+              <Button onClick={() => submit(true)}
+                title={stopper ?? undefined}
+                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0}>
                 {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Working…</>
                       : <><Send className="h-4 w-4" /> Publish now</>}
               </Button>
