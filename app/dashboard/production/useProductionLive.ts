@@ -27,6 +27,21 @@ export type ProductionChange = {
  * Keep `onChange` referentially stable (useCallback) or the effects rewire on
  * every render.
  */
+/** Same-tab signal, for a change this browser made itself.
+ *
+ *  The realtime channel is announced by the workflow, so a change made through
+ *  a path that does not transition an item — publishing an ad-hoc post, say —
+ *  reaches the open views only on the 60s poll. That is a minute of a screen
+ *  showing a queue the person just changed. This closes it for the tab that
+ *  did it, without pretending to be a server announcement: other tabs still
+ *  learn about it the way they always did. */
+const LOCAL_CHANGE = 'md:production-changed'
+
+export function notifyProductionChange(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(LOCAL_CHANGE))
+}
+
 export function useProductionLive(
   onChange: (change?: ProductionChange) => void,
   opts?: { pollMs?: number },
@@ -54,6 +69,12 @@ export function useProductionLive(
     if (seen.current.size > 200) seen.current.clear()
     onChange(d)
   }, [messages.last, onChange])
+
+  useEffect(() => {
+    const fn = () => onChange()
+    window.addEventListener(LOCAL_CHANGE, fn)
+    return () => window.removeEventListener(LOCAL_CHANGE, fn)
+  }, [onChange])
 
   useEffect(() => {
     const tick = () => { if (!document.hidden) onChange() }

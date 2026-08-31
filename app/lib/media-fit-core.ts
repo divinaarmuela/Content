@@ -638,6 +638,97 @@ function delivered(probe: AssetProbe): string {
   return parts.join(' · ')
 }
 
+/** "MP4, MOV or WebM" */
+function orList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`
+}
+
+/**
+ * What this platform wants, in the order it matters — the export brief.
+ *
+ * Read off the same `Rule` the check is decided by, never written out a second
+ * time, so the specs on screen cannot drift from the specs enforced. A number
+ * that appears here is the number that will flag the file.
+ */
+export function requirementLines(
+  platform: Platform, kind: PostKind | undefined, type: MediaType,
+): string[] {
+  const rule = ruleFor(platform, type, kind)
+  if (!rule) return []
+  const lines: string[] = []
+
+  lines.push(orList(rule.formats.map(f => f.toUpperCase())))
+
+  if (rule.aspectName) {
+    lines.push(rule.aspectName)
+  } else if (rule.aspectMin !== undefined && rule.aspectMax !== undefined) {
+    lines.push(`between ${describeRatio(rule.aspectMin)} and ${describeRatio(rule.aspectMax)}`)
+  }
+
+  if (rule.minWidth && rule.minHeight) lines.push(`at least ${rule.minWidth} x ${rule.minHeight} px`)
+  else if (rule.minWidth) lines.push(`at least ${rule.minWidth} px wide`)
+  else if (rule.minHeight) lines.push(`at least ${rule.minHeight} px tall`)
+
+  if (rule.maxWidth && rule.maxHeight) lines.push(`up to ${rule.maxWidth} x ${rule.maxHeight} px`)
+
+  if (type === 'video') {
+    if (rule.minSeconds !== undefined && rule.maxSeconds !== undefined) {
+      lines.push(`${secs(rule.minSeconds)} to ${secs(rule.maxSeconds)}`)
+    } else if (rule.maxSeconds !== undefined) {
+      lines.push(`up to ${secs(rule.maxSeconds)}${rule.overlong === 'trim' ? ' (longer is cut short)' : ''}`)
+    } else if (rule.minSeconds !== undefined) {
+      lines.push(`at least ${secs(rule.minSeconds)}`)
+    }
+  }
+
+  if (rule.maxMB !== undefined) {
+    lines.push(rule.oversize === 'compress'
+      ? `under ${limitMB(rule.maxMB)} — over that it is re-encoded`
+      : `under ${limitMB(rule.maxMB)} — over that it is refused`)
+  }
+
+  if (rule.transcodeAboveHeight) {
+    lines.push(`re-encoded above ${rule.transcodeAboveHeight}p, whatever you send`)
+  }
+
+  return lines
+}
+
+/** A ratio as people write one: 4:5, 1.91:1. */
+function describeRatio(value: number): string {
+  if (Math.abs(value - 0.8) < 0.01) return '4:5'
+  if (Math.abs(value - 9 / 16) < 0.01) return '9:16'
+  if (Math.abs(value - 1) < 0.01) return '1:1'
+  return value >= 1 ? `${value.toFixed(2)}:1` : `1:${(1 / value).toFixed(2)}`
+}
+
+/** The export brief for every selected channel, for the kinds of file in hand. */
+export function channelSpecs(input: {
+  platforms: Platform[]
+  kinds?: Partial<Record<Platform, PostKind>>
+  /** which kinds of file to describe; all of them when nothing is attached yet */
+  types?: MediaType[]
+}): {
+  platform: Platform
+  label: string
+  becomes: string
+  groups: { type: MediaType; lines: string[] }[]
+}[] {
+  const wanted = input.types?.length ? [...new Set(input.types)] : (['image', 'video'] as MediaType[])
+  return input.platforms.map(platform => {
+    const kind = input.kinds?.[platform]
+    return {
+      platform,
+      label: PLATFORM_MEDIA[platform].label,
+      becomes: postingAs(platform, kind, wanted.includes('video') ? 'video' : wanted[0]),
+      groups: wanted
+        .map(type => ({ type, lines: requirementLines(platform, kind, type) }))
+        .filter(g => g.lines.length > 0),
+    }
+  })
+}
+
 /** One row per asset per platform — including the platforms where nothing
  *  happens to it.
  *

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  assessAssets, assetOutcomes, describeAspect, fitHeadline, formatOf, postingAs,
-  unmeasured, verdictByPlatform, PLATFORM_MEDIA,
+  assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, formatOf,
+  postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
 } from '../app/lib/media-fit-core'
 import { SUPPORTED_PLATFORMS } from '../app/lib/publish-core'
@@ -312,6 +312,67 @@ describe('every channel gets a stated outcome, not just the broken ones', () => 
     for (const p of SUPPORTED_PLATFORMS) {
       expect(postingAs(p, 'feed', 'video'), `no medium named for ${p}`).toBeTruthy()
     }
+  })
+})
+
+describe('the specs the person is told to export to', () => {
+  it('states the shape, the length and the weight for a Reel', () => {
+    const lines = requirementLines('instagram', 'reel', 'video')
+    expect(lines).toContain('MP4 or MOV')
+    expect(lines).toContain('9:16 vertical')
+    expect(lines.join(' · ')).toContain('90s')
+    expect(lines.join(' · ')).toContain('300 MB')
+  })
+
+  it('distinguishes a limit that re-encodes from one that refuses', () => {
+    expect(requirementLines('instagram', 'reel', 'video').join(' ')).toContain('re-encoded')
+    expect(requirementLines('twitter', 'feed', 'video').join(' ')).toContain('refused')
+  })
+
+  it('warns where the platform re-encodes whatever you send', () => {
+    expect(requirementLines('reddit', 'feed', 'video').join(' ')).toContain('1080p')
+  })
+
+  // the reason the specs are read off the rules rather than written twice:
+  // a number on screen that the check does not use is worse than no number
+  it('quotes the same numbers the checks flag on', () => {
+    const spec = requirementLines('bluesky', 'feed', 'image').join(' ')
+    const finding = assessAssets({
+      probes: [photo({ bytes: 4 * MB })],
+      platforms: ['bluesky'],
+    })[0]
+    expect(spec).toContain('1 MB')
+    expect(finding.detail).toContain('1 MB')
+  })
+
+  it('has something to say for every platform, for stills and for video', () => {
+    for (const p of SUPPORTED_PLATFORMS) {
+      expect(requirementLines(p, 'feed', 'video').length, `no video spec for ${p}`).toBeGreaterThan(0)
+      expect(requirementLines(p, 'feed', 'image').length, `no image spec for ${p}`).toBeGreaterThan(0)
+    }
+  })
+
+  it('describes only the kinds of file actually attached', () => {
+    const specs = channelSpecs({
+      platforms: ['instagram'],
+      kinds: { instagram: 'reel' },
+      types: ['video'],
+    })
+    expect(specs).toHaveLength(1)
+    expect(specs[0].becomes).toBe('an Instagram Reel')
+    expect(specs[0].groups.map(g => g.type)).toEqual(['video'])
+  })
+
+  it('covers both kinds before anything is attached', () => {
+    const specs = channelSpecs({ platforms: ['instagram'] })
+    expect(specs[0].groups.map(g => g.type)).toEqual(['image', 'video'])
+  })
+
+  it('drops a kind the platform does not take rather than inventing one', () => {
+    // YouTube has no still-image post; the rules table gives it thumbnail
+    // limits, and a channel with nothing to say for a kind says nothing
+    const specs = channelSpecs({ platforms: ['linkedin'], types: ['document'] })
+    expect(specs[0].groups.every(g => g.lines.length > 0)).toBe(true)
   })
 })
 

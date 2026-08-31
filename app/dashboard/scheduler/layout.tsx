@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarDays, ListChecks } from 'lucide-react'
+import NewPostButton from './NewPostButton'
 
 /**
  * Scheduler shell: the views are real CHILD ROUTES, not tab state —
@@ -59,6 +60,10 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
             )
           })}
         </nav>
+
+        {/* posting is decided here, so starting one belongs here — the same
+            composer the Social page opens, not a second one to keep in step */}
+        <NewPostButton />
       </div>
 
       {children}
