@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { uploadMedia } from '../uploadMedia'
+import { probeFile } from './probeMedia'
+import AssetCheck from './AssetCheck'
+import type { AssetProbe } from '../../lib/media-fit-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,6 +53,10 @@ export default function ComposeDialog({
   const [selected, setSelected] = useState<string[]>([])
   const [caption, setCaption] = useState('')
   const [media, setMedia] = useState<MediaItem[]>([])
+  // what the browser measured off each file: size, dimensions, duration. Kept
+  // beside `media` rather than inside it, because `media` is sent to the
+  // provider verbatim and an unexpected field there is a rejected payload.
+  const [probes, setProbes] = useState<AssetProbe[]>([])
   const [when, setWhen] = useState('')
   const [kind, setKind] = useState<PostKind | 'auto'>('auto')
   const [shareToFeed, setShareToFeed] = useState(true)
@@ -106,6 +113,21 @@ export default function ComposeDialog({
   const isReel = effectiveKind === 'reel'
     || (kind === 'auto' && media.length === 1 && media[0]?.type === 'video')
 
+  /** The kind the media check should reason about.
+   *
+   *  `kinds` above is deliberately undefined on "Automatic", because we do not
+   *  claim an intent the operator did not state. The file check cannot afford
+   *  that: a 9:16 clip is fine as a Reel and cropped as a feed post, so the
+   *  same automatic rule Instagram applies is applied here — one video is a
+   *  Reel, several items are a carousel, anything else is a feed post. */
+  const checkKinds = useMemo(() => {
+    const resolved: PostKind = effectiveKind
+      ?? (media.length > 1 ? 'carousel'
+        : media.length === 1 && media[0].type === 'video' ? 'reel'
+        : 'feed')
+    return Object.fromEntries(platforms.map(p => [p, resolved])) as Partial<Record<Platform, PostKind>>
+  }, [platforms, effectiveKind, media])
+
   const limit = platforms.length
     ? Math.min(...platforms.map(p => PLATFORM_RULES[p].captionMax))
     : null
@@ -113,7 +135,7 @@ export default function ComposeDialog({
   const captionIgnored = effectiveKind === 'story'
 
   const reset = () => {
-    setSelected([]); setCaption(''); setMedia([]); setWhen('')
+    setSelected([]); setCaption(''); setMedia([]); setProbes([]); setWhen('')
     setKind('auto'); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
     setLinkItemId('')
     setStep(0)
@@ -123,9 +145,14 @@ export default function ComposeDialog({
     setUploading(true)
     try {
       for (const file of Array.from(files)) {
+        // measure first, off the local file — the size, shape and length decide
+        // whether a platform re-encodes, crops or refuses it, and none of that
+        // is knowable once the bytes are just a URL
+        const probe = await probeFile(file)
         // direct to R2 — a reel is comfortably past Vercel's ~4.5MB body cap
         const { url, kind } = await uploadMedia(file, { purpose: 'social' })
         setMedia(m => [...m, { url, type: kind === 'video' ? 'video' : 'image' }])
+        setProbes(p => [...p, { ...probe, url }])
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
@@ -347,7 +374,11 @@ export default function ComposeDialog({
                           video
                         </div>
                       )}
-                      <button type="button" onClick={() => setMedia(x => x.filter((_, j) => j !== i))}
+                      <button type="button"
+                        onClick={() => {
+                          setMedia(x => x.filter((_, j) => j !== i))
+                          setProbes(p => p.filter(x => x.url !== m.url))
+                        }}
                         className="absolute -right-1.5 -top-1.5 rounded-full bg-zinc-900 p-0.5 text-white dark:bg-zinc-100 dark:text-zinc-900"
                         aria-label="Remove">
                         <X className="h-3 w-3" />
@@ -366,6 +397,11 @@ export default function ComposeDialog({
                   </Button>
                 </div>
               </div>
+
+              {/* what each platform will do to these exact files — shown here,
+                  while the file can still be swapped for a better export */}
+              <AssetCheck probes={probes} platforms={platforms} kinds={checkKinds} />
+
 
               <div className="grid gap-1.5">
                 <div className="flex items-center">
@@ -478,6 +514,10 @@ export default function ComposeDialog({
                   Leave blank to publish immediately.
                 </p>
               </div>
+
+              {/* the verdict again at the last moment, without the detail —
+                  the breakdown lives on the Content step, next to the files */}
+              <AssetCheck probes={probes} platforms={platforms} kinds={checkKinds} compact />
 
               {warnings.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
