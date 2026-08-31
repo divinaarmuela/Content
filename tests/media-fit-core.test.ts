@@ -84,14 +84,17 @@ describe('a file that is only too big', () => {
 })
 
 describe('length', () => {
-  it('blocks a 2 minute cut as an Instagram Reel', () => {
+  it('passes a 2 minute Reel and blocks a 16 minute one — Meta says fifteen', () => {
+    // the 90-second cap in Zernio's guide is stale; Meta's own spec is 15 min,
+    // which is how other tools post longer Reels and this one refused to
+    expect(assessAssets({
+      probes: [reel({ seconds: 120 })], platforms: ['instagram'], kinds: { instagram: 'reel' },
+    })).toEqual([])
     const findings = assessAssets({
-      probes: [reel({ seconds: 120 })],
-      platforms: ['instagram'],
-      kinds: { instagram: 'reel' },
+      probes: [reel({ seconds: 16 * 60 })], platforms: ['instagram'], kinds: { instagram: 'reel' },
     })
     expect(findings[0].level).toBe('blocked')
-    expect(findings[0].detail).toContain('90s')
+    expect(findings[0].detail).toContain('15 min')
   })
 
   it('passes the same cut on TikTok and YouTube Shorts', () => {
@@ -320,7 +323,7 @@ describe('the specs the person is told to export to', () => {
     const lines = requirementLines('instagram', 'reel', 'video')
     expect(lines).toContain('MP4 or MOV')
     expect(lines).toContain('9:16 vertical')
-    expect(lines.join(' · ')).toContain('90s')
+    expect(lines.join(' · ')).toContain('15 min')
     expect(lines.join(' · ')).toContain('300 MB')
   })
 
@@ -420,12 +423,12 @@ describe('a "feed" video on Instagram is a Reel, and is judged as one', () => {
   // publishes every single video as a Reel, and the provider does the same
   it('applies Reel rules to a lone video labelled feed', () => {
     const findings = assessAssets({
-      probes: [reel({ width: 1920, height: 1080, bytes: 2048 * MB, seconds: 240 })],
+      probes: [reel({ width: 1920, height: 1080, bytes: 2048 * MB, seconds: 1000 })],
       platforms: ['instagram'],
       kinds: { instagram: 'feed' },
     })
     const heads = findings.map(f => f.headline)
-    expect(heads).toContain('Too long')                      // 240s vs 90s
+    expect(heads).toContain('Too long')                      // 1000s vs 15 min
     expect(findings.some(f => f.level === 'blocked')).toBe(true)
   })
 

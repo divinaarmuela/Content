@@ -125,12 +125,19 @@ export const PLATFORM_MEDIA: Record<Platform, PlatformMedia> = {
       minWidth: 540,
     },
     byKind: {
+      // Meta's own Reels spec, not the 90-second figure Zernio's guide (and most
+      // of the internet) still carries: 3 seconds to FIFTEEN MINUTES, 300 MB,
+      // any aspect from 0.01:1 to 10:1 with 9:16 recommended, at least 360 px
+      // wide. The 90s cap was real once and is the reason "how does Later post
+      // longer Reels?" was a fair question — they read the current spec.
       reel: {
         video: {
           maxMB: 300, oversize: 'compress',
-          maxSeconds: 90, overlong: 'reject',
+          minSeconds: 3, maxSeconds: 15 * 60, overlong: 'reject',
+          // outside 9:16 it still POSTS — shown with bars or a crop, which is
+          // what `reframed` means — so this stays advisory, never blocking
           aspectMin: VERTICAL_MIN, aspectMax: VERTICAL_MAX, aspectName: '9:16 vertical',
-          minWidth: 1080,
+          minWidth: 360,
         },
       },
       story: {

@@ -259,7 +259,9 @@ export type Target = { platform: Platform; accountId: string; options?: PostOpti
  *  general limits. Duration and aspect ratio cannot be checked here — they
  *  need the file — so they are documented for the UI to surface. */
 export const REEL_REQUIREMENTS = {
-  maxSeconds: 90,
+  // Meta's published Reels spec — fifteen minutes, not the 90s that Zernio's
+  // guide still quotes. See media-fit-core for the full set.
+  maxSeconds: 15 * 60,
   aspect: '9:16 vertical',
   resolution: '1080 x 1920',
   maxMB: 300,
