@@ -212,6 +212,15 @@ export type CanvasCard = {
   urls?: string[]
   /** todo card — its checklist rows */
   items?: { id: string; text: string; done: boolean }[]
+  /** link card — what the link actually is, so the card can SHOW it rather
+   *  than name it. Resolved once when the link is dropped and stored on the
+   *  card: the board must not make a network request per card on every open,
+   *  and a preview that disappears when a provider rate-limits us is worse
+   *  than one that is a few weeks stale. */
+  thumb?: string
+  title?: string
+  provider?: string
+  media?: 'video' | 'image' | 'page'
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -261,6 +270,19 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
           })()
         : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      // a link's resolved preview. The thumbnail is rendered as an <img src>,
+      // so it goes through the same https-only gate the card's own url does —
+      // a preview is not a reason to relax it.
+      ...(kind === 'link'
+        ? {
+            ...(String(r.thumb ?? '').startsWith('https://')
+              ? { thumb: String(r.thumb).slice(0, 2000) } : {}),
+            ...(r.title ? { title: String(r.title).slice(0, 200) } : {}),
+            ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
+            ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
+              ? { media: String(r.media) as CanvasCard['media'] } : {}),
+          }
+        : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
         : {}),

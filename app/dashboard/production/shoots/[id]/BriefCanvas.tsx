@@ -84,6 +84,15 @@ export default function BriefCanvas({
   const [, forceRender] = useState(0)
   const [scalePct, setScalePct] = useState(100)
   const [selected, setSelected] = useState<string | null>(null)
+  /** The one card allowed to be a live player.
+   *
+   *  One, deliberately. A board of ten embedded Reels is ten players, and the
+   *  strip components in this app already learned what that costs — see
+   *  VideoTile, which is a picture of a clip and never the clip. Playing one
+   *  card in place is the useful half of that idea without the bill: watching
+   *  a reference next to the concept beside it is the entire reason it is on
+   *  the board, and a lightbox that covers the board loses the comparison. */
+  const [playing, setPlaying] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [sheetCard, setSheetCard] = useState<CanvasCard | null>(null)
@@ -444,6 +453,40 @@ export default function BriefCanvas({
     persist([card])
     setSelected(card.id)
     if (card.kind === 'note' || card.kind === 'label') setEditing(card.id)
+    if (card.kind === 'link' && card.url) void resolveLink(card.id, card.url)
+  }
+
+  /**
+   * Ask what is at the end of a link, and put it on the card.
+   *
+   * Fire-and-forget on purpose: the card exists and is usable the instant it
+   * is dropped, and the picture arrives a moment later or never. A link whose
+   * provider tells servers nothing — Instagram and Facebook both refuse —
+   * simply stays the chip it was, and the card says to drop an image on it
+   * for a cover. Never blocks, never throws, never leaves a spinner behind.
+   */
+  const resolveLink = async (id: string, url: string) => {
+    try {
+      const res = await fetch('/api/link-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      if (!res.ok) return
+      const { preview, provider } = await res.json() as {
+        preview: Partial<CanvasCard> | null; provider?: string | null
+      }
+      // a provider with no preview is still worth knowing — it is what turns
+      // the chip's second line into an instruction instead of a hostname
+      const patch = preview ?? (provider ? { provider } : null)
+      if (!patch) return
+      // the card may have been moved, edited or deleted while we were away
+      const live = cardsRef.current.find(c => c.id === id)
+      if (!live) return
+      const merged = { ...live, ...patch }
+      upsertLocal(merged)
+      persist([merged])
+    } catch { /* a preview is a bonus; its failure is not the user's problem */ }
   }
 
   const addImages = async (files: FileList) => {
@@ -650,7 +693,14 @@ export default function BriefCanvas({
           backgroundImage: 'radial-gradient(circle, rgba(113,113,122,0.25) 1px, transparent 1px)',
           backgroundSize: '24px 24px',
         }}
-        onPointerDown={e => { if (e.target === viewportRef.current || e.target === worldRef.current) setSelected(null) }}
+        // a click on bare canvas puts the player back to a still, so the board
+        // never carries a running video somebody has walked away from
+        onPointerDown={e => {
+          if (e.target === viewportRef.current || e.target === worldRef.current) {
+            setSelected(null)
+            setPlaying(null)
+          }
+        }}
         onDoubleClick={e => {
           if (viewOnly) return
           if ((e.target as HTMLElement).closest('[data-card]')) return
@@ -756,6 +806,8 @@ export default function BriefCanvas({
                 clientName={clientName}
                 onCommitText={cardCallbacks(card.id).onCommitText}
                 onUpdate={viewOnly ? undefined : cardCallbacks(card.id).onUpdate}
+                playing={playing === card.id}
+                onPlay={() => setPlaying(card.id)}
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div
