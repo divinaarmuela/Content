@@ -210,9 +210,11 @@ export const PLATFORM_MEDIA: Record<Platform, PlatformMedia> = {
       minWidth: 1280, minHeight: 720,
     },
     byKind: {
+      // Meta's Facebook Reels spec is 3 to 90 seconds; Zernio's guide says 60,
+      // which is the STORY ceiling for a reel shared to a Page's story
       reel: {
         video: {
-          minSeconds: 3, maxSeconds: 60, overlong: 'reject',
+          minSeconds: 3, maxSeconds: 90, overlong: 'reject',
           aspectMin: VERTICAL_MIN, aspectMax: VERTICAL_MAX, aspectName: '9:16 vertical',
         },
       },
@@ -283,10 +285,12 @@ export const PLATFORM_MEDIA: Record<Platform, PlatformMedia> = {
       maxMB: 1, oversize: 'compress',
       maxWidth: 2000, maxHeight: 2000,
     },
+    // Bluesky raised video to 10 minutes and 300 MB on 26 August 2026; the
+    // 60s / 50 MB figures in Zernio's guide are the previous limits
     video: {
       formats: ['mp4'],
-      maxMB: 50, oversize: 'reject',
-      maxSeconds: 60, overlong: 'reject',
+      maxMB: 300, oversize: 'reject',
+      maxSeconds: 10 * 60, overlong: 'reject',
       maxWidth: 1920, maxHeight: 1080,
     },
   },
