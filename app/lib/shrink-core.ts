@@ -21,16 +21,22 @@ const MB = 1024 * 1024
 /**
  * The size past which the provider, in practice, does not deliver.
  *
- * TikTok says 4 GB and LinkedIn says 5 GB, and both are true of the platform.
- * Neither is true of the trip through the provider: twice in one day a 2 GB
- * master to TikTok and LinkedIn sat at "processing" and "pending" for good —
- * once as a timeout, once never resolving — while the 11 MB copy sent to
- * Instagram in the same post was live in two minutes. So the copy goes to
- * every channel the master is too big to MOVE, not only the ones it is too
- * big to accept. YouTube is the exception: it took the 2 GB master every time,
- * and a Short or a long-form upload deserves the full file.
+ * LinkedIn says 5 GB, and that is true of the platform. It is not true of the
+ * trip through the provider: every 2 GB master sent to LinkedIn today ended in
+ * "Publishing timed out during platform API call". So LinkedIn gets the copy
+ * past this ceiling, whatever its documented cap.
+ *
+ * TikTok is NOT on this list, and was for an hour, wrongly. Its 2 GB uploads
+ * looked like failures — the provider reports them as `failed` with
+ * "TikTok is still processing this upload… do not repost it" — but the
+ * 3:26 pm master went live on TikTok 63 minutes after it was scheduled. Slow
+ * is not broken, and sending TikTok a 0.85 Mbps copy to avoid a wait was
+ * the wrong trade. TikTok and YouTube keep the full file.
  */
 export const PRACTICAL_RELAY_MB = 500
+
+/** Channels that have taken a 2 GB master, end to end, today. */
+const TAKES_THE_MASTER: readonly Platform[] = ['youtube', 'tiktok']
 
 /** Channels the SHARED video is too big for — by the platform's rule or by
  *  what the provider can actually move — that have no file of their own yet.
@@ -48,7 +54,7 @@ export function channelsNeedingCopy(input: {
     if (input.own?.[p]?.length) return false
     const limit = sizeLimitFor(p, 'video', input.kinds?.[p])
     const platformMax = limit?.maxMB ?? Infinity
-    const practicalMax = p === 'youtube' ? Infinity : PRACTICAL_RELAY_MB
+    const practicalMax = TAKES_THE_MASTER.includes(p) ? Infinity : PRACTICAL_RELAY_MB
     return video.bytes! > Math.min(platformMax, practicalMax) * MB
   })
 }

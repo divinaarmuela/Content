@@ -2,7 +2,7 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { getPublisher } from './publisher'
 import {
-  validatePost, isPlatform, describeRemoteOutcome,
+  validatePost, isPlatform, describeRemoteOutcome, isStillProcessing,
   type MediaItem, type PostKind, type Platform, type Target, type RemotePlatformRow,
 } from './publish-core'
 
@@ -356,7 +356,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
     // a green tick over a post that missed three quarters of its audience.
     // Any failed channel makes it partial, and partial is described per
     // channel further down.
-    if (platforms.some(p => String(p.status ?? '').toLowerCase() === 'failed')) {
+    // …but a TikTok "failed — still processing, do not repost" is a wait, not
+    // a failure: the 3:26 pm master went live on TikTok 63 minutes later
+    if (platforms.some(p => String(p.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(p))) {
       return { status: 'partial', platforms }
     }
     const platformLive = platforms.some(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
@@ -388,6 +390,17 @@ export async function reconcilePublishedJobs(): Promise<number> {
       // keep the per-platform reasons: a post live on YouTube and refused by
       // TikTok is not "failed", it is "went out on youtube; tiktok: <why>"
       const outcome = describeRemoteOutcome(remote.status, remote.platforms as RemotePlatformRow[])
+      // nothing has actually failed yet — a channel is still processing. Say
+      // so on the row without marking it failed, and without offering a retry
+      // that would post the same video twice.
+      if (outcome.failedPlatforms.length === 0 && outcome.pendingPlatforms.length > 0) {
+        await supabase.from('publish_jobs').update({
+          error: outcome.error,
+          ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.id)
+        continue
+      }
       await supabase.from('publish_jobs').update({
         status: 'failed',
         error: outcome.error,

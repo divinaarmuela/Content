@@ -6,7 +6,9 @@ import { UploadRows, useUploadGroup } from '../UploadRows'
 import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile, probeUrl } from './probeMedia'
 import AssetCheck from './AssetCheck'
-import { channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, type CopyState } from '../../lib/shrink-core'
+import {
+  channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, PRACTICAL_RELAY_MB, type CopyState,
+} from '../../lib/shrink-core'
 import {
   assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
@@ -329,6 +331,17 @@ export default function ComposeDialog({
           if (!landed) return // cancelled — its row is already gone
           const { poster, ...probe } = await measuring
           setMedia(m => [...m, { url: landed.url, type: probe.type }])
+          // A big video will need the smaller copy on most channels, and the
+          // encode takes minutes. Ask for it NOW, while the person is still
+          // choosing channels and writing the caption, instead of at the end
+          // when they are waiting on it. One encode per file regardless — this
+          // only moves it earlier. Fire-and-forget: the poll picks it up.
+          if (probe.type === 'video' && (probe.bytes ?? 0) > PRACTICAL_RELAY_MB * 1024 * 1024) {
+            void fetch('/api/social/shrink', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: landed.url }),
+            }).catch(() => {})
+          }
           setProbes(p => [...p, { ...probe, url: landed.url }])
           if (poster) setPosters(p => ({ ...p, [landed.url]: poster }))
         })

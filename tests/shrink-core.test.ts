@@ -11,18 +11,19 @@ const master: AssetProbe = {
 describe('which channels get the smaller copy', () => {
   // the whole point of a 2 GB master: YouTube, TikTok and LinkedIn take it at
   // full quality, and only Instagram needs something smaller
-  it('names every channel the master is too big to MOVE — YouTube alone keeps it', () => {
-    // TikTok and LinkedIn accept 4–5 GB on paper and never received a 2 GB
-    // master through the provider, twice; the 11 MB copy to Instagram in the
-    // same post was live in two minutes
+  it('names the channels the master is too big to MOVE — YouTube and TikTok keep it', () => {
+    // LinkedIn times out on a 2 GB master every time. TikTok looked the same
+    // for an hour and was not: the provider reports a slow TikTok upload as
+    // "failed — still processing, do not repost", and the 3:26 pm master went
+    // live on TikTok 63 minutes later. Slow is not broken.
     expect(channelsNeedingCopy({
       probes: [master],
       platforms: ['instagram', 'youtube', 'tiktok', 'linkedin'],
       kinds: { instagram: 'reel' },
-    })).toEqual(['instagram', 'tiktok', 'linkedin'])
+    })).toEqual(['instagram', 'linkedin'])
   })
 
-  it('does not bother TikTok or LinkedIn with a copy the provider can move', () => {
+  it('does not bother LinkedIn with a copy of a file the provider can move', () => {
     expect(channelsNeedingCopy({
       probes: [{ ...master, bytes: 400 * MB }],
       platforms: ['instagram', 'tiktok', 'linkedin', 'youtube'],

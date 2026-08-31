@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
-  availableKinds, autoKindFor, describeRemoteOutcome, SUPPORTED_PLATFORMS,
+  availableKinds, autoKindFor, describeRemoteOutcome, isStillProcessing, SUPPORTED_PLATFORMS,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -515,5 +515,41 @@ describe('a channel with its own media and words', () => {
       caption: 'a', media: img(1), platforms: ['twitter'],
       mediaByPlatform: { twitter: img(5) },
     })[0].problem).toMatch(/5 images/)
+  })
+})
+
+describe('a TikTok upload the platform is still processing is a wait, not a failure', () => {
+  // Zernio reports it as status "failed" with this message and keeps checking;
+  // the 3:26 pm 2 GB master went live on TikTok 63 minutes later. Reading it
+  // as failed offered a retry that would have posted the video twice — which
+  // the message itself warns against.
+  const still = {
+    platform: 'tiktok', status: 'failed',
+    errorMessage: 'TikTok is still processing this upload. We keep checking and will update this post automatically. Please do not repost it: that would upload a duplicate to TikTok.',
+  }
+  it('is recognised by its message, not its status word', () => {
+    expect(isStillProcessing(still)).toBe(true)
+    expect(isStillProcessing({ platform: 'tiktok', status: 'failed', errorMessage: 'video too long' })).toBe(false)
+  })
+
+  it('is reported as pending, and never as a failure to retry', () => {
+    const o = describeRemoteOutcome('partial', [
+      { platform: 'youtube', status: 'published', platformPostUrl: 'https://youtu.be/x' },
+      still,
+    ])
+    expect(o.failedPlatforms).toEqual([])
+    expect(o.pendingPlatforms).toEqual(['tiktok'])
+    expect(o.error).toBe('Went out on youtube. Still going out on tiktok — the platform is processing it; do not resend.')
+  })
+
+  it('still names a real failure beside it', () => {
+    const o = describeRemoteOutcome('partial', [
+      { platform: 'linkedin', status: 'failed', errorMessage: 'Publishing timed out during platform API call.' },
+      still,
+    ])
+    expect(o.failedPlatforms).toEqual(['linkedin'])
+    expect(o.pendingPlatforms).toEqual(['tiktok'])
+    expect(o.error).toMatch(/^Did not go out — linkedin: Publishing timed out/)
+    expect(o.error).toMatch(/Still going out on tiktok/)
   })
 })

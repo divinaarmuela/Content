@@ -530,27 +530,56 @@ export type RemotePlatformRow = {
   platformPostUrl?: string | null
 }
 
+/**
+ * A "failure" that is a wait.
+ *
+ * Zernio reports a TikTok upload that TikTok is still processing as
+ * `status: "failed"` with this message and `tiktokTerminalDeferred: true`,
+ * keeps checking, and flips it to published when TikTok finishes — a 2 GB
+ * master took 63 minutes and went live. Reading that row as failed marked a
+ * post that was going to succeed as one that had not, and offered a retry
+ * that would have posted the video twice, which the message itself warns of.
+ */
+export function isStillProcessing(row: RemotePlatformRow): boolean {
+  return /still processing/i.test(String(row.errorMessage ?? row.error ?? ''))
+}
+
 export function describeRemoteOutcome(
   overall: string, rows: RemotePlatformRow[] | null | undefined,
-): { error: string; permalink: string | null; livePlatforms: string[]; failedPlatforms: string[] } {
+): {
+  error: string; permalink: string | null
+  livePlatforms: string[]; failedPlatforms: string[]; pendingPlatforms: string[]
+} {
   const list = Array.isArray(rows) ? rows : []
   const name = (r: RemotePlatformRow) => String(r.platform ?? r.name ?? 'a channel').toLowerCase()
   const LIVE = ['published', 'posted', 'success']
   const live = list.filter(r => LIVE.includes(String(r.status ?? '').toLowerCase()))
-  const failed = list.filter(r => String(r.status ?? '').toLowerCase() === 'failed')
+  const pending = list.filter(r => isStillProcessing(r)
+    || ['pending', 'processing', 'publishing'].includes(String(r.status ?? '').toLowerCase()))
+  const failed = list.filter(r => String(r.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(r))
   const reasons = failed.map(r => {
     const why = String(r.errorMessage ?? r.error ?? '').trim()
     return why ? `${name(r)}: ${why}` : `${name(r)}: no reason given`
   })
   const permalink = list.find(r => r.platformPostUrl)?.platformPostUrl ?? null
 
+  const waiting = pending.length
+    ? ` Still going out on ${pending.map(name).join(', ')} — the platform is processing it; do not resend.`
+    : ''
   let error: string
-  if (overall === 'partial' && live.length > 0) {
-    error = `Went out on ${live.map(name).join(', ')}. Did not go out on ${reasons.join('; ') || 'the rest'}.`
+  if (live.length > 0 && (reasons.length > 0 || pending.length > 0)) {
+    error = `Went out on ${live.map(name).join(', ')}.`
+      + (reasons.length ? ` Did not go out on ${reasons.join('; ')}.` : '')
+      + waiting
   } else if (reasons.length > 0) {
-    error = `Did not go out — ${reasons.join('; ')}`
+    error = `Did not go out — ${reasons.join('; ')}.${waiting}`
+  } else if (pending.length > 0) {
+    error = waiting.trim()
   } else {
     error = `Provider reported the post as ${overall} after creation`
   }
-  return { error, permalink, livePlatforms: live.map(name), failedPlatforms: failed.map(name) }
+  return {
+    error, permalink,
+    livePlatforms: live.map(name), failedPlatforms: failed.map(name), pendingPlatforms: pending.map(name),
+  }
 }
