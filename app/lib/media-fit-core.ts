@@ -627,6 +627,26 @@ export function postingAs(platform: Platform, kind: PostKind | undefined, type: 
   }
 }
 
+/**
+ * The platform's own short name for a post type — for a menu, where
+ * `postingAs` is too long to read.
+ *
+ * The same upload is a Reel on Instagram, a Short on YouTube and just a video
+ * on TikTok. One label for all three is wrong on at least two of them.
+ */
+export function kindLabel(platform: Platform, kind: PostKind): string {
+  if (kind === 'feed') return platform === 'pinterest' ? 'Pin' : 'Feed post'
+  if (kind === 'story') return 'Story'
+  if (kind === 'carousel') return platform === 'tiktok' ? 'Photo post' : 'Carousel'
+  switch (platform) {
+    case 'youtube': return 'Short'
+    case 'tiktok': return 'Video'
+    case 'instagram':
+    case 'facebook': return 'Reel'
+    default: return 'Short video'
+  }
+}
+
 /** How the file reads back to a person: shape, length, weight. */
 function delivered(probe: AssetProbe): string {
   const parts: string[] = []

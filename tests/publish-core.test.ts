@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
+  availableKinds, autoKindFor, SUPPORTED_PLATFORMS,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -265,5 +266,110 @@ describe('mediaTypeFor / isPlatform', () => {
   it('guards unknown platforms', () => {
     expect(isPlatform('instagram')).toBe(true)
     expect(isPlatform('myspace')).toBe(false)
+  })
+})
+
+describe('a post type that does not exist on the platform', () => {
+  // "Reel" is Instagram's word; YouTube calls the same upload a Short and
+  // TikTok just calls it a video. Stories are the case where the difference is
+  // not naming but existence — most platforms have none at all.
+  it('refuses a Story on a platform that has none', () => {
+    const issues = validatePost({
+      caption: '',
+      media: [{ url: 'https://x.invalid/a.mp4', type: 'video' }],
+      platforms: ['youtube', 'linkedin', 'tiktok'],
+      kinds: { youtube: 'story', linkedin: 'story', tiktok: 'story' },
+    })
+    for (const p of ['youtube', 'linkedin', 'tiktok']) {
+      expect(issues.some(i => i.platform === p && /has no Stories/.test(i.problem)), p).toBe(true)
+    }
+  })
+
+  it('allows one where it does exist', () => {
+    const issues = validatePost({
+      caption: '',
+      media: [{ url: 'https://x.invalid/a.mp4', type: 'video' }],
+      platforms: ['instagram', 'facebook'],
+      kinds: { instagram: 'story', facebook: 'story' },
+    })
+    expect(issues).toEqual([])
+  })
+
+  it('says the platform has no Stories rather than counting the media', () => {
+    // two items AND no Stories: the count is not the useful half
+    const issues = validatePost({
+      caption: '',
+      media: [
+        { url: 'https://x.invalid/a.jpg', type: 'image' },
+        { url: 'https://x.invalid/b.jpg', type: 'image' },
+      ],
+      platforms: ['youtube'],
+      kinds: { youtube: 'story' },
+    })
+    expect(issues.filter(i => /Story|Stories/.test(i.problem))).toHaveLength(1)
+    expect(issues.some(i => /has no Stories/.test(i.problem))).toBe(true)
+  })
+})
+
+describe('each channel offers only the post types it has', () => {
+  it('does not offer a Story where there are none, or a carousel where there is none', () => {
+    expect(availableKinds('youtube')).toEqual(['feed', 'reel'])
+    expect(availableKinds('instagram')).toEqual(['feed', 'reel', 'story', 'carousel'])
+    expect(availableKinds('linkedin')).toEqual(['feed', 'carousel'])
+    expect(availableKinds('pinterest')).toEqual(['feed'])
+  })
+
+  it('always offers at least a plain post', () => {
+    for (const p of SUPPORTED_PLATFORMS) {
+      expect(availableKinds(p), p).toContain('feed')
+    }
+  })
+
+  it('never offers a type that validation would then refuse', () => {
+    const one = [{ url: 'https://x.invalid/a.mp4', type: 'video' as const }]
+    const two = [
+      { url: 'https://x.invalid/a.jpg', type: 'image' as const },
+      { url: 'https://x.invalid/b.jpg', type: 'image' as const },
+    ]
+    for (const p of SUPPORTED_PLATFORMS) {
+      for (const kind of availableKinds(p)) {
+        // give each type the media it is entitled to
+        const media = kind === 'carousel' ? two : one
+        const issues = validatePost({ caption: '', media, platforms: [p], kinds: { [p]: kind } })
+        const aboutTheType = issues.filter(i =>
+          /has no Stories|does not post carousels|needs at least two/.test(i.problem))
+        expect(aboutTheType, `${p} offers ${kind} but refuses it`).toEqual([])
+      }
+    }
+  })
+})
+
+describe('what Automatic resolves to, per platform', () => {
+  const two = [
+    { url: 'https://x.invalid/a.jpg', type: 'image' as const },
+    { url: 'https://x.invalid/b.jpg', type: 'image' as const },
+  ]
+
+  it('reads the media the way the provider does', () => {
+    expect(autoKindFor('instagram', [{ url: 'https://x.invalid/a.mp4', type: 'video' }])).toBe('reel')
+    expect(autoKindFor('instagram', two)).toBe('carousel')
+    expect(autoKindFor('instagram', [{ url: 'https://x.invalid/a.jpg', type: 'image' }])).toBe('feed')
+    expect(autoKindFor('instagram', [])).toBe('feed')
+  })
+
+  // the bug this closes: one global guess sent "carousel" to YouTube, which
+  // has none, failing validation on a choice nobody made
+  it('falls back rather than guessing a type the platform lacks', () => {
+    expect(autoKindFor('youtube', two)).toBe('feed')
+    expect(autoKindFor('pinterest', two)).toBe('feed')
+    expect(autoKindFor('linkedin', [{ url: 'https://x.invalid/a.mp4', type: 'video' }])).toBe('feed')
+  })
+
+  it('never resolves to something the platform does not offer', () => {
+    for (const p of SUPPORTED_PLATFORMS) {
+      for (const media of [[], two, [{ url: 'https://x.invalid/a.mp4', type: 'video' as const }]]) {
+        expect(availableKinds(p), p).toContain(autoKindFor(p, media))
+      }
+    }
   })
 })

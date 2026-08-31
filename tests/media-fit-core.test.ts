@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, formatOf,
-  postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
+  kindLabel, postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
 } from '../app/lib/media-fit-core'
 import { SUPPORTED_PLATFORMS } from '../app/lib/publish-core'
@@ -387,5 +387,29 @@ describe('describeAspect', () => {
   it('falls back to a ratio for anything else', () => {
     expect(describeAspect(1000, 700)).toBe('1.43:1')
     expect(describeAspect(700, 1000)).toBe('1:1.43')
+  })
+})
+
+describe('the platform names its own post types', () => {
+  it('calls the same upload what each platform calls it', () => {
+    expect(kindLabel('instagram', 'reel')).toBe('Reel')
+    expect(kindLabel('facebook', 'reel')).toBe('Reel')
+    expect(kindLabel('youtube', 'reel')).toBe('Short')
+    expect(kindLabel('tiktok', 'reel')).toBe('Video')
+    expect(kindLabel('linkedin', 'reel')).toBe('Short video')
+  })
+
+  it('names the plain post the way the platform does', () => {
+    expect(kindLabel('pinterest', 'feed')).toBe('Pin')
+    expect(kindLabel('linkedin', 'feed')).toBe('Feed post')
+    expect(kindLabel('tiktok', 'carousel')).toBe('Photo post')
+  })
+
+  it('has a label for every type every platform offers', () => {
+    for (const p of SUPPORTED_PLATFORMS) {
+      for (const k of ['feed', 'reel', 'story', 'carousel'] as const) {
+        expect(kindLabel(p, k), `${p}/${k}`).toBeTruthy()
+      }
+    }
   })
 })

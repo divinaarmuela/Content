@@ -38,17 +38,58 @@ export const PLATFORM_RULES: Record<Platform, {
   carousel: number
   /** may that carousel hold images AND videos together */
   mixedCarousel: boolean
+  /** does this platform have Stories at all — the 24-hour kind. Choosing
+   *  Story while a channel without them is selected is not a style choice,
+   *  it is a post that cannot exist. */
+  stories: boolean
+  /** does it have a distinct short-form vertical slot — a Reel, a Short. On
+   *  a platform without one, a vertical video is simply a video, and offering
+   *  "Reel" there would be inventing a format. */
+  shortForm: boolean
 }> = {
-  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true  },
-  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false },
-  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
-  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false },
-  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
-  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
-  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
-  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
-  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
-  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 0,  mixedCarousel: false },
+  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false, stories: false, shortForm: true  },
+  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
+  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false, stories: false, shortForm: false },
+  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: false, shortForm: false },
+  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: true  },
+  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: false },
+  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
+  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 0,  mixedCarousel: false, stories: false, shortForm: false },
+}
+
+/**
+ * The post types this platform actually has.
+ *
+ * The composer offers one choice per channel rather than one choice for all
+ * of them, and a menu is the wrong place to learn that YouTube has no Stories
+ * — an option that cannot be chosen never has to be explained.
+ */
+export function availableKinds(platform: Platform): PostKind[] {
+  const r = PLATFORM_RULES[platform]
+  if (!r) return ['feed']
+  const kinds: PostKind[] = ['feed']
+  if (r.shortForm) kinds.push('reel')
+  if (r.stories) kinds.push('story')
+  if (r.carousel > 0) kinds.push('carousel')
+  return kinds
+}
+
+/**
+ * What "Automatic" means on THIS platform.
+ *
+ * The provider reads the media: one video is short-form, several items are a
+ * carousel, anything else is a feed post. Clamped to what the platform has,
+ * because the old global guess sent "carousel" to YouTube — a choice nobody
+ * made, failing validation for a reason nobody chose.
+ */
+export function autoKindFor(platform: Platform, media: MediaItem[]): PostKind {
+  const guess: PostKind =
+    media.length > 1 ? 'carousel'
+    : media.length === 1 && media[0].type === 'video' ? 'reel'
+    : 'feed'
+  return availableKinds(platform).includes(guess) ? guess : 'feed'
 }
 
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
@@ -137,8 +178,14 @@ export function validatePost(input: {
         issues.push({ platform: p, problem: 'A Reel cannot include still images' })
       }
     }
-    if (kind === 'story' && input.media.length !== 1) {
-      issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
+    if (kind === 'story') {
+      // caught before the media rules: "a Story takes one item" is useless
+      // advice on a platform that has no Stories to put the item in
+      if (!r.stories) {
+        issues.push({ platform: p, problem: `${p} has no Stories — pick a different post type for it` })
+      } else if (input.media.length !== 1) {
+        issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
+      }
     }
     if (kind === 'carousel') {
       if (r.carousel === 0) {

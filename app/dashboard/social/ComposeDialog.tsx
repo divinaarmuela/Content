@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
 import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile } from './probeMedia'
 import AssetCheck from './AssetCheck'
-import type { AssetProbe } from '../../lib/media-fit-core'
+import { kindLabel, postingAs, PLATFORM_MEDIA, type AssetProbe } from '../../lib/media-fit-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,8 +24,9 @@ import {
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from './PlatformIcon'
 import {
-  validatePost, postWarnings, PLATFORM_RULES, isPlatform,
-  REEL_REQUIREMENTS, STORY_REQUIREMENTS,
+  validatePost, postWarnings, PLATFORM_RULES, isPlatform, availableKinds, autoKindFor,
+  // the per-format requirements are no longer restated here: the check panel
+  // lists them per channel, from the same table the checks use
   type MediaItem, type Platform, type PostKind,
 } from '../../lib/publish-core'
 
@@ -65,6 +66,9 @@ export default function ComposeDialog({
   const [posters, setPosters] = useState<Record<string, string>>({})
   const [when, setWhen] = useState('')
   const [kind, setKind] = useState<PostKind | 'auto'>('auto')
+  /** channels that have been set away from the default above. Absent = follow
+   *  it; the map only ever holds a deliberate choice. */
+  const [perKind, setPerKind] = useState<Partial<Record<Platform, PostKind>>>({})
   const [shareToFeed, setShareToFeed] = useState(true)
   const [firstComment, setFirstComment] = useState('')
   const [collaborators, setCollaborators] = useState('')
@@ -111,11 +115,29 @@ export default function ComposeDialog({
     [chosen]
   )
 
-  const effectiveKind: PostKind | undefined = kind === 'auto' ? undefined : kind
-  const kinds = useMemo(() => {
-    if (!effectiveKind) return undefined
-    return Object.fromEntries(platforms.map(p => [p, effectiveKind])) as Partial<Record<Platform, PostKind>>
-  }, [platforms, effectiveKind])
+  /**
+   * What each channel is actually posting.
+   *
+   * One post type for every channel was wrong twice over: it called the same
+   * upload a Reel on YouTube, where it is a Short, and it offered Story on
+   * platforms that have none. Worse, "Automatic" guessed once, globally — a
+   * three-image drop resolved to "carousel" and sent that to YouTube, which
+   * has no carousel, failing validation on a choice nobody made.
+   *
+   * So the choice is per channel. The select at the top is the default that
+   * every channel follows until one is set on its own, and every resolution
+   * is clamped to what that platform actually has.
+   */
+  const resolveKind = useCallback((p: Platform): PostKind => {
+    const chosen = perKind[p] ?? (kind === 'auto' ? null : kind)
+    if (chosen && availableKinds(p).includes(chosen)) return chosen
+    return autoKindFor(p, media)
+  }, [perKind, kind, media])
+
+  const kinds = useMemo(
+    () => Object.fromEntries(platforms.map(p => [p, resolveKind(p)])) as Partial<Record<Platform, PostKind>>,
+    [platforms, resolveKind],
+  )
 
   const issues = useMemo(
     () => (platforms.length === 0 && !caption && media.length === 0
@@ -128,34 +150,23 @@ export default function ComposeDialog({
     [caption, media, kinds, platforms]
   )
 
-  const isReel = effectiveKind === 'reel'
-    || (kind === 'auto' && media.length === 1 && media[0]?.type === 'video')
-
-  /** The kind the media check should reason about.
-   *
-   *  `kinds` above is deliberately undefined on "Automatic", because we do not
-   *  claim an intent the operator did not state. The file check cannot afford
-   *  that: a 9:16 clip is fine as a Reel and cropped as a feed post, so the
-   *  same automatic rule Instagram applies is applied here — one video is a
-   *  Reel, several items are a carousel, anything else is a feed post. */
-  const checkKinds = useMemo(() => {
-    const resolved: PostKind = effectiveKind
-      ?? (media.length > 1 ? 'carousel'
-        : media.length === 1 && media[0].type === 'video' ? 'reel'
-        : 'feed')
-    return Object.fromEntries(platforms.map(p => [p, resolved])) as Partial<Record<Platform, PostKind>>
-  }, [platforms, effectiveKind, media])
+  // the Reel options — cover frame, share to feed — apply if ANY channel is
+  // posting short-form, not only when every one of them is
+  const isReel = platforms.some(p => kinds[p] === 'reel')
 
   const limit = platforms.length
     ? Math.min(...platforms.map(p => PLATFORM_RULES[p].captionMax))
     : null
 
-  const captionIgnored = effectiveKind === 'story'
+  /** Only when EVERY channel is a Story is the caption genuinely unused. One
+   *  Story among four feed posts must not disable the box the other three
+   *  need — the old rule did exactly that. */
+  const captionIgnored = platforms.length > 0 && platforms.every(p => kinds[p] === 'story')
 
   const reset = () => {
     clearGroup(uploadGroup)
     setSelected([]); setCaption(''); setMedia([]); setProbes([]); setPosters({}); setWhen('')
-    setKind('auto'); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
+    setKind('auto'); setPerKind({}); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
     setLinkItemId('')
     setStep(0)
   }
@@ -204,12 +215,16 @@ export default function ComposeDialog({
           ...(linkItemId ? { contentItemId: linkItemId } : {}),
           caption: captionIgnored ? '' : caption,
           media,
-          targets: chosen.map(a => ({
+          targets: chosen.map(a => {
+            // each channel carries its OWN type — the payload has always had
+            // room for it, only the composer was collapsing them into one
+            const target = isPlatform(a.platform) ? resolveKind(a.platform) : undefined
+            return {
             platform: a.platform,
             accountId: a.provider_account_id,
             options: {
-              ...(effectiveKind ? { kind: effectiveKind } : {}),
-              ...(isReel ? { shareToFeed } : {}),
+              ...(target ? { kind: target } : {}),
+              ...(target === 'reel' ? { shareToFeed } : {}),
               ...(firstComment.trim() ? { firstComment: firstComment.trim() } : {}),
               ...(collaborators.trim()
                 ? { collaborators: collaborators.split(/[\s,]+/).filter(Boolean).slice(0, 3) }
@@ -218,7 +233,8 @@ export default function ComposeDialog({
                 ? { thumbOffset: Math.round(Number(thumbSeconds) * 1000) }
                 : {}),
             },
-          })),
+            }
+          }),
           scheduledFor: publishNow ? null : new Date(when).toISOString(),
           publishNow,
         }),
@@ -365,28 +381,107 @@ export default function ComposeDialog({
                   <SelectContent>
                     <SelectItem value="auto">Automatic — from the media</SelectItem>
                     <SelectItem value="feed">Feed post</SelectItem>
-                    <SelectItem value="reel">Reel</SelectItem>
+                    {/* "Reel" is Instagram's word for it. YouTube calls the
+                        same upload a Short and TikTok just calls it a video,
+                        so the option is named for the thing rather than for
+                        one platform's name for the thing. */}
+                    <SelectItem value="reel">Short vertical video</SelectItem>
                     <SelectItem value="story">Story</SelectItem>
                     <SelectItem value="carousel">Carousel</SelectItem>
                   </SelectContent>
                 </Select>
+
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   {kind === 'auto'
-                    ? `Instagram decides from what you attach: ${
-                        media.length === 0 ? 'one video → Reel, one image → feed post, several → carousel'
+                    ? `Each platform decides from what you attach: ${
+                        media.length === 0 ? 'one video → short video, one image → feed post, several → carousel'
                           : media.length > 1 ? `${media.length} items → carousel`
-                          : media[0].type === 'video' ? 'one video → Reel'
+                          : media[0].type === 'video' ? 'one video → short video'
                           : 'one image → feed post'
-                      }. It will never make a Story — choose Story for that.`
-                    : kind === 'reel'
-                    ? `${REEL_REQUIREMENTS.aspect}, up to ${REEL_REQUIREMENTS.maxSeconds}s, ${REEL_REQUIREMENTS.formats}.`
+                      }. None of them will make a Story — choose Story for that.`
                     : kind === 'story'
-                    ? `${STORY_REQUIREMENTS.aspect}, up to ${STORY_REQUIREMENTS.maxSeconds}s. Captions are not shown.`
+                    ? 'A 24-hour post. Captions are not shown on it — put any wording into the image or video itself.'
                     : kind === 'carousel'
                     ? 'Two or more items, shown as a swipeable set.'
+                    : kind === 'reel'
+                    ? 'One vertical video, in whatever each platform calls its short-form slot.'
                     : 'A standard post in the main feed.'}
                 </p>
+
+                {/* One channel: the sentence says it. Several: they each get
+                    their own row below, and a sentence listing four things is
+                    harder to read than four lines. */}
+                {platforms.length === 1 && (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                    Goes out as{' '}
+                    <span className="font-medium">
+                      {postingAs(platforms[0], kinds[platforms[0]], media[0]?.type ?? 'video')}
+                    </span>.
+                  </p>
+                )}
               </div>
+
+              {/* ── per channel ──────────────────────────────────────────
+                  The same upload is a Reel on Instagram, a Short on YouTube
+                  and a video on TikTok, and a Story is not a thing that
+                  exists on most of them. Each channel picks from what it
+                  actually has; the select above is only the default they
+                  follow until one is set on its own. */}
+              {platforms.length > 1 && (
+                <div className="grid gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium">Per channel</p>
+                    {Object.keys(perKind).length > 0 && (
+                      <button type="button" onClick={() => setPerKind({})}
+                        className="ml-auto text-xs text-zinc-500 underline decoration-dotted hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+                        Reset to the choice above
+                      </button>
+                    )}
+                  </div>
+
+                  {platforms.map(p => {
+                    const options = availableKinds(p)
+                    const resolved = kinds[p]!
+                    // the global choice does not exist here — say which one
+                    // it fell back to rather than showing an unexplained
+                    // difference between what was picked and what will happen
+                    const overridden = kind !== 'auto' && !perKind[p] && !options.includes(kind)
+                    return (
+                      <div key={p} className="flex flex-wrap items-center gap-2">
+                        <PlatformIcon platform={p} size={16} />
+                        <span className="w-20 shrink-0 text-xs">{PLATFORM_MEDIA[p].label}</span>
+                        <Select
+                          value={perKind[p] ?? 'inherit'}
+                          onValueChange={v => setPerKind(m => {
+                            if (v === 'inherit') {
+                              const { [p]: _drop, ...rest } = m
+                              return rest
+                            }
+                            return { ...m, [p]: v as PostKind }
+                          })}
+                        >
+                          <SelectTrigger className="h-8 w-44 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">
+                              Same as above — {kindLabel(p, resolved)}
+                            </SelectItem>
+                            {options.map(k => (
+                              <SelectItem key={k} value={k}>{kindLabel(p, k)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {overridden
+                            ? `${PLATFORM_MEDIA[p].label} has no ${kindLabel(p, kind).toLowerCase()} — posting ${postingAs(p, resolved, media[0]?.type ?? 'video')}`
+                            : postingAs(p, resolved, media[0]?.type ?? 'video')}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               <div className="grid gap-1.5">
                 <Label>Media</Label>
@@ -441,7 +536,7 @@ export default function ComposeDialog({
 
               {/* what each platform will do to these exact files — shown here,
                   while the file can still be swapped for a better export */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={checkKinds} />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} />
 
 
               <div className="grid gap-1.5">
@@ -558,7 +653,7 @@ export default function ComposeDialog({
 
               {/* the verdict again at the last moment, without the detail —
                   the breakdown lives on the Content step, next to the files */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={checkKinds} compact />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} compact />
 
               {warnings.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
