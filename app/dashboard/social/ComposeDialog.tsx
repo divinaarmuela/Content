@@ -6,6 +6,7 @@ import { UploadRows, useUploadGroup } from '../UploadRows'
 import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile } from './probeMedia'
 import AssetCheck from './AssetCheck'
+import { channelsNeedingCopy, copyWords, probeForCopy, type CopyState } from '../../lib/shrink-core'
 import {
   assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
   type AssetProbe,
@@ -196,6 +197,67 @@ export default function ComposeDialog({
   // out one file short with nothing but a dismissed toast to show for it
   const failedUploads = uploads.filter(u => u.status === 'failed').length
 
+  /**
+   * The smaller copy, made for us.
+   *
+   * A 2 GB master is right for YouTube and TikTok and wrong for Instagram, and
+   * the provider's promise to shrink it did not hold — Instagram was handed
+   * the raw file and gave up. So the copy is ours: Cloudflare Stream, which
+   * already encodes every upload for the portal preview, hands back a 1080p
+   * MP4, and every channel the master is too big for gets THAT as its own
+   * file. One encode per file, ever; the download is built once and served
+   * from a fixed URL, so the next post of the same clip pays nothing.
+   */
+  const needingCopy = useMemo(
+    () => channelsNeedingCopy({ probes, platforms, kinds, own: perMedia }),
+    [probes, platforms, kinds, perMedia],
+  )
+  const [copy, setCopy] = useState<{ forUrl: string; state: CopyState } | null>(null)
+  const sharedVideoUrl = probes.length === 1 && probes[0].type === 'video' ? probes[0].url : null
+
+  useEffect(() => {
+    if (!sharedVideoUrl || needingCopy.length === 0) return
+    if (copy?.forUrl === sharedVideoUrl && copy.state.status !== 'encoding') return
+    let stopped = false
+    let asks = 0
+    const ask = async () => {
+      if (stopped) return
+      try {
+        const res = await fetch('/api/social/shrink', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: sharedVideoUrl }),
+        })
+        const state = (await res.json()) as CopyState
+        if (stopped) return
+        setCopy({ forUrl: sharedVideoUrl, state: res.ok ? state : { status: 'failed', reason: 'could not ask for a copy' } })
+        if (!res.ok || state.status !== 'encoding') return
+      } catch {
+        if (!stopped) setCopy({ forUrl: sharedVideoUrl, state: { status: 'failed', reason: 'could not reach the server' } })
+        return
+      }
+      // a 2 GB encode is minutes, not seconds; ask every 5s for up to 15 min
+      if (++asks < 180) setTimeout(ask, 5000)
+      else setCopy({ forUrl: sharedVideoUrl, state: { status: 'failed', reason: 'the copy took too long — add your own smaller file' } })
+    }
+    void ask()
+    return () => { stopped = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedVideoUrl, needingCopy.length])
+
+  // the copy lands as each needing channel's OWN file, so everything
+  // downstream — check, payload, relay — treats it exactly like one added by hand
+  useEffect(() => {
+    if (!copy || copy.state.status !== 'ready' || copy.forUrl !== sharedVideoUrl) return
+    const original = probes[0]
+    const ready = copy.state
+    for (const p of needingCopy) {
+      setPerMedia(m => (m[p]?.length ? m : { ...m, [p]: [{ url: ready.url, type: 'video' }] }))
+      setPerProbes(m => (m[p]?.length ? m : { ...m, [p]: [probeForCopy(original, ready)] }))
+    }
+  }, [copy, needingCopy, probes, sharedVideoUrl])
+
+  const copyPending = needingCopy.length > 0 && copy?.state.status !== 'ready'
+
   // the Reel options — cover frame, share to feed — apply if ANY channel is
   // posting short-form, not only when every one of them is
   const isReel = platforms.some(p => kinds[p] === 'reel')
@@ -217,6 +279,7 @@ export default function ComposeDialog({
     setSelected([]); setCaption(''); setMedia([]); setProbes([]); setPosters({}); setWhen('')
     setKind('auto'); setPerKind({}); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
     setPerMedia({}); setPerProbes({}); setPerCaption({}); setCustomising({}); setLongVideo(false)
+    setCopy(null)
     setLinkItemId('')
     setStep(0)
   }
@@ -355,6 +418,10 @@ export default function ComposeDialog({
    *  with no reason is the most frustrating thing in a form. */
   const stopper =
     failedUploads > 0 ? `${failedUploads} file${failedUploads === 1 ? '' : 's'} failed to upload — retry or remove ${failedUploads === 1 ? 'it' : 'them'}`
+    : copyPending && copy?.state.status === 'failed'
+      ? `${copy.state.reason} — or add a smaller file for ${needingCopy.map(p => PLATFORM_MEDIA[p].label).join(' and ')}`
+    : copyPending
+      ? `Making a smaller copy for ${needingCopy.map(p => PLATFORM_MEDIA[p].label).join(' and ')} — a minute or two for a big file`
     : blockedOn.length > 0 ? `${blockedOn.join(' and ')} will refuse a file in this post — swap it before sending`
     : issues.length > 0 ? 'Fix the problems listed before publishing'
     : uploading ? 'Waiting for the uploads to finish'
@@ -570,6 +637,15 @@ export default function ComposeDialog({
                             ? `${PLATFORM_MEDIA[p].label} has no ${kindLabel(p, kind).toLowerCase()} — posting ${postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}`
                             : postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}
                         </span>
+                        {/* the master is too big here, so this channel gets
+                            the smaller copy — said on the row as it happens */}
+                        {(needingCopy.includes(p) || (copy?.state.status === 'ready' && perMedia[p]?.[0]?.url === copy.state.url)) && (
+                          <span className={`basis-full text-[11px] ${
+                            copy?.state.status === 'failed' ? 'text-red-700 dark:text-red-300' : 'text-sky-700 dark:text-sky-300'
+                          }`}>
+                            {copyWords(PLATFORM_MEDIA[p].label, copy?.forUrl === sharedVideoUrl ? copy?.state : undefined)}
+                          </span>
+                        )}
                         {/* own files and words for this channel alone */}
                         <button
                           type="button"
@@ -875,7 +951,7 @@ export default function ComposeDialog({
                 variant={when ? 'default' : 'outline'}
                 onClick={() => submit(false)}
                 title={stopper ?? undefined}
-                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0 || !when}
+                disabled={busy || uploading || copyPending || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0 || !when}
               >
                 {busy && when
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Scheduling…</>
@@ -885,7 +961,7 @@ export default function ComposeDialog({
                 variant={when ? 'outline' : 'default'}
                 onClick={() => submit(true)}
                 title={stopper ?? undefined}
-                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0}
+                disabled={busy || uploading || copyPending || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0}
               >
                 {busy && !when
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>

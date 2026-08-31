@@ -852,3 +852,13 @@ export function fitHeadline(findings: Finding[], platforms: Platform[]): string 
   if (reframed.length > 0) return `Everything posts, but ${list(reframed)} will crop or trim it.`
   return `These files post untouched on all ${platforms.length} channel${platforms.length === 1 ? '' : 's'}.`
 }
+
+/** The file-size ceiling a channel applies to this kind of file, and what
+ *  it does past it. What the automatic smaller copy is decided on. */
+export function sizeLimitFor(
+  platform: Platform, type: MediaType, kind: PostKind | undefined,
+): { maxMB: number; oversize: 'compress' | 'reject' } | null {
+  const rule = ruleFor(platform, type, kind)
+  if (!rule?.maxMB) return null
+  return { maxMB: rule.maxMB, oversize: rule.oversize ?? 'reject' }
+}

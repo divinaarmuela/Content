@@ -531,3 +531,65 @@ export async function retryFailedPreviews(days = 7): Promise<{ retried: number }
   }
   return { retried }
 }
+
+// ── a smaller copy for a channel that cannot take the master ──────────────
+
+/**
+ * A 1080p MP4 of a video we already hold, or where that stands.
+ *
+ * The encode is the same one the portal preview uses, so most of the time it
+ * already exists; when it does not, this claims it (idempotently — the claim
+ * is a unique key) and reports `encoding` until the webhook or a refresh
+ * marks it ready. Then Stream is asked for a download, which it builds once
+ * and serves from a fixed URL. Never throws: a failure is a state, and the
+ * composer says it in words rather than losing the post over a preview.
+ */
+export async function smallerCopyOf(sourceUrl: string): Promise<
+  | { status: 'encoding'; percent: number | null }
+  | { status: 'ready'; url: string; bytes: number | null; width?: number; height?: number; seconds?: number }
+  | { status: 'failed'; reason: string }
+> {
+  if (!streamConfigured()) return { status: 'failed', reason: 'video encoding is not set up on this workspace' }
+
+  let row = await previewFor(sourceUrl)
+  if (!row) {
+    const asked = await requestPreview(sourceUrl)
+    if (asked.at === 'skipped') return { status: 'failed', reason: asked.why }
+    row = await previewFor(sourceUrl)
+  }
+  if (!row) return { status: 'encoding', percent: null }
+  if (row.state === 'error') return { status: 'failed', reason: row.error ?? 'the encode failed' }
+  if (!row.stream_uid) return { status: 'encoding', percent: null }
+  if (row.state !== 'ready') {
+    // the webhook usually moves the row; asking Stream directly closes the
+    // gap when it has not arrived yet
+    const fresh = await refreshPreview(row.stream_uid)
+    if (fresh?.state === 'ready') row = { ...row, ...fresh, state: 'ready' }
+    else if (fresh?.state === 'error') return { status: 'failed', reason: fresh.error ?? 'the encode failed' }
+    else return { status: 'encoding', percent: null }
+  }
+
+  // enabling downloads is idempotent: a second POST reports the same job
+  const asked = await cf(`/stream/${row.stream_uid}/downloads`, { method: 'POST' })
+  const job = ((asked.ok ? asked.result : null) as {
+    default?: { status?: string; url?: string; percentComplete?: number }
+  } | null)?.default
+  if (!asked.ok || !job?.url) return { status: 'failed', reason: asked.error ?? 'Stream would not make a download' }
+  if (job.status !== 'ready') return { status: 'encoding', percent: job.percentComplete ?? null }
+
+  // the size, so the check can judge the copy the way it judged the master
+  let bytes: number | null = null
+  try {
+    const head = await fetch(job.url, { method: 'HEAD', cache: 'no-store' })
+    const len = Number(head.headers.get('content-length'))
+    if (Number.isFinite(len) && len > 0) bytes = len
+  } catch { /* unknown size is reported as unknown */ }
+
+  return {
+    status: 'ready',
+    url: job.url,
+    bytes,
+    ...(row.width && row.height ? { width: row.width, height: row.height } : {}),
+    ...(row.duration_sec ? { seconds: row.duration_sec } : {}),
+  }
+}
