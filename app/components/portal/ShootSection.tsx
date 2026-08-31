@@ -355,9 +355,15 @@ function ShootCard({ shoot, clientName, token, amName, loggedIn, onActed, bare }
               : `View ${shoot.board_name || 'the planning board'} · ${shoot.canvas_cards.length} cards`}
           </button>
           {boardOpen && (
-            /* the `dark` class pins the canvas to its dark palette so it sits
-               naturally in the portal's ink theme — zoom controls included */
-            <div className="dark overflow-hidden rounded-xl border" style={{ borderColor: 'var(--p-border)' }}>
+            /* This used to carry a hard-coded `dark` class, which pinned the
+               canvas to its dark palette so it sat naturally in the portal's
+               ink theme. That was right while the portal was only ever dark.
+               With a light mode it became the one panel on the page that
+               ignored the switch — a black rectangle in a paper-white page.
+               Nothing here now: the canvas reads `.dark` from <html>, which is
+               where PortalShell and the client shell both put the choice, so
+               the board follows the page like everything else. */
+            <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--p-border)' }}>
               <BriefCanvas
                 cards={shoot.canvas_cards}
                 references={[]}
