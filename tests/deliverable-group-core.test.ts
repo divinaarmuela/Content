@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   addNextLabel, addTypeLabel, formatBreakdown, formatChip, groupCard, groupLine,
   isMixedGroup, mixedGroupLine, nextPieceTitle, plannedFormats, plannedSummary,
-  plannedTarget, pluralType, remainingTypes, splitByGroup,
+  plannedTarget, pluralType, remainingTypes, splitByGroup, spreadLine, statusSpread,
   type DeliverableGroup,
 } from '../app/lib/deliverable-group-core'
-import type { ItemStatus } from '../app/lib/workflow-core'
+import { STATUS_LABELS, type ItemStatus } from '../app/lib/workflow-core'
 
 const g = (over: Partial<DeliverableGroup> = {}): DeliverableGroup => ({
   id: 'g1', client_id: 'c1', content_type: 'reel', title: 'October reels', target: 5, ...over,
@@ -176,9 +176,13 @@ describe('remainingTypes — only what is still owed', () => {
 })
 
 describe('the words on a mixed card', () => {
-  it('mixedGroupLine reads the whole promise back', () => {
+  it('mixedGroupLine reads the whole PROMISE back, not what happens to exist', () => {
+    // built from `done` this said "0 reels, 0 carousels, 0 videos — 0 of 6" on
+    // a fresh card: the one sentence the card most needed to say — what we owe
+    // this client — was the one it never said until the work was finished
     const items = [typed('a', 'reel'), typed('b', 'reel'), typed('c', 'carousel')]
-    expect(mixedGroupLine(mix(), items)).toBe('2 reels, 1 carousel, 0 videos — 3 of 6')
+    expect(mixedGroupLine(mix(), items)).toBe('2 reels, 2 carousels, 2 videos · 3 of 6')
+    expect(mixedGroupLine(mix(), [])).toBe('2 reels, 2 carousels, 2 videos · 0 of 6')
   })
   it('pluralType is singular at one, plural otherwise', () => {
     expect(pluralType('reel', 1)).toBe('reel')
@@ -199,5 +203,114 @@ describe('the words on a mixed card', () => {
       .toBe('2 reels, 2 carousels, 2 videos (6 pieces)')
     expect(plannedSummary([{ type: 'reel', qty: 1 }])).toBe('1 reel (1 piece)')
     expect(plannedSummary([])).toBe('')
+  })
+})
+
+describe('5 feeds + 2 stories is ONE card, whether or not the files were in hand', () => {
+  // The create dialog used to skip the group whenever raw files or a folder
+  // link were attached, on the reasoning that the work already existed rather
+  // than being promised. Seven cards appeared on the board for one job. The
+  // pieces are the same pieces either way; what makes them one card is the
+  // group_id they carry, and these are the rules that turn that into a card.
+  const mixed = g({
+    id: 'g7', content_type: 'feed', title: 'October set', target: 7,
+    planned: [{ type: 'feed', qty: 5 }, { type: 'story', qty: 2 }],
+  })
+  const pieces = [
+    ...Array.from({ length: 5 }, (_, i) => typed(`f${i}`, 'feed', 'draft_uploaded', 'g7')),
+    ...Array.from({ length: 2 }, (_, i) => typed(`s${i}`, 'story', 'draft_uploaded', 'g7')),
+  ]
+
+  it('draws one card holding all seven, not seven cards', () => {
+    const { groupCards, plainItems } = splitByGroup(pieces, [mixed])
+    expect(groupCards).toHaveLength(1)
+    expect(plainItems).toEqual([])
+    expect(groupCards[0].count).toBe(7)
+    expect(groupCards[0].target).toBe(7)
+    expect(groupCards[0].full).toBe(true)
+  })
+
+  it('is seven cards again the moment the pieces carry no group — the old behaviour', () => {
+    const loose = pieces.map(p => ({ ...p, group_id: null }))
+    const { groupCards, plainItems } = splitByGroup(loose, [mixed])
+    expect(plainItems).toHaveLength(7)
+    expect(groupCards[0].count).toBe(0)
+  })
+
+  it('keeps every piece its own item inside the card — one card is not one thing', () => {
+    // versions, statuses and reviews are per item; the card only draws them
+    // together. If the card collapsed identity, the version chains would have
+    // nothing to hang off.
+    const [card] = splitByGroup(pieces, [mixed]).groupCards
+    expect(new Set(card.items.map(i => i.id)).size).toBe(7)
+  })
+
+  it('counts each format against its own promise, not the group total', () => {
+    expect(formatBreakdown(mixed, pieces)).toEqual([
+      { type: 'feed', done: 5, target: 5 },
+      { type: 'story', done: 2, target: 2 },
+    ])
+  })
+
+  it('still says 5 of 7 while two are outstanding', () => {
+    const partial = pieces.slice(0, 5)
+    const [card] = splitByGroup(partial, [mixed]).groupCards
+    expect(card.count).toBe(5)
+    expect(card.full).toBe(false)
+    expect(formatBreakdown(mixed, partial)).toEqual([
+      { type: 'feed', done: 5, target: 5 },
+      { type: 'story', done: 0, target: 2 },
+    ])
+  })
+
+  it('one piece needing changes does not un-approve the other six', () => {
+    // the card's LANE follows the least advanced piece, which is the board's
+    // rule — but the pieces themselves keep their own status, and that is what
+    // the client review and the version chain read
+    const six = pieces.slice(0, 6).map(p => ({ ...p, status: 'approved_for_scheduling' as ItemStatus }))
+    const one = { ...pieces[6], status: 'client_changes_requested' as ItemStatus }
+    const [card] = splitByGroup([...six, one], [mixed]).groupCards
+    expect(card.laneStatus).toBe('client_changes_requested')
+    expect(card.items.filter(i => i.status === 'approved_for_scheduling')).toHaveLength(6)
+  })
+})
+
+describe('a card can be green and stuck at the same time — so it says both', () => {
+  // 5 approved + 2 the client wants changed drew a 100% EMERALD bar while
+  // sitting in the "Client wants changes" lane: the only card on the board that
+  // could read finished and blocked at once. The lane is right — the card is
+  // not done until all of it is — so the fix is the card face, not the lane.
+  const seven = [
+    ...Array.from({ length: 5 }, (_, i) => item(`a${i}`, 'approved_for_scheduling')),
+    ...Array.from({ length: 2 }, (_, i) => item(`c${i}`, 'client_changes_requested')),
+  ]
+
+  it('counts the pieces per stage, worst first', () => {
+    expect(statusSpread(seven)).toEqual([
+      { status: 'client_changes_requested', count: 2 },
+      { status: 'approved_for_scheduling', count: 5 },
+    ])
+  })
+
+  it('says it in words the board can print', () => {
+    expect(spreadLine(seven, STATUS_LABELS))
+      .toBe('2 client wants changes · 5 needs a posting date')
+  })
+
+  it('stays quiet when every piece agrees — the lane already said it', () => {
+    const allSame = Array.from({ length: 4 }, (_, i) => item(`x${i}`, 'internal_review'))
+    expect(spreadLine(allSame, STATUS_LABELS)).toBeNull()
+    expect(statusSpread(allSame)).toEqual([{ status: 'internal_review', count: 4 }])
+  })
+
+  it('says nothing about an empty card rather than inventing a stage', () => {
+    expect(statusSpread([])).toEqual([])
+    expect(spreadLine([], STATUS_LABELS)).toBeNull()
+  })
+
+  it('leaves the lane exactly as it was — this adds to the card, it does not move it', () => {
+    const [card] = splitByGroup(seven.map(i => ({ ...i, group_id: 'g1' })), [g({ target: 7 })]).groupCards
+    expect(card.laneStatus).toBe('client_changes_requested')
+    expect(card.count).toBe(7)
   })
 })

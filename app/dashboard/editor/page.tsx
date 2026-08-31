@@ -24,6 +24,7 @@ import { itemStatusLabel } from '../../lib/brief-task-core'
 import {
   addNextLabel, addTypeLabel, formatBreakdown, formatChip, groupLine, isMixedGroup,
   isTaskGroup, mixedGroupLine, nextPieceTitle, remainingTypes, splitByGroup,
+  spreadLine, statusSpread,
   type DeliverableGroup, type GroupCard,
 } from '../../lib/deliverable-group-core'
 import {
@@ -42,6 +43,21 @@ import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItem
 import AddPieceDialog, { type AddPieceTarget } from '../production/AddPieceDialog'
 import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from '../production/workHooks'
+
+/** One colour per stage, for the segmented bar on a group card. The pipeline
+ *  reads left to right: grey while it is ours, amber while it is with the
+ *  client, emerald once the client has said yes. */
+const SEGMENT_TINT: Record<ItemStatus, string> = {
+  draft_uploaded: 'bg-zinc-300 dark:bg-zinc-600',
+  internal_review: 'bg-sky-400 dark:bg-sky-500',
+  revision_required: 'bg-orange-400 dark:bg-orange-500',
+  revision_complete: 'bg-sky-400 dark:bg-sky-500',
+  client_review: 'bg-amber-400 dark:bg-amber-500',
+  client_changes_requested: 'bg-red-400 dark:bg-red-500',
+  approved_for_scheduling: 'bg-emerald-400 dark:bg-emerald-500',
+  scheduled: 'bg-cyan-400 dark:bg-cyan-500',
+  published: 'bg-emerald-600 dark:bg-emerald-500',
+}
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
 import { TurnChip } from '../production/TurnChip'
@@ -436,7 +452,6 @@ export default function EditorPage() {
    *  and one button, exactly as before. */
   const renderGroupCard = (card: GroupCard<Item>) => {
     const open = openGroups.has(card.group.id)
-    const pct = Math.min(100, Math.round((card.count / card.target) * 100))
     const mixed = isMixedGroup(card.group)
     const breakdown = mixed ? formatBreakdown(card.group, card.items) : []
     const owed = mixed ? remainingTypes(card.group, card.items) : []
@@ -470,10 +485,31 @@ export default function EditorPage() {
                 </button>
               </div>
             </div>
-            {/* the small filled bar — how much of the promise exists */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+            {/* The bar, one segment per piece.
+             *
+             *  It used to be a single emerald fill of "how much exists", which
+             *  meant a card holding five approved pieces and two the client
+             *  wants changed drew a 100% GREEN bar while sitting in the
+             *  "Client wants changes" lane — the only card on the board that
+             *  could read finished and stuck at once. Segments show where the
+             *  work actually is; the empty tail is what is still owed. */}
+            <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+              {statusSpread(card.items).map(s => (
+                <div
+                  key={s.status}
+                  title={`${s.count} · ${STATUS_LABELS[s.status]}`}
+                  className={`h-full transition-all ${SEGMENT_TINT[s.status]}`}
+                  style={{ width: `${(s.count / Math.max(1, card.target)) * 100}%` }}
+                />
+              ))}
             </div>
+            {/* …and the same fact in words, only when the pieces disagree */}
+            {spreadLine(card.items, STATUS_LABELS) && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {spreadLine(card.items, STATUS_LABELS)}
+                {card.count < card.target && ` · ${card.target - card.count} not started`}
+              </p>
+            )}
             {/* per-format progress: Reels 2/2 ✓ · Carousels 1/2 · Videos 0/2 */}
             {mixed && (
               <div className="flex flex-wrap items-center gap-1.5">

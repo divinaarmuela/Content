@@ -235,12 +235,53 @@ export function remainingTypes<T extends GroupableItem>(
   return formatBreakdown(group, items).filter(f => f.done < f.target).map(f => f.type)
 }
 
-/** The mixed card's one summary line: "2 reels, 1 carousel, 0 videos — 3 of 6". */
+/**
+ * The mixed card's one summary line: "5 reels, 2 stories · 3 of 7".
+ *
+ * It used to be built from what EXISTS — "0 reels, 0 stories — 0 of 7" on a
+ * fresh card — so the most important sentence on the card was the one it never
+ * said: what we owe this client. The promise is fixed and belongs in the line;
+ * progress moves and belongs in the chips and the count.
+ */
 export function mixedGroupLine<T extends GroupableItem>(
   group: DeliverableGroup, items: T[],
 ): string {
-  const parts = formatBreakdown(group, items).map(f => `${f.done} ${pluralType(f.type, f.done)}`)
-  return `${parts.join(', ')} — ${items.length} of ${Math.max(1, group.target)}`
+  const parts = formatBreakdown(group, items).map(f => `${f.target} ${pluralType(f.type, f.target)}`)
+  return `${parts.join(', ')} · ${items.length} of ${Math.max(1, group.target)}`
+}
+
+/**
+ * How the pieces are spread across the pipeline, worst-first.
+ *
+ * A card's lane comes from its LEAST advanced piece, which is right — the card
+ * is not done until all of it is. But five approved pieces and two the client
+ * wants changed put a 100% green bar in the "Client wants changes" lane, and
+ * nothing on the face of the card explained the contradiction. This is what
+ * lets the card show both facts at once.
+ */
+export function statusSpread<T extends GroupableItem>(
+  items: T[],
+): { status: ItemStatus; count: number }[] {
+  const counts = new Map<ItemStatus, number>()
+  for (const i of items) counts.set(i.status, (counts.get(i.status) ?? 0) + 1)
+  return [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => rank(a.status) - rank(b.status))
+}
+
+/**
+ * That spread in words: "5 need a posting date · 2 client changes".
+ *
+ * Only worth saying when the pieces actually disagree — one line repeating the
+ * lane the card already sits in is noise, so a card whose pieces are all in
+ * one state says nothing here.
+ */
+export function spreadLine<T extends GroupableItem>(
+  items: T[], labels: Record<ItemStatus, string>,
+): string | null {
+  const spread = statusSpread(items)
+  if (spread.length < 2) return null
+  return spread.map(s => `${s.count} ${labels[s.status].toLowerCase()}`).join(' · ')
 }
 
 /** One per-format chip: "Reels 2/2", plus whether that format is finished. */

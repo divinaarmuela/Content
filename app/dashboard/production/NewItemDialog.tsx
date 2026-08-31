@@ -362,13 +362,26 @@ export default function NewItemDialog({
       const typeAt = (i: number) => isTaskKind ? 'other' : isRegular ? (formatSeq[i] ?? formatSeq[0] ?? 'reel') : draft.content_type
 
       // ── a QUANTITY is a promise, not N cards ──
-      // "2 reels + 2 carousels + 2 videos" makes ONE group with target 6: the
-      // board shows one card ("… 0 of 6") that fills as pieces are added. If
-      // the groups table is not migrated yet the server says so, and we fall
-      // back to creating the numbered items exactly as before — never a dead
-      // end. Attached files or a folder link mean the WORK already exists, not
-      // just the promise — those still create the numbered items directly.
-      if (count > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim()) {
+      // "5 feeds + 2 stories" makes ONE group with target 7: the board shows
+      // one card ("… 0 of 7") that fills as pieces are added. If the groups
+      // table is not migrated yet the server says so, and we fall back to
+      // creating the numbered items exactly as before — never a dead end.
+      //
+      // This used to skip the group whenever files or a folder link were
+      // attached, on the reasoning that the work already existed rather than
+      // being promised. But whether the footage is in hand has nothing to do
+      // with whether the seven pieces are one job: attaching a folder to
+      // "5 feeds + 2 stories" scattered SEVEN cards across the board for a
+      // single promise, which is the opposite of what the grouping is for.
+      // So the group is made either way, and the pieces are filed under it.
+      // A TASK is the exception, and stays one: "5 write-ups" with a reference
+      // doc attached is one task holding that doc, which is what the hint under
+      // the count already promises. Grouping it would have created a card of 5
+      // holding exactly one piece, because the task collapse to count = 1 runs
+      // after the group is made.
+      const workAttached = draft.raw_assets.length > 0 || Boolean(draft.raw_assets_url.trim())
+      let groupId: string | null = null
+      if (count > 1 && !(isTaskKind && workAttached)) {
         const res = await fetch('/api/production/groups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -390,26 +403,33 @@ export default function NewItemDialog({
         })
         const json = await res.json().catch(() => null)
         if (res.ok) {
-          toastOpen(
-            `"${draft.title.trim()}" created — one card, 0 of ${count}. Add pieces from the ${isTaskKind ? 'Production' : 'Editor'} board.`,
-            isTaskKind ? '/dashboard/production' : '/dashboard/editor', router.push,
-          )
-          onOpenChange(false)
-          setDraft({ ...BLANK })
-          setAdhocReason('')
-          setAssetWarnings([])
-          setClientApproval(true)
-          setStep('details')
-          onCreated()
-          return
+          groupId = typeof json?.id === 'string' ? json.id : null
+          // nothing in hand yet: the card IS the deliverable, and the pieces
+          // arrive later from the board. With work attached we carry on and
+          // create them now — under this group, so they fold into one card.
+          if (!workAttached) {
+            toastOpen(
+              `"${draft.title.trim()}" created — one card, 0 of ${count}. Add pieces from the ${isTaskKind ? 'Production' : 'Editor'} board.`,
+              isTaskKind ? '/dashboard/production' : '/dashboard/editor', router.push,
+            )
+            onOpenChange(false)
+            setDraft({ ...BLANK })
+            setAdhocReason('')
+            setAssetWarnings([])
+            setClientApproval(true)
+            setStep('details')
+            onCreated()
+            return
+          }
+        } else {
+          // 503 = the table is not migrated; 404/405 = the endpoint is not
+          // deployed yet. Either way the feature is off — fall back: a task
+          // becomes ONE task, assets become the numbered items as before.
+          if (![503, 404, 405].includes(res.status)) {
+            throw new Error(json?.error ?? 'Could not create the group')
+          }
+          if (isTaskKind) count = 1
         }
-        // 503 = the table is not migrated; 404/405 = the endpoint is not
-        // deployed yet. Either way the feature is off — fall back: a task
-        // becomes ONE task, assets become the numbered items as before.
-        if (![503, 404, 405].includes(res.status)) {
-          throw new Error(json?.error ?? 'Could not create the group')
-        }
-        if (isTaskKind) count = 1
       }
 
       // a task that did not become a group is always ONE task — attached
@@ -431,6 +451,9 @@ export default function NewItemDialog({
           batch_id: draft.batch_id || null,
         } : {}),
         ...(isTaskKind ? { batch_id: null } : {}),
+        // filed under the promise they fulfil, so the board draws ONE card
+        // that reads "5 of 7" rather than seven cards for one job
+        ...(groupId ? { group_id: groupId } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
@@ -450,6 +473,8 @@ export default function NewItemDialog({
       const message = isTaskKind ? 'Task created — it is on the Production board'
         : isBriefKind ? 'Shoot plan created — it is on the Production board'
         : count === 1 ? `Item created — it is on the Editor board, in ${DRAFTING_LANE}`
+        // grouped: one card holding the pieces, which is what the board draws
+        : groupId ? `"${draft.title.trim()}" created — one card holding all ${count} pieces, on the Editor board`
         : `${count} items created — they are on the Editor board, in ${DRAFTING_LANE}`
       const href = count === 1 && firstId
         ? `/dashboard/production/${firstId}`
@@ -491,12 +516,16 @@ export default function NewItemDialog({
   // for a regular item the promise is the formats list; a mix of 6 pieces with
   // no files makes ONE card, so the button says so
   const regularTotal = plannedTarget(draft.formats)
-  const regularCard = regularTotal > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim()
-  const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task'
-    : regularTotal > 1 ? `${regularTotal} items` : 'item'
+  // a quantity is one card whether or not the files are in hand — the button
+  // has to promise what the create actually does, and it used to say
+  // "Create 7 items" for something that has made one card since the grouping
+  // stopped keying off the attachments
+  const regularCard = regularTotal > 1
+  const filesInHand = draft.raw_assets.length > 0 || Boolean(draft.raw_assets_url.trim())
+  const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task' : 'item'
   const createLabel = isBriefKind ? 'Create the shoot plan'
     : isTaskKind ? (draft.count > 1 ? `Create it — 0 of ${draft.count}` : 'Create the task')
-    : regularCard ? `Create the card — 0 of ${regularTotal}`
+    : regularCard ? `Create the card — ${filesInHand ? regularTotal : 0} of ${regularTotal}`
     : `Create ${what}`
 
   return (
@@ -504,7 +533,8 @@ export default function NewItemDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item{regularTotal > 1 ? 's' : ''} <HelpHint term="item" /></>}
+            {/* a quantity is ONE card, so the title stays singular */}
+            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item <HelpHint term="item" /></>}
           </DialogTitle>
           <DialogDescription className="text-xs">
             {isBriefKind ? 'The concept and shot list the client signs off before we film. * required'
@@ -632,15 +662,15 @@ export default function NewItemDialog({
               onClick={() => setDraft(d => ({ ...d, formats: [...d.formats, { type: 'reel', qty: 1 }] }))}>
               <Plus className="h-3.5 w-3.5" /> Add another format
             </Button>
-            {/* live plain-words summary — the whole promise in one line */}
-            {plannedTarget(draft.formats) > 1 && draft.raw_assets.length === 0 && !draft.raw_assets_url.trim() && (
+            {/* live plain-words summary — the whole promise in one line.
+                It is one line now, not two: attached files no longer change
+                the outcome, so the dialog no longer predicts two of them. */}
+            {plannedTarget(draft.formats) > 1 && (
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                One card — {plannedSummary(draft.formats)}. Add pieces on the Editor board.
-              </p>
-            )}
-            {plannedTarget(draft.formats) > 1 && (draft.raw_assets.length > 0 || draft.raw_assets_url.trim()) && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {plannedTarget(draft.formats)} items — attached files make each piece now, not one card.
+                One card — {plannedSummary(draft.formats)}.{' '}
+                {draft.raw_assets.length > 0 || draft.raw_assets_url.trim()
+                  ? 'The pieces are made now, and everything you attached goes on every one of them.'
+                  : 'Add pieces on the Editor board.'}
               </p>
             )}
           </div>
