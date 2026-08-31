@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
+import { inngest } from '../../../inngest/client'
 import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-core'
 
 /** Queue a post, and optionally push it straight away.
@@ -39,10 +40,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: queued.error, issues: queued.issues }, { status: 400 })
     }
 
-    // Hand the job to the provider straight away, whether it publishes now or
-    // later. The provider holds the schedule, so a scheduled post does not
-    // depend on our cron running at the right minute — and the operator finds
-    // out immediately if it was refused, rather than at the scheduled time.
+    /**
+     * Hand the job over — inline when that is quick, in the background when
+     * it is not.
+     *
+     * Publishing inline is genuinely better when it can be done: the provider
+     * holds the schedule either way, and the operator finds out immediately if
+     * a post was refused rather than at the scheduled time.
+     *
+     * It stops being possible the moment there is MEDIA. The job relays every
+     * file — reads it out of our storage and pushes it to the provider — and a
+     * video makes that longer than a serverless function is allowed to live.
+     * The function is killed, the response never arrives, the button spins
+     * until the browser gives up, and the row is left mid-flight for the
+     * reclaim to find. The post is not lost, but nobody watching could tell.
+     *
+     * So anything carrying media goes to `publish-post`, which is the same
+     * code with no request waiting on it. The answer comes back as `queued`
+     * immediately, and the job's own status is what reports the outcome.
+     */
+    const heavy = (Array.isArray(body.media) ? body.media : []).length > 0
+    if (heavy) {
+      await inngest.send({
+        name: 'app/post.publish.requested',
+        data: { jobId: queued.id },
+      })
+      // even if that send is dropped, `dueJobIds` picks up any queued job on
+      // the next dispatcher tick — the event only makes it immediate
+      return NextResponse.json({ id: queued.id, status: 'queued', background: true })
+    }
+
     const status = await runPublishJob(queued.id)
     return NextResponse.json({ id: queued.id, status: status ?? 'publishing' })
   } catch (e) {

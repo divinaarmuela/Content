@@ -23,7 +23,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Check, ImagePlus, Info, Loader2, Send, X,
+  AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, ImagePlus, Info, Loader2, Send, X,
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from './PlatformIcon'
 import {
@@ -272,6 +272,16 @@ export default function ComposeDialog({
 
       if (json.status === 'failed') {
         toast.error('The provider rejected the post — check the job for details')
+      } else if (json.background) {
+        // NOT a hiccup: a post with media is handed to the background worker
+        // on purpose, because relaying a video takes longer than a request is
+        // allowed to live. Saying "did not accept it yet" here would report a
+        // problem that has not happened.
+        toast.success(
+          when && !publishNow
+            ? `Scheduled for ${new Date(when).toLocaleString()} — the video is uploading in the background`
+            : 'Sending — the video is uploading in the background, and it will go out as soon as that finishes',
+        )
       } else if (json.status === 'queued') {
         // a retryable provider hiccup: the job is saved and will retry, but
         // nothing has been posted yet — success would be a lie here
@@ -725,18 +735,32 @@ export default function ComposeDialog({
             </Button>
           ) : (
             <div className="flex gap-2">
-              {/* a post sent mid-transfer goes out without the file still
-                  moving, and nothing afterwards says which one was missing */}
-              <Button variant="outline" onClick={() => submit(false)}
+              {/* Typing a time IS the decision. Once there is one, Schedule is
+                  the primary button and Publish now steps back — before, both
+                  looked equally live, and the eye went to the filled one,
+                  which sent a post meant for Friday out immediately.
+
+                  A post sent mid-transfer goes out without the file still
+                  moving, and nothing afterwards says which one was missing. */}
+              <Button
+                variant={when ? 'default' : 'outline'}
+                onClick={() => submit(false)}
                 title={stopper ?? undefined}
-                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0 || !when}>
-                Schedule
+                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0 || !when}
+              >
+                {busy && when
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Scheduling…</>
+                  : <><CalendarClock className="h-4 w-4" /> Schedule</>}
               </Button>
-              <Button onClick={() => submit(true)}
+              <Button
+                variant={when ? 'outline' : 'default'}
+                onClick={() => submit(true)}
                 title={stopper ?? undefined}
-                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0}>
-                {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Working…</>
-                      : <><Send className="h-4 w-4" /> Publish now</>}
+                disabled={busy || uploading || issues.length > 0 || blockedOn.length > 0 || failedUploads > 0}
+              >
+                {busy && !when
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+                  : <><Send className="h-4 w-4" /> Publish now</>}
               </Button>
             </div>
           )}
