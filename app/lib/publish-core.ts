@@ -432,3 +432,47 @@ function messageFrom(b: Record<string, unknown>, fallback: string): string {
   }
   return fallback
 }
+
+/**
+ * What the provider's per-platform results actually say, in one line.
+ *
+ * A four-channel post that lands on three and fails on one comes back as
+ * `partial`, and the reconcile used to store exactly that word: "Provider
+ * reported the post as partial after creation". The per-platform rows — which
+ * channel, and the platform's own reason — were in the same response and
+ * thrown away, so a post that was LIVE on YouTube read as a failure with no
+ * reason anyone could act on.
+ *
+ * Pure. The row shape is Zernio's, kept loose: `platform`/`name`, `status`,
+ * `errorMessage`/`error`, `platformPostUrl`.
+ */
+export type RemotePlatformRow = {
+  platform?: string; name?: string; status?: string
+  errorMessage?: string | null; error?: string | null
+  platformPostUrl?: string | null
+}
+
+export function describeRemoteOutcome(
+  overall: string, rows: RemotePlatformRow[] | null | undefined,
+): { error: string; permalink: string | null; livePlatforms: string[]; failedPlatforms: string[] } {
+  const list = Array.isArray(rows) ? rows : []
+  const name = (r: RemotePlatformRow) => String(r.platform ?? r.name ?? 'a channel').toLowerCase()
+  const LIVE = ['published', 'posted', 'success']
+  const live = list.filter(r => LIVE.includes(String(r.status ?? '').toLowerCase()))
+  const failed = list.filter(r => String(r.status ?? '').toLowerCase() === 'failed')
+  const reasons = failed.map(r => {
+    const why = String(r.errorMessage ?? r.error ?? '').trim()
+    return why ? `${name(r)}: ${why}` : `${name(r)}: no reason given`
+  })
+  const permalink = list.find(r => r.platformPostUrl)?.platformPostUrl ?? null
+
+  let error: string
+  if (overall === 'partial' && live.length > 0) {
+    error = `Went out on ${live.map(name).join(', ')}. Did not go out on ${reasons.join('; ') || 'the rest'}.`
+  } else if (reasons.length > 0) {
+    error = `Did not go out — ${reasons.join('; ')}`
+  } else {
+    error = `Provider reported the post as ${overall} after creation`
+  }
+  return { error, permalink, livePlatforms: live.map(name), failedPlatforms: failed.map(name) }
+}

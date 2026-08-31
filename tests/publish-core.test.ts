@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
-  availableKinds, autoKindFor, SUPPORTED_PLATFORMS,
+  availableKinds, autoKindFor, describeRemoteOutcome, SUPPORTED_PLATFORMS,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -371,5 +371,42 @@ describe('what Automatic resolves to, per platform', () => {
         expect(availableKinds(p), p).toContain(autoKindFor(p, media))
       }
     }
+  })
+})
+
+describe('what a partial result actually says', () => {
+  // the reconcile used to store "Provider reported the post as partial after
+  // creation" and throw the per-platform rows away — so a post that was LIVE
+  // on YouTube read as a failure with no reason anyone could act on
+  const rows = [
+    { platform: 'youtube', status: 'published', platformPostUrl: 'https://www.youtube.com/watch?v=abc' },
+    { platform: 'instagram', status: 'failed', errorMessage: 'Media must be 9:16 for Reels' },
+    { platform: 'tiktok', status: 'failed', error: 'video exceeds 10 minutes' },
+    { platform: 'linkedin', status: 'failed' },
+  ]
+
+  it('names where it went out and, per channel, why it did not', () => {
+    const o = describeRemoteOutcome('partial', rows)
+    expect(o.error).toBe(
+      'Went out on youtube. Did not go out on instagram: Media must be 9:16 for Reels; '
+      + 'tiktok: video exceeds 10 minutes; linkedin: no reason given.',
+    )
+    expect(o.livePlatforms).toEqual(['youtube'])
+    expect(o.failedPlatforms).toEqual(['instagram', 'tiktok', 'linkedin'])
+  })
+
+  it('keeps the permalink of the channel that DID post', () => {
+    expect(describeRemoteOutcome('partial', rows).permalink).toBe('https://www.youtube.com/watch?v=abc')
+  })
+
+  it('reads a total failure as reasons, not a status word', () => {
+    const o = describeRemoteOutcome('failed', rows.slice(1))
+    expect(o.error).toMatch(/^Did not go out — instagram: /)
+    expect(o.permalink).toBeNull()
+  })
+
+  it('falls back to the status word only when the provider said nothing else', () => {
+    expect(describeRemoteOutcome('failed', []).error).toBe('Provider reported the post as failed after creation')
+    expect(describeRemoteOutcome('partial', undefined).error).toBe('Provider reported the post as partial after creation')
   })
 })

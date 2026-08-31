@@ -2,7 +2,8 @@ import 'server-only'
 import { supabase } from '@/lib/supabase'
 import { getPublisher } from './publisher'
 import {
-  validatePost, isPlatform, type MediaItem, type PostKind, type Platform, type Target,
+  validatePost, isPlatform, describeRemoteOutcome,
+  type MediaItem, type PostKind, type Platform, type Target, type RemotePlatformRow,
 } from './publish-core'
 
 /**
@@ -297,7 +298,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   if (!jobs?.length) return 0
 
   const publisher = getPublisher()
-  type Remote = { status?: string; platforms?: { platformPostUrl?: string | null; status?: string }[] }
+  type Remote = { status?: string; platforms?: RemotePlatformRow[] }
   const all = await publisher.postAnalytics().catch(() => null) as {
     posts?: ({ _id?: string } & Remote)[]
   } | null
@@ -351,9 +352,13 @@ export async function reconcilePublishedJobs(): Promise<number> {
     }
 
     if (remote.status === 'failed' || remote.status === 'partial') {
+      // keep the per-platform reasons: a post live on YouTube and refused by
+      // TikTok is not "failed", it is "went out on youtube; tiktok: <why>"
+      const outcome = describeRemoteOutcome(remote.status, remote.platforms as RemotePlatformRow[])
       await supabase.from('publish_jobs').update({
         status: 'failed',
-        error: `Provider reported the post as ${remote.status} after creation`,
+        error: outcome.error,
+        ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', job.id)
       changed++
