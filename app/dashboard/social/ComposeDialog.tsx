@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { uploadMedia } from '../uploadMedia'
+import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
+import { UploadRows, useUploadGroup } from '../UploadRows'
+import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile } from './probeMedia'
 import AssetCheck from './AssetCheck'
 import type { AssetProbe } from '../../lib/media-fit-core'
@@ -57,6 +59,10 @@ export default function ComposeDialog({
   // beside `media` rather than inside it, because `media` is sent to the
   // provider verbatim and an unexpected field there is a rejected payload.
   const [probes, setProbes] = useState<AssetProbe[]>([])
+  // a frame from each video, so the strip shows the clip rather than the word
+  // "video". Kept apart from `probes` because it is presentation, not a
+  // measurement any rule is decided on.
+  const [posters, setPosters] = useState<Record<string, string>>({})
   const [when, setWhen] = useState('')
   const [kind, setKind] = useState<PostKind | 'auto'>('auto')
   const [shareToFeed, setShareToFeed] = useState(true)
@@ -64,8 +70,20 @@ export default function ComposeDialog({
   const [collaborators, setCollaborators] = useState('')
   const [thumbSeconds, setThumbSeconds] = useState('')
   const [busy, setBusy] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  /** This dialog's own corner of the dashboard-wide upload queue, so the bar,
+   *  speed, ETA, cancel and retry are the same ones the rest of the app has
+   *  rather than a fourth rendering of the word "Uploading…". Fixed for the
+   *  life of the component: the rows have to survive a step change. */
+  const [uploadGroup] = useState(
+    () => `social:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`)
+  const uploads = useUploadGroup(uploadGroup)
+  const uploading = uploads.some(u => !isSettled(u.status))
+  // a finished row would sit beside the thumbnail saying the same thing twice
+  // — except for a video still being encoded for preview, which the thumbnail
+  // cannot say
+  const visibleUploads = uploads.filter(u => u.status !== 'done' || u.preview === 'pending')
   // link the post to the production item it delivers — that's what makes it
   // count toward the client's agreement when it goes live
   const [linkItemId, setLinkItemId] = useState('')
@@ -135,31 +153,40 @@ export default function ComposeDialog({
   const captionIgnored = effectiveKind === 'story'
 
   const reset = () => {
-    setSelected([]); setCaption(''); setMedia([]); setProbes([]); setWhen('')
+    clearGroup(uploadGroup)
+    setSelected([]); setCaption(''); setMedia([]); setProbes([]); setPosters({}); setWhen('')
     setKind('auto'); setFirstComment(''); setCollaborators(''); setThumbSeconds('')
     setLinkItemId('')
     setStep(0)
   }
 
-  const upload = async (files: FileList) => {
-    setUploading(true)
-    try {
-      for (const file of Array.from(files)) {
-        // measure first, off the local file — the size, shape and length decide
-        // whether a platform re-encodes, crops or refuses it, and none of that
-        // is knowable once the bytes are just a URL
-        const probe = await probeFile(file)
-        // direct to R2 — a reel is comfortably past Vercel's ~4.5MB body cap
-        const { url, kind } = await uploadMedia(file, { purpose: 'social' })
-        setMedia(m => [...m, { url, type: kind === 'video' ? 'video' : 'image' }])
-        setProbes(p => [...p, { ...probe, url }])
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed')
-    } finally {
-      setUploading(false)
-      if (fileRef.current) fileRef.current.value = ''
+  /**
+   * Send each file off on its own.
+   *
+   * One batch per file, sharing one group: the rows still render together,
+   * but each settles independently — so one failed upload no longer takes the
+   * four that succeeded with it, which is what the single try/catch around
+   * the whole loop used to do.
+   *
+   * Measuring runs alongside the transfer rather than before it, because the
+   * measurement reads the local file and has no reason to make the bytes wait.
+   */
+  const upload = (files: FileList) => {
+    for (const file of Array.from(files)) {
+      const measuring = probeFile(file)
+      uploadFiles([file], { group: uploadGroup, purpose: 'social' }).done
+        .then(async rows => {
+          const landed = rows[0]
+          if (!landed) return // cancelled — its row is already gone
+          const { poster, ...probe } = await measuring
+          setMedia(m => [...m, { url: landed.url, type: probe.type }])
+          setProbes(p => [...p, { ...probe, url: landed.url }])
+          if (poster) setPosters(p => ({ ...p, [landed.url]: poster }))
+        })
+        .catch(e => toast.error(e instanceof Error ? e.message : `Could not upload ${file.name}`))
     }
+    // let the same file be chosen again after it is removed
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   const submit = async (publishNow: boolean) => {
@@ -366,13 +393,22 @@ export default function ComposeDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   {media.map((m, i) => (
                     <div key={m.url} className="relative">
-                      {m.type === 'image' ? (
+                      {m.type === 'image' || posters[m.url] ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.url} alt="" className="h-16 w-16 rounded object-cover" />
+                        <img src={posters[m.url] ?? m.url} alt=""
+                          className="h-16 w-16 rounded object-cover" />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded bg-zinc-100 text-[11px] dark:bg-zinc-800">
+                        // no frame: a camera .mov the browser will not decode
+                        <div className="flex h-16 w-16 items-center justify-center rounded bg-zinc-100 text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                           video
                         </div>
+                      )}
+                      {m.type === 'video' && (
+                        <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[9px] font-medium text-white">
+                          {probes.find(p => p.url === m.url)?.seconds !== undefined
+                            ? `${Math.round(probes.find(p => p.url === m.url)!.seconds!)}s`
+                            : 'video'}
+                        </span>
                       )}
                       <button type="button"
                         onClick={() => {
@@ -389,13 +425,18 @@ export default function ComposeDialog({
                       refuse a programmatic .click() */}
                   <Input ref={fileRef} type="file" multiple accept="image/*,video/*" className="sr-only"
                     onChange={e => e.target.files && upload(e.target.files)} />
+                  {/* not disabled while uploading — the transfers run in
+                      parallel, and blocking the button was the reason a second
+                      file meant waiting out the first */}
                   <Button type="button" variant="outline" size="sm"
-                    onClick={() => fileRef.current?.click()} disabled={uploading}>
-                    {uploading
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
-                      : <><ImagePlus className="h-3.5 w-3.5" /> Add media</>}
+                    onClick={() => fileRef.current?.click()}>
+                    <ImagePlus className="h-3.5 w-3.5" /> Add media
                   </Button>
                 </div>
+
+                {/* the same bar, speed, ETA, cancel and retry the upload tray
+                    and the item pages use — one store, so they cannot disagree */}
+                <UploadRows uploads={visibleUploads} onDismiss={dismissUpload} />
               </div>
 
               {/* what each platform will do to these exact files — shown here,
@@ -555,11 +596,13 @@ export default function ComposeDialog({
             </Button>
           ) : (
             <div className="flex gap-2">
+              {/* a post sent mid-transfer goes out without the file still
+                  moving, and nothing afterwards says which one was missing */}
               <Button variant="outline" onClick={() => submit(false)}
-                disabled={busy || issues.length > 0 || !when}>
+                disabled={busy || uploading || issues.length > 0 || !when}>
                 Schedule
               </Button>
-              <Button onClick={() => submit(true)} disabled={busy || issues.length > 0}>
+              <Button onClick={() => submit(true)} disabled={busy || uploading || issues.length > 0}>
                 {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Working…</>
                       : <><Send className="h-4 w-4" /> Publish now</>}
               </Button>

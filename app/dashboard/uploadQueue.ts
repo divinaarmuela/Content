@@ -41,6 +41,9 @@ export type QueuedUpload = {
    *  whole dashboard's. `item:<id>` for a job pack, an ad-hoc key otherwise. */
   group: string
   itemId: string | null
+  /** how the finished file is indexed — a social attachment is not a job
+   *  asset, and filing one as the other loses it */
+  purpose: string
   status: UploadStatus
   loaded: number
   total: number
@@ -183,7 +186,7 @@ function run(row: QueuedUpload, file: File, onDone?: (url: string) => Promise<vo
 
     try {
       const { url } = await uploadMedia(file, {
-        purpose: 'production',
+        purpose: row.purpose,
         signal: controller.signal,
         onProgress: p => {
           progress = advanceProgress(progress, { ...p, at: Date.now() })
@@ -220,12 +223,15 @@ function progressFields(p: ProgressState): Partial<QueuedUpload> {
   return { loaded: p.loaded, total: p.total, startedAt: p.startedAt, rateBps: p.rateBps, etaSec: p.etaSec }
 }
 
-function newRow(file: File, group: string, itemId: string | null): QueuedUpload {
+function newRow(
+  file: File, group: string, itemId: string | null, purpose = 'production',
+): QueuedUpload {
   return {
     id: `${group}:${file.name}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
     name: file.name,
     group,
     itemId,
+    purpose,
     status: 'queued',
     loaded: 0,
     total: file.size,
@@ -262,11 +268,11 @@ export function enqueueJobAssets(itemId: string, files: File[]): string {
  * five slides is worse than a version not saved.
  */
 export function uploadFiles(
-  files: File[], opts: { group?: string } = {},
+  files: File[], opts: { group?: string; purpose?: string } = {},
 ): { group: string; done: Promise<{ file: File; url: string }[]> } {
   const group = opts.group ?? `batch:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`
   const jobs = files.map(file => {
-    const row = newRow(file, group, null)
+    const row = newRow(file, group, null, opts.purpose)
     sources.set(row.id, file)
     queue = [...queue, row]
     return { row, file }
