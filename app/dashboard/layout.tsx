@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
   RefreshCw,
 } from 'lucide-react'
@@ -75,6 +75,9 @@ const NAV_MAIN: NavItem[] = [
  * one page's tabs is a permission model nobody would maintain.
  */
 const NAV_SOCIAL_CHILDREN: NavItem[] = [
+  // first, because it answers the question people come to Social with most:
+  // "did it go out?"
+  { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
   { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
   { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
@@ -96,6 +99,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
   '/dashboard/social':        'Social channels',
+  '/dashboard/social/activity': 'Posts',
   '/dashboard/social/inbox':  'Inbox',
   '/dashboard/social/analytics': 'Analytics',
   '/dashboard/social/automations': 'Automations',

@@ -87,7 +87,10 @@ export async function GET(req: Request) {
 
     let q = supabase
       .from('publish_jobs')
-      .select('id, client_id, caption, targets, status, scheduled_for, provider_post_id, permalink, error, attempts, created_at, published_at')
+      // timezone, media and updated_at ride along: the activity page prints
+      // the booked time in the CLIENT's zone, shows a thumbnail, and needs
+      // updated_at to tell "sending now" from "stuck for twenty minutes"
+      .select('id, client_id, content_item_id, caption, media, targets, status, scheduled_for, timezone, provider_post_id, permalink, error, attempts, created_at, updated_at, published_at')
       .order('created_at', { ascending: false })
       .limit(Math.min(Number(url.searchParams.get('limit') ?? 40), 200))
     if (clientId) q = q.eq('client_id', clientId)

@@ -277,10 +277,12 @@ export default function ComposeDialog({
         // on purpose, because relaying a video takes longer than a request is
         // allowed to live. Saying "did not accept it yet" here would report a
         // problem that has not happened.
+        // and WHERE to watch it — the whole reason that page exists
         toast.success(
           when && !publishNow
             ? `Scheduled for ${new Date(when).toLocaleString()} — the video is uploading in the background`
             : 'Sending — the video is uploading in the background, and it will go out as soon as that finishes',
+          { action: { label: 'Watch it', onClick: () => { window.location.href = '/dashboard/social/activity' } } },
         )
       } else if (json.status === 'queued') {
         // a retryable provider hiccup: the job is saved and will retry, but
