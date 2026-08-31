@@ -23,18 +23,27 @@ export async function GET(req: Request) {
     // Token health is opt-in: it is one upstream call per account, and the
     // common case (rendering a list) does not need it. Failures collapse to
     // null so a slow or unavailable provider never blanks the page.
-    let health: Record<string, { valid: boolean; expiresAt: string | null; needsRefresh: boolean }> = {}
+    // `expiresIn` is the provider's own word on the token — "Auto-refreshes"
+    // for a platform that renews itself. Dropping it left the list page with
+    // only a date, which is how two accounts connected minutes earlier ended
+    // up under "needs reconnecting".
+    let health: Record<string, {
+      valid: boolean; expiresAt: string | null; expiresIn: string | null; needsRefresh: boolean
+    }> = {}
     if (new URL(req.url).searchParams.get('health') === '1' && (data ?? []).length > 0) {
       const publisher = getPublisher()
       const results = await Promise.all(
         (data ?? []).map(async row => {
           const h = await publisher.accountHealth(row.provider_account_id as string) as {
-            tokenStatus?: { valid?: boolean; expiresAt?: string; needsRefresh?: boolean }
+            tokenStatus?: {
+              valid?: boolean; expiresAt?: string; expiresIn?: string; needsRefresh?: boolean
+            }
           } | null
           return [row.id as string, h?.tokenStatus
             ? {
                 valid: Boolean(h.tokenStatus.valid),
                 expiresAt: h.tokenStatus.expiresAt ?? null,
+                expiresIn: h.tokenStatus.expiresIn ?? null,
                 needsRefresh: Boolean(h.tokenStatus.needsRefresh),
               }
             : null] as const
