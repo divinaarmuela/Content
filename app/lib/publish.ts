@@ -225,12 +225,23 @@ async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
 
     const res = await fetch(item.url)
     if (!res.ok) throw new Error(`Could not read media (${res.status}): ${item.url}`)
+    if (!res.body) throw new Error(`Media had no body: ${item.url}`)
 
     const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
     const filename = decodeURIComponent(new URL(item.url).pathname.split('/').pop() || 'asset')
-    const bytes = await res.arrayBuffer()
+    const length = Number(res.headers.get('content-length'))
 
-    out.push(await publisher.uploadMedia({ bytes, filename, contentType }))
+    // The stream, NOT the bytes. `await res.arrayBuffer()` here read the whole
+    // file into memory first, so a 2 GB master allocated 2 GB inside a
+    // serverless function and the process was killed for it — no throw, no
+    // catch, no error on the job, and the row left in `publishing` for the
+    // reclaim to hand back to a retry that did exactly the same thing.
+    out.push(await publisher.uploadMedia({
+      body: res.body,
+      filename,
+      contentType,
+      contentLength: Number.isFinite(length) && length > 0 ? length : null,
+    }))
   }
   return out
 }
