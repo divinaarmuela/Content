@@ -177,8 +177,9 @@ describe('the canonical words are the only words', () => {
    * fail, which is the point: the fix and the entry's removal ship together.
    */
   const KNOWN: Known[] = [
-    { file: 'app/api/production/batches/[id]/route.ts', contains: 'content item',
-      why: 'a 409 message and a file comment; the API vocabulary follows the screens, not the other way round' },
+    // the 409 here used to read "This shoot has content items — wrap it
+    // instead of deleting". It now says what happens to the pieces instead of
+    // naming the table they live in, so this entry has nothing left to track.
     { file: 'app/lib/brief-task-core.ts', contains: 'content item',
       why: 'the reason string on a blocked edge; it moves with the Production board' },
     { file: 'app/lib/production-publish.ts', contains: 'content item',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableBatchTransitions, batchSatisfiesLock, canCreateItemsUnder,
-  checkBatchTransition, isInProduction,
+  checkBatchTransition, isInProduction, shootDeletion,
 } from '../app/lib/batch-brief-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -287,5 +287,63 @@ describe('isInProduction', () => {
     expect(isInProduction({ status: 'locked' }, 0)).toBe(false)
     expect(isInProduction({ status: 'brief' }, 3)).toBe(false)
     expect(isInProduction({ status: 'wrapped' }, 3)).toBe(false)
+  })
+})
+
+describe('deleting a shoot keeps the work that came out of it', () => {
+  // it used to refuse the moment the shoot had ANY item — and a shoot plan is
+  // itself an item, so a shoot booked by mistake became permanent as soon as
+  // somebody described it. The task quota card already had the right answer:
+  // detach the pieces, then delete the promise.
+  it('allows an empty shoot and says nothing else changes', () => {
+    const v = shootDeletion([])
+    expect(v.allowed).toBe(true)
+    if (!v.allowed) return
+    expect(v.detaching).toBe(0)
+    expect(v.consequence).toMatch(/nothing else changes/i)
+  })
+
+  it('allows a shoot that has a plan and work under it, and keeps them', () => {
+    const v = shootDeletion([
+      { status: 'draft_uploaded' },
+      { status: 'internal_review' },
+      { status: 'client_review' },
+      { status: 'approved_for_scheduling' },
+    ])
+    expect(v.allowed).toBe(true)
+    if (!v.allowed) return
+    expect(v.detaching).toBe(4)
+    expect(v.consequence).toMatch(/4 pieces are kept/)
+    expect(v.consequence).toMatch(/their own cards/)
+  })
+
+  it('counts one piece in the singular, because four words of grammar is not too much to ask', () => {
+    const v = shootDeletion([{ status: 'draft_uploaded' }])
+    expect(v.allowed).toBe(true)
+    if (!v.allowed) return
+    expect(v.consequence).toMatch(/its one piece is kept/i)
+    expect(v.consequence).toMatch(/its own card/)
+  })
+
+  it('refuses once anything is scheduled or live — that is what wrapping is for', () => {
+    for (const status of ['scheduled', 'published']) {
+      const v = shootDeletion([{ status: 'draft_uploaded' }, { status }])
+      expect(v.allowed, status).toBe(false)
+      if (v.allowed) return
+      expect(v.reason).toMatch(/wrap the shoot instead/i)
+    }
+  })
+
+  it('counts how many are live so the refusal is specific', () => {
+    const v = shootDeletion([{ status: 'published' }, { status: 'scheduled' }])
+    expect(v.allowed).toBe(false)
+    if (v.allowed) return
+    expect(v.reason).toMatch(/^2 pieces/)
+  })
+
+  it('a piece the client is still changing is not live — it can still be deleted', () => {
+    // the stop is work that has left the building, not work in progress
+    const v = shootDeletion([{ status: 'client_changes_requested' }, { status: 'revision_required' }])
+    expect(v.allowed).toBe(true)
   })
 })
