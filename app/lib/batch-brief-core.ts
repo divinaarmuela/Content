@@ -98,10 +98,15 @@ export function canCreateItemsUnder(
   // can create production items too". Only clients never create.
   if (role === 'client') return false
   // a shoot-BRIEF task is how a shoot begins — it may start from nothing
-  // (its shoot is created with it) or attach to a still-planning brief;
-  // account managers own that act
+  // (its shoot is created with it) or attach to a still-planning brief.
+  //
+  // It used to be an account manager's act alone, which made it the one
+  // exception to the rule three lines above, and the exception did not earn
+  // itself: an editor who knows a shoot is needed had to go and ask somebody
+  // to type it. Planning is work like the rest of it, and who a piece of work
+  // BELONGS to is answered by assignment on the boards, not by refusing to
+  // let somebody write it down. Only clients still never create.
   if (kindSlug === 'shoot_brief') {
-    if (role !== 'account_manager' && role !== 'super_admin') return false
     // …or attach to any shoot that is not finished. Restricting it to a
     // still-planning shoot meant that the moment a date was locked the brief
     // could never be raised, and "New brief task" quietly built a SECOND

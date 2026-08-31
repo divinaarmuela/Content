@@ -155,7 +155,7 @@ describe('briefSatisfiesSubmission', () => {
 })
 
 describe('canCreateItemsUnder with the shoot_brief kind', () => {
-  it('AMs raise a brief against any shoot that is not finished', () => {
+  it('the team raises a brief against any shoot that is not finished', () => {
     expect(canCreateItemsUnder(null, 'account_manager', undefined, 'shoot_brief')).toBe(true)
     expect(canCreateItemsUnder('brief', 'super_admin', undefined, 'shoot_brief')).toBe(true)
     // a locked shoot with no brief used to be unreachable, and "New brief
@@ -163,8 +163,11 @@ describe('canCreateItemsUnder with the shoot_brief kind', () => {
     expect(canCreateItemsUnder('locked', 'account_manager', undefined, 'shoot_brief')).toBe(true)
     expect(canCreateItemsUnder('shot', 'account_manager', undefined, 'shoot_brief')).toBe(true)
     expect(canCreateItemsUnder('wrapped', 'account_manager', undefined, 'shoot_brief')).toBe(false)
-    expect(canCreateItemsUnder(null, 'editor', undefined, 'shoot_brief')).toBe(false)
-    expect(canCreateItemsUnder(null, 'scheduler', undefined, 'shoot_brief')).toBe(false)
+    // an editor who knows a shoot is needed writes it down themselves; whose
+    // work it becomes is settled by assignment, not by the create gate
+    expect(canCreateItemsUnder(null, 'editor', undefined, 'shoot_brief')).toBe(true)
+    expect(canCreateItemsUnder(null, 'scheduler', undefined, 'shoot_brief')).toBe(true)
+    expect(canCreateItemsUnder(null, 'client', undefined, 'shoot_brief')).toBe(false)
   })
 
   it('other kinds keep the original gate exactly', () => {

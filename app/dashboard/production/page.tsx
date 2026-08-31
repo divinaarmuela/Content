@@ -172,7 +172,9 @@ export default function ProductionPage() {
   const [briefOpen, setBriefOpen] = useState(false)
 
   const { me, role, loading, can } = useRole()
-  const canPlan = can('editor')
+  // anyone on the team plans a shoot — the boards decide whose work it then
+  // is, which is a different question from who may write it down
+  const canPlan = can('scheduler')
   const isManager = can('account_manager')
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
 

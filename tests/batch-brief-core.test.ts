@@ -73,19 +73,23 @@ describe('canCreateItemsUnder — the production gate', () => {
     }
   })
 
-  it('lets an AM raise a brief task against any shoot that is not finished', () => {
+  it('lets anyone on the team raise a brief task against a shoot that is not finished', () => {
     // a locked shoot with no brief is the exact case that used to build a
     // SECOND shoot instead of joining the one already there
     for (const status of [null, 'brief', 'locked', 'shot'] as const) {
-      expect(canCreateItemsUnder(status, 'account_manager', undefined, 'shoot_brief')).toBe(true)
-      expect(canCreateItemsUnder(status, 'super_admin', undefined, 'shoot_brief')).toBe(true)
+      for (const role of ['scheduler', 'editor', 'account_manager', 'super_admin'] as const) {
+        expect(canCreateItemsUnder(status, role, undefined, 'shoot_brief'), role).toBe(true)
+      }
     }
-    // a wrapped shoot is done; nobody raises a plan for it
-    expect(canCreateItemsUnder('wrapped', 'account_manager', undefined, 'shoot_brief')).toBe(false)
-    // and it stays a manager's act whatever the stage
-    for (const status of [null, 'brief', 'locked'] as const) {
-      expect(canCreateItemsUnder(status, 'editor', undefined, 'shoot_brief')).toBe(false)
-      expect(canCreateItemsUnder(status, 'scheduler', undefined, 'shoot_brief')).toBe(false)
+  })
+
+  it('still refuses a plan on a finished shoot, and refuses a client outright', () => {
+    // a wrapped shoot is done; nobody raises a plan for it, whatever their role
+    for (const role of ['scheduler', 'editor', 'account_manager', 'super_admin'] as const) {
+      expect(canCreateItemsUnder('wrapped', role, undefined, 'shoot_brief'), role).toBe(false)
+    }
+    // a client never creates anything — the one line that did not change
+    for (const status of [null, 'brief', 'locked', 'wrapped'] as const) {
       expect(canCreateItemsUnder(status, 'client', undefined, 'shoot_brief')).toBe(false)
     }
   })
