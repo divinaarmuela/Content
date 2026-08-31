@@ -133,7 +133,10 @@ export default function ComposeDialog({
    */
   const resolveKind = useCallback((p: Platform): PostKind => {
     const chosen = perKind[p] ?? (kind === 'auto' ? null : kind)
-    if (chosen && availableKinds(p).includes(chosen)) return chosen
+    // clamped to what the platform will actually make of THIS media — a lone
+    // video is a Reel on Instagram whatever the default above says, and the
+    // row below shows that rather than echoing a choice that changes nothing
+    if (chosen && availableKinds(p, media).includes(chosen)) return chosen
     return autoKindFor(p, media)
   }, [perKind, kind, media])
 
@@ -486,7 +489,7 @@ export default function ComposeDialog({
                   </div>
 
                   {platforms.map(p => {
-                    const options = availableKinds(p)
+                    const options = availableKinds(p, media)
                     const resolved = kinds[p]!
                     // the global choice does not exist here — say which one
                     // it fell back to rather than showing an unexplained

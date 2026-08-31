@@ -133,9 +133,15 @@ describe('toPlatformData', () => {
     expect(toPlatformData({ kind: 'story' })).toEqual({ contentType: 'story' })
   })
 
-  it('does not mark a Reel — a lone video already becomes one', () => {
-    expect(toPlatformData({ kind: 'reel' })).toBeNull()
-    expect(toPlatformData({ kind: 'reel', shareToFeed: false })).toEqual({ shareToFeed: false })
+  it('does not mark a Reel on Instagram — a lone video already becomes one, and Meta 400s an unknown field', () => {
+    expect(toPlatformData({ kind: 'reel' }, 'instagram')).toBeNull()
+    expect(toPlatformData({ kind: 'reel', shareToFeed: false }, 'instagram')).toEqual({ shareToFeed: false })
+  })
+
+  it('DOES mark a Reel on Facebook, where the default is a feed video', () => {
+    // sending nothing here published every Facebook "Reel" as a feed video
+    expect(toPlatformData({ kind: 'reel' }, 'facebook')).toEqual({ contentType: 'reel' })
+    expect(toPlatformData({ kind: 'feed' }, 'facebook')).toBeNull()
   })
 
   it('maps the optional extras to their provider field names', () => {
@@ -408,5 +414,59 @@ describe('what a partial result actually says', () => {
   it('falls back to the status word only when the provider said nothing else', () => {
     expect(describeRemoteOutcome('failed', []).error).toBe('Provider reported the post as failed after creation')
     expect(describeRemoteOutcome('partial', undefined).error).toBe('Provider reported the post as partial after creation')
+  })
+})
+
+describe('what Zernio requires that we were not sending', () => {
+  it('carries TikTok settings at the top level whenever TikTok is a target', () => {
+    // all six fields are REQUIRED in Zernio's guide, and the block goes at the
+    // top of the body, not in platformSpecificData — their one special case
+    const body = buildPostBody({
+      caption: 'hi', media: vid(1), scheduledFor: null,
+      targets: [{ platform: 'tiktok', accountId: 't' }, { platform: 'instagram', accountId: 'i' }],
+    })
+    expect(body.tiktokSettings).toEqual({
+      privacy_level: 'PUBLIC_TO_EVERYONE',
+      allow_comment: true, allow_duet: true, allow_stitch: true,
+      content_preview_confirmed: true, express_consent_given: true,
+    })
+    expect(body.platforms.find(p => p.platform === 'tiktok')?.platformSpecificData).toBeUndefined()
+  })
+
+  it('sends none when TikTok is not a target', () => {
+    const body = buildPostBody({
+      caption: 'hi', media: vid(1), scheduledFor: null,
+      targets: [{ platform: 'instagram', accountId: 'i' }],
+    })
+    expect(body.tiktokSettings).toBeUndefined()
+  })
+
+  it('passes the platform through so Facebook Reels are marked in the body', () => {
+    const body = buildPostBody({
+      caption: 'hi', media: vid(1), scheduledFor: null,
+      targets: [
+        { platform: 'facebook', accountId: 'f', options: { kind: 'reel' } },
+        { platform: 'instagram', accountId: 'i', options: { kind: 'reel' } },
+      ],
+    })
+    expect(body.platforms[0].platformSpecificData).toEqual({ contentType: 'reel' })
+    expect(body.platforms[1].platformSpecificData).toBeUndefined()
+  })
+})
+
+describe('Instagram has no feed video, so the menu does not offer one', () => {
+  const one = vid(1)
+  it('drops "Feed post" for a lone video on Instagram only', () => {
+    expect(availableKinds('instagram', one)).toEqual(['reel', 'story', 'carousel'])
+    expect(availableKinds('instagram', img(1))).toEqual(['feed', 'reel', 'story', 'carousel'])
+    expect(availableKinds('instagram')).toEqual(['feed', 'reel', 'story', 'carousel'])
+    expect(availableKinds('facebook', one)).toContain('feed')
+    expect(availableKinds('tiktok', one)).toContain('feed')
+  })
+
+  it('so a "feed" choice resolves to Reel there — the row says what will happen', () => {
+    expect(autoKindFor('instagram', one)).toBe('reel')
+    // and the clamp the composer applies: feed is not available, auto is reel
+    expect(availableKinds('instagram', one).includes('feed')).toBe(false)
   })
 })

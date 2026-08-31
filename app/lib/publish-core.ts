@@ -66,13 +66,20 @@ export const PLATFORM_RULES: Record<Platform, {
  * of them, and a menu is the wrong place to learn that YouTube has no Stories
  * — an option that cannot be chosen never has to be explained.
  */
-export function availableKinds(platform: Platform): PostKind[] {
+export function availableKinds(platform: Platform, media?: MediaItem[]): PostKind[] {
   const r = PLATFORM_RULES[platform]
   if (!r) return ['feed']
   const kinds: PostKind[] = ['feed']
   if (r.shortForm) kinds.push('reel')
   if (r.stories) kinds.push('story')
   if (r.carousel > 0) kinds.push('carousel')
+  // Instagram has no feed video: per Zernio's guide, "any single video
+  // publishes as a Reel automatically". Offering "Feed post" for a lone video
+  // there is a choice that changes nothing except what the check looks for —
+  // which is how a 2 GB landscape master passed as feed and was refused as a
+  // Reel. The option goes when it would lie.
+  const loneVideo = media?.length === 1 && media[0].type === 'video'
+  if (platform === 'instagram' && loneVideo) return kinds.filter(k => k !== 'feed')
   return kinds
 }
 
@@ -89,7 +96,8 @@ export function autoKindFor(platform: Platform, media: MediaItem[]): PostKind {
     media.length > 1 ? 'carousel'
     : media.length === 1 && media[0].type === 'video' ? 'reel'
     : 'feed'
-  return availableKinds(platform).includes(guess) ? guess : 'feed'
+  const allowed = availableKinds(platform, media)
+  return allowed.includes(guess) ? guess : allowed.includes('feed') ? 'feed' : allowed[0]
 }
 
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
@@ -313,10 +321,19 @@ export function postWarnings(input: {
   return warnings
 }
 
-/** Translate our options into the provider's field names. */
-export function toPlatformData(o: PostOptions): Record<string, unknown> | null {
+/** Translate our options into the provider's field names.
+ *
+ *  `contentType` is the one field that differs by platform, and Zernio's
+ *  guides are precise about it:
+ *   - Instagram: only "story" exists. A lone video is a Reel with no field at
+ *     all, and Meta 400s an unknown field verbatim — so nothing is sent for it.
+ *   - Facebook: "reel" and "story" both exist, and the DEFAULT is a feed
+ *     video. Choosing Reel used to send nothing, so a Facebook "Reel" went out
+ *     as an ordinary feed video every time. */
+export function toPlatformData(o: PostOptions, platform?: Platform): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}
   if (o.kind === 'story') out.contentType = 'story'
+  if (o.kind === 'reel' && platform === 'facebook') out.contentType = 'reel'
   if (o.shareToFeed !== undefined) out.shareToFeed = o.shareToFeed
   if (o.firstComment) out.firstComment = o.firstComment
   if (o.collaborators?.length) out.collaborators = o.collaborators.slice(0, 3)
@@ -355,6 +372,39 @@ export type ZernioPostBody = {
   scheduledFor?: string
   timezone?: string
   publishNow?: boolean
+  /** TikTok's mandatory settings — top level, NOT platformSpecificData; Zernio
+   *  calls that out as the one special case */
+  tiktokSettings?: TikTokSettings
+}
+
+export type TikTokSettings = {
+  privacy_level: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
+  allow_comment: boolean
+  allow_duet: boolean
+  allow_stitch: boolean
+  content_preview_confirmed: boolean
+  express_consent_given: boolean
+  /** send to the Creator Inbox for review instead of publishing */
+  draft?: boolean
+}
+
+/**
+ * What every TikTok post carries unless told otherwise.
+ *
+ * Zernio marks all six of these REQUIRED, and we were sending none of them —
+ * every TikTok target in every post this app has ever made went out without
+ * the block TikTok insists on. A public post that allows comments, duets and
+ * stitches is what an agency posting for a brand means by "post it"; the two
+ * consent flags are TikTok's legal requirement that the operator has seen the
+ * preview and agreed to publish, which pressing Publish is.
+ */
+export const TIKTOK_DEFAULTS: TikTokSettings = {
+  privacy_level: 'PUBLIC_TO_EVERYONE',
+  allow_comment: true,
+  allow_duet: true,
+  allow_stitch: true,
+  content_preview_confirmed: true,
+  express_consent_given: true,
 }
 
 export function buildPostBody(input: {
@@ -367,7 +417,7 @@ export function buildPostBody(input: {
   const body: ZernioPostBody = {
     content: input.caption,
     platforms: input.targets.map(t => {
-      const data = t.options ? toPlatformData(t.options) : null
+      const data = t.options ? toPlatformData(t.options, t.platform) : null
       return {
         platform: t.platform,
         accountId: t.accountId,
@@ -376,6 +426,7 @@ export function buildPostBody(input: {
     }),
   }
   if (input.media.length > 0) body.mediaItems = input.media
+  if (input.targets.some(t => t.platform === 'tiktok')) body.tiktokSettings = { ...TIKTOK_DEFAULTS }
   if (input.scheduledFor) {
     body.scheduledFor = input.scheduledFor
     body.timezone = input.timezone ?? 'Australia/Melbourne'
