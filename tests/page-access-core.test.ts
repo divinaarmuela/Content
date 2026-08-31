@@ -104,7 +104,9 @@ describe('defaultAllows — the ladder as it always was', () => {
   })
 
   it('account managers get everything except business development', () => {
-    const excluded = ['/dashboard/leads', '/dashboard/audience', '/dashboard/reports']
+    // reports are NOT business development — a monthly client report is client
+    // delivery, and the account manager is who presents it
+    const excluded = ['/dashboard/leads', '/dashboard/audience']
     for (const href of excluded) expect(defaultAllows('account_manager', href)).toBe(false)
     for (const { href } of GRANTABLE_PAGES) {
       if (excluded.includes(href) || GRANT_ONLY_PAGES.has(href)) continue

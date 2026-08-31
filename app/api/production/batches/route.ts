@@ -38,11 +38,12 @@ export async function GET() {
   }
 }
 
-/** Create a shoot brief. editor+ — it starts life as 'brief' (DB default):
- *  a plan the team works up, not yet a commitment. */
+/** Create a shoot brief. Any team role — it starts life as 'brief' (the DB
+ *  default): a plan the team works up, not yet a commitment. Booking it IS
+ *  the commitment, and that is still gated by the batch transitions. */
 export async function POST(req: Request) {
   try {
-    const user = await requireRole('editor')
+    const user = await requireRole('scheduler')
     const body = await req.json()
     if (!body.client_id || !body.title) {
       return NextResponse.json({ error: 'client_id and title are required' }, { status: 400 })

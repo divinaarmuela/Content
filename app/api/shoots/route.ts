@@ -31,7 +31,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireRole('editor')
+    // Booking a shoot is work like the rest of it. This asked for `editor`,
+    // which left a scheduler able to SEE every shoot (the GET above is
+    // 'scheduler') and unable to make one — and whose shoot it then is gets
+    // answered by assignment on the boards, not by the create gate.
+    const user = await requireRole('scheduler')
     const body = await req.json()
 
     const client_id = String(body.client_id ?? '').trim()
