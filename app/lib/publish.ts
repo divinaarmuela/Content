@@ -326,6 +326,15 @@ export async function reconcilePublishedJobs(): Promise<number> {
     // reporting anything. Read literally, a 3:00 pm post was "live" at 2:40.
     // Live means the provider has a publish time, or a platform says so.
     const LIVE = ['published', 'posted', 'success']
+    // One channel live and three refused is NOT "published". A four-channel
+    // post with YouTube up and Instagram, LinkedIn and TikTok failed read as
+    // Live on our side because one platform said so — the person watching saw
+    // a green tick over a post that missed three quarters of its audience.
+    // Any failed channel makes it partial, and partial is described per
+    // channel further down.
+    if (platforms.some(p => String(p.status ?? '').toLowerCase() === 'failed')) {
+      return { status: 'partial', platforms }
+    }
     const platformLive = platforms.some(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
     const live = LIVE.includes(String(one.status).toLowerCase()) && (Boolean(one.publishedAt) || platformLive)
     return { status: live ? 'published' : (LIVE.includes(one.status) ? 'scheduled' : one.status), platforms }
