@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, Search,
+  CalendarClock, CalendarDays, Search,
 } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -61,8 +61,10 @@ export const NAV_MAIN: NavItem[] = [
  * one page's tabs is a permission model nobody would maintain.
  */
 export const NAV_SOCIAL_CHILDREN: NavItem[] = [
-  // first, because it answers the question people come to Social with most:
-  // "did it go out?"
+  // first, because it is where the week is planned — the page people open to
+  // decide what goes out and when, and the one the rest of Social feeds
+  { href: '/dashboard/social/schedule',    label: 'Schedule',    icon: CalendarDays },
+  // then "did it go out?", the question people come to Social with next
   { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
   { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
@@ -99,6 +101,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
   '/dashboard/social':        'Social channels',
+  '/dashboard/social/schedule': 'Schedule',
   '/dashboard/social/activity': 'Posts',
   '/dashboard/social/inbox':  'Inbox',
   '/dashboard/social/analytics': 'Analytics',

@@ -23,7 +23,7 @@ const at = (local: string, tz = TZ) => fromZonedInput(local, tz) as string
 describe('eligibility', () => {
   const version = { id: 'v1', version_number: 2, files: [img(1), img(2)], file_url: null }
 
-  it('lets an approved item with graphics start a post', () => {
+  it('lets an approved item with media start a post', () => {
     const r = eligibility({ status: 'approved_for_scheduling', content_type: 'carousel' }, [version])
     expect(r.ok).toBe(true)
     if (r.ok) {
@@ -74,15 +74,15 @@ describe('eligibility', () => {
     }
   })
 
-  it('an approved item with no version at all has no graphics yet', () => {
+  it('an approved item with no version at all has no media yet', () => {
     expect(eligibility({ status: 'approved_for_scheduling' }, []))
-      .toEqual({ ok: false, reason: 'No graphics yet' })
+      .toEqual({ ok: false, reason: 'No media yet' })
   })
 
-  it('an approved item whose version is only a review link has no graphics yet', () => {
+  it('an approved item whose version is only a review link has no media yet', () => {
     const link = { id: 'v9', version_number: 1, files: [], file_url: null }
     expect(eligibility({ status: 'approved_for_scheduling' }, [link]))
-      .toEqual({ ok: false, reason: 'No graphics yet' })
+      .toEqual({ ok: false, reason: 'No media yet' })
   })
 
   it('counts only the slides that actually go out: a Reel posts one', () => {
@@ -572,10 +572,10 @@ describe('validateComposition', () => {
     expect(validateComposition(good)).toEqual({ ok: true, problems: [] })
   })
 
-  it('refuses a post with no graphics', () => {
+  it('refuses a post with no media', () => {
     const r = validateComposition({ ...good, slides: [] })
     expect(r.ok).toBe(false)
-    expect(r.problems).toContain('Pick at least one graphic')
+    expect(r.problems).toContain('Pick at least one photo or video')
   })
 
   it('refuses a post with no channel', () => {
@@ -602,14 +602,14 @@ describe('validateComposition', () => {
     expect(validateComposition({ ...good, caption: '' }).ok).toBe(true)
   })
 
-  it('counts the graphics against each channel', () => {
+  it('counts the media against each channel', () => {
     const r = validateComposition({
       ...good,
       slides: Array.from({ length: 12 }, (_, i) => img(i)),
       channels: [{ id: 'a1', platform: 'instagram' }],
     })
     expect(r.ok).toBe(false)
-    expect(r.problems).toContain('Instagram takes 10 graphics — take 2 out')
+    expect(r.problems).toContain('Instagram takes 10 media files — take 2 out')
   })
 
   it('says the true thing when a channel takes video, not pictures', () => {

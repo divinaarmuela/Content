@@ -81,7 +81,7 @@ export type Eligibility =
   | { ok: false; reason: string }
 
 /**
- * May this item start a post, and with which graphics?
+ * May this item start a post, and with which media?
  *
  * Yes only when the client has approved the work AND the latest version
  * carries at least one slide that would actually go out. `postSlides` decides
@@ -97,9 +97,9 @@ export function eligibility(
     return { ok: false, reason: NOT_ELIGIBLE[status] ?? 'Not ready yet' }
   }
   const version = latestVersion(versions)
-  if (!version) return { ok: false, reason: 'No graphics yet' }
+  if (!version) return { ok: false, reason: 'No media yet' }
   const slides = postSlides(item?.content_type, slidesOf(version))
-  if (slides.length === 0) return { ok: false, reason: 'No graphics yet' }
+  if (slides.length === 0) return { ok: false, reason: 'No media yet' }
   return { ok: true, version, slides }
 }
 
@@ -754,10 +754,10 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
   const problems: string[] = []
 
   const elig = eligibility(input.item, input.version ? [input.version] : [])
-  if (!elig.ok && elig.reason !== 'No graphics yet') problems.push(elig.reason)
+  if (!elig.ok && elig.reason !== 'No media yet') problems.push(elig.reason)
 
   const slides = Array.isArray(input.slides) ? input.slides : []
-  if (slides.length === 0) problems.push('Pick at least one graphic')
+  if (slides.length === 0) problems.push('Pick at least one photo or video')
 
   const channels = (Array.isArray(input.channels) ? input.channels : [])
     .filter(c => c && String(c.platform ?? ''))
@@ -790,7 +790,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
       const videos = slides.filter(s => s.type === 'video').length
       // count by KIND before counting at all: a channel that takes video and
       // no pictures whatsoever (YouTube) is not "too many slides", it is the
-      // wrong kind of graphic — trimming twelve photos to one photo there is
+      // wrong kind of media — trimming twelve photos to one photo there is
       // a post that still cannot exist
       if (images > 0 && limit.images === 0 && limit.carousel === 0) {
         problems.push(`${name} takes video, not pictures`)
@@ -801,7 +801,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
         if (slides.length > max) {
           const over = slides.length - max
           problems.push(
-            `${name} takes ${max} ${max === 1 ? 'graphic' : 'graphics'} — take ${over} out`,
+            `${name} takes ${max} ${max === 1 ? 'media file' : 'media files'} — take ${over} out`,
           )
         }
       }
