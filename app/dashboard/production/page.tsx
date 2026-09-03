@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -41,7 +39,7 @@ import {
 } from '../../lib/work-calendar-core'
 import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
 import { useWorkRows } from '../useLiveWork'
-import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
+import { AccountUnavailable } from './shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from './workHooks'
 import { useRole } from '../useRole'
 import NewItemDialog, { type ClientRow } from './NewItemDialog'
@@ -51,6 +49,9 @@ import { TurnChip } from './TurnChip'
 import { LaneBoard, type Lane } from './LaneBoard'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 import AddPieceDialog, { type AddPieceTarget } from './AddPieceDialog'
+import PageTitle from '../ui/PageTitle'
+import Chip, { type ChipTone } from '../ui/Chip'
+import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
 import GettingStarted from '../GettingStarted'
 import HelpHint from '../HelpHint'
 import { toastOpen } from '../toastLink'
@@ -126,6 +127,48 @@ function whenShort(iso: string | null) {
   return iso
     ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
     : null
+}
+
+/** Today where the reader is, as a plain YYYY-MM-DD so it compares straight
+ *  against a due date without a clock or a time zone getting involved. */
+function todayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * THE COLOUR OF A CARD IS THE THING THAT NEEDS A PERSON.
+ *
+ * Live work is ink because it is finished and out. Otherwise a date that has
+ * arrived outranks everything — that is the card somebody has to pick up
+ * today. Then the two states that are simply good news: approved, and
+ * scheduled. Everything else is a plain white card, and a board where only
+ * three cards are coloured is a board you can read from the doorway.
+ */
+function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined {
+  if (status === 'published') return 'ink'
+  if (due && due.slice(0, 10) <= todayKey()) return 'amber'
+  if (status === 'approved_for_scheduling') return 'green'
+  if (status === 'scheduled') return 'blue'
+  return undefined
+}
+
+/** "Jess Mackay" → "JM", for a 26px avatar. */
+function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/)
+  const two = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
+  return (two || name.slice(0, 2)).toUpperCase()
+}
+
+/** A shoot's stage, as a chip tone. */
+const SHOOT_CHIP: Record<BatchStatus, ChipTone> = {
+  brief: 'amber', locked: 'blue', shot: 'green', wrapped: 'muted',
+}
+
+/** A work kind's colour, as a chip tone — the palette has five, not eight. */
+const KIND_TONE: Record<string, ChipTone> = {
+  zinc: 'muted', pink: 'red', rose: 'red', sky: 'blue', indigo: 'blue',
+  violet: 'blue', emerald: 'green', amber: 'amber',
 }
 
 /**
@@ -346,6 +389,18 @@ export default function ProductionPage() {
   const closedShoots = visibleShoots.filter(s => (s.status ?? '') === 'wrapped')
 
   const boardCount = briefRows.length + taskRows.length + taskGroupCards.length + planlessShoots.length
+  // "18 items across 6 clients" — counted from the cards actually on screen,
+  // so the sentence and the board can never disagree
+  const boardClients = new Set<string>([
+    ...briefRows.map(b => b.client_id),
+    ...taskRows.map(t => t.client_id),
+    ...taskGroupCards.map(c => c.group.client_id),
+    ...planlessShoots.map(s => s.client_id),
+  ].filter(Boolean))
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const boardSummary = shoots === null
+    ? 'Everything being planned, shot and written — it updates the moment anyone moves something.'
+    : `${plural(boardCount, 'item')} across ${plural(boardClients.size, 'client')} · updates the moment anyone moves something`
   const outOfScope = (briefsInFilters.length - briefRows.length) + (tasksInFilters.length - scopedTaskRows.length)
   const nothingToShow = shoots !== null && boardCount === 0 && doneRows.length === 0
     && bookedShoots.length === 0 && closedShoots.length === 0
@@ -365,12 +420,20 @@ export default function ProductionPage() {
   // load — it is a different screen, and saying so beats a skeleton forever
   if (!loading && !viewer) return <AccountUnavailable />
 
+  /** Whoever is holding this, as the one avatar the card has room for. Only a
+   *  manager is given the team's names, so for everyone else a card shows the
+   *  turn chip and no face — the same as it did before the restyle. */
+  const holder = (ownerId: string | null | undefined): Person[] => {
+    const name = ownerId ? nameById.get(ownerId) : undefined
+    return ownerId && name ? [{ id: ownerId, name, initials: initialsOf(name) }] : []
+  }
+
   /** The Assign… menu — the affordance the chip promised and the page lacked. */
   const assignMenu = (itemId: string) => (
     isManager && nameById.size > 0 ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="outline" className="min-h-11 md:min-h-8">Assign…</Button>
+          <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-4 text-[14px] font-semibold">Assign…</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
           {[...nameById].map(([uid, name]) => (
@@ -386,131 +449,99 @@ export default function ProductionPage() {
   const briefCard = (b: BriefTask, laneKey: string) => {
     const shoot = b.batch_id ? batchById.get(b.batch_id) : undefined
     const state = shoot ? shownShootState(shoot) : null
+    const when = shoot?.shoot_date ?? b.due_date
     return (
-      <div key={b.id} className="relative">
-        <Card className="py-0 transition-shadow hover:shadow-md">
-          <CardContent className="flex flex-col gap-1.5 p-3">
-            {/* the whole card opens the plan on its SHOOT page — plan and shoot
-                are one page now. Falls back to the item page for the rare brief
-                with no shoot behind it (never a dead link). */}
-            <Link href={b.batch_id ? `/dashboard/production/shoots/${b.batch_id}` : `/dashboard/production/${b.id}`}
-              aria-label={b.title} className="absolute inset-0 rounded-xl" />
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">
-                Shoot plan
-              </span>
-              <span className="truncate text-sm font-medium leading-snug">{b.title}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {b.clients?.name ?? '—'}
-              </Badge>
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {itemStatusLabel('shoot_brief', b.status, b.status)}
-              </Badge>
-              {shoot && state && (
-                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${BATCH_STATUS_STYLE[shoot.status ?? 'brief']}`}>
-                  {SHOWN_SHOOT_LABEL[state]}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {viewer && (
-                <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
-                  openTask={b.my_open_task}
-                  onOpenComments={() => commentsDrawer.open(b.id, b.title)}
-                  ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
-              )}
-              {(shoot?.shoot_date || b.due_date) && (
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                  <CalendarDays className="h-3 w-3" />
-                  {whenShort(shoot?.shoot_date ?? b.due_date)}
-                </span>
-              )}
-              {/* the conversation, right here — the drawer, not a page trip */}
-              <CommentsButton className="ml-auto" tagged={b.my_open_task} title={b.title}
-                onOpen={() => commentsDrawer.open(b.id, b.title)} />
-            </div>
-            {credits(b) && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(b)}</p>
-            )}
-            {(laneKey === 'approved' || !b.owner_id) && (
-              // above the stretched link, so these are clicks on a control
-              <div className="relative z-10 flex flex-wrap items-center gap-1.5">
-                {laneKey === 'approved' && shoot && (
-                  // the ONE action an approved plan wants: the date is picked
-                  // and committed on the shoot page
-                  <Button size="sm" className="min-h-11 md:min-h-8" asChild>
-                    <Link href={`/dashboard/production/shoots/${shoot.id}`}>Book the shoot</Link>
-                  </Button>
-                )}
-                {!b.owner_id && assignMenu(b.id)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      /* the whole card opens the plan on its SHOOT page — plan and shoot are
+         one page now. Falls back to the item page for the rare brief with no
+         shoot behind it (never a dead link). */
+      <WorkCard
+        key={b.id}
+        href={b.batch_id ? `/dashboard/production/shoots/${b.batch_id}` : `/dashboard/production/${b.id}`}
+        client={b.clients?.name ?? '—'}
+        title={b.title}
+        tone={cardTone(b.status, when)}
+        people={holder(b.owner_id)}
+        chips={<>
+          <Chip tone="surface">Shoot plan</Chip>
+          <Chip>{itemStatusLabel('shoot_brief', b.status, b.status)}</Chip>
+          {shoot && state && (
+            <Chip tone={SHOOT_CHIP[shoot.status ?? 'brief']}>{SHOWN_SHOOT_LABEL[state]}</Chip>
+          )}
+          {viewer && (
+            <TurnChip status={b.status} item={b} viewer={viewer} turns={BRIEF_STATUS_TURN} brief
+              openTask={b.my_open_task}
+              onOpenComments={() => commentsDrawer.open(b.id, b.title)}
+              ownerName={b.owner_id ? nameById.get(b.owner_id) : undefined} />
+          )}
+          {when && (
+            <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(when)}</Chip>
+          )}
+          {/* the conversation, right here — the drawer, not a page trip */}
+          <CommentsButton className="ml-auto" tagged={b.my_open_task} title={b.title}
+            onOpen={() => commentsDrawer.open(b.id, b.title)} />
+        </>}
+        actions={<>
+          {credits(b) && (
+            <p className="w-full text-[13px] text-muted-foreground">{credits(b)}</p>
+          )}
+          {laneKey === 'approved' && shoot && (
+            // the ONE action an approved plan wants: the date is picked and
+            // committed on the shoot page
+            <Button className="h-11 rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90" asChild>
+              <Link href={`/dashboard/production/shoots/${shoot.id}`}>Book the shoot</Link>
+            </Button>
+          )}
+          {!b.owner_id && assignMenu(b.id)}
+        </>}
+      />
     )
   }
 
   const taskCard = (t: BriefTask, muted = false) => {
     const assignment = viewer ? editorAssignment(t, viewer) : 'other'
     return (
-      <div key={t.id} className="relative">
-        <Card className={`py-0 transition-shadow hover:shadow-md ${muted ? 'opacity-60' : ''}`}>
-          <CardContent className="flex flex-col gap-1.5 p-3">
-            {/* the whole card opens the task, as a stretched link rather than
-                a wrapper — the claim button below is a button, not an anchor */}
-            <Link href={`/dashboard/production/${t.id}`} aria-label={t.title}
-              className="absolute inset-0 rounded-xl" />
-            <span className="text-sm font-medium leading-snug">{t.title}</span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {t.clients?.name ?? '—'}
-              </Badge>
-              {/* "Not started" and "In progress" share the Writing lane — the
-                  card is the only place that can tell them apart */}
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {taskStatusLabel(t.work_kinds, t.status, t.status, { hasWork: (t.current_version_number ?? 0) > 0 })}
-              </Badge>
-              {t.work_kinds?.name && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[t.work_kinds.color] ?? KIND_CHIP.zinc}`}>
-                  {t.work_kinds.name}
-                </span>
+      <WorkCard
+        key={t.id}
+        href={`/dashboard/production/${t.id}`}
+        client={t.clients?.name ?? '—'}
+        title={t.title}
+        tone={muted ? undefined : cardTone(t.status, t.due_date)}
+        people={holder(t.owner_id)}
+        className={muted ? 'opacity-60' : ''}
+        chips={<>
+          {/* "Not started" and "In progress" share the Writing lane — the
+              card is the only place that can tell them apart */}
+          <Chip>{taskStatusLabel(t.work_kinds, t.status, t.status, { hasWork: (t.current_version_number ?? 0) > 0 })}</Chip>
+          {t.work_kinds?.name && (
+            <Chip tone={KIND_TONE[t.work_kinds.color] ?? 'muted'}>{t.work_kinds.name}</Chip>
+          )}
+          {viewer && (
+            <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
+              openTask={t.my_open_task}
+              onOpenComments={() => commentsDrawer.open(t.id, t.title)}
+              ownerName={t.owner_id ? nameById.get(t.owner_id) : undefined} />
+          )}
+          {t.due_date && (
+            <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(t.due_date)}</Chip>
+          )}
+          {/* the conversation, right here — the drawer, not a page trip */}
+          <CommentsButton className="ml-auto" tagged={t.my_open_task} title={t.title}
+            onOpen={() => commentsDrawer.open(t.id, t.title)} />
+        </>}
+        actions={<>
+          {credits(t) && (
+            <p className="w-full text-[13px] text-muted-foreground">{credits(t)}</p>
+          )}
+          {assignment === 'unassigned' && viewer && !muted && (
+            <>
+              {canClaimEditor(t, viewer) && (
+                <ClaimButton itemId={t.id} hat="editor" onDone={() => {}} />
               )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {viewer && (
-                <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
-                  openTask={t.my_open_task}
-                  onOpenComments={() => commentsDrawer.open(t.id, t.title)}
-                  ownerName={t.owner_id ? nameById.get(t.owner_id) : undefined} />
-              )}
-              {t.due_date && (
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                  <CalendarDays className="h-3 w-3" />
-                  {whenShort(t.due_date)}
-                </span>
-              )}
-              {/* the conversation, right here — the drawer, not a page trip */}
-              <CommentsButton className="ml-auto" tagged={t.my_open_task} title={t.title}
-                onOpen={() => commentsDrawer.open(t.id, t.title)} />
-            </div>
-            {credits(t) && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{credits(t)}</p>
-            )}
-            {assignment === 'unassigned' && viewer && !muted && (
-              // above the stretched link, so these are clicks on a control
-              <div className="relative z-10 flex flex-wrap items-center gap-1.5">
-                {canClaimEditor(t, viewer) && (
-                  <ClaimButton itemId={t.id} hat="editor" onDone={() => {}} />
-                )}
-                {assignMenu(t.id)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              {assignMenu(t.id)}
+            </>
+          )}
+        </>}
+      />
     )
   }
 
@@ -555,67 +586,64 @@ export default function ProductionPage() {
     const open = openGroups.has(card.group.id)
     const pct = Math.min(100, Math.round((card.count / card.target) * 100))
     return (
-      <div key={`group-${card.group.id}`}>
-        <Card className="py-0 transition-shadow hover:shadow-md">
-          <CardContent className="flex flex-col gap-2 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
-              <div className="flex shrink-0 items-center">
-                <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
-                  onClick={() => setOpenGroups(prev => {
-                    const next = new Set(prev)
-                    if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
-                    return next
-                  })}
-                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
-                  {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-                <button type="button" aria-label="Delete this card"
-                  onClick={() => setGroupToDelete(card)}
-                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            {/* the small filled bar — how much of the promise exists */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
-              </Badge>
-              {card.group.work_kinds?.name && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[card.group.work_kinds.color ?? 'zinc'] ?? KIND_CHIP.zinc}`}>
-                  {card.group.work_kinds.name}
+      <div key={`group-${card.group.id}`}
+        className="flex flex-col gap-2.5 rounded-inner border border-border bg-surface p-3.5 text-foreground">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
+          {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
+        </span>
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-[15px] font-semibold leading-[1.25]">{groupLine(card)}</span>
+          <div className="flex shrink-0 items-center">
+            <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
+              onClick={() => setOpenGroups(prev => {
+                const next = new Set(prev)
+                if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
+                return next
+              })}
+              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
+              {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            <button type="button" aria-label="Delete this card"
+              onClick={() => setGroupToDelete(card)}
+              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-accent-red">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        {/* the small filled bar — how much of the promise exists */}
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.08]">
+          <div className="h-full rounded-full bg-accent-green transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        {card.group.work_kinds?.name && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip tone={KIND_TONE[card.group.work_kinds.color ?? 'zinc'] ?? 'muted'}>
+              {card.group.work_kinds.name}
+            </Chip>
+          </div>
+        )}
+        {open && (
+          <div className="flex flex-col gap-1">
+            {card.items.length === 0 && (
+              <p className="text-[13px] text-muted-foreground">No pieces yet — add the first one below.</p>
+            )}
+            {card.items.map(i => (
+              <Link key={i.id} href={`/dashboard/production/${i.id}`}
+                className="flex min-h-11 items-center justify-between gap-2 rounded-tile px-2 text-[13px] hover:bg-foreground/[0.05]">
+                <span className="truncate">{i.title}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {taskStatusLabel(i.work_kinds, i.status, i.status, { hasWork: (i.current_version_number ?? 0) > 0 })}
                 </span>
-              )}
-            </div>
-            {open && (
-              <div className="flex flex-col gap-1">
-                {card.items.length === 0 && (
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">No pieces yet — add the first one below.</p>
-                )}
-                {card.items.map(i => (
-                  <Link key={i.id} href={`/dashboard/production/${i.id}`}
-                    className="flex min-h-8 items-center justify-between gap-2 rounded px-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <span className="truncate">{i.title}</span>
-                    <span className="shrink-0 text-zinc-400 dark:text-zinc-500">
-                      {taskStatusLabel(i.work_kinds, i.status, i.status, { hasWork: (i.current_version_number ?? 0) > 0 })}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-            {!card.full && (
-              <Button size="sm" className="min-h-11 w-fit md:min-h-8"
-                onClick={() => openAddPiece(card)}>
-                <Plus className="h-3.5 w-3.5" />
-                {addNextLabel(card.group)}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+        {!card.full && (
+          <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90"
+            onClick={() => openAddPiece(card)}>
+            <Plus className="h-4 w-4" />
+            {addNextLabel(card.group)}
+          </Button>
+        )}
       </div>
     )
   }
@@ -628,40 +656,27 @@ export default function ProductionPage() {
     const canDelete = isManager
     return (
       <div key={s.id} className="relative">
-        <Card className="py-0 transition-shadow hover:shadow-md">
-          <CardContent className="flex flex-col gap-1.5 p-3">
-            <Link href={`/dashboard/production/shoots/${s.id}`} aria-label={s.title}
-              className="absolute inset-0 rounded-xl" />
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                Shoot
-              </span>
-              <span className="truncate text-sm font-semibold">{s.title}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {s.clients?.name ?? '—'}
-              </Badge>
-              <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${BATCH_STATUS_STYLE[s.status ?? 'brief']}`}>
-                {SHOWN_SHOOT_LABEL[shownShootState(s)]}
-              </span>
-              {s.shoot_date && (
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                  <CalendarDays className="h-3 w-3" />
-                  {whenShort(s.shoot_date)}
-                </span>
-              )}
-            </div>
-            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">Write the shoot plan →</p>
-          </CardContent>
-        </Card>
+        <WorkCard
+          href={`/dashboard/production/shoots/${s.id}`}
+          client={s.clients?.name ?? '—'}
+          title={s.title}
+          tone={cardTone('draft_uploaded', s.shoot_date)}
+          chips={<>
+            <Chip tone="surface">Shoot</Chip>
+            <Chip tone={SHOOT_CHIP[s.status ?? 'brief']}>{SHOWN_SHOOT_LABEL[shownShootState(s)]}</Chip>
+            {s.shoot_date && (
+              <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(s.shoot_date)}</Chip>
+            )}
+          </>}
+          actions={<p className="w-full text-[13px] font-semibold">Write the shoot plan →</p>}
+        />
         {canDelete && (
           // an overflow menu, not a hover-only icon: on a tablet a control
           // that only appears on hover does not exist
           <div className="absolute right-2 top-2 z-10">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-11 w-11 text-zinc-400 md:h-8 md:w-8"
+                <Button variant="ghost" size="icon" className="h-11 w-11 rounded-full text-muted-foreground"
                   aria-label={`More for ${s.title}`}
                   onClick={e => { e.preventDefault(); e.stopPropagation() }}>
                   <MoreHorizontal className="h-4 w-4" />
@@ -683,10 +698,10 @@ export default function ProductionPage() {
   /** A booked or closed shoot in the strip — one chip, straight to its page. */
   const shootChip = (s: Shoot) => (
     <Link key={s.id} href={`/dashboard/production/shoots/${s.id}`}
-      className="flex min-h-11 items-center gap-1.5 rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-600 transition-colors hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100">
-      <span className={`inline-block h-1.5 w-1.5 rounded-full ${shownShootState(s) === 'shot' ? 'bg-violet-500' : 'bg-sky-500'}`} />
+      className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold transition-colors hover:bg-foreground/[0.04]">
+      <span className={`inline-block h-2 w-2 rounded-full ${shownShootState(s) === 'shot' ? 'bg-accent-green' : 'bg-accent-blue'}`} />
       {s.title}
-      <span className="opacity-60">· {SHOWN_SHOOT_LABEL[shownShootState(s)]}{s.shoot_date ? ` · ${whenShort(s.shoot_date)}` : ''}</span>
+      <span className="font-normal text-muted-foreground">· {SHOWN_SHOOT_LABEL[shownShootState(s)]}{s.shoot_date ? ` · ${whenShort(s.shoot_date)}` : ''}</span>
     </Link>
   )
 
@@ -694,8 +709,53 @@ export default function ProductionPage() {
     <div className="flex flex-col gap-4">
       {viewer && shoots !== null && <GettingStarted role={role} page="production" />}
 
+      <PageTitle
+        title="Production"
+        summary={boardSummary}
+        actions={<>
+          {/* one place, always on screen — a control that moves with the data
+              is a control nobody learns */}
+          <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
+            unassignedHint="Plans and tasks nobody has picked up yet." />
+          {(canPlan || isManager) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
+                  <Plus className="h-4 w-4" /> New item <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                {/* one line of context: a shoot plan IS the shoot — there is
+                    no separate "make a shoot" step to get wrong */}
+                <p className="px-2 py-1.5 text-[13px] text-muted-foreground">
+                  A shoot plan is the concept and shot list for a filming day. Making it sets up the shoot too.
+                </p>
+                {canPlan && (
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setBriefOpen(true)}>
+                    <FileText className="mt-0.5 h-4 w-4" />
+                    <span className="flex flex-col">
+                      New shoot plan
+                      <span className="text-[13px] text-muted-foreground">the plan the client signs off — creates the shoot with it</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {canPlan && (
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setTaskOpen(true)}>
+                    <ListChecks className="mt-0.5 h-4 w-4" />
+                    <span className="flex flex-col">
+                      Other work
+                      <span className="text-[13px] text-muted-foreground">research, strategy or copy — nothing to post</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </>}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-[13px] text-muted-foreground">
           Shoots <HelpHint term="shoot" />, shoot plans <HelpHint term="shoot_plan" /> and tasks — one board
         </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -710,68 +770,31 @@ export default function ProductionPage() {
               { value: 'calendar', label: 'Calendar', icon: CalendarDays },
             ]}
           />
-          {/* one place, always on screen — a control that moves with the data
-              is a control nobody learns */}
-          <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
-            unassignedHint="Plans and tasks nobody has picked up yet." />
           <Select value={clientFilter} onValueChange={v => v && setClientFilter(v)}>
-            <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-11 w-44 rounded-full border-border bg-surface px-4"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All clients</SelectItem>
               {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+            <Search className="absolute left-4 top-[15px] h-4 w-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search shoots, plans and tasks…" className="w-56 bg-white pl-8 dark:bg-zinc-900" />
+              placeholder="Search shoots, plans and tasks…"
+              className="h-11 w-56 rounded-full border-border bg-surface pl-11" />
           </div>
-          {(canPlan || isManager) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="min-h-11 md:min-h-9"><Plus className="h-4 w-4" /> New <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                {/* one line of context: a shoot plan IS the shoot — there is
-                    no separate "make a shoot" step to get wrong */}
-                <p className="px-2 py-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  A shoot plan is the concept and shot list for a filming day. Making it sets up the shoot too.
-                </p>
-                {canPlan && (
-                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setBriefOpen(true)}>
-                    <FileText className="mt-0.5 h-4 w-4" />
-                    <span className="flex flex-col">
-                      New shoot plan
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">the plan the client signs off — creates the shoot with it</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                {canPlan && (
-                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setTaskOpen(true)}>
-                    <ListChecks className="mt-0.5 h-4 w-4" />
-                    <span className="flex flex-col">
-                      Other work
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">research, strategy or copy — nothing to post</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </div>
-      <p className="-mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+      <p className="-mt-2 text-[13px] text-muted-foreground">
         The Mine / Nobody&rsquo;s / Everyone switch covers plans and tasks. Shoots are always shown.
         {outOfScope > 0 && <> ({outOfScope} more outside this view)</>}
       </p>
 
       {needsSchema && (
-        <Card className="border-amber-200 dark:border-amber-900">
-          <CardContent className="p-4 text-sm text-amber-800 dark:text-amber-300">
-            This part of the app isn&rsquo;t switched on yet. Send this to your developer —
-            shoots are missing their status.
-          </CardContent>
-        </Card>
+        <div className="rounded-card bg-tint-amber p-5 text-[15px]">
+          This part of the app isn&rsquo;t switched on yet. Send this to your developer —
+          shoots are missing their status.
+        </div>
       )}
 
       {view === 'calendar' ? (
@@ -783,7 +806,7 @@ export default function ProductionPage() {
           onMove={moveEvent}
           undatedLabel="No date yet"
           legend={
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-[15px] text-muted-foreground">
               Shoots sit on their shoot date; plans and tasks on their due date. Drag one
               to another day to move it — a booked shoot moves from the shoot
               page, with a reason.
@@ -791,33 +814,35 @@ export default function ProductionPage() {
           }
         />
       ) : shoots === null ? (
-        <div className="flex gap-3 overflow-x-hidden">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
+        <div className="flex gap-3.5 overflow-x-hidden">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[220px] flex-1 rounded-card" />)}
         </div>
       ) : nothingToShow ? (
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-              <Camera className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
-            </div>
-            <p className="text-sm font-medium">Nothing on the board yet</p>
-            <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-              {outOfScope > 0
-                ? 'Work is being planned, but none of it is yours.'
-                : 'Start with a shoot plan — the concept and shot list for a filming day. Making it sets up the shoot too.'}
-            </p>
-            {/* planning is always a valid next move for whoever can plan —
-                whatever the reason the page is empty */}
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {outOfScope > 0 && (
-                <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
-                  Show everyone&rsquo;s
-                </Button>
-              )}
-              {canPlan && <Button size="sm" className="min-h-11" onClick={() => setBriefOpen(true)}><Plus className="h-4 w-4" /> New shoot plan</Button>}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center gap-3 rounded-card border border-border bg-surface px-6 py-14 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-tile bg-foreground/[0.06]">
+            <Camera className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="text-[17px] font-semibold">Nothing on the board yet</p>
+          <p className="max-w-sm text-[15px] text-muted-foreground">
+            {outOfScope > 0
+              ? 'Work is being planned, but none of it is yours.'
+              : 'Start with a shoot plan — the concept and shot list for a filming day. Making it sets up the shoot too.'}
+          </p>
+          {/* planning is always a valid next move for whoever can plan —
+              whatever the reason the page is empty */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {outOfScope > 0 && (
+              <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-4 text-[14px] font-semibold"
+                onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                Show everyone&rsquo;s
+              </Button>
+            )}
+            {canPlan && (
+              <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+                onClick={() => setBriefOpen(true)}><Plus className="h-4 w-4" /> New shoot plan</Button>
+            )}
+          </div>
+        </div>
       ) : (
         <>
           <LaneBoard
@@ -844,14 +869,14 @@ export default function ProductionPage() {
                 cards.push(!doneOpen
                   ? (
                     <button key="done-toggle" type="button" onClick={() => setDoneOpen(true)}
-                      className="min-h-11 rounded-lg border border-dashed border-zinc-200 py-4 text-center text-xs text-zinc-500 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
+                      className="min-h-11 rounded-inner border border-dashed border-border py-4 text-center text-[13px] text-muted-foreground hover:text-foreground">
                       {doneShown.length} task{doneShown.length === 1 ? '' : 's'} finished in the last 14 days — show
                     </button>
                   ) : (
-                    <div key="done-list" className="flex flex-col gap-2">
+                    <div key="done-list" className="flex flex-col gap-2.5">
                       {doneShown.map(t => taskCard(t, true))}
                       <button type="button" onClick={() => setDoneOpen(false)}
-                        className="min-h-11 self-start px-1 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                        className="min-h-11 self-start px-1 text-[13px] text-muted-foreground hover:text-foreground">
                         Hide finished tasks
                       </button>
                     </div>
@@ -872,22 +897,22 @@ export default function ProductionPage() {
               each, straight to the shoot page where the items are created. */}
           {(bookedShoots.length > 0 || closedShoots.length > 0) && (
             <div className="flex flex-col gap-1.5">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
                 Booked shoots <span className="tabular-nums">{bookedShoots.length}</span>
               </p>
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {bookedShoots.map(shootChip)}
                 {closedShoots.length > 0 && (
                   !closedOpen ? (
                     <button type="button" onClick={() => setClosedOpen(true)}
-                      className="min-h-11 rounded-full border border-dashed border-zinc-200 px-3 py-1 text-xs text-zinc-400 hover:text-zinc-700 dark:border-zinc-800 dark:hover:text-zinc-200">
+                      className="min-h-11 rounded-full border border-dashed border-border px-4 text-[13px] font-semibold text-muted-foreground hover:text-foreground">
                       {closedShoots.length} closed — show
                     </button>
                   ) : (
                     <>
                       {closedShoots.map(shootChip)}
                       <button type="button" onClick={() => setClosedOpen(false)}
-                        className="min-h-11 px-2 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                        className="min-h-11 px-2 text-[13px] text-muted-foreground hover:text-foreground">
                         Hide closed
                       </button>
                     </>

@@ -37,7 +37,7 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTa
   onOpenComments?: () => void
 }) {
   if (openTask) {
-    const pill = 'rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+    const pill = 'inline-flex items-center rounded-full bg-tint-amber px-2.5 py-1.5 text-chip-12 text-foreground'
     return onOpenComments ? (
       <button type="button"
         onClick={e => { e.preventDefault(); e.stopPropagation(); onOpenComments() }}
@@ -67,20 +67,20 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTa
         ? 'Nobody on it — any scheduler can take it'
         : 'Nobody on it — anyone can take it'
     return (
-      <span className="rounded-full border border-dashed border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
+      <span className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-1 text-chip-12 text-muted-foreground">
         {word}
       </span>
     )
   }
   if (turn.mine) {
     return (
-      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+      <span className="inline-flex items-center rounded-full bg-tint-green px-2.5 py-1.5 text-chip-12 text-foreground">
         Your turn
       </span>
     )
   }
   return (
-    <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+    <span className="inline-flex items-center rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-foreground">
       {/* ownerName is the item's OWNER. That is only the person holding it up
           while the EDITOR has the turn — at internal_review the move belongs
           to an account manager, and naming the editor there was a lie. */}

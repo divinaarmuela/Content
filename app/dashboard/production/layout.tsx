@@ -42,13 +42,17 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Production</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{active.blurb}</p>
-        </div>
+        {/* the board writes its own heading — it is the only view that can
+            count what is on it. The other two still need one here. */}
+        {active.href !== '/dashboard/production' && (
+          <div>
+            <h2 className="text-[19px] font-semibold tracking-tight">Production</h2>
+            <p className="text-[15px] text-muted-foreground">{active.blurb}</p>
+          </div>
+        )}
 
-        {/* link pills styled like the shadcn TabsList they replace */}
-        <nav className="ml-auto inline-flex h-auto items-center justify-center rounded-lg bg-zinc-100 p-1 md:h-9 dark:bg-zinc-800">
+        {/* link pills, the same white group the scope switch wears */}
+        <nav className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-surface p-1">
           {VIEWS.map(v => {
             const Icon = v.icon
             const isActive = v.href === active.href
@@ -57,13 +61,13 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
                 key={v.href}
                 href={v.href}
                 aria-current={isActive ? 'page' : undefined}
-                className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all md:min-h-7 ${
+                className={`inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
                   isActive
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" /> {v.label}
+                <Icon className="h-4 w-4" /> {v.label}
               </Link>
             )
           })}

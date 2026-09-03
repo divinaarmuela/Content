@@ -954,13 +954,13 @@ export default function NewItemDialog({
         )}
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           {mobile && hasFilesStep && step === 'files' && (
-            <Button variant="outline" className="min-h-11" onClick={() => setStep('details')} disabled={newBusy}>Back</Button>
+            <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-5 text-[14px] font-semibold" onClick={() => setStep('details')} disabled={newBusy}>Back</Button>
           )}
-          <Button variant="outline" className="min-h-11" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
+          <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-5 text-[14px] font-semibold" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
           {mobile && hasFilesStep && step === 'details' ? (
-            <Button className="min-h-11" onClick={() => setStep('files')} disabled={missing !== null}>Next: files</Button>
+            <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90" onClick={() => setStep('files')} disabled={missing !== null}>Next: files</Button>
           ) : (
-            <Button className="min-h-11" onClick={createItems} disabled={newBusy || assetBusy || missing !== null}>
+            <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90" onClick={createItems} disabled={newBusy || assetBusy || missing !== null}>
               {newBusy ? 'Creating…' : assetBusy ? 'Waiting for the files…' : createLabel}
             </Button>
           )}

@@ -8,9 +8,13 @@ import { cn } from '@/lib/utils'
  * The whole card is the link — the target is the card, not a small "open"
  * control in the corner — and `tone` tints the whole card so the one that
  * needs attention is obvious before anything is read.
+ *
+ * A card that carries its OWN buttons (claim it, assign it, open the comments)
+ * passes `actions`. Then the link stops wrapping the card and stretches under
+ * it instead, because a button inside an anchor is neither valid nor operable.
  */
 
-export type WorkTone = 'amber' | 'blue' | 'green' | 'red' | 'paper'
+export type WorkTone = 'amber' | 'blue' | 'green' | 'red' | 'paper' | 'ink'
 
 const TONE: Record<WorkTone, string> = {
   amber: 'bg-tint-amber',
@@ -18,6 +22,7 @@ const TONE: Record<WorkTone, string> = {
   green: 'bg-tint-green',
   red: 'bg-tint-red',
   paper: 'bg-paper',
+  ink: 'bg-ink text-cream',
 }
 
 export type Person = { initials: string; name?: string; id?: string }
@@ -44,7 +49,7 @@ function avatarColor(p: Person) {
 }
 
 export default function WorkCard({
-  client, title, thumb, chips, people = [], tone, href, className,
+  client, title, thumb, chips, people = [], tone, href, className, actions,
 }: {
   /** the client's name — shown small and upper case above the title */
   client: string
@@ -59,19 +64,26 @@ export default function WorkCard({
   tone?: WorkTone
   href: string
   className?: string
+  /**
+   * the card's own controls, on their own row at the bottom. Given at all —
+   * even empty — the card stops being an anchor and the link stretches under
+   * the content instead, so the buttons are real buttons. An empty row hides
+   * itself rather than leaving a gap.
+   */
+  actions?: React.ReactNode
 }) {
   const shown = people.slice(0, 3)
   const extra = people.length - shown.length
 
-  return (
-    <Link
-      href={href}
-      className={cn(
-        'flex flex-col gap-2.5 rounded-inner p-3.5 text-foreground transition-shadow hover:shadow-[0_2px_12px_rgba(11,11,11,0.08)]',
-        tone ? TONE[tone] : 'border border-border bg-surface',
-        className,
-      )}
-    >
+  const face = cn(
+    'flex flex-col gap-2.5 rounded-inner p-3.5 transition-shadow hover:shadow-[0_2px_12px_rgba(11,11,11,0.08)]',
+    tone ? TONE[tone] : 'border border-border bg-surface',
+    tone === 'ink' ? '' : 'text-foreground',
+    className,
+  )
+
+  const body = (
+    <>
       {thumb && (
         /* alt="" on purpose: the still is decoration for the title that sits
            directly under it, so naming it would read the card out twice.
@@ -80,7 +92,10 @@ export default function WorkCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={thumb} alt="" loading="lazy" className="h-[92px] w-full rounded-tile object-cover" />
       )}
-      <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">{client}</span>
+      <span className={cn(
+        'text-[12px] font-semibold uppercase tracking-[0.02em]',
+        tone === 'ink' ? 'text-cream/60' : 'text-muted-foreground',
+      )}>{client}</span>
       <span className="text-[15px] font-semibold leading-[1.25]">{title}</span>
       {(chips || people.length > 0) && (
         <div className="flex min-w-0 items-center gap-2">
@@ -105,6 +120,23 @@ export default function WorkCard({
           )}
         </div>
       )}
+    </>
+  )
+
+  if (actions !== undefined) {
+    return (
+      <div className={cn('relative', face)}>
+        {/* the whole card is still the target — the buttons simply sit on top */}
+        <Link href={href} aria-label={title} className="absolute inset-0 rounded-inner" />
+        {body}
+        <div className="relative z-10 flex flex-wrap items-center gap-1.5 empty:hidden">{actions}</div>
+      </div>
+    )
+  }
+
+  return (
+    <Link href={href} className={face}>
+      {body}
     </Link>
   )
 }

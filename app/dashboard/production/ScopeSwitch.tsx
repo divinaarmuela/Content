@@ -33,16 +33,16 @@ export function ScopeSwitch({ scope, onChange, unassignedCount, unassignedHint }
   // 44px tall on a phone — these three are pressed more than anything else
   // on the page; desktop keeps the compact row
   const pill = (active: boolean) =>
-    `min-h-11 rounded-md px-3 py-1.5 text-sm transition-colors md:min-h-8 ${
+    `flex min-h-11 items-center rounded-full px-4 text-[14px] font-semibold transition-colors ${
       active
-        ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
-        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+        ? 'bg-foreground text-background'
+        : 'text-muted-foreground hover:text-foreground'
     }`
 
   return (
     <div role="group" aria-label="Which work to show"
       title="Mine and Unassigned can be on together. Everyone shows all of it."
-      className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
+      className="flex items-center gap-1.5 rounded-full border border-border bg-surface p-1">
       <button type="button" aria-pressed={scope.has('mine')} className={pill(scope.has('mine'))}
         title="Only what is assigned to you"
         onClick={() => toggle('mine')}>
@@ -53,7 +53,7 @@ export function ScopeSwitch({ scope, onChange, unassignedCount, unassignedHint }
         onClick={() => toggle('unassigned')}>
         Unassigned
         {unassignedCount !== undefined && unassignedCount > 0 && (
-          <span className="ml-1.5 rounded-full bg-zinc-200 px-1.5 py-px font-mono text-[10px] tabular-nums text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+          <span className="ml-1.5 rounded-full bg-foreground/[0.12] px-1.5 py-px text-[11px] font-bold tabular-nums">
             {unassignedCount}
           </span>
         )}

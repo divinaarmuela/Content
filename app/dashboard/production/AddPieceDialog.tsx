@@ -215,8 +215,8 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">
-          <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button className="min-h-11" disabled={busy || missing !== null} onClick={() => void confirm()}>
+          <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-5 text-[14px] font-semibold" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90" disabled={busy || missing !== null} onClick={() => void confirm()}>
             {busy ? 'Adding…' : heading}
           </Button>
         </DialogFooter>

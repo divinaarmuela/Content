@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { useIsMobile } from '../useIsMobile'
+import UiLane from '../ui/Lane'
 
 export type Lane = {
   key: string
@@ -48,26 +49,27 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     if (picked && !lanes.some(l => l.key === picked)) setPicked(null)
   }, [lanes, picked])
 
-  const column = (lane: Lane, grow: boolean) => (
-    <div key={lane.key} className={grow ? 'min-w-44 flex-1' : 'w-full'}>
-      {!mobile && (
-        <div className="mb-2 flex items-center gap-2 px-1">
-          <span className={`h-2 w-2 rounded-full ${lane.tint}`} />
-          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{lane.title}</span>
-          {lane.hint}
-          <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{lane.count}</span>
+  /** the cards of one lane, with the column's own words when it is empty */
+  const stack = (lane: Lane) => (
+    <>
+      {lane.replace ?? lane.cards}
+      {lane.count === 0 && !lane.replace && (
+        <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
+          {lane.empty}
         </div>
       )}
-      <div className="flex min-h-24 flex-col gap-2">
-        {lane.replace ?? lane.cards}
-        {lane.count === 0 && !lane.replace && (
-          <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
-            {lane.empty}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   )
+
+  const column = (lane: Lane, grow: boolean) =>
+    mobile ? (
+      <div key={lane.key} className="flex w-full flex-col gap-2.5">{stack(lane)}</div>
+    ) : (
+      <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
+        className={grow ? 'min-w-[220px]' : ''}>
+        {stack(lane)}
+      </UiLane>
+    )
 
   if (mobile) {
     const lane = lanes.find(l => l.key === current) ?? lanes[0]
@@ -80,22 +82,21 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
             return (
               <button key={l.key} type="button" role="tab" aria-selected={active}
                 onClick={() => setPicked(l.key)}
-                className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors ${
+                className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors ${
                   active
-                    ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                    ? 'bg-foreground text-background'
+                    : 'border border-border bg-surface text-muted-foreground'
                 }`}>
-                <span className={`h-2 w-2 rounded-full ${active ? 'bg-white/80 dark:bg-zinc-900/70' : l.tint}`} />
                 {l.title}
-                <span className={`font-mono text-[11px] tabular-nums ${active ? 'opacity-80' : 'text-zinc-400 dark:text-zinc-500'}`}>{l.count}</span>
+                <span className={`text-[12px] font-bold tabular-nums ${active ? 'opacity-80' : 'text-foreground/60'}`}>{l.count}</span>
               </button>
             )
           })}
         </div>
         {lane && (
           <div role="tabpanel" className="flex items-center gap-2 px-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {lane.count === 1 ? '1 item' : `${lane.count} items`} in <span className="font-medium text-zinc-700 dark:text-zinc-200">{lane.title}</span>
+            <span className="text-[13px] text-muted-foreground">
+              {lane.count === 1 ? '1 item' : `${lane.count} items`} in <span className="font-semibold text-foreground">{lane.title}</span>
             </span>
             {lane.hint}
           </div>
@@ -107,7 +108,7 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
 
   return (
     <div className="w-full overflow-x-auto">
-      <div className="flex gap-3 pb-3">
+      <div className="flex gap-3.5 pb-3">
         {lanes.map(l => column(l, true))}
       </div>
     </div>
