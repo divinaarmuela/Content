@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { ClientBrand } from '@/lib/db-types'
 import { announce } from '@/lib/live'
 import { extractBrandProfile, pdfPageCount } from './brand-extract'
 import { mergeProfiles, type BrandProfile } from './brand-core'
@@ -24,17 +25,20 @@ async function say(
     ...(message ? { message } : {}),
   })
 
-  const { error } = await supabase.from('client_brand').upsert({
-    client_id: clientId,
-    scan_status: status,
-    scan_done: done,
-    scan_total: total,
-    scan_message: message ?? null,
-    // heartbeat: a "scanning" row that stops being touched is a dead job, and
-    // the GET uses this to stop showing an eternal spinner
-    updated_at: new Date().toISOString(),
-  })
-  if (error) console.error('brand status write failed:', error.message)
+  try {
+    await table('client_brand').upsert({
+      client_id: clientId,
+      scan_status: status,
+      scan_done: done,
+      scan_total: total,
+      scan_message: message ?? null,
+      // heartbeat: a "scanning" row that stops being touched is a dead job, and
+      // the GET uses this to stop showing an eternal spinner
+      updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.error('brand status write failed:', e instanceof Error ? e.message : e)
+  }
 }
 
 export async function runBrandScan(input: {
@@ -62,8 +66,7 @@ export async function runBrandScan(input: {
     const pages = await pdfPageCount(bytes)
     await report('scanning', 0, 1, `${pages || '?'} pages`)
 
-    const { data: existing } = await supabase.from('client_brand')
-      .select('profile, docs').eq('client_id', clientId).maybeSingle()
+    const existing = await table<ClientBrand>('client_brand').get(clientId)
     const previous = (existing?.profile ?? null) as BrandProfile | null
 
     const extracted = await extractBrandProfile(bytes, previous, (done, total) => {
@@ -76,12 +79,11 @@ export async function runBrandScan(input: {
       { filename, url, scanned_at: new Date().toISOString(), pages },
     ]
 
-    const { error } = await supabase.from('client_brand').upsert({
+    await table('client_brand').upsert({
       client_id: clientId, profile, docs,
       updated_at: new Date().toISOString(), updated_by: by,
       scan_status: 'done', scan_done: 1, scan_total: 1, scan_message: null,
     })
-    if (error) throw new Error(error.message)
 
     // Fold the scan's colours/fonts into the client's EDITABLE profile, filling
     // only what is still empty. Without this a scan's palette stays in the raw

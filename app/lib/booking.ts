@@ -1,5 +1,8 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type {
+  Booking, BookingAvailability, BookingBlackout, BookingResource, BookingService,
+} from '@/lib/db-types'
 import { openSlots, minToLabel, zonedToUtc, utcToZoned, weekdayOf } from './booking-core'
 
 /**
@@ -86,26 +89,20 @@ export async function loadPublicService(
   slug: string,
 ): Promise<{ service: PublicService; resources: PublicResource[] } | null> {
   if (!/^[a-z0-9-]{1,60}$/.test(slug)) return null
-  const { data: svc } = await supabase
-    .from('booking_services')
-    // SELECT * on purpose: naming a column that a not-yet-run migration
-    // hasn't added makes Supabase fail the WHOLE query, and the page 404s
-    // rather than degrading. Nothing here is sensitive, and the public API
-    // strips ids before answering.
-    .select('*')
-    .eq('slug', slug).eq('active', true).maybeSingle()
+  const svc = (await table<BookingService>('booking_services').list({
+    by: { slug, active: true }, limit: 1,
+  }))[0]
   if (!svc) return null
 
-  const service = withDefaults(svc)
+  const service = withDefaults(svc as unknown as Record<string, unknown>)
 
-  // SELECT * for the same reason as above: space_id arrives in a migration,
-  // and naming it before that runs would 404 the whole booking page
-  let q = supabase.from('booking_resources')
-    .select('*').eq('active', true).order('created_at')
-  if (service.resource_id) q = q.eq('id', service.resource_id)
-  const { data: resources } = await q
-  if (!resources || resources.length === 0) return null
-  return { service, resources: resources.map(toResource) }
+  const resources = await table<BookingResource>('booking_resources').list({
+    by: { active: true },
+    where: r => !service.resource_id || r.id === service.resource_id,
+    orderBy: [['created_at', 'asc']],
+  })
+  if (resources.length === 0) return null
+  return { service, resources: resources.map(r => toResource(r as unknown as Record<string, unknown>)) }
 }
 
 /**
@@ -126,12 +123,16 @@ async function releaseStaleHolds(): Promise<void> {
   // longer just keeps a bookable slot off the calendar while someone who
   // wants it is looking at it.
   const cutoff = new Date(Date.now() - 32 * 60_000).toISOString()
-  await supabase.from('bookings')
-    .update({ status: 'cancelled' })
-    .eq('status', 'pending')
-    .eq('payment_status', 'unpaid')
-    .lt('created_at', cutoff)
-    .then(() => {}, e => console.error('stale hold sweep failed:', e))
+  try {
+    const bookings = table<Booking>('bookings')
+    const stale = await bookings.list({
+      by: { status: 'pending' },
+      where: r => r.payment_status === 'unpaid' && r.created_at < cutoff,
+    })
+    await Promise.all(stale.map(b => bookings.update(b.id, { status: 'cancelled' })))
+  } catch (e) {
+    console.error('stale hold sweep failed:', e)
+  }
 }
 
 /** Add days to a plain YYYY-MM-DD without touching timezones. */
@@ -173,31 +174,39 @@ export async function availabilityFor(
    * called. Both are gathered per SPACE.
    */
   const spaces = new Set(resources.map(spaceOf))
-  const { data: allRes } = await supabase.from('booking_resources').select('*').eq('active', true)
-  const roommates = (allRes ?? []).map(toResource).filter(r => spaces.has(spaceOf(r)))
+  const allRes = await table<BookingResource>('booking_resources').list({ by: { active: true } })
+  const roommates = allRes
+    .map(r => toResource(r as unknown as Record<string, unknown>))
+    .filter(r => spaces.has(spaceOf(r)))
   // never narrower than the resources we were handed
   const occupancyIds = [...new Set([...ids, ...roommates.map(r => r.id)])]
   const spaceById = new Map(roommates.map(r => [r.id, spaceOf(r)]))
   // one timezone per space: it is one physical room, so it has one clock
   const tzBySpace = new Map(resources.map(r => [spaceOf(r), r.timezone]))
 
-  // one query each — never per-day, never per-resource
-  const [{ data: hours }, { data: blackouts }, { data: taken }] = await Promise.all([
-    supabase.from('booking_availability').select('resource_id, weekday, start_min, end_min').in('resource_id', ids),
-    supabase.from('booking_blackouts').select('resource_id, day').in('resource_id', occupancyIds)
-      .gte('day', fromDay).lte('day', lastDay),
-    supabase.from('bookings').select('resource_id, start_at, end_at').in('resource_id', occupancyIds)
-      .neq('status', 'cancelled')
-      // a day either side covers resources sitting in other timezones
-      .gte('start_at', `${addDays(fromDay, -1)}T00:00:00Z`)
-      .lte('start_at', `${addDays(lastDay, 2)}T00:00:00Z`),
+  // one read each — never per-day, never per-resource
+  const fromEdge = `${addDays(fromDay, -1)}T00:00:00Z`
+  const toEdge = `${addDays(lastDay, 2)}T00:00:00Z`
+  const [hours, blackouts, taken] = await Promise.all([
+    table<BookingAvailability>('booking_availability').list({
+      where: h => ids.includes(h.resource_id),
+    }),
+    table<BookingBlackout>('booking_blackouts').list({
+      where: b => occupancyIds.includes(b.resource_id) && b.day >= fromDay && b.day <= lastDay,
+    }),
+    table<Booking>('bookings').list({
+      where: b => occupancyIds.includes(b.resource_id)
+        && b.status !== 'cancelled'
+        // a day either side covers resources sitting in other timezones
+        && b.start_at >= fromEdge && b.start_at <= toEdge,
+    }),
   ])
 
   // keyed by SPACE: closing the room under one of its names closes the room
   const blocked = new Set(
-    (blackouts ?? [])
+    blackouts
       .map(b => {
-        const space = spaceById.get(b.resource_id as string)
+        const space = spaceById.get(b.resource_id)
         return space ? `${space}:${b.day}` : null
       })
       .filter((k): k is string => k !== null),
@@ -206,14 +215,14 @@ export async function availabilityFor(
   // occupies 11:00 as well — carrying only its start time let a 1-hour
   // service be offered right through the middle of it.
   const takenBy = new Map<string, { start_min: number; end_min: number }[]>()
-  for (const b of taken ?? []) {
+  for (const b of taken) {
     // keyed by SPACE: a booking made under the other name for this room
     // still occupies it, and used to be skipped here entirely
-    const space = spaceById.get(b.resource_id as string)
+    const space = spaceById.get(b.resource_id)
     const tz = space ? tzBySpace.get(space) : undefined
     if (!space || !tz) continue
-    const startLocal = utcToZoned(new Date(b.start_at as string), tz)
-    const endAt = b.end_at ? new Date(b.end_at as string) : null
+    const startLocal = utcToZoned(new Date(b.start_at), tz)
+    const endAt = b.end_at ? new Date(b.end_at) : null
     const endLocal = endAt ? utcToZoned(endAt, tz) : null
     // an end past midnight is clamped to the day so it still blocks the
     // evening it actually occupies
@@ -240,9 +249,9 @@ export async function availabilityFor(
 
     for (const res of resources) {
       if (blocked.has(`${spaceOf(res)}:${day}`)) continue
-      const windows = (hours ?? [])
+      const windows = hours
         .filter(h => h.resource_id === res.id && h.weekday === wd)
-        .map(h => ({ start_min: h.start_min as number, end_min: h.end_min as number }))
+        .map(h => ({ start_min: h.start_min, end_min: h.end_min }))
       if (windows.length === 0) continue
 
       for (const min of openSlots({
@@ -274,14 +283,75 @@ export async function availabilityFor(
 
 /** Services listed on the public /events page — active, in display order. */
 export async function listPublicServices(): Promise<PublicService[]> {
-  const { data } = await supabase
-    .from('booking_services')
-    // SELECT * on purpose: naming a column that a not-yet-run migration
-    // hasn't added makes Supabase fail the WHOLE query, and the page 404s
-    // rather than degrading. Nothing here is sensitive, and the public API
-    // strips ids before answering.
-    .select('*')
-    .eq('active', true)
-    .order('sort_order')
-  return (data ?? []).map(withDefaults)
+  const rows = await table<BookingService>('booking_services').list({
+    by: { active: true },
+    orderBy: [['sort_order', 'asc']],
+  })
+  return rows.map(r => withDefaults(r as unknown as Record<string, unknown>))
+}
+
+/**
+ * The physical space a resource occupies — the port of the `bookings_fill_space`
+ * trigger (supabase/booking_space.sql).
+ *
+ * A booking row carries the space so the no-overlap guarantee can read it
+ * without a join. A resource with no space of its own IS its own space.
+ */
+export async function spaceForResource(resourceId: string): Promise<string> {
+  const resource = await table<BookingResource>('booking_resources').get(resourceId)
+  return resource?.space_id ?? resourceId
+}
+
+/**
+ * The port of the `bookings_no_overlap` exclusion constraint
+ * (supabase/booking_space.sql): no two live bookings for the same seat in the
+ * same room may overlap in TIME.
+ *
+ * `[)` is half-open on purpose: a session ending at 11:00 and one starting at
+ * 11:00 are back-to-back, not a clash.
+ */
+export async function seatIsFree(input: {
+  spaceId: string
+  seatNo: number | null
+  startAt: string
+  endAt: string
+  excludeId?: string
+}): Promise<boolean> {
+  const clashes = await table<Booking>('bookings').list({
+    where: b =>
+      b.id !== input.excludeId
+      && b.status !== 'cancelled'
+      && (b.space_id ?? b.resource_id) === input.spaceId
+      && (b.seat_no ?? null) === input.seatNo
+      && b.start_at < input.endAt && b.end_at > input.startAt,
+    limit: 1,
+  })
+  return clashes.length === 0
+}
+
+/**
+ * Insert a booking with both database guarantees applied in code: the space is
+ * filled from the resource, and an overlapping live booking for the same seat
+ * is refused.
+ *
+ * Postgres enforced these with a trigger and a GiST exclusion constraint; the
+ * Realtime Database has neither, so they live here — in ONE place, beside the
+ * insert, so no caller can forget either of them. The refusal carries the
+ * constraint's own name, so callers that already recognise
+ * `bookings_no_overlap` keep working unchanged.
+ */
+export async function insertBooking(
+  row: Omit<Partial<Booking>, 'id'> & {
+    resource_id: string; start_at: string; end_at: string
+  },
+): Promise<Booking> {
+  const space_id = row.space_id ?? await spaceForResource(row.resource_id)
+  const free = await seatIsFree({
+    spaceId: space_id,
+    seatNo: row.seat_no ?? null,
+    startAt: row.start_at,
+    endAt: row.end_at,
+  })
+  if (!free) throw new DbError('unique', 'bookings_no_overlap: that seat is already booked')
+  return await table('bookings').insert({ ...row, space_id }) as unknown as Booking
 }

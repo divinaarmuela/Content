@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Client, ClientBrand } from '@/lib/db-types'
 import type { BrandProfile as ScanProfile } from './brand-core'
 import {
   emptyProfile, fromScan, foldScanIntoProfile, normaliseProfile, proposeFromScan, scanIsUnreviewed,
@@ -22,9 +23,10 @@ export type LoadedBrandProfile = {
 }
 
 export async function loadBrandProfile(clientId: string, seedBy: string): Promise<LoadedBrandProfile | null> {
-  const [{ data: client }, { data: scan }] = await Promise.all([
-    supabase.from('clients').select('id, brand_profile').eq('id', clientId).maybeSingle(),
-    supabase.from('client_brand').select('profile, docs, updated_at, scan_status').eq('client_id', clientId).maybeSingle(),
+  const clients = table<Client>('clients')
+  const [client, scan] = await Promise.all([
+    clients.get(clientId),
+    table<ClientBrand>('client_brand').get(clientId),
   ])
   if (!client) return null
 
@@ -42,9 +44,14 @@ export async function loadBrandProfile(clientId: string, seedBy: string): Promis
     profile = scanHasContent ? fromScan(scanProfile, lastScanAt) : emptyProfile()
     profile.rev = 1
     if (scanHasContent) {
-      await supabase.from('clients')
-        .update({ brand_profile: profile, brand_profile_updated_at: new Date().toISOString(), brand_profile_updated_by: seedBy })
-        .eq('id', clientId).is('brand_profile', null)
+      const live = await clients.get(clientId)
+      if (live && live.brand_profile == null) {
+        await clients.update(clientId, {
+          brand_profile: profile,
+          brand_profile_updated_at: new Date().toISOString(),
+          brand_profile_updated_by: seedBy,
+        })
+      }
     }
   }
 
@@ -70,11 +77,11 @@ export async function applyScanToEditableProfile(
   clientId: string, scanProfile: ScanProfile | null, by: string,
 ): Promise<'updated' | 'unchanged'> {
   if (!scanProfile || Object.keys(scanProfile).length === 0) return 'unchanged'
+  const clients = table<Client>('clients')
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { data: row } = await supabase
-      .from('clients').select('brand_profile').eq('id', clientId).maybeSingle()
+    const row = await clients.get(clientId)
     if (!row) return 'unchanged'
-    const raw = (row as { brand_profile: unknown }).brand_profile
+    const raw = row.brand_profile
     const hadProfile = raw != null
     const current = normaliseProfile(raw ?? {})
     const { profile, changed } = foldScanIntoProfile(current, scanProfile)
@@ -82,13 +89,20 @@ export async function applyScanToEditableProfile(
 
     const seen = hadProfile ? current.rev : 0
     const next: BrandProfile = { ...profile, rev: seen + 1 }
-    let q = supabase.from('clients')
-      .update({ brand_profile: next, brand_profile_updated_at: new Date().toISOString(), brand_profile_updated_by: by })
-      .eq('id', clientId)
-    q = hadProfile ? q.eq('brand_profile->>rev', String(seen)) : q.is('brand_profile', null)
-    const { data, error } = await q.select('id')
-    if (error) throw new Error(error.message)
-    if (data && data.length > 0) return 'updated'
+    // rev guard: re-read immediately before the write and only commit if the
+    // revision this merge was computed from is still the one on the row
+    const live = await clients.get(clientId)
+    const unchangedSince = hadProfile
+      ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
+      : live?.brand_profile == null
+    if (unchangedSince && live) {
+      await clients.update(clientId, {
+        brand_profile: next,
+        brand_profile_updated_at: new Date().toISOString(),
+        brand_profile_updated_by: by,
+      })
+      return 'updated'
+    }
     // conflict → re-read and re-merge once
   }
   return 'unchanged'

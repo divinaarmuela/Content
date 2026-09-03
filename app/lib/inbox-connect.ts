@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { ScanMailbox } from '@/lib/db-types'
 import { encryptSecret, credentialsKeyConfigured } from './secret-box'
 import { allowedMailDomain } from './clerk-gmail'
 
@@ -166,18 +167,21 @@ export async function completeInboxConnect(req: Request, code: string, by: strin
 
   // upsert, not insert: reconnecting a mailbox should replace its token, and
   // must not silently re-enable one an admin deliberately switched off
-  const { data: existing } = await supabase
-    .from('scan_mailboxes').select('email, enabled').eq('email', email).maybeSingle()
+  const mailboxes = table<ScanMailbox>('scan_mailboxes')
+  const existing = (await mailboxes.list({ by: { email }, limit: 1 }))[0] ?? null
 
-  const { error } = await supabase.from('scan_mailboxes').upsert({
-    email,
-    source: 'self',
-    refresh_token_encrypted: encryptSecret(token.refresh_token),
-    connected_at: new Date().toISOString(),
-    connected_by: by,
-    ...(existing ? {} : { enabled: true }),
-  }, { onConflict: 'email' })
-  if (error) return { ok: false, reason: 'exchange_failed', detail: error.message }
+  try {
+    await table('scan_mailboxes').upsert({
+      email,
+      source: 'self',
+      refresh_token_encrypted: encryptSecret(token.refresh_token),
+      connected_at: new Date().toISOString(),
+      connected_by: by,
+      ...(existing ? {} : { enabled: true }),
+    }, { onConflict: 'email' })
+  } catch (e) {
+    return { ok: false, reason: 'exchange_failed', detail: e instanceof Error ? e.message : String(e) }
+  }
 
   return { ok: true, email }
 }
@@ -185,8 +189,9 @@ export async function completeInboxConnect(req: Request, code: string, by: strin
 /** Forget a mailbox's token. The row stays so its history and enabled state
  *  survive, but it stops being scannable until someone reconnects. */
 export async function disconnectInbox(email: string): Promise<void> {
-  const { error } = await supabase.from('scan_mailboxes')
-    .update({ refresh_token_encrypted: null, connected_at: null, connected_by: null })
-    .eq('email', email.toLowerCase())
-  if (error) throw new Error(error.message)
+  const mailboxes = table<ScanMailbox>('scan_mailboxes')
+  const rows = await mailboxes.list({ by: { email: email.toLowerCase() } })
+  await Promise.all(rows.map(r => mailboxes.update(r.id, {
+    refresh_token_encrypted: null, connected_at: null, connected_by: null,
+  })))
 }

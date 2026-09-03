@@ -1,6 +1,7 @@
 import 'server-only'
 import { after } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Client, ContentItem, PostAnalytic, PublishJob, ScheduleEntry } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { shapePostAnalytics } from './post-analytics-core'
 import {
@@ -58,12 +59,10 @@ function platformsOfTargets(targets: unknown): string[] {
  * spend a provider call per published post, forever.
  */
 async function hasOwnJob(itemId: string, platform: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('publish_jobs')
-    .select('targets, provider_post_id')
-    .eq('content_item_id', itemId)
-    .in('status', OWN_JOB)
-  for (const row of data ?? []) {
+  const rows = await table<PublishJob>('publish_jobs').list({
+    where: j => j.content_item_id === itemId && OWN_JOB.includes(j.status),
+  })
+  for (const row of rows) {
     if (!row.provider_post_id) continue
     const platforms = platformsOfTargets(row.targets)
     // a job with no readable targets still means the item went out from here
@@ -74,9 +73,8 @@ async function hasOwnJob(itemId: string, platform: string): Promise<boolean> {
 
 /** The provider profile that holds one client's accounts. */
 async function profileIdOf(clientId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('clients').select('social_profile_id').eq('id', clientId).maybeSingle()
-  return (data?.social_profile_id as string | null) ?? null
+  const row = await table<Client>('clients').get(clientId)
+  return row?.social_profile_id ?? null
 }
 
 /**
@@ -134,36 +132,28 @@ async function cacheExternalPost(input: {
     synced_at: (metrics as { synced_at?: string }).synced_at ?? new Date().toISOString(),
   }
 
-  const { error } = await supabase
-    .from('post_analytics').upsert(row, { onConflict: 'provider_post_id' })
-  if (!error) return true
-
-  // post_analytics_external.sql not run yet: the row is still worth having
-  // without the column that says where it came from
-  if (/source/i.test(error.message)) {
-    const { source: _source, ...rest } = row
-    const retry = await supabase
-      .from('post_analytics').upsert(rest, { onConflict: 'provider_post_id' })
-    if (!retry.error) return true
-    console.error('could not cache external post analytics', input.providerPostId, retry.error.message)
+  try {
+    await table('post_analytics').upsert(row, { onConflict: 'provider_post_id' })
+    return true
+  } catch (e) {
+    console.error('could not cache external post analytics', input.providerPostId,
+      e instanceof Error ? e.message : e)
     return false
   }
-  console.error('could not cache external post analytics', input.providerPostId, error.message)
-  return false
 }
 
-/** Record what the lookup found, so the card can say it. Best-effort: an
- *  un-migrated column must not turn a successful match into a failure. */
+/** Record what the lookup found, so the card can say it. Best-effort: a write
+ *  that fails must not turn a successful match into a failure. */
 async function noteMatchState(
   itemId: string, platform: string, state: 'searching' | 'matched' | 'not_found',
 ): Promise<void> {
-  const { error } = await supabase
-    .from('schedule_entries')
-    .update({ external_match_state: state })
-    .eq('item_id', itemId)
-    .eq('platform', platform)
-  if (error && !/external_match_state/i.test(error.message)) {
-    console.error('could not record the external match state', itemId, error.message)
+  try {
+    const entries = table<ScheduleEntry>('schedule_entries')
+    const rows = await entries.list({ by: { item_id: itemId, platform } })
+    await Promise.all(rows.map(r => entries.update(r.id, { external_match_state: state })))
+  } catch (e) {
+    console.error('could not record the external match state', itemId,
+      e instanceof Error ? e.message : e)
   }
 }
 
@@ -263,22 +253,20 @@ export async function sweepExternalPosts(days = 30, limit = 100): Promise<Extern
   const since = new Date(Date.now() - days * 24 * 3600_000).toISOString()
 
   // ── half two first: it is the cheap one, and it cannot be starved ───────
-  const { data: existing } = await supabase
-    .from('post_analytics')
-    .select('provider_post_id, item_id, platform, platform_post_url, published_at')
-    .eq('source', 'external')
-    .gte('published_at', since)
-    .limit(limit)
+  const existing = await table<PostAnalytic>('post_analytics').list({
+    where: r => r.source === 'external' && r.published_at != null && r.published_at >= since,
+    limit,
+  })
 
-  for (const row of existing ?? []) {
+  for (const row of existing) {
     try {
       const ok = await cacheExternalPost({
         itemId: row.item_id as string,
-        providerPostId: row.provider_post_id as string,
+        providerPostId: row.provider_post_id,
         post: {},
-        platform: (row.platform as string) ?? '',
-        liveUrl: (row.platform_post_url as string) ?? null,
-        at: (row.published_at as string) ?? null,
+        platform: row.platform ?? '',
+        liveUrl: row.platform_post_url ?? null,
+        at: row.published_at ?? null,
       })
       if (ok) out.refreshed++
     } catch (e) {
@@ -287,34 +275,32 @@ export async function sweepExternalPosts(days = 30, limit = 100): Promise<Extern
   }
 
   // ── half one: published, linked, and still without numbers ──────────────
-  const { data: entries } = await supabase
-    .from('schedule_entries')
-    .select('item_id, platform, live_url, published_at, scheduled_at')
-    .eq('publish_status', 'published')
-    .gte('published_at', since)
-    .order('published_at', { ascending: false })
-    .limit(limit)
+  const entries = await table<ScheduleEntry>('schedule_entries').list({
+    where: e => e.publish_status === 'published'
+      && e.published_at != null && e.published_at >= since,
+    orderBy: [['published_at', 'desc']],
+    limit,
+  })
 
-  const candidates = (entries ?? []).filter(e => e.item_id)
+  const candidates = entries.filter(e => e.item_id)
   if (candidates.length === 0) return out
 
-  const { data: cached } = await supabase
-    .from('post_analytics')
-    .select('item_id')
-    .in('item_id', candidates.map(e => e.item_id as string))
-  const known = new Set((cached ?? []).map(r => r.item_id as string))
+  const candidateIds = new Set(candidates.map(e => e.item_id))
+  const cached = await table<PostAnalytic>('post_analytics').list({
+    where: r => r.item_id != null && candidateIds.has(r.item_id),
+  })
+  const known = new Set(cached.map(r => r.item_id as string))
 
-  const { data: items } = await supabase
-    .from('content_items')
-    .select('id, client_id, status')
-    .in('id', [...new Set(candidates.map(e => e.item_id as string))])
-  const clientOf = new Map((items ?? [])
+  const items = await table<ContentItem>('content_items').list({
+    where: i => candidateIds.has(i.id),
+  })
+  const clientOf = new Map(items
     .filter(i => i.status === 'published')
-    .map(i => [i.id as string, i.client_id as string]))
+    .map(i => [i.id, i.client_id]))
 
   const cache: ExternalPostCache = new Map()
   for (const entry of candidates) {
-    const itemId = entry.item_id as string
+    const itemId = entry.item_id
     if (known.has(itemId)) continue
     const clientId = clientOf.get(itemId)
     if (!clientId) continue
@@ -324,8 +310,8 @@ export async function sweepExternalPosts(days = 30, limit = 100): Promise<Extern
         itemId,
         clientId,
         platform: String(entry.platform ?? '').toLowerCase(),
-        liveUrl: (entry.live_url as string) ?? null,
-        at: (entry.published_at as string) ?? (entry.scheduled_at as string) ?? null,
+        liveUrl: entry.live_url ?? null,
+        at: entry.published_at ?? entry.scheduled_at ?? null,
         cache,
       })
       if (result === 'matched') {
@@ -360,14 +346,13 @@ export async function linkExternalPostFromWebhook(input: {
   if (!input.providerPostId || !platform) return { matched: null }
 
   const since = new Date(Date.now() - 7 * 24 * 3600_000).toISOString()
-  const { data: entries } = await supabase
-    .from('schedule_entries')
-    .select('item_id, platform, live_url, published_at')
-    .eq('platform', platform)
-    .eq('publish_status', 'published')
-    .gte('published_at', since)
-    .not('live_url', 'is', null)
-    .limit(200)
+  const entries = await table<ScheduleEntry>('schedule_entries').list({
+    where: e => e.platform === platform
+      && e.publish_status === 'published'
+      && e.published_at != null && e.published_at >= since
+      && e.live_url != null,
+    limit: 200,
+  })
 
   const post: ExternalPost = {
     _id: input.providerPostId,
@@ -378,11 +363,11 @@ export async function linkExternalPostFromWebhook(input: {
     isExternal: true,
   }
 
-  for (const entry of entries ?? []) {
-    const itemId = entry.item_id as string
+  for (const entry of entries) {
+    const itemId = entry.item_id
     if (!itemId) continue
-    const match = matchExternalPost((entry.live_url as string) ?? null, [post], {
-      platform, at: (entry.published_at as string) ?? null,
+    const match = matchExternalPost(entry.live_url ?? null, [post], {
+      platform, at: entry.published_at ?? null,
     })
     if (!match || match.matchedBy !== 'url') continue
     // the URL identified it — the ±6h fallback is deliberately not trusted from
@@ -393,8 +378,8 @@ export async function linkExternalPostFromWebhook(input: {
       providerPostId: input.providerPostId,
       post,
       platform,
-      liveUrl: (entry.live_url as string) ?? null,
-      at: (entry.published_at as string) ?? null,
+      liveUrl: entry.live_url ?? null,
+      at: entry.published_at ?? null,
     })
     if (ok) {
       await noteMatchState(itemId, platform, 'matched')

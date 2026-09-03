@@ -2,11 +2,12 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type { Client, EmailIngestLog, Lead, ScanRun } from '@/lib/db-types'
 import { announce } from '@/lib/live'
 import { autoIngestLead } from './lead-enrichment'
 import { prefilterSkipReason } from './gmail-core'
-import { matchExistingCompany } from './lead-enrichment-core'
+import { matchExistingCompany, type IngestLead } from './lead-enrichment-core'
 import {
   listRecentMessageIds, fetchMessage, getMailboxes,
   type InboxMessage, type Mailbox,
@@ -188,21 +189,28 @@ export async function scanSingleMailbox(
     scanned: 0, claimed: 0, leads_created: 0, skipped: 0, errors: 0, mailboxes: [box.email],
   }
 
-  const { data: run } = await supabase
-    .from('scan_runs')
-    .insert({ mailbox: box.email, trigger, status: 'running' })
-    .select('id')
-    .maybeSingle()
+  const runs = table<ScanRun>('scan_runs')
+  let run: ScanRun | null = null
+  try {
+    run = await table('scan_runs').insert({
+      mailbox: box.email, trigger, status: 'running',
+      started_at: new Date().toISOString(), finished_at: null,
+      scanned: 0, claimed: 0, leads_created: 0, skipped: 0, errors: 0, error: null,
+    }) as unknown as ScanRun
+  } catch (e) {
+    // the run log is bookkeeping; a scan still runs without it
+    console.error('could not open a scan run:', e)
+  }
 
   const finish = async (status: 'success' | 'error', error?: string) => {
     if (!run) return
-    await supabase.from('scan_runs').update({
+    await runs.update(run.id, {
       status,
       finished_at: new Date().toISOString(),
       scanned: result.scanned, claimed: result.claimed,
       leads_created: result.leads_created, skipped: result.skipped,
       errors: result.errors, error: error?.slice(0, 1000) ?? null,
-    }).eq('id', run.id)
+    })
   }
 
   try {
@@ -226,8 +234,8 @@ async function scanOneMailbox(
   // Loaded once per scan rather than per message: the list is small and
   // static for the duration, and a query per message would be a hundred
   // round-trips to answer the same question.
-  const { data: clientRows } = await supabase.from('clients').select('name')
-  const clientNames = (clientRows ?? []).map(c => c.name as string).filter(Boolean)
+  const clientRows = await table<Client>('clients').list()
+  const clientNames = clientRows.map(c => c.name).filter(Boolean)
 
   const ids = await listRecentMessageIds(box, gmailQuery(settings), settings.max_messages)
   result.scanned += ids.length
@@ -235,14 +243,15 @@ async function scanOneMailbox(
 
   for (const id of ids) {
     // 1. claim — the exactly-once gate
-    const { data: claimed } = await supabase
-      .from('email_ingest_log')
-      .upsert(
-        { gmail_message_id: id, mailbox, status: 'pending' },
-        { onConflict: 'gmail_message_id', ignoreDuplicates: true }
-      )
-      .select()
-      .maybeSingle()
+    const ingest = table<EmailIngestLog>('email_ingest_log')
+    let claimed: EmailIngestLog | null = null
+    try {
+      claimed = await table('email_ingest_log').insert({
+        gmail_message_id: id, mailbox, status: 'pending',
+      }) as unknown as EmailIngestLog
+    } catch (e) {
+      if (!(e instanceof DbError && e.code === 'unique')) throw e
+    }
     if (!claimed) {
       // already processed by an earlier/concurrent scan — surface it so a scan
       // that finds nothing new reads as "checked, seen before", not "did nothing"
@@ -253,11 +262,11 @@ async function scanOneMailbox(
 
     try {
       const msg = await fetchMessage(box, id)
-      await supabase.from('email_ingest_log').update({
+      await ingest.update(claimed.id, {
         from_email: msg.fromEmail,
         subject: msg.subject.slice(0, 500),
         received_at: msg.receivedAt,
-      }).eq('id', claimed.id)
+      })
 
       // 2. cheap pre-filter — don't spend a model call on obvious non-leads
       const skip = prefilterSkipReason({
@@ -271,8 +280,7 @@ async function scanOneMailbox(
       const blocked = blockedReason(msg.fromEmail, settings)
       const stop = skip ?? blocked
       if (stop) {
-        await supabase.from('email_ingest_log')
-          .update({ status: 'skipped', reasoning: stop }).eq('id', claimed.id)
+        await ingest.update(claimed.id, { status: 'skipped', reasoning: stop })
         result.skipped++
         emit({
           type: 'message', email: mailbox, outcome: 'prefiltered',
@@ -284,10 +292,10 @@ async function scanOneMailbox(
       // rules-only: the model is deliberately out of the loop, so anything
       // surviving the prefilter is parked for a human rather than dropped
       if (settings.rules_only) {
-        await supabase.from('email_ingest_log').update({
+        await ingest.update(claimed.id, {
           status: 'needs_review',
           reasoning: 'Rules-only mode is on — flagged for manual review, not classified',
-        }).eq('id', claimed.id)
+        })
         result.skipped++
         emit({
           type: 'message', email: mailbox, outcome: 'needs_review',
@@ -306,7 +314,7 @@ async function scanOneMailbox(
         if (fatal) {
           // leave the claim as 'pending' so this message is picked up again
           // once the account issue is resolved — it was never really assessed
-          await supabase.from('email_ingest_log').delete().eq('id', claimed.id)
+          await ingest.remove(claimed.id)
           throw new FatalScanError(fatal)
         }
         throw e
@@ -314,9 +322,9 @@ async function scanOneMailbox(
       if (!c) throw new Error('Classification returned no parseable output')
 
       if (!c.is_lead || c.confidence < settings.min_confidence) {
-        await supabase.from('email_ingest_log').update({
+        await ingest.update(claimed.id, {
           status: 'not_a_lead', is_lead: c.is_lead, confidence: c.confidence, reasoning: c.reasoning,
-        }).eq('id', claimed.id)
+        })
         result.skipped++
         emit({
           type: 'message', email: mailbox, outcome: 'not_a_lead',
@@ -334,10 +342,10 @@ async function scanOneMailbox(
         matchExistingCompany(c.business, clientNames)
         ?? matchExistingCompany(msg.fromEmail.split('@')[1] ?? '', clientNames)
       if (existingClient) {
-        await supabase.from('email_ingest_log').update({
+        await ingest.update(claimed.id, {
           status: 'skipped', is_lead: true, confidence: c.confidence,
           reasoning: `already a client: ${existingClient}`,
-        }).eq('id', claimed.id)
+        })
         result.skipped++
         emit({
           type: 'message', email: mailbox, outcome: 'existing_client',
@@ -350,16 +358,18 @@ async function scanOneMailbox(
 
       // 5. duplicate guard — same sender already a recent lead?
       const since = new Date(Date.now() - settings.duplicate_window_days * 24 * 3600 * 1000).toISOString()
-      const { data: existing } = settings.duplicate_window_days === 0
-        ? { data: null }
-        : await supabase
-            .from('leads').select('id').ilike('email', msg.fromEmail).gte('created_at', since)
-            .limit(1).maybeSingle()
+      const sender = msg.fromEmail.toLowerCase()
+      const existing = settings.duplicate_window_days === 0
+        ? null
+        : (await table<Lead>('leads').list({
+            where: l => l.email?.toLowerCase() === sender && l.created_at >= since,
+            limit: 1,
+          }))[0] ?? null
       if (existing) {
-        await supabase.from('email_ingest_log').update({
+        await ingest.update(claimed.id, {
           status: 'skipped', is_lead: true, confidence: c.confidence,
           reasoning: 'sender already has a recent lead', lead_id: existing.id,
-        }).eq('id', claimed.id)
+        })
         result.skipped++
         emit({
           type: 'message', email: mailbox, outcome: 'duplicate_sender',
@@ -371,28 +381,23 @@ async function scanOneMailbox(
       }
 
       // 6. create the lead
-      const { data: lead, error: leadErr } = await supabase
-        .from('leads')
-        .insert({
-          fname: c.fname || msg.fromName.split(' ')[0] || msg.fromEmail.split('@')[0],
-          lname: c.lname || msg.fromName.split(' ').slice(1).join(' ') || '',
-          email: msg.fromEmail,
-          phone: c.phone || '',
-          biz: c.business || msg.fromEmail.split('@')[1] || '',
-          model: c.service_interest || null,
-          need: c.needs || `Email enquiry: ${msg.subject}`,
-          budget: c.budget || null,
-          timeline: c.timeline || null,
-          source: 'email_ingest',
-        })
-        .select()
-        .single()
-      if (leadErr) throw new Error(leadErr.message)
+      const lead = await table('leads').insert({
+        fname: c.fname || msg.fromName.split(' ')[0] || msg.fromEmail.split('@')[0],
+        lname: c.lname || msg.fromName.split(' ').slice(1).join(' ') || '',
+        email: msg.fromEmail,
+        phone: c.phone || '',
+        biz: c.business || msg.fromEmail.split('@')[1] || '',
+        model: c.service_interest || null,
+        need: c.needs || `Email enquiry: ${msg.subject}`,
+        budget: c.budget || null,
+        timeline: c.timeline || null,
+        source: 'email_ingest',
+      })
 
-      await supabase.from('email_ingest_log').update({
+      await ingest.update(claimed.id, {
         status: 'lead_created', is_lead: true, confidence: c.confidence,
         reasoning: c.reasoning, lead_id: lead.id,
-      }).eq('id', claimed.id)
+      })
       result.leads_created++
       emit({
         type: 'message', email: mailbox, outcome: 'lead_created',
@@ -411,14 +416,14 @@ async function scanOneMailbox(
       })
 
       // 6. feed the existing prospect pipeline (verified-company → client)
-      void autoIngestLead(lead).catch(e => console.error('auto-ingest from email error:', e))
+      void autoIngestLead(lead as unknown as IngestLead).catch(e => console.error('auto-ingest from email error:', e))
     } catch (e) {
       if (e instanceof FatalScanError) throw e // account-level: stop the run
       result.errors++
       const message = e instanceof Error ? e.message : String(e)
-      await supabase.from('email_ingest_log').update({
+      await ingest.update(claimed.id, {
         status: 'error', error: message.slice(0, 1000),
-      }).eq('id', claimed.id)
+      })
       emit({ type: 'message', email: mailbox, outcome: 'error', reason: message })
     }
   }

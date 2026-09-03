@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { DriveConnection } from '@/lib/db-types'
 import { decryptSecret, encryptSecret, credentialsKeyConfigured } from './secret-box'
 import {
   forgetGoogleToken, googleAccessToken, inboxClientId, inboxClientSecret,
@@ -77,9 +78,9 @@ const PERSONAL_DOMAINS = new Set(['gmail.com', 'googlemail.com'])
 /**
  * The Internal app's credentials are present.
  *
- * Every env read is LAZY. `app/lib/supabase.ts` already taught this codebase
- * that reading credentials at module load turns a missing variable into a
- * failed *build* rather than a failed request. Never throws.
+ * Every env read is LAZY. Reading credentials at module load turns a missing
+ * variable into a failed *build* rather than a failed request (CLAUDE.md
+ * trap 7). Never throws.
  */
 export function driveConfigured(): boolean {
   return Boolean(inboxClientId() && inboxClientSecret() && credentialsKeyConfigured())
@@ -111,22 +112,31 @@ type ConnectionRow = {
   connected_by: string | null
 }
 
-const SELECT = 'account_email, account_name, refresh_token_encrypted, root_name, root_folder_id, connected_at, connected_by'
-
-/** The single connection row, or null. A missing TABLE reads as "not
- *  connected" rather than a 500 — the migration may not have been run yet. */
-async function connection(): Promise<ConnectionRow | null> {
+/**
+ * The single connection row, or null.
+ *
+ * Read as "whatever row is there" rather than by id: there is exactly one, it
+ * has been keyed 'team' since the first version, and an unreadable table means
+ * "not connected" rather than a 500.
+ */
+async function connectionRow(): Promise<DriveConnection | null> {
   try {
-    const { data, error } = await supabase
-      .from('drive_connection')
-      .select(SELECT)
-      .eq('id', 'team')
-      .maybeSingle()
-    if (error) return null
-    return (data as ConnectionRow) ?? null
+    return (await table<DriveConnection>('drive_connection').list({ limit: 1 }))[0] ?? null
   } catch {
     return null
   }
+}
+
+async function connection(): Promise<ConnectionRow | null> {
+  return await connectionRow()
+}
+
+/** Write onto the one connection row, opening it the first time. */
+async function writeConnection(patch: Partial<DriveConnection>): Promise<void> {
+  const rows = table<DriveConnection>('drive_connection')
+  const existing = await connectionRow()
+  if (existing) await rows.update(existing.id, patch)
+  else await table('drive_connection').insert({ id: 'team', ...patch })
 }
 
 /** The Workspace domain folders are shared with, or null for a personal
@@ -282,18 +292,21 @@ export async function completeDriveConnect(
     rootId = made.id
   }
 
-  const { error } = await supabase.from('drive_connection').upsert({
-    id: 'team',
-    account_email: account?.email ?? null,
-    account_name: account?.name ?? null,
-    refresh_token_encrypted: encryptSecret(token.refresh_token),
-    root_name: wantedRoot,
-    root_folder_id: rootId,
-    connected_at: new Date().toISOString(),
-    connected_by: by,
-  }, { onConflict: 'id' })
-  if (error) {
-    return { ok: false, reason: 'api_error', message: 'Could not save the connection', detail: error.message }
+  try {
+    await writeConnection({
+      account_email: account?.email ?? null,
+      account_name: account?.name ?? null,
+      refresh_token_encrypted: encryptSecret(token.refresh_token),
+      root_name: wantedRoot,
+      root_folder_id: rootId,
+      connected_at: new Date().toISOString(),
+      connected_by: by,
+    })
+  } catch (e) {
+    return {
+      ok: false, reason: 'api_error', message: 'Could not save the connection',
+      detail: e instanceof Error ? e.message : String(e),
+    }
   }
 
   // a fresh connection invalidates whatever this process had cached
@@ -313,16 +326,13 @@ export async function disconnectDrive(): Promise<void> {
   }
   cachedRootId = null
   lastSharingError = null
-  const { error } = await supabase.from('drive_connection')
-    .update({
-      refresh_token_encrypted: null,
-      connected_at: null,
-      connected_by: null,
-      account_email: null,
-      account_name: null,
-    })
-    .eq('id', 'team')
-  if (error) throw new Error(error.message)
+  await writeConnection({
+    refresh_token_encrypted: null,
+    connected_at: null,
+    connected_by: null,
+    account_email: null,
+    account_name: null,
+  })
 }
 
 // ── access tokens ─────────────────────────────────────────────────────────
@@ -540,8 +550,7 @@ export async function rootFolderId(): Promise<string | null> {
   if (!made.ok) return null
 
   if (made.id !== row.root_folder_id) {
-    await supabase.from('drive_connection')
-      .update({ root_folder_id: made.id }).eq('id', 'team')
+    await writeConnection({ root_folder_id: made.id })
   }
   cachedRootId = made.id
   return made.id

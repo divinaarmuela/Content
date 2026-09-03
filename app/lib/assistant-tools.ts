@@ -1,7 +1,12 @@
 import 'server-only'
 import { tool } from 'ai'
 import { z } from 'zod'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  Client, ClientContact, EmailIngestLog, IntakeForm, Lead,
+  ScanMailbox, ScanRun, ScheduleEntry, TeamUser,
+} from '@/lib/db-types'
 import { roleSatisfies, type Role } from './identity-core'
 import { asanaConfigured, tasksForAssignee } from './asana'
 
@@ -33,14 +38,15 @@ export function assistantTools(role: Role) {
         status: z.enum(['active', 'paused', 'archived', 'any']).default('any'),
       }),
       execute: async ({ query, status }) => {
-        let q = supabase.from('clients')
-          .select('id, name, industry, contact_name, email, phone, status, created_at')
-          .order('name').limit(50)
-        if (status !== 'any') q = q.eq('status', status)
-        if (query) q = q.or(`name.ilike.%${query}%,industry.ilike.%${query}%,contact_name.ilike.%${query}%`)
-        const { data, error } = await q
-        if (error) return { error: error.message }
-        return { clients: data }
+        const needle = query.toLowerCase()
+        const like = (v: string | null | undefined) => !!v && v.toLowerCase().includes(needle)
+        const clients = await table<Client>('clients').list({
+          where: c => (status === 'any' || c.status === status)
+            && (!query || like(c.name) || like(c.industry) || like(c.contact_name)),
+          orderBy: [['name', 'asc']],
+          limit: 50,
+        })
+        return { clients }
       },
     }),
 
@@ -50,16 +56,12 @@ export function assistantTools(role: Role) {
       inputSchema: z.object({ client_id: z.string().uuid() }),
       execute: async ({ client_id }) => {
         const [client, contacts, forms] = await Promise.all([
-          supabase.from('clients')
-            .select('id, name, slug, industry, contact_name, email, phone, status, created_at')
-            .eq('id', client_id).maybeSingle(),
-          supabase.from('client_contacts').select('name, role, email, phone').eq('client_id', client_id),
-          supabase.from('intake_forms')
-            .select('id, title, template_key, status, sent_at, submitted_at')
-            .eq('client_id', client_id),
+          table<Client>('clients').get(client_id),
+          table<ClientContact>('client_contacts').list({ by: { client_id } }),
+          table<IntakeForm>('intake_forms').list({ by: { client_id } }),
         ])
-        if (!client.data) return { error: 'No such client' }
-        return { client: client.data, contacts: contacts.data ?? [], intake_forms: forms.data ?? [] }
+        if (!client) return { error: 'No such client' }
+        return { client, contacts, intake_forms: forms }
       },
     }),
 
@@ -72,13 +74,15 @@ export function assistantTools(role: Role) {
       }),
       execute: async ({ days, search }) => {
         const since = iso(new Date(Date.now() - days * 86_400_000))
-        let q = supabase.from('leads')
-          .select('id, created_at, fname, lname, email, biz, need, budget, timeline, source')
-          .gte('created_at', since).order('created_at', { ascending: false }).limit(100)
-        if (search) q = q.or(`fname.ilike.%${search}%,lname.ilike.%${search}%,biz.ilike.%${search}%,email.ilike.%${search}%`)
-        const { data, error } = await q
-        if (error) return { error: error.message }
-        return { since, count: data.length, leads: data }
+        const needle = search.toLowerCase()
+        const like = (v: string | null | undefined) => !!v && v.toLowerCase().includes(needle)
+        const leads = await table<Lead>('leads').list({
+          where: l => l.created_at >= since
+            && (!search || like(l.fname) || like(l.lname) || like(l.biz) || like(l.email)),
+          orderBy: [['created_at', 'desc']],
+          limit: 100,
+        })
+        return { since, count: leads.length, leads }
       },
     }),
 
@@ -91,13 +95,32 @@ export function assistantTools(role: Role) {
       }),
       execute: async ({ client_id, days_ahead }) => {
         const until = iso(new Date(Date.now() + days_ahead * 86_400_000))
-        let q = supabase.from('schedule_entries')
-          .select('id, platform, scheduled_at, publish_status, published_at, content_items(title, client_id, clients(name))')
-          .lte('scheduled_at', until).order('scheduled_at').limit(100)
-        if (client_id) q = q.eq('content_items.client_id', client_id)
-        const { data, error } = await q
-        if (error) return { error: error.message }
-        return { entries: data }
+        const rows = await table<ScheduleEntry>('schedule_entries').list({
+          where: e => e.scheduled_at != null && e.scheduled_at <= until,
+          orderBy: [['scheduled_at', 'asc']],
+          limit: 100,
+        })
+        // the item, and the item's client name — the same two levels the
+        // dashboard shows against a scheduled post
+        const withItem = await attachOne(rows, 'item_id', 'content_items', ['title', 'client_id'])
+        const items = withItem.map(r => r.content_items as { title: string; client_id: string } | null)
+        const named = await attachOne(
+          items.filter((i): i is { title: string; client_id: string } => !!i),
+          'client_id', 'clients', ['name'],
+        )
+        const byClient = new Map(named.map(i => [i.client_id, i.clients]))
+        const entries = withItem.map(r => {
+          const item = r.content_items as { title: string; client_id: string } | null
+          // a client filter narrows the ITEM, exactly as the embedded filter
+          // did: an entry whose item belongs to somebody else keeps its row
+          // and loses its item
+          const keep = item && (!client_id || item.client_id === client_id)
+          return {
+            ...r,
+            content_items: keep ? { ...item, clients: byClient.get(item.client_id) ?? null } : null,
+          }
+        })
+        return { entries }
       },
     }),
 
@@ -108,14 +131,14 @@ export function assistantTools(role: Role) {
         only: z.enum(['outstanding', 'submitted', 'all']).default('all'),
       }),
       execute: async ({ only }) => {
-        let q = supabase.from('intake_forms')
-          .select('id, title, template_key, status, sent_at, first_opened_at, submitted_at, clients(id, name)')
-          .order('created_at', { ascending: false }).limit(100)
-        if (only === 'outstanding') q = q.neq('status', 'submitted')
-        if (only === 'submitted') q = q.eq('status', 'submitted')
-        const { data, error } = await q
-        if (error) return { error: error.message }
-        return { forms: data }
+        const rows = await table<IntakeForm>('intake_forms').list({
+          where: f => only === 'all'
+            || (only === 'submitted' ? f.status === 'submitted' : f.status !== 'submitted'),
+          orderBy: [['created_at', 'desc']],
+          limit: 100,
+        })
+        const forms = await attachOne(rows, 'client_id', 'clients', ['id', 'name'])
+        return { forms }
       },
     }),
 
@@ -129,13 +152,13 @@ export function assistantTools(role: Role) {
         form_id: z.string().uuid().optional(),
       }),
       execute: async ({ client_id, form_id }) => {
-        let q = supabase.from('intake_forms')
-          .select('id, title, template_key, status, definition, answers, submitted_at, created_at')
-          .eq('client_id', client_id).order('created_at', { ascending: false })
-        if (form_id) q = q.eq('id', form_id)
-        const { data, error } = await q.limit(1)
-        if (error) return { error: error.message }
-        const form = data?.[0]
+        const data = await table<IntakeForm>('intake_forms').list({
+          by: { client_id },
+          where: f => !form_id || f.id === form_id,
+          orderBy: [['created_at', 'desc']],
+          limit: 1,
+        })
+        const form = data[0]
         if (!form) return { error: 'This client has no intake form' }
 
         const answers = (form.answers ?? {}) as Record<string, unknown>
@@ -174,18 +197,22 @@ export function assistantTools(role: Role) {
       execute: async ({ hours }) => {
         const since = iso(new Date(Date.now() - hours * 3_600_000))
         const [mailboxes, runs, picked] = await Promise.all([
-          supabase.from('scan_mailboxes').select('email, enabled, connected_at'),
-          supabase.from('scan_runs')
-            .select('mailbox, status, started_at, scanned, claimed, leads_created, error')
-            .gte('started_at', since).order('started_at', { ascending: false }).limit(30),
-          supabase.from('email_ingest_log')
-            .select('created_at, mailbox, from_email, subject, status, is_lead')
-            .gte('created_at', since).order('created_at', { ascending: false }).limit(30),
+          table<ScanMailbox>('scan_mailboxes').list(),
+          table<ScanRun>('scan_runs').list({
+            where: r => r.started_at >= since,
+            orderBy: [['started_at', 'desc']],
+            limit: 30,
+          }),
+          table<EmailIngestLog>('email_ingest_log').list({
+            where: r => r.created_at >= since,
+            orderBy: [['created_at', 'desc']],
+            limit: 30,
+          }),
         ])
         return {
-          mailboxes: mailboxes.data ?? [],
-          recent_runs: runs.data ?? [],
-          recent_messages: picked.data ?? [],
+          mailboxes,
+          recent_runs: runs,
+          recent_messages: picked,
         }
       },
     }),
@@ -194,10 +221,8 @@ export function assistantTools(role: Role) {
       description: 'The MD Media team: names, roles, emails.',
       inputSchema: z.object({}),
       execute: async () => {
-        const { data, error } = await supabase.from('team_users')
-          .select('name, email, role, employment_type, active_status').order('name')
-        if (error) return { error: error.message }
-        return { team: data }
+        const team = await table<TeamUser>('team_users').list({ orderBy: [['name', 'asc']] })
+        return { team }
       },
     }),
 
@@ -215,20 +240,20 @@ export function assistantTools(role: Role) {
         const workspace = process.env.ASANA_WORKSPACE_GID
         if (!workspace) return { error: 'Asana workspace is not configured' }
 
-        const { data: members, error } = await supabase.from('team_users')
-          .select('name, email, asana_user_gid')
-          .eq('active_status', true).not('asana_user_gid', 'is', null)
-        if (error) return { error: error.message }
+        const members = await table<TeamUser>('team_users').list({
+          by: { active_status: true },
+          where: m => m.asana_user_gid != null,
+        })
 
         const q = team_member.toLowerCase()
-        const hits = (members ?? []).filter(m =>
+        const hits = members.filter(m =>
           m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q))
         if (hits.length !== 1) {
           return {
             error: hits.length === 0
               ? `No team member matching "${team_member}" is linked to Asana`
               : `"${team_member}" matches more than one person; ask the user which one`,
-            available: (members ?? []).map(m => m.name || m.email),
+            available: members.map(m => m.name || m.email),
           }
         }
 
@@ -268,11 +293,10 @@ export function assistantTools(role: Role) {
         if (field === 'status' && !['active', 'paused', 'archived'].includes(value)) {
           return { error: 'Status must be active, paused or archived' }
         }
-        const { data, error } = await supabase.from('clients')
-          .update({ [field]: value }).eq('id', client_id).select('id, name').maybeSingle()
-        if (error) return { error: error.message }
-        if (!data) return { error: 'No such client' }
-        return { updated: data.name, field, value }
+        const updated = await table<Client>('clients')
+          .update(client_id, { [field]: value } as Partial<Client>)
+        if (!updated) return { error: 'No such client' }
+        return { updated: updated.name, field, value }
       },
     }),
 
@@ -286,11 +310,9 @@ export function assistantTools(role: Role) {
       needsApproval: true,
       execute: async ({ lead_id, need }) => {
         if (!roleSatisfies(role, 'editor')) return { error: 'Your role cannot edit leads' }
-        const { data, error } = await supabase.from('leads')
-          .update({ need }).eq('id', lead_id).select('id, fname, lname').maybeSingle()
-        if (error) return { error: error.message }
-        if (!data) return { error: 'No such lead' }
-        return { updated: `${data.fname} ${data.lname}`.trim() }
+        const updated = await table<Lead>('leads').update(lead_id, { need })
+        if (!updated) return { error: 'No such lead' }
+        return { updated: `${updated.fname} ${updated.lname}`.trim() }
       },
     }),
   }

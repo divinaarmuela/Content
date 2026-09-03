@@ -1,6 +1,7 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { ProviderWebhook, PublishJob, SocialAccount } from '@/lib/db-types'
 import { decryptSecret } from './secret-box'
 import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
 import {
@@ -74,20 +75,18 @@ export async function webhookSecrets(): Promise<string[]> {
   if (env) secrets.push(env)
 
   try {
-    const { data } = await supabase
-      .from('provider_webhooks')
-      .select('secret_encrypted')
-      .eq('provider', 'zernio')
-      .eq('active', true)
-    for (const row of data ?? []) {
-      const packed = row.secret_encrypted as string | null
+    const rows = await table<ProviderWebhook>('provider_webhooks').list({
+      by: { provider: 'zernio', active: true },
+    })
+    for (const row of rows) {
+      const packed = row.secret_encrypted
       if (!packed) continue
       // a secret we cannot decrypt (CREDENTIALS_KEY rotated) must not take the
       // whole endpoint down with it — the other secrets still work
       try { secrets.push(decryptSecret(packed)) } catch { /* skip */ }
     }
   } catch {
-    // the table may not exist yet; the env var alone is a complete setup
+    // the registrations may be unreadable; the env var alone is a complete setup
   }
 
   const unique = [...new Set(secrets.filter(Boolean))]
@@ -289,35 +288,38 @@ async function published(
   postId: string, permalink: string | null, platforms: string[],
 ): Promise<Response> {
   const now = new Date().toISOString()
-  const { data: rows, error } = await supabase
-    .from('publish_jobs')
-    .update({
+  const jobs = table<PublishJob>('publish_jobs')
+  let rows: PublishJob[]
+  try {
+    // the claim: only a job still in an open status is settled here, so a
+    // repeat delivery moves nothing
+    const open = await jobs.list({
+      where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status),
+    })
+    rows = (await Promise.all(open.map(j => jobs.update(j.id, {
       status: 'published',
       published_at: now,
       updated_at: now,
       error: null,
       ...(permalink ? { permalink } : {}),
-    })
-    .eq('provider_post_id', postId)
-    .in('status', OPEN_STATUSES)   // ← the claim; zero rows means already done
-    .select('id, content_item_id, targets')
-
-  if (error) {
+    })))).filter((j): j is PublishJob => j !== null)
+  } catch (e) {
     // a real database failure SHOULD be retried by the provider
-    console.error('zernio webhook could not settle the job:', postId, error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('zernio webhook could not settle the job:', postId, message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
-  if (!rows?.length) {
+  if (!rows.length) {
     // Either a repeat delivery or a job `runPublishJob` already settled
     // synchronously. Both are no-ops — except that the platform assigns the
     // permalink after the fact, so a link we did not have before is still
     // worth keeping. Writing it only where it is null keeps that idempotent.
     if (permalink) {
-      await supabase.from('publish_jobs')
-        .update({ permalink })
-        .eq('provider_post_id', postId)
-        .is('permalink', null)
+      const blank = await jobs.list({
+        where: j => j.provider_post_id === postId && j.permalink == null,
+      })
+      await Promise.all(blank.map(j => jobs.update(j.id, { permalink })))
     }
     return NextResponse.json({ ok: true, duplicate: true })
   }
@@ -347,19 +349,22 @@ async function published(
  * usually a re-auth away from being retried.
  */
 async function failed(postId: string, message: string): Promise<Response> {
-  const { data: rows, error } = await supabase
-    .from('publish_jobs')
-    .update({ status: 'failed', error: message, updated_at: new Date().toISOString() })
-    .eq('provider_post_id', postId)
-    .in('status', OPEN_STATUSES)
-    .select('id')
-
-  if (error) {
-    console.error('zernio webhook could not record the failure:', postId, error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  const jobs = table<PublishJob>('publish_jobs')
+  let open: PublishJob[]
+  try {
+    open = await jobs.list({
+      where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status),
+    })
+    await Promise.all(open.map(j => jobs.update(j.id, {
+      status: 'failed', error: message, updated_at: new Date().toISOString(),
+    })))
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    console.error('zernio webhook could not record the failure:', postId, detail)
+    return NextResponse.json({ error: detail }, { status: 500 })
   }
-  if (!rows?.length) return NextResponse.json({ ok: true, duplicate: true })
-  return NextResponse.json({ ok: true, failed: rows[0].id })
+  if (!open.length) return NextResponse.json({ ok: true, duplicate: true })
+  return NextResponse.json({ ok: true, failed: open[0].id })
 }
 
 /**
@@ -369,13 +374,13 @@ async function failed(postId: string, message: string): Promise<Response> {
  * when a post fails, which is after somebody has noticed nothing went out.
  */
 async function accountInactive(accountId: string): Promise<Response> {
-  const { error } = await supabase
-    .from('social_accounts')
-    .update({ active: false })
-    .eq('provider_account_id', accountId)
-  if (error) {
-    console.error('zernio webhook account update failed:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    const accounts = table<SocialAccount>('social_accounts')
+    const rows = await accounts.list({ where: a => a.provider_account_id === accountId })
+    await Promise.all(rows.map(a => accounts.update(a.id, { active: false })))
+  } catch (e) {
+    console.error('zernio webhook account update failed:', e)
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
   return NextResponse.json({ ok: true, marked: accountId })
 }

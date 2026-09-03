@@ -1,4 +1,5 @@
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Project } from '@/lib/db-types'
 import { clients as fallbackClients, wixImg, type WorkClient } from '../components/lama/workData'
 
 /** Canonical shape the site renders. DB rows and the hardcoded fallback both
@@ -21,7 +22,7 @@ export type SiteProject = {
 
 // Re-exported so existing server callers keep working. Client components must
 // import it from './media-core' directly — importing it from here pulls in the
-// Supabase client above, which cannot exist in the browser.
+// server-only database helper above, which cannot exist in the browser.
 export { isVideoUrl } from './media-core'
 
 const fromFallback = (c: WorkClient): SiteProject => ({
@@ -80,7 +81,7 @@ const fromRow = (r: ProjectRow): SiteProject => ({
   },
 })
 
-const dbConfigured = () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+const dbConfigured = () => Boolean(process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL)
 
 /** Published projects for the public site, sorted. Falls back to the
  *  hardcoded list whenever the DB is unconfigured, unreachable, or empty —
@@ -88,14 +89,12 @@ const dbConfigured = () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
 export async function getSiteProjects(): Promise<SiteProject[]> {
   if (!dbConfigured()) return fallbackClients.map(fromFallback)
   try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('published', true)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true })
-    if (error || !data || data.length === 0) return fallbackClients.map(fromFallback)
-    return (data as ProjectRow[]).map(fromRow)
+    const rows = await table<Project>('projects').list({
+      by: { published: true },
+      orderBy: [['sort_order', 'asc'], ['created_at', 'asc']],
+    })
+    if (rows.length === 0) return fallbackClients.map(fromFallback)
+    return (rows as unknown as ProjectRow[]).map(fromRow)
   } catch {
     return fallbackClients.map(fromFallback)
   }

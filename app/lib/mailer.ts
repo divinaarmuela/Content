@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type { NotificationLog, TeamUser } from '@/lib/db-types'
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
 import { actorAlias, replyToFor } from './mailer-core'
@@ -195,53 +196,52 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // notification path honours it. Only an explicit false mutes — no row, no
   // prefs, or a lookup error all fail open to sending.
   if (input.recipientId) {
-    const { data: prefRow } = await supabase
-      .from('team_users').select('notification_prefs').eq('id', input.recipientId).maybeSingle()
+    const prefRow = await table<TeamUser>('team_users').get(input.recipientId)
     const prefs = prefRow?.notification_prefs as { email?: boolean } | null | undefined
     if (prefs?.email === false) return 'muted'
   }
 
   const dedupe_key = buildDedupeKey(input.eventType, input.entityType, input.entityId, input.recipientEmail)
 
-  // 1. claim the dedupe key. `ignoreDuplicates` → conflict returns no row.
-  const { data: claimed, error: insErr } = await supabase
-    .from('notification_log')
-    .upsert(
-      {
-        dedupe_key,
-        event_type: input.eventType,
-        recipient_id: input.recipientId ?? null,
-        recipient_email: input.recipientEmail,
-        subject: input.subject,
-        body_html: input.bodyHtml,
-        entity_type: input.entityType,
-        entity_id: input.entityId,
-        channel: 'email',
-        status: 'pending',
-      },
-      { onConflict: 'dedupe_key', ignoreDuplicates: true }
-    )
-    .select()
-    .maybeSingle()
+  const log = table<NotificationLog>('notification_log')
 
-  if (insErr) {
-    console.error('notification claim failed:', insErr.message)
-    return 'failed'
+  // 1. claim the dedupe key. The unique key on dedupe_key means the loser of
+  // a concurrent claim is refused rather than given a second row.
+  let owned: NotificationLog | null = null
+  try {
+    owned = await table('notification_log').insert({
+      dedupe_key,
+      event_type: input.eventType,
+      recipient_id: input.recipientId ?? null,
+      recipient_email: input.recipientEmail,
+      subject: input.subject,
+      body_html: input.bodyHtml,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      channel: 'email',
+      status: 'pending',
+    }) as unknown as NotificationLog
+  } catch (e) {
+    if (!(e instanceof DbError && e.code === 'unique')) {
+      console.error('notification claim failed:', e instanceof Error ? e.message : e)
+      return 'failed'
+    }
   }
-  let owned = claimed
   if (!owned) {
     // someone owns the key — but a FAILED send (or a pending row stranded by
     // a crash >10 min ago) must not block the event forever. Re-claim it with
     // an optimistic guard: exactly one retrier wins, a sent row stays sent.
     const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString()
-    const { data: reclaimed } = await supabase
-      .from('notification_log')
-      .update({ status: 'pending', body_html: input.bodyHtml, subject: input.subject })
-      .eq('dedupe_key', dedupe_key)
-      .or(`status.eq.failed,and(status.eq.pending,created_at.lt.${staleBefore})`)
-      .select()
-      .maybeSingle()
-    if (!reclaimed) return 'duplicate' // genuinely sent (or in flight) — stop
+    const held = (await log.list({ where: r => r.dedupe_key === dedupe_key, limit: 1 }))[0]
+    const reclaimable = !!held && (
+      held.status === 'failed'
+      || (held.status === 'pending' && held.created_at < staleBefore)
+    )
+    if (!held || !reclaimable) return 'duplicate' // genuinely sent (or in flight) — stop
+    const reclaimed = await log.update(held.id, {
+      status: 'pending', body_html: input.bodyHtml, subject: input.subject,
+    })
+    if (!reclaimed) return 'duplicate'
     owned = reclaimed
   }
   const claimedId = owned.id
@@ -249,8 +249,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // bell-only: the row (which is what the notifications page reads) is
   // enough — no email leaves the building for this recipient
   if (input.bellOnly) {
-    await supabase.from('notification_log')
-      .update({ status: 'sent', channel: 'in_app' }).eq('id', claimedId)
+    await log.update(claimedId, { status: 'sent', channel: 'in_app' })
     return 'sent'
   }
 
@@ -279,16 +278,10 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
       attachments: input.attachments,
       idempotencyKey: dedupe_key,
     })
-    await supabase
-      .from('notification_log')
-      .update({ status: 'sent', sent_at: new Date().toISOString() })
-      .eq('id', claimedId)
+    await log.update(claimedId, { status: 'sent', sent_at: new Date().toISOString() })
     return 'sent'
   } catch (e) {
-    await supabase
-      .from('notification_log')
-      .update({ status: 'failed', error: e instanceof Error ? e.message : String(e) })
-      .eq('id', claimedId)
+    await log.update(claimedId, { status: 'failed', error: e instanceof Error ? e.message : String(e) })
     return 'failed'
   }
 }

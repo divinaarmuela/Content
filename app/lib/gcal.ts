@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { CalendarAccount as CalendarAccountRow } from '@/lib/db-types'
 import { decryptSecret, encryptSecret } from './secret-box'
 import { googleAccessToken, inboxClientId, inboxClientSecret, redirectUriFor } from './inbox-connect'
 import type { CalEvent } from './gcal-core'
@@ -82,29 +83,29 @@ export async function completeCalendarConnect(
   const email = String(((await calRes.json()) as { id?: string })?.id ?? '').trim().toLowerCase()
   if (!email || !email.includes('@')) return { ok: false, reason: 'no_email' }
 
-  const { data: existing } = await supabase
-    .from('calendar_accounts').select('email, enabled').eq('email', email).maybeSingle()
+  const accounts = table<CalendarAccountRow>('calendar_accounts')
+  const existing = (await accounts.list({ by: { email }, limit: 1 }))[0] ?? null
 
-  const { error } = await supabase.from('calendar_accounts').upsert({
-    email,
-    refresh_token_encrypted: encryptSecret(token.refresh_token),
-    connected_at: new Date().toISOString(),
-    connected_by: by,
-    ...(existing ? {} : { enabled: true }),
-  }, { onConflict: 'email' })
-  if (error) return { ok: false, reason: 'exchange_failed', detail: error.message }
+  try {
+    await table('calendar_accounts').upsert({
+      email,
+      refresh_token_encrypted: encryptSecret(token.refresh_token),
+      connected_at: new Date().toISOString(),
+      connected_by: by,
+      ...(existing ? {} : { enabled: true }),
+    }, { onConflict: 'email' })
+  } catch (e) {
+    return { ok: false, reason: 'exchange_failed', detail: e instanceof Error ? e.message : String(e) }
+  }
 
   return { ok: true, email }
 }
 
 /** All calendar accounts, tokens never included. */
 export async function listCalendarAccounts(): Promise<CalendarAccount[]> {
-  const { data, error } = await supabase
-    .from('calendar_accounts')
-    .select('email, enabled, connected_at, connected_by, refresh_token_encrypted')
-    .order('email')
-  if (error) throw new Error(error.message)
-  return (data ?? []).map(r => ({
+  const rows = await table<CalendarAccountRow>('calendar_accounts')
+    .list({ orderBy: [['email', 'asc']] })
+  return rows.map(r => ({
     email: r.email,
     enabled: r.enabled,
     connected: Boolean(r.refresh_token_encrypted),
@@ -114,17 +115,18 @@ export async function listCalendarAccounts(): Promise<CalendarAccount[]> {
 }
 
 export async function setCalendarEnabled(email: string, enabled: boolean): Promise<void> {
-  const { error } = await supabase.from('calendar_accounts')
-    .update({ enabled }).eq('email', email.toLowerCase())
-  if (error) throw new Error(error.message)
+  const accounts = table<CalendarAccountRow>('calendar_accounts')
+  const rows = await accounts.list({ by: { email: email.toLowerCase() } })
+  await Promise.all(rows.map(r => accounts.update(r.id, { enabled })))
 }
 
 /** Forget the token; the row keeps its enabled state for a reconnect. */
 export async function disconnectCalendar(email: string): Promise<void> {
-  const { error } = await supabase.from('calendar_accounts')
-    .update({ refresh_token_encrypted: null, connected_at: null, connected_by: null })
-    .eq('email', email.toLowerCase())
-  if (error) throw new Error(error.message)
+  const accounts = table<CalendarAccountRow>('calendar_accounts')
+  const rows = await accounts.list({ by: { email: email.toLowerCase() } })
+  await Promise.all(rows.map(r => accounts.update(r.id, {
+    refresh_token_encrypted: null, connected_at: null, connected_by: null,
+  })))
 }
 
 // the refresh-token exchange and its cache live in inbox-connect.ts, shared
@@ -134,14 +136,13 @@ const accessToken = googleAccessToken
 
 /** The stored token for one connected account, or null if not connected. */
 async function tokenFor(email: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('calendar_accounts')
-    .select('refresh_token_encrypted')
-    .eq('email', email.toLowerCase())
-    .not('refresh_token_encrypted', 'is', null)
-    .maybeSingle()
-  if (!data?.refresh_token_encrypted) return null
-  return accessToken(decryptSecret(data.refresh_token_encrypted))
+  const row = (await table<CalendarAccountRow>('calendar_accounts').list({
+    by: { email: email.toLowerCase() },
+    where: r => r.refresh_token_encrypted != null,
+    limit: 1,
+  }))[0]
+  if (!row?.refresh_token_encrypted) return null
+  return accessToken(decryptSecret(row.refresh_token_encrypted))
 }
 
 /**
@@ -215,17 +216,15 @@ type GoogleEvent = {
 export async function listCalendarEvents(
   timeMin: string, timeMax: string,
 ): Promise<{ events: CalEvent[]; errors: { calendar: string; message: string }[] }> {
-  const { data, error } = await supabase
-    .from('calendar_accounts')
-    .select('email, refresh_token_encrypted')
-    .eq('enabled', true)
-    .not('refresh_token_encrypted', 'is', null)
-  if (error) throw new Error(error.message)
+  const rows = await table<CalendarAccountRow>('calendar_accounts').list({
+    by: { enabled: true },
+    where: r => r.refresh_token_encrypted != null,
+  })
 
   const events: CalEvent[] = []
   const errors: { calendar: string; message: string }[] = []
 
-  await Promise.all((data ?? []).map(async row => {
+  await Promise.all(rows.map(async row => {
     try {
       const token = await accessToken(decryptSecret(row.refresh_token_encrypted!))
       const url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?' +

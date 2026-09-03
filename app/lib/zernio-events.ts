@@ -1,5 +1,10 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  Client, ContentAsset, PostAnalytic, PublishJob, ScheduleEntry, SocialAccount,
+  TeamUser, TeamUserClient, WebhookDelivery,
+} from '@/lib/db-types'
 import { notify } from './mailer'
 import type { ZernioAction } from './zernio-webhook-core'
 
@@ -16,12 +21,12 @@ import type { ZernioAction } from './zernio-webhook-core'
  *
  *   1. **Every write is idempotent on its own**, not merely because the
  *      delivery log deduped it. Zernio retries up to 7 times over ~51 hours;
- *      the log is the first line of defence, a conditional UPDATE or a
+ *      the log is the first line of defence, a status re-check or a
  *      null-guarded back-fill is the second, and only the second survives the
- *      log table being unmigrated.
- *   2. **A link a human set is never overwritten.** Every permalink write is
- *      `.is('live_url', null)` / `.is('permalink', null)`. The provider is
- *      allowed to fill a blank; it is not allowed to correct a person.
+ *      log being unreadable.
+ *   2. **A link a human set is never overwritten.** Every permalink write
+ *      only fills a null. The provider is allowed to fill a blank; it is not
+ *      allowed to correct a person.
  *   3. **Nothing here throws into the handler.** A failed side effect must not
  *      turn a delivery into a non-2xx, because a non-2xx is redelivered for two
  *      days and would replay every side effect that DID work alongside it. The
@@ -43,11 +48,12 @@ export type DeliveryClaim =
 /**
  * Claim one delivery.
  *
- * `ignoreDuplicates` makes the unique index do the deciding: the insert either
- * returns a row (ours) or returns nothing (someone else's). There is no
- * "select then insert" window for a concurrent retry to slip through, which
- * matters because Zernio's retries are not spaced out enough to assume the
- * first attempt has finished.
+ * The uniqueness that decides this is COMPOSITE — (provider, provider_event_id)
+ * — so it is checked here rather than by the database: an existing row for the
+ * same provider and event id means somebody already has the claim. Zernio's
+ * retries are not spaced out enough to assume the first attempt has finished,
+ * so an in-flight duplicate can still slip through this window; every handler
+ * below is independently idempotent for exactly that reason.
  *
  * An event with no id cannot be deduped this way and is NOT dropped — the
  * account webhook that has been in production since 20 Aug predates the
@@ -56,17 +62,24 @@ export type DeliveryClaim =
 export async function claimDelivery(event: string, eventId: string | null): Promise<DeliveryClaim> {
   if (!eventId) return { kind: 'unlogged' }
   try {
-    const { data, error } = await supabase
-      .from('webhook_deliveries')
-      .upsert(
-        { provider: 'zernio', event, provider_event_id: eventId },
-        { onConflict: 'provider,provider_event_id', ignoreDuplicates: true },
-      )
-      .select('id')
-      .maybeSingle()
-    if (error) return { kind: 'unlogged' }   // table not migrated yet
-    return data?.id ? { kind: 'claimed', id: data.id as string } : { kind: 'duplicate' }
-  } catch {
+    const deliveries = table<WebhookDelivery>('webhook_deliveries')
+    const held = await deliveries.list({
+      where: r => r.provider_event_id === eventId && r.provider === 'zernio',
+      limit: 1,
+    })
+    if (held.length > 0) return { kind: 'duplicate' }
+    const row = await table('webhook_deliveries').insert({
+      provider: 'zernio',
+      event,
+      provider_event_id: eventId,
+      received_at: new Date().toISOString(),
+      handled: false,
+      note: null,
+    })
+    return { kind: 'claimed', id: row.id }
+  } catch (e) {
+    // a losing race on the id is a duplicate, not an outage
+    if (e instanceof DbError && e.code === 'unique') return { kind: 'duplicate' }
     return { kind: 'unlogged' }
   }
 }
@@ -77,9 +90,8 @@ export async function finishDelivery(
 ): Promise<void> {
   if (claim.kind !== 'claimed') return
   try {
-    await supabase.from('webhook_deliveries')
-      .update({ handled, note: note?.slice(0, 500) ?? null })
-      .eq('id', claim.id)
+    await table<WebhookDelivery>('webhook_deliveries')
+      .update(claim.id, { handled, note: note?.slice(0, 500) ?? null })
   } catch { /* the log is bookkeeping; never fail a delivery over it */ }
 }
 
@@ -95,8 +107,8 @@ export async function finishDelivery(
 export async function releaseDelivery(claim: DeliveryClaim): Promise<void> {
   if (claim.kind !== 'claimed') return
   try {
-    await supabase.from('webhook_deliveries').delete().eq('id', claim.id)
-  } catch { /* the retry will collide on the unique index instead — visible, not silent */ }
+    await table<WebhookDelivery>('webhook_deliveries').remove(claim.id)
+  } catch { /* the retry will be seen as a duplicate instead — visible, not silent */ }
 }
 
 export type DeliveryStats = {
@@ -120,16 +132,20 @@ export async function webhookDeliveryStats(provider = 'zernio'): Promise<Deliver
   const empty: DeliveryStats = { last_at: null, today: 0, ever: false }
   try {
     const since = new Date(Date.now() - 24 * 3600_000).toISOString()
-    const [latest, counted] = await Promise.all([
-      supabase.from('webhook_deliveries')
-        .select('received_at').eq('provider', provider)
-        .order('received_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('webhook_deliveries')
-        .select('id', { count: 'exact', head: true })
-        .eq('provider', provider).gte('received_at', since),
+    const deliveries = table<WebhookDelivery>('webhook_deliveries')
+    const [latest, today] = await Promise.all([
+      deliveries.list({
+        by: { provider },
+        orderBy: [['received_at', 'desc']],
+        limit: 1,
+      }),
+      deliveries.count({
+        by: { provider },
+        where: r => r.received_at >= since,
+      }),
     ])
-    const last = (latest.data?.received_at as string | undefined) ?? null
-    return { last_at: last, today: counted.count ?? 0, ever: Boolean(last) }
+    const last = latest[0]?.received_at ?? null
+    return { last_at: last, today, ever: Boolean(last) }
   } catch {
     return empty
   }
@@ -155,24 +171,24 @@ export type InboxActivity = { last_at: string | null; since_count: number }
 /** Has anything inbox-shaped arrived (since `sinceIso`, if given)? */
 export async function inboxActivity(sinceIso?: string | null): Promise<InboxActivity> {
   try {
-    const latest = await supabase.from('webhook_deliveries')
-      .select('received_at')
-      .eq('provider', 'zernio')
-      .in('event', INBOX_ACTIVITY_EVENTS)
-      .order('received_at', { ascending: false })
-      .limit(1).maybeSingle()
-    const last = (latest.data?.received_at as string | undefined) ?? null
+    const deliveries = table<WebhookDelivery>('webhook_deliveries')
+    const latest = await deliveries.list({
+      by: { provider: 'zernio' },
+      where: r => INBOX_ACTIVITY_EVENTS.includes(r.event),
+      orderBy: [['received_at', 'desc']],
+      limit: 1,
+    })
+    const last = latest[0]?.received_at ?? null
     if (!sinceIso || !last) return { last_at: last, since_count: 0 }
 
-    const { count } = await supabase.from('webhook_deliveries')
-      .select('id', { count: 'exact', head: true })
-      .eq('provider', 'zernio')
-      .in('event', INBOX_ACTIVITY_EVENTS)
-      .gt('received_at', sinceIso)
-    return { last_at: last, since_count: count ?? 0 }
+    const since_count = await deliveries.count({
+      by: { provider: 'zernio' },
+      where: r => INBOX_ACTIVITY_EVENTS.includes(r.event) && r.received_at > sinceIso,
+    })
+    return { last_at: last, since_count }
   } catch {
-    // the table is not migrated — the page falls back to loading on visit,
-    // which is exactly what it did before this existed
+    // the deliveries could not be read — the page falls back to loading on
+    // visit, which is exactly what it did before this existed
     return { last_at: null, since_count: 0 }
   }
 }
@@ -204,40 +220,39 @@ export async function platformPublished(action: PlatformPublished): Promise<bool
   const { postId, platform, permalink } = action
   if (!permalink) return false
 
-  const { data: jobs } = await supabase
-    .from('publish_jobs')
-    .select('id, content_item_id')
-    .eq('provider_post_id', postId)
-    .limit(1)
-  const job = jobs?.[0]
+  const jobsTable = table<PublishJob>('publish_jobs')
+  const jobs = await jobsTable.list({ where: j => j.provider_post_id === postId })
+  const job = jobs[0]
 
-  // `.is(…, null)` on all three: the provider may fill a blank, never correct
-  // a link somebody set by hand.
-  await supabase.from('publish_jobs')
-    .update({ permalink })
-    .eq('provider_post_id', postId)
-    .is('permalink', null)
+  // only ever onto a null, on all four: the provider may fill a blank, never
+  // correct a link somebody set by hand.
+  await Promise.all(jobs
+    .filter(j => j.permalink == null)
+    .map(j => jobsTable.update(j.id, { permalink })))
 
-  await supabase.from('post_analytics')
-    .update({ platform_post_url: permalink })
-    .eq('provider_post_id', postId)
-    .is('platform_post_url', null)
+  const analytics = table<PostAnalytic>('post_analytics')
+  const analyticRows = await analytics.list({
+    where: a => a.provider_post_id === postId && a.platform_post_url == null,
+  })
+  await Promise.all(analyticRows.map(a => analytics.update(a.id, { platform_post_url: permalink })))
 
   if (job?.content_item_id && platform) {
     // the PLATFORM's row, not every row on the item: a post that went to
     // Instagram and LinkedIn has two links, and stamping one over both would
     // send a client to the wrong place.
-    await supabase.from('schedule_entries')
-      .update({ live_url: permalink })
-      .eq('item_id', job.content_item_id as string)
-      .eq('platform', platform)
-      .is('live_url', null)
+    const entries = table<ScheduleEntry>('schedule_entries')
+    const rows = await entries.list({
+      by: { item_id: job.content_item_id, platform },
+      where: e => e.live_url == null,
+    })
+    await Promise.all(rows.map(e => entries.update(e.id, { live_url: permalink })))
   }
 
-  await supabase.from('content_assets')
-    .update({ post_url: permalink })
-    .eq('provider_post_id', postId)
-    .is('post_url', null)
+  const assets = table<ContentAsset>('content_assets')
+  const assetRows = await assets.list({
+    where: a => a.provider_post_id === postId && a.post_url == null,
+  })
+  await Promise.all(assetRows.map(a => assets.update(a.id, { post_url: permalink })))
 
   return true
 }
@@ -252,18 +267,19 @@ type PlatformFailed = Extract<ZernioAction, { kind: 'platform_failed' }>
  * own words — "The channel refused the post" with no reason is the message
  * that has cost the most time to act on.
  *
- * The conditional `in(status, OPEN_STATUSES)` is the idempotency: the rollup
- * `post.failed` that follows finds the job already settled and moves nothing.
+ * The open-status check is the idempotency: the rollup `post.failed` that
+ * follows finds the job already settled and moves nothing.
  */
 export async function platformFailed(action: PlatformFailed): Promise<boolean> {
   const label = action.platform ? `${action.platform}: ${action.error}` : action.error
-  const { data } = await supabase
-    .from('publish_jobs')
-    .update({ status: 'failed', error: label.slice(0, 1000), updated_at: new Date().toISOString() })
-    .eq('provider_post_id', action.postId)
-    .in('status', OPEN_STATUSES)
-    .select('id')
-  return (data ?? []).length > 0
+  const jobs = table<PublishJob>('publish_jobs')
+  const open = await jobs.list({
+    where: j => j.provider_post_id === action.postId && OPEN_STATUSES.includes(j.status),
+  })
+  await Promise.all(open.map(j => jobs.update(j.id, {
+    status: 'failed', error: label.slice(0, 1000), updated_at: new Date().toISOString(),
+  })))
+  return open.length > 0
 }
 
 /**
@@ -280,22 +296,21 @@ export async function platformFailed(action: PlatformFailed): Promise<boolean> {
  * item's own history.
  */
 export async function postCancelled(postId: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('publish_jobs')
-    .update({
-      status: 'cancelled',
-      error: 'Cancelled at the publishing service — nothing was posted. Queue it again to send it.',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('provider_post_id', postId)
-    .in('status', OPEN_STATUSES)
-    .select('id, client_id, content_item_id')
-  const job = (data ?? [])[0]
+  const jobsTable = table<PublishJob>('publish_jobs')
+  const open = await jobsTable.list({
+    where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status),
+  })
+  await Promise.all(open.map(j => jobsTable.update(j.id, {
+    status: 'cancelled',
+    error: 'Cancelled at the publishing service — nothing was posted. Queue it again to send it.',
+    updated_at: new Date().toISOString(),
+  })))
+  const job = open[0]
   if (!job) return false
 
   if (job.content_item_id) {
     try {
-      await supabase.from('workflow_activity').insert({
+      await table('workflow_activity').insert({
         client_id: job.client_id ?? null,
         entity_type: 'content_item',
         entity_id: job.content_item_id,
@@ -318,12 +333,11 @@ export async function postCancelled(postId: string): Promise<boolean> {
  * job that already knows its id matches zero rows.
  */
 export async function postScheduledConfirmed(postId: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('publish_jobs')
-    .select('id, status, provider_post_id')
-    .eq('provider_post_id', postId)
-    .limit(1)
-  return (data ?? []).length > 0
+  const jobs = await table<PublishJob>('publish_jobs').list({
+    where: j => j.provider_post_id === postId,
+    limit: 1,
+  })
+  return jobs.length > 0
 }
 
 /* ── accounts ────────────────────────────────────────────────────────────── */
@@ -360,21 +374,22 @@ export async function accountConnected(action: AccountConnected): Promise<boolea
 async function clientForAccount(
   action: { accountId: string; profileId: string | null },
 ): Promise<{ clientId: string | null; profileId: string | null }> {
+  const clients = table<Client>('clients')
   if (action.profileId) {
-    const { data } = await supabase
-      .from('clients').select('id').eq('social_profile_id', action.profileId).maybeSingle()
-    if (data?.id) return { clientId: data.id as string, profileId: action.profileId }
+    const found = (await clients.list({
+      where: c => c.social_profile_id === action.profileId, limit: 1,
+    }))[0]
+    if (found) return { clientId: found.id, profileId: action.profileId }
   }
   // a reconnect: we already hold this account id from a previous sync
-  const { data: existing } = await supabase
-    .from('social_accounts').select('client_id')
-    .eq('provider_account_id', action.accountId).maybeSingle()
+  const existing = (await table<SocialAccount>('social_accounts').list({
+    where: a => a.provider_account_id === action.accountId, limit: 1,
+  }))[0]
   if (!existing?.client_id) return { clientId: null, profileId: action.profileId }
-  const { data: client } = await supabase
-    .from('clients').select('id, social_profile_id').eq('id', existing.client_id).maybeSingle()
+  const client = await clients.get(existing.client_id)
   return {
-    clientId: (client?.id as string) ?? null,
-    profileId: action.profileId ?? (client?.social_profile_id as string | null) ?? null,
+    clientId: client?.id ?? null,
+    profileId: action.profileId ?? client?.social_profile_id ?? null,
   }
 }
 
@@ -397,36 +412,39 @@ export async function accountManagersFor(providerAccountId: string | null): Prom
   let clientName = 'a client'
 
   if (providerAccountId) {
-    const { data: account } = await supabase
-      .from('social_accounts').select('client_id')
-      .eq('provider_account_id', providerAccountId).maybeSingle()
-    clientId = (account?.client_id as string | null) ?? null
+    const account = (await table<SocialAccount>('social_accounts').list({
+      where: a => a.provider_account_id === providerAccountId, limit: 1,
+    }))[0]
+    clientId = account?.client_id ?? null
   }
   if (clientId) {
-    const { data: client } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle()
-    clientName = (client?.name as string) || clientName
+    const client = await table<Client>('clients').get(clientId)
+    clientName = client?.name || clientName
   }
 
   if (clientId) {
-    const { data } = await supabase
-      .from('team_user_clients')
-      // the FK must be named — team_user_clients links to team_users twice
-      // (team_user_id and assigned_by) and the bare embed is ambiguous
-      .select('team_users!team_user_clients_team_user_id_fkey!inner(id, email, name, role, active_status)')
-      .eq('client_id', clientId)
-    const ams = (data ?? [])
+    // the link table points at team_users twice (team_user_id and
+    // assigned_by); the person assigned to the client is team_user_id
+    const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+    const joined = await attachOne(links, 'team_user_id', 'team_users',
+      ['id', 'email', 'name', 'role', 'active_status'])
+    const ams = joined
       .map(r => r.team_users as unknown as
-        { id: string; email: string; name: string; role: string; active_status: boolean })
-      .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
+        { id: string; email: string; name: string; role: string; active_status: boolean } | null)
+      .filter((u): u is { id: string; email: string; name: string; role: string; active_status: boolean } =>
+        !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
     if (ams.length > 0) {
       return { clientId, clientName, people: ams.map(u => ({ id: u.id, email: u.email, name: u.name })) }
     }
   }
 
-  const { data: admins } = await supabase
-    .from('team_users').select('id, email, name')
-    .eq('role', 'super_admin').eq('active_status', true)
-  return { ...none, clientId, clientName, people: (admins ?? []) as { id: string; email: string; name: string }[] }
+  const admins = await table<TeamUser>('team_users').list({
+    by: { role: 'super_admin', active_status: true },
+  })
+  return {
+    ...none, clientId, clientName,
+    people: admins.map(u => ({ id: u.id, email: u.email, name: u.name })),
+  }
 }
 
 type Review = Extract<ZernioAction, { kind: 'review' }>

@@ -1,4 +1,5 @@
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { JournalPost as JournalPostRow } from '@/lib/db-types'
 import { articles as fallbackArticles, type Article } from '../journal/journalData'
 
 /**
@@ -45,7 +46,7 @@ type PostRow = {
 }
 
 function dbConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  return Boolean(process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL)
 }
 
 /** "2026-07-14" → "July 2026". Month and year only: these are essays, not news. */
@@ -89,14 +90,12 @@ const fromFallback = (a: Article): JournalPost => ({
 export async function getJournalPosts(): Promise<JournalPost[]> {
   if (!dbConfigured()) return fallbackArticles.map(fromFallback)
   try {
-    const { data, error } = await supabase
-      .from('journal_posts')
-      .select('*')
-      .eq('published', true)
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('sort_order', { ascending: true })
-    if (error || !data || data.length === 0) return fallbackArticles.map(fromFallback)
-    return (data as PostRow[]).map(fromRow)
+    const rows = await table<JournalPostRow>('journal_posts').list({
+      by: { published: true },
+      orderBy: [['published_at', 'desc'], ['sort_order', 'asc']],
+    })
+    if (rows.length === 0) return fallbackArticles.map(fromFallback)
+    return (rows as unknown as PostRow[]).map(fromRow)
   } catch {
     return fallbackArticles.map(fromFallback)
   }

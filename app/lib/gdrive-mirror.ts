@@ -1,6 +1,9 @@
 import 'server-only'
 import { after } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type {
+  AssetVersion, Batch, Client, ContentItem, DriveFile, ScheduleEntry,
+} from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import {
   FINAL_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
@@ -223,13 +226,11 @@ export async function mirrorLatestVersion(
   itemId: string, target: 'final' | 'scheduled',
 ): Promise<number> {
   if (!driveConfigured()) return 0
-  const { data } = await supabase
-    .from('asset_versions')
-    .select('version_number, file_url, files')
-    .eq('item_id', itemId)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const data = (await table<AssetVersion>('asset_versions').list({
+    by: { item_id: itemId },
+    orderBy: [['version_number', 'desc']],
+    limit: 1,
+  }))[0]
   if (!data) return 0
   // the whole carousel, not its cover: what was approved is the set of slides
   const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url))
@@ -308,12 +309,8 @@ type ItemRow = {
 }
 
 async function loadItem(itemId: string): Promise<ItemRow | null> {
-  const { data } = await supabase
-    .from('content_items')
-    .select('id, client_id, batch_id, title, content_type, work_kind_id, drive_folder_id, raw_assets_url')
-    .eq('id', itemId)
-    .maybeSingle()
-  return (data as ItemRow) ?? null
+  const row = await table<ContentItem>('content_items').get(itemId)
+  return (row as unknown as ItemRow) ?? null
 }
 
 /** The item's own folder, created now if the create hook never got to it. */
@@ -325,9 +322,8 @@ async function itemFolderId(item: ItemRow): Promise<string | null> {
 }
 
 async function clientName(clientId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('clients').select('name').eq('id', clientId).maybeSingle()
-  return String(data?.name ?? '').trim() || null
+  const row = await table<Client>('clients').get(clientId)
+  return String(row?.name ?? '').trim() || null
 }
 
 /**
@@ -373,10 +369,8 @@ async function targetFolder(
   if (target === 'raw' || target === 'final') {
     const sub = target === 'raw' ? RAW_FOLDER : FINAL_FOLDER
     if (item.batch_id) {
-      const { data: batch } = await supabase.from('batches')
-        .select('id, client_id, title, shoot_date, created_at, drive_folder_id')
-        .eq('id', item.batch_id).maybeSingle()
-      const shootId = batch ? await ensureShootFoldersNow(batch as BatchLike) : null
+      const batch = await table<Batch>('batches').get(item.batch_id)
+      const shootId = batch ? await ensureShootFoldersNow(batch as unknown as BatchLike) : null
       if (!shootId) return { skip: 'no shoot folder' }
       const made = await ensureChain(shootId, [sub])
       return made.ok ? { id: made.id } : { skip: made.message }
@@ -394,9 +388,8 @@ async function targetFolder(
   }
 
   // scheduled — the month the piece FIRST goes out
-  const { data: entries } = await supabase
-    .from('schedule_entries').select('scheduled_at').eq('item_id', item.id)
-  const month = earliestScheduledMonth(entries ?? [])
+  const entries = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: item.id } })
+  const month = earliestScheduledMonth(entries)
   if (!month) return { skip: 'nothing scheduled yet' }
   const name = await clientName(item.client_id)
   if (!name) return { skip: 'no client name' }
@@ -439,12 +432,12 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
   if (!driveConfigured()) return { status: 'skipped', detail: 'Drive not configured' }
   if (!(await rootFolderId())) return { status: 'skipped', detail: 'Drive not connected' }
 
-  const { data: existing } = await supabase
-    .from('drive_files')
-    .select('id, drive_file_id, drive_url, bytes')
-    .eq('source_url', req.source_url)
-    .eq('target', req.target)
-    .maybeSingle()
+  // (source_url, target) was a composite unique key; it is checked here
+  const files = table<DriveFile>('drive_files')
+  const existing = (await files.list({
+    where: f => f.source_url === req.source_url && f.target === req.target,
+    limit: 1,
+  }))[0] ?? null
 
   const item = clientScoped ? null : await loadItem(String(req.item_id))
   if (!clientScoped && !item) return { status: 'skipped', detail: 'item is gone' }
@@ -465,16 +458,17 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
 
   // claim it, unless a row is already ours to complete
   if (!existing) {
-    const { error } = await supabase.from('drive_files').insert({
-      item_id: item?.id ?? null,
-      client_id: item?.client_id ?? req.client_id ?? null,
-      source_url: req.source_url,
-      target: req.target,
-    })
-    if (error) {
+    try {
+      await table('drive_files').insert({
+        item_id: item?.id ?? null,
+        client_id: item?.client_id ?? req.client_id ?? null,
+        source_url: req.source_url,
+        target: req.target,
+      })
+    } catch (e) {
       // lost the claim to a concurrent run — which is the claim working
-      if (/duplicate key/i.test(error.message)) return { status: 'already' }
-      throw new Error(error.message)
+      if (e instanceof DbError && e.code === 'unique') return { status: 'already' }
+      throw e
     }
   }
 
@@ -483,14 +477,12 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
   // not `item`: since raw split off, a job-pack asset's first copy lives under
   // `raw`, and a lookup fixed on `item` would re-upload a 2 GB clip to file it
   // in the finals.
-  const { data: sources } = await supabase
-    .from('drive_files')
-    .select('drive_file_id')
-    .eq('source_url', req.source_url)
-    .neq('target', req.target)
-    .not('drive_file_id', 'is', null)
-    .limit(1)
-  const source = sources?.[0] ?? null
+  const source = (await files.list({
+    where: f => f.source_url === req.source_url
+      && f.target !== req.target
+      && f.drive_file_id != null,
+    limit: 1,
+  }))[0] ?? null
 
   const result = source?.drive_file_id
     ? await copyDriveFile(source.drive_file_id, req.name, folder.id)
@@ -501,14 +493,14 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
     throw new Error(`${result.message}${result.detail ? ` — ${result.detail}` : ''}`)
   }
 
-  await supabase.from('drive_files')
-    .update({
-      drive_file_id: result.id,
-      drive_url: driveFileUrl(result.id),
-      bytes: result.bytes || null,
-    })
-    .eq('source_url', req.source_url)
-    .eq('target', req.target)
+  const claimed = await files.list({
+    where: f => f.source_url === req.source_url && f.target === req.target,
+  })
+  await Promise.all(claimed.map(f => files.update(f.id, {
+    drive_file_id: result.id,
+    drive_url: driveFileUrl(result.id),
+    bytes: result.bytes || null,
+  })))
 
   return {
     status: 'mirrored',
@@ -596,12 +588,13 @@ async function migrateMisfiledRaw(
       // the row IS the claim, so it is rewritten rather than re-inserted: a
       // second row would hold the same drive_file_id under two targets and the
       // next sweep would try to mirror the file again
-      const { error } = await supabase.from('drive_files')
-        .update({ target: 'raw' })
-        .eq('id', row.id)
-        .eq('target', 'item')
-      if (error) {
-        console.error(`[gdrive] raw migration: ${row.source_url} — ${error.message}`)
+      try {
+        const driveFiles = table<DriveFile>('drive_files')
+        const live = await driveFiles.get(row.id)
+        if (live?.target !== 'item') continue
+        await driveFiles.update(row.id, { target: 'raw' })
+      } catch (e) {
+        console.error(`[gdrive] raw migration: ${row.source_url} —`, e)
         continue
       }
       // and in the caller's copy of the row, so the sweep that follows counts
@@ -647,47 +640,51 @@ export async function sweepMissingMirrors(opts?: {
   const since = new Date(
     Date.now() - (opts?.days ?? MIRROR_SWEEP_DAYS) * 24 * 60 * 60 * 1000,
   ).toISOString()
-  const q = supabase.from('content_items').select('id, raw_assets')
-  const { data: itemRows, error } = one.length > 0
-    ? await q.in('id', one)
-    // recently touched, not everything ever made: a file that was going to be
-    // mirrored was going to be mirrored because somebody just saved something
-    : await q.gte('updated_at', since).order('updated_at', { ascending: false }).limit(SWEEP_ITEM_LIMIT)
-  if (error) {
-    console.error('[gdrive] mirror sweep could not read items:', error.message)
+  let itemRows: ContentItem[]
+  try {
+    itemRows = one.length > 0
+      ? await table<ContentItem>('content_items').list({ where: r => one.includes(r.id) })
+      // recently touched, not everything ever made: a file that was going to be
+      // mirrored was going to be mirrored because somebody just saved something
+      : await table<ContentItem>('content_items').list({
+          where: r => r.updated_at >= since,
+          orderBy: [['updated_at', 'desc']],
+          limit: SWEEP_ITEM_LIMIT,
+        })
+  } catch (e) {
+    console.error('[gdrive] mirror sweep could not read items:', e instanceof Error ? e.message : e)
     return empty
   }
-  const ids = (itemRows ?? []).map(r => String(r.id))
+  const ids = itemRows.map(r => String(r.id))
   if (ids.length === 0) return empty
 
-  const [versionsRes, mirroredRes] = await Promise.all([
-    supabase.from('asset_versions')
-      .select('item_id, version_number, file_url, files')
-      .in('item_id', ids),
+  const [versions, mirroredRows] = await Promise.all([
+    table<AssetVersion>('asset_versions').list({ where: v => ids.includes(v.item_id) }),
     // a claim with no drive_file_id is an upload that DIED, and asking for it
     // again is exactly what the claim was left behind for — so only completed
     // rows count as "already there". Both item-scoped targets, because a file
     // in `01 Raw` and a file in `02 Edits` are different questions now.
-    supabase.from('drive_files')
-      .select('id, item_id, source_url, target, drive_file_id')
-      .in('item_id', ids)
-      .in('target', ['item', 'raw'])
-      .not('drive_file_id', 'is', null),
+    table<DriveFile>('drive_files').list({
+      where: f => f.item_id != null
+        && ids.includes(f.item_id)
+        && ['item', 'raw'].includes(f.target)
+        && f.drive_file_id != null,
+    }),
   ])
 
   const versionsByItem = new Map<string, SweepVersion[]>()
-  for (const v of versionsRes.data ?? []) {
+  for (const v of versions) {
     const key = String(v.item_id)
     const list = versionsByItem.get(key) ?? []
-    list.push(v as SweepVersion)
+    list.push(v as unknown as SweepVersion)
     versionsByItem.set(key, list)
   }
-  const items: SweepItem[] = (itemRows ?? []).map(r => ({
+  const items: SweepItem[] = itemRows.map(r => ({
     id: String(r.id),
     raw_assets: Array.isArray(r.raw_assets) ? r.raw_assets : [],
     versions: versionsByItem.get(String(r.id)) ?? [],
   }))
-  const rows = (mirroredRes.data ?? []) as DriveFileRow[]
+  const rows = mirroredRows as unknown as DriveFileRow[]
 
   // FIRST, put right what is in the wrong folder — before working out what is
   // missing. A raw file sitting in `02 Edits` is already a completed row, so
@@ -734,14 +731,14 @@ export async function itemMirrorProgress(
   itemId: string, rawAssets: RawAsset[] | null,
 ): Promise<MirrorProgress> {
   if (!driveConfigured()) return mirrorProgress(0, 0)
-  const [versionsRes, mirroredRes, itemRes] = await Promise.all([
-    supabase.from('asset_versions').select('file_url, files').eq('item_id', itemId),
-    supabase.from('drive_files')
-      .select('source_url, target')
-      .eq('item_id', itemId)
-      .in('target', ['item', 'raw'])
-      .not('drive_file_id', 'is', null),
-    supabase.from('content_items').select('batch_id').eq('id', itemId).maybeSingle(),
+  const [versions, mirrored, itemRow] = await Promise.all([
+    table<AssetVersion>('asset_versions').list({ by: { item_id: itemId } }),
+    table<DriveFile>('drive_files').list({
+      where: f => f.item_id === itemId
+        && ['item', 'raw'].includes(f.target)
+        && f.drive_file_id != null,
+    }),
+    table<ContentItem>('content_items').get(itemId),
   ])
   // keyed by target: the same clip can be both raw footage and a version, and
   // one copy arriving says nothing about the other
@@ -751,17 +748,17 @@ export async function itemMirrorProgress(
   }
   // every SLIDE counts: a six-card carousel with one card copied is not
   // "mirrored", and the line on the item page must not say it is
-  for (const v of versionsRes.data ?? []) {
+  for (const v of versions) {
     for (const s of slidesOf(v)) {
       if (isMirrorableUrl(s.url)) wanted.add(mirrorKey('item', s.url))
     }
   }
-  const have = (mirroredRes.data ?? [])
+  const have = mirrored
     .map(r => mirrorKey(String(r.target), String(r.source_url)))
     .filter(k => wanted.has(k))
   const rawDone = have.filter(k => k.startsWith(`${RAW_ASSET_TARGET} `)).length
   return mirrorProgress(
     wanted.size, have.length, rawDone,
-    itemRes.data?.batch_id ? RAW_FOLDER : NO_SHOOT_RAW_FOLDER,
+    itemRow?.batch_id ? RAW_FOLDER : NO_SHOOT_RAW_FOLDER,
   )
 }

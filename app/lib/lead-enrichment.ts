@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type { Client, TeamUser } from '@/lib/db-types'
 import { notify, renderEmail } from './mailer'
 import {
   emailDomain, isBusinessDomain, slugify, type IngestLead,
@@ -46,13 +47,14 @@ export async function autoIngestLead(lead: IngestLead): Promise<'created' | 'ski
     if (!slug) return 'skipped'
 
     // dedupe against slug, contact email, or same website domain
-    const { data: existing } = await supabase
-      .from('clients')
-      .select('id')
-      .or(`slug.eq.${slug},email.eq.${lead.email},website.ilike.%${domain}%`)
-      .limit(1)
-      .maybeSingle()
-    if (existing) return 'exists'
+    const needle = domain.toLowerCase()
+    const existing = await table<Client>('clients').list({
+      where: r => r.slug === slug
+        || r.email === lead.email
+        || (r.website?.toLowerCase().includes(needle) ?? false),
+      limit: 1,
+    })
+    if (existing.length > 0) return 'exists'
 
     const enquiry = [
       `Auto-ingested from website lead — company verified via ${website}`,
@@ -62,9 +64,9 @@ export async function autoIngestLead(lead: IngestLead): Promise<'created' | 'ski
       lead.timeline && `Timeline: ${lead.timeline}`,
     ].filter(Boolean).join('\n')
 
-    const { data: client, error } = await supabase
-      .from('clients')
-      .insert({
+    let client
+    try {
+      client = await table('clients').insert({
         name,
         slug,
         contact_name: `${lead.fname} ${lead.lname}`.trim(),
@@ -75,21 +77,19 @@ export async function autoIngestLead(lead: IngestLead): Promise<'created' | 'ski
         source: 'auto_ingest',
         notes: enquiry,
       })
-      .select()
-      .single()
-    if (error) {
+    } catch (e) {
       // unique collision from a concurrent ingest = someone else created it — fine
-      if (!error.message.includes('duplicate key')) console.error('auto-ingest insert error:', error.message)
+      if (!(e instanceof DbError && e.code === 'unique')) {
+        console.error('auto-ingest insert error:', e instanceof Error ? e.message : e)
+      }
       return 'exists'
     }
 
     // tell the admins — outbox dedupe keys on the lead, so retries can't spam
-    const { data: admins } = await supabase
-      .from('team_users')
-      .select('id, email')
-      .eq('role', 'super_admin')
-      .eq('active_status', true)
-    for (const admin of admins ?? []) {
+    const admins = await table<TeamUser>('team_users').list({
+      by: { role: 'super_admin', active_status: true },
+    })
+    for (const admin of admins) {
       await notify({
         eventType: 'prospect_auto_ingested',
         entityType: 'client',

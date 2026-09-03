@@ -1,34 +1,23 @@
 import { createHmac } from 'node:crypto'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { seedDb } from './helpers/fake-db'
+import type { Row } from '@/lib/db-types'
 
 /**
  * The Stream webhook, at its only real job: deciding whether to believe a
  * delivery, and turning one it believes into a row change.
  *
- * The database is a spy rather than an emulation — there is no claim and no
- * conditional update to prove here, only "the right patch reached the right
- * uid". What is worth testing hard is the signature, because a verifier that
- * is wrong in the safe direction rejects every genuine delivery silently and
- * the whole live path degrades to a 30-minute poll with nobody noticing.
+ * The database is a real one in miniature, so "the right patch reached the
+ * right uid" is asserted on the row itself. What is worth testing hard is the
+ * signature, because a verifier that is wrong in the safe direction rejects
+ * every genuine delivery silently and the whole live path degrades to a
+ * 30-minute poll with nobody noticing.
  */
 
 const SECRET = 'stream-test-secret'
 
-type Update = { patch: Record<string, unknown>; column: string; value: unknown }
-const updates: Update[] = []
-
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      update: (patch: Record<string, unknown>) => ({
-        eq: (column: string, value: unknown) => {
-          updates.push({ patch, column, value })
-          return Promise.resolve({ error: null })
-        },
-      }),
-    }),
-  },
-}))
+const { handleStreamWebhook } = await import('../app/lib/stream')
+const handle = (body: string, header: string | null) => handleStreamWebhook(body, header)
 
 /** The real clock, because the freshness window is measured against it. */
 const nowSec = () => Math.floor(Date.now() / 1000)
@@ -48,14 +37,29 @@ const READY = JSON.stringify({
   input: { width: 1080, height: 1920 },
 })
 
-// statically, after the mock above — the module reads its secret from the
-// environment per call, so the tests can set it without re-importing
-const { handleStreamWebhook } = await import('../app/lib/stream')
-const handle = (body: string, header: string | null) => handleStreamWebhook(body, header)
+/** the two encodes a delivery in these tests can be about */
+const preview = (id: string, uid: string): Row => ({
+  id,
+  source_url: `https://media.mdmmarketing.com.au/${id}.mp4`,
+  stream_uid: uid,
+  state: 'processing',
+  updated_at: '2026-09-01T00:00:00.000Z',
+} as unknown as Row)
 
-beforeEach(() => { updates.length = 0 })
+let fake: ReturnType<typeof seedDb>
+const rowFor = (uid: string) =>
+  (fake.rows('video_previews') as unknown as { stream_uid: string }[]).find(r => r.stream_uid === uid)
 
-afterEach(() => { delete process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET })
+beforeEach(() => {
+  fake = seedDb({
+    video_previews: [preview('p1', 'deadbeefcafe'), preview('p2', 'u1')],
+  })
+})
+
+afterEach(() => {
+  fake.restore()
+  delete process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET
+})
 
 describe('with a secret configured', () => {
   beforeEach(() => { process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET = SECRET })
@@ -63,16 +67,14 @@ describe('with a secret configured', () => {
   it('accepts a correctly signed delivery and records the encode', async () => {
     const res = await handle(READY, sign(READY))
     expect(res.status).toBe(200)
-    expect(updates).toHaveLength(1)
-    expect(updates[0].column).toBe('stream_uid')
-    expect(updates[0].value).toBe('deadbeefcafe')
-    expect(updates[0].patch).toMatchObject({
+    expect(rowFor('deadbeefcafe')).toMatchObject({
       state: 'ready',
       playback_hls: 'https://customer-abc123.cloudflarestream.com/deadbeefcafe/manifest/video.m3u8',
       width: 1080,
       height: 1920,
-      error: null,
     })
+    // the other encode is untouched: a delivery names one uid
+    expect(rowFor('u1')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a body that was changed after signing', async () => {
@@ -80,13 +82,13 @@ describe('with a secret configured', () => {
     const tampered = READY.replace('deadbeefcafe', 'someoneelsesuid')
     const res = await handle(tampered, header)
     expect(res.status).toBe(401)
-    expect(updates).toHaveLength(0)
+    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a signature made with the wrong secret', async () => {
     const res = await handle(READY, sign(READY, nowSec(), 'not-our-secret'))
     expect(res.status).toBe(401)
-    expect(updates).toHaveLength(0)
+    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a replay of a delivery from an hour ago', async () => {
@@ -100,7 +102,7 @@ describe('with a secret configured', () => {
       const res = await handle(READY, header)
       expect(res.status).toBe(401)
     }
-    expect(updates).toHaveLength(0)
+    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 })
 
@@ -108,13 +110,13 @@ describe('with no secret configured', () => {
   it('accepts an unsigned delivery — the poller reaches the same answer anyway', async () => {
     const res = await handle(READY, null)
     expect(res.status).toBe(200)
-    expect(updates).toHaveLength(1)
+    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'ready' })
   })
 
   it('still refuses to invent state from a payload with no video', async () => {
     expect((await handle('{"hello":"world"}', null)).status).toBe(400)
     expect((await handle('not json at all', null)).status).toBe(400)
-    expect(updates).toHaveLength(0)
+    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('records a failed encode with the reason Cloudflare gave', async () => {
@@ -123,6 +125,6 @@ describe('with no secret configured', () => {
     })
     const res = await handle(body, null)
     expect(res.status).toBe(200)
-    expect(updates[0].patch).toMatchObject({ state: 'error', error: 'The file is not a video' })
+    expect(rowFor('u1')).toMatchObject({ state: 'error', error: 'The file is not a video' })
   })
 })

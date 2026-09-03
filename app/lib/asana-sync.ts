@@ -1,5 +1,9 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'node:crypto'
+import { DbError, table } from '@/lib/db'
+import type {
+  AsanaProjectMap, AsanaWebhook, Client, TeamUser,
+} from '@/lib/db-types'
 import * as asana from './asana'
 import { normalizeBatch, webhookLooksDead, matchClient, type RawAsanaEvent } from './asana-core'
 
@@ -27,11 +31,8 @@ export type SyncResult = {
 
 /** Poll one project: backfill missed events, then mirror the tasks involved. */
 async function syncProject(projectGid: string, result: SyncResult): Promise<void> {
-  const { data: hook } = await supabase
-    .from('asana_webhooks')
-    .select('sync_token,last_heartbeat_at,webhook_gid')
-    .eq('project_gid', projectGid)
-    .maybeSingle()
+  const webhooks = table<AsanaWebhook>('asana_webhooks')
+  const hook = (await webhooks.list({ where: h => h.project_gid === projectGid, limit: 1 }))[0] ?? null
 
   // ── Events ──
   const page = await asana.pollEvents(projectGid, hook?.sync_token)
@@ -46,21 +47,21 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
       source: 'poll',
     })
     if (rows.length > 0) {
-      // The dedup_key unique constraint absorbs anything the webhook already
+      // The dedup_key unique key absorbs anything the webhook already
       // delivered, so the overlap is free.
-      const { data: inserted, error } = await supabase
-        .from('asana_events')
-        .upsert(rows, { onConflict: 'dedup_key', ignoreDuplicates: true })
-        .select('id')
-      if (error) throw new Error(error.message)
-      result.newEvents += inserted?.length ?? 0
+      const events = table('asana_events')
+      for (const row of rows) {
+        try {
+          await events.insert(row as never)
+          result.newEvents++
+        } catch (e) {
+          if (!(e instanceof DbError && e.code === 'unique')) throw e
+        }
+      }
     }
   }
 
-  await supabase.from('asana_webhooks').upsert(
-    { project_gid: projectGid, sync_token: page.sync || null, last_error: null },
-    { onConflict: 'project_gid' }
-  )
+  await upsertWebhook({ project_gid: projectGid, sync_token: page.sync || null, last_error: null })
 
   // ── Task mirror ──
   // Events say a field changed, never what it changed to. "Open" and
@@ -68,8 +69,9 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
   // themselves.
   const tasks = await asana.tasksForProject(projectGid)
   if (tasks.length > 0) {
-    const { error } = await supabase.from('asana_tasks').upsert(
-      tasks.map(t => ({
+    const mirror = table('asana_tasks')
+    for (const t of tasks) {
+      await mirror.upsert({
         gid: t.gid,
         name: t.name ?? '',
         assignee_gid: t.assignee?.gid ?? null,
@@ -80,10 +82,8 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
         modified_at: t.modified_at,
         permalink_url: t.permalink_url ?? null,
         synced_at: new Date().toISOString(),
-      })),
-      { onConflict: 'gid' }
-    )
-    if (error) throw new Error(error.message)
+      }, { onConflict: 'gid' })
+    }
     result.tasksMirrored += tasks.length
   }
 
@@ -93,6 +93,20 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
   if (hook && webhookLooksDead(hook.last_heartbeat_at, new Date())) {
     result.deadWebhooks.push(projectGid)
   }
+}
+
+/**
+ * One row per project in `asana_webhooks`.
+ *
+ * The table's key is its own uuid, so the "one row per project_gid" rule that
+ * `onConflict: 'project_gid'` used to express is applied here: find the
+ * project's row and patch it, otherwise open a new one.
+ */
+async function upsertWebhook(patch: Partial<AsanaWebhook> & { project_gid: string }): Promise<void> {
+  const webhooks = table<AsanaWebhook>('asana_webhooks')
+  const existing = (await webhooks.list({ where: h => h.project_gid === patch.project_gid, limit: 1 }))[0]
+  if (existing) await webhooks.update(existing.id, patch)
+  else await table('asana_webhooks').insert({ id: randomUUID(), ...patch })
 }
 
 /** Reconcile every tracked project. One project's failure never stops the rest. */
@@ -107,21 +121,18 @@ export async function reconcileAll(): Promise<SyncResult> {
     return result
   }
 
-  const { data: tracked } = await supabase
-    .from('asana_project_map')
-    .select('project_gid')
-    .eq('tracked', true)
+  const tracked = await table<AsanaProjectMap>('asana_project_map').list({
+    where: m => m.tracked === true,
+  })
 
-  for (const row of tracked ?? []) {
+  for (const row of tracked) {
     result.projects++
     try {
       await syncProject(row.project_gid, result)
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error'
       result.errors.push({ project: row.project_gid, message })
-      await supabase
-        .from('asana_webhooks')
-        .upsert({ project_gid: row.project_gid, last_error: message }, { onConflict: 'project_gid' })
+      await upsertWebhook({ project_gid: row.project_gid, last_error: message })
     }
   }
 
@@ -144,13 +155,12 @@ export async function syncTasksForAssignees(
   workspaceGid: string,
   days = 30
 ): Promise<{ people: number; tasks: number }> {
-  const { data: people } = await supabase
-    .from('team_users')
-    .select('asana_user_gid')
-    .not('asana_user_gid', 'is', null)
-    .eq('active_status', true)
+  const people = await table<TeamUser>('team_users').list({
+    by: { active_status: true },
+    where: p => p.asana_user_gid != null,
+  })
 
-  const gids = [...new Set((people ?? []).map(p => p.asana_user_gid as string))]
+  const gids = [...new Set(people.map(p => p.asana_user_gid as string))]
   if (gids.length === 0) return { people: 0, tasks: 0 }
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
@@ -160,8 +170,9 @@ export async function syncTasksForAssignees(
     const tasks = await asana.tasksForAssignee(gid, workspaceGid, since)
     if (tasks.length === 0) continue
 
-    const { error } = await supabase.from('asana_tasks').upsert(
-      tasks.map(t => ({
+    const mirror = table('asana_tasks')
+    for (const t of tasks) {
+      await mirror.upsert({
         gid: t.gid,
         name: t.name ?? '',
         assignee_gid: gid,
@@ -174,10 +185,8 @@ export async function syncTasksForAssignees(
         modified_at: t.modified_at,
         permalink_url: t.permalink_url ?? null,
         synced_at: new Date().toISOString(),
-      })),
-      { onConflict: 'gid' }
-    )
-    if (error) throw new Error(error.message)
+      }, { onConflict: 'gid' })
+    }
     total += tasks.length
   }
 
@@ -204,10 +213,9 @@ export async function importAsanaPeople(
 ): Promise<{ created: number; linked: number; skipped: number }> {
   const asanaUsers = (await asana.listUsers(workspaceGid)).filter(u => u.email)
 
-  const { data: existingRows } = await supabase
-    .from('team_users')
-    .select('id,email,asana_user_gid')
-  const existing = new Map((existingRows ?? []).map(r => [r.email.toLowerCase(), r]))
+  const users = table<TeamUser>('team_users')
+  const existingRows = await users.list()
+  const existing = new Map(existingRows.map(r => [r.email.toLowerCase(), r]))
 
   let created = 0, linked = 0, skipped = 0
 
@@ -217,24 +225,23 @@ export async function importAsanaPeople(
 
     if (row) {
       if (row.asana_user_gid !== u.gid) {
-        const { error } = await supabase
-          .from('team_users')
-          .update({ asana_user_gid: u.gid })
-          .eq('id', row.id)
-        if (!error) linked++
-        else skipped++
+        try {
+          await users.update(row.id, { asana_user_gid: u.gid })
+          linked++
+        } catch { skipped++ }
       } else skipped++
       continue
     }
 
-    const { error } = await supabase.from('team_users').insert({
-      email,
-      name: u.name ?? email,
-      role: 'editor',
-            asana_user_gid: u.gid,
-    })
-    if (error) skipped++
-    else created++
+    try {
+      await table('team_users').insert({
+        email,
+        name: u.name ?? email,
+        role: 'editor',
+        asana_user_gid: u.gid,
+      })
+      created++
+    } catch { skipped++ }
   }
 
   return { created, linked, skipped }
@@ -263,43 +270,39 @@ export async function connectAsana(workspaceGid: string, appUrl: string | null):
   // 2. track every visible project, and guess which client each belongs to
   const projects = await asana.listProjects(workspaceGid)
   if (projects.length > 0) {
-    const [{ data: clients }, { data: existingMap }] = await Promise.all([
-      supabase.from('clients').select('id,name'),
-      supabase.from('asana_project_map').select('project_gid,client_id'),
+    const [clients, existingMap] = await Promise.all([
+      table<Client>('clients').list(),
+      table<AsanaProjectMap>('asana_project_map').list(),
     ])
     // Only ever fill a blank: a mapping an admin set by hand outranks a guess,
     // and a wrong one silently misattributes a client's work.
-    const already = new Map((existingMap ?? []).map(m => [m.project_gid, m.client_id]))
+    const already = new Map(existingMap.map(m => [m.project_gid, m.client_id]))
 
-    await supabase.from('asana_project_map').upsert(
-      projects.map(p => {
-        const existing = already.get(p.gid)
-        return {
-          project_gid: p.gid,
-          project_name: p.name ?? '',
-          tracked: true,
-          client_id: existing ?? matchClient(p.name ?? '', clients ?? [])?.id ?? null,
-        }
-      }),
-      { onConflict: 'project_gid' }
-    )
+    const map = table('asana_project_map')
+    for (const p of projects) {
+      const existing = already.get(p.gid)
+      await map.upsert({
+        project_gid: p.gid,
+        project_name: p.name ?? '',
+        tracked: true,
+        client_id: existing ?? matchClient(p.name ?? '', clients)?.id ?? null,
+      }, { onConflict: 'project_gid' })
+    }
   }
 
   // 3. webhooks for live updates, best-effort — a failure here costs freshness,
   //    not data, because the poll still covers every tracked project
   let registered = 0, failed = 0
   if (appUrl) {
-    const { data: hooks } = await supabase.from('asana_webhooks').select('project_gid,webhook_gid')
-    const live = new Set((hooks ?? []).filter(h => h.webhook_gid).map(h => h.project_gid))
+    const hooks = await table<AsanaWebhook>('asana_webhooks').list()
+    const live = new Set(hooks.filter(h => h.webhook_gid).map(h => h.project_gid))
 
     for (const p of projects) {
       if (live.has(p.gid)) continue
       try {
         const target = `${appUrl.replace(/\/$/, '')}/api/asana/webhook?project=${p.gid}`
         const hook = await asana.createWebhook(p.gid, target)
-        await supabase
-          .from('asana_webhooks')
-          .upsert({ project_gid: p.gid, webhook_gid: hook.gid }, { onConflict: 'project_gid' })
+        await upsertWebhook({ project_gid: p.gid, webhook_gid: hook.gid })
         registered++
       } catch (e) {
         failed++
@@ -341,27 +344,26 @@ export async function linkUsersByEmail(workspaceGid: string): Promise<{
     asanaUsers.filter(u => u.email).map(u => [u.email!.toLowerCase(), u.gid])
   )
 
-  const { data: team } = await supabase
-    .from('team_users')
-    .select('id,email,asana_user_gid')
-    .eq('active_status', true)
-    .neq('role', 'client')
+  const users = table<TeamUser>('team_users')
+  const team = await users.list({
+    by: { active_status: true },
+    where: m => m.role !== 'client',
+  })
 
   const linked: { email: string; gid: string }[] = []
   const unmatched: string[] = []
 
-  for (const member of team ?? []) {
+  for (const member of team) {
     const gid = byEmail.get(member.email.toLowerCase())
     if (!gid) {
       if (!member.asana_user_gid) unmatched.push(member.email)
       continue
     }
     if (member.asana_user_gid === gid) continue
-    const { error } = await supabase
-      .from('team_users')
-      .update({ asana_user_gid: gid })
-      .eq('id', member.id)
-    if (!error) linked.push({ email: member.email, gid })
+    try {
+      await users.update(member.id, { asana_user_gid: gid })
+      linked.push({ email: member.email, gid })
+    } catch { /* one person failing to link never stops the rest */ }
   }
 
   return { linked, unmatched }

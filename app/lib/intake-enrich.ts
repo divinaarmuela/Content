@@ -2,7 +2,10 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type {
+  Client, ClientBrand, ClientContact, IntakeForm as IntakeFormRow,
+} from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import { listIntakeFiles, type IntakeForm } from './intake'
 import { intakeFileTarget } from './gdrive-core'
@@ -65,11 +68,9 @@ export type EnrichResult = {
 
 /** The intake answers + definition + template for one form, or null. */
 async function loadForm(formId: string, clientId: string): Promise<IntakeForm | null> {
-  const { data } = await supabase
-    .from('intake_forms')
-    .select('id, client_id, title, template_key, definition, token, status, answers, sent_at, first_opened_at, submitted_at, reopened_at, notify_emails')
-    .eq('id', formId).eq('client_id', clientId).maybeSingle()
-  return (data as unknown as IntakeForm) ?? null
+  const row = await table<IntakeFormRow>('intake_forms').get(formId)
+  if (!row || row.client_id !== clientId) return null
+  return row as unknown as IntakeForm
 }
 
 /** The brand/logo files uploaded against this form, as {name, url}. A file is
@@ -95,18 +96,16 @@ async function brandFilesFor(form: IntakeForm): Promise<BrandFile[]> {
  * NOTHING — never overwrite, never duplicate. Existing records always win.
  *
  * A genuinely new person is inserted with `is_primary` set only when the client
- * has no primary yet; the partial unique index otherwise 409s and we fall back
- * to a non-primary row. Returns whether a row was created or already existed.
+ * has no primary yet; if that write is refused we fall back to a non-primary
+ * row. Returns whether a row was created or already existed.
  */
 async function insertContactIfMissing(
   clientId: string, contact: DerivedContact, extraMatch: ContactLike[] = [],
 ): Promise<'created' | 'exists'> {
-  const { data: existing } = await supabase
-    .from('client_contacts').select('id, name, email, is_primary').eq('client_id', clientId)
-  const rows = existing ?? []
+  const rows = await table<ClientContact>('client_contacts').list({ by: { client_id: clientId } })
 
   const dedupeSet: ContactLike[] = [
-    ...rows.map(r => ({ name: r.name as string | null, email: r.email as string | null })),
+    ...rows.map(r => ({ name: r.name, email: r.email })),
     ...extraMatch,
   ]
   if (matchesExisting({ name: contact.name, email: contact.email }, dedupeSet)) return 'exists'
@@ -121,18 +120,16 @@ async function insertContactIfMissing(
     notes: contact.notes,
   }
 
-  const { error } = await supabase
-    .from('client_contacts').insert({ ...base, is_primary: !hasPrimary })
-  if (error) {
+  try {
+    await table('client_contacts').insert({ ...base, is_primary: !hasPrimary })
+  } catch (e) {
     // someone else set a primary between our read and write — take a
     // non-primary row rather than losing the contact
-    if (error.message.includes('client_contacts_one_primary')) {
-      const { error: retry } = await supabase
-        .from('client_contacts').insert({ ...base, is_primary: false })
-      if (retry) throw new Error(retry.message)
+    if (e instanceof DbError && e.code === 'unique') {
+      await table('client_contacts').insert({ ...base, is_primary: false })
       return 'created'
     }
-    throw new Error(error.message)
+    throw e
   }
   return 'created'
 }
@@ -150,11 +147,11 @@ async function writeBrandProfile(
     // and guarding on rev=1 against a null column matches zero rows, so the
     // write silently never lands. The guard must reflect what is really stored:
     // a null column (never saved) vs the exact rev of an existing profile.
-    const { data: row } = await supabase
-      .from('clients').select('brand_profile').eq('id', clientId).maybeSingle()
+    const clients = table<Client>('clients')
+    const row = await clients.get(clientId)
     if (!row) return 'unchanged'
 
-    const raw = (row as { brand_profile: unknown }).brand_profile
+    const raw = row.brand_profile
     const hadProfile = raw != null
     const current = normaliseProfile(raw ?? {})
     const { profile, changed } = build(current)
@@ -163,19 +160,21 @@ async function writeBrandProfile(
     // normaliseProfile carries a stored rev through; 0 means the column is null
     const seen = hadProfile ? current.rev : 0
     const next: BrandProfile = { ...normaliseProfile(profile), rev: seen + 1 }
-    let q = supabase.from('clients')
-      .update({
+    // the row must still be where we merged from: a null column stays null, an
+    // existing one stays at its rev — a concurrent scan or edit fails the guard,
+    // which is re-checked immediately before the write
+    const live = await clients.get(clientId)
+    const unchangedSince = hadProfile
+      ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
+      : live?.brand_profile == null
+    if (live && unchangedSince) {
+      await clients.update(clientId, {
         brand_profile: next,
         brand_profile_updated_at: new Date().toISOString(),
         brand_profile_updated_by: 'intake enrichment',
       })
-      .eq('id', clientId)
-    // the row must still be where we merged from: a null column stays null, an
-    // existing one stays at its rev — a concurrent scan or edit fails the guard
-    q = hadProfile ? q.eq('brand_profile->>rev', String(seen)) : q.is('brand_profile', null)
-    const { data, error } = await q.select('id')
-    if (error) throw new Error(error.message)
-    if (data && data.length > 0) return 'updated'
+      return 'updated'
+    }
     // conflict: loop once to re-read and re-merge onto the newer profile
   }
   return 'unchanged'
@@ -203,8 +202,7 @@ export async function enrichFromIntake(
   // client_contacts AND a legacy single contact carried on the clients row
   // itself. Both are the source of truth — the enrichment respects them, never
   // overwrites them, and only ADDS a genuinely new person.
-  const { data: clientRow } = await supabase
-    .from('clients').select('contact_name, email, phone').eq('id', clientId).maybeSingle()
+  const clientRow = await table<Client>('clients').get(clientId)
   const legacy = legacyContactFromClient(clientRow)
   // every intake/AI insert dedupes against the legacy contact too, in case the
   // seed below could not run (best-effort) — so it can never be duplicated
@@ -340,12 +338,12 @@ async function maybeDelegateBrandScan(
   const pdf = brandFiles.find(f => /\.pdf(\?|$)/i.test(f.url) || /\.pdf$/i.test(f.name))
   if (!pdf) return 'skipped'
 
-  const [{ data: client }, { data: brand }] = await Promise.all([
-    supabase.from('clients').select('brand_profile').eq('id', clientId).maybeSingle(),
-    supabase.from('client_brand').select('profile, scan_status').eq('client_id', clientId).maybeSingle(),
+  const [client, brand] = await Promise.all([
+    table<Client>('clients').get(clientId),
+    table<ClientBrand>('client_brand').get(clientId),
   ])
 
-  const editable = normaliseProfile((client?.brand_profile as unknown) ?? {})
+  const editable = normaliseProfile(client?.brand_profile ?? {})
 
   if (force) {
     // A deliberate staff re-click FORCES the scan whenever the palette is not
@@ -373,7 +371,7 @@ async function maybeDelegateBrandScan(
 
   // mark it queued before dispatching, exactly like the brand panel's action,
   // so the panel shows a scan in flight immediately
-  await supabase.from('client_brand').upsert({
+  await table('client_brand').upsert({
     client_id: clientId, scan_status: 'queued', scan_done: 0, scan_total: 1, scan_message: null,
   })
   await inngest.send({

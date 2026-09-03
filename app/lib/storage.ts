@@ -1,7 +1,6 @@
 import 'server-only'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { supabase } from '@/lib/supabase'
 
 /**
  * Where uploaded media lives.
@@ -11,11 +10,9 @@ import { supabase } from '@/lib/supabase'
  * everyone has to remember — and the rule would be broken the first time
  * someone dragged in a mixed folder.
  *
- * Cloudflare R2 when configured, Supabase Storage otherwise. Supabase caps a
- * file at the project limit (50MB on the free plan) which a 200MB master
- * cannot clear; R2 takes objects to 5TB and charges no egress. Both hand the
- * browser a presigned URL and take the bytes directly, so nothing large
- * crosses Vercel's ~4.5MB request-body limit either way.
+ * Cloudflare R2, and only R2. It takes objects to 5TB and charges no egress,
+ * and it hands the browser a presigned URL and takes the bytes directly, so
+ * nothing large crosses Vercel's ~4.5MB request-body limit.
  */
 
 const R2_BUCKET = process.env.R2_BUCKET
@@ -31,8 +28,8 @@ export function r2Configured(): boolean {
   )
 }
 
-export function storageBackend(): 'r2' | 'supabase' {
-  return r2Configured() ? 'r2' : 'supabase'
+export function storageBackend(): 'r2' {
+  return 'r2'
 }
 
 // Built lazily. Constructing a client at module load would make a missing
@@ -65,7 +62,7 @@ export type SignedUpload = {
   /** Where it will be readable once uploaded. */
   publicUrl: string
   key: string
-  backend: 'r2' | 'supabase'
+  backend: 'r2'
 }
 
 /**
@@ -78,20 +75,13 @@ export type SignedUpload = {
 export async function putObject(
   filename: string, bytes: Buffer, contentType: string,
 ): Promise<{ publicUrl: string; key: string }> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
   const key = objectKey(filename)
 
-  if (r2Configured()) {
-    await r2().send(new PutObjectCommand({
-      Bucket: R2_BUCKET!, Key: key, Body: bytes, ContentType: contentType,
-    }))
-    return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
-  }
-
-  const { error } = await supabase.storage
-    .from('website-assets').upload(key, bytes, { contentType })
-  if (error) throw new Error(error.message)
-  const { data: pub } = supabase.storage.from('website-assets').getPublicUrl(key)
-  return { publicUrl: pub.publicUrl, key }
+  await r2().send(new PutObjectCommand({
+    Bucket: R2_BUCKET!, Key: key, Body: bytes, ContentType: contentType,
+  }))
+  return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
 }
 
 /**
@@ -105,31 +95,22 @@ export async function signUpload(
   filename: string,
   contentType: string,
 ): Promise<SignedUpload> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
   const key = objectKey(filename)
 
-  if (r2Configured()) {
-    const signedUrl = await getSignedUrl(
-      r2(),
-      new PutObjectCommand({
-        Bucket: R2_BUCKET!,
-        Key: key,
-        ContentType: contentType || 'application/octet-stream',
-      }),
-      { expiresIn: 60 * 60 }, // an hour — a 200MB master on a slow line is not quick
-    )
-    return {
-      signedUrl,
-      publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`,
-      key,
-      backend: 'r2',
-    }
+  const signedUrl = await getSignedUrl(
+    r2(),
+    new PutObjectCommand({
+      Bucket: R2_BUCKET!,
+      Key: key,
+      ContentType: contentType || 'application/octet-stream',
+    }),
+    { expiresIn: 60 * 60 }, // an hour — a 200MB master on a slow line is not quick
+  )
+  return {
+    signedUrl,
+    publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`,
+    key,
+    backend: 'r2',
   }
-
-  const { data, error } = await supabase.storage
-    .from('website-assets')
-    .createSignedUploadUrl(key)
-  if (error || !data) throw new Error(error?.message ?? 'Could not sign upload')
-
-  const { data: pub } = supabase.storage.from('website-assets').getPublicUrl(key)
-  return { signedUrl: data.signedUrl, publicUrl: pub.publicUrl, key, backend: 'supabase' }
 }

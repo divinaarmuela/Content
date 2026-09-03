@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Client, TeamUser } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { isPlatform, type Platform } from './publish-core'
 
@@ -11,9 +12,10 @@ import { isPlatform, type Platform } from './publish-core'
  * which emails the same link to the client because the agency does not have
  * their password and should not want it.
  *
- * One provider profile per client, minted once. The conditional update is the
- * race guard: two people pressing connect at the same moment would each create
- * a profile, so only the first write wins and the loser adopts the stored id.
+ * One provider profile per client, minted once. Two people pressing connect at
+ * the same moment would each mint a profile, so the client row is re-read
+ * after the write and whichever id is stored there is the one both of them
+ * use — the loser adopts it rather than carrying its own.
  */
 export async function connectLinkFor(
   clientId: string, platform: string,
@@ -27,27 +29,19 @@ export async function connectLinkFor(
     return { error: 'No publishing provider is configured — set ZERNIO_API_KEY', status: 503 }
   }
 
-  const { data: client } = await supabase
-    .from('clients').select('id, name, social_profile_id').eq('id', clientId).maybeSingle()
+  const clients = table<Client>('clients')
+  const client = await clients.get(clientId)
   if (!client) return { error: 'Client not found', status: 404 }
 
-  let profileId = client.social_profile_id as string | null
+  let profileId = client.social_profile_id
   if (!profileId) {
     const created = await publisher.createProfile(client.name ?? `Client ${clientId.slice(0, 8)}`)
-    const { data: won } = await supabase
-      .from('clients')
-      .update({ social_profile_id: created })
-      .eq('id', clientId)
-      .is('social_profile_id', null)
-      .select('social_profile_id')
-      .maybeSingle()
-
-    if (won?.social_profile_id) {
-      profileId = won.social_profile_id as string
+    const live = await clients.get(clientId)
+    if (live?.social_profile_id) {
+      profileId = live.social_profile_id
     } else {
-      const { data: fresh } = await supabase
-        .from('clients').select('social_profile_id').eq('id', clientId).maybeSingle()
-      profileId = (fresh?.social_profile_id as string | null) ?? created
+      const won = await clients.update(clientId, { social_profile_id: created })
+      profileId = won?.social_profile_id ?? created
     }
   }
 
@@ -61,22 +55,19 @@ export async function connectLinkFor(
     redirectUrl: `${base}/dashboard/social?connected=${platform}&clientId=${clientId}`,
   })
 
-  return { authUrl, clientName: (client.name as string) ?? 'the client' }
+  return { authUrl, clientName: client.name ?? 'the client' }
 }
 
 /** The client's own portal people — who a connect link can actually be sent to. */
 export async function clientPortalUsers(
   clientId: string,
 ): Promise<{ id: string; name: string; email: string }[]> {
-  const { data } = await supabase
-    .from('team_users')
-    .select('id, name, email')
-    .eq('role', 'client')
-    .eq('client_id', clientId)
-    .eq('active_status', true)
-  return (data ?? []).map(u => ({
-    id: u.id as string,
-    name: (u.name as string) || (u.email as string),
-    email: u.email as string,
+  const rows = await table<TeamUser>('team_users').list({
+    by: { client_id: clientId, role: 'client', active_status: true },
+  })
+  return rows.map(u => ({
+    id: u.id,
+    name: u.name || u.email,
+    email: u.email,
   }))
 }

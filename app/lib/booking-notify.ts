@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { BookingResource, TeamUser } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml, noReplyAddress } from './mailer'
 import type { PublicService, PublicResource } from './booking'
 
@@ -130,8 +131,8 @@ function watcherList(resourceMailbox: string | null): { email: string; mail: boo
 }
 
 async function resourceEmail(resourceId: string): Promise<string | null> {
-  const { data } = await supabase.from('booking_resources').select('email').eq('id', resourceId).maybeSingle()
-  return data?.email ?? null
+  const row = await table<BookingResource>('booking_resources').get(resourceId)
+  return row?.email ?? null
 }
 
 /**
@@ -142,9 +143,13 @@ async function resourceEmail(resourceId: string): Promise<string | null> {
  * kind of "I never saw it" gap bookings cannot afford.
  */
 async function teamUserIdFor(email: string): Promise<string | null> {
-  const { data } = await supabase.from('team_users')
-    .select('id').ilike('email', email).eq('active_status', true).maybeSingle()
-  return data?.id ?? null
+  const needle = email.toLowerCase()
+  const row = (await table<TeamUser>('team_users').list({
+    by: { active_status: true },
+    where: r => r.email?.toLowerCase() === needle,
+    limit: 1,
+  }))[0]
+  return row?.id ?? null
 }
 
 /** The customer moved their own booking — tell them and the team. */

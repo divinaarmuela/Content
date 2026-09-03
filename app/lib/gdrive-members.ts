@@ -1,6 +1,7 @@
 import 'server-only'
 import { after } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { TeamUser } from '@/lib/db-types'
 import { driveStatus, rootFolderId } from './gdrive'
 import { grantUserPermission, listPermissions, revokePermission } from './gdrive-files'
 import {
@@ -55,12 +56,12 @@ const skipped = (reason: string): MemberSyncResult =>
 /** Active team members who are not clients. The pure module does the rest of
  *  the filtering; this is only the read. */
 async function teamMembers(): Promise<MemberLike[]> {
-  const { data, error } = await supabase
-    .from('team_users')
-    .select('email, role, active_status')
-    .eq('active_status', true)
-  if (error) return []
-  return (data ?? []) as MemberLike[]
+  try {
+    const rows = await table<TeamUser>('team_users').list({ by: { active_status: true } })
+    return rows as unknown as MemberLike[]
+  } catch {
+    return []
+  }
 }
 
 /**

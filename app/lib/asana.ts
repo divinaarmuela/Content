@@ -6,10 +6,9 @@ import { retryAfterMs } from './asana-core'
  * service account that has been added to every tracked project.
  *
  * Note the env var is read lazily inside the functions, not at module load.
- * `app/lib/supabase.ts` reads at load and that turns a missing var into a
- * *build* failure rather than a request failure (CLAUDE.md trap 7) — Asana is
- * an optional integration, so it must degrade to "not configured" instead of
- * taking the whole app down.
+ * Reading at load turns a missing var into a *build* failure rather than a
+ * request failure (CLAUDE.md trap 7) — Asana is an optional integration, so
+ * it must degrade to "not configured" instead of taking the whole app down.
  */
 
 const BASE = 'https://app.asana.com/api/1.0'

@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Client, EmailIngestLog, Lead } from '@/lib/db-types'
 
 /** Aggregates one calendar month of lead activity for the report. */
 
@@ -39,28 +40,25 @@ export async function buildLeadsReportData(
   const startIso = effectiveStart.toISOString()
   const endIso = end.toISOString()
 
-  const [leadsRes, ingestRes, prospectsRes] = await Promise.all([
-    supabase
-      .from('leads')
-      .select('created_at, fname, lname, email, biz, model, source')
-      .gte('created_at', startIso).lt('created_at', endIso)
-      .order('created_at', { ascending: true })
-      .limit(500),
-    supabase
-      .from('email_ingest_log')
-      .select('status')
-      .gte('created_at', startIso).lt('created_at', endIso)
-      .limit(2000),
-    supabase
-      .from('clients')
-      .select('id')
-      .eq('status', 'prospect')
-      .gte('created_at', startIso).lt('created_at', endIso)
-      .limit(500),
-  ])
+  const inPeriod = (created: string | null | undefined) =>
+    !!created && created >= startIso && created < endIso
 
-  const leads = leadsRes.data ?? []
-  const ingest = ingestRes.data ?? []
+  const [leads, ingest, prospects] = await Promise.all([
+    table<Lead>('leads').list({
+      where: r => inPeriod(r.created_at),
+      orderBy: [['created_at', 'asc']],
+      limit: 500,
+    }),
+    table<EmailIngestLog>('email_ingest_log').list({
+      where: r => inPeriod(r.created_at),
+      limit: 2000,
+    }),
+    table<Client>('clients').list({
+      by: { status: 'prospect' },
+      where: r => inPeriod(r.created_at),
+      limit: 500,
+    }),
+  ])
 
   const serviceCounts = new Map<string, number>()
   for (const l of leads) {
@@ -81,7 +79,7 @@ export async function buildLeadsReportData(
       leads: leads.length,
       fromForm: leads.filter(l => (l.source ?? 'web_form') === 'web_form').length,
       fromInbox: leads.filter(l => l.source === 'email_ingest').length,
-      prospectsCreated: (prospectsRes.data ?? []).length,
+      prospectsCreated: prospects.length,
       inboxScanned: ingest.length,
       inboxSkipped: ingest.filter(i => ['skipped', 'not_a_lead'].includes(i.status)).length,
     },
@@ -90,7 +88,7 @@ export async function buildLeadsReportData(
       date: new Date(l.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', day: '2-digit', month: 'short' }),
       name: `${l.fname} ${l.lname}`.trim(),
       business: l.biz ?? '',
-      email: l.email,
+      email: l.email ?? '',
       source: l.source === 'email_ingest' ? 'Inbox' : 'Website',
       service: l.model ?? '—',
     })),

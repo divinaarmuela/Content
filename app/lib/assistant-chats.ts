@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { AssistantChat, AssistantPref } from '@/lib/db-types'
 import { chatTitleFrom, clampInstructions, type ChatMessage } from './assistant-core'
 
 /**
@@ -13,79 +14,66 @@ import { chatTitleFrom, clampInstructions, type ChatMessage } from './assistant-
 export type ChatSummary = { id: string; title: string; updated_at: string }
 
 export async function listChats(ownerId: string): Promise<ChatSummary[]> {
-  const { data, error } = await supabase
-    .from('assistant_chats')
-    .select('id, title, updated_at')
-    .eq('clerk_user_id', ownerId)
-    .order('updated_at', { ascending: false })
-    .limit(50)
-  if (error) throw new Error(error.message)
-  return data ?? []
+  const rows = await table<AssistantChat>('assistant_chats').list({
+    by: { clerk_user_id: ownerId },
+    orderBy: [['updated_at', 'desc']],
+    limit: 50,
+  })
+  return rows.map(r => ({ id: r.id, title: r.title, updated_at: r.updated_at }))
 }
 
 export async function getChatMessages(ownerId: string, chatId: string): Promise<ChatMessage[] | null> {
-  const { data } = await supabase
-    .from('assistant_chats')
-    .select('messages')
-    .eq('clerk_user_id', ownerId)
-    .eq('id', chatId)
-    .maybeSingle()
-  return (data?.messages as ChatMessage[] | undefined) ?? null
+  const row = await table<AssistantChat>('assistant_chats').get(chatId)
+  if (!row || row.clerk_user_id !== ownerId) return null
+  return (row.messages as ChatMessage[] | undefined) ?? null
 }
 
 /**
  * Replace the chat with its post-response state. Insert and update are one
- * upsert on the primary key; ownership is enforced by checking the existing
- * row's owner first, so a colliding or guessed id cannot overwrite someone
- * else's chat (it fails, rather than being silently re-owned).
+ * upsert on the id; ownership is enforced by checking the existing row's
+ * owner first, so a colliding or guessed id cannot overwrite someone else's
+ * chat (it fails, rather than being silently re-owned).
  */
 export async function saveChat(ownerId: string, chatId: string, messages: ChatMessage[]): Promise<void> {
-  const { data: existing } = await supabase
-    .from('assistant_chats').select('clerk_user_id').eq('id', chatId).maybeSingle()
+  const chats = table<AssistantChat>('assistant_chats')
+  const existing = await chats.get(chatId)
   if (existing && existing.clerk_user_id !== ownerId) {
     throw new Error('Not your chat')
   }
-  const { error } = await supabase.from('assistant_chats').upsert({
+  await table('assistant_chats').upsert({
     id: chatId,
     clerk_user_id: ownerId,
     title: chatTitleFrom(messages),
     messages,
     updated_at: new Date().toISOString(),
   })
-  if (error) throw new Error(error.message)
 }
 
 export async function deleteChat(ownerId: string, chatId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('assistant_chats')
-    .delete()
-    .eq('clerk_user_id', ownerId)
-    .eq('id', chatId)
-    .select('id')
-  if (error) throw new Error(error.message)
-  return (data ?? []).length > 0
+  const chats = table<AssistantChat>('assistant_chats')
+  const existing = await chats.get(chatId)
+  if (!existing || existing.clerk_user_id !== ownerId) return false
+  await chats.remove(chatId)
+  return true
 }
 
 export async function getInstructions(clerkUserId: string): Promise<string> {
-  const { data } = await supabase
-    .from('assistant_prefs')
-    .select('instructions')
-    .eq('clerk_user_id', clerkUserId)
-    .maybeSingle()
-  return data?.instructions ?? ''
+  const rows = await table<AssistantPref>('assistant_prefs').list({
+    by: { clerk_user_id: clerkUserId }, limit: 1,
+  })
+  return rows[0]?.instructions ?? ''
 }
 
 export async function saveInstructions(
   clerkUserId: string, email: string, instructions: unknown, updatedBy: string,
 ): Promise<string> {
   const clean = clampInstructions(instructions)
-  const { error } = await supabase.from('assistant_prefs').upsert({
+  await table('assistant_prefs').upsert({
     clerk_user_id: clerkUserId,
     email,
     instructions: clean,
     updated_at: new Date().toISOString(),
     updated_by: updatedBy,
   })
-  if (error) throw new Error(error.message)
   return clean
 }

@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { ScanMailbox, ScanRun } from '@/lib/db-types'
 import { getMailboxes, type Mailbox } from './gmail'
 import { listConnectedMailboxes } from './clerk-gmail'
 import { normaliseSettings, DEFAULT_SCAN_SETTINGS, type ScanSettings } from './scan-core'
@@ -8,23 +9,24 @@ import { inboxClientId, inboxClientSecret } from './inbox-connect'
 
 export type { ScanSettings } from './scan-core'
 
-/** Global scanner settings. Never throws: if the table is missing or the row
- *  is malformed the scanner falls back to documented defaults rather than
- *  refusing to run. */
+/** Global scanner settings. Never throws: if the row is missing or malformed
+ *  the scanner falls back to documented defaults rather than refusing to run.
+ *  One row, so it lives under a fixed id. */
 export async function getScanSettings(): Promise<ScanSettings> {
-  const { data, error } = await supabase
-    .from('scan_settings').select('*').eq('id', 1).maybeSingle()
-  if (error || !data) return { ...DEFAULT_SCAN_SETTINGS }
-  return normaliseSettings(data)
+  try {
+    const row = await table('scan_settings').get('singleton')
+    if (!row) return { ...DEFAULT_SCAN_SETTINGS }
+    return normaliseSettings(row)
+  } catch {
+    return { ...DEFAULT_SCAN_SETTINGS }
+  }
 }
 
 export async function saveScanSettings(patch: unknown, updatedBy: string): Promise<ScanSettings> {
   const current = await getScanSettings()
   const merged = normaliseSettings({ ...current, ...(patch as object) })
-  const { error } = await supabase
-    .from('scan_settings')
-    .upsert({ id: 1, ...merged, updated_at: new Date().toISOString(), updated_by: updatedBy })
-  if (error) throw new Error(error.message)
+  await table('scan_settings')
+    .upsert({ id: 'singleton', ...merged, updated_at: new Date().toISOString(), updated_by: updatedBy })
   return merged
 }
 
@@ -46,9 +48,9 @@ export type MailboxEntry = {
  * Every address the scanner could use, with its on/off state and health.
  *
  * Availability comes from the environment and from Clerk; the enabled flag
- * comes from scan_mailboxes. Newly discovered addresses are registered
- * enabled-by-default via an upsert that ignores conflicts, so a mailbox an
- * admin has explicitly turned off is never silently re-enabled.
+ * comes from scan_mailboxes. Only addresses with no row yet are registered,
+ * enabled-by-default, so a mailbox an admin has explicitly turned off is
+ * never silently re-enabled.
  */
 export async function listMailboxEntries(): Promise<MailboxEntry[]> {
   const shared = getMailboxes()
@@ -66,25 +68,23 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
       .map(m => ({ email: m.email.toLowerCase(), source: 'connected' as const })),
   ]
 
-  if (available.length > 0) {
-    await supabase.from('scan_mailboxes').upsert(
-      available.map(a => ({ email: a.email, source: a.source })),
-      { onConflict: 'email', ignoreDuplicates: true }
-    )
+  const mailboxes = table<ScanMailbox>('scan_mailboxes')
+  let rows = await mailboxes.list()
+  const known = new Set(rows.map(r => r.email))
+  const missing = available.filter(a => !known.has(a.email))
+  if (missing.length > 0) {
+    await Promise.all(missing.map(a => mailboxes.upsert({ email: a.email, source: a.source })))
+    rows = await mailboxes.list()
   }
-
-  const { data: rows } = await supabase
-    .from('scan_mailboxes').select('email, enabled, label, source, connected_by')
-  const byEmail = new Map((rows ?? []).map(r => [r.email as string, r]))
+  const byEmail = new Map(rows.map(r => [r.email, r]))
 
   // one most-recent run per mailbox
-  const { data: runs } = await supabase
-    .from('scan_runs')
-    .select('mailbox, status, started_at, error, leads_created')
-    .order('started_at', { ascending: false })
-    .limit(200)
-  const latest = new Map<string, NonNullable<typeof runs>[number]>()
-  for (const r of runs ?? []) if (!latest.has(r.mailbox)) latest.set(r.mailbox, r)
+  const runs = await table<ScanRun>('scan_runs').list({
+    orderBy: [['started_at', 'desc']],
+    limit: 200,
+  })
+  const latest = new Map<string, ScanRun>()
+  for (const r of runs) if (!latest.has(r.mailbox)) latest.set(r.mailbox, r)
 
   return available.map(a => {
     const row = byEmail.get(a.email)
@@ -93,8 +93,8 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
       email: a.email,
       source: a.source,
       enabled: row?.enabled ?? true,
-      label: (row?.label as string | null) ?? null,
-      connected_by: (row?.connected_by as string | null) ?? null,
+      label: row?.label ?? null,
+      connected_by: row?.connected_by ?? null,
       last_run_at: run?.started_at ?? null,
       last_status: (run?.status as MailboxEntry['last_status']) ?? null,
       last_error: run?.error ?? null,
@@ -104,11 +104,11 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
 }
 
 export async function setMailboxEnabled(email: string, enabled: boolean, by: string): Promise<void> {
-  const { error } = await supabase
-    .from('scan_mailboxes')
-    .update({ enabled, updated_at: new Date().toISOString(), updated_by: by })
-    .eq('email', email.toLowerCase())
-  if (error) throw new Error(error.message)
+  const mailboxes = table<ScanMailbox>('scan_mailboxes')
+  const rows = await mailboxes.list({ by: { email: email.toLowerCase() } })
+  await Promise.all(rows.map(r => mailboxes.update(r.id, {
+    enabled, updated_at: new Date().toISOString(), updated_by: by,
+  })))
 }
 
 /** The addresses a scheduled run should fan out over. */
@@ -125,16 +125,15 @@ export async function enabledMailboxEmails(): Promise<string[]> {
  * throwing and losing the whole scan.
  */
 export async function listSelfConnectedMailboxes(): Promise<Mailbox[]> {
-  const { data } = await supabase
-    .from('scan_mailboxes')
-    .select('email, refresh_token_encrypted')
-    .not('refresh_token_encrypted', 'is', null)
+  const rows = await table<ScanMailbox>('scan_mailboxes').list({
+    where: r => r.refresh_token_encrypted != null,
+  })
 
   const out: Mailbox[] = []
-  for (const row of data ?? []) {
+  for (const row of rows) {
     try {
       out.push({
-        email: (row.email as string).toLowerCase(),
+        email: row.email.toLowerCase(),
         refreshToken: decryptSecret(row.refresh_token_encrypted as string),
         // bound to the connect app, not the mail-sending one
         clientId: inboxClientId(),

@@ -1,25 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedDb } from './helpers/fake-db'
+import type { Row } from '@/lib/db-types'
 
 /**
  * The brand profile route at its seams: who may write, what a bad body gets
  * told, the first-read seed from the scan, and the revision check that stops
  * two account managers undoing each other.
+ *
+ * GET runs against a miniature Realtime Database, because everything it does
+ * happens inside `loadBrandProfile`. PATCH is still route code on the old
+ * client and keeps its own spy until that route is rewritten.
  */
 
-type Row = Record<string, unknown>
-const tables: Record<string, Row[]> = {}
-const updates: { table: string; patch: Row; filters: [string, string, unknown][] }[] = []
+type Json = Record<string, unknown>
+const tables: Record<string, Json[]> = {}
+const updates: { table: string; patch: Json; filters: [string, string, unknown][] }[] = []
 
 const supabase = {
   from(table: string) {
     const filters: [string, string, unknown][] = []
     let single = false
-    let patch: Row | null = null
+    let patch: Json | null = null
     const matching = () => (tables[table] ?? []).filter(r => filters.every(([op, c, v]) => {
       if (op === 'is') return r[c] === v
       if (c.includes('->>')) {
         const [col, key] = c.split('->>')
-        const obj = r[col] as Row | null
+        const obj = r[col] as Json | null
         return String(obj?.[key]) === String(v)
       }
       return r[c] === v
@@ -29,7 +35,7 @@ const supabase = {
       eq: (c: string, v: unknown) => { filters.push(['eq', c, v]); return chain },
       is: (c: string, v: unknown) => { filters.push(['is', c, v]); return chain },
       maybeSingle: () => { single = true; return chain },
-      update: (p: Row) => { patch = p; return chain },
+      update: (p: Json) => { patch = p; return chain },
       then: (ok: (r: unknown) => unknown, no?: (e: unknown) => unknown) => {
         const rows = matching()
         if (patch) {
@@ -74,22 +80,43 @@ const patch = async (body: unknown) => {
   return { status: res.status, json: await res.json() as Record<string, unknown> }
 }
 
+/** the scan the profile is seeded from */
+const SCAN = {
+  colors: [{ name: 'Forest', hex: '#14392B', usage: 'primary' }],
+  fonts: [{ family: 'Lora', usage: 'headings' }],
+  logo_rules: ['Never stretch the logo'],
+}
+
 beforeEach(() => {
   role = 'account_manager'
   updates.length = 0
   tables.clients = [{ id: 'client-1', name: 'ZZ TEST', brand_profile: null }]
-  tables.client_brand = [{
-    client_id: 'client-1', updated_at: '2026-08-20T00:00:00.000Z', scan_status: 'done', docs: [],
-    profile: {
-      colors: [{ name: 'Forest', hex: '#14392B', usage: 'primary' }],
-      fonts: [{ family: 'Lora', usage: 'headings' }],
-      logo_rules: ['Never stretch the logo'],
-    },
-  }]
 })
 
 describe('GET /api/clients/[id]/brand/profile', () => {
+  let client: Json
+  let fake: ReturnType<typeof seedDb>
+
+  const start = () => {
+    fake = seedDb({
+      clients: [client] as unknown as Row[],
+      client_brand: [{
+        id: 'client-1', client_id: 'client-1',
+        updated_at: '2026-08-20T00:00:00.000Z', scan_status: 'done', docs: [],
+        profile: SCAN,
+      }] as unknown as Row[],
+    })
+  }
+  const savedProfile = () =>
+    (fake.rows('clients')[0] as unknown as Json).brand_profile as Json | null
+
+  beforeEach(() => {
+    client = { id: 'client-1', name: 'ZZ TEST', brand_profile: null }
+  })
+  afterEach(() => fake?.restore())
+
   it('seeds the profile from the scan on first read, and writes it once', async () => {
+    start()
     const { status, json } = await get()
     expect(status).toBe(200)
     const profile = json.profile as { colours: { hex: string }[]; fonts: { name: string }[]; rev: number }
@@ -98,24 +125,30 @@ describe('GET /api/clients/[id]/brand/profile', () => {
     expect(profile.rev).toBe(1)
     expect(json.proposal).toBeNull()
     expect(json.can_edit).toBe(true)
-    const seed = updates.find(u => u.table === 'clients')
-    expect(seed).toBeTruthy()
-    expect(seed!.filters).toContainEqual(['is', 'brand_profile', null])
+    // the seed landed on the row, so the next read is not a second seed
+    expect(savedProfile()).toMatchObject({ rev: 1 })
+    const again = await get()
+    expect((again.json.profile as { rev: number }).rev).toBe(1)
+    expect(savedProfile()).toMatchObject({ rev: 1 })
   })
 
   it('offers what a newer scan adds, without touching the saved profile', async () => {
-    tables.clients[0].brand_profile = {
+    client.brand_profile = {
       rev: 2, colours: [{ name: 'My Forest', hex: '#14392B', role: 'primary' }],
       reviewed_scan_at: '2026-08-01T00:00:00.000Z',
     }
+    start()
     const { json } = await get()
     const proposal = json.proposal as { changes: { id: string }[] }
     expect(proposal.changes.map(c => c.id)).toEqual(['font:lora', 'logo_rules:never stretch the logo'])
     expect((json.profile as { colours: { name: string }[] }).colours[0].name).toBe('My Forest')
-    expect(updates).toEqual([])
+    // nothing was written: the saved profile is exactly what it was
+    expect(savedProfile()).toMatchObject({ rev: 2 })
+    expect((savedProfile() as { colours: { name: string }[] }).colours[0].name).toBe('My Forest')
   })
 
   it('a scheduler can read but not edit', async () => {
+    start()
     role = 'scheduler'
     const { status, json } = await get()
     expect(status).toBe(200)
@@ -123,6 +156,7 @@ describe('GET /api/clients/[id]/brand/profile', () => {
   })
 
   it('an editor cannot read it', async () => {
+    start()
     role = 'editor'
     expect((await get()).status).toBe(403)
   })

@@ -1,7 +1,8 @@
 import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { after } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type { AssetVersion, ContentItem, VideoPreview } from '@/lib/db-types'
 import {
   POLL_AFTER_MS, isVideoUrl, missingPreviewSources, pollablePreviews,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
@@ -88,25 +89,24 @@ async function cf(path: string, init?: RequestInit): Promise<CfResult> {
 
 // ── reading ───────────────────────────────────────────────────────────────
 
-const ROW_COLUMNS = 'source_url, stream_uid, state, playback_hls, thumbnail_url, duration_sec, width, height, error'
-
 /**
  * The preview rows for a set of source URLs.
  *
- * A missing table is an empty map, not an error: the feature is optional and
- * a dashboard must not 500 because `video_previews.sql` has not been run yet.
+ * A read failure is an empty map, not an error: the feature is optional and a
+ * dashboard must not 500 because the previews could not be read.
  */
 export async function previewsFor(urls: readonly string[]): Promise<Map<string, PreviewRow>> {
   const out = new Map<string, PreviewRow>()
-  const wanted = [...new Set(urls.map(u => String(u ?? '')).filter(Boolean))].slice(0, 100)
-  if (wanted.length === 0 || !streamConfigured()) return out
-  const { data, error } = await supabase
-    .from('video_previews').select(ROW_COLUMNS).in('source_url', wanted)
-  if (error) {
-    console.error('[stream] could not read previews:', error.message)
-    return out
+  const wanted = new Set([...new Set(urls.map(u => String(u ?? '')).filter(Boolean))].slice(0, 100))
+  if (wanted.size === 0 || !streamConfigured()) return out
+  try {
+    const rows = await table<VideoPreview>('video_previews').list({
+      where: r => wanted.has(r.source_url),
+    })
+    for (const row of rows) out.set(row.source_url, row as unknown as PreviewRow)
+  } catch (e) {
+    console.error('[stream] could not read previews:', e instanceof Error ? e.message : e)
   }
-  for (const row of data ?? []) out.set(String(row.source_url), row as PreviewRow)
   return out
 }
 
@@ -138,11 +138,15 @@ export async function requestPreview(sourceUrl: string): Promise<
 
   // the claim. A duplicate key here is the whole point: it is how a second
   // caller learns, in one round trip, that it has nothing to do.
-  const { error } = await supabase.from('video_previews').insert({ source_url: url, state: 'queued' })
-  if (error) {
-    if (error.code === '23505') return { at: 'existing' }
-    console.error('[stream] could not claim a preview:', error.message)
-    return { at: 'skipped', why: error.message }
+  try {
+    await table('video_previews').insert({
+      source_url: url, state: 'queued', updated_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    if (e instanceof DbError && e.code === 'unique') return { at: 'existing' }
+    const why = e instanceof Error ? e.message : String(e)
+    console.error('[stream] could not claim a preview:', why)
+    return { at: 'skipped', why }
   }
 
   return { at: 'claimed', uid: await copyIntoStream(url) }
@@ -176,17 +180,16 @@ async function copyIntoStream(url: string): Promise<string | null> {
     }),
   })
   if (!res.ok) {
-    await supabase.from('video_previews')
-      .update({ error: res.error, updated_at: new Date().toISOString() })
-      .eq('source_url', url)
+    await writeRaw({ source_url: url }, { error: res.error, updated_at: new Date().toISOString() })
     console.error('[stream] copy request failed:', res.error)
     return null
   }
   const patch = previewPatchFrom(res.result)
   if (!patch) {
-    await supabase.from('video_previews')
-      .update({ error: 'Cloudflare accepted the copy but returned no video id', updated_at: new Date().toISOString() })
-      .eq('source_url', url)
+    await writeRaw({ source_url: url }, {
+      error: 'Cloudflare accepted the copy but returned no video id',
+      updated_at: new Date().toISOString(),
+    })
     return null
   }
   await writePatch({ source_url: url }, patch)
@@ -200,19 +203,28 @@ function fileNameOf(url: string): string {
   } catch { return 'video' }
 }
 
+/** Write a patch onto the row(s) identified by url OR uid. */
+async function writeRaw(
+  where: { source_url?: string; stream_uid?: string }, patch: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const previews = table<VideoPreview>('video_previews')
+    const rows = where.source_url
+      ? await previews.list({ where: r => r.source_url === where.source_url })
+      : await previews.list({ where: r => r.stream_uid === where.stream_uid })
+    await Promise.all(rows.map(r => previews.update(r.id, patch as Partial<VideoPreview>)))
+    return true
+  } catch (e) {
+    console.error('[stream] could not save preview state:', e instanceof Error ? e.message : e)
+    return false
+  }
+}
+
 /** Apply a Cloudflare patch to the row identified by url OR uid. */
 async function writePatch(
   where: { source_url?: string; stream_uid?: string }, patch: PreviewPatch,
 ): Promise<boolean> {
-  let q = supabase.from('video_previews')
-    .update({ ...patch, updated_at: new Date().toISOString() })
-  q = where.source_url ? q.eq('source_url', where.source_url) : q.eq('stream_uid', where.stream_uid!)
-  const { error } = await q
-  if (error) {
-    console.error('[stream] could not save preview state:', error.message)
-    return false
-  }
-  return true
+  return writeRaw(where, { ...patch, updated_at: new Date().toISOString() })
 }
 
 /**
@@ -256,7 +268,6 @@ export function isOwnStorageUrl(url: string): boolean {
   if (!/^https:\/\//i.test(u)) return false
   const bases = [
     process.env.R2_PUBLIC_BASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
   ].map(b => String(b ?? '').trim().replace(/\/$/, '')).filter(Boolean)
   return bases.some(b => u.startsWith(`${b}/`))
 }
@@ -297,9 +308,11 @@ export async function refreshPreview(uid: string): Promise<PreviewPatch | null> 
     // asking about it every half hour until the end of time, and the reason
     // is the truthful one to show a team member.
     if (/404|not found|not_found/i.test(res.error ?? '')) {
-      await supabase.from('video_previews')
-        .update({ state: 'error', error: 'This preview no longer exists at Cloudflare', updated_at: new Date().toISOString() })
-        .eq('stream_uid', id)
+      await writeRaw({ stream_uid: id }, {
+        state: 'error',
+        error: 'This preview no longer exists at Cloudflare',
+        updated_at: new Date().toISOString(),
+      })
     }
     return null
   }
@@ -322,8 +335,12 @@ export async function deletePreview(sourceUrl: string): Promise<boolean> {
       return false
     }
   }
-  const { error } = await supabase.from('video_previews').delete().eq('source_url', url)
-  if (error) { console.error('[stream] could not delete the preview row:', error.message); return false }
+  try {
+    await table<VideoPreview>('video_previews').removeWhere(r => r.source_url === url)
+  } catch (e) {
+    console.error('[stream] could not delete the preview row:', e instanceof Error ? e.message : e)
+    return false
+  }
   return true
 }
 
@@ -401,25 +418,34 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
 
   const since = new Date(Date.now() - SWEEP_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
-  const [itemsRes, versionsRes] = await Promise.all([
-    supabase.from('content_items').select('id, raw_assets')
-      .gte('updated_at', since).order('updated_at', { ascending: false }).limit(SWEEP_ITEM_LIMIT),
-    supabase.from('asset_versions').select('file_url, files')
-      .gte('created_at', since).order('created_at', { ascending: false }).limit(SWEEP_ITEM_LIMIT),
-  ])
-  if (itemsRes.error && versionsRes.error) {
-    console.error('[stream] sweep could not read work:', itemsRes.error.message)
+  let items: ContentItem[] = []
+  let versions: AssetVersion[] = []
+  try {
+    [items, versions] = await Promise.all([
+      table<ContentItem>('content_items').list({
+        where: r => r.updated_at >= since,
+        orderBy: [['updated_at', 'desc']],
+        limit: SWEEP_ITEM_LIMIT,
+      }),
+      table<AssetVersion>('asset_versions').list({
+        where: r => r.created_at >= since,
+        orderBy: [['created_at', 'desc']],
+        limit: SWEEP_ITEM_LIMIT,
+      }),
+    ])
+  } catch (e) {
+    console.error('[stream] sweep could not read work:', e instanceof Error ? e.message : e)
     return empty
   }
 
   const candidates: string[] = []
-  for (const row of itemsRes.data ?? []) {
+  for (const row of items) {
     for (const a of Array.isArray(row.raw_assets) ? row.raw_assets : []) {
       const url = (a as { url?: unknown })?.url
       if (typeof url === 'string') candidates.push(url)
     }
   }
-  for (const v of versionsRes.data ?? []) {
+  for (const v of versions) {
     if (typeof v.file_url === 'string') candidates.push(v.file_url)
     for (const s of Array.isArray(v.files) ? v.files : []) {
       const url = (s as { url?: unknown })?.url
@@ -430,11 +456,13 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   const videos = [...new Set(candidates.filter(isVideoUrl))]
   let missing: string[] = []
   if (videos.length > 0) {
-    // ask only about the URLs we are considering — `in` on a bounded list,
-    // never a full scan of a table that grows with every file ever uploaded
-    const { data: have } = await supabase
-      .from('video_previews').select('source_url').in('source_url', videos.slice(0, 200))
-    missing = missingPreviewSources(videos, (have ?? []).map(r => String(r.source_url)))
+    // ask only about the URLs we are considering — a bounded set, never a
+    // walk of every file ever uploaded
+    const asked = new Set(videos.slice(0, 200))
+    const have = await table<VideoPreview>('video_previews').list({
+      where: r => asked.has(r.source_url),
+    })
+    missing = missingPreviewSources(videos, have.map(r => r.source_url))
   }
 
   let claimed = 0
@@ -455,14 +483,15 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
 /** The backstop for a webhook that never arrived. */
 async function pollStalePreviews(): Promise<number> {
   const cutoff = new Date(Date.now() - POLL_AFTER_MS).toISOString()
-  const { data, error } = await supabase.from('video_previews')
-    .select('stream_uid, state, updated_at')
-    .in('state', ['queued', 'processing'])
-    .lte('updated_at', cutoff)
-    .order('updated_at', { ascending: true })
-    .limit(20)
-  if (error || !data) return 0
-  const rows = pollablePreviews(data as { state: 'queued' | 'processing'; updated_at: string; stream_uid: string | null }[])
+  let data: VideoPreview[]
+  try {
+    data = await table<VideoPreview>('video_previews').list({
+      where: r => ['queued', 'processing'].includes(r.state) && r.updated_at <= cutoff,
+      orderBy: [['updated_at', 'asc']],
+      limit: 20,
+    })
+  } catch { return 0 }
+  const rows = pollablePreviews(data as unknown as { state: 'queued' | 'processing'; updated_at: string; stream_uid: string | null }[])
   let n = 0
   for (const row of rows) {
     if (await refreshPreview(row.stream_uid!)) n++
@@ -480,13 +509,14 @@ async function pollStalePreviews(): Promise<number> {
  */
 async function retakeStalledClaims(): Promise<number> {
   const cutoff = new Date(Date.now() - POLL_AFTER_MS).toISOString()
-  const { data } = await supabase.from('video_previews')
-    .select('source_url')
-    .eq('state', 'queued').is('stream_uid', null).lte('updated_at', cutoff)
-    .limit(10)
+  const rows = await table<VideoPreview>('video_previews').list({
+    by: { state: 'queued' },
+    where: r => r.stream_uid == null && r.updated_at <= cutoff,
+    limit: 10,
+  })
   let n = 0
-  for (const row of data ?? []) {
-    if (await copyIntoStream(String(row.source_url))) n++
+  for (const row of rows) {
+    if (await copyIntoStream(row.source_url)) n++
   }
   return n
 }
@@ -498,9 +528,13 @@ export async function previewStats(days = 7): Promise<PreviewStats> {
   const zero: PreviewStats = { ready: 0, preparing: 0, failed: 0, total: 0 }
   if (!streamConfigured()) return zero
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-  const { data, error } = await supabase.from('video_previews')
-    .select('state').gte('created_at', since).limit(1000)
-  if (error || !data) return zero
+  let data: VideoPreview[]
+  try {
+    data = await table<VideoPreview>('video_previews').list({
+      where: r => r.created_at >= since,
+      limit: 1000,
+    })
+  } catch { return zero }
   const out = { ...zero, total: data.length }
   for (const row of data) {
     const s = String(row.state)
@@ -522,11 +556,14 @@ export async function previewStats(days = 7): Promise<PreviewStats> {
 export async function retryFailedPreviews(days = 7): Promise<{ retried: number }> {
   if (!streamConfigured()) return { retried: 0 }
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-  const { data } = await supabase.from('video_previews')
-    .select('source_url').eq('state', 'error').gte('created_at', since).limit(50)
+  const rows = await table<VideoPreview>('video_previews').list({
+    by: { state: 'error' },
+    where: r => r.created_at >= since,
+    limit: 50,
+  })
   let retried = 0
-  for (const row of data ?? []) {
-    const url = String(row.source_url)
+  for (const row of rows) {
+    const url = row.source_url
     if (await deletePreview(url) && (await requestPreview(url)).at === 'claimed') retried++
   }
   return { retried }

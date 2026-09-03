@@ -1,6 +1,7 @@
 import 'server-only'
 import { after } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Batch, Client, ContentItem, WorkKind } from '@/lib/db-types'
 import {
   BRAND_FOLDER, EDITS_FOLDER, NO_SHOOT_FOLDER, TASKS_FOLDER,
   brandChain, clientChain, folderNameFor, itemChain, noShootChain, shootChains,
@@ -57,8 +58,8 @@ function detach(label: string, run: () => Promise<unknown>): void {
 }
 
 async function clientName(clientId: string): Promise<string | null> {
-  const { data } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle()
-  const name = String(data?.name ?? '').trim()
+  const row = await table<Client>('clients').get(clientId)
+  const name = String(row?.name ?? '').trim()
   return name || null
 }
 
@@ -110,13 +111,14 @@ export async function ensureShootFoldersNow(batch: BatchLike): Promise<string | 
 
   const url = await shareWithDomain(shoot.id)
 
-  // `is null` guard: two requests racing to fold the same shoot must not
-  // overwrite each other's recorded folder — the first one to land wins and
-  // the second's folder is simply an empty duplicate
-  await supabase.from('batches')
-    .update({ drive_folder_id: shoot.id, drive_url: url })
-    .eq('id', batch.id)
-    .is('drive_folder_id', null)
+  // only ever onto a blank: two requests racing to fold the same shoot must
+  // not overwrite each other's recorded folder — the first one to land wins
+  // and the second's folder is simply an empty duplicate
+  const batches = table<Batch>('batches')
+  const live = await batches.get(batch.id)
+  if (live && live.drive_folder_id == null) {
+    await batches.update(batch.id, { drive_folder_id: shoot.id, drive_url: url })
+  }
 
   return shoot.id
 }
@@ -195,17 +197,15 @@ async function kindIds(items: ItemLike[]): Promise<{
 }> {
   const ids = [...new Set(items.map(i => i.work_kind_id).filter(Boolean))] as string[]
   if (ids.length === 0) return { internal: new Set(), noFolder: new Set() }
-  const { data } = await supabase
-    .from('work_kinds').select('id, slug, uses_media').in('id', ids)
-  const rows = data ?? []
+  const rows = await table<WorkKind>('work_kinds').list({ where: k => ids.includes(k.id) })
   return {
     internal: new Set(
       rows
         .filter(k => kindGetsOwnFolder(k.slug) && k.uses_media === false)
-        .map(k => k.id as string),
+        .map(k => k.id),
     ),
     noFolder: new Set(
-      rows.filter(k => !kindGetsOwnFolder(k.slug)).map(k => k.id as string),
+      rows.filter(k => !kindGetsOwnFolder(k.slug)).map(k => k.id),
     ),
   }
 }
@@ -241,10 +241,8 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
   // that) — otherwise every item would fold into a different duplicate
   const shootDirs = new Map<string, string | null>()
   for (const batchId of new Set(items.map(i => i.batch_id).filter(Boolean) as string[])) {
-    const { data } = await supabase.from('batches')
-      .select('id, client_id, title, shoot_date, created_at, drive_folder_id')
-      .eq('id', batchId).maybeSingle()
-    shootDirs.set(batchId, data ? await ensureShootFoldersNow(data as BatchLike) : null)
+    const data = await table<Batch>('batches').get(batchId)
+    shootDirs.set(batchId, data ? await ensureShootFoldersNow(data as unknown as BatchLike) : null)
   }
 
   // names already taken in each parent folder, so two identically titled
@@ -296,17 +294,18 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
     if (!made.ok) continue
     const url = await shareWithDomain(made.id)
 
-    await supabase.from('content_items')
-      .update({ drive_folder_id: made.id, drive_url: url })
-      .eq('id', item.id)
-      .is('drive_folder_id', null)
+    const contentItems = table<ContentItem>('content_items')
+    const liveItem = await contentItems.get(item.id)
+    if (liveItem && liveItem.drive_folder_id == null) {
+      await contentItems.update(item.id, { drive_folder_id: made.id, drive_url: url })
+    }
 
     // the master link, only if the editor has not set one
     if (url && !item.raw_assets_url) {
-      await supabase.from('content_items')
-        .update({ raw_assets_url: url })
-        .eq('id', item.id)
-        .is('raw_assets_url', null)
+      const fresh = await contentItems.get(item.id)
+      if (fresh && fresh.raw_assets_url == null) {
+        await contentItems.update(item.id, { raw_assets_url: url })
+      }
     }
   }
 }

@@ -1,6 +1,9 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type {
+  IntakeFile as IntakeFileRow, IntakeForm as IntakeFormRow, IntakeTemplate, TeamUser,
+} from '@/lib/db-types'
 import { templateFor } from './intake-templates'
 import { normaliseDefinition } from './intake-core'
 import {
@@ -32,9 +35,7 @@ export type IntakeForm = {
 
 export type IntakeFile = { block_id: string; filename: string; url: string }
 
-const COLS =
-  'id, client_id, title, template_key, definition, token, status, answers, ' +
-  'sent_at, first_opened_at, submitted_at, reopened_at, notify_emails'
+const forms = () => table<IntakeFormRow>('intake_forms')
 
 /** Create a form for this client. The template definition is COPIED in, not
  *  referenced — editing intake-templates.ts later must not alter a form a
@@ -47,11 +48,12 @@ const COLS =
  * code remains the fallback, which is what makes deleting a row a safe undo.
  */
 export async function resolveTemplate(key: TemplateKey): Promise<TemplateDefinition> {
-  const { data } = await supabase
-    .from('intake_templates').select('definition').eq('key', key).maybeSingle()
-  if (!data?.definition) return templateFor(key)
+  const row = (await table<IntakeTemplate>('intake_templates').list({
+    where: t => t.key === key, limit: 1,
+  }))[0]
+  if (!row?.definition) return templateFor(key)
   // repaired, not trusted: a stored override came from a browser once
-  const def = normaliseDefinition(data.definition, key)
+  const def = normaliseDefinition(row.definition, key)
   return def.sections.length > 0 ? def : templateFor(key)
 }
 
@@ -59,10 +61,9 @@ export async function resolveTemplate(key: TemplateKey): Promise<TemplateDefinit
 export async function saveTemplateDefinition(
   key: TemplateKey, definition: TemplateDefinition, by: string,
 ): Promise<void> {
-  const { error } = await supabase.from('intake_templates').upsert({
+  await table('intake_templates').upsert({
     key, definition, updated_at: new Date().toISOString(), updated_by: by,
   })
-  if (error) throw new Error(error.message)
 }
 
 export async function createIntakeForm(
@@ -76,38 +77,35 @@ export async function createIntakeForm(
   copyNotifyEmails?: string[] | null,
 ): Promise<IntakeForm> {
   const def = copyFrom ?? await resolveTemplate(key)
-  const { data, error } = await supabase
-    .from('intake_forms')
-    .insert({
-      client_id: clientId, template_key: def.key, definition: def,
-      created_by: createdBy, title: title.trim() || def.name,
-      ...(copyNotifyEmails !== undefined ? { notify_emails: copyNotifyEmails } : {}),
-    })
-    .select(COLS)
-    .single()
-  if (error) throw new Error(error.message)
-  return data as unknown as IntakeForm
+  // Postgres defaulted these three; the token IS the client's credential for
+  // the form, so a missing one would be a dead link
+  const row = await table('intake_forms').insert({
+    client_id: clientId, template_key: def.key, definition: def,
+    created_by: createdBy, title: title.trim() || def.name,
+    token: randomUUID(), status: 'draft', answers: {},
+    ...(copyNotifyEmails !== undefined ? { notify_emails: copyNotifyEmails } : {}),
+  })
+  return row as unknown as IntakeForm
 }
 
 export async function getIntakeByToken(token: string): Promise<IntakeForm | null> {
-  const { data } = await supabase
-    .from('intake_forms').select(COLS).eq('token', token).maybeSingle()
+  const data = (await forms().list({ by: { token }, limit: 1 }))[0]
   if (!data) return null
   const form = data as unknown as IntakeForm
   // first open is recorded, but does NOT advance status — "started" means typed
   if (!form.first_opened_at) {
-    await supabase.from('intake_forms')
-      .update({ first_opened_at: new Date().toISOString() }).eq('id', form.id)
+    await forms().update(form.id, { first_opened_at: new Date().toISOString() })
   }
   return form
 }
 
 /** Every form on this client, newest first. */
 export async function listIntakeFormsForClient(clientId: string): Promise<IntakeForm[]> {
-  const { data } = await supabase
-    .from('intake_forms').select(COLS)
-    .eq('client_id', clientId).order('created_at', { ascending: false })
-  return (data ?? []) as unknown as IntakeForm[]
+  const rows = await forms().list({
+    by: { client_id: clientId },
+    orderBy: [['created_at', 'desc']],
+  })
+  return rows as unknown as IntakeForm[]
 }
 
 /** One form, but only if it belongs to this client — so a form id from another
@@ -115,16 +113,13 @@ export async function listIntakeFormsForClient(clientId: string): Promise<Intake
 export async function getIntakeFormForClient(
   clientId: string, formId: string,
 ): Promise<IntakeForm | null> {
-  const { data } = await supabase
-    .from('intake_forms').select(COLS)
-    .eq('client_id', clientId).eq('id', formId).maybeSingle()
-  return (data as unknown as IntakeForm) ?? null
+  const row = await forms().get(formId)
+  if (!row || row.client_id !== clientId) return null
+  return row as unknown as IntakeForm
 }
 
 export async function renameIntakeForm(formId: string, title: string): Promise<void> {
-  const { error } = await supabase.from('intake_forms')
-    .update({ title: title.trim().slice(0, 120) || 'Intake form' }).eq('id', formId)
-  if (error) throw new Error(error.message)
+  await forms().update(formId, { title: title.trim().slice(0, 120) || 'Intake form' })
 }
 
 /**
@@ -138,9 +133,7 @@ export async function renameIntakeForm(formId: string, title: string): Promise<v
 export async function saveIntakeAnswers(
   token: string, patch: unknown,
 ): Promise<{ answers: Answers; status: IntakeStatus } | null> {
-  const { data } = await supabase
-    .from('intake_forms').select('id, status, answers, definition')
-    .eq('token', token).maybeSingle()
+  const data = (await forms().list({ by: { token }, limit: 1 }))[0]
   if (!data) return null
 
   const status = data.status as IntakeStatus
@@ -149,67 +142,61 @@ export async function saveIntakeAnswers(
 
   const answers = mergeAnswers(data.definition as TemplateDefinition, current, patch)
   const next = nextStatus(status, 'save')
-  const { error } = await supabase
-    .from('intake_forms').update({ answers, status: next }).eq('id', data.id)
-  if (error) throw new Error(error.message)
+  await forms().update(data.id, { answers, status: next })
   return { answers, status: next }
 }
 
 export async function submitIntake(token: string): Promise<IntakeForm | null> {
-  const { data } = await supabase
-    .from('intake_forms').select(COLS).eq('token', token).maybeSingle()
+  const data = (await forms().list({ by: { token }, limit: 1 }))[0]
   if (!data) return null
   const form = data as unknown as IntakeForm
   if (!isWritable(form.status)) return form
 
-  // optimistic concurrency: only the caller who saw a writable status wins,
-  // so a double-click cannot send two notifications
-  const { data: updated } = await supabase
-    .from('intake_forms')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', form.id).neq('status', 'submitted')
-    .select(COLS).maybeSingle()
+  // only the caller who still sees an unsubmitted status writes, so a
+  // double-click cannot send two notifications
+  const live = await forms().get(form.id)
+  if (!live || live.status === 'submitted') return form
+  const updated = await forms().update(form.id, {
+    status: 'submitted', submitted_at: new Date().toISOString(),
+  })
   return (updated as unknown as IntakeForm) ?? form
 }
 
 export async function reopenIntake(formId: string): Promise<void> {
-  const { error } = await supabase.from('intake_forms')
-    .update({ status: 'in_progress', reopened_at: new Date().toISOString() })
-    .eq('id', formId)
-  if (error) throw new Error(error.message)
+  await forms().update(formId, {
+    status: 'in_progress', reopened_at: new Date().toISOString(),
+  })
 }
 
 /** A forwarded link is a real scenario — rotating invalidates the old one. */
 export async function rotateIntakeToken(formId: string): Promise<string> {
-  const { data, error } = await supabase.from('intake_forms')
-    .update({ token: randomUUID() }).eq('id', formId)
-    .select('token').single()
-  if (error) throw new Error(error.message)
-  return data.token as string
+  const updated = await forms().update(formId, { token: randomUUID() })
+  if (!updated) throw new Error('No such form')
+  return updated.token
 }
 
 /** Marks the form as sent. Only moves a draft, so re-copying the link later
  *  never rewrites the date it actually went out. */
 export async function markIntakeSent(formId: string): Promise<void> {
-  await supabase.from('intake_forms')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
-    .eq('id', formId).eq('status', 'draft')
+  const live = await forms().get(formId)
+  if (live?.status !== 'draft') return
+  await forms().update(formId, { status: 'sent', sent_at: new Date().toISOString() })
 }
 
 /** Remove the form entirely so a different template can be chosen. One form per
  *  client is a unique index, so without this a wrong choice is permanent.
  *  intake_files cascades. */
 export async function deleteIntakeForm(formId: string): Promise<void> {
-  const { error } = await supabase.from('intake_forms').delete().eq('id', formId)
-  if (error) throw new Error(error.message)
+  await forms().remove(formId)
+  await table<IntakeFileRow>('intake_files').removeWhere(f => f.form_id === formId)
 }
 
 /**
  * Replace the questions on one form.
  *
- * Only while the client has not started — `.in('status', ...)` is the guard, so
- * a client typing at the same moment cannot have the form rearranged underneath
- * them. Zero rows updated means they began first, and the caller is told.
+ * Only while the form has not been submitted — the status check is the guard,
+ * so a client who has finished cannot have the form rearranged underneath
+ * them. A submitted form writes nothing, and the caller is told.
  */
 export async function updateIntakeDefinition(
   formId: string, definition: TemplateDefinition,
@@ -218,12 +205,9 @@ export async function updateIntakeDefinition(
   // ids, so editing questions mid-fill never orphans what the client typed;
   // a submitted form is a document a shot list gets built on, so that one
   // stays read-only until deliberately reopened.
-  const { data } = await supabase
-    .from('intake_forms')
-    .update({ definition })
-    .eq('id', formId).neq('status', 'submitted')
-    .select('id').maybeSingle()
-  return Boolean(data)
+  const live = await forms().get(formId)
+  if (!live || live.status === 'submitted') return false
+  return Boolean(await forms().update(formId, { definition }))
 }
 
 /**
@@ -238,53 +222,50 @@ export async function updateIntakeDefinition(
 export async function addIntakeFile(
   formId: string, blockId: string, filename: string, url: string, size: number,
 ): Promise<void> {
-  const { error } = await supabase.from('intake_files')
+  await table('intake_files')
     .insert({ form_id: formId, block_id: blockId, filename, url, size_bytes: size })
-  if (error) throw new Error(error.message)
 
-  const { data } = await supabase
-    .from('intake_forms').select('answers').eq('id', formId).maybeSingle()
+  const data = await forms().get(formId)
   const answers = ((data?.answers ?? {}) as Answers)
   const current = answers[blockId]
   const list = Array.isArray(current) ? current : []
   if (list.includes(filename)) return
 
-  await supabase.from('intake_forms')
-    .update({ answers: { ...answers, [blockId]: [...list, filename] } })
-    .eq('id', formId)
+  await forms().update(formId, { answers: { ...answers, [blockId]: [...list, filename] } })
 }
 
 export async function listIntakeFiles(formId: string): Promise<IntakeFile[]> {
-  const { data } = await supabase.from('intake_files')
-    .select('block_id, filename, url').eq('form_id', formId)
-    .order('created_at', { ascending: true })
-  return (data ?? []) as IntakeFile[]
+  const rows = await table<IntakeFileRow>('intake_files').list({
+    where: f => f.form_id === formId,
+    orderBy: [['created_at', 'asc']],
+  })
+  return rows.map(f => ({ block_id: f.block_id, filename: f.filename, url: f.url }))
 }
 
 /** The agency-wide default recipient list. Never throws: a missing row means
  *  no default, which resolveRecipients turns into the sending mailbox rather
  *  than into silence. */
 export async function getIntakeDefaultRecipients(): Promise<string[]> {
-  const { data } = await supabase
-    .from('intake_settings').select('notify_emails').eq('id', 1).maybeSingle()
-  return normaliseRecipients(data?.notify_emails)
+  try {
+    const row = await table('intake_settings').get('singleton')
+    return normaliseRecipients(row?.notify_emails)
+  } catch {
+    return normaliseRecipients(null)
+  }
 }
 
 export async function saveIntakeDefaultRecipients(raw: unknown, by: string): Promise<string[]> {
   const notify_emails = normaliseRecipients(raw)
-  const { error } = await supabase.from('intake_settings').upsert({
-    id: 1, notify_emails, updated_at: new Date().toISOString(), updated_by: by,
+  await table('intake_settings').upsert({
+    id: 'singleton', notify_emails, updated_at: new Date().toISOString(), updated_by: by,
   })
-  if (error) throw new Error(error.message)
   return notify_emails
 }
 
 /** Set one form's own recipients. Pass null to go back to inheriting. */
 export async function setFormRecipients(formId: string, raw: unknown): Promise<string[] | null> {
   const notify_emails = raw === null ? null : normaliseRecipients(raw)
-  const { error } = await supabase
-    .from('intake_forms').update({ notify_emails }).eq('id', formId)
-  if (error) throw new Error(error.message)
+  await forms().update(formId, { notify_emails })
   return notify_emails
 }
 
@@ -292,35 +273,33 @@ export async function setFormRecipients(formId: string, raw: unknown): Promise<s
  * Which of a client's forms are toggled to show on the client portal, as a
  * { formId: boolean } map.
  *
- * Read TOLERANTLY and on its own: the show_on_portal column does not exist
- * until supabase/intake_portal.sql is run by hand, and asking for a missing
- * column fails the whole select. Kept out of COLS for exactly that reason — a
- * failure here degrades to "nothing toggled on" (an empty map) rather than
- * taking the intake panel down. Every id defaults to false at the call site.
+ * Read TOLERANTLY: a failure here degrades to "nothing toggled on" (an empty
+ * map) rather than taking the intake panel down. Every id defaults to false at
+ * the call site.
  */
 export async function getShowOnPortalFlags(clientId: string): Promise<Record<string, boolean>> {
-  const { data, error } = await supabase
-    .from('intake_forms').select('id, show_on_portal').eq('client_id', clientId)
-  if (error) return {}
-  const out: Record<string, boolean> = {}
-  for (const r of data ?? []) out[(r as { id: string }).id] = (r as { show_on_portal?: boolean }).show_on_portal === true
-  return out
+  try {
+    const rows = await forms().list({ by: { client_id: clientId } })
+    const out: Record<string, boolean> = {}
+    for (const r of rows) out[r.id] = r.show_on_portal === true
+    return out
+  } catch {
+    return {}
+  }
 }
 
 /** Turn one form's portal visibility on or off. Unlike the read above this is
- *  allowed to throw: it only runs from a deliberate super-admin click, and if
- *  the column is not migrated yet the toast telling them so is the honest
- *  outcome — the feature simply is not live until the SQL runs. */
+ *  allowed to throw: it only runs from a deliberate super-admin click, and a
+ *  toast telling them it failed is the honest outcome. */
 export async function setShowOnPortal(formId: string, value: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('intake_forms').update({ show_on_portal: value }).eq('id', formId)
-  if (error) throw new Error(error.message)
+  await forms().update(formId, { show_on_portal: value })
 }
 
 /** Everyone who could be picked in the recipients dropdown: the active team. */
 export async function listTeamRecipients(): Promise<{ name: string; email: string }[]> {
-  const { data } = await supabase
-    .from('team_users').select('name, email')
-    .eq('active_status', true).order('name')
-  return (data ?? []).filter(u => u.email) as { name: string; email: string }[]
+  const rows = await table<TeamUser>('team_users').list({
+    by: { active_status: true },
+    orderBy: [['name', 'asc']],
+  })
+  return rows.filter(u => u.email).map(u => ({ name: u.name, email: u.email }))
 }
