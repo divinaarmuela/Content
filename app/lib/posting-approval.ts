@@ -188,7 +188,14 @@ export async function actOnPostingApproval(
   const clearing = input.action === 'send' && input.self_approved === true
     && (hats.includes('account_manager') || hats.includes('super_admin'))
 
-  if (input.action === 'send') {
+  if (input.action === 'reset') {
+    // whoever could have ASKED for this approval, or given it, may put the
+    // gate back when the post it belonged to is taken off the calendar
+    if (!maySendPostApproval(hats)
+      && !hats.includes('account_manager') && !hats.includes('super_admin')) {
+      throw new AuthzError('Only the people scheduling this post can take it back', 403)
+    }
+  } else if (input.action === 'send') {
     if (!maySendPostApproval(hats) && !clearing) {
       throw new AuthzError('Only the person scheduling this may send it for approval', 403)
     }
@@ -226,6 +233,13 @@ export async function actOnPostingApproval(
     patch.posting_approved_by = null
     patch.posting_approved_at = null
   }
+  if (input.action === 'reset') {
+    // nothing is being asked and nothing has been answered
+    patch.posting_approved_by = null
+    patch.posting_approved_at = null
+    patch.posting_approval_note = null
+    patch.posting_client_required = false
+  }
 
   // the state is re-read immediately before the write, and only a row still
   // sitting where this actor saw it is answered: two people answering at once
@@ -252,6 +266,7 @@ export async function actOnPostingApproval(
     entityType: 'content_item', entityId: item.id,
     action: input.action === 'send' ? 'posting_approval_sent'
       : input.action === 'approve' ? 'posting_approved'
+      : input.action === 'reset' ? 'posting_approval_reset'
       : 'posting_changes_requested',
     detail: note || undefined,
   })
@@ -261,7 +276,11 @@ export async function actOnPostingApproval(
 
   // notifications — fire-and-forget, the outbox dedupe makes retries safe
   const title = item.title ?? 'A post'
-  if (clearing) return updated as unknown as Record<string, unknown>
+  // a reset is housekeeping after a cancel — nobody is asked anything and
+  // nobody is told an answer, so there is nothing to email about
+  if (clearing || input.action === 'reset') {
+    return updated as unknown as Record<string, unknown>
+  }
   void (async () => {
     const facts = await previewFacts(item)
     const stamp = new Date().toISOString()

@@ -306,11 +306,11 @@ function problemsWith(input: {
 }
 
 /**
- * The slides a post may carry: the ones the client actually approved.
+ * The media a post may carry: the files the client actually approved.
  *
  * A caller may choose a SUBSET of the approved version's slides and put them
  * in any order, but never a URL that is not in it — that is the whole promise
- * of "only approved graphics get posted", and it is enforced here rather than
+ * of "only approved media gets posted", and it is enforced here rather than
  * trusted to the screen that draws the picker.
  */
 function chooseSlides(approved: Slide[], chosen: unknown): Slide[] {
@@ -322,7 +322,7 @@ function chooseSlides(approved: Slide[], chosen: unknown): Slide[] {
     const match = byUrl.get(url)
     if (!match) {
       throw new ComposeError([
-        'One of those graphics is not part of the approved version — pick from the approved files',
+        'One of those files is not part of the approved version — pick from the approved media',
       ])
     }
     out.push(match)
@@ -435,7 +435,7 @@ const SETTLED: string[] = ['published', 'failed', 'cancelled']
 /**
  * Change a post that has not gone out.
  *
- * A change to the WORDS OR PICTURES of an APPROVED post takes the approval
+ * A change to the WORDS OR MEDIA of an APPROVED post takes the approval
  * back: the yes was given to something that no longer exists, so it has to be
  * asked for again. `stateAfterPostEdit` is the one place that rule lives, and
  * the item's own state is what moves — the post only ever mirrors it.
@@ -611,8 +611,8 @@ export async function sendForApproval(
  * themselves. The post records how it was cleared (`approval_mode: 'self'`)
  * and who cleared it, so nobody has to guess later.
  *
- * The client's approval of the GRAPHICS is untouched — that happens earlier,
- * and only approved graphics are ever in a post.
+ * The client's approval of the MEDIA is untouched — that happens earlier,
+ * and only approved media is ever in a post.
  */
 export async function scheduleWithoutApproval(
   user: TeamUser, id: string, note?: string,
@@ -966,6 +966,17 @@ export async function cancelPost(user: TeamUser, id: string): Promise<PlannedPos
     cur && cur.status !== 'cancelled'
       ? { ...cur, status: 'cancelled', updated_at: stamp } as SocialPost
       : null)
+
+  // The approval belonged to THIS post, so it goes with it. Without this the
+  // item is left saying 'approved' over a post nobody will ever send: the
+  // next post on the item would inherit a yes given to different words, and
+  // the ad-hoc composer would find the gate open for an item whose only
+  // approved post was cancelled. Only when this post ever ASKED — cancelling
+  // a draft nobody sent has no answer to take back.
+  if (saved.claimed && post.sent_at) {
+    await actOnPostingApproval(user, item as never, { action: 'reset' })
+      .catch(e => console.error('approval reset failed:', (e as Error).message))
+  }
   await releaseClaimLock(postLockKey(item.id), id).catch(() => {})
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'cancelled' })
   return saved.claimed ? shape(saved.row) : shape(saved.current ?? (await posts().get(id))!)

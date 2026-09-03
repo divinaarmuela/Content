@@ -509,6 +509,53 @@ describe('one item, one post at a time', () => {
   })
 })
 
+/* ── cancelling takes the approval with it ──────────────────────────────── */
+
+describe('cancelling a post', () => {
+  const adhocFor = (body: Record<string, unknown> = {}) => json(
+    adhoc.POST(new Request('https://x.test/api/social/publish', {
+      method: 'POST',
+      body: JSON.stringify({
+        clientId: CLIENT, contentItemId: ITEM, caption: 'Straight to the queue',
+        media: [{ url: SLIDES[0].url, type: 'image' }],
+        targets: [{ platform: 'instagram', accountId: 'prov-1' }],
+        ...body,
+      }),
+    })))
+
+  it('puts the item\u2019s approval back, so nothing inherits it', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
+
+    const gone = await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
+    expect(gone.status).toBe(200)
+    expect(gone.body.post.status).toBe('cancelled')
+    // the yes belonged to that post, and that post is gone
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('draft')
+
+    // …so the ad-hoc door is shut again for this item
+    const adHoc = await adhocFor()
+    expect(adHoc.status).toBe(409)
+    expect(adHoc.body.error).toBe('Send the post for approval first')
+    expect(jobs()).toHaveLength(0)
+  })
+
+  it('leaves the item alone when the post was never sent', async () => {
+    fake.restore()
+    fake = seed({ posting_approval_state: 'approved' })
+    const id = (await create()).body.post.id as string
+
+    const gone = await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
+    expect(gone.status).toBe(200)
+    // nothing was ever asked on this post, so there is no answer to take back
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
+  })
+})
+
 /* ── sending, when somebody got there first ─────────────────────────────── */
 
 describe('send for approval, against a moving post', () => {
