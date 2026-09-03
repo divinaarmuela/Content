@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOverview, pipelineOf, unassignedOf } from '@/app/lib/overview-core'
+import { buildOverview, LEADS_CAP, pipelineOf, unassignedOf } from '@/app/lib/overview-core'
 
 /**
  * The Overview's numbers, pinned.
@@ -138,5 +138,45 @@ describe('buildOverview', () => {
     }) as never as { waiting_on_you: { items: { id: string }[]; shoots: { id: string }[] } }
     expect(out.waiting_on_you.items.map(i => i.id)).toEqual(['x'])
     expect(out.waiting_on_you.shoots.map(s => s.id)).toEqual(['b'])
+  })
+})
+
+describe('the leads cap', () => {
+  /**
+   * The route has always read `leads` with `limit: 50`, so "8+ total" has
+   * always meant "of the 50 newest". The page reads the same table through a
+   * live listener; a cap that lived only at the route's read would be the page
+   * and the endpoint quietly disagreeing about a number. It lives in
+   * `buildOverview` now, so it holds whatever either caller hands over.
+   */
+  const many = Array.from({ length: 120 }, (_, i) => ({
+    id: `l${i}`,
+    created_at: new Date(NOW - i * 3_600_000).toISOString(),
+  }))
+
+  it('counts at most LEADS_CAP, whatever the caller passes', () => {
+    const out = buildOverview({
+      user: { id: 'u1', role: 'account_manager', name: 'Div' },
+      items: [], tagged: { items: [], batches: [] },
+      leads: many, mayLeads: true, now: NOW,
+    }) as never as { manager: Record<string, never> }
+    expect(LEADS_CAP).toBe(50)
+    expect(out.manager.leads_total).toBe(50)
+    // the week window is counted inside the cap, exactly as the route did
+    expect(out.manager.leads_week).toBe(50)
+    expect((out.manager.latest_leads as unknown as unknown[]).length).toBe(6)
+  })
+
+  it('gives the same answer whether the caller capped at the read or not', () => {
+    const base = {
+      user: { id: 'u1', role: 'account_manager' as const, name: 'Div' },
+      items: [], tagged: { items: [] as string[], batches: [] as string[] },
+      mayLeads: true, now: NOW,
+    }
+    const uncapped = buildOverview({ ...base, leads: many }) as never as { manager: Record<string, never> }
+    const capped = buildOverview({ ...base, leads: many.slice(0, LEADS_CAP) }) as never as { manager: Record<string, never> }
+    expect(uncapped.manager.leads_total).toBe(capped.manager.leads_total)
+    expect(uncapped.manager.leads_week).toBe(capped.manager.leads_week)
+    expect(uncapped.manager.latest_leads).toEqual(capped.manager.latest_leads)
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -165,7 +165,11 @@ export default function ProductionPage() {
   const { me, role, loading, can } = useRole()
   const canPlan = can('editor')
   const isManager = can('account_manager')
-  const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
+  // memoised: this is the memo key `useWorkRows` scopes the whole table by,
+  // and a fresh object per render re-ran that on every keystroke in the
+  // search box
+  const viewer: Viewer | null = useMemo(
+    () => (me ? { id: me.id, role: me.role } : null), [me])
 
   // names for "waiting on …" and the Assign… menu — managers only. One
   // `/api/team` fetch, shared with the two New-work dialogs below.
@@ -204,6 +208,18 @@ export default function ProductionPage() {
     () => (live.items as unknown as BriefTask[]).filter(isInternalTask), [live.items])
   // schema not migrated yet: rows come back with no status — show the setup card
   const needsSchema = shoots !== null && shoots.length > 0 && shoots.every(r => !r.status)
+
+  /**
+   * A LISTENER THAT COULD NOT READ IS NOT AN EMPTY BOARD.
+   *
+   * The old page toasted 'Could not load shoots' when its fetch threw. Drawing
+   * nothing and saying nothing is worse than that was — an empty board looks
+   * like an answer. Toasted once per failure, not once per render.
+   */
+  const liveError = live.error
+  useEffect(() => {
+    if (liveError) toast.error('Could not load shoots')
+  }, [liveError])
 
   const [toDelete, setToDelete] = useState<Shoot | null>(null)
   const [delBusy, setDelBusy] = useState(false)

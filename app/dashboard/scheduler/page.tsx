@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { ExternalLink, ArrowRight, CalendarClock } from 'lucide-react'
+import { toast } from 'sonner'
 import { STATUS_LABELS, STATUS_MEANING, schedulerIdsOf, type ItemStatus } from '../../lib/workflow-core'
 import { choosePlatform, platformLabel } from '../../lib/posting-card-core'
 import { approvalChip } from '../../lib/posting-approval-core'
@@ -88,7 +89,11 @@ export default function SchedulerPage() {
 
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
-  const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
+  // memoised: this is the memo key `useWorkRows` scopes the whole table by,
+  // and a fresh object per render re-ran that on every keystroke in the
+  // search box
+  const viewer: Viewer | null = useMemo(
+    () => (me ? { id: me.id, role: me.role } : null), [me])
 
   // the comments drawer: read and answer an item's comments without leaving
   // the queue. `?comments=<itemId>` opens it on load (notification links).
@@ -118,6 +123,18 @@ export default function SchedulerPage() {
    */
   const live = useWorkRows(viewer)
   const items: Item[] | null = live.loading ? null : (live.items as unknown as Item[])
+
+  /**
+   * A LISTENER THAT COULD NOT READ IS NOT AN EMPTY BOARD.
+   *
+   * The old page toasted 'Failed to load queue' when its fetch threw. Drawing
+   * nothing and saying nothing is worse than that was — an empty board looks
+   * like an answer. Toasted once per failure, not once per render.
+   */
+  const liveError = live.error
+  useEffect(() => {
+    if (liveError) toast.error('Failed to load queue')
+  }, [liveError])
   const scheduleRows = useTable<ScheduleEntryRow>('schedule_entries', { enabled: viewer !== null })
   const schedules = useMemo(() => {
     const byItem: Record<string, ScheduleEntry[]> = {}

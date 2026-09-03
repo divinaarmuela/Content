@@ -22,8 +22,8 @@
  * listener repaints the moment the row lands.
  */
 
-import { useMemo } from 'react'
-import { useTable } from '@/lib/db-client'
+import { useEffect, useMemo, useState } from 'react'
+import { useRow, useTable } from '@/lib/db-client'
 import type {
   AssetVersion, Batch, Client, ContentItem, DeliverableGroup, ItemComment,
   TeamUser, TeamUserClient, WorkKind, WorkflowActivity, BatchComment,
@@ -32,7 +32,7 @@ import { CLIENT_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { slidesOf } from '../lib/version-files-core'
 import {
   visibleBatches, visibleClientIdsOf, visibleGroups, visibleItems,
-  type ScopeViewer,
+  type ScopeContext, type ScopeViewer,
 } from '../lib/scope-client'
 
 /** A board row: the item, its joins and the items API's three annotations. */
@@ -60,6 +60,17 @@ const BY_UPDATED_DESC: [keyof ContentItem & string, 'asc' | 'desc'][] = [['updat
 const BY_CREATED_DESC: [string, 'asc' | 'desc'][] = [['created_at', 'desc']]
 
 /**
+ * `useTable` hands back a fresh `{ rows, loading, error }` literal every
+ * render — `rows` is memoised inside it, `loading` and `error` are primitives,
+ * but the wrapper is not. Every memo downstream keys on these objects, so one
+ * unmemoised wrapper defeats the lot. This pins the wrapper to its contents.
+ */
+function stableTable<T>(r: { rows: T[]; loading: boolean; error: string | null }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => r, [r.rows, r.loading, r.error])
+}
+
+/**
  * Every table the three boards read, as live listeners.
  *
  * Split out from `useWorkRows` so a page that needs one raw table (the
@@ -75,21 +86,26 @@ const BY_CREATED_DESC: [string, 'asc' | 'desc'][] = [['created_at', 'desc']]
  * starting it immediately makes that window impossible instead of unlikely.
  */
 export function useWorkTables(enabled = true) {
-  const items = useTable<ContentItem>('content_items', { orderBy: BY_UPDATED_DESC, enabled })
-  const batches = useTable<Batch>('batches', { orderBy: BY_CREATED_DESC as never, enabled })
-  const clients = useTable<Client>('clients', { enabled })
-  const workKinds = useTable<WorkKind>('work_kinds', { enabled })
-  const groups = useTable<DeliverableGroup>('deliverable_groups', { orderBy: BY_CREATED_DESC as never, enabled })
-  const assignments = useTable<TeamUserClient>('team_user_clients', { enabled })
-  const team = useTable<TeamUser>('team_users', { enabled })
-  const itemComments = useTable<ItemComment>('item_comments', { enabled })
-  const batchComments = useTable<BatchComment & { assigned_to?: string | null; resolved?: boolean }>('batch_comments', { enabled })
-  const activity = useTable<WorkflowActivity>('workflow_activity', { enabled })
-  const versions = useTable<AssetVersion>('asset_versions', { enabled })
-  return {
+  const items = stableTable(useTable<ContentItem>('content_items', { orderBy: BY_UPDATED_DESC, enabled }))
+  const batches = stableTable(useTable<Batch>('batches', { orderBy: BY_CREATED_DESC as never, enabled }))
+  const clients = stableTable(useTable<Client>('clients', { enabled }))
+  const workKinds = stableTable(useTable<WorkKind>('work_kinds', { enabled }))
+  const groups = stableTable(useTable<DeliverableGroup>('deliverable_groups', { orderBy: BY_CREATED_DESC as never, enabled }))
+  const assignments = stableTable(useTable<TeamUserClient>('team_user_clients', { enabled }))
+  const team = stableTable(useTable<TeamUser>('team_users', { enabled }))
+  const itemComments = stableTable(useTable<ItemComment>('item_comments', { enabled }))
+  const batchComments = stableTable(useTable<BatchComment & { assigned_to?: string | null; resolved?: boolean }>('batch_comments', { enabled }))
+  const activity = stableTable(useTable<WorkflowActivity>('workflow_activity', { enabled }))
+  const versions = stableTable(useTable<AssetVersion>('asset_versions', { enabled }))
+  // memoised: `useWorkRows` and the Overview both use this object as a memo
+  // key, and a fresh literal per render would defeat every one of them
+  return useMemo(() => ({
     items, batches, clients, workKinds, groups, assignments, team,
     itemComments, batchComments, activity, versions,
-  }
+  }), [
+    items, batches, clients, workKinds, groups, assignments, team,
+    itemComments, batchComments, activity, versions,
+  ])
 }
 
 export type WorkTables = ReturnType<typeof useWorkTables>
@@ -285,5 +301,81 @@ export function useWorkRows(
   const loading = viewer === null
     || t.items.loading || t.batches.loading || t.clients.loading || t.workKinds.loading
 
-  return { items, batches, clients, groups, tagged, tables: t, loading }
+  /**
+   * A listener that could not read is a FAILURE, not an empty board.
+   *
+   * The old pages toasted "Could not load shoots" when their fetch threw. A
+   * live board that silently draws nothing on a dropped subscription is worse
+   * than the fetch was: it looks like an answer. Only the four tables the
+   * cards are made of count — a missing credit is not a broken page.
+   */
+  const error = t.items.error || t.batches.error || t.clients.error || t.workKinds.error || null
+
+  // memoised: this object is a memo key on every page that uses it (the
+  // Overview derives its whole payload from it), and a fresh literal per
+  // render would re-run every one of those on every keystroke
+  return useMemo(
+    () => ({ items, batches, clients, groups, tagged, tables: t, loading, error }),
+    [items, batches, clients, groups, tagged, t, loading, error],
+  )
+}
+
+/**
+ * The context ONE item's visibility check needs — the two grants a single row
+ * cannot carry on its own.
+ *
+ * `assignmentOpensItem` on the server opens an item for somebody off its
+ * client team in four ways: they own it, they hold its scheduling, they were
+ * TAGGED in a comment on it, or they hold the SHOOT it sits under (which is
+ * `canOpenBatch`: owning the shoot, owning or scheduling any item on it, or
+ * being tagged in the shoot's own thread). The first two are readable off the
+ * row; the other two are not, and passing `{ items: [item] }` quietly dropped
+ * them — a tagged editor off the client team opened their notification link
+ * and was told "Item not found".
+ *
+ * `loading` is the part that matters as much as the data: every leg here can
+ * only ever GRANT access, so judging on a half-arrived snapshot produces a
+ * false "not yours". It stays true until the subscriptions are keyed to THIS
+ * item and have all answered.
+ */
+export function useItemScopeContext(
+  viewer: ScopeViewer | null,
+  item: { id: string; batch_id?: string | null } | null | undefined,
+  /** this item's comments, already subscribed by the caller */
+  itemComments: { item_id?: string; assigned_to?: string | null }[],
+): { ctx: ScopeContext; loading: boolean } {
+  const batchId = item?.batch_id ?? null
+  const byBatch = useMemo(() => ({ batch_id: batchId ?? '' }), [batchId])
+  // the shoot, and every OTHER item on it: holding one of those siblings is
+  // what opens the shoot, and the shoot is what opens this row
+  const { row: batch, loading: batchLoading } = useRow<Batch>('batches', batchId)
+  const { rows: siblings, loading: siblingsLoading } = useTable<ContentItem>(
+    'content_items', { by: byBatch })
+  const { rows: batchComments, loading: batchCommentsLoading } =
+    useTable<BatchComment & { assigned_to?: string | null }>('batch_comments')
+
+  // A subscription re-keys in an EFFECT, one render after the key changed, so
+  // for that one render the hook still reports the previous key's settled
+  // rows. This says "not yet" for exactly that render.
+  const [keyedTo, setKeyedTo] = useState<string | null | undefined>(undefined)
+  useEffect(() => { setKeyedTo(batchId) }, [batchId])
+  const keyed = keyedTo === batchId
+
+  const ctx: ScopeContext = useMemo(() => ({
+    items: siblings,
+    batches: batch ? [batch] : [],
+    // a tag on THIS item's thread — resolved or not, exactly as the server's
+    // `taggedItemIds` reads it: being asked a question is the assignment
+    taggedItemIds: viewer && item && itemComments.some(c => c.assigned_to === viewer.id)
+      ? [item.id]
+      : [],
+    taggedBatchIds: viewer
+      ? batchComments.filter(c => c.assigned_to === viewer.id).map(c => c.batch_id).filter(Boolean)
+      : [],
+  }), [siblings, batch, batchComments, itemComments, viewer, item?.id])
+
+  return {
+    ctx,
+    loading: !keyed || siblingsLoading || batchCommentsLoading || (batchId !== null && batchLoading),
+  }
 }

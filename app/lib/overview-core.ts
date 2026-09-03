@@ -62,6 +62,18 @@ export type OverviewInput = {
   now?: number
 }
 
+/**
+ * How many leads the Overview's numbers are drawn from.
+ *
+ * The route has always read `leads` with `limit: 50`, so "8+ total" has always
+ * meant "of the 50 newest". The cap lives HERE rather than only at each read,
+ * because the page reads the same table through a live listener and a cap that
+ * exists in one caller and not the other is a page and an endpoint quietly
+ * disagreeing about a number. Both still cap at the read as well — no reason
+ * to carry rows across the wire only to drop them.
+ */
+export const LEADS_CAP = 50
+
 const kindOf = (i: OverviewItem) => i.work_kinds ?? null
 
 /** The content funnel: one count per status, with the rows that are not
@@ -180,7 +192,8 @@ export function buildOverview(input: OverviewInput): Record<string, unknown> {
   }
 
   // account_manager / super_admin — the funnel plus the front door
-  const leads = input.leads ?? []
+  // the cap is part of the answer, not an optimisation the caller may skip
+  const leads = (input.leads ?? []).slice(0, LEADS_CAP)
   const mayLeads = input.mayLeads ?? false
   // the manager's own queue: the three statuses whose turn is theirs.
   // 'client_review' is the CLIENT's move and already has its own stat.

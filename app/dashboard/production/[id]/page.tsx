@@ -13,6 +13,7 @@ import type {
 } from '@/lib/db-types'
 import { useRole } from '../../useRole'
 import { itemIsVisible } from '../../../lib/scope-client'
+import { useItemScopeContext } from '../../useLiveWork'
 import { shapeItemDetail } from '../../../lib/production-access-core'
 import {
   clearGroup, completedIn, dismissUpload, enqueueJobAssets,
@@ -420,6 +421,12 @@ export default function ItemDetailPage() {
     [me, team],
   )
 
+  /** the shoot, its other items and the comment tags — the two grants a
+   *  single row cannot carry, without which a tagged editor off the client
+   *  team is told this item does not exist */
+  const { ctx: scopeCtx, loading: scopeLoading } =
+    useItemScopeContext(liveViewer, itemRow, commentRows)
+
   /** the four fields only the server can answer, and the fetch that gets them */
   const [extras, setExtras] = useState<Partial<Detail>>({})
   const loadOrdered = useOrderedLoad<Detail>(
@@ -529,14 +536,15 @@ export default function ItemDetailPage() {
    */
   useEffect(() => {
     // never judge on a half-arrived snapshot: the client roster is what turns
-    // "not on this client" into "assigned to me", so wait for it
-    if (!liveViewer || itemLoading || assignmentsLoading) return
-    if (itemRow && itemIsVisible(liveViewer, itemRow, assignments, { items: [itemRow] })) return
+    // "not on this client" into "assigned to me", and every leg of scopeCtx
+    // can only ever GRANT — so wait for all of them
+    if (!liveViewer || itemLoading || assignmentsLoading || scopeLoading) return
+    if (itemRow && itemIsVisible(liveViewer, itemRow, assignments, scopeCtx)) return
     toast.error('Item not found')
     // no detail to ask where this came from — the editor board is where an
     // unreadable content item would have been listed
     router.push('/dashboard/editor')
-  }, [liveViewer, itemRow, itemLoading, assignmentsLoading, assignments, router])
+  }, [liveViewer, itemRow, itemLoading, assignmentsLoading, scopeLoading, assignments, scopeCtx, router])
 
   // A shoot plan lives on its SHOOT page now — the two pages used to ping-pong,
   // so a shoot_brief item just forwards to its shoot, keeping old links and

@@ -17,6 +17,7 @@ import type {
 } from '@/lib/db-types'
 import { useRole } from '../../dashboard/useRole'
 import { itemIsVisible } from '../../lib/scope-client'
+import { useItemScopeContext } from '../../dashboard/useLiveWork'
 import { shapeItemDetail } from '../../lib/production-access-core'
 import { extractMentions } from '../../lib/mention-core'
 import { commentBadge, commentsParamOf, withCommentsParam } from '../../lib/comment-drawer-core'
@@ -164,12 +165,17 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
   )
   const { rows: assignments, loading: assignmentsLoading } = useTable<TeamUserClient>('team_user_clients')
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
+  /** the shoot, its other items and the comment tags — the grants a single
+   *  row cannot carry. Without them a tagged editor off the client team was
+   *  told "Item not found" on the notification link that sent them here. */
+  const { ctx: scopeCtx, loading: scopeLoading } =
+    useItemScopeContext(viewer, item, commentRows)
 
   /** the item, shaped for this viewer — or the reason the drawer is empty */
   const { detail, failed } = useMemo((): { detail: DrawerDetail | null; failed: string | null } => {
-    if (!viewer || itemLoading || assignmentsLoading) return { detail: null, failed: null }
+    if (!viewer || itemLoading || assignmentsLoading || scopeLoading) return { detail: null, failed: null }
     if (!item) return { detail: null, failed: 'Item not found' }
-    if (!itemIsVisible(viewer, item, assignments, { items: [item] })) {
+    if (!itemIsVisible(viewer, item, assignments, scopeCtx)) {
       // the same words the API answered with — never "you are not allowed",
       // which tells somebody a thing exists that they cannot see
       return { detail: null, failed: 'Item not found' }
@@ -191,7 +197,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
       },
       failed: null,
     }
-  }, [viewer, item, itemLoading, assignmentsLoading, assignments, team, commentRows, client])
+  }, [viewer, item, itemLoading, assignmentsLoading, scopeLoading, assignments, scopeCtx, team, commentRows, client])
 
   /** the people "@" can reach: everyone active on the team but you */
   const mentionable = useMemo(
@@ -313,13 +319,10 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
 
       <div ref={scrollRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {failed ? (
-          <div className="flex flex-col items-start gap-2">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">{failed}</p>
-            <Button variant="outline" size="sm" className="min-h-11"
-              onClick={() => window.location.reload()}>
-              Try again
-            </Button>
-          </div>
+          // no "Try again": the thread is a live subscription, so this is the
+          // database's current answer and pressing a button cannot change it.
+          // (A dropped connection reconnects and repaints on its own.)
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">{failed}</p>
         ) : detail === null ? (
           <>
             <Skeleton className="h-14 w-full" />

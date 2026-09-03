@@ -22,7 +22,7 @@ import { useTable } from '@/lib/db-client'
 import type { Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
 import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
-import { buildOverview, type OverviewItem } from '../lib/overview-core'
+import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -581,7 +581,10 @@ export default function OverviewPage() {
   const leadsRow = pageAccess.find(r => r.href === '/dashboard/leads')
   const mayLeads = isManager && !leadsRow?.hidden
     && (viewer?.role === 'super_admin' || (!!leadsRow && !leadsRow.hidden))
-  const { rows: leadRows } = useTable<Lead>('leads', { orderBy: LEADS_NEWEST, enabled: mayLeads })
+  // the same 50 the route reads: "8+ total" means "of the 50 newest", and a
+  // page counting more than the endpoint does is the two disagreeing
+  const { rows: leadRows } = useTable<Lead>(
+    'leads', { orderBy: LEADS_NEWEST, limit: LEADS_CAP, enabled: mayLeads })
   const { rows: entryRows } = useTable<ScheduleEntry>(
     'schedule_entries', { enabled: enabled && viewer?.role === 'scheduler' })
 
@@ -647,7 +650,7 @@ export default function OverviewPage() {
     }) as unknown as Overview
   }, [me, viewer, live, entryRows, leadRows, mayLeads])
 
-  const loading = data === null
+  const loading = data === null && live.error === null
   const role = data?.role
 
   const subtitle =
@@ -659,9 +662,17 @@ export default function OverviewPage() {
     <div className="flex flex-col gap-4">
       <Greeting subtitle={subtitle} />
 
+      {/* a listener that could not read is a failure, not a page of zeros —
+          every number below is drawn from those rows, and showing "0 waiting
+          on you" because the connection dropped is a lie with a number on it */}
+      {live.error && (
+        <LoadFailed what="your dashboard" detail={live.error}
+          onRetry={() => window.location.reload()} />
+      )}
+
       {/* the only onboarding in the product — three steps for this role, each
           a real link, dismissed per person and per role */}
-      {!loading && <GettingStarted role={(role ?? null) as Role | null} />}
+      {!loading && !live.error && <GettingStarted role={(role ?? null) as Role | null} />}
 
       {/* somebody tagged you and it is not done — every role, whatever the
           client. The tag is the assignment; this is where it is answered. */}

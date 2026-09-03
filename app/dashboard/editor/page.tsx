@@ -131,7 +131,11 @@ export default function EditorPage() {
 
   const { me, role, loading, can } = useRole()
   const isManager = can('account_manager')
-  const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
+  // memoised: this is the memo key `useWorkRows` scopes the whole table by,
+  // and a fresh object per render re-ran that on every keystroke in the
+  // search box
+  const viewer: Viewer | null = useMemo(
+    () => (me ? { id: me.id, role: me.role } : null), [me])
   // the footer is a link to another PAGE — only offer it to someone who may
   // open it. No grants are loaded here, so this is the role default; a
   // person granted the page individually reaches it from the sidebar.
@@ -177,6 +181,18 @@ export default function EditorPage() {
   const clients = live.clients as unknown as ClientRow[]
   const batches = live.batches as unknown as Batch[]
   const groups = live.groups as unknown as DeliverableGroup[]
+
+  /**
+   * A LISTENER THAT COULD NOT READ IS NOT AN EMPTY BOARD.
+   *
+   * The old page toasted 'Failed to load the editor board' when its fetch threw. Drawing
+   * nothing and saying nothing is worse than that was — an empty board looks
+   * like an answer. Toasted once per failure, not once per render.
+   */
+  const liveError = live.error
+  useEffect(() => {
+    if (liveError) toast.error('Failed to load the editor board')
+  }, [liveError])
   // arriving from a shoot's "Create items": dialog open, client+shoot preset
   // (the old `new_for_batch` spelling still works — a bookmarked link is a link)
   useEffect(() => {

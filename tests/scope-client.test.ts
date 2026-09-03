@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  accessibleClientIdsOf, assignedItemsPredicate, heldBatchIdsOf, visibleBatches,
-  visibleItems,
+  accessibleClientIdsOf, assignedItemsPredicate, heldBatchIdsOf, itemIsVisible,
+  visibleBatches, visibleClientIdsOf, visibleGroups, visibleItems,
 } from '@/app/lib/scope-client'
 
 /**
@@ -148,5 +148,135 @@ describe('visibleBatches', () => {
     // batchClientIds: only super_admin is unrestricted for shoots
     expect(visibleBatches({ id: 'u1', role: 'scheduler' }, batches, [], onC1, []).map(b => b.id))
       .toEqual(['bA'])
+  })
+})
+
+describe('itemIsVisible', () => {
+  const item: any = {
+    id: 'x1', client_id: 'cX', status: 'draft_uploaded',
+    owner_id: 'u9', batch_id: 'bA', scheduler_ids: [],
+  }
+
+  it('opens for the client team, and for the owner', () => {
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item,
+      [{ id: 'u1__cX', team_user_id: 'u1', client_id: 'cX' } as any])).toBe(true)
+    expect(itemIsVisible({ id: 'u9', role: 'editor' }, item, [])).toBe(true)
+  })
+
+  it('opens for a viewer TAGGED on it, off the client team', () => {
+    // the notification deep-links straight here; a link to "not found" is
+    // worse than no link (assignmentOpensItem, the comment-tag leg)
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [])).toBe(false)
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [], { taggedItemIds: ['x1'] }))
+      .toBe(true)
+  })
+
+  it('opens for a viewer who owns a SIBLING item on the same shoot', () => {
+    // canOpenBatch: holding a job on the shoot opens the shoot, and the shoot
+    // opens every item on it -- the shoot page lists them all, and a list
+    // whose rows 404 on click is the same broken promise facing the other way
+    const sibling: any = { id: 'x2', client_id: 'cX', status: 'draft_uploaded', owner_id: 'u1', batch_id: 'bA' }
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [], { items: [item, sibling] }))
+      .toBe(true)
+    // ...and for one handed the SCHEDULING of a sibling, not just owning it
+    const handed: any = { id: 'x3', client_id: 'cX', status: 'draft_uploaded', owner_id: 'u9', batch_id: 'bA', scheduler_ids: ['u1'] }
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [], { items: [item, handed] }))
+      .toBe(true)
+  })
+
+  it('opens for a viewer who OWNS the shoot, or was tagged in its thread', () => {
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [],
+      { batches: [{ id: 'bA', client_id: 'cX', owner_id: 'u1' }] })).toBe(true)
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [], { taggedBatchIds: ['bA'] }))
+      .toBe(true)
+  })
+
+  it('stays shut for an unrelated viewer, however much context is supplied', () => {
+    const otherShoot: any = { id: 'y1', client_id: 'cY', status: 'draft_uploaded', owner_id: 'u1', batch_id: 'bZ' }
+    expect(itemIsVisible({ id: 'u1', role: 'editor' }, item, [], {
+      items: [item, otherShoot],
+      batches: [{ id: 'bA', client_id: 'cX', owner_id: 'u9' }],
+      taggedItemIds: ['someone-elses-item'],
+      taggedBatchIds: ['bZ'],
+    })).toBe(false)
+  })
+
+  it('opens a shoot plan for a scheduler that the BOARD would hide', () => {
+    // the list drops a brief from a scheduler's board; loadItemForUser has
+    // always opened one. itemIsVisible follows the page, not the list.
+    const brief: any = {
+      id: 'b1', client_id: 'c1', status: 'approved_for_scheduling',
+      owner_id: 'u9', scheduler_ids: [], work_kinds: { slug: 'shoot_brief' },
+    }
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, [brief], []).length).toBe(0)
+    expect(itemIsVisible({ id: 'u1', role: 'scheduler' }, brief, [])).toBe(true)
+  })
+
+  it('keeps the scheduler status gate and the taken seat', () => {
+    const draft: any = { id: 'd', client_id: 'c1', status: 'draft_uploaded', owner_id: 'u9', scheduler_ids: [] }
+    expect(itemIsVisible({ id: 'u1', role: 'scheduler' }, draft, [])).toBe(false)
+    const handed: any = { id: 'h', client_id: 'c1', status: 'scheduled', owner_id: 'u9', scheduler_ids: ['u2'] }
+    expect(itemIsVisible({ id: 'u1', role: 'scheduler' }, handed, [])).toBe(false)
+    expect(itemIsVisible({ id: 'u2', role: 'scheduler' }, handed, [])).toBe(true)
+  })
+
+  it('is false for no row at all', () => {
+    expect(itemIsVisible({ id: 'u1', role: 'super_admin' }, null)).toBe(false)
+  })
+})
+
+describe('schedulerPostFilter: false', () => {
+  // the Overview counts a scheduler's whole scoped list and lets each card
+  // decide; turning the board's post-filter on there would change every number
+  const rows: any[] = [
+    { id: 'brief', client_id: 'c1', status: 'approved_for_scheduling', owner_id: 'u9', scheduler_ids: [], work_kinds: { slug: 'shoot_brief' } },
+    { id: 'handed', client_id: 'c1', status: 'approved_for_scheduling', owner_id: 'u9', scheduler_ids: ['u2'] },
+    { id: 'free', client_id: 'c1', status: 'approved_for_scheduling', owner_id: 'u9', scheduler_ids: [] },
+  ]
+  it('keeps the status gate but drops the board-only post-filter', () => {
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, []).map(i => i.id)).toEqual(['free'])
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, [], { schedulerPostFilter: false })
+      .map(i => i.id)).toEqual(['brief', 'handed', 'free'])
+  })
+  it('still hides a pre-approval row the scheduler does not own', () => {
+    const draft: any = [{ id: 'd', client_id: 'c1', status: 'draft_uploaded', owner_id: 'u9' }]
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, draft, [], { schedulerPostFilter: false }))
+      .toEqual([])
+  })
+})
+
+describe('visibleGroups', () => {
+  const groups: any[] = [{ id: 'g1', client_id: 'c1' }, { id: 'g2', client_id: 'c9' }]
+  it('is everything for the unrestricted roles', () => {
+    expect(visibleGroups({ id: 'u1', role: 'super_admin' }, groups, []).map(g => g.id))
+      .toEqual(['g1', 'g2'])
+    // a scheduler is gated by status on items, not by client
+    expect(visibleGroups({ id: 'u1', role: 'scheduler' }, groups, []).map(g => g.id))
+      .toEqual(['g1', 'g2'])
+  })
+  it('is the client team groups for everyone else, and none without a team', () => {
+    expect(visibleGroups({ id: 'u1', role: 'editor' }, groups, onC1).map(g => g.id)).toEqual(['g1'])
+    expect(visibleGroups({ id: 'u1', role: 'editor' }, groups, [])).toEqual([])
+  })
+})
+
+describe('visibleClientIdsOf', () => {
+  const batches: any[] = [{ id: 'bA', client_id: 'cX', owner_id: 'u1' }]
+  const rows: any[] = [
+    { id: 'i1', client_id: 'cY', status: 'draft_uploaded', owner_id: 'u1' },
+    { id: 'i2', client_id: 'cZ', status: 'draft_uploaded', owner_id: 'u9' },
+  ]
+  it('stays null for the unrestricted roles', () => {
+    expect(visibleClientIdsOf({ id: 'u1', role: 'super_admin' }, rows, batches, [])).toBeNull()
+    expect(visibleClientIdsOf({ id: 'u1', role: 'scheduler' }, rows, batches, [])).toBeNull()
+  })
+  it('is the client own id for a client -- assignment never widens it', () => {
+    expect(visibleClientIdsOf({ id: 'c', role: 'client', client_id: 'c9' }, rows, batches, []))
+      .toEqual(['c9'])
+  })
+  it('adds the clients of everything assignment already opens', () => {
+    // on c1; owns an item for cY and the shoot for cX -- all three are context
+    const out = visibleClientIdsOf({ id: 'u1', role: 'editor' }, rows, batches, onC1)
+    expect([...(out ?? [])].sort()).toEqual(['c1', 'cX', 'cY'])
   })
 })
