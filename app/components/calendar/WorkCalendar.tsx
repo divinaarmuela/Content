@@ -145,7 +145,9 @@ function EventChip({ e, viewer, onMove, dense, onDragStart, onDragEnd }: {
       }`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[clientTone(e.clientId)]}`}
         aria-hidden />
-      <span className="shrink-0 rounded bg-black/5 px-1 font-mono text-[9px] uppercase tracking-wide dark:bg-white/10">
+      {/* the same 12/600 pill the boards wear — a 9px mono chip was the one
+          piece of type on the calendar nobody could read at arm's length */}
+      <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-chip-12 uppercase dark:bg-white/[0.12]">
         {e.typeChip}
       </span>
       {time && <span className="shrink-0 font-mono text-[10px] tabular-nums">{time}</span>}

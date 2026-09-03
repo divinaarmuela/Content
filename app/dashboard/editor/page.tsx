@@ -137,6 +137,10 @@ function todayKey() {
  * can read from the doorway.
  */
 function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined {
+  // `published` and `scheduled` cannot reach this board — `editorScope` drops
+  // both before the lanes are built. They are kept so the three boards share
+  // ONE rule rather than three that agree by coincidence, and so a card looks
+  // the same the day someone widens the scope.
   if (status === 'published') return 'ink'
   if (due && due.slice(0, 10) <= todayKey()) return 'amber'
   if (status === 'approved_for_scheduling') return 'green'
@@ -448,127 +452,127 @@ export default function EditorPage() {
     return (
       <div key={`group-${card.group.id}`}
         className="flex flex-col gap-2.5 rounded-inner border border-border bg-surface p-3.5 text-foreground">
-            <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
-              {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
-            </span>
-            <div className="flex items-start justify-between gap-2">
-              {mixed ? (
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-[15px] font-semibold leading-[1.25]">{card.group.title}</span>
-                  <span className="text-[13px] text-muted-foreground">{mixedGroupLine(card.group, card.items)}</span>
-                </div>
-              ) : (
-                <span className="text-[15px] font-semibold leading-[1.25]">{groupLine(card)}</span>
-              )}
-              <div className="flex shrink-0 items-center">
-                <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
-                  onClick={() => setOpenGroups(prev => {
-                    const next = new Set(prev)
-                    if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
-                    return next
-                  })}
-                  className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
-                  {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-                <button type="button" aria-label="Delete this card"
-                  onClick={() => setGroupToDelete(card)}
-                  className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-accent-red">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+        <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
+          {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
+        </span>
+        <div className="flex items-start justify-between gap-2">
+          {mixed ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate text-[15px] font-semibold leading-[1.25]">{card.group.title}</span>
+              <span className="text-[13px] text-muted-foreground">{mixedGroupLine(card.group, card.items)}</span>
             </div>
-            {/* The bar, one segment per piece.
-             *
-             *  It used to be a single emerald fill of "how much exists", which
-             *  meant a card holding five approved pieces and two the client
-             *  wants changed drew a 100% GREEN bar while sitting in the
-             *  "Client wants changes" lane — the only card on the board that
-             *  could read finished and stuck at once. Segments show where the
-             *  work actually is; the empty tail is what is still owed. */}
-            <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-foreground/[0.08]">
-              {statusSpread(card.items).map(s => (
-                <div
-                  key={s.status}
-                  title={`${s.count} · ${STATUS_LABELS[s.status]}`}
-                  className={`h-full transition-all ${SEGMENT_TINT[s.status]}`}
-                  style={{ width: `${(s.count / Math.max(1, card.target)) * 100}%` }}
-                />
-              ))}
-            </div>
-            {/* …and the same fact in words, only when the pieces disagree */}
-            {spreadLine(card.items, STATUS_LABELS) && (
-              <p className="text-[13px] text-muted-foreground">
-                {spreadLine(card.items, STATUS_LABELS)}
-                {card.count < card.target && ` · ${card.target - card.count} not started`}
-              </p>
-            )}
-            {/* per-format progress: Reels 2/2 ✓ · Carousels 1/2 · Videos 0/2 */}
-            {mixed && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {breakdown.map(f => {
-                  const chip = formatChip(f)
-                  return (
-                    <Chip key={f.type} tone={chip.done ? 'green' : 'muted'}>
-                      {chip.label}{chip.done ? ' ✓' : ''}
-                    </Chip>
-                  )
-                })}
-              </div>
-            )}
-            {!mixed && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Chip className="capitalize">{card.group.content_type}</Chip>
-              </div>
-            )}
-            {open && (
-              <div className="flex flex-col gap-1">
-                {card.items.length === 0 && (
-                  <p className="text-[13px] text-muted-foreground">No pieces yet — add the first one below.</p>
-                )}
-                {card.items.map(i => (
-                  <Link key={i.id} href={`/dashboard/production/${i.id}`}
-                    className="flex min-h-11 items-center justify-between gap-2 rounded-tile px-2 text-[13px] hover:bg-foreground/[0.05]">
-                    <span className="flex min-w-0 items-center gap-1.5 truncate">
-                      {mixed && (
-                        <span className="shrink-0 rounded-tile bg-foreground/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          {i.content_type}
-                        </span>
-                      )}
-                      <span className="truncate">{i.title}</span>
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">{STATUS_LABELS[i.status]}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-            {mixed ? (
-              // driven by what each FORMAT still owes, not the aggregate count —
-              // six reels on a 2+2+2 card have not filled the carousels
-              owed.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90">
-                      <Plus className="h-4 w-4" />
-                      Add the next piece
-                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {owed.map(t => (
-                      <DropdownMenuItem key={t} className="min-h-11" onSelect={() => openAddPiece(card, t)}>
-                        {addTypeLabel(t)}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+          ) : (
+            <span className="text-[15px] font-semibold leading-[1.25]">{groupLine(card)}</span>
+          )}
+          <div className="flex shrink-0 items-center">
+            <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
+              onClick={() => setOpenGroups(prev => {
+                const next = new Set(prev)
+                if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
+                return next
+              })}
+              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
+              {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            <button type="button" aria-label="Delete this card"
+              onClick={() => setGroupToDelete(card)}
+              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-accent-red">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        {/* The bar, one segment per piece.
+         *
+         *  It used to be a single emerald fill of "how much exists", which
+         *  meant a card holding five approved pieces and two the client
+         *  wants changed drew a 100% GREEN bar while sitting in the
+         *  "Client wants changes" lane — the only card on the board that
+         *  could read finished and stuck at once. Segments show where the
+         *  work actually is; the empty tail is what is still owed. */}
+        <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-foreground/[0.08]">
+          {statusSpread(card.items).map(s => (
+            <div
+              key={s.status}
+              title={`${s.count} · ${STATUS_LABELS[s.status]}`}
+              className={`h-full transition-all ${SEGMENT_TINT[s.status]}`}
+              style={{ width: `${(s.count / Math.max(1, card.target)) * 100}%` }}
+            />
+          ))}
+        </div>
+        {/* …and the same fact in words, only when the pieces disagree */}
+        {spreadLine(card.items, STATUS_LABELS) && (
+          <p className="text-[13px] text-muted-foreground">
+            {spreadLine(card.items, STATUS_LABELS)}
+            {card.count < card.target && ` · ${card.target - card.count} not started`}
+          </p>
+        )}
+        {/* per-format progress: Reels 2/2 ✓ · Carousels 1/2 · Videos 0/2 */}
+        {mixed && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {breakdown.map(f => {
+              const chip = formatChip(f)
+              return (
+                <Chip key={f.type} tone={chip.done ? 'green' : 'muted'}>
+                  {chip.label}{chip.done ? ' ✓' : ''}
+                </Chip>
               )
-            ) : (!card.full && (
-              <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90"
-                onClick={() => openAddPiece(card, card.group.content_type)}>
-                <Plus className="h-4 w-4" />
-                {addNextLabel(card.group)}
-              </Button>
+            })}
+          </div>
+        )}
+        {!mixed && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip className="capitalize">{card.group.content_type}</Chip>
+          </div>
+        )}
+        {open && (
+          <div className="flex flex-col gap-1">
+            {card.items.length === 0 && (
+              <p className="text-[13px] text-muted-foreground">No pieces yet — add the first one below.</p>
+            )}
+            {card.items.map(i => (
+              <Link key={i.id} href={`/dashboard/production/${i.id}`}
+                className="flex min-h-11 items-center justify-between gap-2 rounded-tile px-2 text-[13px] hover:bg-foreground/[0.05]">
+                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  {mixed && (
+                    <span className="shrink-0 rounded-tile bg-foreground/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {i.content_type}
+                    </span>
+                  )}
+                  <span className="truncate">{i.title}</span>
+                </span>
+                <span className="shrink-0 text-muted-foreground">{STATUS_LABELS[i.status]}</span>
+              </Link>
             ))}
+          </div>
+        )}
+        {mixed ? (
+          // driven by what each FORMAT still owes, not the aggregate count —
+          // six reels on a 2+2+2 card have not filled the carousels
+          owed.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90">
+                  <Plus className="h-4 w-4" />
+                  Add the next piece
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {owed.map(t => (
+                  <DropdownMenuItem key={t} className="min-h-11" onSelect={() => openAddPiece(card, t)}>
+                    {addTypeLabel(t)}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )
+        ) : (!card.full && (
+          <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90"
+            onClick={() => openAddPiece(card, card.group.content_type)}>
+            <Plus className="h-4 w-4" />
+            {addNextLabel(card.group)}
+          </Button>
+        ))}
       </div>
     )
   }
@@ -707,20 +711,25 @@ export default function EditorPage() {
             )}
         </div>
       ) : view === 'calendar' ? (
-        <WorkCalendar
-          events={calendar}
-          viewer={viewer}
-          view={range as CalendarView}
-          onViewChange={setRange}
-          onMove={moveEvent}
-          undatedLabel="No due date"
-          legend={
-            <p className="text-[15px] text-muted-foreground">
-              Every item on its due date, coloured by the step it is on. Drag one to
-              another day to move the date.
-            </p>
-          }
-        />
+        /* the same 22px surface card the Scheduler's calendar sits on — a
+           month grid loose on the cream canvas is the one thing on the page
+           without an edge. Wrapper only: no prop of WorkCalendar moves. */
+        <section className="rounded-card border border-border bg-surface p-4 sm:p-6">
+          <WorkCalendar
+            events={calendar}
+            viewer={viewer}
+            view={range as CalendarView}
+            onViewChange={setRange}
+            onMove={moveEvent}
+            undatedLabel="No due date"
+            legend={
+              <p className="text-[15px] text-muted-foreground">
+                Every item on its due date, coloured by the step it is on. Drag one to
+                another day to move the date.
+              </p>
+            }
+          />
+        </section>
       ) : (
         <LaneBoard
           ariaLabel="Editor columns"
@@ -771,8 +780,11 @@ export default function EditorPage() {
                             <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName}
                               openTask={item.my_open_task}
                               onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
+                            {/* two different problems: one is ours to fix,
+                                one came back from the client — and a board
+                                where both are amber cannot say which */}
                             {item.status === 'revision_required' && <Chip tone="amber">needs edit</Chip>}
-                            {item.status === 'client_changes_requested' && <Chip tone="amber">client changes</Chip>}
+                            {item.status === 'client_changes_requested' && <Chip tone="red">client changes</Chip>}
                             {item.due_date && (
                               <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(item.due_date)}</Chip>
                             )}

@@ -242,13 +242,17 @@ export default function SchedulerPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        {/* the three steps as pills, each carrying how much is sitting on it */}
-        <div role="tablist" aria-label="Which step to show"
+        {/* The three steps, as the same pressed-button rail the scope switch
+            and the view switch are. NOT role="tablist": that promises
+            aria-controls, a tabpanel and arrow-key roving to a screen reader,
+            and half a promise is worse than none. These are buttons that
+            filter a list, and aria-pressed is exactly what they do. */}
+        <div role="group" aria-label="Which step to show"
           className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-border bg-surface p-1">
           {LANES.map(l => {
             const active = l.key === lane
             return (
-              <button key={l.key} type="button" role="tab" aria-selected={active}
+              <button key={l.key} type="button" aria-pressed={active}
                 onClick={() => setLane(l.key)}
                 className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors ${
                   active ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
@@ -388,7 +392,7 @@ export default function SchedulerPage() {
                     <Chip tone="green">{STATUS_LABELS.approved_for_scheduling}</Chip>
                   )}
                   {entries.map(e => (
-                    <span key={e.platform} className="relative z-10 flex items-center gap-1">
+                    <span key={e.platform} className="flex items-center gap-1">
                       <Chip className="capitalize">
                         {e.platform}
                         {e.scheduled_at && (
@@ -406,8 +410,11 @@ export default function SchedulerPage() {
                         )}
                       </Chip>
                       {e.live_url && (
+                        // the one thing on the chip row that is its own
+                        // destination, so it — and only it — rides above the
+                        // card's stretched link
                         <a href={e.live_url} target="_blank" rel="noreferrer noopener"
-                          className="flex h-11 w-11 items-center justify-center rounded-full text-accent-green hover:bg-foreground/[0.06]"
+                          className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full text-accent-green hover:bg-foreground/[0.06]"
                           aria-label={`Live on ${e.platform}`}>
                           <ExternalLink className="h-4 w-4" />
                         </a>
@@ -418,10 +425,10 @@ export default function SchedulerPage() {
                   <CommentsButton className="ml-auto" tagged={item.my_open_task} title={item.title}
                     onOpen={() => commentsDrawer.open(item.id, item.title)} />
                 </>}
+                note={item.caption
+                  ? <span className="line-clamp-2">{item.caption}</span>
+                  : undefined}
                 actions={<>
-                  {item.caption && (
-                    <p className="line-clamp-2 w-full text-[13px] text-muted-foreground">{item.caption}</p>
-                  )}
                   {/* ONE primary per row: take it if nobody has, else the
                       posting action. Both filled at once was two blue buttons
                       asking two different questions. */}
