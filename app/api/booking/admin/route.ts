@@ -66,7 +66,9 @@ export async function GET() {
   return withRequestCache(async () => {
     try {
       await requireBookingsAccess()
-      // a read that fails at all (nothing migrated yet) → empty, with a flag
+      // Vestigial: on the Realtime Database an empty node reads as no rows
+      // rather than an error, so this flag only trips on a transport failure
+      // and the page's "run the migration" banner can no longer appear.
       let missing = false
       const services = await table<BookingService>('booking_services')
         .list({ orderBy: [['sort_order', 'asc'], ['name', 'asc']] })
@@ -129,7 +131,7 @@ export async function POST(req: Request) {
             return NextResponse.json({
               error: e instanceof DbError && e.code === 'unique'
                 ? 'A service with that name/slug already exists'
-                : 'Run supabase/booking.sql first',
+                : 'Bookings are not set up yet',
             }, { status: 400 })
           }
         }
@@ -165,6 +167,7 @@ export async function POST(req: Request) {
           }
           if (!Object.keys(patch).length) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
           const data = await table('booking_services').update(String(body.id), patch)
+          if (!data) return NextResponse.json({ error: 'Service not found' }, { status: 500 })
           return NextResponse.json({ service: data })
         }
         case 'delete_service': {
@@ -185,7 +188,7 @@ export async function POST(req: Request) {
             })
             return NextResponse.json({ resource: data })
           } catch {
-            return NextResponse.json({ error: 'Run supabase/booking.sql first' }, { status: 400 })
+            return NextResponse.json({ error: 'Bookings are not set up yet' }, { status: 400 })
           }
         }
         case 'update_resource': {
@@ -194,6 +197,7 @@ export async function POST(req: Request) {
           if ('email' in body) patch.email = String(body.email ?? '').trim().slice(0, 200) || null
           if ('active' in body) patch.active = body.active !== false
           const data = await table('booking_resources').update(String(body.id), patch)
+          if (!data) return NextResponse.json({ error: 'Resource not found' }, { status: 500 })
           return NextResponse.json({ resource: data })
         }
         case 'delete_resource': {
@@ -246,7 +250,7 @@ export async function POST(req: Request) {
         case 'cancel_booking': {
           // only a live booking cancels, and exactly once — the state is
           // re-read immediately before the write rather than guarded by it
-          const live = await table<Booking>('bookings').get(String(body.id))
+          const live = await table<Booking>('bookings').get(String(body.id), { fresh: true })
           if (!live || live.status === 'cancelled') {
             return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
           }
@@ -293,7 +297,7 @@ export async function POST(req: Request) {
           if (!free) {
             return NextResponse.json({ error: 'That time is already taken' }, { status: 409 })
           }
-          const live = await table<Booking>('bookings').get(id)
+          const live = await table<Booking>('bookings').get(id, { fresh: true })
           if (!live || live.status === 'cancelled') {
             return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
           }

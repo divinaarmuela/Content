@@ -318,6 +318,12 @@ export async function seatIsFree(input: {
   excludeId?: string
 }): Promise<boolean> {
   const clashes = await table<Booking>('bookings').list({
+    // `fresh` is the whole point: callers reach here after several other
+    // reads of this table inside one withRequestCache, and a seat check
+    // answered from a cached copy of `bookings` is a check against the state
+    // several round-trips ago — exactly the race this function exists to
+    // close. It also drops the stale whole-table entry for later reads.
+    fresh: true,
     where: b =>
       b.id !== input.excludeId
       && b.status !== 'cancelled'

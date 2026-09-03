@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       }
       // only a live booking can be cancelled, and exactly once — the state is
       // re-read immediately before the write rather than guarded by it
-      const live = await table<Booking>('bookings').get(booking.id)
+      const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
       if (!live || live.status === 'cancelled') {
         return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
       }
@@ -153,7 +153,7 @@ export async function POST(req: Request) {
     if (!free) {
       return NextResponse.json({ error: 'That time was just taken — pick another' }, { status: 409 })
     }
-    const live = await table<Booking>('bookings').get(booking.id)
+    const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
     if (!live || live.status === 'cancelled') {
       return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
     }

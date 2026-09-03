@@ -51,11 +51,13 @@ export async function GET(req: Request) {
 
     const ids = await accessibleClientIds(user)
     // an empty id list scopes to nothing on its own — no sentinel needed
+    // every read below degrades to empty rather than erroring the page: a
+    // transient fault yields a month with no rows, the same as overview GET
     const clients = await table('clients').list({
       by: { status: 'active' },
       where: ids === null ? undefined : r => ids.includes(r.id),
       orderBy: [['name', 'asc']],
-    })
+    }).catch(() => [])
     const clientIds = clients.map(c => c.id)
     if (clientIds.length === 0) {
       return NextResponse.json({ month, year, month_key: monthKey, tz: PORTAL_TZ, clients: [] })
@@ -68,14 +70,18 @@ export async function GET(req: Request) {
     const to = new Date(Date.UTC(year, month, 1) + 86_400_000).toISOString()
 
     const [agreements, commitments, items, batches] = await Promise.all([
-      table<ClientAgreement>('client_agreements').list({ where: r => clientIds.includes(r.client_id) }),
+      table<ClientAgreement>('client_agreements')
+        .list({ where: r => clientIds.includes(r.client_id) }).catch(() => []),
       table('monthly_commitments')
-        .list({ where: r => clientIds.includes(r.client_id as string) && r.month === month && r.year === year }),
+        .list({ where: r => clientIds.includes(r.client_id as string) && r.month === month && r.year === year })
+        .catch(() => []),
       table<ContentItem>('content_items')
         .list({ where: r => clientIds.includes(r.client_id), limit: 4000 })
         .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media']))
-        .then(rows => attachMany(rows, 'id', 'schedule_entries', 'item_id', ['published_at'])),
-      table<Batch>('batches').list({ where: r => clientIds.includes(r.client_id), limit: 1000 }),
+        .then(rows => attachMany(rows, 'id', 'schedule_entries', 'item_id', ['published_at']))
+        .catch(() => []),
+      table<Batch>('batches')
+        .list({ where: r => clientIds.includes(r.client_id), limit: 1000 }).catch(() => []),
     ])
 
     type ItemRow = {

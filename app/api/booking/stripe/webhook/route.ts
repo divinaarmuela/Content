@@ -77,7 +77,7 @@ async function fulfil(session: Stripe.Checkout.Session) {
 
   // re-read immediately before the write so two concurrent deliveries cannot
   // both "first" confirm
-  const live = await table<Booking>('bookings').get(booking.id)
+  const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
   if (!live || live.payment_status === 'paid') return
   await table<Booking>('bookings').update(booking.id, {
     payment_status: 'paid',

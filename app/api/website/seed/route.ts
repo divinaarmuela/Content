@@ -25,10 +25,19 @@ export async function POST() {
 
       let clientRow: { id: string }
       try {
-        // `status` is minted here because Postgres defaulted it to 'active';
-        // a client with no status shows up on no list.
-        clientRow = await table('clients')
-          .upsert({ slug: c.slug, name: c.name, industry: c.industry, status: 'active' }, { onConflict: 'slug' })
+        // `status` is minted only for a client this run CREATES — Postgres
+        // defaulted it to 'active' and a client with no status shows up on no
+        // list, but re-running the seed must not un-archive an existing one.
+        const already = await table('clients')
+          .list({ where: r => r.slug === c.slug, limit: 1 })
+          .then(r => r[0] ?? null)
+        clientRow = await table('clients').upsert(
+          {
+            slug: c.slug, name: c.name, industry: c.industry,
+            status: (already?.status as string | undefined) ?? 'active',
+          },
+          { onConflict: 'slug' },
+        )
       } catch (e) {
         return NextResponse.json({ error: `client ${c.slug}: ${(e as Error).message}` }, { status: 500 })
       }
