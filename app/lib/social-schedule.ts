@@ -13,7 +13,7 @@ import { accessibleClientIds, loadItemForUser } from './production-access'
 import { actingRoles } from './workflow-core'
 import { actOnPostingApproval } from './posting-approval'
 import {
-  maySendPostApproval, publishBlockReason, stateAfterPostEdit,
+  mayApprovePost, maySendPostApproval, publishBlockReason, stateAfterPostEdit,
 } from './posting-approval-core'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { LIVE_JOB_STATUSES, publishLockKey, queuePublishJob } from './publish'
@@ -505,8 +505,10 @@ export async function updatePost(
  * answer onto the post.
  */
 export async function sendForApproval(
-  user: TeamUser, id: string, opts: { note?: string; client_too?: boolean } = {},
+  user: TeamUser, id: string,
+  opts: { note?: string; client_too?: boolean; mode?: 'approval' | 'direct' } = {},
 ): Promise<PlannedPost> {
+  if (opts.mode === 'direct') return scheduleWithoutApproval(user, id, opts.note)
   const { post, item } = await loadPostForUser(user, id)
   assertCompose(user, item)
   if (SETTLED.includes(post.status) || post.status === 'scheduled') {
@@ -532,12 +534,79 @@ export async function sendForApproval(
   const stamp = nowIso()
   const saved = await posts().claim(id, cur =>
     cur && cur.status !== 'pending'
-      ? { ...cur, status: 'pending', sent_at: stamp, updated_at: stamp } as SocialPost
+      ? {
+        ...cur, status: 'pending', sent_at: stamp,
+        approval_mode: 'client', updated_at: stamp,
+      } as SocialPost
       : null)
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'sent' })
   // a second click landing on an already-pending post is not an error: the
   // ask has been made, which is what the caller wanted
   return saved.claimed ? shape(saved.row) : shape(saved.current ?? (await posts().get(id))!)
+}
+
+/**
+ * Schedule a post without sending it out for final approval — the owner's
+ * decision of 3 September.
+ *
+ * Only somebody who could have APPROVED it may skip the asking: the client's
+ * account manager or a super admin, the same check `actOnPostingApproval`
+ * makes on 'approve'. A scheduler or an editor gets the same refusal they
+ * would get for approving.
+ *
+ * It goes THROUGH the state machine, never around it: send, then approve, as
+ * this person — so the item page, the client portal, the publish lock and the
+ * activity trail all see an ordinary approved post. The only thing suppressed
+ * is the "please approve this" email, which would be this person asking
+ * themselves. The post records how it was cleared (`approval_mode: 'self'`)
+ * and who cleared it, so nobody has to guess later.
+ *
+ * The client's approval of the GRAPHICS is untouched — that happens earlier,
+ * and only approved graphics are ever in a post.
+ */
+export async function scheduleWithoutApproval(
+  user: TeamUser, id: string, note?: string,
+): Promise<PlannedPost> {
+  const { post, item } = await loadPostForUser(user, id)
+  assertCompose(user, item)
+  if (!mayApprovePost(actingRoles({ id: user.id, role: user.role }, item))) {
+    throw new AuthzError('Only an account manager (or the client) can approve the final post', 403)
+  }
+  if (SETTLED.includes(post.status) || post.status === 'scheduled') {
+    throw new AuthzError('This post has already been dealt with', 409)
+  }
+
+  const elig = eligibility(item, await versionsOf(item.id))
+  if (!elig.ok) throw new ComposeError([elig.reason])
+  const accounts = await channelsFor(item.client_id, post.channels)
+  const problems = problemsWith({
+    item, version: (elig.version as AssetVersion) ?? null,
+    slides: post.slides, caption: String(post.caption ?? ''), accounts,
+    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
+  })
+  if (problems.length > 0) throw new ComposeError(problems)
+
+  // the ask — written and logged, but nobody is emailed to answer a question
+  // that is being answered in the same breath
+  const asked = await actOnPostingApproval(user, item as never, {
+    action: 'send', client_too: false, self_approved: true,
+  })
+  // …and the answer, from the person entitled to give it
+  await actOnPostingApproval(user, { ...item, ...asked } as never, {
+    action: 'approve', note,
+  })
+
+  const stamp = nowIso()
+  await posts().claim(id, cur =>
+    cur && cur.status === post.status
+      ? {
+        ...cur, status: 'approved', sent_at: cur.sent_at ?? stamp,
+        approval_mode: 'self', approved_by: user.id, approved_at: stamp,
+        updated_at: stamp,
+      } as SocialPost
+      : null)
+
+  return schedulePost(user, id)
 }
 
 /**

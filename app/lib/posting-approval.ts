@@ -90,6 +90,18 @@ export type PostingApprovalInput = {
   note?: string
   /** send only: also route it to the client's portal for their sign-off */
   client_too?: boolean
+  /**
+   * send only: this person is CLEARING the post themselves — the owner's
+   * "schedule without approval".
+   *
+   * Two effects, both about the same fact: the ask and the answer are the
+   * same person in the same breath. Nobody is emailed to answer a question
+   * being answered already; and an APPROVER counts as a sender for this one
+   * step, because being allowed to say yes must imply being allowed to ask.
+   * Only the client's account manager or a super admin qualifies — never a
+   * client, and never a scheduler or editor, who must still ask.
+   */
+  self_approved?: boolean
 }
 
 /** The preview facts the approver's email carries — worked out once here so
@@ -171,8 +183,13 @@ export async function actOnPostingApproval(
   const hats = actingRoles({ id: actor.id, role: actor.role }, item)
   const note = String(input.note ?? '').trim().slice(0, 2000)
 
+  // an account manager (or super admin) clearing the post themselves is
+  // allowed to make the ask that their own yes answers
+  const clearing = input.action === 'send' && input.self_approved === true
+    && (hats.includes('account_manager') || hats.includes('super_admin'))
+
   if (input.action === 'send') {
-    if (!maySendPostApproval(hats)) {
+    if (!maySendPostApproval(hats) && !clearing) {
       throw new AuthzError('Only the person scheduling this may send it for approval', 403)
     }
     // the gate guards the queue, so it only makes sense on a signed-off asset
@@ -244,6 +261,7 @@ export async function actOnPostingApproval(
 
   // notifications — fire-and-forget, the outbox dedupe makes retries safe
   const title = item.title ?? 'A post'
+  if (clearing) return updated as unknown as Record<string, unknown>
   void (async () => {
     const facts = await previewFacts(item)
     const stamp = new Date().toISOString()

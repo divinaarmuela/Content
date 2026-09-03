@@ -106,6 +106,10 @@ const GHOST_TABLES = {
     ['sent_at', col('string', true)],
     ['approved_at', col('string', true)],
     ['approved_by', col('string', true)],
+    // 'client' = it went through the final-post approval; 'self' = an account
+    // manager (or super admin) cleared it themselves at send time, which the
+    // owner asked for on 3 Sep. Null on a post that has not been sent.
+    ['approval_mode', col('string', true)],
     ['note', col('string', true)],
   ],
   schedule_notes: [

@@ -44,14 +44,17 @@ describe('db-types (generated)', () => {
       'id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides',
       'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone',
       'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at',
-      'sent_at', 'approved_at', 'approved_by', 'note',
+      'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note',
     ])
     // a post always belongs to a client and an item; a draft may not have
     // picked its version, its time or its words yet
     expect(NULLABLE_COLUMNS.social_posts).not.toContain('client_id')
     expect(NULLABLE_COLUMNS.social_posts).not.toContain('item_id')
     expect(NULLABLE_COLUMNS.social_posts).not.toContain('status')
-    for (const c of ['version_id', 'version_number', 'scheduled_for', 'caption', 'note']) {
+    // how the post was cleared — 'client' through the approval, 'self' when
+    // an account manager cleared it at send time — and null until it is sent
+    for (const c of ['version_id', 'version_number', 'scheduled_for', 'caption', 'note',
+      'approval_mode', 'approved_by']) {
       expect(NULLABLE_COLUMNS.social_posts).toContain(c)
     }
     // the jsonb columns lib/db.ts has to put back when they read empty

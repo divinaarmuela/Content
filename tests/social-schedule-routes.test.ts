@@ -134,8 +134,10 @@ const create = (body: Record<string, unknown> = {}) => json(
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
-const post = (id: string) => json(
-  send.POST(new Request('https://x.test/send', { method: 'POST', body: '{}' }), params(id)))
+const post = (id: string, body: Record<string, unknown> = {}) => json(
+  send.POST(new Request('https://x.test/send', {
+    method: 'POST', body: JSON.stringify(body),
+  }), params(id)))
 const bookIn = (id: string) => json(
   book.POST(new Request('https://x.test/schedule', { method: 'POST' }), params(id)))
 const moveTo = (id: string, at: string) => json(
@@ -291,6 +293,50 @@ describe('a planned post, end to end', () => {
     as(SCHEDULER)
     expect((await create()).status).toBe(404)
     expect(fake.rows('social_posts')).toHaveLength(0)
+  })
+})
+
+/* ── scheduling without asking ──────────────────────────────────────────── */
+
+describe('schedule without approval', () => {
+  it('lets an account manager clear their own post and book it in', async () => {
+    const made = await create()
+    const id = made.body.post.id as string
+
+    as(AM)
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.status).toBe('scheduled')
+    expect(direct.body.post.approval_mode).toBe('self')
+    expect(direct.body.post.approved_by).toBe(AM.id)
+    // the item went through the ordinary state machine, so every other screen
+    // reads it as an approved post
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
+    expect(jobs()).toHaveLength(1)
+  })
+
+  it('refuses a scheduler, in the same words approving would', async () => {
+    const id = (await create()).body.post.id as string
+    as(SCHEDULER)
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(403)
+    expect(direct.body.error).toBe('Only an account manager (or the client) can approve the final post')
+    expect(jobs()).toHaveLength(0)
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBeFalsy()
+  })
+
+  it('refuses an editor on their own item too', async () => {
+    as(OWNER)
+    const id = (await create()).body.post.id as string
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(403)
+    expect(jobs()).toHaveLength(0)
+  })
+
+  it('marks an ordinary send as the client route', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    expect(row(id).approval_mode).toBe('client')
   })
 })
 
