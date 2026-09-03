@@ -48,7 +48,19 @@ function prune(node: Json): Json {
   return node
 }
 
-/** The node's ETag: a stable hash of its JSON. A missing node has a well-known one. */
+/**
+ * The node's ETag: a stable hash of its JSON. A missing node has a well-known
+ * one.
+ *
+ * Hashing the CONTENT rather than counting versions is deliberate, and it
+ * reproduces the real database's behaviour rather than papering over it: RTDB
+ * derives its ETag from the node's value too, so a node written to B and back
+ * to A carries the tag it had at A, and a conditional write held across that
+ * round trip succeeds. That is the classic ABA, and every claim in lib/db.ts
+ * is written to be indifferent to it — the predicate is about the value, so a
+ * value that came back is a value that is still true. A counter here would
+ * hide an assumption the production database does not honour.
+ */
 const NULL_ETAG = 'null_etag'
 function etagOf(node: Json): string {
   if (node === null || node === undefined) return NULL_ETAG

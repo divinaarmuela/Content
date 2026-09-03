@@ -463,21 +463,38 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
     },
     async getForUpdate(id) {
       const { value, etag } = await rtdbGetWithEtag(`${base}/${id}`)
-      // like get({ fresh: true }): what the network just said replaces both
-      // the row's own cache entry and any whole-table copy this request holds
-      const store = als.getStore()
-      if (store) { store.delete(base); store.set(`${base}/${id}`, Promise.resolve(value)) }
+      // What the network just said replaces everything this request holds for
+      // the table — the whole-table copy AND the filtered orderBy/equalTo
+      // variants, which `fresh` on a single row would otherwise leave behind
+      // to serve a version we have just proved stale. Then the row we read
+      // becomes the cached one.
+      invalidate(name)
+      als.getStore()?.set(`${base}/${id}`, Promise.resolve(value))
       return { row: value ? normalise<T>(name, id, value) : null, etag }
     },
     async compareAndSet(id, etag, next) {
-      // CAS cannot move a unique key (see the interface doc) — but it can and
-      // must refuse to write a value another row already owns, so a misuse
-      // fails loudly here instead of quietly forking the key.
-      for (const col of uniques) {
-        const v = (next as any)[col]
-        if (v == null) continue
-        const owner = await cachedGet(`${ROOT}/uniq/${name}/${col}/${encodeKey(String(v))}`)
-        if (owner && owner !== id) throw new DbError('unique', `${name}.${col} already exists`)
+      // CAS cannot move a unique key (see the interface doc), and that is
+      // enforced, not merely documented: the row as it stands is compared
+      // against `next`, and any unique column that differs is refused. The
+      // read is free inside a request — getForUpdate seeded exactly this key
+      // — and is skipped entirely for a table with no unique columns, which
+      // is every lock table and every hot claim path.
+      if (uniques.length) {
+        const before = await cachedGet(`${base}/${id}`)
+        for (const col of uniques) {
+          const v = (next as any)[col]
+          if (before) {
+            // an existing row: the value must be exactly what it already is
+            if (String(v ?? '') !== String(before[col] ?? '')) {
+              throw new DbError('unique', `${name}.${col} cannot change through compareAndSet — use update()`)
+            }
+            continue
+          }
+          // creating the row: the key must be free, or already ours
+          if (v == null) continue
+          const owner = await cachedGet(`${ROOT}/uniq/${name}/${col}/${encodeKey(String(v))}`)
+          if (owner && owner !== id) throw new DbError('unique', `${name}.${col} already exists`)
+        }
       }
       const now = new Date().toISOString()
       const row: any = { ...(next as any), id }

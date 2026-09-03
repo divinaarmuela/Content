@@ -388,14 +388,22 @@ export async function takeSeat(input: SeatClaim): Promise<boolean> {
     fresh: true,
     where: b => (b.space_id ?? b.resource_id) === spaceId && (b.seat_no ?? null) === seatNo,
   })
-  const live = new Map(bookings.filter(b => b.status !== 'cancelled').map(b => [b.id, b]))
+  // A session that has ENDED holds nothing. Keeping finished ranges would
+  // grow this row without limit and, worse, make it slower and slower to
+  // answer a question only about the future — so a past range is never kept
+  // and a past booking is never seeded.
+  const overBy = (endsAt: string | null | undefined) => (endsAt ?? '') <= now
+  const live = new Map(
+    bookings.filter(b => b.status !== 'cancelled' && !overBy(b.end_at ?? b.start_at)).map(b => [b.id, b]),
+  )
 
   const claimed = await table<SeatRow>('booking_seats').claim(seatKey(spaceId, seatNo), cur => {
     const kept = (cur?.ranges ?? []).filter(r =>
       r.booking_id === bookingId ? false                 // our own hold, being replaced
-        : live.has(r.booking_id) ? true
-          : r.at > judgedBefore ? true                   // too young to judge
-            : false)                                    // its booking is gone or cancelled
+        : overBy(r.end) ? false                          // the session is over
+          : live.has(r.booking_id) ? true
+            : r.at > judgedBefore ? true                 // too young to judge
+              : false)                                   // its booking is gone or cancelled
     for (const b of live.values()) {
       if (b.id === bookingId || kept.some(r => r.booking_id === b.id)) continue
       kept.push({ booking_id: b.id, start: b.start_at, end: b.end_at ?? b.start_at, at: b.created_at ?? now })

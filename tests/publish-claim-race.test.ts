@@ -16,12 +16,13 @@ import type { Row } from '@/lib/db-types'
  */
 
 const created: string[] = []
+const original = async (p: { requestId: string }) => {
+  created.push(p.requestId)
+  return { kind: 'published' as const, postId: 'prov-1' }
+}
 const publisher = {
   configured: () => true,
-  createPost: async (p: { requestId: string }) => {
-    created.push(p.requestId)
-    return { kind: 'published' as const, postId: 'prov-1' }
-  },
+  createPost: original,
   uploadMedia: async () => { throw new Error('should not relay') },
 }
 vi.mock('../app/lib/publisher', () => ({ getPublisher: () => publisher }))
@@ -70,6 +71,36 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
     expect(await runPublishJob('j1')).toBeNull()
     expect(created).toEqual([])
     expect(fake.rows('publish_jobs')[0]).toMatchObject({ status: 'publishing' })
+  })
+
+  it('the claim stamps updated_at, so the stale sweep cannot re-dispatch it', async () => {
+    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    // the job sat in the queue for an hour before a worker picked it up
+    fake.tree().mdm.tables.publish_jobs.j1.updated_at = '2026-09-01T00:00:00.000Z'
+    await runPublishJob('j1')
+    const settled = fake.rows('publish_jobs')[0] as unknown as { updated_at: string }
+    expect(Date.now() - Date.parse(settled.updated_at)).toBeLessThan(1000)
+  })
+
+  it('a claim that is still running is NOT reclaimed as stale', async () => {
+    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake.tree().mdm.tables.publish_jobs.j1.updated_at = '2026-09-01T00:00:00.000Z'
+    // hold the provider call open, so the row is observed mid-publish
+    let release = () => {}
+    const held = new Promise<void>(r => { release = r })
+    const slow = { ...publisher, createPost: async (p: { requestId: string }) => {
+      created.push(p.requestId)
+      await held
+      return { kind: 'published' as const, postId: 'prov-1' }
+    } }
+    Object.assign(publisher, slow)
+    const running = runPublishJob('j1')
+    await new Promise(r => setTimeout(r, 0))
+    const { reclaimStalePublishing } = await import('../app/lib/publish')
+    expect(await reclaimStalePublishing(15)).toBe(0)   // claimed just now, not abandoned
+    release()
+    await running
+    Object.assign(publisher, { createPost: original })
   })
 
   it('a job nobody else wants is still claimed and published', async () => {

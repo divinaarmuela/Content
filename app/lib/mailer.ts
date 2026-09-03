@@ -234,21 +234,31 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString()
     const held = (await log.list({ where: r => r.dedupe_key === dedupe_key, limit: 1 }))[0]
     if (!held) return 'duplicate'
-    // the reclaim predicate is evaluated INSIDE the write, so two retriers
-    // cannot both take the same failed row and send the email twice
+    // The reclaim predicate is evaluated INSIDE the write, so two retriers
+    // cannot both take the same failed row and send the email twice.
+    //
+    // The winner stamps `claimed_at`, and staleness is judged on it: the
+    // stale rule is "pending for more than ten minutes", and created_at
+    // cannot express that once a row has been reclaimed — it does not move,
+    // so the next retrier along would find the row it just took still
+    // "stale", take it in turn, and send the same email again. claimed_at is
+    // when the row was last picked up, which is the thing being timed.
     const reclaimed = await log.claim(held.id, cur => {
+      const pendingSince = cur?.claimed_at ?? cur?.created_at ?? ''
       const reclaimable = !!cur && (
         cur.status === 'failed'
-        || (cur.status === 'pending' && cur.created_at < staleBefore)
+        || (cur.status === 'pending' && pendingSince < staleBefore)
       )
       return reclaimable
-        ? { ...cur!, status: 'pending', body_html: input.bodyHtml, subject: input.subject }
+        ? {
+            ...cur!,
+            status: 'pending',
+            claimed_at: new Date().toISOString(),
+            body_html: input.bodyHtml,
+            subject: input.subject,
+          }
         : null
-    // ONE attempt on purpose: staleness is judged from created_at, which the
-    // winner's write does not change, so a retry would find the row it just
-    // lost still "reclaimable" and take it — and send the email twice. Losing
-    // the conditional write IS the answer here.
-    }, { attempts: 1 })
+    })
     if (!reclaimed.claimed) return 'duplicate' // genuinely sent (or in flight) — stop
     owned = reclaimed.row
   }

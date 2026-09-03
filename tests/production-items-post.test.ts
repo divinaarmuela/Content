@@ -136,6 +136,24 @@ describe('POST /api/production/items — one shoot plan per shoot', () => {
     expect(fake.rows('content_items')).toHaveLength(1)
   })
 
+  it('a body that fails validation later hands the shoot back', async () => {
+    // the plan is claimed while the body is still being read; a second item
+    // that turns out to be invalid must not leave the shoot unplannable
+    const bad = await post({
+      items: [
+        { client_id: 'c1', title: 'Plan A', work_kind_id: 'wk-brief', batch_id: 'b1' },
+        { client_id: 'c1', work_kind_id: 'wk-edit' },      // no title
+      ],
+    })
+    expect(bad.status).toBe(400)
+    expect(fake.rows('content_items')).toHaveLength(0)
+    // …and the shoot can be planned straight away, not in a minute's time
+    const good = await post({
+      client_id: 'c1', title: 'Plan A', work_kind_id: 'wk-brief', batch_id: 'b1',
+    })
+    expect(good.status).toBe(201)
+  })
+
   it('still allows one plan each on two different shoots', async () => {
     fake.restore()
     fake = seedDb({

@@ -61,6 +61,18 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //   booking_seats  — one row per (space, seat) holding the time ranges that
 //                    seat is spoken for, so no-overlap is one atomic write.
 for (const ghost of ['website', 'claim_locks', 'booking_seats']) if (!tables.has(ghost)) tables.set(ghost, new Map([['id', { type: 'string', nullable: false }]]))
+
+// Columns the code writes but no SQL ever created.
+//   notification_log.claimed_at — when a retrier last took the row. The stale
+//     rule is "pending since more than 10 minutes ago", and created_at cannot
+//     answer that once a row has been reclaimed: the winner's write does not
+//     move it, so the next retrier would judge the row stale again and send
+//     the same email twice. Staleness is judged on claimed_at ?? created_at.
+const GHOST_COLUMNS = { notification_log: [['claimed_at', { type: 'string', nullable: true }]] }
+for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {
+  const existing = tables.get(t)
+  if (existing) for (const [c, def] of cols) if (!existing.has(c)) existing.set(c, def)
+}
 for (const t of tables.values()) if (!t.has('id')) t.set('id', { type: 'string', nullable: false })
 
 function splitTopLevel(s) {

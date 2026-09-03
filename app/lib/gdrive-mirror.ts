@@ -589,11 +589,12 @@ async function migrateMisfiledRaw(
       // second row would hold the same drive_file_id under two targets and the
       // next sweep would try to mirror the file again
       try {
-        const driveFiles = table<DriveFile>('drive_files')
-        const stored = await driveFiles.get(row.id, { fresh: true })
-        // somebody else re-targeted it first: that is this function succeeding,
-        // so the row is still counted and still corrected in the caller's copy
-        if (stored?.target === 'item') await driveFiles.update(row.id, { target: 'raw' })
+        // somebody else re-targeting it first is this function succeeding, so
+        // the row is still counted and still corrected in the caller's copy —
+        // but the re-target itself is one conditional write, never a read
+        // followed by one
+        await table<DriveFile>('drive_files').claim(row.id, cur =>
+          cur?.target === 'item' ? { ...cur, target: 'raw' } : null)
       } catch (e) {
         console.error(`[gdrive] raw migration: ${row.source_url} —`, e)
         continue

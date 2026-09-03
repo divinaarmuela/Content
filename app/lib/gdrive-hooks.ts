@@ -114,11 +114,13 @@ export async function ensureShootFoldersNow(batch: BatchLike): Promise<string | 
   // only ever onto a blank: two requests racing to fold the same shoot must
   // not overwrite each other's recorded folder — the first one to land wins
   // and the second's folder is simply an empty duplicate
-  const batches = table<Batch>('batches')
-  const live = await batches.get(batch.id, { fresh: true })
-  if (live && live.drive_folder_id == null) {
-    await batches.update(batch.id, { drive_folder_id: shoot.id, drive_url: url })
-  }
+  // one conditional write: the racer that finds the column already filled
+  // does not land at all, rather than reading a blank and writing over the
+  // folder the winner recorded a moment later
+  await table<Batch>('batches').claim(batch.id, cur =>
+    cur && cur.drive_folder_id == null
+      ? { ...cur, drive_folder_id: shoot.id, drive_url: url }
+      : null)
 
   return shoot.id
 }
@@ -294,18 +296,17 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
     if (!made.ok) continue
     const url = await shareWithDomain(made.id)
 
+    // both writes go onto a blank ONLY, decided inside the write
     const contentItems = table<ContentItem>('content_items')
-    const liveItem = await contentItems.get(item.id, { fresh: true })
-    if (liveItem && liveItem.drive_folder_id == null) {
-      await contentItems.update(item.id, { drive_folder_id: made.id, drive_url: url })
-    }
+    await contentItems.claim(item.id, cur =>
+      cur && cur.drive_folder_id == null
+        ? { ...cur, drive_folder_id: made.id, drive_url: url }
+        : null)
 
     // the master link, only if the editor has not set one
     if (url && !item.raw_assets_url) {
-      const fresh = await contentItems.get(item.id, { fresh: true })
-      if (fresh && fresh.raw_assets_url == null) {
-        await contentItems.update(item.id, { raw_assets_url: url })
-      }
+      await contentItems.claim(item.id, cur =>
+        cur && cur.raw_assets_url == null ? { ...cur, raw_assets_url: url } : null)
     }
   }
 }

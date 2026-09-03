@@ -138,6 +138,40 @@ describe('a stale notification is reclaimed by exactly one retrier', () => {
     expect(smtpSends).toHaveLength(1)          // one email, not two
   })
 
+  it('a retrier arriving AFTER the winner reads fresh and still sends nothing', async () => {
+    // the sequential case, which is the one created_at could not answer: the
+    // winner leaves the row pending with an old created_at, so a later
+    // retrier reading the real row would judge it stale all over again
+    fake = seedDb({ notification_log: [held('failed', '2026-01-01T00:00:00.000Z')] })
+    fake.tree().mdm.uniq = { notification_log: { dedupe_key: { [encodeKey(DEDUPE)]: 'n1' } } }
+    stubTransport()
+    const { notify } = await import('../app/lib/mailer')
+    expect(await notify(input)).toBe('sent')
+    expect(await notify(input)).toBe('duplicate')
+    expect(await notify(input)).toBe('duplicate')
+    expect(smtpSends).toHaveLength(1)
+    // the row records when it was taken, which is what the stale rule times
+    const row = fake.rows('notification_log')[0] as unknown as { claimed_at: string; created_at: string }
+    expect(Date.now() - Date.parse(row.claimed_at)).toBeLessThan(1000)
+    expect(row.created_at).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  it('a claim that really has gone stale is still reclaimable', async () => {
+    fake = seedDb({ notification_log: [{
+      id: 'n1', dedupe_key: DEDUPE, event_type: 'e', recipient_email: 'a@x.invalid',
+      subject: 'S', body_html: '<p>x</p>', entity_type: 'item', entity_id: 'i1',
+      channel: 'email', status: 'pending',
+      created_at: '2026-01-01T00:00:00.000Z',
+      // taken by a worker that then died, well over the ten-minute window
+      claimed_at: '2026-01-01T00:05:00.000Z',
+    }] as unknown as Row[] })
+    fake.tree().mdm.uniq = { notification_log: { dedupe_key: { [encodeKey(DEDUPE)]: 'n1' } } }
+    stubTransport()
+    const { notify } = await import('../app/lib/mailer')
+    expect(await notify(input)).toBe('sent')
+    expect(smtpSends).toHaveLength(1)
+  })
+
   it('a row that is already sent is never reclaimed, and no email leaves', async () => {
     fake = seedDb({ notification_log: [held('sent', '2026-01-01T00:00:00.000Z')] })
     fake.tree().mdm.uniq = { notification_log: { dedupe_key: { [encodeKey(DEDUPE)]: 'n1' } } }

@@ -245,6 +245,20 @@ export async function POST(req: Request) {
     const groupById = new Map(groupRows.map(gr => [gr.id, gr]))
 
     const rows: Record<string, unknown>[] = []
+    // Every shoot lock this request has taken. A lock is only worth holding
+    // while there is a plan behind it, so ANY exit that does not create one —
+    // a later item failing validation, an insert throwing, an unexpected
+    // error — hands it straight back rather than leaving the shoot
+    // unplannable until the lock ages out.
+    const heldBriefLocks: { key: string; holder: string }[] = []
+    let planned = false
+    const releaseHeld = async (keep: ReadonlySet<string> = new Set()) => {
+      for (const l of heldBriefLocks) {
+        if (keep.has(l.holder)) continue
+        await releaseClaimLock(l.key, l.holder).catch(() => {})
+      }
+    }
+    try {
     for (const it of items) {
       if (!it.client_id || !it.title) {
         return NextResponse.json({ error: 'client_id and title are required on every item' }, { status: 400 })
@@ -345,6 +359,7 @@ export async function POST(req: Request) {
             if (gate.ok) await releaseClaimLock(briefLockKey(String(it.batch_id)), briefItemId).catch(() => {})
             return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
           }
+          heldBriefLocks.push({ key: briefLockKey(String(it.batch_id)), holder: briefItemId })
           briefBatchId = it.batch_id
         } else {
           const newBatch = await table('batches').insert({
@@ -434,9 +449,16 @@ export async function POST(req: Request) {
     // a folder per deliverable, and the master link prefilled from it — in
     // the background, so a slow Drive never delays a batch upload
     onItemsCreated(data)
+    // a plan whose insert did not land holds nothing; every other lock is
+    // now backed by a real row and stays
+    planned = true
+    await releaseHeld(new Set(data.map(d => d.id)))
     // 207: some of this landed and some did not, and the body says which
     if (failed.length > 0) return NextResponse.json({ created: data, failed }, { status: 207 })
     return NextResponse.json(data, { status: 201 })
+    } finally {
+      if (!planned) await releaseHeld()
+    }
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

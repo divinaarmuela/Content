@@ -230,12 +230,49 @@ describe('compare-and-set', () => {
     expect(second.ok).toBe(false)
     expect(fake.tree().mdm.tables.claim_locks.publish__i1.holder).toBe('a')
   })
-  it('compareAndSet refuses to move a unique column onto another row', async () => {
-    await table('team_users').insert({ email: 'b@x.com', name: 'B' } as any)
+  it('compareAndSet refuses to move a unique column at all — free value or not', async () => {
     const t = table('team_users')
     const { row, etag } = await t.getForUpdate('u1')
-    await expect(t.compareAndSet('u1', etag, { ...row!, email: 'b@x.com' } as any))
+    // nobody holds this address, and it is still refused: the unique key
+    // lives in a second node that one conditional PUT cannot cover
+    await expect(t.compareAndSet('u1', etag, { ...row!, email: 'nobody@x.com' } as any))
+      .rejects.toMatchObject({ code: 'unique', message: expect.stringContaining('cannot change through compareAndSet') })
+    // …and one another row already owns is refused too
+    await table('team_users').insert({ email: 'b@x.com', name: 'B' } as any)
+    const again = await t.getForUpdate('u1')
+    await expect(t.compareAndSet('u1', again.etag, { ...again.row!, email: 'b@x.com' } as any))
       .rejects.toMatchObject({ code: 'unique' })
+    // clearing one is a change as well
+    await expect(t.compareAndSet('u1', again.etag, { ...again.row!, email: null } as any))
+      .rejects.toMatchObject({ code: 'unique' })
+    // and everything else on the row still writes
+    const ok = await t.compareAndSet('u1', again.etag, { ...again.row!, name: 'Renamed' } as any)
+    expect(ok.ok).toBe(true)
+    expect(fake.tree().mdm.tables.team_users.u1.name).toBe('Renamed')
+  })
+
+  it('compareAndSet creating a row may claim a free unique key, but not a taken one', async () => {
+    const t = table('team_users')
+    const { etag } = await t.getForUpdate('u9')
+    const made = await t.compareAndSet('u9', etag, { id: 'u9', email: 'fresh@x.com', name: 'New' } as any)
+    expect(made.ok).toBe(true)
+    const other = await t.getForUpdate('u8')
+    await expect(t.compareAndSet('u8', other.etag, { id: 'u8', email: 'a@x.com', name: 'Thief' } as any))
+      .rejects.toMatchObject({ code: 'unique' })
+  })
+
+  it('getForUpdate drops the filtered query variants too, not just the whole-table read', async () => {
+    await withRequestCache(async () => {
+      const rows = await table<ContentItem>('content_items').list({ by: { client_id: 'c1' } })
+      expect(rows).toHaveLength(2)
+      // an indexed orderBy/equalTo slice is cached under its own key
+      fake.tree().mdm.tables.content_items.i9 = { id: 'i9', client_id: 'c1', status: 'draft', title: 'New' }
+      expect(await table<ContentItem>('content_items').list({ by: { client_id: 'c1' } })).toHaveLength(2)
+
+      await table<ContentItem>('content_items').getForUpdate('i1')
+      // the stale slice is gone, so the next read sees the row written since
+      expect(await table<ContentItem>('content_items').list({ by: { client_id: 'c1' } })).toHaveLength(3)
+    })
   })
   it('claim runs the mutation on the winning read and reports the loser', async () => {
     const items = table<ContentItem>('content_items')

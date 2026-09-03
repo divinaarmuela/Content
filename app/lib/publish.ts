@@ -147,8 +147,16 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
   // queued → publishing as ONE conditional write. Reading the status and
   // then writing it is two, and two workers can both pass the read — which
   // on this path means the same post going out twice.
+  //
+  // `publish_jobs` is not an updated_at trigger table, so the stamp is
+  // explicit — and it is not decoration: reclaimStalePublishing re-queues
+  // anything that has sat in 'publishing' for 15 minutes by that column. A
+  // claim that left it at the job's queue time would look abandoned the
+  // moment it was taken, and the same post would be dispatched twice.
   const taken = await table<PublishJobRow>('publish_jobs').claim(jobId, cur =>
-    cur && cur.status === 'queued' ? { ...cur, status: 'publishing' } : null)
+    cur && cur.status === 'queued'
+      ? { ...cur, status: 'publishing', updated_at: new Date().toISOString() }
+      : null)
   if (!taken.claimed) return null                            // ← the gate; not queued means we lost
   const claimed = taken.row
 

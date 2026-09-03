@@ -115,6 +115,42 @@ describe('bookings_no_overlap under a race', () => {
   })
 })
 
+describe('a seat row does not accumulate the past', () => {
+  const past = (h: number) => `2020-01-01T0${h}:00:00.000Z`
+
+  it('a finished booking is neither seeded nor kept', async () => {
+    fake = seedDb({
+      ...rows(),
+      bookings: [{
+        id: 'bk-done', resource_id: 'res-1', space_id: 'res-1', seat_no: 1,
+        start_at: past(1), end_at: past(2), status: 'confirmed',
+        created_at: past(0),
+      }] as unknown as Row[],
+      // …and a range left behind by an even older one
+      booking_seats: [{
+        id: 'res-1__1',
+        ranges: [{ booking_id: 'bk-ancient', start: past(3), end: past(4), at: past(3) }],
+      }] as unknown as Row[],
+    })
+    await insertBooking(slot(1))
+    const seat = fake.rows('booking_seats')[0] as unknown as { ranges: { booking_id: string }[] }
+    expect(seat.ranges.map(r => r.booking_id)).toEqual([fake.rows('bookings').find(b => b.id !== 'bk-done')!.id])
+  })
+
+  it('the seat a finished session used is bookable again', async () => {
+    fake = seedDb({
+      ...rows(),
+      bookings: [{
+        id: 'bk-done', resource_id: 'res-1', space_id: 'res-1', seat_no: 1,
+        start_at: past(1), end_at: past(2), status: 'confirmed', created_at: past(0),
+      }] as unknown as Row[],
+    })
+    // a booking at the same wall-clock time, but in the future, is fine
+    const made = await insertBooking(slot(1))
+    expect(made.id).toBeTruthy()
+  })
+})
+
 describe('moveBooking', () => {
   it('moves a live booking and refuses a time somebody else holds', async () => {
     fake = seedDb(rows())

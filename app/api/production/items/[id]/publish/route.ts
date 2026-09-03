@@ -150,7 +150,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     // cancel does not land at all
     const cancelled = await jobs.claim(job.id, cur =>
       cur && cur.status === job.status
-        ? { ...cur, status: 'cancelled', error: null }
+        // publish_jobs carries no updated_at trigger, so the stamp is explicit
+        ? { ...cur, status: 'cancelled', error: null, updated_at: new Date().toISOString() }
         : null)
     if (!cancelled.claimed) {
       return NextResponse.json(
