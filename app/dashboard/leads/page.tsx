@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useLive } from '@/lib/db-client'
+import { useLive, useTable } from '@/lib/db-client'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -45,6 +45,10 @@ interface Lead {
   timeline: string
 }
 
+/** newest first, as the leads API always ordered them — module-level so the
+ *  live query stays referentially stable across renders */
+const BY_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
+
 const COLS: { key: keyof Lead; label: string; mono?: boolean }[] = [
   { key: 'created_at', label: 'Date', mono: true },
   { key: 'fname',      label: 'First' },
@@ -63,10 +67,7 @@ type TodayLead = { id: string; created_at: string; name: string; biz: string | n
 export default function LeadsPage() {
   const { can } = useRole()
   const canScan = can('account_manager')
-  const [leads, setLeads]     = useState<Lead[]>([])
   const [today, setToday] = useState<TodayLead[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState('')
   const [sort, setSort]       = useState<{ key: keyof Lead; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
   const [deleting, setDeleting] = useState<Lead | null>(null)
@@ -88,7 +89,7 @@ export default function LeadsPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
-      setLeads(ls => ls.map(l => l.id === detail.id ? json : l))
+      // no local splice: the listener has the row already
       toast.success('Lead updated')
       setDetail(null)
     } catch (e) {
@@ -132,8 +133,7 @@ export default function LeadsPage() {
     try {
       const res = await fetch(`/api/leads/${deleting.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed')
-      // optimistic local removal — no full refetch needed
-      setLeads(ls => ls.filter(l => l.id !== deleting.id))
+      // the listener removes the row itself
       toast.success(`Lead from ${deleting.fname} ${deleting.lname} deleted`)
       setDeleting(null)
     } catch (e) {
@@ -143,40 +143,30 @@ export default function LeadsPage() {
     }
   }
 
-  /** `quiet` refreshes in the background: no spinner, no error banner. A poll
-   *  that flickers the table or shouts about a dropped packet is worse than no
-   *  poll at all. */
-  const fetchLeads = useCallback(async (quiet = false) => {
-    if (!quiet) { setLoading(true); setError(null) }
-    try {
-      const res = await fetch('/api/leads')
-      void fetch('/api/leads/today').then(async r => {
-        if (r.ok) setToday((await r.json()).leads ?? [])
-      })
-      if (!res.ok) throw new Error(`${res.status}`)
-      setLeads(await res.json())
-    } catch (e) {
-      // env-var names belong in the console, not in front of whoever is
-      // chasing this morning's enquiries
-      console.error('[leads] load failed', e)
-      if (!quiet) setError(e instanceof Error ? e.message : 'unknown')
-    } finally {
-      if (!quiet) setLoading(false)
-    }
-  }, [])
+  /**
+   * THE LIST, LIVE.
+   *
+   * Straight off the database: the table paints from the first snapshot and a
+   * lead added by the website form or the inbox scanner appears in it by
+   * itself, with no refetch and no reload. Newest first, exactly as
+   * `/api/leads` ordered them.
+   */
+  const { rows: leads, loading, error } = useTable<Lead>('leads', { orderBy: BY_NEWEST })
 
-  useEffect(() => { fetchLeads() }, [fetchLeads])
+  /** today's leads carry WHY they exist — the classifier's reasoning, which
+   *  lives in the ingest log — so that one banner is still its own fetch */
+  const loadToday = useCallback(() => {
+    void fetch('/api/leads/today')
+      .then(async r => { if (r.ok) setToday((await r.json()).leads ?? []) })
+      .catch(() => { /* the banner is a bonus; the table is the page */ })
+  }, [])
+  useEffect(() => { loadToday() }, [loadToday])
 
   /**
-   * Live: a lead announces itself the moment it is created, from the contact
-   * form or the inbox scanner. The hint is treated as a hint, not data — we
-   * refetch through the authenticated /api/leads rather than splicing the
-   * payload in, so there is one definition of what a lead looks like.
-   *
-   * `useLive` also includes a visibility-aware poll (fires on an empty hint),
-   * which is the belt to the live marker's braces — a dropped socket, a
-   * sleeping laptop, or a lead created while the tab was backgrounded. A
-   * poll tick refetches quietly; a real hint toasts first.
+   * A new lead announces itself the moment it is created. The table does not
+   * need telling — its own listener has already drawn the row — so the hint
+   * is now just what it always should have been: the toast, plus the one
+   * banner that is still fetched.
    */
   const onLeadChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
     const d = hint as { id?: string; label?: string; source?: string }
@@ -185,8 +175,8 @@ export default function LeadsPage() {
         description: d.source === 'web_form' ? 'From the website form' : 'Found in the inbox',
       })
     }
-    void fetchLeads(true)
-  }, [fetchLeads])
+    loadToday()
+  }, [loadToday])
   useLive('leads', onLeadChange)
 
   const toggleSort = (key: keyof Lead) =>
@@ -267,10 +257,9 @@ export default function LeadsPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Contact form submissions from mdmmarketing.com.au</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {/* wrapped: passing fetchLeads directly hands it the click event as
-              its `quiet` argument, silencing the very errors this button exists
-              to surface */}
-          <Button variant="outline" size="sm" onClick={() => fetchLeads()}>
+          {/* the table is live, so this refreshes the one thing that is not:
+              today's leads and the reason each of them exists */}
+          <Button variant="outline" size="sm" onClick={() => loadToday()}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
           {/* Export is a monthly reporting job. It used to be the only filled
@@ -285,7 +274,7 @@ export default function LeadsPage() {
       {/* Scanning reads the agency mailbox and creates leads — account_manager
           and above. The API enforces the same rule; this only stops the
           control being offered to people it would reject. */}
-      {canScan && <ScanPanel onLeadsCreated={fetchLeads} />}
+      {canScan && <ScanPanel onLeadsCreated={loadToday} />}
 
       <div className="flex items-center gap-3">
         <Input
@@ -308,7 +297,7 @@ export default function LeadsPage() {
           </CardContent>
         </Card>
       ) : error ? (
-        <LoadFailed what="your leads" detail={error} onRetry={() => fetchLeads()} />
+        <LoadFailed what="your leads" detail={error} onRetry={() => window.location.reload()} />
       ) : (
         <>
         {/* Below md the eleven-column table is about one and a half columns

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -34,8 +34,7 @@ import {
   dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
 } from '../../lib/work-calendar-core'
 import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
-import { useProductionLive } from '../production/useProductionLive'
-import { useOrderedLoad } from '../useOrderedLoad'
+import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
@@ -70,18 +69,6 @@ type Item = {
   clients: { name: string } | null
   batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
   work_kinds?: { name: string; slug: string; color: string } | null
-}
-
-/** Everything one refetch of the board answers with, so the ordering guard has
- *  a single value to accept or discard rather than four scattered setStates. */
-type BoardData = {
-  items?: Item[]
-  clients?: ClientRow[]
-  batches?: Batch[]
-  /** quota groups — "5 reels" as one card. Empty until the SQL has run. */
-  groups?: DeliverableGroup[]
-  /** the production tables are not migrated yet — a state, not a failure */
-  noSchema?: boolean
 }
 
 /** One dot per lane, in the same order the work moves. */
@@ -125,10 +112,6 @@ function initialsOf(name: string): string {
  */
 export default function EditorPage() {
   const router = useRouter()
-  const [items, setItems] = useState<Item[] | null>(null)
-  const [clients, setClients] = useState<ClientRow[]>([])
-  const [batches, setBatches] = useState<Batch[]>([])
-  const [groups, setGroups] = useState<DeliverableGroup[]>([])
   /** which quota cards are open, listing their pieces */
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   /** the group + format the "add a piece" dialog is collecting content for */
@@ -138,7 +121,6 @@ export default function EditorPage() {
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [clientFilter, setClientFilter] = useState<string>('all')
   const [batchFilter, setBatchFilter] = useState<string>('all')
-  const [needsSchema, setNeedsSchema] = useState(false)
 
   const [newOpen, setNewOpen] = useState(false)
   const [preset, setPreset] = useState<{ client_id?: string; batch_id?: string } | undefined>()
@@ -176,57 +158,25 @@ export default function EditorPage() {
   }, [clientFilter])
 
   /**
-   * The board, refetched with its answers kept in order — and never dropped.
+   * THE BOARD, LIVE.
    *
-   * One fetcher, one apply: with the setState calls buried in the fetch, an
-   * answer ruled "too old" had already half-written itself. See
-   * lib/load-order.ts for why "newest issued wins" lost every post-mutation
-   * refetch — including the one after "Create items", which is why new items
-   * did not appear until the board was reloaded by hand.
+   * Four API calls and a refetch-everything hint used to sit here. The board
+   * now renders from database listeners: the first snapshot paints it, and
+   * every later change — anybody's, anywhere — repaints it with no refetch
+   * and no reload. The rows are scoped and joined exactly as
+   * `/api/production/items` scoped and joined them; see
+   * `app/lib/scope-client.ts`, whose rules are unit-tested against the
+   * server's own predicate.
+   *
+   * WRITES ARE UNCHANGED: every mutation below is still its `fetch('/api/...')`
+   * call, because the routes own the side effects. What has gone is the
+   * `load()` that used to follow each one.
    */
-  const loadOrdered = useOrderedLoad<BoardData>(
-    async () => {
-      const [itemsRes, clientsRes, batchesRes, groupsRes] = await Promise.all([
-        fetch('/api/production/items', { cache: 'no-store' }),
-        // scope=mine: the client filter and the New-work dialog offer the
-        // clients this person holds work for, assignments included
-        fetch('/api/website/clients?scope=mine'),
-        fetch('/api/production/batches'),
-        // quota groups — the endpoint answers [] on a database where the
-        // table has not been created yet, so this can never break the board
-        fetch('/api/production/groups', { cache: 'no-store' }),
-      ])
-      if (!itemsRes.ok) {
-        const err = (await itemsRes.json().catch(() => ({}))).error ?? ''
-        if (String(err).match(/relation|does not exist/i)) return { noSchema: true }
-        throw new Error(err || 'Failed to load items')
-      }
-      return {
-        items: await itemsRes.json(),
-        clients: clientsRes.ok ? await clientsRes.json() : undefined,
-        batches: batchesRes.ok ? await batchesRes.json() : undefined,
-        groups: groupsRes.ok ? await groupsRes.json() : [],
-      }
-    },
-    data => {
-      if (data.noSchema) { setNeedsSchema(true); setItems([]); return }
-      if (data.items) setItems(data.items)
-      if (data.clients) setClients(data.clients)
-      if (data.batches) setBatches(data.batches)
-      if (data.groups) setGroups(Array.isArray(data.groups) ? data.groups : [])
-    },
-  )
-  const load = useCallback(async () => {
-    try {
-      await loadOrdered()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load the editor board')
-      setItems([])
-    }
-  }, [loadOrdered])
-
-  useEffect(() => { load() }, [load])
-
+  const live = useWorkRows(viewer)
+  const items: Item[] | null = live.loading ? null : (live.items as unknown as Item[])
+  const clients = live.clients as unknown as ClientRow[]
+  const batches = live.batches as unknown as Batch[]
+  const groups = live.groups as unknown as DeliverableGroup[]
   // arriving from a shoot's "Create items": dialog open, client+shoot preset
   // (the old `new_for_batch` spelling still works — a bookmarked link is a link)
   useEffect(() => {
@@ -238,9 +188,6 @@ export default function EditorPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // live board: any item created/moved/commented anywhere refreshes the columns
-  useProductionLive(load)
 
   const all = items ?? []
   // the client and shoot chips narrow EVERYTHING the header reports, not just
@@ -315,7 +262,6 @@ export default function EditorPage() {
       else toast.error(`Deleted ${deleted}, but ${failed} failed — the board shows what remains`)
       setBulkOpen(false)
       exitSelect()
-      void load()
     } finally {
       setBulkBusy(false)
     }
@@ -324,17 +270,16 @@ export default function EditorPage() {
   /**
    * Drag a card onto another day — the due date, moved.
    *
-   * Optimistic, then reconciled: the card lands where it was dropped straight
-   * away, and the sequence-stamped `load()` (lib/load-order.ts) has the last
-   * word whichever way the server answers, so a refusal puts it back without
-   * any bookkeeping here. `canMove` only decides whether to offer the handle;
-   * the API is what actually enforces who may move a date, and its refusal is
-   * shown in its own words.
+   * No optimistic copy any more: the card lands on the new day the moment the
+   * write commits, because the listener is what draws it — and a refusal
+   * therefore leaves it exactly where it was, with no bookkeeping here.
+   * `canMove` only decides whether to offer the handle; the API is what
+   * actually enforces who may move a date, and its refusal is shown in its
+   * own words.
    */
   const moveEvent = async (e: CalEvent, day: string) => {
     const patch = movePatch(e, day)
     if (!patch) return
-    setItems(prev => (prev ?? []).map(i => (i.id === e.entityId ? { ...i, due_date: day } : i)))
     try {
       const res = await fetch(moveUrl(e), {
         method: 'PATCH',
@@ -346,8 +291,6 @@ export default function EditorPage() {
       toast.success(`${e.title} → ${dayLabel(day)}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not move it')
-    } finally {
-      void load()
     }
   }
 
@@ -362,7 +305,6 @@ export default function EditorPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign it')
       const who = nameById.get(ownerId) ?? 'a teammate'
       toastOpen(`Assigned to ${who} — they have been emailed`, `/dashboard/production/${itemId}`, router.push)
-      void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign it')
     }
@@ -381,47 +323,22 @@ export default function EditorPage() {
     })
   }
 
-  /** The dialog created a real piece (item + its first version). Fold it into
-   *  its card AT ONCE, then reconcile with the fully-joined row. */
-  const applyCreatedPiece = (raw: Record<string, unknown> & { id: string }) => {
-    const optimistic: Item = {
-      id: raw.id,
-      title: String(raw.title ?? ''),
-      client_id: String(raw.client_id ?? ''),
-      batch_id: (raw.batch_id as string | null) ?? null,
-      content_type: String(raw.content_type ?? 'reel'),
-      status: (raw.status as ItemStatus) ?? 'draft_uploaded',
-      priority: String(raw.priority ?? 'normal'),
-      due_date: (raw.due_date as string | null) ?? null,
-      current_version_number: Number(raw.current_version_number ?? 0),
-      owner_id: (raw.owner_id as string | null) ?? null,
-      group_id: (raw.group_id as string | null) ?? null,
-      clients: null,
-      batches: null,
-    }
-    setItems(prev => {
-      const list = prev ?? []
-      return list.some(i => i.id === optimistic.id) ? list : [optimistic, ...list]
-    })
-    void load()
-  }
+  /** The dialog created a real piece (item + its first version). Nothing left
+   *  to do here: the listener has already folded it into its card. */
+  const applyCreatedPiece = () => {}
 
   /** Delete a quota card. Its pieces are detached server-side and stay on the
-   *  board as plain cards; here we just drop the group and unlink its pieces
-   *  optimistically so the card vanishes at once. */
+   *  board as plain cards; the listener drops the card the moment it is gone. */
   const deleteGroupCard = async (card: GroupCard<Item>) => {
     setDeletingGroup(true)
     try {
       const res = await fetch(`/api/production/groups/${card.group.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => null)
       if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not delete the card')
-      setGroups(prev => prev.filter(g => g.id !== card.group.id))
-      setItems(prev => (prev ?? []).map(i => (i.group_id === card.group.id ? { ...i, group_id: null } : i)))
       toast.success(card.count
         ? `Card deleted — ${card.count} piece${card.count === 1 ? '' : 's'} kept on the board`
         : 'Card deleted')
       setGroupToDelete(null)
-      void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete the card')
     } finally {
@@ -550,17 +467,6 @@ export default function EditorPage() {
           </CardContent>
         </Card>
       </div>
-    )
-  }
-
-  if (needsSchema) {
-    return (
-      <Card className="border-dashed shadow-none">
-        <CardContent className="py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          This part of the app isn&rsquo;t switched on yet. Send this to your developer:
-          run <span className="font-mono">supabase/production.sql</span>.
-        </CardContent>
-      </Card>
     )
   }
 
@@ -801,7 +707,7 @@ export default function EditorPage() {
                               // a control and not on the card
                               <div className="relative z-10 flex flex-wrap items-center gap-1.5">
                                 {canClaimEditor(item, viewer!) && (
-                                  <ClaimButton itemId={item.id} hat="editor" onDone={load} />
+                                  <ClaimButton itemId={item.id} hat="editor" onDone={() => {}} />
                                 )}
                                 {isManager && nameById.size > 0 && (
                                   <DropdownMenu>
@@ -888,7 +794,7 @@ export default function EditorPage() {
       <NewItemDialog
         open={newOpen}
         onOpenChange={o => { setNewOpen(o); if (!o) setPreset(undefined) }}
-        onCreated={load}
+        onCreated={() => {}}
         preset={preset}
         clients={clients}
         batches={batches}

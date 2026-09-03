@@ -114,8 +114,20 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
       })
       const itemJson = await itemRes.json().catch(() => null)
       if (!itemRes.ok) throw new Error((itemJson as { error?: string } | null)?.error ?? 'Could not add the piece')
-      const item = (Array.isArray(itemJson) ? itemJson[0] : null) as (Record<string, unknown> & { id?: string }) | null
-      if (!item?.id) throw new Error('Could not add the piece')
+      // 207 = the batch half-landed. One piece is being added here, so a 207
+      // means this one did not — and its own reason beats a generic refusal.
+      const partial = itemRes.status === 207 && itemJson && !Array.isArray(itemJson)
+      const item = (Array.isArray(itemJson)
+        ? itemJson[0]
+        : partial
+          ? ((itemJson as { created?: unknown[] }).created ?? [])[0] ?? null
+          : null) as (Record<string, unknown> & { id?: string }) | null
+      if (!item?.id) {
+        const why = partial
+          ? ((itemJson as { failed?: { error?: string }[] }).failed ?? [])[0]?.error
+          : null
+        throw new Error(why || 'Could not add the piece')
+      }
       createdId = item.id
       // 2) its first version — the CONTENT that makes the count honest. Without
       //    this the piece would be the empty shell this whole change exists to

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,7 +18,12 @@ import { LoadFailed } from './NotSetUp'
 import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
 import { DEFAULT_TZ, formatInZone, viewerHint } from '../lib/timezone-core'
-import { useProductionLive } from './production/useProductionLive'
+import { useTable } from '@/lib/db-client'
+import type { Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
+import { useRole } from './useRole'
+import { useWorkRows } from './useLiveWork'
+import { buildOverview, type OverviewItem } from '../lib/overview-core'
+import { accessibleClientIdsOf } from '../lib/scope-client'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
@@ -86,6 +91,9 @@ type Overview = {
     latest_leads?: LeadLite[]
   }
 }
+
+/** newest first — module-level so the live query stays referentially stable */
+const LEADS_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
 const STATUS_BADGE: Record<string, string> = {
   draft_uploaded: 'bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800',
@@ -541,22 +549,103 @@ function browserZone(): string | null {
 }
 
 export default function OverviewPage() {
-  const [data, setData] = useState<Overview | null>(null)
   // resolved after mount: on the server there is no viewer to have a zone
   const [viewerTz, setViewerTz] = useState<string | null>(null)
   useEffect(() => { setViewerTz(browserZone()) }, [])
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/overview')
-      if (!res.ok) return
-      setData(await res.json())
-    } catch { /* transient — the poll retries */ }
-  }, [])
+  /**
+   * THE OVERVIEW, LIVE.
+   *
+   * One `/api/overview` call, refetched in full every time anybody anywhere
+   * moved anything, used to sit here. The cards now count live rows — an
+   * approval lands in "Ready for review" as the manager clicks it, with no
+   * refetch and no reload.
+   *
+   * The counting itself is NOT reimplemented: `buildOverview` in
+   * `app/lib/overview-core.ts` is the route's own shaping, moved out of it,
+   * and the route calls the same function on the same shape of rows. The page
+   * and the API therefore cannot disagree about what a number means.
+   */
+  const { me } = useRole()
+  const viewer = useMemo(
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role } : null), [me])
+  // schedulerPostFilter off: the Overview counts a scheduler's whole scoped
+  // list and lets each card decide, exactly as its route always did
+  const live = useWorkRows(viewer, { schedulerPostFilter: false })
+  const enabled = viewer !== null
+  const byMe = useMemo(() => ({ team_user_id: me?.id ?? '' }), [me?.id])
+  const { rows: pageAccess } = useTable<UserPageAccess & { hidden?: boolean }>(
+    'user_page_access', { by: byMe, enabled: enabled && !!me?.id })
+  const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
+  // hidden wins for everyone — a super admin who muted Leads sees none of it
+  const leadsRow = pageAccess.find(r => r.href === '/dashboard/leads')
+  const mayLeads = isManager && !leadsRow?.hidden
+    && (viewer?.role === 'super_admin' || (!!leadsRow && !leadsRow.hidden))
+  const { rows: leadRows } = useTable<Lead>('leads', { orderBy: LEADS_NEWEST, enabled: mayLeads })
+  const { rows: entryRows } = useTable<ScheduleEntry>(
+    'schedule_entries', { enabled: enabled && viewer?.role === 'scheduler' })
 
-  useEffect(() => { load() }, [load])
-  // snapshot feel: any production change anywhere repaints the overview
-  useProductionLive(load)
+  const data: Overview | null = useMemo(() => {
+    if (!me || !viewer || live.loading) return null
+    const raw = live.tables.items.rows
+    const clientsById = new Map(live.tables.clients.rows.map(c => [c.id, c]))
+    const items = live.items as unknown as OverviewItem[]
+    // a tagged item off the roster is still theirs to answer
+    const have = new Set(items.map(i => i.id))
+    const taggedExtraItems = raw
+      .filter(r => live.tagged.items.includes(r.id) && !have.has(r.id))
+      .map(r => ({
+        ...r,
+        clients: clientsById.get(r.client_id) ? { name: clientsById.get(r.client_id)!.name } : null,
+      })) as unknown as OverviewItem[]
+    const taggedShoots = live.tables.batches.rows
+      .filter(b => live.tagged.batches.includes(b.id))
+      .map(b => ({
+        id: b.id,
+        title: b.title,
+        client_id: b.client_id,
+        clients: clientsById.get(b.client_id) ? { name: clientsById.get(b.client_id)!.name } : null,
+      }))
+    // how many clients this person runs — null means every one of them
+    const scopedClients = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    const clientCount = scopedClients === null
+      ? live.tables.clients.rows.length
+      : live.tables.clients.rows.filter(c => scopedClients.includes(c.id)).length
+    // the same lower bound the route used: without it, historical rows fill
+    // the window and both scheduler panels go permanently blank
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const itemById = new Map(raw.map(r => [r.id, r]))
+    const entries = entryRows
+      .filter(e => e.scheduled_at != null && e.scheduled_at >= weekAgo)
+      .sort((a, b) => (a.scheduled_at ?? '').localeCompare(b.scheduled_at ?? ''))
+      .slice(0, 200)
+      .map(e => {
+        const it = itemById.get(e.item_id)
+        const c = it ? clientsById.get(it.client_id) : null
+        return {
+          ...e,
+          content_items: it
+            ? {
+                id: it.id,
+                title: it.title,
+                client_id: it.client_id,
+                clients: c ? { name: c.name, timezone: c.timezone } : null,
+              }
+            : null,
+        }
+      })
+    return buildOverview({
+      user: { id: me.id, role: me.role, name: me.name },
+      items,
+      tagged: live.tagged,
+      taggedExtraItems,
+      taggedShoots,
+      clientCount,
+      entries: entries as never,
+      leads: leadRows,
+      mayLeads,
+    }) as unknown as Overview
+  }, [me, viewer, live, entryRows, leadRows, mayLeads])
 
   const loading = data === null
   const role = data?.role

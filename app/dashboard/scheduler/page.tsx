@@ -1,8 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -25,8 +24,7 @@ import { slideCountLabel } from '../../lib/version-files-core'
 import {
   DEFAULT_TZ, formatInZone, formatWithZone, viewerHint, zoneAbbrev,
 } from '../../lib/timezone-core'
-import { useProductionLive } from '../production/useProductionLive'
-import { useOrderedLoad } from '../useOrderedLoad'
+import { useWorkRows } from '../useLiveWork'
 import { defaultAllows } from '../../lib/page-access-core'
 import { ClaimButton } from '../production/ClaimButton'
 import { ScopeSwitch } from '../production/ScopeSwitch'
@@ -34,9 +32,12 @@ import { TurnChip } from '../production/TurnChip'
 import { AccountUnavailable } from '../production/shoot-ui'
 import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { useRole } from '../useRole'
+import { useTable } from '@/lib/db-client'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 
 type ScheduleEntry = { platform: string; scheduled_at: string | null; live_url: string | null }
+/** the live `schedule_entries` row, as the listener delivers it */
+type ScheduleEntryRow = ScheduleEntry & { id: string; item_id: string }
 type Item = {
   id: string
   client_id?: string | null
@@ -75,8 +76,6 @@ const SCOPE_KEY = 'md-scheduler-scope'
 /** The QUEUE view. Calendar is a sibling route; the shared header and view
  *  switcher live in layout.tsx. */
 export default function SchedulerPage() {
-  const [items, setItems] = useState<Item[] | null>(null)
-  const [schedules, setSchedules] = useState<Record<string, ScheduleEntry[]>>({})
   const [lane, setLane] = useState<string>('approved_for_scheduling')
   /** which platforms each client has connected — so a row can say whether the
    *  next move is "schedule it" or "we can't post for them yet" */
@@ -104,47 +103,31 @@ export default function SchedulerPage() {
   const canSeeEditor = defaultAllows(me?.role ?? null, '/dashboard/editor')
 
   /**
-   * The queue, refetched with its answers kept in order — and never dropped.
+   * THE QUEUE, LIVE.
    *
-   * One fetcher, one apply. "I'll schedule this" used to leave the card where
-   * it was: the claim announced itself, that hint issued a second refetch, and
-   * the old rule discarded the claim's own answer for being one ticket behind.
-   * See lib/load-order.ts.
+   * This page used to load itself with one call for the list and then ONE
+   * MORE CALL PER ROW to find each item's posting times — forty round trips
+   * on a busy week, every time anything anywhere changed. It now renders from
+   * database listeners: the queue and the schedule entries arrive in one
+   * snapshot each and repaint themselves the instant an approval, a claim or
+   * a posting time lands, whoever made it.
+   *
+   * The rows are scoped exactly as `/api/production/items` scoped them —
+   * `app/lib/scope-client.ts`, unit-tested against the server's predicate —
+   * and every write below is still its own API call.
    */
-  const loadOrdered = useOrderedLoad<{ items: Item[]; schedules: Record<string, ScheduleEntry[]> }>(
-    async () => {
-      const res = await fetch('/api/production/items', { cache: 'no-store' })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to load queue')
-      const all: Item[] = await res.json()
-      // schedule entries for scheduled/published rows (small N, parallel).
-      // a shoot brief rides this same status pipeline but is never scheduled,
-      // so it never has entries to fetch — schedulerScope drops it on screen.
-      const withSchedule = all
-        .filter(i => i.work_kinds?.slug !== 'shoot_brief')
-        .filter(i => i.status === 'scheduled' || i.status === 'published')
-        .slice(0, 40)
-      const entries = await Promise.all(
-        withSchedule.map(async i => {
-          const r = await fetch(`/api/production/items/${i.id}`)
-          if (!r.ok) return [i.id, []] as const
-          const d = await r.json()
-          return [i.id, (d.schedule ?? []) as ScheduleEntry[]] as const
-        })
-      )
-      return { items: all, schedules: Object.fromEntries(entries) }
-    },
-    data => { setItems(data.items); setSchedules(data.schedules) },
-  )
-  const load = useCallback(async () => {
-    try {
-      await loadOrdered()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load queue')
-      setItems([])
+  const live = useWorkRows(viewer)
+  const items: Item[] | null = live.loading ? null : (live.items as unknown as Item[])
+  const scheduleRows = useTable<ScheduleEntryRow>('schedule_entries', { enabled: viewer !== null })
+  const schedules = useMemo(() => {
+    const byItem: Record<string, ScheduleEntry[]> = {}
+    for (const e of scheduleRows.rows) {
+      (byItem[e.item_id] ??= []).push({
+        platform: e.platform, scheduled_at: e.scheduled_at, live_url: e.live_url,
+      })
     }
-  }, [loadOrdered])
-
-  useEffect(() => { load() }, [load])
+    return byItem
+  }, [scheduleRows.rows])
 
   // one call for every client's channels — the queue's whole job is telling a
   // scheduler what to do next, and "send them a connect link" is a different
@@ -168,9 +151,6 @@ export default function SchedulerPage() {
     })()
     return () => { cancelled = true }
   }, [])
-
-  // live queue: an approval lands in "To schedule" the moment the AM clicks it
-  useProductionLive(load)
 
   const ready = items !== null && viewer !== null
   const all = items ?? []
@@ -342,7 +322,7 @@ export default function SchedulerPage() {
                   </div>
                   {item.caption && <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">{item.caption}</p>}
                   <div className="flex flex-col gap-2">
-                    {canTake && <ClaimButton itemId={item.id} hat="scheduler" onDone={load} />}
+                    {canTake && <ClaimButton itemId={item.id} hat="scheduler" onDone={() => {}} />}
                     <Button variant={canTake ? 'outline' : 'default'} size="sm" className="min-h-11 w-full" asChild>
                       <Link href={`/dashboard/production/${item.id}`}>{label} <ArrowRight className="h-3.5 w-3.5" /></Link>
                     </Button>
@@ -470,7 +450,7 @@ export default function SchedulerPage() {
                         {lane === 'approved_for_scheduling' && assignment === 'unassigned'
                           && canClaimScheduler(item, viewer!) ? (
                           <>
-                            <ClaimButton itemId={item.id} hat="scheduler" onDone={load} />
+                            <ClaimButton itemId={item.id} hat="scheduler" onDone={() => {}} />
                             <Button variant="outline" size="sm" asChild>
                               <Link href={`/dashboard/production/${item.id}`}>Open</Link>
                             </Button>

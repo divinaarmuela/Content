@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -40,8 +40,7 @@ import {
   dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
 } from '../../lib/work-calendar-core'
 import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
-import { useProductionLive } from './useProductionLive'
-import { useOrderedLoad } from '../useOrderedLoad'
+import { useWorkRows } from '../useLiveWork'
 import { AccountUnavailable, BATCH_STATUS_STYLE, KIND_CHIP } from './shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from './workHooks'
 import { useRole } from '../useRole'
@@ -143,14 +142,7 @@ function whenShort(iso: string | null) {
  */
 export default function ProductionPage() {
   const router = useRouter()
-  const [shoots, setShoots] = useState<Shoot[] | null>(null)
-  const [briefTasks, setBriefTasks] = useState<BriefTask[]>([])
-  const [internalTasks, setInternalTasks] = useState<BriefTask[]>([])
   const [taskOpen, setTaskOpen] = useState(false)
-  const [clients, setClients] = useState<ClientRow[]>([])
-  /** quota groups — a "5 write-ups" task promise as one card. [] until the
-   *  SQL has run; the endpoint degrades to [] on a missing table. */
-  const [groups, setGroups] = useState<DeliverableGroup[]>([])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   /** the group the "add a piece" dialog is collecting content for */
   const [pieceTarget, setPieceTarget] = useState<AddPieceTarget | null>(null)
@@ -159,7 +151,6 @@ export default function ProductionPage() {
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [clientFilter, setClientFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [needsSchema, setNeedsSchema] = useState(false)
   /** finished tasks are a tail, not a queue — collapsed until asked for */
   const [doneOpen, setDoneOpen] = useState(false)
   /** closed shoots in the strip — hidden until asked for */
@@ -186,54 +177,33 @@ export default function ProductionPage() {
   const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board', 'view')
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
 
-  /** The page, refetched with its answers kept in order — and never dropped.
-   *  One fetcher, one apply; see lib/load-order.ts for why "newest issued
-   *  wins" threw away every post-mutation refetch. */
-  const loadOrdered = useOrderedLoad<{
-    shoots: Shoot[]; clients?: ClientRow[]; items?: BriefTask[]; groups?: DeliverableGroup[]
-  }>(
-    async () => {
-      const [bRes, cRes, iRes, gRes] = await Promise.all([
-        fetch('/api/production/batches', { cache: 'no-store' }),
-        // the clients this person actually works for — their team's, plus any
-        // they hold a shoot or an item on. The server decides; a client-side
-        // role guess is how the assignee got left out in the first place.
-        fetch('/api/website/clients?scope=mine'),
-        fetch('/api/production/items', { cache: 'no-store' }),
-        // quota groups — [] on a database where the table has not been made
-        fetch('/api/production/groups', { cache: 'no-store' }),
-      ])
-      return {
-        shoots: bRes.ok ? (await bRes.json()) as Shoot[] : [],
-        clients: cRes.ok ? ((await cRes.json()) as ClientRow[]).filter(Boolean) : undefined,
-        // every plan, not just the live ones: the lanes want the active ones,
-        // but a shoot chip still has to say "Booked"
-        items: iRes.ok ? (await iRes.json()) as BriefTask[] : undefined,
-        groups: gRes.ok ? (await gRes.json()) as DeliverableGroup[] : [],
-      }
-    },
-    data => {
-      // schema not migrated yet → rows have no status; show the setup card
-      setNeedsSchema(data.shoots.length > 0 && data.shoots.every(r => !r.status))
-      setShoots(data.shoots)
-      if (data.clients) setClients(data.clients)
-      if (data.items) {
-        setBriefTasks(data.items.filter(isBriefTask))
-        setInternalTasks(data.items.filter(isInternalTask))
-      }
-      setGroups(Array.isArray(data.groups) ? data.groups : [])
-    },
-  )
-  const load = useCallback(async () => {
-    try {
-      await loadOrdered()
-    } catch {
-      toast.error('Could not load shoots')
-      setShoots([])
-    }
-  }, [loadOrdered])
-  useEffect(() => { void load() }, [load])
-  useProductionLive(useCallback(() => { void load() }, [load]))
+  /**
+   * THE PAGE, LIVE.
+   *
+   * Four API calls and a refetch-everything-on-every-change hint used to sit
+   * here. The board now renders from database listeners: the first snapshot
+   * paints it and every later change repaints it, so nothing on this page
+   * reloads and nothing waits for a round trip to show what somebody just
+   * did. The rows are scoped and joined exactly as `/api/production/items`
+   * and `/api/production/batches` scoped and joined them (see
+   * `app/lib/scope-client.ts` — one set of rules, unit-tested against the
+   * server's).
+   *
+   * WRITES ARE UNCHANGED. Every mutation below is still its `fetch('/api/...')`
+   * call, because the routes own the emails, the activity log and the Drive
+   * work. There is just no `load()` afterwards any more — the listener has
+   * already repainted by the time the toast appears.
+   */
+  const live = useWorkRows(viewer)
+  const shoots: Shoot[] | null = live.loading ? null : (live.batches as unknown as Shoot[])
+  const clients = live.clients as unknown as ClientRow[]
+  const groups = live.groups as unknown as DeliverableGroup[]
+  const briefTasks = useMemo(
+    () => (live.items as unknown as BriefTask[]).filter(isBriefTask), [live.items])
+  const internalTasks = useMemo(
+    () => (live.items as unknown as BriefTask[]).filter(isInternalTask), [live.items])
+  // schema not migrated yet: rows come back with no status — show the setup card
+  const needsSchema = shoots !== null && shoots.length > 0 && shoots.every(r => !r.status)
 
   const [toDelete, setToDelete] = useState<Shoot | null>(null)
   const [delBusy, setDelBusy] = useState(false)
@@ -247,7 +217,6 @@ export default function ProductionPage() {
       if (!res.ok) throw new Error(json.error ?? 'Could not delete the shoot')
       toast.success('Shoot deleted')
       setToDelete(null)
-      void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete the shoot')
     } finally {
@@ -266,7 +235,6 @@ export default function ProductionPage() {
       if (!res.ok) throw new Error((await res.json()).error ?? 'Could not assign it')
       const who = nameById.get(ownerId) ?? 'a teammate'
       toastOpen(`Assigned to ${who} — they have been emailed`, `/dashboard/production/${itemId}`, router.push)
-      void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not assign it')
     }
@@ -275,22 +243,14 @@ export default function ProductionPage() {
   /**
    * Drag a card onto another day.
    *
-   * The row moves on screen first, because a date that waits for a round trip
-   * before it lands makes the drag feel broken — and then `load()` has the
-   * last word either way (the sequence-stamped load from lib/load-order.ts).
-   * The server is the authority on WHO may do this.
+   * No optimistic copy any more: the row lands on the new day the instant the
+   * write commits, because the listener is what draws it. A refusal therefore
+   * leaves the card exactly where it was, with the server's own words in a
+   * toast — the server is the authority on WHO may do this.
    */
   const moveEvent = async (e: CalEvent, day: string) => {
     const patch = movePatch(e, day)
     if (!patch) return
-    if (e.kind === 'shoot') {
-      setShoots(prev => (prev ?? []).map(s => (s.id === e.entityId ? { ...s, shoot_date: day } : s)))
-    } else {
-      const bump = (rows: BriefTask[]) =>
-        rows.map(t => (t.id === e.entityId ? { ...t, due_date: day } : t))
-      setBriefTasks(bump)
-      setInternalTasks(bump)
-    }
     try {
       const res = await fetch(moveUrl(e), {
         method: 'PATCH',
@@ -302,8 +262,6 @@ export default function ProductionPage() {
       toast.success(`${e.title} → ${dayLabel(day)}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not move it')
-    } finally {
-      void load()
     }
   }
 
@@ -315,7 +273,6 @@ export default function ProductionPage() {
    * an empty page. Creating is an explicit act — it earns a view.
    */
   const revealCreated = (created?: { id: string; owner_id?: string | null }[]) => {
-    void load()
     if (!viewer || !created?.length || scope.has('all')) return
     const hidden = created.some(r => {
       const a = editorAssignment({ id: r.id, status: 'draft_uploaded', owner_id: r.owner_id ?? null }, viewer)
@@ -528,7 +485,7 @@ export default function ProductionPage() {
               // above the stretched link, so these are clicks on a control
               <div className="relative z-10 flex flex-wrap items-center gap-1.5">
                 {canClaimEditor(t, viewer) && (
-                  <ClaimButton itemId={t.id} hat="editor" onDone={load} />
+                  <ClaimButton itemId={t.id} hat="editor" onDone={() => {}} />
                 )}
                 {assignMenu(t.id)}
               </div>
@@ -552,24 +509,9 @@ export default function ProductionPage() {
     })
   }
 
-  /** The dialog created a real task (item + its first version). Fold it into
-   *  its card AT ONCE, then reconcile with the fully-joined row. */
-  const applyCreatedPiece = (raw: Record<string, unknown> & { id: string }) => {
-    const optimistic: BriefTask = {
-      id: raw.id,
-      title: String(raw.title ?? ''),
-      client_id: String(raw.client_id ?? ''),
-      batch_id: (raw.batch_id as string | null) ?? null,
-      status: (raw.status as ItemStatus) ?? 'draft_uploaded',
-      due_date: (raw.due_date as string | null) ?? null,
-      owner_id: (raw.owner_id as string | null) ?? null,
-      group_id: (raw.group_id as string | null) ?? null,
-      clients: null,
-      current_version_number: Number(raw.current_version_number ?? 0),
-    }
-    setInternalTasks(prev => (prev.some(i => i.id === optimistic.id) ? prev : [optimistic, ...prev]))
-    void load()
-  }
+  /** The dialog created a real task (item + its first version). Nothing left
+   *  to do here: the listener has already folded it into its card. */
+  const applyCreatedPiece = () => {}
 
   /** Delete a task quota card. Pieces are detached server-side and stay on the
    *  board as plain cards; drop the group and unlink its pieces optimistically. */
@@ -579,13 +521,10 @@ export default function ProductionPage() {
       const res = await fetch(`/api/production/groups/${card.group.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => null)
       if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not delete the card')
-      setGroups(prev => prev.filter(g => g.id !== card.group.id))
-      setInternalTasks(prev => prev.map(i => (i.group_id === card.group.id ? { ...i, group_id: null } : i)))
       toast.success(card.count
         ? `Card deleted — ${card.count} piece${card.count === 1 ? '' : 's'} kept on the board`
         : 'Card deleted')
       setGroupToDelete(null)
-      void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete the card')
     } finally {

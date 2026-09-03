@@ -1,11 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { useOrderedLoad } from '../../useOrderedLoad'
 import { useProductionLive } from '../useProductionLive'
+import { useRow, useTable } from '@/lib/db-client'
+import type {
+  AssetVersion, Batch, Client, ContentItem, ItemComment, ScheduleEntry as ScheduleEntryRow,
+  TeamUser, TeamUserClient, WorkKind,
+} from '@/lib/db-types'
+import { useRole } from '../../useRole'
+import { itemIsVisible } from '../../../lib/scope-client'
+import { shapeItemDetail } from '../../../lib/production-access-core'
 import {
   clearGroup, completedIn, dismissUpload, enqueueJobAssets,
   uploadFiles as runUploads,
@@ -206,7 +214,17 @@ function measureFile(file: File): Promise<{ w: number; h: number } | null> {
 export default function ItemDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const [detail, setDetail] = useState<Detail | null>(null)
+  /**
+   * What the person just typed or clicked, held until the row comes back.
+   *
+   * These fields save on blur, and blur is the same gesture that clicks the
+   * button beside them: typing a brief link and pressing "Submit brief for
+   * review" ran the click while the PATCH was still in the air, so the button
+   * was still disabled by the old value and the click died in silence. This
+   * keeps the page agreeing with what the person just did until the database
+   * says otherwise — which, now, is a listener, not a refetch.
+   */
+  const [pending, setPending] = useState<Partial<Detail>>({})
   /** where the READER is, resolved after mount — the server has no opinion
    *  about that, and rendering one would be a hydration mismatch */
   const [viewerTz, setViewerTz] = useState<string | null>(null)
@@ -361,17 +379,49 @@ export default function ItemDetailPage() {
   const focusVal = useRef<Record<string, string>>({})
 
   /**
-   * Refetch, with the answers kept in order — and never dropped.
+   * THE ITEM, LIVE — with the server keeping the parts only it can know.
    *
-   * Three things reload this page: a mutation finishing, the realtime hint,
-   * and the 60s poll. They overlap constantly and HTTP gives no ordering
-   * guarantee, so the order has to be decided here rather than by whichever
-   * response happens to arrive first. `useOrderedLoad` does that, and — the
-   * part that matters — it never discards a fresh answer merely because a
-   * newer request was issued: every mutation's own write announces itself,
-   * which immediately issues that newer request, and the old rule threw the
-   * post-mutation answer away every single time. See lib/load-order.ts.
+   * The page used to be one `/api/production/items/[id]` fetch, refetched in
+   * full every time a comment, a version or a status change was announced.
+   * Now the item itself, its versions, its conversation and its posting times
+   * come straight from database listeners: a colleague's comment or a new
+   * version appears as they save it, with no refetch and no reload.
+   *
+   * WHAT THIS VIEWER MAY SEE IS UNCHANGED. The rows go through
+   * `shapeItemDetail` — the very function the API shapes its payload with,
+   * moved to `production-access-core` so both can import it — so a client
+   * still gets no internal comments and no master link, and a scheduler still
+   * gets the latest version's final links and nothing else.
+   *
+   * Four things stay on the API, because only the server can answer them: the
+   * posting card's connected accounts and live publish job, the posting
+   * approval gate, the Drive mirror progress, and the named audit trail. They
+   * ride the same live hint they always did.
    */
+  // none of these wait on `/api/team/me`: gating a listener on the viewer
+  // leaves one render where `loading` is false and no snapshot has arrived,
+  // and "no rows yet" then reads as "not yours" (see useLiveWork.ts)
+  const { me } = useRole()
+  const { row: itemRow, loading: itemLoading } = useRow<ContentItem>('content_items', id)
+  const byItem = useMemo(() => ({ item_id: id }), [id])
+  const { rows: versionRows } = useTable<AssetVersion>('asset_versions', { by: byItem })
+  const { rows: commentRows } = useTable<ItemComment>('item_comments', { by: byItem })
+  const { rows: scheduleRows } = useTable<ScheduleEntryRow>('schedule_entries', { by: byItem })
+  const { rows: team } = useTable<TeamUser>('team_users')
+  const { rows: assignments, loading: assignmentsLoading } = useTable<TeamUserClient>('team_user_clients')
+  const { rows: workKinds } = useTable<WorkKind>('work_kinds')
+  const { row: client } = useRow<Client>('clients', itemRow?.client_id ?? null)
+  const { row: batch } = useRow<Batch>('batches', itemRow?.batch_id ?? null)
+
+  /** the signed-in person, with the client_id a client viewer is scoped by
+   *  (`/api/team/me` does not carry it; the people table does) */
+  const liveViewer = useMemo(
+    () => (me ? { id: me.id, role: me.role, client_id: team.find(u => u.id === me.id)?.client_id ?? null } : null),
+    [me, team],
+  )
+
+  /** the four fields only the server can answer, and the fetch that gets them */
+  const [extras, setExtras] = useState<Partial<Detail>>({})
   const loadOrdered = useOrderedLoad<Detail>(
     async () => {
       // no-store: this is live workflow state, and a revalidation-free hit
@@ -384,23 +434,109 @@ export default function ItemDetailPage() {
       }
       return await res.json() as Detail
     },
-    setDetail,
+    d => setExtras({
+      posting: d.posting,
+      posting_approval: d.posting_approval,
+      drive_mirror: d.drive_mirror,
+      activity: d.activity,
+    }),
   )
   const load = useCallback(async () => {
     try {
       await loadOrdered()
     } catch (e) {
-      // a dropped connection is not a missing item — only the server saying
-      // "you cannot read this" is grounds for leaving the page
+      // a dropped connection is not a missing item, and the LISTENER is what
+      // decides whether this item exists for this viewer now — so a failure
+      // here costs the posting card its extras, never the page
       if (!(e instanceof UnreadableItem)) return
-      toast.error(e.message)
-      // no detail to ask where this came from — the editor board is where an
-      // unreadable content item would have been listed
-      router.push('/dashboard/editor')
     }
-  }, [loadOrdered, router])
-
+  }, [loadOrdered])
   useEffect(() => { load() }, [load])
+
+  /** the item, shaped for this viewer, out of the live rows */
+  const liveDetail: Detail | null = useMemo(() => {
+    if (!liveViewer || !itemRow) return null
+    const personName = new Map(team.map(a => [a.id, a.name || a.email]))
+    const versions = [...versionRows]
+      .sort((a, b) => (b.version_number ?? 0) - (a.version_number ?? 0))
+    const comments = [...commentRows]
+      .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      .map(c => ({ ...c, author_name: c.author_id ? personName.get(c.author_id) ?? null : null }))
+    const shaped = shapeItemDetail(
+      liveViewer, itemRow as unknown as Record<string, unknown>, versions as never, comments as never,
+    ) as Record<string, unknown>
+    const kind = itemRow.work_kind_id
+      ? workKinds.find(k => k.id === itemRow.work_kind_id) ?? null
+      : null
+    const isClient = liveViewer.role === 'client'
+    const owner = itemRow.owner_id ? team.find(u => u.id === itemRow.owner_id) ?? null : null
+    const clientTeam = new Set(assignments.filter(a => a.client_id === itemRow.client_id).map(a => a.team_user_id))
+    return {
+      ...shaped,
+      work_kind: kind
+        ? { name: kind.name, slug: kind.slug, color: kind.color, uses_media: kind.uses_media }
+        : null,
+      batch: batch
+        ? {
+            id: batch.id, title: batch.title, status: batch.status ?? undefined,
+            planned_deliverables: (batch.planned_deliverables ?? undefined) as { type: string; qty: number }[] | undefined,
+            concept: (batch as { concept?: string | null }).concept ?? null,
+            shot_list: (batch.shot_list ?? null) as unknown[] | null,
+          }
+        : null,
+      client_name: client?.name ?? null,
+      client_timezone: (client?.timezone as string | null) || DEFAULT_TZ,
+      // a client never sees who inside the agency did what
+      owner_name: isClient ? null : (owner?.name || owner?.email || null),
+      managers: isClient
+        ? []
+        : team
+            .filter(u => clientTeam.has(u.id) && u.active_status
+              && ['account_manager', 'super_admin'].includes(u.role))
+            .map(u => ({ name: u.name || u.email, email: u.email })),
+      // who at the client a "Send to client" would actually email
+      client_users: isClient
+        ? []
+        : team
+            .filter(u => u.role === 'client' && u.client_id === itemRow.client_id && u.active_status === true)
+            .map(u => ({ name: u.name || u.email, email: u.email })),
+      schedule: isClient ? [] : (scheduleRows as unknown as ScheduleEntry[]),
+      viewer_role: liveViewer.role,
+      // the pickers need to know who is looking: offering yourself as a
+      // reviewer is a silent no-op
+      viewer_id: liveViewer.id,
+    } as unknown as Detail
+  }, [liveViewer, itemRow, team, assignments, versionRows, commentRows, scheduleRows, workKinds, client, batch])
+
+  /** live first, the server's four extras over the top, then whatever the
+   *  person has just done and the database has not echoed back yet */
+  const detail: Detail | null = useMemo(
+    () => (liveDetail ? { ...liveDetail, ...extras, ...pending } : null),
+    [liveDetail, extras, pending],
+  )
+
+  // the database has spoken: whatever was being held for the round trip is
+  // either in the row now or was refused, and either way it is not "pending"
+  const rowStamp = itemRow?.updated_at
+  useEffect(() => { setPending({}) }, [rowStamp])
+
+  /**
+   * The item is not this person's to read — or is gone.
+   *
+   * Only the LISTENER decides this, never a dropped request: the same rule
+   * `loadItemForUser` applies on the server, restated over the row in hand
+   * (`app/lib/scope-client.ts`).
+   */
+  useEffect(() => {
+    // never judge on a half-arrived snapshot: the client roster is what turns
+    // "not on this client" into "assigned to me", so wait for it
+    if (!liveViewer || itemLoading || assignmentsLoading) return
+    if (itemRow && itemIsVisible(liveViewer, itemRow, assignments, { items: [itemRow] })) return
+    toast.error('Item not found')
+    // no detail to ask where this came from — the editor board is where an
+    // unreadable content item would have been listed
+    router.push('/dashboard/editor')
+  }, [liveViewer, itemRow, itemLoading, assignmentsLoading, assignments, router])
 
   // A shoot plan lives on its SHOOT page now — the two pages used to ping-pong,
   // so a shoot_brief item just forwards to its shoot, keeping old links and
@@ -414,27 +550,14 @@ export default function ItemDetailPage() {
   }, [detail?.work_kind?.slug, detail?.batch?.id, router])
 
   /**
-   * Put a write's OWN answer on the page, now.
-   *
-   * The workflow routes return the row they just wrote. Merging the handful of
-   * fields the screen is keyed on — never the whole row, which carries fields
-   * this viewer's shaped payload deliberately omits — means the buttons agree
-   * with the toast in the same tick, whatever the refetch does afterwards.
+   * A write's own answer no longer has to be spliced in: the listener puts
+   * the new row on the page before the toast finishes animating.
    */
-  const applyWrite = useCallback((row: unknown) => {
-    const r = row as Partial<Detail> | null
-    if (!r || typeof r !== 'object' || !r.status) return
-    setDetail(d => (d ? {
-      ...d,
-      status: r.status as ItemStatus,
-      owner_id: 'owner_id' in r ? r.owner_id ?? null : d.owner_id,
-      scheduler_ids: 'scheduler_ids' in r ? r.scheduler_ids ?? null : d.scheduler_ids,
-    } : d))
-  }, [])
+  const applyWrite = useCallback((_row: unknown) => { void _row }, [])
 
-  // live item: a comment, version, or status change from anyone else appears
-  // without a reload. Only this item's hints trigger a refetch; the periodic
-  // fallback (change === undefined) refreshes regardless.
+  // the item itself is live; this only re-reads the four things the server
+  // answers — the posting card, the approval gate, the Drive mirror and the
+  // audit trail. Only this item's hints, plus the periodic fallback.
   useProductionLive(useCallback((change?: { item_id: string }) => {
     if (!change || change.item_id === id) void load()
   }, [id, load]))
@@ -942,14 +1065,8 @@ export default function ItemDetailPage() {
       clearGroup(versionGroup)
       setVersionWarnings([])
       setLinksOpen(false)
-      // put it on the page NOW: "The work" and the Submit button both read
-      // detail.versions, and a toast above an unchanged screen is how the
-      // team learns to distrust the save
-      setDetail(d => (d ? {
-        ...d,
-        versions: [json as Version, ...d.versions],
-        current_version_number: json.version_number ?? d.current_version_number,
-      } : d))
+      // no splice: "The work" and the Submit button read detail.versions,
+      // and the listener has already put the new version there
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed')
@@ -1026,7 +1143,7 @@ export default function ItemDetailPage() {
     // the PATCH was still in the air, so the button was still disabled by the
     // old value and the click died in silence. Optimistic here means the page
     // agrees with what the person just typed; a failure snaps it back.
-    setDetail(d => (d ? { ...d, ...patch } as Detail : d))
+    setPending(p => ({ ...p, ...patch }))
     return fetch(`/api/production/items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1035,13 +1152,13 @@ export default function ItemDetailPage() {
       .then(async r => {
         if (!r.ok) {
           toast.error((await r.json().catch(() => ({}))).error ?? 'Save failed')
-          void load() // put the truth back
+          setPending({}) // put the truth back — the row on screen is the row
           return
         }
         toast.success(done)
         void load()
       })
-      .catch(() => { toast.error('Could not save — check your connection'); void load() })
+      .catch(() => { toast.error('Could not save — check your connection'); setPending({}) })
   }
 
   const saveOwner = async (ownerId: string) => {

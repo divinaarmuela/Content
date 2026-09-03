@@ -432,9 +432,21 @@ export default function NewItemDialog({
       })
       const created = await res.json().catch(() => null)
       if (!res.ok) throw new Error(created?.error ?? 'Create failed')
+      // SOME OF THEM LANDED. Every item in a batch upload is its own write, so
+      // the server answers 207 with exactly what was saved and what was not.
+      // "10 items created" over eight is the worst answer available, and so is
+      // a red "Create failed" over eight that are sitting on the board — this
+      // says the number and names the ones to try again.
+      const partial = res.status === 207 && created && !Array.isArray(created)
+      const rows = (Array.isArray(created)
+        ? created
+        : partial
+          ? (created.created ?? [])
+          : []) as { id: string; owner_id?: string | null }[]
+      const failed = (partial ? created.failed ?? [] : []) as { title: string }[]
       // where it went, and a way to go there: one item opens itself, several
       // open the board they landed on
-      const firstId = Array.isArray(created) && created[0]?.id ? String(created[0].id) : null
+      const firstId = rows[0]?.id ? String(rows[0].id) : null
       const message = isTaskKind ? 'Task created — it is on the Production board'
         : isBriefKind ? 'Shoot plan created — it is on the Production board'
         : count === 1 ? `Item created — it is on the Editor board, in ${DRAFTING_LANE}`
@@ -442,14 +454,22 @@ export default function NewItemDialog({
       const href = count === 1 && firstId
         ? `/dashboard/production/${firstId}`
         : isTaskKind || isBriefKind ? '/dashboard/production' : '/dashboard/editor'
-      toastOpen(message, href, router.push)
+      if (failed.length > 0) {
+        const names = failed.map(f => f.title).filter(Boolean).join(', ')
+        toast.error(
+          `${rows.length} of ${count} saved — ${failed.length} could not be saved${names ? `: ${names}` : ''}. Try those again.`,
+          { duration: 12_000 },
+        )
+      } else {
+        toastOpen(message, href, router.push)
+      }
       onOpenChange(false)
       setDraft({ ...BLANK })
       setAdhocReason('')
       setAssetWarnings([])
       setClientApproval(true)
       setStep('details')
-      onCreated(Array.isArray(created) ? created : undefined)
+      onCreated(rows.length > 0 ? rows : undefined)
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
       // may well have created everything. Check before inviting a retry that

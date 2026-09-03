@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { ArrowRight, MessageSquare, Send } from 'lucide-react'
@@ -11,8 +11,13 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
 import MentionBox from '../../dashboard/MentionBox'
-import { useOrderedLoad } from '../../dashboard/useOrderedLoad'
-import { useProductionLive } from '../../dashboard/production/useProductionLive'
+import { useRow, useTable } from '@/lib/db-client'
+import type {
+  Client, ContentItem, ItemComment, TeamUser, TeamUserClient,
+} from '@/lib/db-types'
+import { useRole } from '../../dashboard/useRole'
+import { itemIsVisible } from '../../lib/scope-client'
+import { shapeItemDetail } from '../../lib/production-access-core'
 import { extractMentions } from '../../lib/mention-core'
 import { commentBadge, commentsParamOf, withCommentsParam } from '../../lib/comment-drawer-core'
 import type { Role } from '../../lib/identity-core'
@@ -115,14 +120,12 @@ export default function CommentsDrawer({ target, onClose }: {
   )
 }
 
-/** Mounted only while the drawer is open, so it fetches nothing until asked. */
+/** Mounted only while the drawer is open, so it listens to nothing until asked. */
 function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?: string }) {
-  const [detail, setDetail] = useState<DrawerDetail | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [visibility, setVisibility] = useState<'internal' | 'client'>('internal')
   const [busy, setBusy] = useState(false)
-  /** the comment being posted, shown at once — the refetch has the last word */
+  /** the comment being posted, shown at once — the listener has the last word */
   const [pending, setPending] = useState<ThreadComment | null>(null)
 
   // the reader's zone, resolved after mount — a timestamp on something a
@@ -132,60 +135,80 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
     try { setViewerTz(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { /* no hint */ }
   }, [])
 
-  /** The drawer's read is the item page's read — the server shapes the
-   *  payload per viewer, so the drawer can never show more than the page.
-   *  Answers kept in order via the sequence-safe load (lib/load-order.ts). */
-  const loadOrdered = useOrderedLoad<DrawerDetail>(
-    async () => {
-      const res = await fetch(`/api/production/items/${itemId}`, { cache: 'no-store' })
-      if (!res.ok) {
-        throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not load the comments')
-      }
-      return await res.json() as DrawerDetail
-    },
-    d => { setDetail(d); setFailed(null) },
+  /**
+   * THE CONVERSATION, LIVE.
+   *
+   * The drawer used to fetch the whole item detail — the item page's payload
+   * — and refetch it every time anybody anywhere changed anything. It now
+   * listens to this item's comments: somebody else's reply appears in the
+   * thread as they post it, with no refetch and no reload.
+   *
+   * What the viewer may READ is unchanged, because it is decided by the same
+   * function the API used: `shapeItemDetail` (now in `production-access-core`,
+   * imported by both). A manager reads the whole record; everyone else reads
+   * the conversations they are actually in.
+   */
+  // not gated on `/api/team/me`: an `enabled` that flips false→true leaves one
+  // render with loading already false and no snapshot yet, and the drawer
+  // would read that as "Item not found" (see useLiveWork.ts)
+  const { me } = useRole()
+  const { row: item, loading: itemLoading } = useRow<ContentItem>('content_items', itemId)
+  const byItem = useMemo(() => ({ item_id: itemId }), [itemId])
+  const { rows: commentRows } = useTable<ItemComment>('item_comments', { by: byItem })
+  const { rows: team } = useTable<TeamUser>('team_users')
+  // a client viewer is scoped by their own client_id, which /api/team/me does
+  // not carry and the people table does
+  const viewer = useMemo(
+    () => (me ? { id: me.id, role: me.role, client_id: team.find(u => u.id === me.id)?.client_id ?? null } : null),
+    [me, team],
   )
-  const load = useCallback(async () => {
-    try {
-      await loadOrdered()
-    } catch (e) {
-      setFailed(e instanceof Error ? e.message : 'Could not load the comments')
+  const { rows: assignments, loading: assignmentsLoading } = useTable<TeamUserClient>('team_user_clients')
+  const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
+
+  /** the item, shaped for this viewer — or the reason the drawer is empty */
+  const { detail, failed } = useMemo((): { detail: DrawerDetail | null; failed: string | null } => {
+    if (!viewer || itemLoading || assignmentsLoading) return { detail: null, failed: null }
+    if (!item) return { detail: null, failed: 'Item not found' }
+    if (!itemIsVisible(viewer, item, assignments, { items: [item] })) {
+      // the same words the API answered with — never "you are not allowed",
+      // which tells somebody a thing exists that they cannot see
+      return { detail: null, failed: 'Item not found' }
     }
-  }, [loadOrdered])
-  useEffect(() => { void load() }, [load])
+    const personName = new Map(team.map(a => [a.id, a.name || a.email]))
+    const named = [...commentRows]
+      .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      .map(c => ({ ...c, author_name: c.author_id ? personName.get(c.author_id) ?? null : null }))
+    const shaped = shapeItemDetail(viewer, item as unknown as Record<string, unknown>, [], named as never)
+    return {
+      detail: {
+        id: item.id,
+        title: item.title,
+        client_name: client?.name ?? null,
+        viewer_id: viewer.id,
+        viewer_role: viewer.role,
+        acting_roles: (shaped as { acting_roles?: Role[] }).acting_roles,
+        comments: (shaped as { comments: ThreadComment[] }).comments,
+      },
+      failed: null,
+    }
+  }, [viewer, item, itemLoading, assignmentsLoading, assignments, team, commentRows, client])
 
-  // live drawer: a comment from anyone else appears without a reload
-  useProductionLive(useCallback((change?: { item_id: string }) => {
-    if (!change || change.item_id === itemId) void load()
-  }, [itemId, load]))
-
-  // the team roster: names for "Waiting on …" and the people "@" can reach
-  const [team, setTeam] = useState<{ id: string; name: string; email: string }[]>([])
-  const viewerRole = detail?.viewer_role
-  useEffect(() => {
-    if (!viewerRole || viewerRole === 'client') return
-    fetch('/api/team')
-      .then(r => (r.ok ? r.json() : { members: [] }))
-      .then(json => {
-        const active = (json.members ?? []).filter(
-          (m: { active_status?: boolean; role: string }) => m.active_status !== false && m.role !== 'client')
-        setTeam(active.map((m: { id: string; name: string; email: string }) =>
-          ({ id: m.id, name: m.name, email: m.email })))
-      })
-      .catch(() => setTeam([]))
-  }, [viewerRole])
+  /** the people "@" can reach: everyone active on the team but you */
+  const mentionable = useMemo(
+    () => team
+      .filter(t => t.active_status !== false && t.role !== 'client' && t.id !== viewer?.id)
+      .map(t => ({ id: t.id, name: t.name || t.email })),
+    [team, viewer?.id],
+  )
 
   const nameOf = (uid: string) => {
     const m = team.find(t => t.id === uid)
     return m ? (m.name || m.email) : null
   }
-  /** the people "@Name" can reach — everyone active on the team but you */
-  const mentionable = team
-    .filter(t => t.id !== detail?.viewer_id)
-    .map(t => ({ id: t.id, name: t.name || t.email }))
 
   // what this viewer may do here follows the ASSIGNMENT, exactly as on the
-  // item page: the server sends the hats it shaped the payload with
+  // item page — the hats come from `actingRoles` inside `shapeItemDetail`,
+  // the same function the API shapes its payload with
   const role = detail?.viewer_role
   const isTeam = !!role && role !== 'client'
   const hats = detail?.acting_roles ?? []
@@ -211,7 +234,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
     const text = draft.trim()
     if (!text || busy) return
     setBusy(true)
-    // shown immediately; the POST's own row replaces it, the refetch confirms
+    // shown immediately; the listener's own row replaces it a moment later
     const temp: ThreadComment = {
       id: `pending-${Date.now()}`,
       created_at: new Date().toISOString(),
@@ -239,13 +262,9 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
         }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Comment failed')
-      const created = await res.json().catch(() => null) as ThreadComment | null
+      await res.json().catch(() => null)
+      // the listener has already put the real row in the thread
       setPending(null)
-      if (created?.id) {
-        setDetail(d => d && !d.comments.some(c => c.id === created.id)
-          ? { ...d, comments: [...d.comments, { ...created, author_name: temp.author_name }] }
-          : d)
-      }
       if (tagged.length > 0) {
         const names = tagged.map(t => t.name).join(', ')
         toast.success(`Posted — ${names} ${tagged.length === 1 ? 'has' : 'have'} been emailed and will see "Waiting on you"`)
@@ -254,7 +273,6 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
       } else {
         toast.success('Posted — managers can see it. Tag someone with @ to reach them.')
       }
-      void load()
     } catch (e) {
       // give the words back — a failed post must never eat what was typed
       setPending(null)
@@ -273,7 +291,6 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
     })
     if (!res.ok) return toast.error('Update failed')
     toast.success(c.resolved ? 'Reopened — it is back on their list' : 'Marked done — it is off their list')
-    await load()
   }
 
   const title = detail?.title ?? fallbackTitle
@@ -298,7 +315,8 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
         {failed ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">{failed}</p>
-            <Button variant="outline" size="sm" className="min-h-11" onClick={() => { setFailed(null); void load() }}>
+            <Button variant="outline" size="sm" className="min-h-11"
+              onClick={() => window.location.reload()}>
               Try again
             </Button>
           </div>
