@@ -94,7 +94,10 @@ by Production, Editor and Scheduler.
 One piece of work: the client small and upper case, the title, an optional still,
 a row of chips and the people holding it. The whole card is the link, and `tone`
 tints the whole card so the one that needs attention is obvious before anything
-is read. Avatars are 26px; three are shown and the rest become "+N".
+is read. Avatars are 26px; three are shown and the rest become "+N". Their
+colour is a brand accent token picked by a stable hash of `id` (falling back to
+`name`, then `initials`), so the same person keeps the same colour on every
+board — pass `id` whenever you have one.
 
 ```tsx
 <WorkCard
@@ -104,7 +107,7 @@ is read. Avatars are 26px; three are shown and the rest become "+N".
   thumb={item.thumbUrl}
   tone="amber"
   chips={<Chip tone="surface">Due today</Chip>}
-  people={[{ initials: 'JM', name: 'Jess M' }]}
+  people={[{ id: item.editorId, initials: 'JM', name: 'Jess M' }]}
 />
 ```
 
@@ -112,8 +115,11 @@ is read. Avatars are 26px; three are shown and the rest become "+N".
 
 A Monday-first month grid for the right-hand rail. Today is filled ink; days
 with something on them are tinted — shoots amber, posts blue, client reviews
-green — and a day with more than one takes the loudest. Days are drawn at 34px
-but their tap area is 44px. Dates are plain `YYYY-MM-DD` strings so nothing
+green — and a day with more than one takes the loudest. Each day is a real 44px
+button with the 34px dot centred inside it, so the tap areas touch without
+overlapping and the edge of a cell belongs to that cell; the card's padding is
+12px because seven 44px columns need 308px and the rail is 336px. Give it at
+least 332px of width. Dates are plain `YYYY-MM-DD` strings so nothing
 depends on the reader's clock agreeing with Melbourne's; "today" is read after
 mount, or passed in as `today` for a test. The arrows only appear when
 `onMonthChange` is given, and `action` is the 44px ink button under the grid.

@@ -91,16 +91,22 @@ export default function MiniCalendar({
   )
 
   return (
-    <section className={cn('flex flex-col gap-3.5 rounded-card border border-border bg-surface p-5 text-foreground', className)}>
+    /* p-3, not p-5: seven real 44px day buttons need 308px, and 12px padding
+       leaves 312px inside the 336px rail. The card's own breathing room comes
+       from the buttons being 10px taller than the 34px dot they draw. */
+    <section className={cn('flex flex-col gap-3.5 rounded-card border border-border bg-surface p-3 text-foreground', className)}>
       <div className="flex items-center justify-between gap-2">
         {arrow(-1, ChevronLeft, 'Previous month')}
         <h2 className="rounded-full bg-foreground px-2.5 py-1.5 text-chip-12 text-background">{label}</h2>
         {arrow(1, ChevronRight, 'Next month')}
       </div>
 
-      <div className="grid grid-cols-7 justify-items-center gap-1">
+      {/* no gap: every column is one 44px-wide button whose visible 34px dot is
+          centred inside it, so the tap areas touch and never overlap — the
+          edge of a cell belongs to that cell */}
+      <div className="grid grid-cols-7">
         {WEEKDAYS.map(d => (
-          <div key={d} className="w-[34px] text-center text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">{d}</div>
+          <div key={d} className="pb-1 text-center text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">{d}</div>
         ))}
         {cells.map(d => {
           const k = key(d)
@@ -119,20 +125,21 @@ export default function MiniCalendar({
               onClick={() => onPick?.(k)}
               aria-label={`${d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}${isToday ? ', today' : ''}${what}`}
               aria-current={isToday ? 'date' : undefined}
-              /* drawn at 34px; the ::after grows the tap area to 44 without
-                 pushing the grid wider than the rail it sits in */
-              className={cn(
-                'relative flex h-[34px] w-[34px] items-center justify-center rounded-full text-[13px] font-medium tabular-nums',
-                "after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
-                onPick && 'cursor-pointer',
-                isToday ? 'bg-foreground text-background'
-                  : kind ? MARKER_TINT[kind]
-                  : '',
-                outside && !isToday ? 'text-foreground/30' : 'text-foreground',
-                isToday && 'text-background',
-              )}
+              className={cn('flex h-11 w-full items-center justify-center', onPick && 'cursor-pointer')}
             >
-              {d.getDate()}
+              {/* the button is the 44px target; this is the 34px dot you see */}
+              <span
+                className={cn(
+                  'flex h-[34px] w-[34px] items-center justify-center rounded-full text-[13px] font-medium tabular-nums',
+                  isToday ? 'bg-foreground text-background'
+                    : kind ? MARKER_TINT[kind]
+                    : '',
+                  outside && !isToday ? 'text-foreground/30' : 'text-foreground',
+                  isToday && 'text-background',
+                )}
+              >
+                {d.getDate()}
+              </span>
             </button>
           )
         })}

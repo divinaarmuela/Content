@@ -20,15 +20,26 @@ const TONE: Record<WorkTone, string> = {
   paper: 'bg-paper',
 }
 
-export type Person = { initials: string; name?: string; color?: string }
+export type Person = { initials: string; name?: string; id?: string }
 
-/** dark enough for cream initials, and all four are brand colours */
-const AVATAR_COLORS = ['#0057FF', '#242421', '#E53935', '#0044CC']
+/**
+ * Avatar colours are brand accent tokens, never loose hex, so they move with
+ * the palette. Each pairs with the text colour that is actually readable on
+ * it — cream on blue/red/ink, ink on green/amber.
+ */
+const AVATAR_COLORS = [
+  'bg-accent-blue text-cream',
+  'bg-ink text-cream',
+  'bg-accent-red text-cream',
+  'bg-accent-green text-ink',
+  'bg-accent-amber text-ink',
+]
 
+/** stable per person, so the same face keeps the same colour across boards */
 function avatarColor(p: Person) {
-  if (p.color) return p.color
+  const seed = p.id ?? p.name ?? p.initials
   let n = 0
-  for (const ch of p.initials) n = (n * 31 + ch.charCodeAt(0)) >>> 0
+  for (const ch of seed) n = (n * 31 + ch.charCodeAt(0)) >>> 0
   return AVATAR_COLORS[n % AVATAR_COLORS.length]
 }
 
@@ -62,8 +73,12 @@ export default function WorkCard({
       )}
     >
       {thumb && (
+        /* alt="" on purpose: the still is decoration for the title that sits
+           directly under it, so naming it would read the card out twice.
+           A plain <img> rather than next/image — these come from Drive and
+           Zernio, hosts that are not in the next.config image allowlist. */
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumb} alt="" className="h-[92px] w-full rounded-tile object-cover" />
+        <img src={thumb} alt="" loading="lazy" className="h-[92px] w-full rounded-tile object-cover" />
       )}
       <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">{client}</span>
       <span className="text-[15px] font-semibold leading-[1.25]">{title}</span>
@@ -76,8 +91,7 @@ export default function WorkCard({
                 <span
                   key={`${p.initials}-${i}`}
                   title={p.name ?? p.initials}
-                  style={{ background: avatarColor(p) }}
-                  className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[11px] font-bold text-cream"
+                  className={cn('flex h-[26px] w-[26px] items-center justify-center rounded-full text-[11px] font-bold', avatarColor(p))}
                 >
                   {p.initials}
                 </span>
