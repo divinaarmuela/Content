@@ -95,6 +95,7 @@ out += `export function encodeKey(s: string): string {\n  return s.replace(/[.#$
 out += `/** Tables whose Postgres key was not a uuid \`id\`. The id stored in RTDB is derived from the row. */\nexport const NATURAL_KEYS: Partial<Record<TableName, (row: any) => string>> = {
   team_user_clients: r => \`\${r.team_user_id}__\${r.client_id}\`,
   user_page_access: r => \`\${r.team_user_id}__\${encodeKey(r.href)}\`,
+  asset_versions: r => \`\${r.item_id}__\${r.version_number}\`,
   client_brand: r => r.client_id,
   drive_connection: () => 'singleton',
   scan_settings: () => 'singleton',

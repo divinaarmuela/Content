@@ -746,11 +746,11 @@ export async function addVersion(
     const existing = await table<AssetVersion>('asset_versions')
       .list({ by: { item_id: itemId }, orderBy: [['version_number', 'desc']] })
     const nextNumber = (existing[0]?.version_number ?? 0) + 1
-    // (item_id, version_number) is unique in Postgres; here the claim is made
-    // by re-reading the numbers immediately before writing, so a concurrent
-    // upload that already took this number sends us round the loop
-    if (existing.some(v => v.version_number === nextNumber)) continue
 
+    // (item_id, version_number) was unique in Postgres, and it still is: a
+    // version row's id IS `<item_id>__<version_number>`, so the insert of a
+    // number a concurrent upload already took is refused rather than
+    // overwriting it — which is what sends us round the loop below.
     let data: AssetVersion
     try {
       data = await table('asset_versions').insert({

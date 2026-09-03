@@ -72,10 +72,13 @@ export async function queuePublishJob(input: {
   // only one LIVE job per content item, ever — the rule the partial unique
   // index enforced in Postgres. Queueing the same item twice is the one
   // mistake that double-posts to a client's real account.
+  // 'scheduled' counts as live: the provider is HOLDING that post until its
+  // time, so the item is still spoken for — queueing a second job would put
+  // the same post out twice.
   if (input.contentItemId) {
     const live = await table<PublishJobRow>('publish_jobs').list({
       where: j => j.content_item_id === input.contentItemId
-        && ['queued', 'publishing'].includes(j.status),
+        && ['queued', 'publishing', 'scheduled'].includes(j.status),
       limit: 1,
     })
     if (live.length > 0) return { error: 'This content item is already queued to publish' }
