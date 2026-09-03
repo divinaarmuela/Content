@@ -31,6 +31,20 @@ async function rt(pathname, method = 'GET', body) {
   if (!r.ok) throw new Error(`RTDB ${method} ${pathname}: ${r.status} ${await r.text()}`)
   return r.json()
 }
+// database.rules.json grants `.write` on mdm/tables, mdm/live and mdm/meta
+// individually — there is no `.write` at /mdm or at /mdm/uniq itself (a
+// descendant's conditional rule never authorises a shallower write). So the
+// uniq pointers must go up as a multi-location PATCH at /mdm using the flat
+// "uniq/<table>/<field>/<key>" paths already produced by buildUniq(), which
+// RTDB validates per path against mdm/uniq/$table/$field/$key's own rule —
+// never as a single PUT to /mdm/uniq, which would 401 with nothing applied.
+async function patchChunked(flat, chunkSize = 500) {
+  const keys = Object.keys(flat)
+  for (let i = 0; i < keys.length; i += chunkSize) {
+    const body = Object.fromEntries(keys.slice(i, i + chunkSize).map(k => [k, flat[k]]))
+    await rt('/mdm', 'PATCH', body)
+  }
+}
 
 const report = []
 fs.mkdirSync(OUT_DIR, { recursive: true })
@@ -59,10 +73,9 @@ for (const t of TABLES) {
   } else report.push([t, 'would copy', rows.length, '-'])
 }
 if (!DRY) {
-  await rt('/mdm/uniq', 'PUT', Object.keys(uniqAll).length ? unflatten(uniqAll) : null)
+  if (Object.keys(uniqAll).length) await patchChunked(Object.fromEntries(Object.entries(uniqAll).map(([k, v]) => [`uniq/${k}`, v])))
   await rt('/mdm/meta', 'PUT', { migrated_at: new Date().toISOString(), skipped: SKIPPED })
 }
-function unflatten(flat) { const o = {}; for (const [k, v] of Object.entries(flat)) { const segs = k.split('/'); let c = o; for (const s of segs.slice(0, -1)) c = c[s] ??= {}; c[segs.at(-1)] = v } return o }
 
 console.log(`\n${'table'.padEnd(26)} ${'status'.padEnd(20)} ${'supabase'.padStart(9)} ${'rtdb'.padStart(6)}`)
 let bad = 0
