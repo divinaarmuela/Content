@@ -186,9 +186,11 @@ export const PLATFORM_MEDIA: Record<Platform, PlatformMedia> = {
     },
     video: {
       formats: ['mp4', 'mov', 'avi'],
-      maxMB: 5120, oversize: 'reject',
-      minSeconds: 3, maxSeconds: 10 * 60, overlong: 'reject',
-      minWidth: 256, minHeight: 144, maxWidth: 4096, maxHeight: 2304,
+      // LinkedIn's Videos API spec: 500 MB max, 3s-30min, max 1920x1920.
+      // https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/videos-api
+      maxMB: 500, oversize: 'reject',
+      minSeconds: 3, maxSeconds: 30 * 60, overlong: 'reject',
+      minWidth: 256, minHeight: 144, maxWidth: 1920, maxHeight: 1920,
       // LinkedIn does not crop to fit; a shape outside this fails to process
       aspectMin: 1 / 2.4, aspectMax: 2.4, aspectIsHard: true,
     },
