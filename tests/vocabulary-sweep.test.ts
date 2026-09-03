@@ -340,7 +340,8 @@ describe('the overview sends people to the right page', () => {
   })
 
   it('Production is still reachable — from the sidebar, as the shoots page', () => {
-    const layout = readFileSync(join(APP, 'dashboard', 'layout.tsx'), 'utf8')
-    expect(layout).toMatch(/href: '\/dashboard\/production'/)
+    // the sidebar's nav data moved from layout.tsx into the shell it renders
+    const shell = readFileSync(join(APP, 'dashboard', 'ui', 'Shell.tsx'), 'utf8')
+    expect(shell).toMatch(/href: '\/dashboard\/production'/)
   })
 })

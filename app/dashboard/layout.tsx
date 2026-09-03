@@ -4,23 +4,21 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Toaster } from '@/components/ui/sonner'
-import { ClerkProvider, UserButton, useUser } from '@clerk/nextjs'
+import { ClerkProvider } from '@clerk/nextjs'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
-  RefreshCw,
-} from 'lucide-react'
+import { Lock, RefreshCw } from 'lucide-react'
 import { useRole } from './useRole'
 import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
-import NotificationBell from './NotificationBell'
+import Shell, { NAV_MAIN, NAV_TOOLS } from './ui/Shell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
-import { techMailto } from '@/app/lib/support-core'
-import { roleLabel, type Role } from '@/app/lib/identity-core'
+
+// the shell's markup lives in ./ui/Shell; the nav data and the active-entry
+// rule live there with it, and are re-exported here for anything that used to
+// import them from the layout
+export { activeNavHref, NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS, PAGE_TITLES } from './ui/Shell'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
  *  the dark tokens too, persists to localStorage, and cleans up on unmount so
@@ -47,81 +45,6 @@ function useDashTheme() {
   return { dark, toggle }
 }
 
-type NavItem = { href: string; label: string; icon: React.ComponentType<{ className?: string }> }
-
-const NAV_MAIN: NavItem[] = [
-  { href: '/dashboard',            label: 'Overview',         icon: LayoutGrid },
-  { href: '/dashboard/leads',      label: 'Leads',            icon: Inbox },
-  { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
-  { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
-  { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
-  { href: '/dashboard/website',    label: 'Website',          icon: Globe },
-  // one board became three pages, each answering one question: which shoots
-  // am I planning, what is mine to edit, what is mine to post
-  { href: '/dashboard/production', label: 'Production',       icon: Camera },
-  { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
-  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
-  { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
-  { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
-]
-
-/**
- * Social's own pages. Inbox, Analytics and Automations existed only as three
- * outline buttons in the header of the channels list — so someone sent a direct
- * link to the Inbox, who then navigated away, could never find it again.
- *
- * They are children of Social rather than entries in GRANTABLE_PAGES: whoever
- * may see Social may see all of it, and inventing three more permissions for
- * one page's tabs is a permission model nobody would maintain.
- */
-const NAV_SOCIAL_CHILDREN: NavItem[] = [
-  // first, because it answers the question people come to Social with most:
-  // "did it go out?"
-  { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
-  { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
-  { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
-  { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
-]
-
-const NAV_TOOLS: NavItem[] = [
-  { href: '/dashboard/reports',       label: 'Reports',       icon: BarChart3 },
-  { href: '/dashboard/team',          label: 'Team',          icon: Users },
-  // the directory says who exists; this says what each of them is holding
-  { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
-  { href: '/dashboard/ai',            label: 'AI Assistant',  icon: Sparkles },
-  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
-  { href: '/dashboard/settings',      label: 'Settings',      icon: Settings },
-]
-
-const PAGE_TITLES: Record<string, string> = {
-  '/dashboard':               'Overview',
-  '/dashboard/leads':         'Leads',
-  '/dashboard/clients':       'Clients',
-  '/dashboard/audience':      'Audience',
-  '/dashboard/social':        'Social channels',
-  '/dashboard/social/activity': 'Posts',
-  '/dashboard/social/inbox':  'Inbox',
-  '/dashboard/social/analytics': 'Analytics',
-  '/dashboard/social/automations': 'Automations',
-  '/dashboard/website':       'Website',
-  '/dashboard/production':    'Production',
-  '/dashboard/editor':        'Editor',
-  '/dashboard/bookings':      'Bookings',
-  '/dashboard/production/availability': 'Availability',
-  '/dashboard/production/proposals': 'Proposals',
-  '/dashboard/scheduler':     'Scheduler',
-  // "Calendar" meant three different things; each one now says which
-  '/dashboard/scheduler/calendar': 'Posting calendar',
-  '/dashboard/calendar':      'Posting calendar',
-  '/dashboard/activity':      'Asana activity',
-  '/dashboard/reports':       'Reports',
-  '/dashboard/team':          'Team',
-  '/dashboard/team/activity': 'Team activity',
-  '/dashboard/ai':            'AI Assistant',
-  '/dashboard/notifications': 'Notifications',
-  '/dashboard/settings':      'Settings',
-}
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   // ClerkProvider is scoped here (and to the auth/sso routes) rather than the
   // root layout, so the public marketing pages don't load the Clerk SDK.
@@ -134,100 +57,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-/**
- * Which nav entry the current page belongs to.
- *
- * An exact match only used to count, so opening a client, a shoot or a
- * settings tab un-highlighted the whole sidebar and the person lost track of
- * where they were. Longest prefix wins, so /dashboard/team/activity highlights
- * Team activity rather than Team, and bare '/dashboard' never swallows
- * everything below it.
- */
-export function activeNavHref(path: string, hrefs: string[]): string | null {
-  const exact = hrefs.find(h => h === path)
-  if (exact) return exact
-  return hrefs
-    .filter(h => path.startsWith(`${h}/`))
-    .sort((a, b) => b.length - a.length)[0] ?? null
-}
-
-function NavLinks({ role, granted, hidden, path, onNavigate, touch }: {
-  role: Role | null
-  granted: string[]
-  hidden: string[]
-  path: string
-  onNavigate?: () => void
-  /** the mobile drawer: every link is a 44px finger target, not a 30px one */
-  touch?: boolean
-}) {
-  // the role ladder decides by default; a super admin's grants can only add
-  const main = visiblePages(role, NAV_MAIN, granted, hidden)
-  const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
-  // Social's children ride on Social's own permission
-  const socialOpen = main.some(i => i.href === '/dashboard/social')
-  const children = socialOpen ? NAV_SOCIAL_CHILDREN : []
-  const current = activeNavHref(path, [...main, ...children, ...tools].map(i => i.href))
-  const link = (item: NavItem, nested = false) => {
-    const active = current === item.href
-    const Icon = item.icon
-    return (
-      <Link
-        key={item.href}
-        href={item.href}
-        aria-current={active ? 'page' : undefined}
-        onClick={onNavigate}
-        className={`group flex items-center gap-2.5 rounded-lg text-sm transition-all duration-150 ${
-          nested ? 'ml-3 pl-4 pr-2.5' : 'px-2.5'
-        } ${
-          touch ? 'min-h-11 py-3' : 'py-[7px]'
-        } ${
-          active
-            ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-            : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
-        }`}
-      >
-        <Icon className={`h-4 w-4 shrink-0 transition-colors ${active ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400 group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300'}`} />
-        {item.label}
-        {active && <span className="ml-auto h-1 w-1 rounded-full bg-blue-600 dark:bg-blue-400" />}
-      </Link>
-    )
-  }
-  return (
-    <nav className="flex flex-col gap-0.5 px-3">
-      <p className="px-2.5 pb-1.5 pt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">Workspace</p>
-      {main.map(item => (
-        <div key={item.href} className="contents">
-          {link(item)}
-          {item.href === '/dashboard/social' && children.map(c => link(c, true))}
-        </div>
-      ))}
-      {tools.length > 0 && (
-        <p className="px-2.5 pb-1.5 pt-5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">System</p>
-      )}
-      {tools.map(i => link(i))}
-    </nav>
-  )
-}
-
-function SidebarHeader() {
-  return (
-    <div className="flex h-14 items-center gap-2.5 border-b border-zinc-100 px-4 dark:border-zinc-800">
-      {/* the wordmark is white + blue slash, so it sits on a dark plate */}
-      <div className="flex items-center rounded-lg bg-gradient-to-b from-zinc-800 to-zinc-950 px-2.5 py-2 shadow-sm">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/MDLogo-trim.png" alt="MD Media" className="h-3.5 w-auto" />
-      </div>
-    </div>
-  )
-}
-
 function DashboardInner({ children }: { children: React.ReactNode }) {
   const path = usePathname()
   // remember the last LIST page, so an item's "Back" returns where the person
   // came from rather than wherever its status happens to file it
   useEffect(() => { rememberList(path ?? '') }, [path])
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const { user } = useUser()
   // The role comes from the server (team_users), not Clerk publicMetadata.
   // The old fallback here was `?? 'admin'`, so an identity whose metadata was
   // never stamped rendered the *full* admin navigation — a client included.
@@ -302,151 +136,79 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   const firstAllowed = visiblePages(role, [...NAV_MAIN, ...NAV_TOOLS], granted, hidden)[0] ?? null
 
   return (
-    <div className="dbx min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Desktop sidebar */}
-      {/* Desktop sidebar from `md`, not `lg`: at the old 1024px breakpoint an
-          iPad in portrait — a real device on this team — lost the whole
-          navigation and had to work through one hamburger. */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-zinc-200/80 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-900">
-        <SidebarHeader />
-        <div className="flex-1 overflow-y-auto pb-6">
-          <NavLinks role={role} granted={granted} hidden={hidden} path={path} />
-        </div>
-        <div className="border-t border-zinc-100 px-5 py-3.5 dark:border-zinc-800">
-          <a
-            href="https://www.mdmmarketing.com.au"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-700"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            mdmmarketing.com.au
-          </a>
-        </div>
-      </aside>
-
-      {/* Main column */}
-      <div className="md:pl-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-zinc-800 dark:bg-zinc-900/85">
-          {/* Mobile nav */}
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="flex w-72 flex-col p-0">
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <SidebarHeader />
-              <div className="flex-1 overflow-y-auto pb-6">
-                <NavLinks role={role} granted={granted} hidden={hidden} path={path} touch onNavigate={() => setMobileOpen(false)} />
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          <h1 className="text-sm font-semibold tracking-tight">{PAGE_TITLES[path] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).sort((a, b) => b.length - a.length).find(k => path.startsWith(`${k}/`)) ?? ''] ?? 'Dashboard'}</h1>
-          {/* Beta: this is in daily use while still being built, so the state
-              is stated rather than left to be discovered on a rough edge. */}
-          {/* The badge used to say "tell us about them" in a hover-only
-              title=, with nobody to tell. It is now the way to tell us. */}
-          <a
-            href={techMailto({ subject: 'Feedback on the dashboard', page: path })}
-            className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-widest text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
-          >
-            Beta
-          </a>
-
-          <div className="ml-auto flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            {role && role !== 'super_admin' && (
-              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-600">
-                {roleLabel(role)}
-              </span>
-            )}
-            <NotificationBell />
-            {user && (
-              <span className="hidden text-xs text-zinc-500 sm:block dark:text-zinc-400">
-                {user.firstName ?? user.emailAddresses[0]?.emailAddress}
-              </span>
-            )}
-            {/* Signing out defaults to "/" on the CURRENT host, and this host
-                also serves the marketing site — so the default drops a staff
-                member on the homepage as if they had wandered onto the public
-                site. Send them to sign-in instead. */}
-            <UserButton
-              appearance={{ elements: { avatarBox: { width: 28, height: 28, borderRadius: 8 } } }}
-            />
+    <>
+      <Shell
+        role={role}
+        granted={granted}
+        hidden={hidden}
+        path={path}
+        dark={dark}
+        onToggleTheme={toggle}
+      >
+        {resolving ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-64 w-full" />
           </div>
-        </header>
-
-        <main className="w-full p-4 sm:p-6 xl:px-8">
-          {resolving ? (
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-8 w-56" />
-              <Skeleton className="h-64 w-full" />
-            </div>
-          ) : noAccount ? (
-            /* Signed in with Clerk, but not a member of the team yet — or we
-               could not reach the server to find out. Either way this is an
-               answer, and a person needs to be able to read it and know what
-               to do next. Anything is better than the skeleton that used to
-               sit here for good. */
-            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
-              {identity === 'unreachable' ? (
-                <>
-                  <RefreshCw className="h-6 w-6 text-zinc-400" />
-                  <p className="text-sm font-medium">We could not check your account</p>
-                  <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
-                    That is usually the connection rather than your account.
-                    Try again in a moment.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                    Try again
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Lock className="h-6 w-6 text-zinc-400" />
-                  <p className="text-sm font-medium">Your account is not set up yet</p>
-                  <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
-                    {/* the server's own sentence, which is already written for
-                        a person — "No invitation found for this account." */}
-                    {reason ?? 'This sign-in is not linked to a team account yet.'}
-                    {' '}Ask Manal or Divina to invite you — they can do it in a
-                    minute, and you will not need to sign up again.
-                  </p>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                    You are signed in — use the avatar above to sign out, or to
-                    switch to a different account.
-                  </p>
-                </>
-              )}
-            </div>
-          ) : blocked ? (
-            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
-              <Lock className="h-6 w-6 text-zinc-400" />
-              <p className="text-sm font-medium">This page is not part of your access</p>
-              {/* Naming the tab was a dead end: Page access is super-admin
-                  only, so following the instruction landed on "this section is
-                  for super admins". Name a person instead. */}
-              <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
-                If you need it, ask Manal or Divina to open it for you — they can
-                do it in a minute.
-              </p>
-              {firstAllowed && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={firstAllowed.href}>Go to {firstAllowed.label}</Link>
+        ) : noAccount ? (
+          /* Signed in with Clerk, but not a member of the team yet — or we
+             could not reach the server to find out. Either way this is an
+             answer, and a person needs to be able to read it and know what
+             to do next. Anything is better than the skeleton that used to
+             sit here for good. */
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface py-16 text-center">
+            {identity === 'unreachable' ? (
+              <>
+                <RefreshCw className="h-6 w-6 text-muted-foreground" />
+                <p className="text-[17px] font-semibold">We could not check your account</p>
+                <p className="max-w-xs text-[13px] text-muted-foreground">
+                  That is usually the connection rather than your account.
+                  Try again in a moment.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                  Try again
                 </Button>
-              )}
-            </div>
-          ) : children}
-        </main>
-      </div>
+              </>
+            ) : (
+              <>
+                <Lock className="h-6 w-6 text-muted-foreground" />
+                <p className="text-[17px] font-semibold">Your account is not set up yet</p>
+                <p className="max-w-xs text-[13px] text-muted-foreground">
+                  {/* the server's own sentence, which is already written for
+                      a person — "No invitation found for this account." */}
+                  {reason ?? 'This sign-in is not linked to a team account yet.'}
+                  {' '}Ask Manal or Divina to invite you — they can do it in a
+                  minute, and you will not need to sign up again.
+                </p>
+                <p className="text-[13px] text-muted-foreground">
+                  You are signed in — use the avatar above to sign out, or to
+                  switch to a different account.
+                </p>
+              </>
+            )}
+          </div>
+        ) : blocked ? (
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface py-16 text-center">
+            <Lock className="h-6 w-6 text-muted-foreground" />
+            <p className="text-[17px] font-semibold">This page is not part of your access</p>
+            {/* Naming the tab was a dead end: Page access is super-admin
+                only, so following the instruction landed on "this section is
+                for super admins". Name a person instead. */}
+            <p className="max-w-xs text-[13px] text-muted-foreground">
+              If you need it, ask Manal or Divina to open it for you — they can
+              do it in a minute.
+            </p>
+            {firstAllowed && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={firstAllowed.href}>Go to {firstAllowed.label}</Link>
+              </Button>
+            )}
+          </div>
+        ) : children}
+      </Shell>
 
       <Toaster />
       <UploadTray />
-    </div>
+    </>
   )
 }

@@ -84,26 +84,49 @@
    is mounted — dashboard routes own the page, and Radix portals mount on
    <body> outside .dbx, so tokens must live at body level */
 body:has(.dbx) {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  /* interactive accent: MD electric blue (validated against white surface) */
-  --primary: 221 83% 53%;
+  /* ── Brand tokens (raw values, consumed by the Tailwind colour names
+     ink / cream / paper / surface / tint-* / accent-* in tailwind.config.js).
+     Kept as plain hex/rgba rather than HSL triples so the exact values from
+     the design spec survive round-tripping. ── */
+  --dbx-ink: #0B0B0B;
+  --dbx-cream: #f9f4eb;
+  --dbx-paper: #ECE7D9;
+  --dbx-surface: #ffffff;
+  --dbx-border: rgba(11, 11, 11, 0.08);
+  --dbx-muted: rgba(11, 11, 11, 0.62);
+  --dbx-blue: #0057FF;
+  --dbx-blue-deep: #0044CC;
+  --dbx-green: #00C853;
+  --dbx-amber: #FFB300;
+  --dbx-red: #E53935;
+  --dbx-tint-blue: #DCE6FF;
+  --dbx-tint-green: #D6F5E1;
+  --dbx-tint-amber: #FFEFC2;
+  --dbx-tint-red: #FBDAD8;
+
+  /* ── shadcn tokens, re-pointed at the brand palette so every existing
+     component lands on the new canvas: background = cream, card/popover =
+     surface. HSL triples because tailwind.config.js wraps them in hsl(). ── */
+  --background: 39 54% 95%;          /* cream  #f9f4eb */
+  --foreground: 0 0% 4%;             /* ink    #0B0B0B */
+  --card: 0 0% 100%;                 /* surface #ffffff */
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;              /* light: level with card, above cream */
+  --popover-foreground: 0 0% 4%;
+  /* interactive accent: MD electric blue #0057FF */
+  --primary: 220 100% 50%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
+  --secondary: 44 33% 89%;           /* paper #ECE7D9 */
+  --secondary-foreground: 0 0% 4%;
+  --muted: 44 33% 89%;
+  --muted-foreground: 39 3% 39%;     /* ink at 62% over cream */
+  --accent: 44 33% 89%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 1 77% 55%;          /* #E53935 */
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 221 83% 53%;
+  --border: 39 20% 88%;              /* ink at 8% over cream */
+  --input: 39 20% 88%;
+  --ring: 220 100% 50%;
 }
 
 /* dashboard dark mode — the shell toggles .dark on <html> (portals included).
@@ -111,25 +134,38 @@ body:has(.dbx) {
    lighter, so floating surfaces read as ABOVE the page instead of melting
    into it. */
 .dark body:has(.dbx) {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 6% 8%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 5% 13%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 217 91% 60%;
+  /* Brand tokens in dark: the canvas is ink, plain surfaces are #141414, and
+     each tint becomes an 18% overlay of its accent on that surface. */
+  --dbx-paper: #1C1C1C;
+  --dbx-surface: #141414;
+  --dbx-border: rgba(249, 244, 235, 0.14);
+  --dbx-muted: rgba(249, 244, 235, 0.62);
+  --dbx-tint-blue: #10203E;   /* #0057FF @ 18% on #141414 */
+  --dbx-tint-green: #10341F;  /* #00C853 @ 18% */
+  --dbx-tint-amber: #3E3110;  /* #FFB300 @ 18% */
+  --dbx-tint-red: #3A1B1A;    /* #E53935 @ 18% */
+
+  /* Elevation scale (trap 3): background #0B0B0B → card #141414 →
+     popover #1F1F1F, each step lighter than the last. */
+  --background: 0 0% 4%;             /* ink #0B0B0B */
+  --foreground: 39 54% 95%;          /* cream #f9f4eb */
+  --card: 0 0% 8%;                   /* surface #141414 */
+  --card-foreground: 39 54% 95%;
+  --popover: 0 0% 12%;               /* #1F1F1F — above card */
+  --popover-foreground: 39 54% 95%;
+  --primary: 220 100% 62%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 4% 14%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 4% 14%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 4% 14%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 72% 51%;
+  --secondary: 0 0% 11%;
+  --secondary-foreground: 39 54% 95%;
+  --muted: 0 0% 11%;
+  --muted-foreground: 38 4% 60%;     /* cream at 62% over ink */
+  --accent: 0 0% 11%;
+  --accent-foreground: 39 54% 95%;
+  --destructive: 1 70% 52%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 4% 19%;
-  --input: 240 4% 22%;
-  --ring: 217 91% 60%;
+  --border: 39 2% 17%;               /* cream at 14% over ink */
+  --input: 39 2% 22%;
+  --ring: 220 100% 62%;
 }
 
 @layer base {
