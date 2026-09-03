@@ -39,10 +39,23 @@ export default function Reveal({
   // IntersectionObserver callback fires after hydration, which on a slow
   // phone is the client's first impression of their portal.
   const [hides, setHides] = useState(false)
+  /** the entrance has finished, so the clip that drove it can come off — see
+   *  the note on clipPath below for what it breaks if it stays */
+  const [settled, setSettled] = useState(false)
   const ready = useLamaReady()
   // the reveal plays only once the preloader is gone, so entrances that are
   // in the first viewport actually animate instead of finishing behind it
   const shown = !hides || (seen && (ready || !gate))
+
+  // Belt and braces for dropping the clip. `transitionend` is the precise
+  // signal but it does not fire for a block that was never hidden, and it can
+  // be missed if the element is scrolled out mid-transition — either of which
+  // would leave the clip on permanently and trap every fixed child inside it.
+  useEffect(() => {
+    if (!shown) return
+    const t = setTimeout(() => setSettled(true), 1400 + delay)
+    return () => clearTimeout(t)
+  }, [shown, delay])
 
   useBeforePaint(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setSeen(true); return }
@@ -65,9 +78,20 @@ export default function Reveal({
   return (
     <div ref={ref} className={className}>
       <div
+        onTransitionEnd={() => { if (shown) setSettled(true) }}
         style={{
           transitionDelay: `${delay}ms`,
-          clipPath: shown ? 'inset(-10% -10% -10%)' : 'inset(-10% -10% 110%)',
+          /* The clip drives the entrance, and then it MUST go.
+           *
+           * A non-`none` clip-path makes this div the containing block for any
+           * `position: fixed` descendant, and clips it to this box. So anything
+           * inside a Reveal that tries to fill the screen — the planning
+           * board's fullscreen, a dialog, a dropdown — silently filled this
+           * div instead, which looks like the feature is broken rather than
+           * like a layout rule. It is only ever needed while the entrance is
+           * running, so it is dropped the moment that finishes. */
+          clipPath: settled || !hides ? undefined
+            : shown ? 'inset(-10% -10% -10%)' : 'inset(-10% -10% 110%)',
           transform: shown ? 'none' : 'translate(0, 80%) scale(0.96)',
           opacity: shown ? 1 : 0,
           // Invisible is not intangible. Hit-testing uses the TRANSFORMED box,

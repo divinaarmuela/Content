@@ -55,27 +55,63 @@ function syncTimezone(me: Me): void {
  * ran in the dangerous direction. Callers gate on `can(...)`, which is false
  * until the real role arrives.
  */
+/**
+ * Where the answer got to.
+ *
+ * `none` is the one that was missing, and it cost a new starter the whole
+ * dashboard. A 403 from /api/team/me — "no invitation found for this account"
+ * — was mapped to `me = null`, identical to "the answer has not arrived".
+ * The layout treats an unknown role as still-loading, correctly, so a user
+ * whose role would NEVER arrive sat in front of two skeletons forever. A
+ * refusal is an answer, and has to be able to say so.
+ */
+export type IdentityState = 'loading' | 'ready' | 'none' | 'unreachable'
+
 export function useRole() {
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
+  const [identity, setIdentity] = useState<IdentityState>('loading')
+  /** the server's own reason, when it gave one — it is written for a person */
+  const [reason, setReason] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/team/me')
-      .then(async r => (r.ok ? r.json() : null))
-      .then(data => {
+      .then(async r => {
+        if (r.ok) return { data: await r.json(), state: 'ready' as const, why: null }
+        // 401/403/404 are answers: this account has no place in the team yet
+        const body = await r.json().catch(() => ({})) as { error?: string }
+        return {
+          data: null,
+          state: 'none' as const,
+          why: typeof body.error === 'string' && body.error.trim() ? body.error : null,
+        }
+      })
+      .then(({ data, state, why }) => {
         if (cancelled) return
         setMe(data)
+        setIdentity(data ? state : state)
+        setReason(why)
         setLoading(false)
         if (data) syncTimezone(data as Me)
       })
-      .catch(() => { if (!cancelled) setLoading(false) })
+      .catch(() => {
+        // a dropped connection is not the same as being turned away, and must
+        // not be shown as one
+        if (cancelled) return
+        setIdentity('unreachable')
+        setLoading(false)
+      })
     return () => { cancelled = true }
   }, [])
 
   return {
     me,
     loading,
+    identity,
+    /** the server answered, and the answer was no */
+    noAccount: identity === 'none' || identity === 'unreachable',
+    reason,
     role: me?.role ?? null,
     /** Does this user meet a minimum role? False while unknown. */
     can: (required: Role) => (me ? roleSatisfies(me.role, required) : false),

@@ -332,7 +332,7 @@ export async function POST(req: Request) {
           user.role, undefined, 'shoot_brief',
         )) {
           return NextResponse.json(
-            { error: 'Shoot plans are created by account managers, on a shoot that is not finished' },
+            { error: 'A shoot plan can only be raised on a shoot that is not finished' },
             { status: 403 },
           )
         }

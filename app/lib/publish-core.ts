@@ -38,17 +38,66 @@ export const PLATFORM_RULES: Record<Platform, {
   carousel: number
   /** may that carousel hold images AND videos together */
   mixedCarousel: boolean
+  /** does this platform have Stories at all — the 24-hour kind. Choosing
+   *  Story while a channel without them is selected is not a style choice,
+   *  it is a post that cannot exist. */
+  stories: boolean
+  /** does it have a distinct short-form vertical slot — a Reel, a Short. On
+   *  a platform without one, a vertical video is simply a video, and offering
+   *  "Reel" there would be inventing a format. */
+  shortForm: boolean
 }> = {
-  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true  },
-  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false },
-  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
-  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false },
-  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
-  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true  },
-  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
-  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false },
-  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false },
-  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 0,  mixedCarousel: false },
+  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false, stories: false, shortForm: true  },
+  twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
+  linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false, stories: false, shortForm: false },
+  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: false, shortForm: false },
+  youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: true  },
+  pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: false },
+  bluesky:   { captionMax: 300,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
+  reddit:    { captionMax: 40000, images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 0,  mixedCarousel: false, stories: false, shortForm: false },
+}
+
+/**
+ * The post types this platform actually has.
+ *
+ * The composer offers one choice per channel rather than one choice for all
+ * of them, and a menu is the wrong place to learn that YouTube has no Stories
+ * — an option that cannot be chosen never has to be explained.
+ */
+export function availableKinds(platform: Platform, media?: MediaItem[]): PostKind[] {
+  const r = PLATFORM_RULES[platform]
+  if (!r) return ['feed']
+  const kinds: PostKind[] = ['feed']
+  if (r.shortForm) kinds.push('reel')
+  if (r.stories) kinds.push('story')
+  if (r.carousel > 0) kinds.push('carousel')
+  // Instagram has no feed video: per Zernio's guide, "any single video
+  // publishes as a Reel automatically". Offering "Feed post" for a lone video
+  // there is a choice that changes nothing except what the check looks for —
+  // which is how a 2 GB landscape master passed as feed and was refused as a
+  // Reel. The option goes when it would lie.
+  const loneVideo = media?.length === 1 && media[0].type === 'video'
+  if (platform === 'instagram' && loneVideo) return kinds.filter(k => k !== 'feed')
+  return kinds
+}
+
+/**
+ * What "Automatic" means on THIS platform.
+ *
+ * The provider reads the media: one video is short-form, several items are a
+ * carousel, anything else is a feed post. Clamped to what the platform has,
+ * because the old global guess sent "carousel" to YouTube — a choice nobody
+ * made, failing validation for a reason nobody chose.
+ */
+export function autoKindFor(platform: Platform, media: MediaItem[]): PostKind {
+  const guess: PostKind =
+    media.length > 1 ? 'carousel'
+    : media.length === 1 && media[0].type === 'video' ? 'reel'
+    : 'feed'
+  const allowed = availableKinds(platform, media)
+  return allowed.includes(guess) ? guess : allowed.includes('feed') ? 'feed' : allowed[0]
 }
 
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
@@ -80,27 +129,33 @@ export function validatePost(input: {
   platforms: Platform[]
   /** intent per platform, when the caller has one */
   kinds?: Partial<Record<Platform, PostKind>>
+  /** a channel with its own media is judged on that, not on the shared set */
+  mediaByPlatform?: Partial<Record<Platform, MediaItem[]>>
+  /** …and likewise its own caption */
+  captionByPlatform?: Partial<Record<Platform, string>>
 }): ValidationIssue[] {
   const issues: ValidationIssue[] = []
-  const images = input.media.filter(m => m.type === 'image').length
-  const videos = input.media.filter(m => m.type === 'video').length
-  const docs   = input.media.filter(m => m.type === 'document').length
 
   if (input.platforms.length === 0) {
     return [{ platform: 'instagram', problem: 'No platform selected' }]
   }
 
   for (const p of input.platforms) {
+    const caption = input.captionByPlatform?.[p] ?? input.caption
+    const media = input.mediaByPlatform?.[p] ?? input.media
+    const images = media.filter(m => m.type === 'image').length
+    const videos = media.filter(m => m.type === 'video').length
+    const docs   = media.filter(m => m.type === 'document').length
     const r = PLATFORM_RULES[p]
     if (!r) { issues.push({ platform: p, problem: `Unsupported platform "${p}"` }); continue }
 
-    if (input.caption.length > r.captionMax) {
+    if (caption.length > r.captionMax) {
       issues.push({
         platform: p,
-        problem: `Caption is ${input.caption.length} characters; ${p} allows ${r.captionMax}`,
+        problem: `Caption is ${caption.length} characters; ${p} allows ${r.captionMax}`,
       })
     }
-    if (r.requiresMedia && input.media.length === 0) {
+    if (r.requiresMedia && media.length === 0) {
       issues.push({ platform: p, problem: `${p} requires at least one image or video` })
     }
     // a carousel is measured as a carousel: one ceiling for the whole set,
@@ -137,18 +192,24 @@ export function validatePost(input: {
         issues.push({ platform: p, problem: 'A Reel cannot include still images' })
       }
     }
-    if (kind === 'story' && input.media.length !== 1) {
-      issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
+    if (kind === 'story') {
+      // caught before the media rules: "a Story takes one item" is useless
+      // advice on a platform that has no Stories to put the item in
+      if (!r.stories) {
+        issues.push({ platform: p, problem: `${p} has no Stories — pick a different post type for it` })
+      } else if (media.length !== 1) {
+        issues.push({ platform: p, problem: 'A Story takes exactly one image or video' })
+      }
     }
     if (kind === 'carousel') {
       if (r.carousel === 0) {
         issues.push({ platform: p, problem: `${p} does not post carousels` })
-      } else if (input.media.length < 2) {
+      } else if (media.length < 2) {
         issues.push({ platform: p, problem: 'A carousel needs at least two items' })
-      } else if (input.media.length > r.carousel) {
+      } else if (media.length > r.carousel) {
         issues.push({
           platform: p,
-          problem: `${input.media.length} slides; ${p} allows ${r.carousel} in one carousel`,
+          problem: `${media.length} slides; ${p} allows ${r.carousel} in one carousel`,
         })
       }
     }
@@ -168,6 +229,17 @@ export type PostKind = 'feed' | 'reel' | 'story' | 'carousel'
 
 export type PostOptions = {
   kind?: PostKind
+  /**
+   * This channel's OWN media, replacing the shared set for this channel only
+   * — Zernio's `customMedia`. The reason it exists: a twelve-minute cut for
+   * YouTube and a ninety-second one for Instagram used to be two posts.
+   */
+  media?: MediaItem[]
+  /** …and its own caption — `customContent`. X takes 280 characters where
+   *  LinkedIn takes 3,000, and one caption cannot serve both. */
+  caption?: string
+  /** X Premium only: lift the 140-second / 512 MB cap. Sent as `longVideo`. */
+  longVideo?: boolean
   /** Reels: also show in the main feed. */
   shareToFeed?: boolean
   /** Posted automatically once the post is live — the usual place for hashtags. */
@@ -204,7 +276,9 @@ export type Target = { platform: Platform; accountId: string; options?: PostOpti
  *  general limits. Duration and aspect ratio cannot be checked here — they
  *  need the file — so they are documented for the UI to surface. */
 export const REEL_REQUIREMENTS = {
-  maxSeconds: 90,
+  // Meta's published Reels spec — fifteen minutes, not the 90s that Zernio's
+  // guide still quotes. See media-fit-core for the full set.
+  maxSeconds: 15 * 60,
   aspect: '9:16 vertical',
   resolution: '1080 x 1920',
   maxMB: 300,
@@ -266,10 +340,21 @@ export function postWarnings(input: {
   return warnings
 }
 
-/** Translate our options into the provider's field names. */
-export function toPlatformData(o: PostOptions): Record<string, unknown> | null {
+/** Translate our options into the provider's field names.
+ *
+ *  `contentType` is the one field that differs by platform, and Zernio's
+ *  guides are precise about it:
+ *   - Instagram: only "story" exists. A lone video is a Reel with no field at
+ *     all, and Meta 400s an unknown field verbatim — so nothing is sent for it.
+ *   - Facebook: "reel" and "story" both exist, and the DEFAULT is a feed
+ *     video. Choosing Reel used to send nothing, so a Facebook "Reel" went out
+ *     as an ordinary feed video every time. */
+export function toPlatformData(o: PostOptions, platform?: Platform): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}
   if (o.kind === 'story') out.contentType = 'story'
+  if (o.kind === 'reel' && platform === 'facebook') out.contentType = 'reel'
+  // an unknown field is a 400 from Meta, so this goes only where it exists
+  if (o.longVideo && platform === 'twitter') out.longVideo = true
   if (o.shareToFeed !== undefined) out.shareToFeed = o.shareToFeed
   if (o.firstComment) out.firstComment = o.firstComment
   if (o.collaborators?.length) out.collaborators = o.collaborators.slice(0, 3)
@@ -303,11 +388,48 @@ export type ZernioPostBody = {
     platform: Platform
     accountId: string
     platformSpecificData?: Record<string, unknown>
+    /** replaces `mediaItems` for this platform only */
+    customMedia?: MediaItem[]
+    /** replaces `content` for this platform only */
+    customContent?: string
   }[]
   mediaItems?: MediaItem[]
   scheduledFor?: string
   timezone?: string
   publishNow?: boolean
+  /** TikTok's mandatory settings — top level, NOT platformSpecificData; Zernio
+   *  calls that out as the one special case */
+  tiktokSettings?: TikTokSettings
+}
+
+export type TikTokSettings = {
+  privacy_level: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
+  allow_comment: boolean
+  allow_duet: boolean
+  allow_stitch: boolean
+  content_preview_confirmed: boolean
+  express_consent_given: boolean
+  /** send to the Creator Inbox for review instead of publishing */
+  draft?: boolean
+}
+
+/**
+ * What every TikTok post carries unless told otherwise.
+ *
+ * Zernio marks all six of these REQUIRED, and we were sending none of them —
+ * every TikTok target in every post this app has ever made went out without
+ * the block TikTok insists on. A public post that allows comments, duets and
+ * stitches is what an agency posting for a brand means by "post it"; the two
+ * consent flags are TikTok's legal requirement that the operator has seen the
+ * preview and agreed to publish, which pressing Publish is.
+ */
+export const TIKTOK_DEFAULTS: TikTokSettings = {
+  privacy_level: 'PUBLIC_TO_EVERYONE',
+  allow_comment: true,
+  allow_duet: true,
+  allow_stitch: true,
+  content_preview_confirmed: true,
+  express_consent_given: true,
 }
 
 export function buildPostBody(input: {
@@ -320,15 +442,18 @@ export function buildPostBody(input: {
   const body: ZernioPostBody = {
     content: input.caption,
     platforms: input.targets.map(t => {
-      const data = t.options ? toPlatformData(t.options) : null
+      const data = t.options ? toPlatformData(t.options, t.platform) : null
       return {
         platform: t.platform,
         accountId: t.accountId,
         ...(data ? { platformSpecificData: data } : {}),
+        ...(t.options?.media?.length ? { customMedia: t.options.media } : {}),
+        ...(t.options?.caption?.trim() ? { customContent: t.options.caption } : {}),
       }
     }),
   }
   if (input.media.length > 0) body.mediaItems = input.media
+  if (input.targets.some(t => t.platform === 'tiktok')) body.tiktokSettings = { ...TIKTOK_DEFAULTS }
   if (input.scheduledFor) {
     body.scheduledFor = input.scheduledFor
     body.timezone = input.timezone ?? 'Australia/Melbourne'
@@ -384,4 +509,77 @@ function messageFrom(b: Record<string, unknown>, fallback: string): string {
     if (typeof v === 'string' && v.trim()) return v
   }
   return fallback
+}
+
+/**
+ * What the provider's per-platform results actually say, in one line.
+ *
+ * A four-channel post that lands on three and fails on one comes back as
+ * `partial`, and the reconcile used to store exactly that word: "Provider
+ * reported the post as partial after creation". The per-platform rows — which
+ * channel, and the platform's own reason — were in the same response and
+ * thrown away, so a post that was LIVE on YouTube read as a failure with no
+ * reason anyone could act on.
+ *
+ * Pure. The row shape is Zernio's, kept loose: `platform`/`name`, `status`,
+ * `errorMessage`/`error`, `platformPostUrl`.
+ */
+export type RemotePlatformRow = {
+  platform?: string; name?: string; status?: string
+  errorMessage?: string | null; error?: string | null
+  platformPostUrl?: string | null
+}
+
+/**
+ * A "failure" that is a wait.
+ *
+ * Zernio reports a TikTok upload that TikTok is still processing as
+ * `status: "failed"` with this message and `tiktokTerminalDeferred: true`,
+ * keeps checking, and flips it to published when TikTok finishes — a 2 GB
+ * master took 63 minutes and went live. Reading that row as failed marked a
+ * post that was going to succeed as one that had not, and offered a retry
+ * that would have posted the video twice, which the message itself warns of.
+ */
+export function isStillProcessing(row: RemotePlatformRow): boolean {
+  return /still processing/i.test(String(row.errorMessage ?? row.error ?? ''))
+}
+
+export function describeRemoteOutcome(
+  overall: string, rows: RemotePlatformRow[] | null | undefined,
+): {
+  error: string; permalink: string | null
+  livePlatforms: string[]; failedPlatforms: string[]; pendingPlatforms: string[]
+} {
+  const list = Array.isArray(rows) ? rows : []
+  const name = (r: RemotePlatformRow) => String(r.platform ?? r.name ?? 'a channel').toLowerCase()
+  const LIVE = ['published', 'posted', 'success']
+  const live = list.filter(r => LIVE.includes(String(r.status ?? '').toLowerCase()))
+  const pending = list.filter(r => isStillProcessing(r)
+    || ['pending', 'processing', 'publishing'].includes(String(r.status ?? '').toLowerCase()))
+  const failed = list.filter(r => String(r.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(r))
+  const reasons = failed.map(r => {
+    const why = String(r.errorMessage ?? r.error ?? '').trim()
+    return why ? `${name(r)}: ${why}` : `${name(r)}: no reason given`
+  })
+  const permalink = list.find(r => r.platformPostUrl)?.platformPostUrl ?? null
+
+  const waiting = pending.length
+    ? ` Still going out on ${pending.map(name).join(', ')} — the platform is processing it; do not resend.`
+    : ''
+  let error: string
+  if (live.length > 0 && (reasons.length > 0 || pending.length > 0)) {
+    error = `Went out on ${live.map(name).join(', ')}.`
+      + (reasons.length ? ` Did not go out on ${reasons.join('; ')}.` : '')
+      + waiting
+  } else if (reasons.length > 0) {
+    error = `Did not go out — ${reasons.join('; ')}.${waiting}`
+  } else if (pending.length > 0) {
+    error = waiting.trim()
+  } else {
+    error = `Provider reported the post as ${overall} after creation`
+  }
+  return {
+    error, permalink,
+    livePlatforms: live.map(name), failedPlatforms: failed.map(name), pendingPlatforms: pending.map(name),
+  }
 }

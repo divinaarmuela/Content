@@ -10,6 +10,7 @@ import {
   KeyRound, MessageSquare, RefreshCw, XCircle,
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import { tokenNotice } from '../../../lib/token-health-core'
 import { Button } from '@/components/ui/button'
 
 /* ── shapes (kept loose: the provider owns them) ───────────────────────── */
@@ -21,6 +22,7 @@ type Account = {
 }
 
 type Scope = { scope: string; granted: boolean; required?: boolean }
+
 type Health = {
   status?: string
   tokenStatus?: { valid?: boolean; expiresAt?: string; expiresIn?: string; needsRefresh?: boolean }
@@ -149,8 +151,12 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   const scopes = Object.entries(health?.permissions ?? {})
   const missing = scopes.flatMap(([, list]) => list).filter(s => !s.granted && s.required)
 
-  // one condition behind the button and all three warnings
-  const needsReconnect = token?.valid === false || token?.needsRefresh === true || missing.length > 0
+  // The token's own story, decided by the provider rather than by a countdown.
+  // Missing scopes are a separate panel with its own wording, so they are ORed
+  // in for the BUTTON only — the one rule being that nothing on this page tells
+  // anyone to press a button that is not rendered.
+  const notice = tokenNotice(token, Date.now())
+  const needsReconnect = (notice?.needsReconnect ?? false) || missing.length > 0
 
   const followerRow = followers?.accounts?.find(a => a._id === account.provider_account_id)
   const metrics = Object.entries(insights?.metrics ?? {})
@@ -214,27 +220,28 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
         </CardContent>
       </Card>
 
-      {/* token expiry is the thing that silently breaks publishing later */}
-      {token?.expiresAt && (() => {
-        const days = Math.ceil((new Date(token.expiresAt).getTime() - Date.now()) / 86400000)
-        const urgent = token.needsRefresh || days <= 14
-        return (
-          <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
-            urgent
-              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
-              : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
-          }`}>
-            <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>
-              Access token expires {when(token.expiresAt)}
-              {token.expiresIn && ` — ${token.expiresIn}`}.{' '}
-              {urgent
-                ? 'Use Reconnect account above. Until you do, posts scheduled for this account will quietly fail to go out.'
-                : 'Reconnecting before then keeps posting working — it does not always renew on its own.'}
-            </span>
-          </div>
-        )
-      })()}
+      {/* An expiry date only breaks publishing when nothing renews it. Which
+          of those this is, is the provider's to say — not a fortnight rule
+          that fired on every TikTok and YouTube account from the day it was
+          connected, and pointed at a button it had not rendered. */}
+      {notice && (
+        <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
+          notice.level === 'act'
+            ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+            : notice.level === 'watch'
+            ? 'border-amber-200 text-amber-800 dark:border-amber-900 dark:text-amber-300'
+            : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
+        }`}>
+          <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {token?.expiresAt
+              ? <>Access token expires {when(token.expiresAt)}
+                  {notice.autoRenews && token.expiresIn ? ` — ${token.expiresIn}` : ''}. </>
+              : null}
+            {notice.advice}
+          </span>
+        </div>
+      )}
 
       {missing.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
 import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
+import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 export const NOTE_COLORS: Record<string, string> = {
@@ -24,13 +25,37 @@ export const NOTE_COLORS: Record<string, string> = {
 
 /** One card on the board. Memoised per card object — a drag re-renders one
  *  card, not two hundred. Position is applied by the parent via transform. */
+/** The badge that turns a still into a player. Its own component because the
+ *  image card and the link card both need it, and because it must stop the
+ *  pointer reaching the canvas — a click that starts a drag is a click that
+ *  never plays anything. */
+function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Play ${label}`}
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => { e.stopPropagation(); onPlay?.() }}
+      className="absolute inset-0 flex items-center justify-center"
+    >
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-transform hover:scale-110">
+        <Play className="h-4 w-4 translate-x-[1px] fill-white text-white" />
+      </span>
+    </button>
+  )
+}
+
 function CanvasCardInner({
-  card, selected, editing, clientName, onCommitText, onUpdate,
+  card, selected, editing, clientName, onCommitText, onUpdate, playing, onPlay,
 }: {
   card: Card
   selected: boolean
   editing: boolean
   clientName?: string
+  /** this is the one card allowed to be a live player right now */
+  playing?: boolean
+  /** ask the canvas to make it that card */
+  onPlay?: () => void
   onCommitText: (text: string) => void
   /** whole-card change (todo rows etc.) — absent means read-only */
   onUpdate?: (next: Card) => void
@@ -359,11 +384,33 @@ function CanvasCardInner({
   }
 
   if (card.kind === 'image') {
+    // A dropped .mp4 is an image card whose url is a video, and it rendered as
+    // an <img> — a broken picture on the board with no way to tell why. It is
+    // a <video>, and it PLAYS: `preload="none"` so a board full of clips costs
+    // nothing to open, `controls` only once somebody asked for it.
+    const isFilm = isPlayableFile(card.url ?? '')
     return (
       <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900" style={{ width: card.w }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
-          draggable={false} className="w-full select-none" />
+        {isFilm ? (
+          <div className="relative">
+            <video
+              src={card.url}
+              // the whole point of playing in place: the element must get the
+              // pointer, and the canvas must not read that as a drag
+              controls={playing}
+              autoPlay={playing}
+              playsInline
+              preload={playing ? 'metadata' : 'none'}
+              className="w-full select-none bg-black"
+              style={{ pointerEvents: playing ? 'auto' : 'none' }}
+            />
+            {!playing && <PlayBadge onPlay={onPlay} label={card.name ?? 'video'} />}
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
+            draggable={false} className="w-full select-none" />
+        )}
         {card.name && (
           <p className="truncate px-2 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">{card.name}</p>
         )}
@@ -371,17 +418,104 @@ function CanvasCardInner({
     )
   }
 
-  // link chip — click selects; opening happens via the toolbar or ctrl+click
+  // link card — click selects; opening happens via the toolbar or ctrl+click
   let host = card.url ?? ''
-  try { host = new URL(card.url ?? '').hostname } catch { /* show as-is */ }
+  try { host = new URL(card.url ?? '').hostname.replace(/^www\./, '') } catch { /* show as-is */ }
+  const heading = card.title || card.name || host
+
+  // With a picture it is a REFERENCE — the reason somebody dropped a Reel on
+  // the board was to look at it, and a chip naming its hostname is the least
+  // useful thing that link can be. Without one it stays the chip it was: a
+  // grey box promising a picture that never comes is worse than a tidy line.
+  const embed = embedUrlFor(card.url ?? '')
+
+  // Playing IN PLACE, not in a lightbox. The reason to put a competitor's Reel
+  // on a moodboard is to watch it next to the concept it is sitting beside;
+  // taking over the screen to do that loses the comparison, which was the
+  // whole point. One card plays at a time — the canvas owns that — so the
+  // "ten players froze a tab" problem never arises.
+  if (playing && embed) {
+    return (
+      <div
+        className="overflow-hidden rounded-lg border-2 border-blue-500 bg-black shadow-lg"
+        style={{ width: card.w }}
+      >
+        <iframe
+          src={embed}
+          title={card.title || card.name || 'Embedded post'}
+          allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
+          allowFullScreen
+          // Instagram's embed is a tall post, TikTok's is a 9:16 player,
+          // YouTube is 16:9. Guessing one shape for all three crops two of
+          // them, so the frame follows the platform.
+          className={`w-full border-0 bg-black ${
+            card.provider === 'YouTube' || card.provider === 'Vimeo' ? 'aspect-video'
+              : card.provider === 'TikTok' ? 'aspect-[9/16]'
+              : 'aspect-[4/5]'
+          }`}
+        />
+      </div>
+    )
+  }
+
+  if (card.thumb) {
+    return (
+      <div
+        className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        style={{ width: card.w }}
+      >
+        <div className="relative bg-zinc-100 dark:bg-zinc-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={card.thumb}
+            alt={heading}
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            // vertical for a Reel or a Short, wide for anything else: a 9:16
+            // clip letterboxed into 16:9 is mostly grey, and grey is what the
+            // board is trying not to be
+            className={`w-full object-cover ${card.media === 'video' ? 'aspect-[4/5]' : 'aspect-video'}`}
+          />
+          {/* a badge that plays where we can, and opens the post where we
+              cannot — never one that does nothing */}
+          {(card.media === 'video' || embed) && (
+            embed
+              ? <PlayBadge onPlay={onPlay} label={card.title ?? 'post'} />
+              : <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
+                    <Play className="h-4 w-4 translate-x-[1px] fill-white text-white" />
+                  </span>
+                </span>
+          )}
+          {card.provider && (
+            <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white backdrop-blur-sm">
+              {card.provider}
+            </span>
+          )}
+        </div>
+        <div className="p-2">
+          <span className="block truncate text-[12px] font-medium text-zinc-900 dark:text-zinc-100">
+            {heading}
+          </span>
+          <span className="block truncate text-[11px] text-zinc-400">{host}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900" style={{ width: card.w }}>
       <Link2 className="h-4 w-4 shrink-0 text-zinc-400" />
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100">
-          {card.name || host}
+          {heading}
         </span>
-        {card.name && <span className="block truncate text-[11px] text-zinc-400">{host}</span>}
+        <span className="block truncate text-[11px] text-zinc-400">
+          {/* Instagram and Facebook tell a server nothing — say so, and say
+              what to do about it, rather than looking merely unfinished */}
+          {card.provider && !card.title ? `${card.provider} · drop an image on it for a cover` : host}
+        </span>
       </span>
     </div>
   )

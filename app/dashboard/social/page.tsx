@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { AlertTriangle, BarChart3, MessageSquare, PenLine, Search, Share2 , Zap } from 'lucide-react'
 import EmptyState from '../EmptyState'
 import SocialChannels from '../clients/SocialChannels'
+import { needsAttention, timeLeftWords } from '../../lib/token-health-core'
 import PlatformIcon from './PlatformIcon'
 import ComposeDialog from './ComposeDialog'
 
@@ -28,12 +29,8 @@ type Account = {
   name: string | null
   active: boolean
 }
-type Health = { valid: boolean; expiresAt: string | null; needsRefresh: boolean }
-
-/** Days until a token dies, or null when it is not known. */
-function daysLeft(h?: Health): number | null {
-  if (!h?.expiresAt) return null
-  return Math.ceil((new Date(h.expiresAt).getTime() - Date.now()) / 86400000)
+type Health = {
+  valid: boolean; expiresAt: string | null; expiresIn: string | null; needsRefresh: boolean
 }
 
 /**
@@ -81,16 +78,14 @@ export default function SocialPage() {
   const clientName = (id: string | null) =>
     (clients ?? []).find(c => c.id === id)?.name ?? 'Unassigned'
 
-  // anything inside a fortnight, already flagged by the provider, or invalid
-  const expiring = accounts
-    .filter(a => a.active)
-    .map(account => ({ account, days: daysLeft(health[account.id]) }))
-    .filter(({ account, days }) => {
-      const h = health[account.id]
-      if (!h) return false
-      return !h.valid || h.needsRefresh || (days !== null && days <= 14)
-    })
-    .sort((a, b) => (a.days ?? -1) - (b.days ?? -1))
+  // What the PROVIDER says needs a person, not what a countdown guesses.
+  // The old rule was `days <= 14`, which put every TikTok and YouTube account
+  // in here permanently: their access tokens last a day by design and renew
+  // themselves, so they are always one day from expiry and never in trouble.
+  const expiring = needsAttention(
+    accounts.filter(a => a.active).map(account => ({ row: account, status: health[account.id] })),
+    Date.now(),
+  )
 
   const countFor = (id: string) => accounts.filter(a => a.client_id === id && a.active).length
   const platformsFor = (id: string) =>
@@ -146,17 +141,17 @@ export default function SocialPage() {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
             <strong>
-              {expiring.length} channel{expiring.length > 1 ? 's need' : ' needs'} reconnecting soon.
+              {expiring.length} channel{expiring.length > 1 ? 's need' : ' needs'} reconnecting.
             </strong>{' '}
-            Once a token expires, scheduled posts fail silently.
+            Until they are, scheduled posts for them will not go out.
             <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
-              {expiring.map(({ account, days }) => (
+              {expiring.map(({ row: account, notice }) => (
                 <li key={account.id}>
                   <Link href={`/dashboard/social/${account.id}`} className="underline decoration-dotted">
                     {clientName(account.client_id)} · {account.platform}
                   </Link>
                   {' — '}
-                  {days === null ? 'expired' : days <= 0 ? 'expired' : `${days} day${days === 1 ? '' : 's'} left`}
+                  {notice.level === 'act' ? 'disconnected' : timeLeftWords(notice.daysLeft)}
                 </li>
               ))}
             </ul>

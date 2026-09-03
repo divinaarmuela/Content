@@ -10,7 +10,7 @@ import {
 } from './batch-brief-core'
 import { accountManagerName, type PortalItem, type PortalShoot } from './portal-data'
 import { isInternalKind } from './task-kind-core'
-import { planState, progressLine, shootStatusLabel } from './portal-words'
+import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
 
 /**
@@ -124,7 +124,10 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       title: item.title,
       content_type: item.content_type,
       status,
-      status_label: CLIENT_LABELS[status],
+      // the same word the overview card uses. Raw CLIENT_LABELS calls a booked
+      // post "Approved", so a client tapped a card marked Scheduled and landed
+      // on a page headed Approved — one item, two states, on two screens.
+      status_label: clientStatusWord(status, CLIENT_LABELS[status]),
       updated_at: item.updated_at,
       preview_url: slides[0]?.url ?? latest?.file_url ?? null,
       drive_url: latest?.drive_url ?? null,

@@ -304,6 +304,40 @@ export default function ClientPortalPage() {
       </div>
       </PortalTabbedView>
 
+      {/* What should change about this PIECE?
+       *
+       *  This dialog did not exist. `setChanging(item)` was wired to the
+       *  button, `requestChanges` was written and correct, and nothing on the
+       *  page ever read `changing` — so a logged-in client pressed Request
+       *  changes and the page did nothing at all, every time. The anonymous
+       *  share-link portal had its own working version, which is why it was
+       *  never noticed. */}
+      <Dialog open={changing !== null} onOpenChange={o => !o && setChanging(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>What should change?</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            rows={4}
+            value={changeText}
+            autoFocus
+            onChange={e => setChangeText(e.target.value)}
+            placeholder="e.g. “Tighter intro, and use the daytime shots instead.”"
+          />
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            This goes straight to your account manager, and you will hear back
+            when the new version is ready.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" className="min-h-11" onClick={() => setChanging(null)} disabled={busy !== null}>Cancel</Button>
+            <Button className="min-h-11" disabled={busy !== null || !changeText.trim()}
+              onClick={() => void requestChanges()}>
+              {busy !== null ? 'Sending…' : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* what should change about the POST? — the note rides the request */}
       <Dialog open={postChanging !== null} onOpenChange={o => !o && setPostChanging(null)}>
         <DialogContent className="sm:max-w-md">

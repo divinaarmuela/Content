@@ -9,6 +9,7 @@ import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
+  shootDeletion,
 } from '../../../../lib/batch-brief-core'
 
 /** Load a brief the caller may touch, or answer with the right refusal. */
@@ -197,7 +198,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   })
 }
 
-/** Delete a brief that never became anything: still in planning, no items. */
+/**
+ * Delete a shoot, keeping whatever was made under it.
+ *
+ * This used to refuse the moment the shoot had ANY content item — which meant
+ * the moment its plan was written, a shoot plan being an item itself. A shoot
+ * booked by mistake became permanent as soon as somebody described it, and the
+ * only route out was to wrap a shoot that never happened.
+ *
+ * The task quota card already had the right answer: detach the pieces first,
+ * then delete the promise, so real work is never orphaned into a deleted
+ * parent. Same shape of problem, same fix. `shootDeletion` holds the rule and
+ * the sentence, so the dialog warns with the words the server enforces.
+ */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
@@ -206,21 +219,30 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
 
-    // a shoot that produced NO items can always be deleted (nothing to orphan);
-    // one that produced work must be wrapped instead. Read
-    // the error too: a failed count must NOT be treated as "zero items" and
-    // silently orphan every item to batch_id = null
-    const count = await table<ContentItem>('content_items').count({ by: { batch_id: id } })
-    if (count > 0) {
-      return NextResponse.json({ error: 'This shoot has content items — wrap it instead of deleting' }, { status: 409 })
+    // Read the whole list, not a count: a failed read must NOT be treated as
+    // "no items" and silently orphan every one of them to batch_id = null.
+    // The helper throws instead of returning an error to ignore.
+    const items = await table<ContentItem>('content_items').list({ by: { batch_id: id } })
+
+    const verdict = shootDeletion(items)
+    if (!verdict.allowed) {
+      return NextResponse.json({ error: verdict.reason }, { status: 409 })
     }
+
+    // detach BEFORE deleting the parent — the pieces become plain cards
+    if (verdict.detaching > 0) {
+      await Promise.all(items.map(i => table<ContentItem>('content_items').update(i.id, { batch_id: null })))
+    }
+
     await table('batches').remove(id)
     await logActivity({
       actor: user, clientId: loaded.batch.client_id,
-      entityType: 'batch', entityId: id, action: 'deleted', oldValue: loaded.batch.title,
+      entityType: 'batch', entityId: id, action: 'deleted',
+      oldValue: loaded.batch.title,
+      ...(verdict.detaching > 0 ? { detail: `${verdict.detaching} piece(s) kept` } : {}),
     })
     announceBatchChange({ batch_id: id, client_id: loaded.batch.client_id, status: 'brief', kind: 'deleted' })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, detached: verdict.detaching })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

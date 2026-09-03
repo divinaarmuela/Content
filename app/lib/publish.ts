@@ -7,7 +7,8 @@ import type {
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import {
-  validatePost, isPlatform, type MediaItem, type PostKind, type Platform, type Target,
+  validatePost, isPlatform, describeRemoteOutcome, isStillProcessing,
+  type MediaItem, type PostKind, type Platform, type Target, type RemotePlatformRow,
 } from './publish-core'
 
 /**
@@ -67,9 +68,18 @@ export async function queuePublishJob(input: {
   // carry each target's intent into validation, so a Reel with a still image
   // or a Story with a carousel is refused here rather than by the platform
   const kinds: Partial<Record<Platform, PostKind>> = {}
-  for (const t of input.targets) if (t.options?.kind) kinds[t.platform] = t.options.kind
+  const mediaByPlatform: Partial<Record<Platform, MediaItem[]>> = {}
+  const captionByPlatform: Partial<Record<Platform, string>> = {}
+  for (const t of input.targets) {
+    if (t.options?.kind) kinds[t.platform] = t.options.kind
+    // a channel with its own media or words is judged on THOSE
+    if (t.options?.media?.length) mediaByPlatform[t.platform] = t.options.media
+    if (t.options?.caption?.trim()) captionByPlatform[t.platform] = t.options.caption
+  }
 
-  const issues = validatePost({ caption: input.caption, media: input.media, platforms, kinds })
+  const issues = validatePost({
+    caption: input.caption, media: input.media, platforms, kinds, mediaByPlatform, captionByPlatform,
+  })
   if (issues.length > 0) {
     return {
       error: 'This post is not valid for every selected platform',
@@ -178,10 +188,25 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     const media = await relayMedia(job.media ?? [])
     if (media !== job.media) await settle({ media })
 
+    // a channel's own media has to make the same trip — it is the same kind
+    // of URL the provider cannot fetch — and is persisted for the same reason
+    const targets: Target[] = []
+    let targetsChanged = false
+    for (const t of (job.targets ?? []) as Target[]) {
+      if (t.options?.media?.length) {
+        const own = await relayMedia(t.options.media)
+        if (own !== t.options.media) targetsChanged = true
+        targets.push({ ...t, options: { ...t.options, media: own } })
+      } else {
+        targets.push(t)
+      }
+    }
+    if (targetsChanged) await settle({ targets })
+
     const outcome = await publisher.createPost({
       caption: job.caption,
       media,
-      targets: job.targets ?? [],
+      targets,
       scheduledFor: job.scheduled_for,
       timezone: job.timezone,
       requestId: job.request_id,   // ← layer 2, stable across retries
@@ -281,12 +306,23 @@ async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
 
     const res = await fetch(item.url)
     if (!res.ok) throw new Error(`Could not read media (${res.status}): ${item.url}`)
+    if (!res.body) throw new Error(`Media had no body: ${item.url}`)
 
     const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
     const filename = decodeURIComponent(new URL(item.url).pathname.split('/').pop() || 'asset')
-    const bytes = await res.arrayBuffer()
+    const length = Number(res.headers.get('content-length'))
 
-    out.push(await publisher.uploadMedia({ bytes, filename, contentType }))
+    // The stream, NOT the bytes. `await res.arrayBuffer()` here read the whole
+    // file into memory first, so a 2 GB master allocated 2 GB inside a
+    // serverless function and the process was killed for it — no throw, no
+    // catch, no error on the job, and the row left in `publishing` for the
+    // reclaim to hand back to a retry that did exactly the same thing.
+    out.push(await publisher.uploadMedia({
+      body: res.body,
+      filename,
+      contentType,
+      contentLength: Number.isFinite(length) && length > 0 ? length : null,
+    }))
   }
   return out
 }
@@ -338,7 +374,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   if (!jobs.length) return 0
 
   const publisher = getPublisher()
-  type Remote = { status?: string; platforms?: { platformPostUrl?: string | null; status?: string }[] }
+  type Remote = { status?: string; platforms?: RemotePlatformRow[] }
   const all = await publisher.postAnalytics().catch(() => null) as {
     posts?: ({ _id?: string } & Remote)[]
   } | null
@@ -366,6 +402,17 @@ export async function reconcilePublishedJobs(): Promise<number> {
     // reporting anything. Read literally, a 3:00 pm post was "live" at 2:40.
     // Live means the provider has a publish time, or a platform says so.
     const LIVE = ['published', 'posted', 'success']
+    // One channel live and three refused is NOT "published". A four-channel
+    // post with YouTube up and Instagram, LinkedIn and TikTok failed read as
+    // Live on our side because one platform said so — the person watching saw
+    // a green tick over a post that missed three quarters of its audience.
+    // Any failed channel makes it partial, and partial is described per
+    // channel further down.
+    // …but a TikTok "failed — still processing, do not repost" is a wait, not
+    // a failure: the 3:26 pm master went live on TikTok 63 minutes later
+    if (platforms.some(p => String(p.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(p))) {
+      return { status: 'partial', platforms }
+    }
     const platformLive = platforms.some(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
     const live = LIVE.includes(String(one.status).toLowerCase()) && (Boolean(one.publishedAt) || platformLive)
     return { status: live ? 'published' : (LIVE.includes(one.status) ? 'scheduled' : one.status), platforms }
@@ -396,9 +443,24 @@ export async function reconcilePublishedJobs(): Promise<number> {
     }
 
     if (remote.status === 'failed' || remote.status === 'partial') {
+      // keep the per-platform reasons: a post live on YouTube and refused by
+      // TikTok is not "failed", it is "went out on youtube; tiktok: <why>"
+      const outcome = describeRemoteOutcome(remote.status, remote.platforms as RemotePlatformRow[])
+      // nothing has actually failed yet — a channel is still processing. Say
+      // so on the row without marking it failed, and without offering a retry
+      // that would post the same video twice.
+      if (outcome.failedPlatforms.length === 0 && outcome.pendingPlatforms.length > 0) {
+        await table('publish_jobs').update(job.id, {
+          error: outcome.error,
+          ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        continue
+      }
       await table('publish_jobs').update(job.id, {
         status: 'failed',
-        error: `Provider reported the post as ${remote.status} after creation`,
+        error: outcome.error,
+        ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
         updated_at: new Date().toISOString(),
       })
       changed++

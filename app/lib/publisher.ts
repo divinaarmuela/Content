@@ -69,8 +69,20 @@ export interface Publisher {
   deletePost(postId: string): Promise<unknown>
   /** Bulk messaging campaigns. */
   listBroadcasts(): Promise<unknown>
-  /** Push bytes to the provider and return a URL usable in a post. */
-  uploadMedia(input: { bytes: ArrayBuffer; filename: string; contentType: string }): Promise<MediaItem>
+  /** Push bytes to the provider and return a URL usable in a post.
+   *
+   *  `body` is whatever fetch will send — for the relay it is the SOURCE
+   *  RESPONSE'S STREAM, never a buffer. See the implementation for why that
+   *  distinction is the difference between a 2 GB master posting and the
+   *  process being killed. */
+  uploadMedia(input: {
+    body: BodyInit
+    filename: string
+    contentType: string
+    /** the source's Content-Length, when it had one — a presigned PUT wants
+     *  a length, and a stream cannot be measured */
+    contentLength?: number | null
+  }): Promise<MediaItem>
   /** Create (or schedule) a post. Idempotent on requestId. */
   createPost(input: CreatePostInput): Promise<PublishOutcome>
 }
@@ -368,9 +380,24 @@ class ZernioPublisher implements Publisher {
   /** Presign → PUT → return the public URL.
    *
    *  The provider does not accept arbitrary public URLs, so assets held in
-   *  our own storage (Cloudflare R2) must be relayed through here rather than linked. */
-  async uploadMedia({ bytes, filename, contentType }: {
-    bytes: ArrayBuffer; filename: string; contentType: string
+   *  our own storage (Cloudflare R2) must be relayed through here rather than
+   *  linked.
+   *
+   *  ── Why this takes a body and not an ArrayBuffer ──
+   *
+   *  It used to take the whole file as an ArrayBuffer, which meant the relay
+   *  read every byte into memory before sending the first one. A 2 GB master
+   *  is a 2 GB allocation inside a serverless function, and the function is
+   *  killed for it — not thrown from, KILLED, so the catch never runs, the job
+   *  is never marked failed, and the row sits in `publishing` with no error
+   *  while the post silently never happens. Retrying repeats it exactly.
+   *
+   *  Streaming costs nothing and has no ceiling: the bytes pass through. */
+  async uploadMedia({ body, filename, contentType, contentLength }: {
+    body: BodyInit
+    filename: string
+    contentType: string
+    contentLength?: number | null
   }): Promise<MediaItem> {
     const type = mediaTypeFor(contentType)
     if (!type) throw new Error(`Unsupported media type: ${contentType}`)
@@ -389,8 +416,18 @@ class ZernioPublisher implements Publisher {
 
     const put = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      body: bytes,
+      headers: {
+        'Content-Type': contentType,
+        // a presigned PUT signs the length when it knows it, and a stream
+        // cannot be measured — so the source's own length is passed through
+        ...(contentLength ? { 'Content-Length': String(contentLength) } : {}),
+      },
+      body,
+      // undici refuses a stream body without this; it is the flag that says
+      // "I am not waiting to read the response before I finish sending"
+      ...(typeof body === 'object' && body !== null && 'getReader' in body
+        ? { duplex: 'half' } as RequestInit
+        : {}),
     })
     if (!put.ok) throw new Error(`Media upload failed (${put.status})`)
 

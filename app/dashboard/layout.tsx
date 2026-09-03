@@ -10,8 +10,9 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, Lock, CalendarClock,
+  RefreshCw,
 } from 'lucide-react'
 import { useRole } from './useRole'
 import { rememberList } from './lastList'
@@ -74,6 +75,9 @@ const NAV_MAIN: NavItem[] = [
  * one page's tabs is a permission model nobody would maintain.
  */
 const NAV_SOCIAL_CHILDREN: NavItem[] = [
+  // first, because it answers the question people come to Social with most:
+  // "did it go out?"
+  { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
   { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
   { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
@@ -95,6 +99,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/clients':       'Clients',
   '/dashboard/audience':      'Audience',
   '/dashboard/social':        'Social channels',
+  '/dashboard/social/activity': 'Posts',
   '/dashboard/social/inbox':  'Inbox',
   '/dashboard/social/analytics': 'Analytics',
   '/dashboard/social/automations': 'Automations',
@@ -228,7 +233,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   // never stamped rendered the *full* admin navigation — a client included.
   // useRole starts as null and `visibleFor` shows nothing until it resolves,
   // so the failure now runs in the safe direction.
-  const { role, loading: roleLoading } = useRole()
+  const { role, loading: roleLoading, identity, noAccount, reason } = useRole()
   // pages a super admin has opened to THIS person; empty until it loads, so
   // the sidebar starts from the role ladder and only ever gains entries
   const [granted, setGranted] = useState<string[]>([])
@@ -279,8 +284,14 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
    * someone who is not allowed Leads, which is a disclosure, not a flicker.
    * Super admins skip the grants wait: nothing can change their answer.
    */
-  const resolving = roleLoading || role === null
-    || (role !== 'super_admin' && !grantsLoaded)
+  //
+  // `role === null` counts as "still loading" ONLY while the answer might
+  // still arrive. For someone the server has already turned away it is the
+  // final answer, and treating it as loading left a new starter watching two
+  // skeletons that would never resolve — a blank dashboard with no way to
+  // learn why. `noAccount` is that terminal state, and it renders words.
+  const resolving = !noAccount
+    && (roleLoading || role === null || (role !== 'super_admin' && !grantsLoaded))
   // an ITEM page is shared ground: all three work pages link straight to
   // /dashboard/production/<id>, so no team member is turned away at the door.
   // The API (loadItemForUser) decides what any one person may actually see —
@@ -375,6 +386,43 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col gap-3">
               <Skeleton className="h-8 w-56" />
               <Skeleton className="h-64 w-full" />
+            </div>
+          ) : noAccount ? (
+            /* Signed in with Clerk, but not a member of the team yet — or we
+               could not reach the server to find out. Either way this is an
+               answer, and a person needs to be able to read it and know what
+               to do next. Anything is better than the skeleton that used to
+               sit here for good. */
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">
+              {identity === 'unreachable' ? (
+                <>
+                  <RefreshCw className="h-6 w-6 text-zinc-400" />
+                  <p className="text-sm font-medium">We could not check your account</p>
+                  <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
+                    That is usually the connection rather than your account.
+                    Try again in a moment.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                    Try again
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-6 w-6 text-zinc-400" />
+                  <p className="text-sm font-medium">Your account is not set up yet</p>
+                  <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
+                    {/* the server's own sentence, which is already written for
+                        a person — "No invitation found for this account." */}
+                    {reason ?? 'This sign-in is not linked to a team account yet.'}
+                    {' '}Ask Manal or Divina to invite you — they can do it in a
+                    minute, and you will not need to sign up again.
+                  </p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    You are signed in — use the avatar above to sign out, or to
+                    switch to a different account.
+                  </p>
+                </>
+              )}
             </div>
           ) : blocked ? (
             <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 py-16 text-center dark:border-zinc-700">

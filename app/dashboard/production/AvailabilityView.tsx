@@ -273,7 +273,9 @@ export default function AvailabilityView() {
   // schedulers read the week; proposing, cancelling, and managing calendars
   // stay editor+ (matching the API), so those controls simply don't render
   const { can } = useRole()
-  const canManage = can('editor')
+  // matches the floor on POST /api/shoots — a button the route would refuse
+  // is a button that exists to say no
+  const canManage = can('scheduler')
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [events, setEvents] = useState<CalEvent[] | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])

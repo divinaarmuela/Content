@@ -30,7 +30,21 @@ export default function PortalShell({ className = '', children }: {
   }, [])
   useEffect(() => {
     document.documentElement.setAttribute('data-portal-theme', theme)
-    return () => document.documentElement.removeAttribute('data-portal-theme')
+    // …and the shadcn tokens too.
+    //
+    // `data-portal-theme` drives the --p-* palette, which is the portal's own
+    // chrome. But every one of these pages also carries `.dbx`, and the cards,
+    // dialogs, inputs and badges inside them are painted from --background /
+    // --card / --border, which only move when `.dark` is on <html>. So the
+    // toggle flipped the page around the content and left the content itself
+    // in daylight — a half-applied theme, which reads as broken rather than as
+    // a choice. One class, the same one the dashboard toggles, and the whole
+    // page moves together.
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    return () => {
+      document.documentElement.removeAttribute('data-portal-theme')
+      document.documentElement.classList.remove('dark')
+    }
   }, [theme])
 
   const flip = () => {

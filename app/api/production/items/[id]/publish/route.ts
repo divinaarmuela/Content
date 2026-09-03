@@ -12,15 +12,30 @@ import { getPublisher } from '../../../../../lib/publisher'
 import { releaseClaimLock } from '../../../../../lib/claim-lock'
 import { publishLockKey } from '../../../../../lib/publish'
 
+/**
+ * Who may put something on a client's live accounts.
+ *
+ * Not the plain ladder: `requireRole('scheduler')` admits editors, and editing
+ * a cut is not the same act as sending it to the public.
+ *
+ * But the list left out the account manager, who runs the client's schedule
+ * and signs the work off — so the person answering to the client for what goes
+ * out was the one person who could not send it, while an EDITOR-level ladder
+ * check on /api/social/publish let them post the same content ad-hoc through
+ * the composer. The comment on POST below already said "Scheduler and above";
+ * this is the code catching up with it.
+ */
+const MAY_PUBLISH = ['scheduler', 'account_manager', 'super_admin']
+
+const NOT_ALLOWED = 'Publishing to a client account is for schedulers and account managers'
+
 /** What would be published for this item, and what is stopping it. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    // the role ladder admits editors via 'scheduler'; publishing to a client's
-    // live accounts is scheduler/super-admin only
-    if (!['scheduler', 'super_admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    if (!MAY_PUBLISH.includes(user.role)) {
+      return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params
     await loadItemForUser(user, id) // client scoping
@@ -40,8 +55,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!['scheduler', 'super_admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    if (!MAY_PUBLISH.includes(user.role)) {
+      return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params
     const item = await loadItemForUser(user, id)
@@ -110,8 +125,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!['scheduler', 'super_admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Only a scheduler can publish' }, { status: 403 })
+    if (!MAY_PUBLISH.includes(user.role)) {
+      return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params
     const item = await loadItemForUser(user, id)

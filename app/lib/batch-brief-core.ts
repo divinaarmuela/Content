@@ -98,10 +98,15 @@ export function canCreateItemsUnder(
   // can create production items too". Only clients never create.
   if (role === 'client') return false
   // a shoot-BRIEF task is how a shoot begins — it may start from nothing
-  // (its shoot is created with it) or attach to a still-planning brief;
-  // account managers own that act
+  // (its shoot is created with it) or attach to a still-planning brief.
+  //
+  // It used to be an account manager's act alone, which made it the one
+  // exception to the rule three lines above, and the exception did not earn
+  // itself: an editor who knows a shoot is needed had to go and ask somebody
+  // to type it. Planning is work like the rest of it, and who a piece of work
+  // BELONGS to is answered by assignment on the boards, not by refusing to
+  // let somebody write it down. Only clients still never create.
   if (kindSlug === 'shoot_brief') {
-    if (role !== 'account_manager' && role !== 'super_admin') return false
     // …or attach to any shoot that is not finished. Restricting it to a
     // still-planning shoot meant that the moment a date was locked the brief
     // could never be raised, and "New brief task" quietly built a SECOND
@@ -207,6 +212,15 @@ export type CanvasCard = {
   urls?: string[]
   /** todo card — its checklist rows */
   items?: { id: string; text: string; done: boolean }[]
+  /** link card — what the link actually is, so the card can SHOW it rather
+   *  than name it. Resolved once when the link is dropped and stored on the
+   *  card: the board must not make a network request per card on every open,
+   *  and a preview that disappears when a provider rate-limits us is worse
+   *  than one that is a few weeks stale. */
+  thumb?: string
+  title?: string
+  provider?: string
+  media?: 'video' | 'image' | 'page'
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -256,6 +270,19 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
           })()
         : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      // a link's resolved preview. The thumbnail is rendered as an <img src>,
+      // so it goes through the same https-only gate the card's own url does —
+      // a preview is not a reason to relax it.
+      ...(kind === 'link'
+        ? {
+            ...(String(r.thumb ?? '').startsWith('https://')
+              ? { thumb: String(r.thumb).slice(0, 2000) } : {}),
+            ...(r.title ? { title: String(r.title).slice(0, 200) } : {}),
+            ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
+            ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
+              ? { media: String(r.media) as CanvasCard['media'] } : {}),
+          }
+        : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
         : {}),
@@ -330,4 +357,50 @@ export function seedCardsFromReferences(refs: ReferenceMedia[]): CanvasCard[] {
 export const BATCH_TRANSITION_NOTIFICATIONS: Record<string, ('owner_editor' | 'account_managers')[]> = {
   'brief>locked': ['owner_editor', 'account_managers'],
   'locked>shot': ['account_managers'],
+}
+
+/**
+ * May this shoot be deleted, and what happens to what is under it.
+ *
+ * Deleting used to be refused the moment a shoot had ANY content item — which
+ * in practice meant the moment its plan was written, since a shoot plan is
+ * itself an item. So the only deletable shoot was one nobody had started, and
+ * a shoot booked by mistake became permanent as soon as somebody described it.
+ * The delete option simply vanished from the menu, with nothing to say why.
+ *
+ * The task quota card already solved this properly: detach the pieces first,
+ * then delete the promise, so real work is never orphaned into a deleted
+ * parent — it becomes a plain card and lives on. A shoot is the same shape of
+ * thing and gets the same treatment.
+ *
+ * The one genuine stop is work that has left the building. A published or
+ * scheduled piece is a commitment to the client's audience, and the shoot is
+ * the record of where it came from; that is what "wrap it" is for.
+ */
+export type ShootDeletion =
+  | { allowed: true; detaching: number; consequence: string }
+  | { allowed: false; reason: string }
+
+export function shootDeletion(
+  items: readonly { status: string }[],
+): ShootDeletion {
+  const live = items.filter(i => i.status === 'published' || i.status === 'scheduled')
+  if (live.length > 0) {
+    return {
+      allowed: false,
+      reason: live.length === 1
+        ? 'One piece from this shoot is already scheduled or live. Wrap the shoot instead — deleting it would lose where that post came from.'
+        : `${live.length} pieces from this shoot are already scheduled or live. Wrap the shoot instead — deleting it would lose where those posts came from.`,
+    }
+  }
+  const n = items.length
+  return {
+    allowed: true,
+    detaching: n,
+    consequence: n === 0
+      ? 'Nothing is attached to it, so nothing else changes.'
+      : n === 1
+      ? 'Its one piece is kept and stays on the board as its own card — only the shoot goes.'
+      : `Its ${n} pieces are kept and stay on the board as their own cards — only the shoot goes.`,
+  }
 }

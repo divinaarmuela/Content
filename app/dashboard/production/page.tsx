@@ -163,7 +163,9 @@ export default function ProductionPage() {
   const [briefOpen, setBriefOpen] = useState(false)
 
   const { me, role, loading, can } = useRole()
-  const canPlan = can('editor')
+  // anyone on the team plans a shoot — the boards decide whose work it then
+  // is, which is a different question from who may write it down
+  const canPlan = can('scheduler')
   const isManager = can('account_manager')
   // memoised: this is the memo key `useWorkRows` scopes the whole table by,
   // and a fresh object per render re-ran that on every keystroke in the
@@ -620,7 +622,10 @@ export default function ProductionPage() {
 
   /** A shoot with no plan yet — its card IS the reminder to write one. */
   const shootCard = (s: Shoot) => {
-    const canDelete = isManager && (s.content_items?.[0]?.count ?? 0) === 0
+    // no longer "only while it is empty": a shoot plan is itself an item, so
+    // the option vanished the moment anyone described the shoot. The pieces
+    // are kept and detached server-side; the dialog says so before you commit.
+    const canDelete = isManager
     return (
       <div key={s.id} className="relative">
         <Card className="py-0 transition-shadow hover:shadow-md">
@@ -926,8 +931,14 @@ export default function ProductionPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the shoot, its plan and its board. It cannot be undone. A shoot
-              that produced no items can be deleted at any stage; one with items is closed instead.
+              {/* the count the card already holds, said back before the click:
+                  "it cannot be undone" is only frightening, whereas "your four
+                  pieces are kept" is the fact somebody actually needs */}
+              This removes the shoot and its own record. It cannot be undone.{' '}
+              {(toDelete?.content_items?.[0]?.count ?? 0) > 0
+                ? `Its ${toDelete!.content_items![0].count} piece${toDelete!.content_items![0].count === 1 ? ' is' : 's are'} kept and stay${toDelete!.content_items![0].count === 1 ? 's' : ''} on the board as ${toDelete!.content_items![0].count === 1 ? 'its own card' : 'their own cards'}.`
+                : 'Nothing is attached to it, so nothing else changes.'}
+              {' '}A shoot with anything already scheduled or live is closed instead of deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

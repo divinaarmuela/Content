@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 /** Cancel a proposal — the token page stops accepting answers. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole('editor')
+    // same floor as creating one: the team edits the shoot it is running
+    await requireRole('scheduler')
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     if (!body.cancel) return NextResponse.json({ error: 'Nothing to do' }, { status: 400 })

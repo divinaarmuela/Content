@@ -712,10 +712,14 @@ export default function ItemDetailPage() {
   const canComment = role !== 'client'
     && (isSuper || hats.includes('editor') || hats.includes('account_manager') || hats.includes('scheduler'))
   const canSchedule = isSuper || hats.includes('scheduler')
-  // …but auto-publishing to a client's LIVE accounts is the scheduling team's
-  // job by title, not a hat anyone can be handed: /publish is role-gated, so
-  // showing these buttons to a handed editor would only ever produce a 403.
-  const canAutoPublish = isSuper || role === 'scheduler'
+  // …but auto-publishing to a client's LIVE accounts is a matter of TITLE,
+  // not of a hat anyone can be handed: /publish is role-gated, so showing
+  // these buttons to a handed editor would only ever produce a 403. The
+  // account manager belongs here beside the scheduler — they run the client's
+  // schedule and sign the work off — and this list must stay identical to
+  // MAY_PUBLISH in api/production/items/[id]/publish, or the button and the
+  // route start disagreeing again.
+  const canAutoPublish = isSuper || role === 'scheduler' || role === 'account_manager'
   // reviewing IS the job, and it is not per-item — owner picker, delete,
   // handoff, comment visibility, job-pack editing
   const canManage = isSuper || hats.includes('account_manager')

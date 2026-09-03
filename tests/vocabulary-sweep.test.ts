@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import { EDITOR_LANES, SCHEDULER_LANES } from '../app/lib/work-pages-core'
+import { STATUS_LABELS } from '../app/lib/workflow-core'
 
 /**
  * The words on screen, swept from the source itself.
@@ -175,8 +177,9 @@ describe('the canonical words are the only words', () => {
    * fail, which is the point: the fix and the entry's removal ship together.
    */
   const KNOWN: Known[] = [
-    { file: 'app/api/production/batches/[id]/route.ts', contains: 'content item',
-      why: 'a 409 message and a file comment; the API vocabulary follows the screens, not the other way round' },
+    // the 409 here used to read "This shoot has content items — wrap it
+    // instead of deleting". It now says what happens to the pieces instead of
+    // naming the table they live in, so this entry has nothing left to track.
     { file: 'app/lib/brief-task-core.ts', contains: 'content item',
       why: 'the reason string on a blocked edge; it moves with the Production board' },
     { file: 'app/lib/production-publish.ts', contains: 'content item',
@@ -272,9 +275,11 @@ describe('"brief" is retired — the word is "shoot plan"', () => {
 })
 
 describe('the columns say the status words, and the claim says one thing', () => {
-  it('every "approved" column is the status label, never the bare word "Approved"', async () => {
-    const { EDITOR_LANES, SCHEDULER_LANES } = await import('../app/lib/work-pages-core')
-    const { STATUS_LABELS } = await import('../app/lib/workflow-core')
+  // statically imported, not awaited inside the test: both modules are pure,
+  // and a dynamic import here made the assertion race the 5s test timeout
+  // whenever the suite ran under load — a green/red result that depended on
+  // how busy the machine was, which is no result at all
+  it('every "approved" column is the status label, never the bare word "Approved"', () => {
     expect(EDITOR_LANES.find(l => l.key === 'approved')?.title).toBe(STATUS_LABELS.approved_for_scheduling)
     expect(SCHEDULER_LANES[0].title).toBe(STATUS_LABELS.approved_for_scheduling)
     expect(STATUS_LABELS.approved_for_scheduling).not.toBe('Approved')
