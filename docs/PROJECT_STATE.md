@@ -1,5 +1,68 @@
 # Project state — as at 3 September 2026
 
+## Dashboard look — 3 Sep 2026
+
+**What this was.** The owner said the dashboard looked basic and everything was
+small. It now follows the approved mockup:
+<https://claude.ai/code/artifact/a952d413-f53e-473f-ba18-fbee823ccedc>. A dark
+ink sidebar, a cream page, big headings, colour-tinted cards, one calendar in
+the rail.
+
+**The contract: nothing changed except the look.** Every page kept its data,
+its live listeners, its buttons, its API calls and its role rules. No route
+moved, no permission changed, no words got more technical. If a page behaves
+differently after this, that is a bug, not a decision.
+
+**What changed:**
+
+- **Tokens.** The colours, type sizes and radii live in `app/globals.css` under
+  `.dbx` and in `tailwind.config.js` (`ink`, `cream`, `paper`, `surface`,
+  `tint-*`, `accent-*`, `text-page-title`, `text-card-title`, and so on). Dark
+  mode swaps the same names, so no page writes a colour of its own.
+- **The shell.** `app/dashboard/ui/Shell.tsx` draws the sidebar, the top bar
+  and the page frame for every dashboard page at once. `app/dashboard/layout.tsx`
+  still owns the hooks and the whole access decision and hands the answer down.
+- **The components.** `app/dashboard/ui/` — `PageTitle`, `TintCard`, `Stat`,
+  `Chip`, `Lane`, `WorkCard`, `MiniCalendar`, `Timeline`, plus `tone.ts`, the
+  one map from a row's state to a card tint and a chip colour. They are
+  presentation only: props in, markup out. `app/dashboard/ui/README.md` says
+  what each one is for and when to reach for it.
+- **Every page.** Overview, Production, Editor, Scheduler, Clients, Leads,
+  Bookings, Social (and its four child pages), Website, Team, Team activity,
+  Reports, Notifications, Settings, AI Assistant, Audience, the item page, the
+  shoot page and the dialogs all sit on the shell and use the components. None
+  was redesigned from scratch — old cards, chips and buttons were swapped for
+  the new ones.
+
+**The client portal.** `app/client/**` and `app/portal/[token]/**` are wrapped
+in `.dbx` and use the same `components/ui/*`, so they picked the new look up
+without being touched. The ruling for now is to KEEP that — one look across
+everything the client and the team both see — and the pass on 3 Sep found no
+breakage at 1440 or 390, light or dark. **This is still the owner's call to
+make**: if the portal should look like the marketing site instead of the
+dashboard, say so and it gets its own tokens.
+
+**The tracker page is out of scope.** `app/dashboard/tracker`, `app/api/tracker`
+and `app/lib/tracker*.ts` are the owner's own working files and are not in
+version control. The restyle deliberately left them alone, and the coverage
+test names them as a carve-out rather than pretending they pass.
+
+**Adding a page.** Two lines:
+
+1. Start the page with `<PageTitle title="…" summary="…" />` — the title is the
+   only thing that names the page on a desktop, because the shell's own header
+   title is hidden above `md`. A page under a layout that already draws one
+   (Clients detail, Scheduler, Settings, Production's three views) must not
+   draw a second.
+2. Build the body out of `app/dashboard/ui/` components — `TintCard` + `Stat`
+   for a summary, `Lane` + `WorkCard` for a board, `Chip` for a fact. Take the
+   colours from `tone.ts`; never write a raw colour class.
+
+`tests/page-title-coverage.test.ts`, `tests/shell-nav.test.ts`,
+`tests/tone.test.ts` and `tests/button-touch-floor.test.ts` hold all of the
+above in place.
+
+
 ## Firebase Realtime Database — 3 Sep 2026
 
 **Why.** A single route such as `app/api/production/batches/[id]` made 11
