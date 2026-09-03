@@ -3,21 +3,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
-  ArrowRight, Inbox, Users, TrendingUp, CalendarClock,
-  ClipboardList, PencilLine, Send, CheckCircle2, Film, HandHelping,
-  ChevronDown, ChevronLeft, ChevronRight, BarChart3,
+  ArrowRight, CalendarClock, CheckCircle2, ClipboardList, Clock,
+  ChevronDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import Greeting from './Greeting'
 import GettingStarted from './GettingStarted'
 import { LoadFailed } from './NotSetUp'
 import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
-import { DEFAULT_TZ, formatInZone, viewerHint } from '../lib/timezone-core'
+import PageTitle from './ui/PageTitle'
+import TintCard from './ui/TintCard'
+import Stat from './ui/Stat'
+import Chip, { type ChipTone } from './ui/Chip'
+import MiniCalendar, { type Marker } from './ui/MiniCalendar'
+import Timeline, { type TimelineItem } from './ui/Timeline'
+import {
+  DEFAULT_TZ, dayKeyInZone, formatInZone, greetingInZone, viewerHint, zoneLabel,
+} from '../lib/timezone-core'
 import { useTable } from '@/lib/db-client'
 import type { Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
 import { useRole } from './useRole'
@@ -95,89 +100,154 @@ type Overview = {
 /** newest first — module-level so the live query stays referentially stable */
 const LEADS_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
-const STATUS_BADGE: Record<string, string> = {
-  draft_uploaded: 'bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800',
-  internal_review: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
-  revision_required: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  revision_complete: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  client_review: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  client_changes_requested: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  approved_for_scheduling: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  scheduled: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-900',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-}
-
 /** Plain words, and a shoot brief's own words when it is one. */
 const statusLabel = (i: ItemLite) =>
   itemStatusLabel(i.work_kinds?.slug, i.status, STATUS_LABELS[i.status])
 
-function Stat({ label, value, hint, loading, icon: Icon, href }: {
-  label: string; value: string | number; hint?: string; loading: boolean
-  icon: React.ComponentType<{ className?: string }>
-  /** a number worth acting on links to the page you act on it from */
-  href?: string
-}) {
-  const card = (
-    <Card className={href ? 'transition-shadow hover:shadow-md' : undefined}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{label}</p>
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-950/40">
-            <Icon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-          </div>
-        </div>
-        {loading
-          ? <Skeleton className="mt-2 h-8 w-16" />
-          : <p className="mt-1 font-mono text-3xl font-semibold tabular-nums tracking-tight">{value}</p>}
-        {hint && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
-      </CardContent>
-    </Card>
-  )
-  return href ? <Link href={href} className="block">{card}</Link> : card
-}
+/** "1 item" / "4 items" — the summary sentence reads as English or not at all. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-function ItemList({ title, icon: Icon, items, empty, actionHref, actionLabel }: {
+/* ─────────────────────────────────────────────────────────────────────────
+   The page's own small pieces: a section heading, a plain panel, and the
+   tinted row the mockup's "Assigned to you" list is made of. Everything
+   else comes from `app/dashboard/ui`.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/** A heading with at most one link out of it — the mockup's section rule. */
+function Section({ title, action, aside, children, className }: {
   title: string
-  icon: React.ComponentType<{ className?: string }>
-  items: ItemLite[] | undefined
-  empty: string
-  actionHref: string
-  actionLabel: string
+  action?: { label: string; href: string }
+  aside?: React.ReactNode
+  children: React.ReactNode
+  className?: string
 }) {
   return (
-    <Card>
-      <CardHeader className="flex-row items-center">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Icon className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> {title}
-        </CardTitle>
-        <Button variant="ghost" size="sm" className="ml-auto" asChild>
-          <Link href={actionHref}>{actionLabel} <ArrowRight className="h-3.5 w-3.5" /></Link>
-        </Button>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1 pt-0">
-        {items === undefined && Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
-        {items !== undefined && items.length === 0 && (
-          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">{empty}</p>
-        )}
-        {(items ?? []).map(i => (
-          <Link key={i.id} href={`/dashboard/production/${i.id}`}
-            className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-            {/* the client name used to be `hidden sm:block`, so on a phone
-                every row lost which client it belonged to. The title is what
-                gives way now — the client is how you tell two reels apart. */}
-            <span className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
-              <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
-              {i.clients?.name && (
-                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{i.clients.name}</span>
-              )}
-            </span>
-            <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${STATUS_BADGE[i.status] ?? ''}`}>
-              {statusLabel(i)}
-            </Badge>
+    <section className={cn('flex min-w-0 flex-col gap-3', className)}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="min-w-0 truncate text-section-title">{title}</h2>
+        {aside}
+        {action && (
+          <Link href={action.href}
+            className="-my-3 inline-flex min-h-11 shrink-0 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
+            {action.label} <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
           </Link>
-        ))}
-      </CardContent>
-    </Card>
+        )}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** A white panel for the wider blocks (the month ledger, the leads list). */
+function Panel({ title, right, children, className }: {
+  title: string
+  right?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={cn('flex min-w-0 flex-col gap-4 rounded-card border border-border bg-surface p-5 sm:p-6', className)}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="min-w-0 text-section-title">{title}</h2>
+        {right}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+type RowTone = 'amber' | 'blue' | 'green' | 'surface'
+
+/* only the amber row is tinted: in the mockup the thing that needs you today
+   is the one that changes colour, and a page of tinted rows says nothing */
+const ROW_BG: Record<RowTone, string> = {
+  amber: 'border-transparent bg-tint-amber',
+  blue: 'border-border bg-surface',
+  green: 'border-border bg-surface',
+  surface: 'border-border bg-surface',
+}
+const ROW_TILE: Record<RowTone, string> = {
+  amber: 'bg-accent-amber text-ink',
+  blue: 'bg-tint-blue text-accent-blue-deep dark:text-cream',
+  green: 'bg-tint-green text-foreground',
+  surface: 'bg-paper text-foreground',
+}
+const ROW_ICON: Record<RowTone, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
+  amber: Clock, blue: CalendarClock, green: CheckCircle2, surface: ClipboardList,
+}
+const ROW_CHIP: Record<RowTone, ChipTone> = {
+  amber: 'surface', blue: 'blue', green: 'green', surface: 'muted',
+}
+
+/** One line of work: what it is, which client, and the one fact about it. */
+function WorkRow({ href, tone = 'surface', title, detail, chip }: {
+  href: string
+  tone?: RowTone
+  title: string
+  detail?: string
+  chip?: string
+}) {
+  const Icon = ROW_ICON[tone]
+  return (
+    <Link href={href}
+      className={cn('flex min-h-[64px] items-center gap-3.5 rounded-inner border px-4 py-2.5 transition-opacity hover:opacity-90', ROW_BG[tone])}>
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-tile', ROW_TILE[tone])}>
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[15px] font-semibold">{title}</span>
+        {detail && <span className="truncate text-[13px] text-muted-foreground">{detail}</span>}
+      </span>
+      {chip && <Chip tone={ROW_CHIP[tone]} className="shrink-0">{chip}</Chip>}
+    </Link>
+  )
+}
+
+/** Amber is "today or your move", blue is "in the calendar", green is done. */
+function toneOf(i: ItemLite, todayKey: string | null): RowTone {
+  if (todayKey && i.due_date && i.due_date <= todayKey
+    && !['published', 'scheduled'].includes(i.status)) return 'amber'
+  if (['revision_required', 'client_changes_requested'].includes(i.status)) return 'amber'
+  if (['published', 'approved_for_scheduling'].includes(i.status)) return 'green'
+  if (['scheduled', 'client_review'].includes(i.status)) return 'blue'
+  return 'surface'
+}
+
+/** The rows for a list of items, with the list's own loading and empty words. */
+function ItemRows({ items, empty, todayKey, hash = '' }: {
+  items: ItemLite[] | undefined
+  empty: string
+  todayKey: string | null
+  /** e.g. '#comments' for the rows that are a question to answer */
+  hash?: string
+}) {
+  if (items === undefined) {
+    return (
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-inner" />)}
+      </div>
+    )
+  }
+  if (items.length === 0) {
+    return <p className="rounded-inner border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">{empty}</p>
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map(i => {
+        const tone = toneOf(i, todayKey)
+        const due = todayKey && i.due_date && i.due_date <= todayKey
+          && !['published', 'scheduled'].includes(i.status)
+        return (
+          <WorkRow key={i.id}
+            href={`/dashboard/production/${i.id}${hash}`}
+            tone={tone}
+            title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
+            detail={statusLabel(i)}
+            chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : statusLabel(i)}
+          />
+        )
+      })}
+    </div>
   )
 }
 
@@ -185,14 +255,11 @@ type AtRiskLine = { type: string; label: string; quota: number; delivered: numbe
 type AtRiskClient = { id: string; name: string; has_agreement: boolean; worst: string; lines: AtRiskLine[] }
 
 const PACE_DOT: Record<string, string> = {
-  behind: 'bg-rose-500', tight: 'bg-amber-500', on_track: 'bg-emerald-500', met: 'bg-emerald-600',
+  behind: 'bg-accent-red', tight: 'bg-accent-amber', on_track: 'bg-accent-green', met: 'bg-accent-green',
 }
 
-const MONTH_CHIP: Record<MonthStatus, string> = {
-  short: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
-  at_risk: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  on_track: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
-  met: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+const MONTH_CHIP: Record<MonthStatus, ChipTone> = {
+  short: 'red', at_risk: 'amber', on_track: 'blue', met: 'green',
 }
 
 const chipWords = (r: MonthClientRow) => (r.status === 'met' ? 'Met ✓' : r.status_label)
@@ -207,11 +274,11 @@ function TypeChips({ row }: { row: MonthClientRow }) {
     <span className="flex flex-wrap gap-x-3 gap-y-1">
       {row.lines.map(l => (
         <span key={l.type}
-          className={`font-mono text-[11px] tabular-nums ${
-            l.posted >= l.promised ? 'text-zinc-400 dark:text-zinc-500'
-              : l.pace === 'behind' ? 'text-rose-600 dark:text-rose-400'
-                : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-zinc-500 dark:text-zinc-400'
+          className={`text-[12px] font-medium tabular-nums ${
+            l.posted >= l.promised ? 'text-muted-foreground'
+              : l.pace === 'behind' ? 'text-accent-red'
+                : l.pace === 'tight' ? 'text-accent-amber'
+                  : 'text-muted-foreground'
           }`}>
           {expandLine(l)}
         </span>
@@ -267,101 +334,95 @@ function MonthAcrossClients() {
   const openClient = (id: string) => router.push(`/dashboard/clients/${id}`)
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center gap-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <BarChart3 className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> This month across clients
-        </CardTitle>
-        <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Previous month"
+    <Panel
+      title="This month across clients"
+      right={
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" aria-label="Previous month"
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-foreground/[0.06]"
             onClick={() => setBack(b => Math.min(b + 1, 24))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="min-w-[5.5rem] text-center font-mono text-[11px] uppercase tracking-wider text-zinc-400">
-            {monthName}
-          </span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Next month"
-            disabled={back === 0} onClick={() => setBack(b => Math.max(0, b - 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.8} />
+          </button>
+          <span className="min-w-[6rem] text-center text-[13px] font-semibold">{monthName}</span>
+          <button type="button" aria-label="Next month" disabled={back === 0}
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-foreground/[0.06] disabled:opacity-40"
+            onClick={() => setBack(b => Math.max(0, b - 1))}>
+            <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.8} />
+          </button>
         </div>
-      </CardHeader>
+      }
+    >
+      {failed
+        ? <LoadFailed what="this month's numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
+        : rows === null && <Skeleton className="h-40 w-full rounded-inner" />}
+      {!failed && rows !== null && rows.length === 0 && (
+        <p className="py-6 text-center text-[13px] text-muted-foreground">
+          No active clients to report on.
+        </p>
+      )}
 
-      <CardContent className="pt-0">
-        {failed
-          ? <LoadFailed what="this month's numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
-          : rows === null && <Skeleton className="h-40 w-full" />}
-        {!failed && rows !== null && rows.length === 0 && (
-          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            No active clients to report on.
-          </p>
-        )}
-
-        {/* ---- 768px and up: the table ---- */}
-        {rows !== null && rows.length > 0 && (
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 text-left dark:border-zinc-800">
-                  {['Client', 'Promised', 'Posted', 'Scheduled', 'In production', 'Status', 'Last post', 'Views'].map((h, i) => (
-                    <th key={h} className={`py-2 font-mono text-[10px] uppercase tracking-[0.14em] font-normal text-zinc-400 dark:text-zinc-500 ${i > 0 ? 'px-3' : 'pr-3'}`}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <MonthTableRow key={r.id} row={r}
-                    expanded={open === r.id}
-                    onToggle={() => setOpen(o => (o === r.id ? null : r.id))}
-                    onOpen={() => openClient(r.id)} />
+      {/* ---- 768px and up: the table ---- */}
+      {rows !== null && rows.length > 0 && (
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="border-b border-border text-left">
+                {['Client', 'Promised', 'Posted', 'Scheduled', 'In production', 'Status', 'Last post', 'Views'].map((h, i) => (
+                  <th key={h} className={`py-2 text-[12px] font-semibold text-muted-foreground ${i > 0 ? 'px-3' : 'pr-3'}`}>
+                    {h}
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <MonthTableRow key={r.id} row={r}
+                  expanded={open === r.id}
+                  onToggle={() => setOpen(o => (o === r.id ? null : r.id))}
+                  onOpen={() => openClient(r.id)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        {/* ---- under 768px: the same eight facts as cards ---- */}
-        {rows !== null && rows.length > 0 && (
-          <div className="flex flex-col gap-2 md:hidden">
-            {rows.map(r => (r.has_agreement ? (
-              <button key={r.id} type="button" onClick={() => openClient(r.id)}
-                className="w-full rounded-lg border border-zinc-200 p-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/60">
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 truncate text-sm font-medium">{r.name}</span>
-                  <Badge variant="outline" className={`ml-auto shrink-0 font-normal ${MONTH_CHIP[r.status]}`}>
-                    {chipWords(r)}
-                  </Badge>
-                </div>
-                <div className="mt-2 grid grid-cols-4 gap-2 font-mono text-xs tabular-nums">
-                  {[
-                    ['Promised', r.promised], ['Posted', r.posted],
-                    ['Sched.', r.scheduled], ['In prod.', r.in_production],
-                  ].map(([label, v]) => (
-                    <div key={String(label)}>
-                      <p className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{label}</p>
-                      <p className="font-semibold">{v}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2"><TypeChips row={r} /></div>
-                <p className="mt-2 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                  {r.last_post ? `Last post ${shortDate(r.last_post.at, r.tz)}` : 'No posts yet'}
-                  {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
-                </p>
-              </button>
-            ) : (
-              <Link key={r.id} href={`/dashboard/clients/${r.id}/agreement`}
-                className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-200 p-3 text-sm text-zinc-400 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-500 dark:hover:bg-zinc-800/60">
-                <span className="min-w-0 truncate font-medium">{r.name}</span>
-                <span className="ml-auto shrink-0 text-xs">{NO_AGREEMENT_LINE} →</span>
-              </Link>
-            )))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {/* ---- under 768px: the same eight facts as cards ---- */}
+      {rows !== null && rows.length > 0 && (
+        <div className="flex flex-col gap-2 md:hidden">
+          {rows.map(r => (r.has_agreement ? (
+            <button key={r.id} type="button" onClick={() => openClient(r.id)}
+              className="w-full rounded-inner border border-border p-3.5 text-left hover:bg-foreground/[0.04]">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 truncate text-[15px] font-semibold">{r.name}</span>
+                <Chip tone={MONTH_CHIP[r.status]} className="ml-auto shrink-0">{chipWords(r)}</Chip>
+              </div>
+              <div className="mt-2 grid grid-cols-4 gap-2 tabular-nums">
+                {[
+                  ['Promised', r.promised], ['Posted', r.posted],
+                  ['Sched.', r.scheduled], ['In prod.', r.in_production],
+                ].map(([label, v]) => (
+                  <div key={String(label)}>
+                    <p className="text-[12px] text-muted-foreground">{label}</p>
+                    <p className="text-[15px] font-semibold">{v}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2"><TypeChips row={r} /></div>
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                {r.last_post ? `Last post ${shortDate(r.last_post.at, r.tz)}` : 'No posts yet'}
+                {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
+              </p>
+            </button>
+          ) : (
+            <Link key={r.id} href={`/dashboard/clients/${r.id}/agreement`}
+              className="flex items-center gap-2 rounded-inner border border-dashed border-border p-3.5 text-[14px] text-muted-foreground hover:bg-foreground/[0.04]">
+              <span className="min-w-0 truncate font-medium">{r.name}</span>
+              <span className="ml-auto shrink-0 text-[13px]">{NO_AGREEMENT_LINE} →</span>
+            </Link>
+          )))}
+        </div>
+      )}
+    </Panel>
   )
 }
 
@@ -371,28 +432,28 @@ function MonthTableRow({ row, expanded, onToggle, onOpen }: {
   // no agreement on file: one muted row that is a to-do, not a measurement
   if (!row.has_agreement) {
     return (
-      <tr className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
-        <td className="py-2 pr-3 text-zinc-400 dark:text-zinc-500">{row.name}</td>
+      <tr className="border-b border-border last:border-0">
+        <td className="py-2 pr-3 text-muted-foreground">{row.name}</td>
         <td colSpan={7} className="px-3 py-2">
           <Link href={`/dashboard/clients/${row.id}/agreement`}
-            className="text-xs text-zinc-400 underline-offset-4 hover:underline dark:text-zinc-500">
+            className="text-[13px] text-muted-foreground underline-offset-4 hover:underline">
             {NO_AGREEMENT_LINE} →
           </Link>
         </td>
       </tr>
     )
   }
-  const num = 'px-3 py-2 font-mono tabular-nums'
+  const num = 'px-3 py-2 tabular-nums'
   return (
     <>
       <tr onClick={onOpen}
-        className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/60">
+        className="cursor-pointer border-b border-border hover:bg-foreground/[0.04]">
         <td className="py-2 pr-3">
           <span className="flex items-center gap-1.5">
             <button type="button" aria-label={expanded ? 'Hide types' : 'Show types'}
               aria-expanded={expanded}
               onClick={e => { e.stopPropagation(); onToggle() }}
-              className="rounded p-0.5 text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300">
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground">
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`} />
             </button>
             <span className="truncate font-medium">{row.name}</span>
@@ -402,27 +463,25 @@ function MonthTableRow({ row, expanded, onToggle, onOpen }: {
             one tap, on any device, not a hover */}
         <td className={`${num} font-semibold`}>{row.promised}</td>
         <td className={`${num} font-semibold`}>{row.posted}</td>
-        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.scheduled}</td>
-        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>{row.in_production}</td>
+        <td className={`${num} text-muted-foreground`}>{row.scheduled}</td>
+        <td className={`${num} text-muted-foreground`}>{row.in_production}</td>
         <td className="px-3 py-2">
-          <Badge variant="outline" className={`shrink-0 font-normal ${MONTH_CHIP[row.status]}`}>
-            {chipWords(row)}
-          </Badge>
+          <Chip tone={MONTH_CHIP[row.status]} className="shrink-0">{chipWords(row)}</Chip>
         </td>
-        <td className="px-3 py-2 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+        <td className="px-3 py-2 text-[13px] text-muted-foreground">
           {row.last_post
             ? (row.last_post.item_id
                 ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
                     className="underline-offset-4 hover:underline">{shortDate(row.last_post.at, row.tz)}</Link>
                 : shortDate(row.last_post.at, row.tz))
-            : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+            : <span className="text-foreground/30">—</span>}
         </td>
-        <td className={`${num} text-zinc-500 dark:text-zinc-400`}>
-          {row.views === null ? <span className="text-zinc-300 dark:text-zinc-600">—</span> : compactCount(row.views)}
+        <td className={`${num} text-muted-foreground`}>
+          {row.views === null ? <span className="text-foreground/30">—</span> : compactCount(row.views)}
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-zinc-100 bg-zinc-50/60 dark:border-zinc-800/60 dark:bg-zinc-900/40">
+        <tr className="border-b border-border bg-foreground/[0.03]">
           <td />
           <td colSpan={7} className="px-3 py-2"><TypeChips row={row} /></td>
         </tr>
@@ -440,102 +499,92 @@ function AtRiskThisMonth() {
       .then(j => setRows(j.clients ?? []))
       .catch(() => setRows([]))
   }, [])
-  if (rows === null) return <Skeleton className="h-24 w-full" />
+  if (rows === null) return <Skeleton className="h-24 w-full rounded-card" />
   // every client still OWING something this month — not only the ones behind
   // pace. The dot carries urgency; the numbers carry what's left to deliver.
   const owing = rows.filter(c => c.has_agreement && c.lines.some(l => l.delivered < l.quota))
   return (
-    <Card>
-      <CardHeader className="flex-row items-center">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <TrendingUp className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Agreement gaps this month
-        </CardTitle>
-        {/* the table above is the ledger — every client, met or not. This card
-            is the alert: only what is still owed, and only where. Saying so
-            stops the two reading as the same list twice. */}
-        <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
-          Only what’s still owed
-        </span>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1 pt-0">
-        {owing.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            Every agreement is fully delivered this month. Nice.
-          </p>
-        ) : owing.map(c => {
-          const short = c.lines.filter(l => l.delivered < l.quota)
-          // what is still moving towards the gap — this sat in a hover-only
-          // title= per chip, which is where a phone never looks
-          const moving = short.reduce((acc, l) => ({
-            scheduled: acc.scheduled + (l.scheduled ?? 0),
-            approved: acc.approved + (l.approved ?? 0),
-            in_production: acc.in_production + (l.in_production ?? 0),
-          }), { scheduled: 0, approved: 0, in_production: 0 })
-          const movingWords = [
-            moving.scheduled > 0 ? `${moving.scheduled} scheduled` : null,
-            moving.approved > 0 ? `${moving.approved} approved` : null,
-            moving.in_production > 0 ? `${moving.in_production} in production` : null,
-          ].filter(Boolean).join(' · ')
-          return (
-          <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`} className="flex flex-col gap-0.5 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-            <span className="flex items-center gap-3">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-zinc-400'}`} />
-              <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
-              <span className="ml-auto flex flex-wrap justify-end gap-1.5">
-                {short.map(l => (
-                  <span key={l.type}
-                    className={`font-mono text-[11px] tabular-nums ${
-                      l.pace === 'behind' ? 'text-red-500 dark:text-red-400'
-                        : l.pace === 'tight' ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-zinc-500 dark:text-zinc-400'
-                    }`}>
-                    {l.label} {l.delivered}/{l.quota}
+    <Panel
+      title="Agreement gaps this month"
+      /* the table above is the ledger — every client, met or not. This card
+         is the alert: only what is still owed, and only where. Saying so
+         stops the two reading as the same list twice. */
+      right={<span className="shrink-0 text-[13px] text-muted-foreground">Only what’s still owed</span>}
+    >
+      {owing.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-muted-foreground">
+          Every agreement is fully delivered this month. Nice.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {owing.map(c => {
+            const short = c.lines.filter(l => l.delivered < l.quota)
+            // what is still moving towards the gap — this sat in a hover-only
+            // title= per chip, which is where a phone never looks
+            const moving = short.reduce((acc, l) => ({
+              scheduled: acc.scheduled + (l.scheduled ?? 0),
+              approved: acc.approved + (l.approved ?? 0),
+              in_production: acc.in_production + (l.in_production ?? 0),
+            }), { scheduled: 0, approved: 0, in_production: 0 })
+            const movingWords = [
+              moving.scheduled > 0 ? `${moving.scheduled} scheduled` : null,
+              moving.approved > 0 ? `${moving.approved} approved` : null,
+              moving.in_production > 0 ? `${moving.in_production} in production` : null,
+            ].filter(Boolean).join(' · ')
+            return (
+              <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`}
+                className="flex flex-col gap-0.5 rounded-inner px-3 py-2.5 hover:bg-foreground/[0.04]">
+                <span className="flex items-center gap-3">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-foreground/40'}`} />
+                  <span className="min-w-0 truncate text-[15px] font-semibold">{c.name}</span>
+                  <span className="ml-auto flex flex-wrap justify-end gap-1.5">
+                    {short.map(l => (
+                      <span key={l.type}
+                        className={`text-[12px] font-medium tabular-nums ${
+                          l.pace === 'behind' ? 'text-accent-red'
+                            : l.pace === 'tight' ? 'text-accent-amber'
+                              : 'text-muted-foreground'
+                        }`}>
+                        {l.label} {l.delivered}/{l.quota}
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-            </span>
-            <span className="pl-5 text-[11px] text-zinc-400 dark:text-zinc-500">
-              {movingWords ? `On the way: ${movingWords}` : 'Nothing in the pipeline yet for what is still owed'}
-            </span>
-          </Link>
-          )
-        })}
-      </CardContent>
-    </Card>
+                </span>
+                <span className="pl-5 text-[12px] text-muted-foreground">
+                  {movingWords ? `On the way: ${movingWords}` : 'Nothing in the pipeline yet for what is still owed'}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </Panel>
   )
 }
 
 /** The production funnel at a glance — draft → review → approval → published. */
+const STAGES: { key: string; label: string; tone: ChipTone }[] = [
+  // the same words the board uses — a stage is called one thing everywhere
+  { key: 'draft_uploaded', label: STATUS_LABELS.draft_uploaded, tone: 'muted' },
+  { key: 'internal_review', label: STATUS_LABELS.internal_review, tone: 'blue' },
+  { key: 'revision_required', label: STATUS_LABELS.revision_required, tone: 'amber' },
+  { key: 'client_review', label: STATUS_LABELS.client_review, tone: 'blue' },
+  { key: 'approved_for_scheduling', label: STATUS_LABELS.approved_for_scheduling, tone: 'green' },
+  { key: 'scheduled', label: STATUS_LABELS.scheduled, tone: 'blue' },
+  { key: 'published', label: STATUS_LABELS.published, tone: 'green' },
+]
+
 function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }) {
-  const STAGES: { key: string; label: string; tint: string }[] = [
-    // the same words the board uses — a stage is called one thing everywhere
-    { key: 'draft_uploaded', label: STATUS_LABELS.draft_uploaded, tint: 'bg-zinc-400' },
-    { key: 'internal_review', label: STATUS_LABELS.internal_review, tint: 'bg-blue-500' },
-    { key: 'revision_required', label: STATUS_LABELS.revision_required, tint: 'bg-amber-500' },
-    { key: 'client_review', label: STATUS_LABELS.client_review, tint: 'bg-violet-500' },
-    { key: 'approved_for_scheduling', label: STATUS_LABELS.approved_for_scheduling, tint: 'bg-emerald-500' },
-    { key: 'scheduled', label: STATUS_LABELS.scheduled, tint: 'bg-cyan-600' },
-    { key: 'published', label: STATUS_LABELS.published, tint: 'bg-emerald-700' },
-  ]
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-2 px-5 py-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-          Where everything is right now
-        </p>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+    <TintCard tone="paper" title="Where everything is right now">
+      <div className="flex flex-wrap gap-2">
         {STAGES.map(s => (
-          <div key={s.key} className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${s.tint}`} />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{s.label}</span>
-            {pipeline === undefined
-              ? <Skeleton className="h-4 w-5" />
-              : <span className="font-mono text-sm font-semibold tabular-nums">{pipeline[s.key] ?? 0}</span>}
-          </div>
+          <Chip key={s.key} tone={s.tone}>
+            {s.label} · <span className="tabular-nums">{pipeline?.[s.key] ?? 0}</span>
+          </Chip>
         ))}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </TintCard>
   )
 }
 
@@ -549,9 +598,19 @@ function browserZone(): string | null {
 }
 
 export default function OverviewPage() {
-  // resolved after mount: on the server there is no viewer to have a zone
+  // resolved after mount: on the server there is no viewer to have a zone,
+  // and rendering the clock during render would hydrate wrong
   const [viewerTz, setViewerTz] = useState<string | null>(null)
-  useEffect(() => { setViewerTz(browserZone()) }, [])
+  const [now, setNow] = useState<Date | null>(null)
+  const [month, setMonth] = useState<Date | null>(null)
+  useEffect(() => {
+    setViewerTz(browserZone())
+    setNow(new Date())
+    setMonth(new Date())
+    // ticks so the greeting and the clock stay honest on a page left open
+    const t = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   /**
    * THE OVERVIEW, LIVE.
@@ -581,12 +640,21 @@ export default function OverviewPage() {
   const leadsRow = pageAccess.find(r => r.href === '/dashboard/leads')
   const mayLeads = isManager && !leadsRow?.hidden
     && (viewer?.role === 'super_admin' || (!!leadsRow && !leadsRow.hidden))
+  // Bookings is a grant-only page (page-access-core), so the rail's "Book a
+  // shoot" button is drawn only for the people who actually hold it — a
+  // button that lands on "this page is not part of your access" is worse
+  // than no button.
+  const bookingsRow = pageAccess.find(r => r.href === '/dashboard/bookings')
+  const mayBook = !!bookingsRow && !bookingsRow.hidden
   // the same 50 the route reads: "8+ total" means "of the 50 newest", and a
   // page counting more than the endpoint does is the two disagreeing
   const { rows: leadRows } = useTable<Lead>(
     'leads', { orderBy: LEADS_NEWEST, limit: LEADS_CAP, enabled: mayLeads })
-  const { rows: entryRows } = useTable<ScheduleEntry>(
-    'schedule_entries', { enabled: enabled && viewer?.role === 'scheduler' })
+  // Scheduled posts are what the rail's calendar and today-list are made of,
+  // so this is no longer the scheduler's alone. Nothing downstream changes:
+  // `buildOverview` reads `entries` only in its scheduler branch, so every
+  // role's numbers are exactly what they were.
+  const { rows: entryRows } = useTable<ScheduleEntry>('schedule_entries', { enabled })
 
   const data: Overview | null = useMemo(() => {
     if (!me || !viewer || live.loading) return null
@@ -652,15 +720,119 @@ export default function OverviewPage() {
 
   const loading = data === null && live.error === null
   const role = data?.role
+  const zone = viewerTz || me?.timezone || DEFAULT_TZ
+  const todayKey = now ? dayKeyInZone(now, zone) : null
 
-  const subtitle =
-    role === 'editor' ? 'Your production work, live.'
-      : role === 'scheduler' ? 'What’s approved, scheduled, and going out — live.'
-        : 'Where every client stands this month, live.'
+  /* ── the rail: the shoots, posts and client reviews the page already holds ── */
+
+  const clientNameOf = useMemo(
+    () => new Map(live.tables.clients.rows.map(c => [c.id, { name: c.name, tz: c.timezone }])),
+    [live.tables.clients.rows])
+
+  /** every day this month with something on it — shoots amber, posts blue,
+   *  client reviews green */
+  const markers: Marker[] = useMemo(() => {
+    const out: Marker[] = []
+    for (const b of live.batches) {
+      const d = b.shoot_date ? dayKeyInZone(b.shoot_date, zone) : null
+      if (d) out.push({ date: d, kind: 'shoot' })
+    }
+    const itemById = new Map(live.items.map(i => [i.id, i]))
+    for (const e of entryRows) {
+      if (!e.scheduled_at) continue
+      const it = itemById.get(e.item_id)
+      if (!it) continue
+      const d = dayKeyInZone(e.scheduled_at, zone)
+      if (d) out.push({ date: d, kind: 'post' })
+    }
+    for (const i of live.items) {
+      if (!i.due_date) continue
+      if (!['client_review', 'client_changes_requested'].includes(i.status)) continue
+      out.push({ date: i.due_date, kind: 'review' })
+    }
+    return out
+  }, [live.batches, live.items, entryRows, zone])
+
+  /** today, in order — the same rows, filtered to this one day */
+  const todayItems: TimelineItem[] = useMemo(() => {
+    if (!todayKey) return []
+    const rows: (TimelineItem & { at: string })[] = []
+    for (const b of live.batches) {
+      if (!b.shoot_date || dayKeyInZone(b.shoot_date, zone) !== todayKey) continue
+      const timed = String(b.shoot_date).includes('T')
+      rows.push({
+        at: timed ? String(b.shoot_date) : `${todayKey}T00:00`,
+        time: timed ? (formatInZone(b.shoot_date, zone, 'time') ?? '') : 'All day',
+        title: `Shoot · ${b.clients?.name ?? 'a client'}`,
+        detail: [b.title, b.location].filter(Boolean).join(' · ') || undefined,
+        tone: 'amber',
+        href: `/dashboard/production/shoots/${b.id}`,
+      })
+    }
+    const itemById = new Map(live.items.map(i => [i.id, i]))
+    for (const e of entryRows) {
+      if (!e.scheduled_at || dayKeyInZone(e.scheduled_at, zone) !== todayKey) continue
+      const it = itemById.get(e.item_id)
+      if (!it) continue
+      rows.push({
+        at: e.scheduled_at,
+        time: formatInZone(e.scheduled_at, zone, 'time') ?? '',
+        title: `Post goes live · ${clientNameOf.get(it.client_id)?.name ?? 'a client'}`,
+        detail: [it.title, e.platform].filter(Boolean).join(' · '),
+        tone: 'blue',
+        href: `/dashboard/production/${it.id}`,
+      })
+    }
+    for (const i of live.items) {
+      if (i.due_date !== todayKey) continue
+      if (['published', 'scheduled'].includes(i.status)) continue
+      const review = ['client_review', 'client_changes_requested'].includes(i.status)
+      rows.push({
+        at: `${todayKey}T23:59`,
+        time: 'Due',
+        title: `${review ? 'Client review' : 'Due today'} · ${i.clients?.name ?? 'a client'}`,
+        detail: i.title,
+        tone: review ? 'green' : 'amber',
+        href: `/dashboard/production/${i.id}`,
+      })
+    }
+    return rows
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map(r => ({ time: r.time, title: r.title, detail: r.detail, tone: r.tone, href: r.href }))
+  }, [live.batches, live.items, entryRows, clientNameOf, todayKey, zone])
+
+  /* ── the heading ── */
+
+  const firstName = (me?.name || '').trim().split(/\s+/)[0]
+  const hello = now ? greetingInZone(now, zone) : null
+  const title = hello ? (firstName ? `${hello}, ${firstName}` : hello) : 'Overview'
+
+  /** the one plain sentence, from the numbers already on this page */
+  const summary = useMemo(() => {
+    if (!data) return undefined
+    if (data.editor) {
+      const e = data.editor
+      return `${plural(e.due_soon_count ?? e.due_soon.length, 'item')} due this week, `
+        + `${e.revisions_needed} being revised, and ${e.in_internal_review} with the account manager.`
+    }
+    if (data.scheduler) {
+      const s = data.scheduler
+      return `${plural(s.to_schedule, 'item')} ready to schedule, `
+        + `${plural(s.upcoming_count ?? s.upcoming.length, 'post')} going out in the next 7 days, `
+        + `and ${s.published_week} published this week.`
+    }
+    if (data.manager) {
+      const m = data.manager
+      const leads = m.latest_leads ? `, and ${plural(m.leads_week ?? 0, 'new lead')} came in this week` : ''
+      return `${plural(m.awaiting_internal_review, 'item')} waiting on you, `
+        + `${m.awaiting_client} with clients${leads}.`
+    }
+    return undefined
+  }, [data])
 
   return (
-    <div className="flex flex-col gap-4">
-      <Greeting subtitle={subtitle} />
+    <div className="flex flex-col gap-6">
+      <PageTitle title={title} summary={summary} />
 
       {/* a listener that could not read is a failure, not a page of zeros —
           every number below is drawn from those rows, and showing "0 waiting
@@ -674,202 +846,295 @@ export default function OverviewPage() {
           a real link, dismissed per person and per role */}
       {!loading && !live.error && <GettingStarted role={(role ?? null) as Role | null} />}
 
-      {/* somebody tagged you and it is not done — every role, whatever the
-          client. The tag is the assignment; this is where it is answered. */}
-      {!loading && data?.waiting_on_you
-        && (data.waiting_on_you.items.length + data.waiting_on_you.shoots.length) > 0 && (
-        <Card className="border-amber-200 dark:border-amber-900">
-          <CardHeader className="flex-row items-center">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <ClipboardList className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Waiting on you
-            </CardTitle>
-            <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
-              Someone tagged you. Open it and mark the note done when you have answered.
-            </span>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-1 pt-0">
-            {data.waiting_on_you.items.map(i => (
-              <Link key={i.id} href={`/dashboard/production/${i.id}#comments`}
-                className="flex min-h-11 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                <span className="min-w-0 truncate text-sm font-medium">{i.title}</span>
-                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{i.clients?.name ?? ''}</span>
-                <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400" />
-              </Link>
-            ))}
-            {data.waiting_on_you.shoots.map(s => (
-              <Link key={s.id} href={`/dashboard/production/shoots/${s.id}#comments`}
-                className="flex min-h-11 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                <span className="min-w-0 truncate text-sm font-medium">{s.title}</span>
-                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{s.clients?.name ?? ''} · shoot</span>
-                <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_336px]">
+        {/* ── the page ── */}
+        <div className="flex min-w-0 flex-col gap-6">
 
-      {/* Seven identical grey ghost links and no cue which to press. The one
-          thing a manager should do first now says so, and says how many. */}
-      {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
-        <Button size="sm" className="w-fit" asChild>
-          <Link href="/dashboard/editor">
-            Review {data!.manager!.needs_review.length} item{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </Button>
-      )}
-
-      {/* one neutral skeleton until the role is known — branching while
-          `loading` flashed the editor layout at every other role first */}
-      {loading && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
-        </div>
-      )}
-
-      {/* ---- editor ---- */}
-      {!loading && role === 'editor' && data?.editor && (
-        (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="My items" value={data!.editor!.my_items} loading={false} hint="Assigned to you" icon={Film} />
-              <Stat label="Being revised" value={data!.editor!.revisions_needed} loading={false} hint="Revision required" icon={PencilLine} />
-              <Stat label="Ready for review" value={data!.editor!.in_internal_review} loading={false} hint="With the account manager" icon={Send} />
-              <Stat label="Due this week" value={data!.editor!.due_soon_count ?? data!.editor!.due_soon.length} loading={false} hint="Not yet scheduled" icon={CalendarClock} />
+          {/* one neutral skeleton until the role is known — branching while
+              `loading` flashed the editor layout at every other role first */}
+          {loading && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-card" />)}
             </div>
-            <Pipeline pipeline={data!.pipeline} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ItemList title="Needs your action" icon={PencilLine} items={data!.editor!.needs_action}
-                empty="Nothing waiting on you — all drafts are in review." actionHref="/dashboard/editor" actionLabel="Open board" />
-              <ItemList title="Due soon" icon={CalendarClock} items={data!.editor!.due_soon}
-                empty="Nothing due in the next 7 days." actionHref="/dashboard/editor" actionLabel="Open board" />
-            </div>
-            {/* the open pool: work nobody holds, one click from being yours */}
-            {data!.editor!.unassigned && (
-              <ItemList title="Nobody has taken these yet" icon={HandHelping} items={data!.editor!.unassigned}
-                empty="Nothing is going spare." actionHref="/dashboard/editor" actionLabel="Open board" />
-            )}
-          </>
-        )
-      )}
+          )}
 
-      {/* ---- scheduler ---- */}
-      {role === 'scheduler' && data?.scheduler && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label={STATUS_LABELS.approved_for_scheduling} value={data.scheduler.to_schedule} loading={false} hint="Signed off, waiting on you" icon={ClipboardList} />
-            <Stat label="Going out · 7 days" value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} loading={false} hint="Scheduled posts" icon={CalendarClock} />
-            <Stat label="Published · 7 days" value={data.scheduler.published_week} loading={false} hint="Live this week" icon={CheckCircle2} />
-            <Stat label="Scheduled total" value={data.pipeline.scheduled ?? 0} loading={false} hint="In the calendar" icon={Send} />
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ItemList title="Ready to schedule" icon={ClipboardList} items={data.scheduler.queue}
-              empty="Nothing waiting — approved items land here the moment they’re signed off." actionHref="/dashboard/scheduler" actionLabel="Open queue" />
-            <Card>
-              <CardHeader className="flex-row items-center">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <CalendarClock className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Going out next
-                </CardTitle>
-                <Button variant="ghost" size="sm" className="ml-auto" asChild>
-                  <Link href="/dashboard/scheduler/calendar">Calendar <ArrowRight className="h-3.5 w-3.5" /></Link>
-                </Button>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1 pt-0">
-                {data.scheduler.upcoming.length === 0 && (
-                  <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">Nothing scheduled for the next 7 days.</p>
+          {/* ---- editor ---- */}
+          {!loading && role === 'editor' && data?.editor && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TintCard tone="amber" title="Needs your action"
+                action={{ label: 'Editor', href: '/dashboard/editor' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.editor.due_soon_count ?? data.editor.due_soon.length} label="due this week" />
+                  <Stat value={data.editor.revisions_needed} label="being revised" />
+                </div>
+              </TintCard>
+              <TintCard tone="blue" title="Going out this week">
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.pipeline.scheduled ?? 0} label="scheduled" />
+                  <Stat value={data.pipeline.published ?? 0} label="published" />
+                  <Stat value={data.pipeline.approved_for_scheduling ?? 0} label="need a posting date" />
+                </div>
+              </TintCard>
+              <TintCard tone="green" title="Ready for review"
+                action={{ label: 'Editor', href: '/dashboard/editor' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.editor.in_internal_review} label="with the account manager" />
+                  <Stat value={data.editor.my_items} label="my items" />
+                </div>
+              </TintCard>
+              <TintCard tone="paper" title="Nobody has taken these"
+                action={{ label: 'Editor', href: '/dashboard/editor' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.editor.unassigned_count ?? data.editor.unassigned?.length ?? 0}
+                    label="nobody has taken" />
+                </div>
+              </TintCard>
+            </div>
+          )}
+
+          {/* ---- scheduler ---- */}
+          {role === 'scheduler' && data?.scheduler && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TintCard tone="amber" title="Needs your action"
+                action={{ label: 'Queue', href: '/dashboard/scheduler' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.scheduler.to_schedule} label="need a posting date" />
+                </div>
+              </TintCard>
+              <TintCard tone="blue" title="Going out this week"
+                action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} label="going out · 7 days" />
+                  <Stat value={data.scheduler.published_week} label="published · 7 days" />
+                  <Stat value={data.pipeline.scheduled ?? 0} label="in the calendar" />
+                </div>
+              </TintCard>
+            </div>
+          )}
+
+          {/* ---- account manager / super admin ---- */}
+          {data?.manager && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TintCard tone="amber" title="Needs your action"
+                action={{ label: 'Editor', href: '/dashboard/editor' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.manager.awaiting_internal_review} label="waiting on you" />
+                  <Stat value={data.manager.revisions_open} label="being revised" />
+                  {data.manager.unassigned_count !== undefined && (
+                    <Stat value={data.manager.unassigned_count} label="nobody has taken" />
+                  )}
+                </div>
+              </TintCard>
+              <TintCard tone="blue" title="Going out this week"
+                action={{ label: 'Scheduler', href: '/dashboard/scheduler' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.pipeline.scheduled ?? 0} label="scheduled" />
+                  <Stat value={data.pipeline.published ?? 0} label="published" />
+                  <Stat value={data.pipeline.approved_for_scheduling ?? 0} label="need a posting date" />
+                </div>
+              </TintCard>
+              <TintCard tone="green" title="Ready for review"
+                action={{ label: 'Editor', href: '/dashboard/editor' }}>
+                <div className="flex flex-wrap gap-7">
+                  <Stat value={data.manager.awaiting_client} label="with client" />
+                  <Stat value={data.manager.my_tasks_count ?? data.manager.my_tasks?.length ?? 0} label="my items" />
+                </div>
+              </TintCard>
+              {data.manager.latest_leads ? (
+                <TintCard tone="paper" title="Leads · 7 days"
+                  action={{ label: 'Leads', href: '/dashboard/leads' }}>
+                  <div className="flex flex-wrap gap-7">
+                    <Stat value={data.manager.leads_week ?? 0} label="new leads" />
+                    <Stat value={data.manager.clients} label="clients" />
+                    <Stat value={`${data.manager.leads_total ?? 0}+`} label="leads all up" />
+                  </div>
+                </TintCard>
+              ) : (
+                <TintCard tone="paper" title="Your clients"
+                  action={{ label: 'Clients', href: '/dashboard/clients' }}>
+                  <div className="flex flex-wrap gap-7">
+                    <Stat value={data.manager.clients} label="you look after" />
+                  </div>
+                </TintCard>
+              )}
+            </div>
+          )}
+
+          {/* somebody tagged you and it is not done — every role, whatever the
+              client. The tag is the assignment; this is where it is answered. */}
+          {!loading && data?.waiting_on_you
+            && (data.waiting_on_you.items.length + data.waiting_on_you.shoots.length) > 0 && (
+            <Section title="Waiting on you"
+              aside={<span className="ml-auto text-[13px] text-muted-foreground">
+                Someone tagged you. Open it and mark the note done when you have answered.
+              </span>}>
+              <div className="flex flex-col gap-2">
+                {data.waiting_on_you.items.map(i => (
+                  <WorkRow key={i.id} tone="amber"
+                    href={`/dashboard/production/${i.id}#comments`}
+                    title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
+                    detail={statusLabel(i)} chip="Answer this" />
+                ))}
+                {data.waiting_on_you.shoots.map(s => (
+                  <WorkRow key={s.id} tone="amber"
+                    href={`/dashboard/production/shoots/${s.id}#comments`}
+                    title={s.clients?.name ? `${s.clients.name} · ${s.title}` : s.title}
+                    detail="Shoot" chip="Answer this" />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Seven identical grey ghost links and no cue which to press. The one
+              thing a manager should do first now says so, and says how many. */}
+          {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
+            <Button size="sm" className="min-h-11 w-fit" asChild>
+              <Link href="/dashboard/editor">
+                Review {data!.manager!.needs_review.length} item{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          )}
+
+          {/* ---- the lists, per role ---- */}
+          {!loading && role === 'editor' && data?.editor && (
+            <>
+              <Section title="Assigned to you" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                <ItemRows items={data.editor.needs_action} todayKey={todayKey}
+                  empty="Nothing waiting on you — all drafts are in review." />
+              </Section>
+              <Section title="Due soon" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                <ItemRows items={data.editor.due_soon} todayKey={todayKey}
+                  empty="Nothing due in the next 7 days." />
+              </Section>
+              {/* the open pool: work nobody holds, one click from being yours */}
+              {data.editor.unassigned && (
+                <Section title="Nobody has taken these yet" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                  <ItemRows items={data.editor.unassigned} todayKey={todayKey}
+                    empty="Nothing is going spare." />
+                </Section>
+              )}
+            </>
+          )}
+
+          {role === 'scheduler' && data?.scheduler && (
+            <>
+              <Section title="Ready to schedule" action={{ label: 'Open queue', href: '/dashboard/scheduler' }}>
+                <ItemRows items={data.scheduler.queue} todayKey={todayKey}
+                  empty="Nothing waiting — approved items land here the moment they’re signed off." />
+              </Section>
+              <Section title="Going out next" action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
+                {data.scheduler.upcoming.length === 0 ? (
+                  <p className="rounded-inner border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
+                    Nothing scheduled for the next 7 days.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {data.scheduler.upcoming.map(e => {
+                      // when it reaches the AUDIENCE — this strip mixes clients,
+                      // so the zone comes from the row, not the page
+                      const tz = e.content_items?.clients?.timezone || DEFAULT_TZ
+                      const when = e.scheduled_at ? formatInZone(e.scheduled_at, tz, 'short') : null
+                      // "= 1:00 pm your time" for a scheduler in Manila — the
+                      // one fact a phone user most needs, never a hover
+                      const mine = viewerHint(e.scheduled_at, tz, viewerTz)
+                      return (
+                        <WorkRow key={e.id} tone="blue"
+                          href={`/dashboard/production/${e.item_id}`}
+                          title={e.content_items?.clients?.name
+                            ? `${e.content_items.clients.name} · ${e.content_items?.title ?? '—'}`
+                            : (e.content_items?.title ?? '—')}
+                          detail={[e.platform, mine].filter(Boolean).join(' · ')}
+                          chip={when ?? undefined} />
+                      )
+                    })}
+                  </div>
                 )}
-                {data.scheduler.upcoming.map(e => {
-                  // when it reaches the AUDIENCE — this strip mixes clients,
-                  // so the zone comes from the row, not the page
-                  const tz = e.content_items?.clients?.timezone || DEFAULT_TZ
-                  // "= 1:00 pm your time" for a scheduler in Manila. This was a
-                  // hover-only title= — the one fact a phone user most needs.
-                  const mine = viewerHint(e.scheduled_at, tz, viewerTz)
-                  return (
-                  <Link key={e.id} href={`/dashboard/production/${e.item_id}`}
-                    className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                    <span className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
-                      <span className="min-w-0 truncate text-sm font-medium">{e.content_items?.title ?? '—'}</span>
-                      {e.content_items?.clients?.name && (
-                        <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{e.content_items.clients.name}</span>
-                      )}
-                    </span>
-                    <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                      <Badge variant="outline" className="font-normal capitalize text-zinc-600 dark:text-zinc-400">{e.platform}</Badge>
-                      {e.scheduled_at && (
-                        <span className="text-right font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                          {formatInZone(e.scheduled_at, tz, 'short')}
-                          {mine && <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 sm:inline sm:before:content-['_·_']">{mine}</span>}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                  )
-                })}
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
+              </Section>
+            </>
+          )}
 
-      {/* ---- account manager / super admin ---- */}
+          {data?.manager && (
+            <>
+              {(data.manager.my_tasks?.length ?? 0) > 0 && (
+                <Section title="Assigned to you" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                  <ItemRows items={data.manager.my_tasks} todayKey={todayKey} empty="" />
+                </Section>
+              )}
+              {/* the three stages whose turn is a MANAGER's — the same
+                  population the stat above it counts */}
+              <Section title="Waiting on your sign-off" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                <ItemRows items={data.manager.needs_review} todayKey={todayKey}
+                  empty="Nothing is waiting on you right now." />
+              </Section>
+            </>
+          )}
+        </div>
+
+        {/* ── the rail: this month, and today ── */}
+        <aside className="flex min-w-0 flex-col gap-4">
+          {month === null
+            ? <Skeleton className="h-[360px] w-full rounded-card" />
+            : (
+              <MiniCalendar
+                month={month}
+                markers={markers}
+                onMonthChange={setMonth}
+                action={mayBook ? { label: 'Book a shoot', href: '/dashboard/bookings' } : undefined}
+              />
+            )}
+
+          <Panel
+            title={now ? `Today, ${now.toLocaleDateString('en-AU', { timeZone: zone, day: 'numeric', month: 'long' })}` : 'Today'}
+            right={now && (
+              <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">
+                {(formatInZone(now, zone, 'time') ?? '')} · {zoneLabel(zone)}
+              </span>
+            )}
+          >
+            <Timeline items={todayItems} empty="Nothing on today." />
+          </Panel>
+        </aside>
+      </div>
+
+      {/* ── the wide blocks, under both columns ── */}
+      {!loading && (role === 'editor' || data?.manager) && <Pipeline pipeline={data?.pipeline} />}
+
       {data?.manager && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Clients" value={data.manager.clients} loading={false} hint="You look after" icon={Users} />
-            <Stat label="Ready for review" value={data.manager.awaiting_internal_review} loading={false} hint="Waiting on your sign-off" icon={ClipboardList} />
-            <Stat label="With client" value={data.manager.awaiting_client} loading={false} hint="In client review" icon={Send} />
-            {data.manager.latest_leads
-              ? <Stat label="Leads · 7 days" value={data.manager.leads_week ?? 0} loading={false} hint={`${data.manager.leads_total ?? 0}+ total`} icon={TrendingUp} />
-              : <Stat label="Being revised" value={data.manager.revisions_open} loading={false} hint="In the edit loop" icon={TrendingUp} />}
-            {data.manager.unassigned_count !== undefined && (
-              <Stat label="Unassigned" value={data.manager.unassigned_count} loading={false}
-                hint="Nobody has picked these up" icon={HandHelping} href="/dashboard/editor" />
-            )}
-          </div>
-          <Pipeline pipeline={data.pipeline} />
           {/* the ledger first, then the alert it summarises */}
           <MonthAcrossClients />
           <AtRiskThisMonth />
-          {(data.manager.my_tasks?.length ?? 0) > 0 && (
-            <ItemList title="Assigned to you" icon={ClipboardList} items={data.manager.my_tasks}
-              empty="" actionHref="/dashboard/editor" actionLabel="Open board" />
-          )}
-          <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-            {/* the three stages whose turn is a MANAGER's — the same
-                population the stat above it counts */}
-            <ItemList title="Waiting on you" icon={ClipboardList} items={data.manager.needs_review}
-              empty="Nothing is waiting on you right now." actionHref="/dashboard/editor" actionLabel="Open board" />
-            <div className="flex flex-col gap-4">
-              {/* what is waiting on YOU, beside who else is behind */}
-              <TeamLoadCard />
-            {data.manager.latest_leads && <>
-              <Card>
-                <CardHeader className="flex-row items-center">
-                  <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                    <Inbox className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Latest leads
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" className="ml-auto" asChild>
-                    <Link href="/dashboard/leads">View all <ArrowRight className="h-3.5 w-3.5" /></Link>
-                  </Button>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-1 pt-0">
-                  {data.manager.latest_leads.length === 0 && (
-                    <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">No leads yet.</p>
-                  )}
-                  {data.manager.latest_leads.map(l => (
-                    <div key={l.id} className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                      <span className="text-sm font-medium">{l.fname} {l.lname}</span>
-                      <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{l.biz}</span>
-                      <span className="ml-auto shrink-0 font-mono text-[11px] uppercase text-zinc-400 dark:text-zinc-500">
-                        {new Date(l.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </>}
-            </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* what is waiting on YOU, beside who else is behind */}
+            <TeamLoadCard />
+            {data.manager.latest_leads && (
+              <Panel
+                title="Latest leads"
+                right={
+                  <Link href="/dashboard/leads"
+                    className="-my-3 inline-flex min-h-11 shrink-0 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
+                    View all <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </Link>
+                }
+              >
+                {data.manager.latest_leads.length === 0 ? (
+                  <p className="py-6 text-center text-[13px] text-muted-foreground">No leads yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {data.manager.latest_leads.map(l => (
+                      <div key={l.id} className="flex items-baseline gap-3 rounded-inner px-3 py-2">
+                        <span className="text-[15px] font-semibold">{l.fname} {l.lname}</span>
+                        <span className="truncate text-[13px] text-muted-foreground">{l.biz}</span>
+                        <span className="ml-auto shrink-0 text-[12px] text-muted-foreground">
+                          {new Date(l.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+            )}
           </div>
         </>
       )}
