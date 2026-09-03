@@ -2,7 +2,15 @@
  * The Realtime Database REST surface, in memory, on globalThis.fetch.
  * Just enough for lib/db.ts and the migration script: GET (shallow,
  * orderBy+equalTo), PUT, PATCH (multi-path), DELETE, null-deletes.
+ *
+ * Also fakes the two pieces of database.rules.json that lib/db.ts's own
+ * logic depends on rather than merely wraps: an orderBy on a column with no
+ * ".indexOn" 400s, exactly like the real database would; and a PATCH that
+ * would overwrite an existing, different, non-null /mdm/uniq/... claim 401s
+ * with nothing applied — the atomic half of the unique-claim race guard.
  */
+import { INDEXED_COLUMNS } from '@/lib/db'
+
 type Json = any
 const ORIGIN = 'https://fake.firebasedatabase.app'
 
@@ -32,7 +40,7 @@ function prune(node: Json): Json {
 
 export function installFakeRtdb(seed: Json = {}) {
   let tree: Json = structuredClone(seed)
-  const calls: { method: string; path: string }[] = []
+  const calls: { method: string; path: string; query: string }[] = []
   const real = globalThis.fetch
   process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL = ORIGIN
 
@@ -41,13 +49,19 @@ export function installFakeRtdb(seed: Json = {}) {
     if (url.origin !== ORIGIN) return real(input, init)
     const method = (init.method ?? 'GET').toUpperCase()
     const segs = url.pathname.replace(/\.json$/, '').split('/').filter(Boolean)
-    calls.push({ method, path: '/' + segs.join('/') })
+    calls.push({ method, path: '/' + segs.join('/'), query: url.search })
     const body = init.body ? JSON.parse(init.body) : undefined
     const respond = (v: Json, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } })
 
     if (method === 'GET') {
-      let node = structuredClone(getAt(tree, segs))
       const orderBy = url.searchParams.get('orderBy'), equalTo = url.searchParams.get('equalTo')
+      if (orderBy) {
+        const col = JSON.parse(orderBy)
+        if (!INDEXED_COLUMNS.has(col)) {
+          return respond({ error: `Index not defined, add ".indexOn": "${col}", for the path "/${segs.join('/')}" to your security rules for better performance` }, 400)
+        }
+      }
+      let node = structuredClone(getAt(tree, segs))
       if (orderBy && equalTo !== null && node && typeof node === 'object') {
         const col = JSON.parse(orderBy), val = JSON.parse(equalTo)
         node = Object.fromEntries(Object.entries(node).filter(([, r]: any) => r?.[col] === val))
@@ -58,6 +72,19 @@ export function installFakeRtdb(seed: Json = {}) {
     }
     if (method === 'PUT') { tree = prune(setAt(tree, segs, body)) ?? {}; return respond(body) }
     if (method === 'PATCH') {
+      // The atomic half of the unique-claim guard (database.rules.json
+      // ".write" on /mdm/uniq/$table/$field/$key): a losing claimant's
+      // whole multi-path PATCH is rejected, nothing partially applied.
+      for (const [k, v] of Object.entries(body)) {
+        const fullSegs = [...segs, ...k.split('/').filter(Boolean)]
+        const uniqAt = fullSegs.indexOf('uniq')
+        if (uniqAt >= 0 && fullSegs.length >= uniqAt + 4) {
+          const existing = getAt(tree, fullSegs)
+          if (existing != null && v != null && existing !== v) {
+            return respond({ error: 'Permission denied' }, 401)
+          }
+        }
+      }
       for (const [k, v] of Object.entries(body)) tree = setAt(tree, [...segs, ...k.split('/').filter(Boolean)], v)
       tree = prune(tree) ?? {}
       return respond(body)

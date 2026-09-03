@@ -1,7 +1,8 @@
+import 'server-only'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { rtdbUrl } from './firebase-config'
 import {
-  NATURAL_KEYS, NULLABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
+  NATURAL_KEYS, NULLABLE_COLUMNS, TABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
   type Row, type TableName,
 } from './db-types'
 
@@ -22,7 +23,7 @@ export { encodeKey }
  */
 
 export class DbError extends Error {
-  code: 'unique' | 'network' | 'not_found' | 'bad_request'
+  code: 'unique' | 'network' | 'bad_request'
   constructor(code: DbError['code'], message: string) { super(message); this.code = code; this.name = 'DbError' }
 }
 
@@ -34,19 +35,20 @@ export type ListQuery<T> = {
 }
 
 // `T extends Row` (where Row is just `{ id: string }`) lets `table<Client>(...)`
-// bind to a concrete generated interface. But when `table('clients')` is
-// called with no explicit type argument, T defaults to the bare constraint —
-// so write methods intersect with `Record<string, unknown>` too, or a plain
-// `{ name: 'New' }` patch on an untyped call would be rejected as having no
-// known properties.
+// bind to a concrete generated interface and get real excess-property checks
+// on writes (`update('i1', { titel: 'Z' })` fails to compile). The default
+// type argument (`Row & Record<string, unknown>`) is what an untyped call —
+// `table('clients')` — falls back to, so it stays as loose as before: a
+// patch like `{ name: 'New' }` is still accepted with no explicit type
+// argument to check it against.
 export interface Table<T extends Row> {
   name: TableName
   get(id: string): Promise<T | null>
   list(q?: ListQuery<T>): Promise<T[]>
   count(q?: ListQuery<T>): Promise<number>
-  insert(row: Omit<T, 'id'> & { id?: string } & Record<string, unknown>): Promise<T>
-  update(id: string, patch: Partial<T> & Record<string, unknown>): Promise<T | null>
-  upsert(row: Partial<T> & { id?: string } & Record<string, unknown>, opts?: { onConflict?: keyof T & string }): Promise<T>
+  insert(row: Omit<T, 'id'> & { id?: string }): Promise<T>
+  update(id: string, patch: Partial<T>): Promise<T | null>
+  upsert(row: Partial<T> & { id?: string }, opts?: { onConflict?: keyof T & string }): Promise<T>
   remove(id: string): Promise<void>
   removeWhere(where: (row: T) => boolean): Promise<number>
 }
@@ -54,10 +56,11 @@ export interface Table<T extends Row> {
 /**
  * Single-column UNIQUE constraints carried over from Postgres.
  *
- * Verified against supabase/*.sql (grep -rniE "unique"). Every column below
- * really is enforced as a standalone unique constraint or unique index (or is
- * the table's primary key). Three entries the migration brief listed did not
- * hold up and are intentionally left out:
+ * Verified against supabase/*.sql (grep -rniE "unique"), across two review
+ * rounds. Every column below really is enforced as a standalone unique
+ * constraint or unique index (or is the table's primary key). Entries the
+ * migration brief or a later review listed that did not hold up were
+ * intentionally left out:
  *   - team_invites.email: only a PARTIAL unique index on lower(email) WHERE
  *     status = 'pending' (identity.sql) — accepted/revoked invites may repeat
  *     an email, so a plain always-on unique key would reject legitimate rows.
@@ -66,13 +69,21 @@ export interface Table<T extends Row> {
  *     uniques are enforced by call sites already, not here.
  *   - publish_jobs.dedupe_key: no such column exists on publish_jobs
  *     (social_publishing.sql); the only unique index there is partial, on
- *     content_item_id. This looks like it was meant to be notification_log's
- *     dedupe_key (see below), so it is dropped rather than fabricated.
- * Two entries were corrected to match the actual schema:
+ *     content_item_id.
+ * Corrected to match the actual schema:
  *   - notification_log: the real column is `dedupe_key` (identity.sql), not
  *     `dedup_key`.
  *   - social_accounts: the real unique column is `provider_account_id`
  *     (social_publishing.sql), not `provider_post_id`.
+ * Added in the round-1 fix review, each re-verified against its .sql file:
+ *   asana_events.dedup_key (asana_activity.sql, not null unique), clients.slug
+ *   (website_cms.sql, not null unique — alongside the existing share_token),
+ *   journal_posts.slug (journal.sql), booking_services.slug (booking.sql),
+ *   shoot_proposals.token (shoot_proposals.sql), room_invite_requests.email
+ *   (room_invites.sql), client_agreements.client_id (agreements_and_briefs.sql
+ *   — a standalone `unique` on the column, not a primary key, so it still
+ *   needs a /mdm/uniq claim), content_assets.slug and .provider_post_id, and
+ *   asset_clicks.click_id (both content_register.sql).
  */
 export const UNIQUE_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
   team_users: ['email', 'clerk_user_id'],
@@ -82,21 +93,42 @@ export const UNIQUE_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
   post_analytics: ['provider_post_id'],
   notification_log: ['dedupe_key'],
   asana_project_map: ['project_gid'],
+  asana_events: ['dedup_key'],
   work_kinds: ['slug'],
   projects: ['slug'],
   intake_forms: ['token'],
   monthly_updates: ['token'],
-  clients: ['share_token'],
+  clients: ['share_token', 'slug'],
   client_brand: ['client_id'],
   social_accounts: ['provider_account_id'],
+  journal_posts: ['slug'],
+  booking_services: ['slug'],
+  shoot_proposals: ['token'],
+  room_invite_requests: ['email'],
+  client_agreements: ['client_id'],
+  content_assets: ['slug', 'provider_post_id'],
+  asset_clicks: ['click_id'],
 }
+
+/**
+ * Columns `database.rules.json` declares `.indexOn` for, mirrored exactly.
+ * RTDB's REST API rejects an orderBy/equalTo query on any other field with a
+ * 400 ("Index not defined") — pushing an arbitrary `by` key down as a query
+ * would work against the fake in tests and break in production the moment a
+ * real database enforces its rules. `readAll` below only pushes an
+ * indexed key down; everything else is filtered in memory after a full read.
+ */
+export const INDEXED_COLUMNS: ReadonlySet<string> = new Set([
+  'client_id', 'status', 'batch_id', 'owner_id', 'team_user_id', 'created_at',
+  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at',
+])
 
 const ROOT = '/mdm'
 
 // ---- transport ------------------------------------------------------------
 
-export async function rtdbFetch(path: string, init: RequestInit & { query?: Record<string, string> } = {}): Promise<any> {
-  const { query, ...rest } = init
+export async function rtdbFetch(path: string, init: RequestInit & { query?: Record<string, string>; table?: string } = {}): Promise<any> {
+  const { query, table: tableCtx, ...rest } = init
   const qs = query ? '?' + new URLSearchParams(query).toString() : ''
   const url = `${rtdbUrl()}${path}.json${qs}`
   let res: Response
@@ -105,7 +137,16 @@ export async function rtdbFetch(path: string, init: RequestInit & { query?: Reco
   } catch (e) {
     throw new DbError('network', `Database unreachable: ${(e as Error).message}`)
   }
-  if (!res.ok) throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database ${rest.method ?? 'GET'} ${path} failed (${res.status})`)
+  if (!res.ok) {
+    // The RTDB security rules make a losing unique-claim PATCH fail at the
+    // database itself (belt to the pre-check's suspenders — see uniqChecks).
+    // A write rejected by rules comes back 401/403, never a GET.
+    const isWrite = !!rest.method && rest.method.toUpperCase() !== 'GET'
+    if (isWrite && (res.status === 401 || res.status === 403)) {
+      throw new DbError('unique', tableCtx ? `${tableCtx} unique key already taken` : 'unique key already taken')
+    }
+    throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database ${rest.method ?? 'GET'} ${path} failed (${res.status})`)
+  }
   return res.json()
 }
 
@@ -128,7 +169,10 @@ function cachedGet(path: string, query?: Record<string, string>): Promise<any> {
 function invalidate(name: string) {
   const store = als.getStore()
   if (!store) return
-  for (const k of [...store.keys()]) if (k.startsWith(`${ROOT}/tables/${name}`) || k.startsWith(`${ROOT}/uniq/${name}`)) store.delete(k)
+  const tablesPrefix = `${ROOT}/tables/${name}`
+  const uniqPrefix = `${ROOT}/uniq/${name}`
+  const hits = (k: string, p: string) => k === p || k.startsWith(`${p}/`) || k.startsWith(`${p}?`)
+  for (const k of [...store.keys()]) if (hits(k, tablesPrefix) || hits(k, uniqPrefix)) store.delete(k)
 }
 
 // ---- row shaping ------------------------------------------------------------
@@ -140,7 +184,7 @@ function stripNulls<T extends object>(row: T): T {
 }
 function normalise<T>(name: TableName, id: string, raw: any): T {
   const row: any = { ...raw, id: raw?.id ?? id }
-  for (const c of (NULLABLE_COLUMNS as any)[name] ?? []) if (row[c] === undefined) row[c] = null
+  for (const c of NULLABLE_COLUMNS[name] ?? []) if (row[c] === undefined) row[c] = null
   return row as T
 }
 function idFor(name: TableName, row: any): string {
@@ -165,19 +209,31 @@ function sortRows<T>(rows: T[], orderBy: ListQuery<T>['orderBy']) {
 
 // ---- the table -------------------------------------------------------------
 
-export function table<T extends Row>(name: TableName): Table<T> {
+export function table<T extends Row = Row & Record<string, unknown>>(name: TableName): Table<T> {
   const base = `${ROOT}/tables/${name}`
   const uniques = UNIQUE_COLUMNS[name] ?? []
+  const naturalKey = NATURAL_KEYS[name]
 
   async function readAll(by?: Partial<T>): Promise<T[]> {
     let node: any
-    let rest: Partial<T> = {}
+    let rest: Partial<T> = by ?? {}
     if (by && Object.keys(by).length) {
-      const [[col, val], ...others] = Object.entries(by)
-      rest = Object.fromEntries(others) as Partial<T>
-      node = val == null ? await cachedGet(base) : await cachedGet(base, { orderBy: JSON.stringify(col), equalTo: JSON.stringify(val) })
-      if (val == null) rest = by
-    } else node = await cachedGet(base)
+      const entries = Object.entries(by)
+      // Push down the FIRST `by` key that database.rules.json actually
+      // indexes; everything else — including an indexed key whose value is
+      // null, which equalTo can't usefully express — is filtered in memory
+      // after reading the whole node.
+      const idx = entries.findIndex(([k, v]) => v != null && INDEXED_COLUMNS.has(k))
+      if (idx >= 0) {
+        const [col, val] = entries[idx]
+        rest = Object.fromEntries(entries.filter((_, i) => i !== idx)) as Partial<T>
+        node = await cachedGet(base, { orderBy: JSON.stringify(col), equalTo: JSON.stringify(val) })
+      } else {
+        node = await cachedGet(base)
+      }
+    } else {
+      node = await cachedGet(base)
+    }
     let rows = node ? Object.entries(node).map(([id, r]) => normalise<T>(name, id, r)) : []
     const restEntries = Object.entries(rest)
     if (restEntries.length) rows = rows.filter((r: any) => restEntries.every(([k, v]) => r[k] === v))
@@ -231,11 +287,20 @@ export function table<T extends Row>(name: TableName): Table<T> {
     },
     async insert(input) {
       const id = idFor(name, input)
+      // A natural-key table's id is derived from its own data (e.g.
+      // client_brand's id IS client_id), so a second insert for the same key
+      // would silently overwrite the first row's PATCH instead of failing
+      // like a real primary-key violation would.
+      if (naturalKey) {
+        const existing = await cachedGet(`${base}/${id}`)
+        if (existing) throw new DbError('unique', `${name} row already exists`)
+      }
       const now = new Date().toISOString()
-      const row: any = stripNulls({ created_at: now, ...(input as any), id })
+      const hasCreatedAt = (TABLE_COLUMNS[name] as readonly string[]).includes('created_at')
+      const row: any = stripNulls({ ...(hasCreatedAt ? { created_at: now } : {}), ...(input as any), id })
       if (UPDATED_AT_TABLES.has(name)) row.updated_at = row.updated_at ?? now
       const patch: Record<string, unknown> = { [`tables/${name}/${id}`]: row, ...(await uniqChecks(row, id)) }
-      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(patch) })
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(patch), table: name })
       invalidate(name)
       return normalise<T>(name, id, row)
     },
@@ -252,7 +317,7 @@ export function table<T extends Row>(name: TableName): Table<T> {
         Object.assign(body, uniqClears(Object.fromEntries(changedUniques.map(c => [c, current[c]]))))
         Object.assign(body, await uniqChecks(Object.fromEntries(changedUniques.map(c => [c, next[c]])), id))
       }
-      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body), table: name })
       invalidate(name)
       return normalise<T>(name, id, stripNulls(next))
     },
@@ -264,13 +329,17 @@ export function table<T extends Row>(name: TableName): Table<T> {
       } else if (row.id) {
         const existing = await t.get(row.id)
         if (existing) return (await t.update(row.id, row)) as T
+      } else if (naturalKey) {
+        const derivedId = naturalKey(row)
+        const existing = await t.get(derivedId)
+        if (existing) return (await t.update(derivedId, row)) as T
       }
       return t.insert(row as any)
     },
     async remove(id) {
       const current = await cachedGet(`${base}/${id}`)
       const body: Record<string, unknown> = { [`tables/${name}/${id}`]: null, ...uniqClears(current) }
-      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body), table: name })
       invalidate(name)
     },
     async removeWhere(where) {
@@ -278,7 +347,7 @@ export function table<T extends Row>(name: TableName): Table<T> {
       if (!rows.length) return 0
       const body: Record<string, unknown> = {}
       for (const r of rows) { body[`tables/${name}/${r.id}`] = null; Object.assign(body, uniqClears(r)) }
-      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body), table: name })
       invalidate(name)
       return rows.length
     },

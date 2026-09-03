@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { installFakeRtdb } from './helpers/fake-rtdb'
-import { table, withRequestCache, DbError, listTables } from '@/lib/db'
-import type { Client, ContentItem } from '@/lib/db-types'
+import { table, withRequestCache, DbError, listTables, rtdbFetch, encodeKey } from '@/lib/db'
+import type { Table } from '@/lib/db'
+import type { Client, ContentItem, ClientBrand } from '@/lib/db-types'
 
 let fake: ReturnType<typeof installFakeRtdb>
 const seed = () => ({ mdm: { tables: {
@@ -12,6 +13,8 @@ const seed = () => ({ mdm: { tables: {
     i3: { id: 'i3', client_id: 'c2', status: 'draft', title: 'C', updated_at: '2026-01-01T00:00:00Z' },
   },
   team_users: { u1: { id: 'u1', email: 'a@x.com', name: 'A' } },
+  work_kinds: { w1: { id: 'w1', slug: 'edit', name: 'Edit', client_id: 'c1' }, w2: { id: 'w2', slug: 'graphics', name: 'Graphics', client_id: 'c2' } },
+  client_brand: { c1: { id: 'c1', client_id: 'c1', profile: { voice: 'friendly' }, docs: ['doc1'], updated_at: '2026-01-01T00:00:00Z', updated_by: 'system' } },
 }, uniq: { team_users: { email: { 'a@x%2Ecom': 'u1' } } } } })
 
 beforeEach(() => { fake = installFakeRtdb(seed()) })
@@ -99,12 +102,75 @@ describe('withRequestCache', () => {
 
 describe('errors and misc', () => {
   it('listTables reads the shallow key list', async () => {
-    expect(await listTables()).toEqual(['clients', 'content_items', 'team_users'])
+    expect(await listTables()).toEqual(['client_brand', 'clients', 'content_items', 'team_users', 'work_kinds'])
   })
   it('a non-2xx becomes DbError network', async () => {
     fake.restore()
     globalThis.fetch = (async () => new Response('boom', { status: 500 })) as any
     process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL = 'https://fake.firebasedatabase.app'
     await expect(table('clients').list()).rejects.toBeInstanceOf(DbError)
+  })
+})
+
+describe('indexed pushdown', () => {
+  it('list({ by: { slug } }) on an unindexed column reads the whole table, no query string', async () => {
+    const rows = await table('work_kinds').list({ by: { slug: 'edit' } } as any)
+    expect(rows.map((r: any) => r.id)).toEqual(['w1'])
+    expect(fake.calls().at(-1)!.query).toBe('')
+  })
+  it('list({ by: { slug, client_id } }) pushes the indexed client_id down instead of slug', async () => {
+    const rows = await table('work_kinds').list({ by: { slug: 'edit', client_id: 'c1' } } as any)
+    expect(rows.map((r: any) => r.id)).toEqual(['w1'])
+    expect(fake.calls().at(-1)!.query).toContain(encodeURIComponent('"client_id"'))
+  })
+})
+
+describe('unique-claim atomicity', () => {
+  it('a losing write is rejected at the database (401/403), not just by the local pre-check', async () => {
+    ;(fake.tree() as any).mdm.uniq = { x: { f: { k: 'owner1' } } }
+    await expect(
+      rtdbFetch('/mdm', { method: 'PATCH', body: JSON.stringify({ 'uniq/x/f/k': 'owner2' }), table: 'x' }),
+    ).rejects.toMatchObject({ code: 'unique', message: expect.stringContaining('x') })
+  })
+})
+
+describe('natural-key upsert/insert', () => {
+  it('upsert on a natural-key table merges into the existing row instead of dropping fields', async () => {
+    const r = await table<ClientBrand>('client_brand').upsert({ client_id: 'c1', profile: { voice: 'bold' } } as any)
+    expect(r.id).toBe('c1')
+    expect(r.profile).toEqual({ voice: 'bold' })
+    expect(fake.tree().mdm.tables.client_brand.c1.docs).toEqual(['doc1'])
+  })
+  it('insert on a natural-key table rejects a row that already exists', async () => {
+    await expect(table<ClientBrand>('client_brand').insert({ client_id: 'c1', profile: {} } as any)).rejects.toMatchObject({ code: 'unique' })
+  })
+})
+
+describe('typed write safety', () => {
+  it('rejects an unknown property on a typed table at compile time', () => {
+    const check = (t: Table<Client>) => {
+      // @ts-expect-error 'nmae' is not a key of Client — a full type argument must catch this typo
+      t.update('c1', { nmae: 'x' })
+    }
+    expect(typeof check).toBe('function')
+  })
+})
+
+describe('update / removeWhere with unique columns', () => {
+  it('update clears the old unique claim and claims the new value in one PATCH', async () => {
+    const updated = await table('team_users').update('u1', { email: 'c@x.com' } as any)
+    expect(updated?.email).toBe('c@x.com')
+    expect(fake.tree().mdm.uniq.team_users.email[encodeKey('a@x.com')]).toBeUndefined()
+    expect(fake.tree().mdm.uniq.team_users.email[encodeKey('c@x.com')]).toBe('u1')
+  })
+  it('update rejects when the new unique value is already claimed by another row', async () => {
+    await table('team_users').insert({ email: 'b@x.com', name: 'B' } as any)
+    await expect(table('team_users').update('u1', { email: 'b@x.com' } as any)).rejects.toMatchObject({ code: 'unique' })
+  })
+  it('removeWhere clears unique claims for every removed row', async () => {
+    await table('team_users').insert({ email: 'b@x.com', name: 'B' } as any)
+    const n = await table('team_users').removeWhere(() => true)
+    expect(n).toBe(2)
+    expect(fake.tree().mdm.uniq).toBeUndefined()
   })
 })

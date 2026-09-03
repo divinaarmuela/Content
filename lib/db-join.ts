@@ -1,3 +1,4 @@
+import 'server-only'
 import { table } from './db'
 import type { Row, TableName } from './db-types'
 
