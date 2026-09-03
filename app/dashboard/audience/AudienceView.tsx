@@ -17,6 +17,7 @@ import {
   AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Download, Mail, Search, Sparkles, Trash2 } from 'lucide-react'
+import PageTitle from '../ui/PageTitle'
 
 type Subscriber = { id: string; email: string; source: string; created_at: string }
 type Invite = { id: string; name: string; email: string; about: string | null; created_at: string }
@@ -104,7 +105,7 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
   const deleteButton = (type: AudienceTab, id: string, label: string) => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-red-600" aria-label={`Remove ${label}`}>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-accent-red" aria-label={`Remove ${label}`}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </AlertDialogTrigger>
@@ -119,7 +120,7 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => remove(type, id)} className="bg-red-600 hover:bg-red-700">
+          <AlertDialogAction onClick={() => remove(type, id)} className="bg-accent-red hover:bg-accent-red">
             Remove
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -129,44 +130,51 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
 
   const empty = (message: string) => (
     <div className="flex flex-col items-center gap-2 py-16 text-center">
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">{message}</p>
+      <p className="text-body-15 text-muted-foreground">{message}</p>
     </div>
   )
 
   const pill = (href: string, active: boolean, icon: React.ReactNode, label: string, count: number | null) => (
     <Link
       href={href}
-      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
+      className={`flex items-center gap-1.5 rounded-tile px-3 py-1.5 text-body-15 transition-colors ${
         active
-          ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
-          : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+          ? 'bg-surface font-medium text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground'
       }`}
     >
       {icon} {label}
-      <Badge variant="secondary" className="ml-1 px-1.5 font-mono text-[11px]">{count ?? '…'}</Badge>
+      <Badge variant="secondary" className="ml-1 px-1.5 font-mono text-[12px]">{count ?? '…'}</Badge>
     </Link>
   )
 
   return (
     <div className="flex flex-col gap-5">
+      <PageTitle
+        title="Audience"
+        summary="Everyone who has asked to hear from us — the journal list and The Room."
+        actions={<>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="pl-10"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={loading}>
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        </>}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
-        <nav className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
+        <nav className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
           {pill('/dashboard/audience', tab === 'newsletter', <Mail className="h-3.5 w-3.5" />, 'Newsletter', newsletter?.length ?? null)}
           {pill('/dashboard/audience/room', tab === 'invites', <Sparkles className="h-3.5 w-3.5" />, 'The Room', invites?.length ?? null)}
         </nav>
 
-        <div className="relative ml-auto w-full sm:w-64">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <Input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search…"
-            className="pl-8"
-          />
-        </div>
-        <Button variant="outline" size="sm" onClick={exportCsv} disabled={loading}>
-          <Download className="h-3.5 w-3.5" /> Export CSV
-        </Button>
       </div>
 
       <Card>
@@ -196,9 +204,9 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
                       <TableRow key={s.id}>
                         <TableCell className="font-medium">{s.email}</TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          <Badge variant="outline" className="font-mono text-[11px] capitalize">{s.source}</Badge>
+                          <Badge variant="outline" className="font-mono text-[12px] capitalize">{s.source}</Badge>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-zinc-500 dark:text-zinc-400">{fmt(s.created_at)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{fmt(s.created_at)}</TableCell>
                         <TableCell>{deleteButton('newsletter', s.id, s.email)}</TableCell>
                       </TableRow>
                     ))}
@@ -224,11 +232,11 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
                   {visibleInvites.map(i => (
                     <TableRow key={i.id}>
                       <TableCell className="font-medium">{i.name}</TableCell>
-                      <TableCell className="text-zinc-600 dark:text-zinc-300">{i.email}</TableCell>
-                      <TableCell className="hidden max-w-md truncate text-zinc-500 md:table-cell dark:text-zinc-400">
+                      <TableCell className="text-muted-foreground">{i.email}</TableCell>
+                      <TableCell className="hidden max-w-md truncate text-muted-foreground md:table-cell">
                         {i.about || '—'}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-zinc-500 dark:text-zinc-400">{fmt(i.created_at)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">{fmt(i.created_at)}</TableCell>
                       <TableCell>{deleteButton('invites', i.id, i.name)}</TableCell>
                     </TableRow>
                   ))}

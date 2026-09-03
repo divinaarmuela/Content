@@ -13,10 +13,10 @@ type Row = {
 /** The stages an item passes through on its way to counting. Same order and
  *  colours as the Overview pipeline, so the two read as one thing. */
 const STAGES: { key: 'in_production' | 'approved' | 'scheduled' | 'posted'; label: string; dot: string; bar: string }[] = [
-  { key: 'in_production', label: 'in production', dot: 'bg-zinc-400', bar: 'bg-zinc-300 dark:bg-zinc-600' },
-  { key: 'approved', label: 'approved', dot: 'bg-emerald-400', bar: 'bg-emerald-300 dark:bg-emerald-800' },
-  { key: 'scheduled', label: 'scheduled', dot: 'bg-cyan-500', bar: 'bg-cyan-400 dark:bg-cyan-700' },
-  { key: 'posted', label: 'posted', dot: 'bg-emerald-600', bar: 'bg-emerald-600 dark:bg-emerald-400' },
+  { key: 'in_production', label: 'in production', dot: 'bg-foreground/[0.14]', bar: 'bg-foreground/[0.12]' },
+  { key: 'approved', label: 'approved', dot: 'bg-accent-green', bar: 'bg-tint-green' },
+  { key: 'scheduled', label: 'scheduled', dot: 'bg-accent-blue', bar: 'bg-accent-blue' },
+  { key: 'posted', label: 'posted', dot: 'bg-accent-green', bar: 'bg-accent-green' },
 ]
 type Service = { key: string; label: string; active: boolean }
 
@@ -60,12 +60,12 @@ export default function MonthProgress({ clientId }: { clientId: string }) {
     <Card>
       <CardContent className="flex flex-col gap-3 py-5">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold">This month</h3>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-zinc-400">{monthName}</span>
+          <h3 className="text-body-15 font-semibold">This month</h3>
+          <span className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">{monthName}</span>
         </div>
 
         {!hasAgreement || rows.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-body-15 text-muted-foreground">
             No agreement on file.{' '}
             {canManage && (
               <Link href={`/dashboard/clients/${clientId}/agreement`} className="underline decoration-dotted">
@@ -84,23 +84,23 @@ export default function MonthProgress({ clientId }: { clientId: string }) {
               const segments = [...STAGES].reverse()
               return (
                 <div key={r.type} className="flex flex-col gap-1">
-                  <div className="flex items-baseline justify-between text-sm">
+                  <div className="flex items-baseline justify-between text-body-15">
                     <span>{r.label}</span>
-                    <span className={`font-mono tabular-nums ${over ? 'text-amber-600 dark:text-amber-400' : ''}`}>
-                      {r.delivered} / {r.quota} <span className="text-zinc-400">posted</span>
+                    <span className={`font-mono tabular-nums ${over ? 'text-accent-amber' : ''}`}>
+                      {r.delivered} / {r.quota} <span className="text-muted-foreground">posted</span>
                     </span>
                   </div>
-                  <div className="flex h-1.5 w-full gap-px overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
+                  <div className="flex h-1.5 w-full gap-px overflow-hidden rounded bg-foreground/[0.06]">
                     {segments.map(s => {
                       const n = r[s.key] ?? 0
-                      return n > 0 ? <div key={s.key} className={`h-1.5 ${over && s.key === 'posted' ? 'bg-amber-500' : s.bar}`} style={{ width: width(n) }} /> : null
+                      return n > 0 ? <div key={s.key} className={`h-1.5 ${over && s.key === 'posted' ? 'bg-accent-amber' : s.bar}`} style={{ width: width(n) }} /> : null
                     })}
                   </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10.5px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
                     {STAGES.map(s => (
                       <span key={s.key} className="flex items-center gap-1">
                         <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                        {s.label} <span className="text-zinc-800 dark:text-zinc-200">{r[s.key] ?? 0}</span>
+                        {s.label} <span className="text-foreground">{r[s.key] ?? 0}</span>
                       </span>
                     ))}
                   </div>
@@ -111,9 +111,9 @@ export default function MonthProgress({ clientId }: { clientId: string }) {
         )}
 
         {services.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
             {services.map(s => (
-              <Badge key={s.key} variant="outline" className="font-normal text-zinc-500 dark:text-zinc-400">
+              <Badge key={s.key} variant="outline" className="font-normal text-muted-foreground">
                 {s.label}
               </Badge>
             ))}

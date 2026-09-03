@@ -84,7 +84,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-body-15 text-muted-foreground">
           {contacts.length} contact{contacts.length === 1 ? '' : 's'}
         </p>
         {!draft && (
@@ -95,7 +95,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       </div>
 
       {draft && (
-        <Card className="border-blue-200 dark:border-blue-900">
+        <Card className="border-accent-blue/25">
           <CardContent className="grid gap-4 py-5 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>Name</Label>
@@ -103,7 +103,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                 onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Role <span className="text-xs text-zinc-400">(owner, marketing lead…)</span></Label>
+              <Label>Role <span className="text-secondary-13 text-muted-foreground">(owner, marketing lead…)</span></Label>
               <Input value={draft.role ?? ''}
                 onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} />
             </div>
@@ -125,8 +125,8 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
             <div className="flex items-center gap-2 sm:col-span-2">
               <Switch checked={!!draft.is_primary}
                 onCheckedChange={v => setDraft(d => ({ ...d, is_primary: v }))} />
-              <span className="text-sm">Primary contact</span>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="text-body-15">Primary contact</span>
+              <span className="text-secondary-13 text-muted-foreground">
                 — only one per client
               </span>
               <div className="ml-auto flex gap-2">
@@ -151,20 +151,20 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {contacts.map(c => (
-            <Card key={c.id} className={c.is_primary ? 'border-zinc-300 dark:border-zinc-600' : undefined}>
+            <Card key={c.id} className={c.is_primary ? 'border-border' : undefined}>
               <CardContent className="flex flex-col gap-2.5 py-4">
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium">{c.name}</p>
+                      <p className="truncate text-body-15 font-medium">{c.name}</p>
                       {c.is_primary && (
-                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 font-normal text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">
+                        <Badge variant="outline" className="gap-1 border-accent-amber/35 bg-tint-amber font-normal text-foreground">
                           <Star className="h-3 w-3 fill-current" /> primary
                         </Badge>
                       )}
                     </div>
                     {c.role && (
-                      <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+                      <p className="mt-0.5 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
                         {c.role}
                       </p>
                     )}
@@ -180,7 +180,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                       confirmLabel="Remove contact"
                       onConfirm={() => remove(c)}
                     >
-                      <Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:text-red-600"
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-accent-red hover:text-accent-red"
                         aria-label={`Remove ${c.name}`}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -189,31 +189,31 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                 </div>
 
                 {c.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                    <a href={`mailto:${c.email}`} className="min-w-0 flex-1 truncate text-zinc-600 hover:underline dark:text-zinc-300">
+                  <div className="flex items-center gap-2 text-body-15">
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <a href={`mailto:${c.email}`} className="min-w-0 flex-1 truncate text-muted-foreground hover:underline">
                       {c.email}
                     </a>
                     <button onClick={() => copy(c.email, 'Email')} aria-label="Copy email"
-                      className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+                      className="text-muted-foreground transition-colors hover:text-muted-foreground">
                       <Copy className="h-3 w-3" />
                     </button>
                   </div>
                 )}
                 {c.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                    <a href={`tel:${c.phone}`} className="min-w-0 flex-1 truncate text-zinc-600 hover:underline dark:text-zinc-300">
+                  <div className="flex items-center gap-2 text-body-15">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <a href={`tel:${c.phone}`} className="min-w-0 flex-1 truncate text-muted-foreground hover:underline">
                       {c.phone}
                     </a>
                     <button onClick={() => copy(c.phone, 'Phone')} aria-label="Copy phone"
-                      className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+                      className="text-muted-foreground transition-colors hover:text-muted-foreground">
                       <Copy className="h-3 w-3" />
                     </button>
                   </div>
                 )}
                 {c.notes && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{c.notes}</p>
+                  <p className="text-secondary-13 text-muted-foreground">{c.notes}</p>
                 )}
               </CardContent>
             </Card>

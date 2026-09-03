@@ -9,9 +9,9 @@ import CredentialsPanel from '../../CredentialsPanel'
  *  them off a placeholder client would bury them in that client's panel. */
 export default function TeamCredentialsPage() {
   return (
-    <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    <Card className="border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-base">MD Media credentials</CardTitle>
+        <CardTitle>MD Media credentials</CardTitle>
         <CardDescription>
           Our own platform logins. Client logins live on each client&rsquo;s page.
         </CardDescription>

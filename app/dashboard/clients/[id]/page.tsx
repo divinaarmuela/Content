@@ -99,7 +99,7 @@ export default function ClientOverviewPage() {
           </div>
           <div className="grid gap-1.5">
             <Label>Slug</Label>
-            <Input defaultValue={client.slug} className="font-mono text-sm" onBlur={e => {
+            <Input defaultValue={client.slug} className="font-mono text-body-15" onBlur={e => {
               if (e.target.value !== client.slug) patch({ slug: e.target.value })
             }} />
           </div>
@@ -138,9 +138,9 @@ export default function ClientOverviewPage() {
 
           {portalUrl && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Client portal <span className="text-xs text-zinc-400">(no login required)</span></Label>
+              <Label>Client portal <span className="text-secondary-13 text-muted-foreground">(no login required)</span></Label>
               <div className="flex items-center gap-2">
-                <Input readOnly value={portalUrl} className="font-mono text-xs" />
+                <Input readOnly value={portalUrl} className="font-mono text-secondary-13" />
                 <Button variant="outline" size="sm" asChild>
                   <a href={portalUrl} target="_blank" rel="noreferrer noopener">
                     <ExternalLink className="h-3.5 w-3.5" /> Open
@@ -155,13 +155,13 @@ export default function ClientOverviewPage() {
               looks lost, with a route to the replacement. */}
           {(client.contact_name || client.email || client.phone) && (
             <div className="sm:col-span-2">
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-zinc-400">
+              <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">
                 Original contact
               </p>
-              <div className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-800">
-                <span className="text-zinc-700 dark:text-zinc-300">{client.contact_name || '—'}</span>
-                {client.email && <span className="text-zinc-500">{client.email}</span>}
-                {client.phone && <span className="text-zinc-500">{client.phone}</span>}
+              <div className="flex flex-wrap items-center gap-3 rounded-tile border border-border px-3 py-2.5 text-body-15">
+                <span className="text-muted-foreground">{client.contact_name || '—'}</span>
+                {client.email && <span className="text-muted-foreground">{client.email}</span>}
+                {client.phone && <span className="text-muted-foreground">{client.phone}</span>}
                 <Button variant="ghost" size="sm" className="ml-auto" asChild>
                   <a href={`/dashboard/clients/${clientId}/contacts`}>Move to Contacts →</a>
                 </Button>
@@ -169,7 +169,7 @@ export default function ClientOverviewPage() {
             </div>
           )}
 
-          {saving && <p className="text-xs text-zinc-400 sm:col-span-2">Saving…</p>}
+          {saving && <p className="text-secondary-13 text-muted-foreground sm:col-span-2">Saving…</p>}
         </CardContent>
       </Card>
     </div>

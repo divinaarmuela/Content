@@ -209,6 +209,10 @@ body:has(.dbx) {
   :where(.intake button) { background: transparent; color: inherit; font: inherit; cursor: pointer; }
   :where(.intake a) { color: inherit; }
 
+  /* Tailwind's preflight is off site-wide, so a semantic <ul> in the app
+     still wore the browser's disc markers — they showed up hanging outside
+     the inbox's post list. Lists in the dashboard are layout, never prose. */
+  :where(body:has(.dbx) ul, body:has(.dbx) ol) { list-style: none; margin: 0; padding: 0; }
   :where(body:has(.dbx) img, body:has(.dbx) video, body:has(.dbx) svg) { display: block; max-width: 100%; }
   :where(body:has(.dbx) table) { border-collapse: collapse; }
   /* the marketing grid + noise overlays don't belong over the app shell */

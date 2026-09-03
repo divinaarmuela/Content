@@ -23,19 +23,19 @@ import {
 
 const TONE: Record<FitLevel, { chip: string; icon: typeof Check }> = {
   ok: {
-    chip: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
+    chip: 'border-accent-green/30 bg-tint-green text-foreground',
     icon: Check,
   },
   reframed: {
-    chip: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300',
+    chip: 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep',
     icon: Crop,
   },
   degraded: {
-    chip: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
+    chip: 'border-accent-amber/35 bg-tint-amber text-foreground',
     icon: Gauge,
   },
   blocked: {
-    chip: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
+    chip: 'border-accent-red/30 bg-tint-red text-foreground',
     icon: XCircle,
   },
 }
@@ -114,14 +114,14 @@ export default function AssetCheck({
     (w, v) => (rank[v.level] > rank[w] ? v.level : w), 'ok')
 
   return (
-    <div className="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+    <div className="grid gap-3 rounded-inner border border-border p-3">
       <div className="flex items-start gap-2">
         {worst === 'ok'
-          ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />}
+          ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-green" />
+          : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" />}
         <div>
-          <p className="text-xs font-medium">Before you schedule</p>
-          <p className="text-xs text-zinc-600 dark:text-zinc-300">
+          <p className="text-secondary-13 font-medium">Before you schedule</p>
+          <p className="text-secondary-13 text-muted-foreground">
             {platforms.length === 0
               ? 'Pick the channels first — what happens to a file depends entirely on where it goes.'
               : probes.length === 0
@@ -141,7 +141,7 @@ export default function AssetCheck({
               <span
                 key={v.platform}
                 title={LEVEL_WORDS[v.level].meaning}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${tone.chip}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-chip-12 ${tone.chip}`}
               >
                 <PlatformIcon platform={v.platform} size={13} />
                 <span>{PLATFORM_MEDIA[v.platform].label}</span>
@@ -169,11 +169,11 @@ export default function AssetCheck({
           <details
             key={v.platform}
             open={v.level !== 'ok'}
-            className="rounded-lg border border-zinc-200 dark:border-zinc-800"
+            className="rounded-inner border border-border"
           >
             {/* Safari draws its own disclosure triangle unless the webkit
                 pseudo-element is hidden too — `list-none` alone leaves it */}
-            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 px-2 py-1.5 text-[11px] [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 px-2 py-1.5 text-[12px] [&::-webkit-details-marker]:hidden">
               <PlatformIcon platform={v.platform} size={14} />
               <span className="font-medium">{PLATFORM_MEDIA[v.platform].label}</span>
               <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${tone.chip}`}>
@@ -181,9 +181,9 @@ export default function AssetCheck({
                 {LEVEL_WORDS[v.level].label}
               </span>
               {medium && (
-                <span className="text-zinc-500 dark:text-zinc-400">sent as {medium}</span>
+                <span className="text-muted-foreground">sent as {medium}</span>
               )}
-              <span className="ml-auto font-mono text-zinc-400 dark:text-zinc-500">
+              <span className="ml-auto font-mono text-muted-foreground">
                 {rows.length} file{rows.length === 1 ? '' : 's'}
               </span>
             </summary>
@@ -196,7 +196,7 @@ export default function AssetCheck({
                 return (
                   <li
                     key={row.asset}
-                    className={`rounded-md border px-2 py-1.5 text-[11px] ${rowTone.chip}`}
+                    className={`rounded-tile border px-2 py-1.5 text-[12px] ${rowTone.chip}`}
                   >
                     <span className="flex items-center gap-1.5 font-medium">
                       <RowIcon className="h-3 w-3" />
@@ -226,7 +226,7 @@ export default function AssetCheck({
       })}
 
       {!compact && platforms.length === 0 && (
-        <p className="border-t border-zinc-100 pt-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+        <p className="border-t border-border pt-2 text-[12px] text-muted-foreground">
           Nothing is checked yet — go back and choose the channels first.
         </p>
       )}
@@ -238,12 +238,12 @@ export default function AssetCheck({
       {specs.length > 0 && (
         <details
           open={probes.length === 0}
-          className="rounded-lg border border-zinc-200 dark:border-zinc-800"
+          className="rounded-inner border border-border"
         >
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium [&::-webkit-details-marker]:hidden">
-            <FileCog className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-[12px] font-medium [&::-webkit-details-marker]:hidden">
+            <FileCog className="h-3.5 w-3.5 text-muted-foreground" />
             What each channel wants
-            <span className="ml-auto font-mono font-normal text-zinc-400 dark:text-zinc-500">
+            <span className="ml-auto font-mono font-normal text-muted-foreground">
               {specs.length} channel{specs.length === 1 ? '' : 's'}
             </span>
           </summary>
@@ -251,23 +251,23 @@ export default function AssetCheck({
           <div className="grid gap-2 px-2 pb-2">
             {specs.map(s => (
               <div key={s.platform} className="grid gap-1">
-                <p className="flex items-center gap-1.5 text-[11px] font-medium">
+                <p className="flex items-center gap-1.5 text-[12px] font-medium">
                   <PlatformIcon platform={s.platform} size={12} />
                   {s.label}
-                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
+                  <span className="font-normal text-muted-foreground">
                     — as {s.becomes}
                   </span>
                 </p>
                 {s.groups.map(g => (
-                  <p key={g.type} className="pl-4 text-[11px] text-zinc-600 dark:text-zinc-300">
-                    <span className="font-mono text-zinc-400 dark:text-zinc-500">{g.type}</span>
+                  <p key={g.type} className="pl-4 text-[12px] text-muted-foreground">
+                    <span className="font-mono text-muted-foreground">{g.type}</span>
                     {' · '}
                     {g.lines.join(' · ')}
                   </p>
                 ))}
               </div>
             ))}
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="text-[12px] text-muted-foreground">
               These are the same numbers the checks above use, so hitting them
               means nothing is cropped, cut or re-encoded on the way out.
             </p>
@@ -276,7 +276,7 @@ export default function AssetCheck({
       )}
 
       {missing.length > 0 && (
-        <p className="flex items-start gap-1.5 border-t border-zinc-100 pt-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+        <p className="flex items-start gap-1.5 border-t border-border pt-2 text-[12px] text-muted-foreground">
           <HelpCircle className="mt-0.5 h-3 w-3 shrink-0" />
           <span>
             {missing.length === 1 ? `File ${missing[0]} could not be` : `Files ${missing.join(', ')} could not be`}

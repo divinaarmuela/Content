@@ -64,18 +64,18 @@ function UploadRow({ u, onDismiss, compact }: {
   const settled = u.status === 'done' || failed
 
   return (
-    <div className="flex flex-col gap-1 text-xs">
+    <div className="flex flex-col gap-1 text-secondary-13">
       <div className="flex items-center gap-2">
         {u.status === 'done' && u.preview !== 'pending' && (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-accent-green" aria-hidden />
         )}
-        {failed && <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />}
+        {failed && <XCircle className="h-3.5 w-3.5 shrink-0 text-accent-red" aria-hidden />}
         <span className="min-w-0 flex-1 truncate" title={u.name}>{u.name}</span>
         {!compact && size && (
-          <span className="shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{size}</span>
+          <span className="shrink-0 font-mono text-[12px] text-muted-foreground">{size}</span>
         )}
-        <span className={`shrink-0 font-mono text-[11px] tabular-nums ${
-          failed ? 'text-red-500' : 'text-zinc-500 dark:text-zinc-400'
+        <span className={`shrink-0 font-mono text-[12px] tabular-nums ${
+          failed ? 'text-accent-red' : 'text-muted-foreground'
         }`}>
           {failed ? 'failed' : u.status === 'uploading' ? `${pct}%` : words}
         </span>
@@ -84,7 +84,7 @@ function UploadRow({ u, onDismiss, compact }: {
             type="button"
             onClick={u.abort}
             aria-label={`Cancel upload of ${u.name}`}
-            className="shrink-0 text-zinc-400 hover:text-red-600 dark:hover:text-red-400"
+            className="shrink-0 text-muted-foreground hover:text-accent-red"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -94,7 +94,7 @@ function UploadRow({ u, onDismiss, compact }: {
             type="button"
             onClick={u.retry}
             aria-label={`Retry upload of ${u.name}`}
-            className="flex shrink-0 items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+            className="flex shrink-0 items-center gap-1 text-accent-blue-deep hover:underline"
           >
             <RotateCw className="h-3 w-3" /> Retry
           </button>
@@ -104,7 +104,7 @@ function UploadRow({ u, onDismiss, compact }: {
             type="button"
             onClick={() => onDismiss(u.id)}
             aria-label={`Dismiss ${u.name}`}
-            className="shrink-0 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            className="shrink-0 text-muted-foreground hover:text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -124,7 +124,7 @@ function UploadRow({ u, onDismiss, compact }: {
       )}
 
       {(line || failed || (u.status === 'done' && u.preview === 'pending')) && (
-        <p className={`truncate text-[11px] ${failed ? 'text-red-500' : 'text-zinc-400 dark:text-zinc-500'}`}>
+        <p className={`truncate text-[12px] ${failed ? 'text-accent-red' : 'text-muted-foreground'}`}>
           {failed ? u.error ?? 'Upload failed' : u.preview === 'pending' ? words : line}
         </p>
       )}
@@ -134,15 +134,15 @@ function UploadRow({ u, onDismiss, compact }: {
 
 function Bar({ pct, tone }: { pct: number; tone: 'moving' | 'saving' | 'done' }) {
   const colour = tone === 'done'
-    ? 'bg-emerald-500'
-    : tone === 'saving' ? 'bg-amber-500' : 'bg-blue-500'
+    ? 'bg-accent-green'
+    : tone === 'saving' ? 'bg-accent-amber' : 'bg-accent-blue'
   return (
     <div
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
-      className="h-1 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+      className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.08]"
     >
       <div
         className={`h-full rounded-full transition-[width] duration-200 motion-reduce:transition-none ${colour}`}
@@ -168,7 +168,7 @@ export function UploadOverall({ uploads, className }: {
   const overall = overallProgress(uploads)
   return (
     <div className={`flex flex-col gap-1 ${className ?? ''}`}>
-      <div className="flex items-center justify-between text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+      <div className="flex items-center justify-between text-[12px] font-medium text-muted-foreground">
         <span>{overall.label}</span>
       </div>
       <Bar pct={overall.percent} tone={overall.active ? 'moving' : 'done'} />

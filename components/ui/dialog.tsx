@@ -38,7 +38,7 @@ const DialogContent = React.forwardRef<
         // max-h + overflow-y-auto: without them a tall form (the New item
         // dialog is ~1400px) is clipped by the screen edges on a phone and the
         // primary button is unreachable — the page behind does not scroll it.
-        'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain border border-border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-card',
         className
       )}
       {...props}

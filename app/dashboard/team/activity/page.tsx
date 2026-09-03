@@ -22,6 +22,7 @@ import {
   type HeldItem, type SortKey, type TeamActivityRow, type Throughput,
 } from '../../../lib/team-activity-core'
 import { ROLE_LABEL as ALL_ROLE_LABEL, type Role } from '../../../lib/identity-core'
+import PageTitle from '../../ui/PageTitle'
 
 type Payload = {
   rows: TeamActivityRow[]
@@ -41,10 +42,10 @@ const ROLE_LABEL: Record<string, string> = {
 }
 
 const ROLE_STYLE: Record<string, string> = {
-  super_admin:     'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
-  account_manager: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  editor:          'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
-  scheduler:       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
+  super_admin:     'bg-tint-blue text-foreground border-accent-blue/25',
+  account_manager: 'bg-tint-green text-foreground border-accent-green/30',
+  editor:          'bg-foreground/[0.06] text-muted-foreground border-border',
+  scheduler:       'bg-tint-amber text-foreground border-accent-amber/35',
 }
 
 const initials = (name: string, email: string) =>
@@ -61,11 +62,11 @@ function dueLabel(due: string | null): string {
 }
 
 const THROUGHPUT_BARS: { key: keyof Throughput; label: string; tone: string }[] = [
-  { key: 'versions',  label: 'versions added',      tone: 'bg-zinc-400 dark:bg-zinc-500' },
-  { key: 'submitted', label: 'submitted for review', tone: 'bg-blue-500' },
-  { key: 'approved',  label: 'approved',            tone: 'bg-emerald-500' },
-  { key: 'scheduled', label: 'scheduled',           tone: 'bg-amber-500' },
-  { key: 'posted',    label: 'posted',              tone: 'bg-violet-500' },
+  { key: 'versions',  label: 'versions added',      tone: 'bg-foreground/[0.14]' },
+  { key: 'submitted', label: 'submitted for review', tone: 'bg-accent-blue' },
+  { key: 'approved',  label: 'approved',            tone: 'bg-accent-green' },
+  { key: 'scheduled', label: 'scheduled',           tone: 'bg-accent-amber' },
+  { key: 'posted',    label: 'posted',              tone: 'bg-accent-blue' },
 ]
 
 /** Five bars, one per kind of move. Deliberately unlabelled at this size: the
@@ -82,7 +83,7 @@ function ThroughputBars({ t }: { t: Throughput }) {
       {THROUGHPUT_BARS.map(b => (
         <span key={b.key} className="flex h-full w-1.5 items-end">
           <span
-            className={`w-full rounded-sm ${t[b.key] > 0 ? b.tone : 'bg-zinc-200 dark:bg-zinc-800'}`}
+            className={`w-full rounded-tile ${t[b.key] > 0 ? b.tone : 'bg-foreground/[0.08]'}`}
             style={{ height: t[b.key] > 0 ? `${Math.max(18, (t[b.key] / peak) * 100)}%` : '3px' }}
           />
         </span>
@@ -100,7 +101,7 @@ function Sparkline({ days }: { days: { day: string; count: number }[] }) {
         <span
           key={d.day}
           title={`${d.day} · ${d.count}`}
-          className={`w-[3px] rounded-sm ${d.count > 0 ? 'bg-zinc-400 dark:bg-zinc-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}
+          className={`w-[3px] rounded-tile ${d.count > 0 ? 'bg-foreground/[0.14]' : 'bg-foreground/[0.08]'}`}
           style={{ height: d.count > 0 ? `${Math.max(20, (d.count / peak) * 100)}%` : '2px' }}
         />
       ))}
@@ -110,7 +111,7 @@ function Sparkline({ days }: { days: { day: string; count: number }[] }) {
 
 function HoldingSummary({ row }: { row: TeamActivityRow }) {
   if (row.holding.total === 0 && row.holding.shoots === 0 && row.holding.comments === 0) {
-    return <span className="text-sm text-zinc-400 dark:text-zinc-500">Nothing — free</span>
+    return <span className="text-body-15 text-muted-foreground">Nothing — free</span>
   }
   const parts: string[] = []
   if (row.holding.items > 0) parts.push(`${row.holding.items} owned`)
@@ -119,9 +120,9 @@ function HoldingSummary({ row }: { row: TeamActivityRow }) {
   if (row.holding.comments > 0) parts.push(`${row.holding.comments} tagged`)
   return (
     <span className="flex flex-col">
-      <span className="text-sm tabular-nums">{parts.join(' · ')}</span>
+      <span className="text-body-15 tabular-nums">{parts.join(' · ')}</span>
       {row.holding.by_status.length > 0 && (
-        <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="truncate text-secondary-13 text-muted-foreground">
           {row.holding.by_status.slice(0, 3).map(g => `${g.word} ${g.count}`).join(' · ')}
         </span>
       )}
@@ -165,8 +166,8 @@ export default function TeamActivityPage() {
     return (
       <Card className="border-dashed shadow-none">
         <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-          <Users className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <Users className="h-6 w-6 text-muted-foreground" />
+          <p className="text-body-15 text-muted-foreground">
             This page shows the whole team&rsquo;s workload — ask a super admin to open it for you.
           </p>
         </CardContent>
@@ -176,46 +177,43 @@ export default function TeamActivityPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Team activity</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Everything assigned, and who is holding it. Throughput is this week
-            {data ? ` (${dueLabel(data.week.start)} – ${dueLabel(data.week.end)}, Melbourne)` : ''}.
-          </p>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger className="h-9 w-40 bg-white dark:bg-zinc-900" aria-label="Filter by role">
-              <SelectValue placeholder="All roles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All roles</SelectItem>
-              {Object.entries(ROLE_LABEL).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {(data?.clients.length ?? 0) > 0 && (
-            <Select value={client} onValueChange={setClient}>
-              <SelectTrigger className="h-9 w-48 bg-white dark:bg-zinc-900" aria-label="Filter by client">
-                <SelectValue placeholder="All clients" />
+      <PageTitle
+        title="Team activity"
+        summary={<>Everything assigned, and who is holding it. Throughput is this week {data ? ` (${dueLabel(data.week.start)} – ${dueLabel(data.week.end)}, Melbourne)` : ''}.</>}
+        actions={<>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="h-9 w-40 bg-surface" aria-label="Filter by role">
+                <SelectValue placeholder="All roles" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All clients</SelectItem>
-                {data?.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                <SelectItem value="all">All roles</SelectItem>
+                {Object.entries(ROLE_LABEL).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          )}
-          <Tabs value={sort} onValueChange={v => v && setSort(v as SortKey)}>
-            <TabsList>
-              <TabsTrigger value="overdue">Overdue</TabsTrigger>
-              <TabsTrigger value="holding">Holding</TabsTrigger>
-              <TabsTrigger value="name">Name</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
+            {(data?.clients.length ?? 0) > 0 && (
+              <Select value={client} onValueChange={setClient}>
+                <SelectTrigger className="h-9 w-48 bg-surface" aria-label="Filter by client">
+                  <SelectValue placeholder="All clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All clients</SelectItem>
+                  {data?.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <Tabs value={sort} onValueChange={v => v && setSort(v as SortKey)}>
+              <TabsList>
+                <TabsTrigger value="overdue">Overdue</TabsTrigger>
+                <TabsTrigger value="holding">Holding</TabsTrigger>
+                <TabsTrigger value="name">Name</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </>}
+      />
 
       {data && data.unassigned.total > 0 && (
         <UnassignedPool pool={data.unassigned} />
@@ -228,8 +226,8 @@ export default function TeamActivityPage() {
       ) : rows.length === 0 ? (
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-            <Inbox className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <Inbox className="h-6 w-6 text-muted-foreground" />
+            <p className="text-body-15 text-muted-foreground">
               Nobody is holding work on your clients right now.
             </p>
           </CardContent>
@@ -260,12 +258,12 @@ export default function TeamActivityPage() {
                     >
                       <TableCell>
                         <span className="flex items-center gap-2.5">
-                          <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open === r.id ? 'rotate-90' : ''}`} />
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-100 font-mono text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                          <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open === r.id ? 'rotate-90' : ''}`} />
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-tile bg-foreground/[0.06] font-mono text-secondary-13 text-muted-foreground">
                             {initials(r.name, r.email)}
                           </span>
                           <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium">{r.name || r.email}</span>
+                            <span className="block truncate text-body-15 font-medium">{r.name || r.email}</span>
                             <Badge variant="outline" className={`mt-0.5 font-normal ${ROLE_STYLE[r.role] ?? ''}`}>
                               {ROLE_LABEL[r.role] ?? r.role}
                             </Badge>
@@ -274,13 +272,13 @@ export default function TeamActivityPage() {
                       </TableCell>
                       <TableCell><HoldingSummary row={r} /></TableCell>
                       <TableCell className="text-right font-mono tabular-nums">{r.due.this_week}</TableCell>
-                      <TableCell className={`text-right font-mono tabular-nums ${r.due.overdue > 0 ? 'font-semibold text-red-600 dark:text-red-400' : 'text-zinc-400'}`}>
+                      <TableCell className={`text-right font-mono tabular-nums ${r.due.overdue > 0 ? 'font-semibold text-accent-red' : 'text-muted-foreground'}`}>
                         {r.due.overdue}
                       </TableCell>
                       <TableCell><ThroughputBars t={r.throughput ?? EMPTY_THROUGHPUT} /></TableCell>
                       <TableCell className="text-right">
                         <span className="flex flex-col items-end gap-1">
-                          <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                          <span className="font-mono text-secondary-13 text-muted-foreground">
                             {sinceLabel(r.last_active, now, data.viewer.timezone)}
                           </span>
                           <Sparkline days={r.activity} />
@@ -289,7 +287,7 @@ export default function TeamActivityPage() {
                     </TableRow>
                     {open === r.id && (
                       <TableRow key={`${r.id}-panel`} className="hover:bg-transparent">
-                        <TableCell colSpan={6} className="bg-zinc-50/70 p-0 dark:bg-zinc-900/40">
+                        <TableCell colSpan={6} className="bg-foreground/[0.04] p-0">
                           <PersonPanel person={r} people={rows} canReassign={canReassign} onChanged={load} />
                         </TableCell>
                       </TableRow>
@@ -303,28 +301,28 @@ export default function TeamActivityPage() {
           {/* ── Mobile: the same rows as cards ── */}
           <div className="flex flex-col gap-2 md:hidden">
             {rows.map(r => (
-              <Card key={r.id} className={r.due.overdue > 0 ? 'border-red-200 dark:border-red-900/60' : undefined}>
+              <Card key={r.id} className={r.due.overdue > 0 ? 'border-accent-red/30' : undefined}>
                 <button
                   type="button"
                   onClick={() => setOpen(o => (o === r.id ? null : r.id))}
                   aria-expanded={open === r.id}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left"
                 >
-                  <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open === r.id ? 'rotate-90' : ''}`} />
+                  <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open === r.id ? 'rotate-90' : ''}`} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{r.name || r.email}</span>
-                    <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    <span className="block truncate text-body-15 font-medium">{r.name || r.email}</span>
+                    <span className="block truncate text-secondary-13 text-muted-foreground">
                       {ROLE_LABEL[r.role] ?? r.role} · {sinceLabel(r.last_active, now, data.viewer.timezone)}
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className={`block font-mono text-lg tabular-nums ${r.due.overdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                    <span className={`block font-mono text-lg tabular-nums ${r.due.overdue > 0 ? 'text-accent-red' : 'text-foreground'}`}>
                       {r.due.overdue}
                     </span>
-                    <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400">overdue</span>
+                    <span className="block font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">overdue</span>
                   </span>
                 </button>
-                <div className="flex items-center gap-3 border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">
+                <div className="flex items-center gap-3 border-t border-border px-4 py-2">
                   <HoldingSummary row={r} />
                   <span className="ml-auto shrink-0"><ThroughputBars t={r.throughput ?? EMPTY_THROUGHPUT} /></span>
                 </div>
@@ -338,8 +336,8 @@ export default function TeamActivityPage() {
       )}
 
       {totalOverdue > 0 && (
-        <p className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-          <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+        <p className="flex items-center gap-1.5 text-secondary-13 text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 text-accent-red" />
           {totalOverdue} piece{totalOverdue === 1 ? '' : 's'} past its date across the team. A date is
           read on the client&rsquo;s own calendar, so &ldquo;today&rdquo; is not the same day for every row.
         </p>
@@ -352,12 +350,12 @@ export default function TeamActivityPage() {
 function UnassignedPool({ pool }: { pool: { total: number; items: HeldItem[] } }) {
   const [show, setShow] = useState(false)
   return (
-    <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/20">
+    <Card className="border-accent-amber/35 bg-tint-amber">
       <CardHeader className="flex-row items-center gap-2 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <HandHelping className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+        <CardTitle className="flex items-center gap-2">
+          <HandHelping className="h-4 w-4 text-accent-amber" />
           Unassigned pool
-          <span className="font-mono tabular-nums text-amber-700 dark:text-amber-400">{pool.total}</span>
+          <span className="font-mono tabular-nums text-foreground">{pool.total}</span>
         </CardTitle>
         <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setShow(s => !s)}>
           {show ? 'Hide' : 'Show'}
@@ -367,7 +365,7 @@ function UnassignedPool({ pool }: { pool: { total: number; items: HeldItem[] } }
         </Button>
       </CardHeader>
       <CardContent className="pt-0">
-        <p className="text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="text-secondary-13 text-muted-foreground">
           Work nobody holds — waiting for an editor to claim it, or for a scheduler to take an
           approved piece. Shoot briefs are not in here; an account manager writes those.
         </p>
@@ -375,7 +373,7 @@ function UnassignedPool({ pool }: { pool: { total: number; items: HeldItem[] } }
           <ul className="mt-3 flex flex-col">
             {pool.items.map(i => <ItemLine key={i.id} item={i} />)}
             {pool.total > pool.items.length && (
-              <li className="pt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <li className="pt-2 text-secondary-13 text-muted-foreground">
                 +{pool.total - pool.items.length} more on the board
               </li>
             )}
@@ -400,7 +398,7 @@ function PersonPanel({ person, people, canReassign, onChanged }: {
 
   if (person.items.length === 0) {
     return (
-      <div className="px-4 py-6 text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="px-4 py-6 text-body-15 text-muted-foreground">
         {person.name || person.email} is holding nothing right now.
         {person.holding.shoots > 0 && ` (${person.holding.shoots} shoot${person.holding.shoots === 1 ? '' : 's'} to plan.)`}
       </div>
@@ -434,11 +432,11 @@ function ItemGroup({ title, hint, items, people, canReassign, onChanged, empty }
 }) {
   return (
     <div>
-      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+      <p className="mb-1.5 font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
         {title} <span className="normal-case tracking-normal">· {hint}</span>
       </p>
       {items.length === 0
-        ? <p className="py-2 text-sm text-zinc-400 dark:text-zinc-500">{empty}</p>
+        ? <p className="py-2 text-body-15 text-muted-foreground">{empty}</p>
         : (
           <ul className="flex flex-col">
             {items.map(i => (
@@ -478,22 +476,22 @@ function ItemLine({ item, reassign }: {
   }
 
   return (
-    <li className="flex items-center gap-2.5 border-b border-zinc-100 py-1.5 last:border-b-0 dark:border-zinc-800/60">
+    <li className="flex items-center gap-2.5 border-b border-border py-1.5 last:border-b-0">
       <Link
         href={`/dashboard/production/${item.id}`}
-        className="min-w-0 flex-1 truncate text-sm hover:underline"
+        className="min-w-0 flex-1 truncate text-body-15 hover:underline"
       >
         {item.title}
       </Link>
-      <Badge variant="outline" className="hidden shrink-0 font-normal text-zinc-600 sm:inline-flex dark:text-zinc-400">
+      <Badge variant="outline" className="hidden shrink-0 font-normal text-muted-foreground sm:inline-flex">
         {statusWordOf(item)}
       </Badge>
       {item.client_name && (
-        <span className="hidden shrink-0 truncate text-xs text-zinc-500 lg:block dark:text-zinc-400">
+        <span className="hidden shrink-0 truncate text-secondary-13 text-muted-foreground lg:block">
           {item.client_name}
         </span>
       )}
-      <span className={`shrink-0 font-mono text-xs tabular-nums ${overdue ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}`}>
+      <span className={`shrink-0 font-mono text-secondary-13 tabular-nums ${overdue ? 'text-accent-red' : 'text-muted-foreground'}`}>
         {dueLabel(item.due_date)}
       </span>
       {reassign && (
@@ -502,7 +500,7 @@ function ItemLine({ item, reassign }: {
             aria-label={`Reassign "${item.title}"`}
             className="h-7 w-7 shrink-0 justify-center border-none bg-transparent p-0 shadow-none [&>svg:last-child]:hidden"
           >
-            <UserPlus className="h-3.5 w-3.5 text-zinc-400" />
+            <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
           </SelectTrigger>
           <SelectContent>
             {reassign.people.map(p => (

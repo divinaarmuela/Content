@@ -13,6 +13,7 @@ import SocialChannels from '../clients/SocialChannels'
 import { needsAttention, timeLeftWords } from '../../lib/token-health-core'
 import PlatformIcon from './PlatformIcon'
 import ComposeDialog from './ComposeDialog'
+import PageTitle from '../ui/PageTitle'
 
 type Client = {
   id: string
@@ -93,41 +94,38 @@ export default function SocialPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Social channels</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Connect each client’s accounts. Scheduled posts can only go to the
-            channels linked to that client.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Find a client…"
-              className="w-56 bg-white pl-8 dark:bg-zinc-900"
-            />
+      <PageTitle
+        title="Social channels"
+        summary="Connect each client’s accounts. Scheduled posts can only go to the channels linked to that client."
+        actions={<>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Find a client…"
+                className="w-56 bg-surface pl-8"
+              />
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/social/inbox"><MessageSquare className="h-4 w-4" /> Inbox</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/social/analytics"><BarChart3 className="h-4 w-4" /> Analytics</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/social/automations"><Zap className="h-4 w-4" /> Automations</Link>
+            </Button>
+            <Button size="sm" onClick={() => setComposeFor('')} disabled={!configured}>
+              <PenLine className="h-4 w-4" /> New post
+            </Button>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/social/inbox"><MessageSquare className="h-4 w-4" /> Inbox</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/social/analytics"><BarChart3 className="h-4 w-4" /> Analytics</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/social/automations"><Zap className="h-4 w-4" /> Automations</Link>
-          </Button>
-          <Button size="sm" onClick={() => setComposeFor('')} disabled={!configured}>
-            <PenLine className="h-4 w-4" /> New post
-          </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {!configured && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>Posting isn&apos;t switched on yet — nobody can schedule or publish from here until someone on our side turns it on.</span>
         </div>
@@ -137,7 +135,7 @@ export default function SocialPage() {
           queueing, the provider keeps rejecting, and it surfaces as "why has
           nothing posted". So it is called out here, not only on the detail page. */}
       {expiring.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+        <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
             <strong>
@@ -186,8 +184,8 @@ export default function SocialPage() {
             <Card key={c.id}>
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold tracking-tight">{c.name}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  <span className="text-card-title">{c.name}</span>
+                  <span className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-muted-foreground">
                     {c.status}
                   </span>
 
@@ -198,12 +196,12 @@ export default function SocialPage() {
                         {platformsFor(c.id).map(p => (
                           <PlatformIcon
                             key={p} platform={p} size={20}
-                            className="ring-2 ring-white dark:ring-zinc-900"
+                            className="ring-2 ring-white"
                           />
                         ))}
                       </div>
                     )}
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <span className="text-secondary-13 text-muted-foreground">
                       {countFor(c.id) === 0
                         ? 'not connected'
                         : `${countFor(c.id)} channel${countFor(c.id) === 1 ? '' : 's'}`}

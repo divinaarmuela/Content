@@ -57,7 +57,7 @@ export default function ServicePicker({
                 type="button"
                 onClick={() => onChange(removeService(value, s))}
                 aria-label={`Remove ${s}`}
-                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-muted-foreground"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -82,7 +82,7 @@ export default function ServicePicker({
             }
           }}
           placeholder="Pick below, or type a new service and press Enter"
-          className="bg-white dark:bg-zinc-900"
+          className="bg-surface"
         />
         {draft.trim() && (
           <Button type="button" variant="outline" size="sm" onClick={() => commit(draft)}>
@@ -98,7 +98,7 @@ export default function ServicePicker({
               key={s}
               type="button"
               onClick={() => commit(s)}
-              className="rounded-full border border-zinc-200 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
+              className="rounded-full border border-border px-2.5 py-1 text-secondary-13 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
             >
               {s}
             </button>
@@ -106,7 +106,7 @@ export default function ServicePicker({
         </div>
       )}
 
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p className="text-secondary-13 text-muted-foreground">
         {isNew
           ? `“${draft.trim()}” is new — adding it here makes it available to every project, and it becomes a filter on the Work page.`
           : 'These are the filters visitors see on the Work page. Reuse an existing one where you can.'}

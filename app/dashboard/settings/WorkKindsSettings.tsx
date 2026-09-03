@@ -19,8 +19,8 @@ type Kind = {
 }
 
 const COLOR_DOT: Record<string, string> = {
-  zinc: 'bg-zinc-400', pink: 'bg-pink-500', sky: 'bg-sky-500', indigo: 'bg-indigo-500',
-  violet: 'bg-violet-500', emerald: 'bg-emerald-500', amber: 'bg-amber-500', rose: 'bg-rose-500',
+  zinc: 'bg-foreground/[0.14]', pink: 'bg-accent-red', sky: 'bg-accent-blue', indigo: 'bg-accent-blue',
+  violet: 'bg-accent-blue', emerald: 'bg-accent-green', amber: 'bg-accent-amber', rose: 'bg-accent-red',
 }
 
 /**
@@ -103,16 +103,16 @@ export default function WorkKindsSettings() {
     return (
       <Card>
         <CardContent className="flex flex-col gap-2 py-8">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <Lock className="h-4 w-4 text-zinc-400" /> Work types
+          <h3 className="flex items-center gap-2 text-body-15 font-semibold">
+            <Lock className="h-4 w-4 text-muted-foreground" /> Work types
           </h3>
-          <p className="max-w-lg text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="max-w-lg text-body-15 text-muted-foreground">
             These are the kinds of work the New item dialog offers — reel,
             carousel, shoot plan, and so on. Only account managers and super
             admins can change them, because the choice files everybody&rsquo;s work.
           </p>
           {kinds.length > 0 && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               Right now: {kinds.map(k => k.name).join(', ')}.
             </p>
           )}
@@ -126,8 +126,8 @@ export default function WorkKindsSettings() {
       <CardContent className="flex flex-col gap-3 py-5">
         <div className="flex items-baseline justify-between">
           <div>
-            <h3 className="text-sm font-semibold">Work types</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <h3 className="text-body-15 font-semibold">Work types</h3>
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               The kinds of work the New item dialog offers. Each one suggests
               who usually does it. Archive rather than delete — old items keep
               the label they were filed under.
@@ -139,7 +139,7 @@ export default function WorkKindsSettings() {
         </div>
 
         {adding && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-tile border border-border p-3">
             <Input autoFocus value={draft.name} placeholder="e.g. Motion graphics" className="w-56"
               onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && create()} />
@@ -162,20 +162,20 @@ export default function WorkKindsSettings() {
         <div className="flex flex-col gap-1.5">
           {kinds.map(k => (
             <div key={k.id}
-              className={`flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 ${k.active ? '' : 'opacity-50'}`}>
+              className={`flex flex-wrap items-center gap-3 rounded-tile border border-border px-3 py-2 ${k.active ? '' : 'opacity-50'}`}>
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${COLOR_DOT[k.color] ?? COLOR_DOT.zinc}`} />
               <Input key={`${k.id}:${k.name}`} defaultValue={k.name} disabled={busy !== null}
-                className="h-8 w-48 border-transparent bg-transparent px-1 text-sm shadow-none hover:border-zinc-200 dark:hover:border-zinc-800"
+                className="h-8 w-48 border-transparent bg-transparent px-1 text-body-15 shadow-none hover:border-border"
                 onBlur={e => {
                   const v = e.target.value.trim()
                   if (v && v !== k.name) void patch(k, { name: v }, `Renamed to "${v}"`)
                 }} />
-              <span className="font-mono text-[11px] text-muted-foreground">
+              <span className="font-mono text-[12px] text-muted-foreground">
                 suggests {k.default_roles.length ? k.default_roles.map(r => r.replace('_', ' ')).join(', ') : 'anyone'}
               </span>
               {!k.active && <Badge variant="outline" className="font-normal text-muted-foreground">archived</Badge>}
               <button type="button" disabled={busy !== null}
-                className="ml-auto text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                className="ml-auto text-secondary-13 text-muted-foreground hover:text-foreground disabled:opacity-50"
                 onClick={() => void patch(k, { active: !k.active }, k.active ? `"${k.name}" archived` : `"${k.name}" is back`)}>
                 {k.active ? 'Archive' : 'Restore'}
               </button>

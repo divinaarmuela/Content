@@ -69,7 +69,7 @@ function PostedMetrics(
   const cells = metricCells(metrics)
   if (metricsPending(metrics)) {
     return (
-      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{METRICS_PENDING_LINE}</p>
+      <p className="text-[12px] text-muted-foreground">{METRICS_PENDING_LINE}</p>
     )
   }
   return (
@@ -77,14 +77,14 @@ function PostedMetrics(
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
         {cells.map(c => (
           <span key={c.key} className="flex items-baseline gap-1">
-            <span className="font-mono text-xs tabular-nums">{compactCount(c.value)}</span>
-            <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+            <span className="font-mono text-secondary-13 tabular-nums">{compactCount(c.value)}</span>
+            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
               {c.label}
             </span>
           </span>
         ))}
       </div>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
         suppressHydrationWarning>
         {/* These numbers belong to a post this app never published. Saying so
             is the difference between a figure and an unexplained figure: the
@@ -96,7 +96,7 @@ function PostedMetrics(
           : metrics?.synced_at ? updatedAgo(metrics.synced_at) : null}
       </span>
       {isExternalRow(metrics) && metrics?.synced_at && (
-        <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
           suppressHydrationWarning>
           {updatedAgo(metrics.synced_at)}
         </span>
@@ -218,7 +218,7 @@ export default function PostingCard(props: Props) {
   /** "Melbourne time (AEST)" plus "= 1:00 pm your time" under a picker */
   const pickerNote = (
     <>
-      <span className="font-medium text-zinc-500 dark:text-zinc-400">{zoneNote}</span>
+      <span className="font-medium text-muted-foreground">{zoneNote}</span>
       {whenIso && hint(whenIso) && <> · {hint(whenIso)}</>}
     </>
   )
@@ -296,8 +296,8 @@ export default function PostingCard(props: Props) {
   }
 
   const manualRow = (
-    <div className="mt-1 flex flex-col gap-2.5 rounded-lg border border-dashed border-zinc-200 p-3 dark:border-zinc-800">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+    <div className="mt-1 flex flex-col gap-2.5 rounded-inner border border-dashed border-border p-3">
+      <p className="font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
         Posting it yourself
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -307,10 +307,10 @@ export default function PostingCard(props: Props) {
             {platforms.map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Input type="datetime-local" value={pickedWhen} className="font-mono text-xs"
+        <Input type="datetime-local" value={pickedWhen} className="font-mono text-secondary-13"
           onChange={e => setPickedWhen(e.target.value)} />
       </div>
-      <p className="-mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+      <p className="-mt-1 text-[12px] text-muted-foreground">
         {whenIso
           ? <>“Set date” records {when(whenIso)}. {hint(whenIso)}</>
           : pickerNote}
@@ -333,7 +333,7 @@ export default function PostingCard(props: Props) {
           Save the live link
         </Button>
       </div>
-      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+      <p className="text-[12px] text-muted-foreground">
         “Mark as posted” is for anything that went out without a link — a Story,
         or files handed over.
       </p>
@@ -342,7 +342,7 @@ export default function PostingCard(props: Props) {
 
   const manualLink = (
     <button type="button" onClick={() => setManual(m => !m)}
-      className="w-fit text-xs text-zinc-500 underline-offset-4 hover:underline dark:text-zinc-400">
+      className="w-fit text-secondary-13 text-muted-foreground underline-offset-4 hover:underline">
       {manual ? 'Hide the manual fields' : 'Post manually instead'}
     </button>
   )
@@ -377,9 +377,9 @@ export default function PostingCard(props: Props) {
    *  channel, and the hour in the client's zone. */
   const firstSlide = (previewSlides ?? [])[0] ?? null
   const previewPanel = (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+    <div className="overflow-hidden rounded-inner border border-border">
       {firstSlide && (
-        <div className="max-h-64 w-full overflow-hidden bg-zinc-950">
+        <div className="max-h-64 w-full overflow-hidden bg-foreground">
           {firstSlide.type === 'video' ? (
             <video src={firstSlide.url} muted playsInline controls preload="metadata" className="max-h-64 w-full object-contain" />
           ) : (
@@ -389,25 +389,25 @@ export default function PostingCard(props: Props) {
         </div>
       )}
       {(previewSlides?.length ?? 0) > 1 && (
-        <p className="border-b border-zinc-100 px-3 py-1.5 text-[11px] text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+        <p className="border-b border-border px-3 py-1.5 text-[12px] text-muted-foreground">
           {previewSlides!.length} slides — the first is shown; they post in the order under Versions.
         </p>
       )}
       <div className="flex flex-col gap-2 p-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-wrap items-center gap-2 text-secondary-13 text-muted-foreground">
           <PlatformIcon platform={platform} size={16} />
-          <span className="font-medium text-zinc-700 dark:text-zinc-200">{label}</span>
+          <span className="font-medium text-muted-foreground">{label}</span>
           {posting?.accounts.find(a => a.platform === platform)?.username && (
             <span className="font-mono">@{posting!.accounts.find(a => a.platform === platform)!.username}</span>
           )}
           <span>·</span>
-          <span>{whenIso ? <>{when(whenIso)} {hint(whenIso) && <span className="text-zinc-400">({hint(whenIso)})</span>}</> : 'posts as soon as it is queued'}</span>
+          <span>{whenIso ? <>{when(whenIso)} {hint(whenIso) && <span className="text-muted-foreground">({hint(whenIso)})</span>}</> : 'posts as soon as it is queued'}</span>
         </div>
         <div>
-          <p className="mb-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-400">The caption, exactly as it will post</p>
+          <p className="mb-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">The caption, exactly as it will post</p>
           {caption?.trim()
-            ? <p className="whitespace-pre-wrap text-sm">{caption}</p>
-            : <p className="text-sm text-zinc-400">No caption — it would go out with the title as its text.</p>}
+            ? <p className="whitespace-pre-wrap text-body-15">{caption}</p>
+            : <p className="text-body-15 text-muted-foreground">No caption — it would go out with the title as its text.</p>}
         </div>
       </div>
     </div>
@@ -420,7 +420,7 @@ export default function PostingCard(props: Props) {
       <Button size="sm" disabled title={WAITING_LINE}>
         {isPast ? `Post now on ${label}` : `Schedule on ${label}`}
       </Button>
-      <span className="text-xs text-amber-600 dark:text-amber-400">{WAITING_LINE}</span>
+      <span className="text-secondary-13 text-accent-amber">{WAITING_LINE}</span>
     </div>
   )
 
@@ -428,7 +428,7 @@ export default function PostingCard(props: Props) {
   const approvalBlock = gate === 'open' ? null : (
     <div className="flex flex-col gap-2.5">
       {gate === 'resend' && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             <strong>Changes were asked for on this post.</strong>
@@ -441,11 +441,11 @@ export default function PostingCard(props: Props) {
       {(gate === 'send' || gate === 'resend') && (
         sendOpen ? (
           <>
-            <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            <p className="text-secondary-13 font-medium text-muted-foreground">
               This is what gets approved — check it reads exactly right:
             </p>
             {previewPanel}
-            <label className="flex min-h-11 items-center gap-2.5 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+            <label className="flex min-h-11 items-center gap-2.5 text-secondary-13 text-muted-foreground md:min-h-0">
               <Switch checked={clientToo} onCheckedChange={setClientToo} />
               {clientName} approves the final post too (it appears on their portal)
             </label>
@@ -467,7 +467,7 @@ export default function PostingCard(props: Props) {
               {manualLink}
             </div>
             {!caption?.trim() && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+              <p className="text-secondary-13 text-accent-amber">
                 Write the caption first — the caption is what gets approved.
               </p>
             )}
@@ -477,7 +477,7 @@ export default function PostingCard(props: Props) {
 
       {gate === 'waiting' && (
         <>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-secondary-13 text-muted-foreground">
             The post is with {approval?.client_required ? `the account manager and ${clientName}` : 'the account manager'} for
             final sign-off. Nothing goes out until someone approves it.
           </p>
@@ -487,12 +487,12 @@ export default function PostingCard(props: Props) {
 
       {gate === 'decide' && (
         <>
-          <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+          <p className="text-secondary-13 font-medium text-muted-foreground">
             This post needs your sign-off — the caption and timing, exactly as it will appear:
           </p>
           {previewPanel}
           {approval?.client_required && (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               {clientName} was asked to approve it too — it is on their portal.
             </p>
           )}
@@ -503,7 +503,7 @@ export default function PostingCard(props: Props) {
               autoFocus
               onChange={e => setApprovalNote(e.target.value)}
               placeholder="What should change before it goes out?"
-              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+              className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border"
             />
           )}
           <div className="flex flex-wrap gap-2">
@@ -540,7 +540,7 @@ export default function PostingCard(props: Props) {
     <div className="flex flex-col gap-3">
       {!canAutoPublish ? (
         <>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-secondary-13 text-muted-foreground">
             Publishing to the channels is done by the scheduling team; add the live link here once it&rsquo;s up.
           </p>
           {manualRow}
@@ -548,7 +548,7 @@ export default function PostingCard(props: Props) {
       ) : (
         <>
           {state.kind === 'not_configured' && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>Publishing is not configured on the server, so nothing can go out from here yet. Post it yourself and record the link below.</span>
             </div>
@@ -558,9 +558,9 @@ export default function PostingCard(props: Props) {
             <>
               <div className="flex items-center gap-2">
                 <PlatformIcon platform={platform} size={22} className="opacity-40 grayscale" />
-                <p className="text-sm font-medium">{clientName} has no {label} connected</p>
+                <p className="text-body-15 font-medium">{clientName} has no {label} connected</p>
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-secondary-13 text-muted-foreground">
                 We can&rsquo;t post for them until their account is linked. The link opens
                 {' '}{label}&rsquo;s own login — nobody types the client&rsquo;s password here.
               </p>
@@ -581,19 +581,19 @@ export default function PostingCard(props: Props) {
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <PlatformIcon platform={platform} size={22} />
-                <span className="text-sm font-medium">{label}</span>
+                <span className="text-body-15 font-medium">{label}</span>
                 {posting?.accounts.find(a => a.platform === platform)?.username && (
-                  <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="font-mono text-secondary-13 text-muted-foreground">
                     @{posting.accounts.find(a => a.platform === platform)!.username}
                   </span>
                 )}
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-accent-green" />
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">When should it go out? — {zoneNote}</Label>
-                <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-xs"
+                <Label className="text-secondary-13">When should it go out? — {zoneNote}</Label>
+                <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-secondary-13"
                   onChange={e => setPickedWhen(e.target.value)} />
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[12px] text-muted-foreground">
                   {whenIso
                     ? isPast
                       ? 'That time has passed — this will post immediately.'
@@ -602,7 +602,7 @@ export default function PostingCard(props: Props) {
                 </p>
               </div>
               {!caption?.trim() && gate === 'open' && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="text-secondary-13 text-accent-amber">
                   There is no caption yet — it will go out with the title as its text.
                 </p>
               )}
@@ -610,7 +610,7 @@ export default function PostingCard(props: Props) {
                 <>
                   {/* the gate has been through and said yes — the queue is open */}
                   {approval?.supported && approval.state === 'approved' && (
-                    <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+                    <p className="flex items-center gap-1.5 text-secondary-13 text-foreground">
                       <CheckCircle2 className="h-3.5 w-3.5" /> Final post approved
                       {approval.approved_at ? ` — ${when(approval.approved_at)}` : ''}.
                       Changing the caption or the media will need a fresh approval.
@@ -632,27 +632,27 @@ export default function PostingCard(props: Props) {
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <PlatformIcon platform={platform} size={22} />
-                <p className="text-sm font-medium">
+                <p className="text-body-15 font-medium">
                   {state.when
                     ? `Queued for ${when(state.when)} on ${label}`
                     : `Queued on ${label}`}
-                  <span className="font-normal text-zinc-500 dark:text-zinc-400"> · will post automatically</span>
+                  <span className="font-normal text-muted-foreground"> · will post automatically</span>
                 </p>
                 {state.when && hint(state.when) && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint(state.when)}</span>
+                  <span className="text-secondary-13 text-muted-foreground">{hint(state.when)}</span>
                 )}
               </div>
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] text-muted-foreground">
                 {state.handedOver
                   ? `${label} is holding it until then — nobody needs to do anything.`
                   : 'Waiting to be handed to the channel; this happens within a minute.'}
               </p>
               {rescheduling && (
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">New time — {zoneNote}</Label>
-                  <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-xs"
+                  <Label className="text-secondary-13">New time — {zoneNote}</Label>
+                  <Input type="datetime-local" value={pickedWhen} className="w-fit font-mono text-secondary-13"
                     onChange={e => setPickedWhen(e.target.value)} />
-                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{pickerNote}</p>
+                  <p className="text-[12px] text-muted-foreground">{pickerNote}</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
@@ -681,14 +681,14 @@ export default function PostingCard(props: Props) {
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <PlatformIcon platform={platform} size={22} />
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                <span className="text-body-15 font-medium text-foreground">
                   Posted{state.at ? ` ${when(state.at)}` : ''}
                 </span>
                 {state.at && hint(state.at) && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint(state.at)}</span>
+                  <span className="text-secondary-13 text-muted-foreground">{hint(state.at)}</span>
                 )}
                 {state.manual && (
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                  <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
                     recorded by hand
                   </span>
                 )}
@@ -696,11 +696,11 @@ export default function PostingCard(props: Props) {
               {(state.permalink ?? posting?.metrics?.post_url)
                 ? (
                   <a href={(state.permalink ?? posting?.metrics?.post_url)!} target="_blank" rel="noreferrer noopener"
-                    className="flex w-fit items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-400">
+                    className="flex w-fit items-center gap-1 text-secondary-13 text-accent-green hover:underline">
                     See the post <ExternalLink className="h-3 w-3" />
                   </a>
                 )
-                : <p className="text-[11px] text-zinc-400 dark:text-zinc-500">No link — a Story, or posted without one.</p>}
+                : <p className="text-[12px] text-muted-foreground">No link — a Story, or posted without one.</p>}
               {/* A post recorded by hand was never handed to the provider — but
                   the platform still counted it, and the provider's own list of
                   posts made directly on the account is where those numbers
@@ -713,7 +713,7 @@ export default function PostingCard(props: Props) {
                 : posting?.metrics
                   ? <PostedMetrics metrics={posting.metrics} platform={state.platform} />
                   : postedEntry?.external_match_state === 'not_found' && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    <p className="text-[12px] text-accent-amber">
                       Couldn&rsquo;t find this post on {label} — check the link.
                     </p>
                   )}
@@ -722,7 +722,7 @@ export default function PostingCard(props: Props) {
 
           {state.kind === 'failed' && (
             <>
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              <div className="flex items-start gap-2 rounded-inner border border-accent-red/30 bg-tint-red px-3 py-2 text-secondary-13 text-foreground">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
                   <strong>{label} did not post it.</strong><br />{state.error}

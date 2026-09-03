@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRole } from '../useRole'
+import PageTitle from '../ui/PageTitle'
 
 /**
  * Settings shell. Each tab is a real child route, so a refresh keeps your
@@ -32,29 +33,26 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Your profile, how work is filed, and the accounts this workspace is
-          connected to. People and roles are on the Team page.
-        </p>
-      </div>
+      <PageTitle
+        title="Settings"
+        summary="Your profile, how work is filed, and the accounts this workspace is connected to. People and roles are on the Team page."
+      />
 
       {/* hold the shape until the role is known — no tab bar that morphs */}
       {loading ? (
         <Skeleton className="h-9 w-96" />
       ) : (
-        <nav className="flex flex-wrap items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60 sm:w-fit">
+        <nav className="flex flex-wrap items-center gap-1 rounded-inner bg-foreground/[0.06] p-1 sm:w-fit">
           {TABS.filter(t => isSuper || !t.superOnly).map(t => {
             const active = pathname === t.href
             return (
               <Link
                 key={t.href}
                 href={t.href}
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                className={`rounded-tile px-3 py-1.5 text-body-15 transition-colors ${
                   active
-                    ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-surface font-medium text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {t.label}

@@ -44,10 +44,10 @@ export function NotSetUp({ feature, detail, className }: {
   }, [feature, detail])
 
   return (
-    <div className={`mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 px-6 py-14 text-center dark:border-zinc-700 ${className ?? ''}`}>
-      <AlertTriangle className="h-6 w-6 text-amber-500" />
-      <p className="text-sm font-medium">{feature} isn&apos;t switched on yet</p>
-      <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+    <div className={`mx-auto flex max-w-md flex-col items-center gap-3 rounded-inner border border-dashed border-border px-6 py-14 text-center ${className ?? ''}`}>
+      <AlertTriangle className="h-6 w-6 text-accent-amber" />
+      <p className="text-body-15 font-medium">{feature} isn&apos;t switched on yet</p>
+      <p className="max-w-sm text-secondary-13 leading-relaxed text-muted-foreground">
         {notSetUpMessage(feature)}
       </p>
       <TellTech subject={`${feature} isn't switched on`} detail={detail} />
@@ -67,10 +67,10 @@ export function LoadFailed({ what, detail, onRetry, className }: {
   }, [what, detail])
 
   return (
-    <div className={`flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700 ${className ?? ''}`}>
-      <AlertTriangle className="h-5 w-5 text-amber-500" />
-      <p className="text-sm font-medium">We couldn&apos;t load {what}</p>
-      <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+    <div className={`flex flex-col items-center gap-3 rounded-inner border border-dashed border-border px-6 py-12 text-center ${className ?? ''}`}>
+      <AlertTriangle className="h-5 w-5 text-accent-amber" />
+      <p className="text-body-15 font-medium">We couldn&apos;t load {what}</p>
+      <p className="max-w-sm text-secondary-13 leading-relaxed text-muted-foreground">
         {loadFailedMessage(what)}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-2">

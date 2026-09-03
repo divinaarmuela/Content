@@ -24,9 +24,9 @@ export default function UploadTray() {
   const waiting = uploads.filter(u => u.status === 'queued').length
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <span className="text-xs font-semibold">
+    <div className="fixed bottom-4 right-4 z-50 w-80 rounded-inner border border-border bg-surface shadow-lg">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <span className="text-secondary-13 font-semibold">
           {active.length > 0
             ? `${overall.label}${waiting > 0 ? ` · ${waiting} waiting` : ''}`
             : 'Uploads finished'}
@@ -36,7 +36,7 @@ export default function UploadTray() {
             type="button"
             onClick={clearFinishedUploads}
             aria-label="Dismiss uploads"
-            className="ml-auto text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            className="ml-auto text-muted-foreground hover:text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -44,7 +44,7 @@ export default function UploadTray() {
       </div>
 
       {uploads.length > 1 && (
-        <div className="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+        <div className="border-b border-border px-3 py-2">
           <UploadOverall uploads={uploads} />
         </div>
       )}
@@ -54,7 +54,7 @@ export default function UploadTray() {
       </div>
 
       {active.length > 0 && (
-        <p className="border-t border-zinc-100 px-3 py-1.5 text-[11px] text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+        <p className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
           Keep this tab open — you can keep working anywhere in the dashboard.
         </p>
       )}

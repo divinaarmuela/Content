@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import LeadsReportCard from './LeadsReportCard'
+import PageTitle from '../ui/PageTitle'
 
 const TREND_DATA = [
   { week: 'W1', reach: 18200, engagement: 1230 },
@@ -61,24 +62,24 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Reports</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Performance snapshot — May 2026.</p>
-        </div>
-        <Badge
-          variant="outline"
-          className="ml-auto font-mono text-[11px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
-        >
-          Demo data
-        </Badge>
-      </div>
+      <PageTitle
+        title="Reports"
+        summary="Performance snapshot — May 2026."
+        actions={<>
+          <Badge
+            variant="outline"
+            className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground"
+          >
+            Demo data
+          </Badge>
+        </>}
+      />
 
       <LeadsReportCard />
 
       <div className="flex flex-wrap items-center gap-2">
         <Select value={client} onValueChange={v => setClient(v ?? 'All Clients')}>
-          <SelectTrigger className="w-48 bg-white dark:bg-zinc-900">
+          <SelectTrigger className="w-48 bg-surface">
             <SelectValue placeholder="Select client" />
           </SelectTrigger>
           <SelectContent>
@@ -114,19 +115,19 @@ export default function ReportsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {METRICS.map(m => (
-          <Card key={m.label} className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <Card key={m.label} className="border-border bg-surface">
             <CardHeader className="pb-2">
-              <CardTitle className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+              <CardTitle className="font-mono text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {m.label}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-mono text-3xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+              <p className="font-mono text-3xl font-semibold tabular-nums text-foreground">
                 {m.value}
               </p>
               <p
-                className={`mt-1 flex items-center gap-1 text-xs ${
-                  m.up ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+                className={`mt-1 flex items-center gap-1 text-secondary-13 ${
+                  m.up ? 'text-foreground' : 'text-foreground'
                 }`}
               >
                 {m.up ? (
@@ -142,9 +143,9 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <Card className="border-border bg-surface">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            <CardTitle>
               Reach &amp; engagement trend
             </CardTitle>
           </CardHeader>
@@ -193,21 +194,21 @@ export default function ReportsPage() {
               </LineChart>
             </ResponsiveContainer>
             <div className="mt-2 flex items-center gap-4">
-              <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+              <span className="flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-blue" />
                 Reach
               </span>
-              <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+              <span className="flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-foreground/[0.14]" />
                 Engagement
               </span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <Card className="border-border bg-surface">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            <CardTitle>
               Platform breakdown
             </CardTitle>
           </CardHeader>
@@ -215,16 +216,16 @@ export default function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
                     Platform
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
                     Reach
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
                     Engagement
                   </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                  <TableHead className="text-right font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
                     Clicks
                   </TableHead>
                 </TableRow>
@@ -232,14 +233,14 @@ export default function ReportsPage() {
               <TableBody>
                 {PLATFORM_DATA.map(p => (
                   <TableRow key={p.name}>
-                    <TableCell className="font-medium text-zinc-900 dark:text-zinc-100">{p.name}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-200">
+                    <TableCell className="font-medium text-foreground">{p.name}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
                       {p.reach.toLocaleString('en-US')}
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-200">
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
                       {p.engagement.toLocaleString('en-US')}
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-200">
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
                       {p.clicks.toLocaleString('en-US')}
                     </TableCell>
                   </TableRow>
@@ -250,15 +251,15 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="border-border bg-surface">
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <CardTitle>
             Report commentary
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Textarea
-            className="min-h-24 resize-y bg-zinc-50 dark:bg-zinc-900 text-sm leading-relaxed text-zinc-700 dark:text-zinc-200"
+            className="min-h-24 resize-y bg-foreground/[0.04] text-body-15 leading-relaxed text-muted-foreground"
             defaultValue="May showed strong reach performance across Instagram and TikTok, with engagement up 8% month-on-month. Link clicks dipped slightly — recommend A/B testing CTA copy in June."
           />
         </CardContent>

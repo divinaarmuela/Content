@@ -120,7 +120,7 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
               </SelectContent>
             </Select>
 
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               {VISIBILITY[visibility].hint}. Saved with your name and the time.
             </p>
 
@@ -142,15 +142,15 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
       ) : (
         <ol className="flex flex-col">
           {notes.map(n => (
-            <li key={n.id} className="group flex gap-3 border-b border-zinc-100 py-4 last:border-b-0 dark:border-zinc-800">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            <li key={n.id} className="group flex gap-3 border-b border-border py-4 last:border-b-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] font-mono text-[12px] text-muted-foreground">
                 {initials(n.author_name)}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-medium">{n.author_name || 'Unknown'}</span>
+                  <span className="text-body-15 font-medium">{n.author_name || 'Unknown'}</span>
                   <span
-                    className="font-mono text-[11px] text-zinc-400"
+                    className="font-mono text-[12px] text-muted-foreground"
                     title={new Date(n.created_at).toLocaleString('en-AU')}
                   >
                     {when(n.created_at)}
@@ -159,7 +159,7 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
                       would be noise on the default case. */}
                   {n.visibility && n.visibility !== 'team' && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                      className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider text-muted-foreground"
                       title={VISIBILITY[n.visibility].hint}
                     >
                       {(() => { const I = VISIBILITY[n.visibility].icon; return <I className="h-2.5 w-2.5" /> })()}
@@ -179,14 +179,14 @@ export default function NotesPanel({ clientId }: { clientId: string }) {
                   >
                     <button
                       aria-label="Delete note"
-                      className="ml-auto rounded p-2 text-zinc-400 transition-colors hover:text-red-500 dark:text-zinc-500"
+                      className="ml-auto rounded p-2 text-muted-foreground transition-colors hover:text-accent-red"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </ConfirmAction>
                 </div>
                 {/* whitespace-pre-wrap so paragraphs survive as typed */}
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                <p className="mt-1 whitespace-pre-wrap text-body-15 leading-relaxed text-muted-foreground">
                   {n.body}
                 </p>
               </div>

@@ -70,27 +70,27 @@ export default function GettingStarted({ role, page = 'overview' }: {
   }
 
   return (
-    <section className="mb-1 rounded-xl border border-blue-200 bg-blue-50/60 p-4 sm:p-5 dark:border-blue-900 dark:bg-blue-950/30"
+    <section className="mb-1 rounded-card border border-accent-blue/25 bg-tint-blue p-4 sm:p-5"
       aria-label="Getting started">
       <div className="flex items-start gap-2.5">
-        <Compass className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-        <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-200">{panel.heading}</h2>
+        <Compass className="mt-0.5 h-4 w-4 shrink-0 text-accent-blue-deep" />
+        <h2 className="text-body-15 font-semibold text-foreground">{panel.heading}</h2>
       </div>
 
       <ol className="mt-4 grid gap-4 sm:grid-cols-3">
         {panel.steps.map((step, i) => (
           <li key={step.title} className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium">
-              <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold text-white">
+            <p className="text-body-15 font-medium">
+              <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-blue text-[12px] font-semibold text-white">
                 {i + 1}
               </span>
               {step.title}
             </p>
-            <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{step.body}</p>
+            <p className="text-secondary-13 leading-relaxed text-muted-foreground">{step.body}</p>
             {step.href && step.linkLabel && (
               <Link
                 href={step.href}
-                className="mt-auto inline-flex min-h-11 items-center gap-1 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
+                className="mt-auto inline-flex min-h-11 items-center gap-1 text-secondary-13 font-medium text-foreground hover:underline"
               >
                 {step.linkLabel} <ArrowRight className="h-3.5 w-3.5" />
               </Link>

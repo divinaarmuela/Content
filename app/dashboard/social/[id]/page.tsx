@@ -127,7 +127,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="flex flex-col gap-4">
         <Back />
-        <Card><CardContent className="p-6 text-sm text-red-600 dark:text-red-400">{error}</CardContent></Card>
+        <Card><CardContent className="p-6 text-body-15 text-accent-red">{error}</CardContent></Card>
       </div>
     )
   }
@@ -178,21 +178,21 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
           <PlatformIcon platform={account.platform} size={48} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold tracking-tight">
+              <h2 className="text-section-title">
                 {account.username ? `@${account.username}` : account.name ?? brand.label}
               </h2>
-              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              <span className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-muted-foreground">
                 {brand.label}
               </span>
               {token?.valid
-                ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                ? <span className="inline-flex items-center gap-1 rounded-full bg-tint-green px-2.5 py-1.5 text-chip-12 text-foreground">
                     <CheckCircle2 className="h-3 w-3" /> Healthy
                   </span>
-                : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                : <span className="inline-flex items-center gap-1 rounded-full bg-tint-red px-2.5 py-1.5 text-chip-12 text-foreground">
                     <XCircle className="h-3 w-3" /> Needs reconnecting
                   </span>}
             </div>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               {client
                 ? <>Publishing for <Link href="/dashboard/social" className="underline decoration-dotted">{client.name}</Link></>
                 : 'Not linked to a client'}
@@ -212,7 +212,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
             )}
             <Link
               href={`/dashboard/social/inbox?account=${encodeURIComponent(account.provider_account_id)}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              className="inline-flex items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-body-15 transition-colors hover:bg-foreground/[0.04]"
             >
               <MessageSquare className="h-3.5 w-3.5" /> Inbox
             </Link>
@@ -225,12 +225,12 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
           that fired on every TikTok and YouTube account from the day it was
           connected, and pointed at a button it had not rendered. */}
       {notice && (
-        <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
+        <div className={`flex items-start gap-2 rounded-inner border px-3 py-2 text-secondary-13 ${
           notice.level === 'act'
-            ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+            ? 'border-accent-amber/35 bg-tint-amber text-foreground'
             : notice.level === 'watch'
-            ? 'border-amber-200 text-amber-800 dark:border-amber-900 dark:text-amber-300'
-            : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
+            ? 'border-accent-amber/35 text-foreground'
+            : 'border-border text-muted-foreground'
         }`}>
           <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
@@ -244,7 +244,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       )}
 
       {missing.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {/* the raw scope strings ("instagram_manage_comments") meant
               nothing to anyone reading this page; the instruction does */}
@@ -270,7 +270,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
         ))}
         {metrics.length === 0 && (
           <Card className="sm:col-span-2 lg:col-span-3">
-            <CardContent className="p-4 text-xs text-zinc-500 dark:text-zinc-400">
+            <CardContent className="p-4 text-secondary-13 text-muted-foreground">
               No insights available for this account yet. Platforms only report figures
               once there is activity, and {brand.label} data can lag by up to 48 hours.
             </CardContent>
@@ -279,7 +279,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {insights?.dateRange?.since && (
-        <p className="-mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="-mt-2 text-secondary-13 text-muted-foreground">
           {insights.dateRange.since} → {insights.dateRange.until}
           {insights.dataDelay ? ` · ${insights.dataDelay}` : ''}
         </p>
@@ -289,7 +289,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       {(daily?.dailyData?.length ?? 0) > 0 && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="mb-3 text-sm font-semibold tracking-tight">Recent daily activity</h3>
+            <h3 className="mb-3 text-card-title">Recent daily activity</h3>
             <Trend points={daily!.dailyData!} />
           </CardContent>
         </Card>
@@ -299,18 +299,18 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       <Card>
         <CardContent className="p-4">
           <div className="mb-3 flex items-center gap-2">
-            <h3 className="text-sm font-semibold tracking-tight">
-              Posts <span className="font-normal text-zinc-400 dark:text-zinc-500">({analysedPosts.length})</span>
+            <h3 className="text-card-title">
+              Posts <span className="font-normal text-muted-foreground">({analysedPosts.length})</span>
             </h3>
             {overview && (
-              <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="ml-auto text-secondary-13 text-muted-foreground">
                 {overview.publishedPosts ?? 0} published · {overview.scheduledPosts ?? 0} scheduled
               </span>
             )}
           </div>
 
           {analysedPosts.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               No posts found for this account yet.
             </p>
           ) : (
@@ -319,11 +319,11 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                 const m = p.analytics ?? {}
                 const url = p.platforms?.find(x => x.platformPostUrl)?.platformPostUrl
                 return (
-                  <li key={p._id ?? i} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                  <li key={p._id ?? i} className="rounded-inner border border-border p-3">
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm">{p.content || '(no caption)'}</p>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="truncate text-body-15">{p.content || '(no caption)'}</p>
+                        <p className="text-secondary-13 text-muted-foreground">
                           {p.status ?? 'published'} · {when(p.publishedAt ?? p.createdAt)}
                           {typeof m.engagementRate === 'number' && m.engagementRate > 0 &&
                             ` · ${m.engagementRate.toFixed(1)}% engagement`}
@@ -331,7 +331,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                       </div>
                       {url && (
                         <a href={url} target="_blank" rel="noopener noreferrer"
-                           className="shrink-0 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                           className="shrink-0 text-muted-foreground hover:text-foreground"
                            title="Open on the platform">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
@@ -342,8 +342,8 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                     <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
                       {POST_METRICS.map(([k, label]) => (
                         <div key={k}>
-                          <dt className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</dt>
-                          <dd className="font-mono text-sm tabular-nums">
+                          <dt className="text-[12px] text-muted-foreground">{label}</dt>
+                          <dd className="font-mono text-body-15 tabular-nums">
                             {typeof m[k] === 'number' ? (m[k] as number).toLocaleString() : '—'}
                           </dd>
                         </div>
@@ -360,30 +360,30 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       {/* ── comments ──────────────────────────────────────────────────── */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
-            <MessageSquare className="h-3.5 w-3.5 text-zinc-400" />
-            Activity <span className="font-normal text-zinc-400 dark:text-zinc-500">({myComments.length})</span>
+          <h3 className="mb-3 flex items-center gap-1.5 text-card-title">
+            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+            Activity <span className="font-normal text-muted-foreground">({myComments.length})</span>
           </h3>
           {myComments.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               No posts with comments found for this account.
             </p>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
               {myComments.map((c, i) => (
-                <li key={c.id ?? i} className="flex gap-3 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+                <li key={c.id ?? i} className="flex gap-3 rounded-inner border border-border p-2">
                   {c.picture && (
                     // provider-hosted CDN image; next/image would need host config
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={c.picture} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{c.content || '(no caption)'}</p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{when(c.createdTime)}</p>
+                    <p className="truncate text-body-15">{c.content || '(no caption)'}</p>
+                    <p className="text-secondary-13 text-muted-foreground">{when(c.createdTime)}</p>
                   </div>
                   {c.permalink && (
                     <a href={c.permalink} target="_blank" rel="noopener noreferrer"
-                       className="shrink-0 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                       className="shrink-0 text-muted-foreground hover:text-foreground">
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
@@ -403,7 +403,7 @@ function Back() {
   return (
     <Link
       href="/dashboard/social"
-      className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground"
     >
       <ArrowLeft className="h-3.5 w-3.5" /> Social channels
     </Link>
@@ -414,11 +414,11 @@ function Stat({ label, value, sub }: { label: string; value: number | null; sub?
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-secondary-13 text-muted-foreground">{label}</p>
         <p className="font-mono text-2xl tabular-nums">
-          {value === null ? <span className="text-zinc-300 dark:text-zinc-600">—</span> : value.toLocaleString()}
+          {value === null ? <span className="text-muted-foreground">—</span> : value.toLocaleString()}
         </p>
-        {sub && <p className="text-xs text-zinc-500 dark:text-zinc-400">{sub}</p>}
+        {sub && <p className="text-secondary-13 text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
   )
@@ -441,22 +441,22 @@ function Trend({ points }: { points: DailyPoint[] }) {
           const v = p.metrics?.impressions ?? 0
           return (
             <div key={p.date} className="flex w-9 shrink-0 flex-col items-center gap-1">
-              <span className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+              <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
                 {v}
               </span>
               <div
-                className="w-full rounded-t bg-zinc-400 dark:bg-zinc-600"
+                className="w-full rounded-t bg-foreground/[0.14]"
                 style={{ height: Math.max(3, (v / max) * 56) }}
                 title={`${p.date} · ${v} impressions`}
               />
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+              <span className="text-[12px] text-muted-foreground">
                 {p.date.slice(5)}
               </span>
             </div>
           )
         })}
       </div>
-      <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+      <p className="mt-1 text-[12px] text-muted-foreground">
         Impressions per day{recent.length === 1 ? ' — only one day of data so far' : ''}
       </p>
     </div>

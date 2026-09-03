@@ -556,13 +556,13 @@ export default function NewItemDialog({
             {/* a quantity is ONE card, so the title stays singular */}
             {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item <HelpHint term="item" /></>}
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogDescription className="text-secondary-13">
             {isBriefKind ? 'The concept and shot list the client signs off before we film. * required'
               : isTaskKind ? 'Research, strategy or copy — work with nothing to post. * required'
               : `Lands on the Editor board in ${DRAFTING_LANE}, ready for an editor. * required`}
           </DialogDescription>
           {mobile && hasFilesStep && (
-            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 font-medium text-muted-foreground">
               Step {step === 'details' ? '1 of 2 — the details' : '2 of 2 — the files'}
             </p>
           )}
@@ -583,11 +583,11 @@ export default function NewItemDialog({
               </SelectContent>
             </Select>
             {isTaskKind ? (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] text-muted-foreground">
                 A task can be for any client — it never leaves the team.
               </p>
             ) : isBriefKind ? (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] text-muted-foreground">
                 Any client — planning a shoot is often the first work a new
                 client has, so this is not limited to the ones you run.
               </p>
@@ -608,7 +608,7 @@ export default function NewItemDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] text-muted-foreground">
                 {!draft.client_id
                   ? 'Choose a client to see their shoots.'
                   : briefableShoots.length === 0
@@ -633,13 +633,13 @@ export default function NewItemDialog({
             </Select>
             {needsAdhocReason && (
               <div className="grid gap-1">
-                <Label className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                <Label className="text-secondary-13 font-normal text-muted-foreground">
                   Where is the footage from? *
                 </Label>
                 <Input value={adhocReason} placeholder="e.g. the client sent phone footage via WeTransfer"
-                  onChange={e => setAdhocReason(e.target.value)} className="text-xs" />
+                  onChange={e => setAdhocReason(e.target.value)} className="text-secondary-13" />
                 {/* the no-shoot path, explained in one sentence */}
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[12px] text-muted-foreground">
                   Items usually come from a shoot; when the footage came from somewhere else, say where, and it is kept with the item.
                 </p>
               </div>
@@ -647,7 +647,7 @@ export default function NewItemDialog({
           </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Title * {(draft.count > 1 || regularTotal > 1) && <span className="text-xs text-zinc-400">(numbered automatically)</span>}</Label>
+            <Label>Title * {(draft.count > 1 || regularTotal > 1) && <span className="text-secondary-13 text-muted-foreground">(numbered automatically)</span>}</Label>
             <Input value={draft.title} placeholder={isTaskKind ? "e.g. Competitor research — October" : isBriefKind ? "e.g. October clinic day" : "e.g. May shoot — BTS reel"} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
           {/* ONE card, a MIX of formats. One row {reel,1} = a single plain
@@ -655,7 +655,7 @@ export default function NewItemDialog({
               carousels + 2 videos in one card that fills up per type. */}
           {!isBriefKind && !isTaskKind && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Formats <span className="text-xs font-normal text-zinc-400">(what this card is — add a row for each kind)</span></Label>
+            <Label>Formats <span className="text-secondary-13 font-normal text-muted-foreground">(what this card is — add a row for each kind)</span></Label>
             {draft.formats.map((f, i) => (
               <div key={i} className="flex items-center gap-2">
                 <Select value={f.type} onValueChange={v => v && setDraft(d => ({
@@ -674,11 +674,11 @@ export default function NewItemDialog({
                 {draft.formats.length > 1 && (
                   <button type="button" aria-label="Remove format"
                     onClick={() => setDraft(d => ({ ...d, formats: d.formats.filter((_, j) => j !== i) }))}
-                    className="flex h-11 w-11 items-center justify-center text-zinc-400 hover:text-red-500">&#10005;</button>
+                    className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-accent-red">&#10005;</button>
                 )}
               </div>
             ))}
-            <Button type="button" variant="ghost" size="sm" className="w-fit text-zinc-500"
+            <Button type="button" variant="ghost" size="sm" className="w-fit text-muted-foreground"
               onClick={() => setDraft(d => ({ ...d, formats: [...d.formats, { type: 'reel', qty: 1 }] }))}>
               <Plus className="h-3.5 w-3.5" /> Add another format
             </Button>
@@ -686,7 +686,7 @@ export default function NewItemDialog({
                 It is one line now, not two: attached files no longer change
                 the outcome, so the dialog no longer predicts two of them. */}
             {plannedTarget(draft.formats) > 1 && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="text-[12px] text-muted-foreground">
                 One card — {plannedSummary(draft.formats)}.{' '}
                 {draft.raw_assets.length > 0 || draft.raw_assets_url.trim()
                   ? 'The pieces are made now, and everything you attached goes on every one of them.'
@@ -710,7 +710,7 @@ export default function NewItemDialog({
             {/* the picker's own order follows the BROWSER's locale, which is
                 not ours to set — so echo the date back in words. An Australian
                 typing 09/15 for 15 September sees it immediately. */}
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-[12px] text-muted-foreground">
               {draft.due_date
                 ? new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
                 : 'Shown in words once picked.'}
@@ -718,11 +718,11 @@ export default function NewItemDialog({
           </div>
           {isTaskKind && (
           <div className="grid gap-1.5">
-            <Label>How many pieces? <span className="text-xs font-normal text-zinc-400">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
+            <Label>How many pieces? <span className="text-secondary-13 font-normal text-muted-foreground">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
             <Input type="number" min={1} max={30} value={draft.count}
               onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
             {draft.count > 1 && (
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              <p className="text-[12px] text-muted-foreground">
                 One card on the Production board with {draft.count} pieces inside. Attached files make it a single task instead.
               </p>
             )}
@@ -732,7 +732,7 @@ export default function NewItemDialog({
             <div className="grid gap-1.5">
               <Label>
                 Kind of work{isTaskKind ? ' *' : ''}
-                <span className="ml-1 text-xs font-normal text-zinc-400">
+                <span className="ml-1 text-secondary-13 font-normal text-muted-foreground">
                   {isTaskKind ? '' : '(optional)'}
                 </span>
               </Label>
@@ -776,20 +776,20 @@ export default function NewItemDialog({
                 </div>
               )}
               {isTaskKind && (
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[12px] text-muted-foreground">
                   What kind of work this is. Managers can add a kind from the list.
                 </p>
               )}
               {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
                 <button type="button"
-                  className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                  className="flex w-fit items-center gap-1.5 rounded-full border border-accent-blue/25 bg-tint-blue px-2.5 py-1.5 text-chip-12 text-accent-blue-deep hover:bg-tint-blue"
                   onClick={() => { kindTouchedRef.current = true; setDraft(d => ({ ...d, work_kind_id: kindHint.kind_id })); setKindHint(null) }}>
                   ✦ Looks like <span className="font-semibold">{kindHint.name}</span> — click to use
                 </button>
               )}
               {kindHint && kindHint.match === 'new' && isManager && (
                 <button type="button"
-                  className="flex w-fit items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700 hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                  className="flex w-fit items-center gap-1.5 rounded-full border border-accent-blue/25 bg-tint-blue px-2.5 py-1.5 text-chip-12 text-accent-blue-deep hover:bg-tint-blue"
                   onClick={async () => {
                     const hint = kindHint
                     setKindHint(null)
@@ -850,11 +850,11 @@ export default function NewItemDialog({
           {/* does the client have to sign this off, or can we finish it in
               house? A task never asks; a brief always does. */}
           {!isTaskKind && !isBriefKind && (
-            <label className="flex items-center gap-2.5 self-end pb-1.5 text-sm sm:col-span-2">
+            <label className="flex items-center gap-2.5 self-end pb-1.5 text-body-15 sm:col-span-2">
               <Switch checked={clientApproval} onCheckedChange={setClientApproval} />
               <span>
                 Client must approve this
-                <span className="block text-[11px] text-zinc-400 dark:text-zinc-500">
+                <span className="block text-[12px] text-muted-foreground">
                   Off means an account manager can approve it without sending it out.
                 </span>
               </span>
@@ -862,21 +862,21 @@ export default function NewItemDialog({
           )}
           {!hidesMedia && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Folder link <span className="text-xs font-normal text-zinc-400">(Google Drive — what the editor works from)</span></Label>
+            <Label>Folder link <span className="text-secondary-13 font-normal text-muted-foreground">(Google Drive — what the editor works from)</span></Label>
             <Input value={draft.raw_assets_url} placeholder="https://drive.google.com/drive/folders/…"
-              onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-xs" />
+              onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-secondary-13" />
           </div>
           )}
           {isBriefKind && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Plan link <span className="text-xs font-normal text-zinc-400">(Milanote or anywhere — or write the concept and shot list on the shoot page)</span></Label>
+              <Label>Plan link <span className="text-secondary-13 font-normal text-muted-foreground">(Milanote or anywhere — or write the concept and shot list on the shoot page)</span></Label>
               <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
-                onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-xs" />
+                onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-secondary-13" />
             </div>
           )}
           {isBriefKind && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Deliverables <HelpHint term="deliverable" /> * <span className="text-xs font-normal text-zinc-400">(what the shoot must produce)</span></Label>
+              <Label>Deliverables <HelpHint term="deliverable" /> * <span className="text-secondary-13 font-normal text-muted-foreground">(what the shoot must produce)</span></Label>
               {draft.deliverables.map((d0, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Select value={d0.type} onValueChange={v => v && setDraft(d => ({
@@ -893,24 +893,24 @@ export default function NewItemDialog({
                     }))} />
                   <button type="button" aria-label="Remove deliverable"
                     onClick={() => setDraft(d => ({ ...d, deliverables: d.deliverables.filter((_, j) => j !== i) }))}
-                    className="flex h-11 w-11 items-center justify-center text-zinc-400 hover:text-red-500">&#10005;</button>
+                    className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-accent-red">&#10005;</button>
                 </div>
               ))}
-              <Button type="button" variant="ghost" size="sm" className="w-fit text-zinc-500"
+              <Button type="button" variant="ghost" size="sm" className="w-fit text-muted-foreground"
                 onClick={() => setDraft(d => ({ ...d, deliverables: [...d.deliverables, { type: 'reel', qty: 1 }] }))}>
                 <Plus className="h-3.5 w-3.5" /> Add deliverable
               </Button>
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Editing notes'} <span className="text-xs font-normal text-zinc-400">{isBriefKind ? '(context for whoever reviews the plan)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
+            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Editing notes'} <span className="text-secondary-13 font-normal text-muted-foreground">{isBriefKind ? '(context for whoever reviews the plan)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
             <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
           </div>
         </div>
         {showFiles && (
           <div className="grid gap-1.5">
-            <Label>Files <span className="text-xs font-normal text-zinc-400">{isTaskKind ? '(anything the task needs — docs, decks, references; as many as you like)' : '(footage for the editor — or use the folder link for full shoots)'}</span></Label>
+            <Label>Files <span className="text-secondary-13 font-normal text-muted-foreground">{isTaskKind ? '(anything the task needs — docs, decks, references; as many as you like)' : '(footage for the editor — or use the folder link for full shoots)'}</span></Label>
             {/* the drop zone is the path; the button is the same path for a
                 thumb. Rows underneath say what is happening to each file. */}
             <div
@@ -918,12 +918,12 @@ export default function NewItemDialog({
               onDragLeave={() => setDragging(false)}
               onDrop={e => { e.preventDefault(); setDragging(false); void onAssetFiles(e.dataTransfer.files) }}
               onClick={() => assetFileRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
-                dragging ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
-                  : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+              className={`flex cursor-pointer flex-col items-center gap-1 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors ${
+                dragging ? 'border-accent-blue/25 bg-tint-blue'
+                  : 'border-border hover:border-border'
               }`}>
-              <p className="text-sm font-medium">{assetBusy ? 'Uploading…' : 'Choose files, or drag them here'}</p>
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Any size — they go straight to our storage. You can skip this and add files later.</p>
+              <p className="text-body-15 font-medium">{assetBusy ? 'Uploading…' : 'Choose files, or drag them here'}</p>
+              <p className="text-[12px] text-muted-foreground">Any size — they go straight to our storage. You can skip this and add files later.</p>
             </div>
             {draft.raw_assets.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -932,7 +932,7 @@ export default function NewItemDialog({
                     <span className="max-w-40 truncate">{a.name}</span>
                     <button type="button" aria-label={`Remove ${a.name}`}
                       onClick={() => setDraft(d => ({ ...d, raw_assets: d.raw_assets.filter(x => x.url !== a.url) }))}
-                      className="text-zinc-400 hover:text-red-500">✕</button>
+                      className="text-muted-foreground hover:text-accent-red">✕</button>
                   </Badge>
                 ))}
               </div>
@@ -940,7 +940,7 @@ export default function NewItemDialog({
             {/* what is actually happening to the files, per file: name, size,
                 bar, %, speed, time left, cancel, and Retry with the reason */}
             {assetUploads.length > 0 && (
-              <div className="flex flex-col gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-800">
+              <div className="flex flex-col gap-2 rounded-tile border border-border p-2">
                 <UploadOverall uploads={assetUploads} />
                 <UploadRows uploads={assetUploads} />
               </div>
@@ -968,7 +968,7 @@ export default function NewItemDialog({
         {/* the reason the button is grey, said where the person is looking —
             not as a toast after twelve fields are filled in */}
         {missing && (
-          <p className="-mt-2 text-right text-xs text-amber-600 dark:text-amber-400">{missing}</p>
+          <p className="-mt-2 text-right text-secondary-13 text-accent-amber">{missing}</p>
         )}
       </DialogContent>
     </Dialog>

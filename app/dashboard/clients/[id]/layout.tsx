@@ -13,6 +13,7 @@ import {
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
 import { canSeeSubpage } from '@/app/lib/page-access-core'
+import PageTitle from '../../ui/PageTitle'
 
 /**
  * One client, one shell. The tabs are real CHILD ROUTES rather than state:
@@ -30,9 +31,9 @@ type Client = {
 }
 
 const STATUS: Record<string, string> = {
-  active: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  paused: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  archived: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+  active: 'bg-tint-green text-foreground border-accent-green/30',
+  paused: 'bg-tint-amber text-foreground border-accent-amber/35',
+  archived: 'bg-foreground/[0.06] text-muted-foreground border-border',
 }
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -71,7 +72,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     return (
       <Card className="border-dashed shadow-none">
         <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">That client no longer exists.</p>
+          <p className="text-body-15 text-muted-foreground">That client no longer exists.</p>
           <Button variant="outline" size="sm" asChild>
             <Link href="/dashboard/clients">Back to clients</Link>
           </Button>
@@ -110,28 +111,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </Button>
 
         {client ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-950 font-mono text-sm text-white">
-              {client.name.slice(0, 2).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <h2 className="truncate text-lg font-semibold tracking-tight">{client.name}</h2>
-              <p className="font-mono text-xs text-zinc-400">
-                {client.industry || 'No industry set'} · /{client.slug}
-              </p>
-            </div>
-
-            <Badge variant="outline" className={`${STATUS[client.status] ?? STATUS.archived} capitalize`}>
-              {client.status}
-            </Badge>
-
-            {portalUrl && (
-              <Button variant="outline" size="sm" className="ml-auto"
-                onClick={() => { navigator.clipboard.writeText(portalUrl); toast.success('Portal link copied') }}>
-                <Copy className="h-3.5 w-3.5" /> Portal link
-              </Button>
-            )}
-          </div>
+          <PageTitle
+            title={client.name}
+            summary={`${client.industry || 'No industry set'} · /${client.slug}`}
+            actions={<>
+              <Badge variant="outline" className={`${STATUS[client.status] ?? STATUS.archived} capitalize`}>
+                {client.status}
+              </Badge>
+              {portalUrl && (
+                <Button variant="outline" size="sm"
+                  onClick={() => { navigator.clipboard.writeText(portalUrl); toast.success('Portal link copied') }}>
+                  <Copy className="h-3.5 w-3.5" /> Portal link
+                </Button>
+              )}
+            </>}
+          />
         ) : (
           <Skeleton className="h-11 w-72" />
         )}
@@ -141,7 +135,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       {/* the fade is the only thing that says "there is more this way" — the
           bar scrolled silently before, so half the tabs did not exist */}
       <div className="relative max-w-full">
-      <nav className="inline-flex w-fit max-w-full items-center justify-start overflow-x-auto rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+      <nav className="inline-flex w-fit max-w-full items-center justify-start overflow-x-auto rounded-inner bg-foreground/[0.06] p-1">
         {TABS.map(t => {
           const Icon = t.icon
           const active = t.exact ? path === t.href : path.startsWith(t.href)
@@ -149,10 +143,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <Link
               key={t.href}
               href={t.href}
-              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all ${
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-tile px-3 py-2.5 text-body-15 font-medium transition-all ${
                 active
-                  ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  ? 'bg-surface text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="h-3.5 w-3.5" /> {t.label}
@@ -162,7 +156,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       </nav>
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end rounded-r-lg bg-gradient-to-l from-zinc-100 to-transparent pr-1 text-zinc-400 dark:from-zinc-800"
+        className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end rounded-r-lg bg-gradient-to-l from-background to-transparent pr-1 text-muted-foreground"
       >
         <ChevronRight className="h-3.5 w-3.5" />
       </span>

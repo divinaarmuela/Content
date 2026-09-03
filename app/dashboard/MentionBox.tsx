@@ -92,20 +92,20 @@ export default function MentionBox({
         }}
         aria-autocomplete="list"
         aria-expanded={open}
-        className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+        className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border"
       />
       {open && (
         <ul role="listbox" aria-label="Tag someone"
-          className="absolute left-0 top-full z-30 mt-1 w-64 max-w-full overflow-hidden rounded-lg border border-zinc-200 bg-popover shadow-lg dark:border-zinc-700">
+          className="absolute left-0 top-full z-30 mt-1 w-64 max-w-full overflow-hidden rounded-inner border border-border bg-popover shadow-lg">
           {options.map((m, i) => (
             <li key={m.id} role="option" aria-selected={i === active}>
               <button type="button"
                 onMouseDown={e => e.preventDefault()}
                 onClick={() => choose(m)}
-                className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm ${
-                  i === active ? 'bg-zinc-100 dark:bg-zinc-800' : ''
+                className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-body-15 ${
+                  i === active ? 'bg-foreground/[0.06]' : ''
                 }`}>
-                <AtSign className="h-3.5 w-3.5 text-zinc-400" />
+                <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
                 {m.name}
               </button>
             </li>
@@ -114,7 +114,7 @@ export default function MentionBox({
       )}
       {members.length > 0 && (
         <button type="button" onClick={tagButton} disabled={disabled}
-          className="flex min-h-11 w-fit items-center gap-1.5 rounded-md px-2 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+          className="flex min-h-11 w-fit items-center gap-1.5 rounded-tile px-2 text-secondary-13 text-muted-foreground hover:text-foreground">
           <AtSign className="h-3.5 w-3.5" /> Tag someone
         </button>
       )}

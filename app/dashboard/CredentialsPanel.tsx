@@ -36,7 +36,7 @@ const BLANK = { platform: '', label: '', username: '', secret: '', url: '', note
 /** Sentinel for the free-text escape in the platform Select. */
 const OTHER = '__other'
 /** a bare 14px glyph is not a tap target — this gives the finger 44px on touch */
-const ICON_TAP = 'inline-flex items-center justify-center rounded p-1 text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11'
+const ICON_TAP = 'inline-flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-muted-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11'
 
 const SUGGESTED = [
   'Instagram', 'Facebook', 'Meta Business', 'Meta Ads', 'TikTok', 'LinkedIn',
@@ -116,7 +116,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-body-15 text-muted-foreground">
           {items.length} credential{items.length === 1 ? '' : 's'}
         </p>
         {!draft && canEdit && (
@@ -126,14 +126,14 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
         )}
       </div>
 
-      <p className="flex items-start gap-2 rounded-md bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <p className="flex items-start gap-2 rounded-tile bg-foreground/[0.04] px-3 py-2.5 text-secondary-13 text-muted-foreground">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-green" />
         Passwords are encrypted before they are stored and are never included when this list
         loads — click the eye to reveal one.{canEdit ? '' : ' Only a super admin can change them.'}
       </p>
 
       {draft && (
-        <Card className="border-blue-200 dark:border-blue-900">
+        <Card className="border-accent-blue/25">
           <CardContent className="grid gap-4 py-5 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>Platform</Label>
@@ -165,7 +165,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
               )}
             </div>
             <div className="grid gap-1.5">
-              <Label>Label <span className="text-xs text-zinc-400">(which account)</span></Label>
+              <Label>Label <span className="text-secondary-13 text-muted-foreground">(which account)</span></Label>
               <Input value={draft.label ?? ''} placeholder="Main account, ads manager…"
                 onChange={e => setDraft(d => ({ ...d, label: e.target.value }))} />
             </div>
@@ -177,7 +177,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
             <div className="grid gap-1.5">
               <Label>
                 Password
-                {draft.id && <span className="ml-1 text-xs text-zinc-400">(blank = leave unchanged)</span>}
+                {draft.id && <span className="ml-1 text-secondary-13 text-muted-foreground">(blank = leave unchanged)</span>}
               </Label>
               {/* Visible while typing, with a toggle to mask it. Masking by
                   default only guards against someone reading your screen —
@@ -189,14 +189,14 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   value={draft.secret ?? ''}
                   autoComplete="off"
                   spellCheck={false}
-                  className="pr-9 font-mono text-sm"
+                  className="pr-9 font-mono text-body-15"
                   onChange={e => setDraft(d => ({ ...d, secret: e.target.value }))}
                 />
                 <button
                   type="button"
                   onClick={() => setMaskDraft(m => !m)}
                   aria-label={maskDraft ? 'Show password' : 'Hide password'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-muted-foreground"
                 >
                   {maskDraft ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 </button>
@@ -208,7 +208,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                 onChange={e => setDraft(d => ({ ...d, url: e.target.value }))} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Notes <span className="text-xs text-zinc-400">(2FA, recovery…)</span></Label>
+              <Label>Notes <span className="text-secondary-13 text-muted-foreground">(2FA, recovery…)</span></Label>
               <Input value={draft.notes ?? ''}
                 onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))} />
             </div>
@@ -234,7 +234,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
                 <TableHead>Platform</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead className="w-64">Password</TableHead>
@@ -248,12 +248,12 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{c.platform}</p>
-                        {c.label && <p className="truncate text-xs text-zinc-400">{c.label}</p>}
+                        <p className="truncate text-body-15 font-medium">{c.platform}</p>
+                        {c.label && <p className="truncate text-secondary-13 text-muted-foreground">{c.label}</p>}
                       </div>
                       {c.url && (
                         <a href={c.url} target="_blank" rel="noreferrer noopener"
-                          className="text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-zinc-200"
+                          className="text-muted-foreground transition-colors hover:text-muted-foreground"
                           aria-label={`Open ${c.platform}`}>
                           <ExternalLink className="h-3 w-3" />
                         </a>
@@ -264,7 +264,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   <TableCell>
                     {c.username ? (
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-300">
+                        <span className="truncate font-mono text-secondary-13 text-muted-foreground">
                           {c.username}
                         </span>
                         <button onClick={() => { navigator.clipboard.writeText(c.username); toast.success('Username copied') }}
@@ -273,15 +273,15 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
-                    ) : <span className="text-xs text-zinc-400">—</span>}
+                    ) : <span className="text-secondary-13 text-muted-foreground">—</span>}
                   </TableCell>
 
                   <TableCell>
                     {!c.has_secret ? (
-                      <span className="text-xs text-zinc-400">none stored</span>
+                      <span className="text-secondary-13 text-muted-foreground">none stored</span>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
+                        <span className="min-w-0 flex-1 truncate font-mono text-secondary-13 text-muted-foreground">
                           {revealed[c.id] ?? '••••••••••'}
                         </span>
                         <button onClick={() => reveal(c)}
@@ -301,11 +301,11 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   </TableCell>
 
                   <TableCell>
-                    <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="font-mono text-secondary-13 text-muted-foreground">
                       {new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                     </p>
                     {c.updated_by_name && (
-                      <p className="truncate text-[11px] text-zinc-400">by {c.updated_by_name}</p>
+                      <p className="truncate text-[12px] text-muted-foreground">by {c.updated_by_name}</p>
                     )}
                   </TableCell>
 
@@ -329,7 +329,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                           load()
                         }}
                       >
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:text-red-600"
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-accent-red hover:text-accent-red"
                           aria-label={`Delete the ${c.platform} login`}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -347,7 +347,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
       {items.some(c => c.notes) && (
         <div className="flex flex-col gap-1.5">
           {items.filter(c => c.notes).map(c => (
-            <p key={c.id} className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p key={c.id} className="text-secondary-13 text-muted-foreground">
               <Badge variant="outline" className="mr-2 font-normal">{c.platform}</Badge>
               {c.notes}
             </p>

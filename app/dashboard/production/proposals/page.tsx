@@ -34,10 +34,10 @@ type Proposal = {
 }
 
 const STATUS_STYLE: Record<ShootStatus, string> = {
-  pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  accepted: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  declined: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900',
-  cancelled: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+  pending: 'bg-tint-amber text-foreground border-accent-amber/35',
+  accepted: 'bg-tint-green text-foreground border-accent-green/30',
+  declined: 'bg-tint-red text-foreground border-accent-red/30',
+  cancelled: 'bg-foreground/[0.06] text-muted-foreground border-border',
 }
 
 const fmtWhen = (startsAt: string, endsAt: string) => {
@@ -99,7 +99,7 @@ export default function ProposalsPage() {
     return (
       <Card className="border-dashed shadow-none">
         <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-body-15 text-muted-foreground">
             No shoot proposals yet — send one from a free day in the Availability view.
           </p>
         </CardContent>
@@ -112,7 +112,7 @@ export default function ProposalsPage() {
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+            <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
               <TableHead>Shoot</TableHead>
               <TableHead>When</TableHead>
               <TableHead className="hidden md:table-cell">Sent to</TableHead>
@@ -124,16 +124,16 @@ export default function ProposalsPage() {
             {proposals.map(p => (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="text-sm font-medium">{p.title}</div>
-                  <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
+                  <div className="text-body-15 font-medium">{p.title}</div>
+                  <div className="font-mono text-secondary-13 text-muted-foreground">
                     {p.clients?.name ?? '—'}
                   </div>
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-400">
+                <TableCell className="whitespace-nowrap text-body-15 text-muted-foreground">
                   {fmtWhen(p.starts_at, p.ends_at)}
                 </TableCell>
                 <TableCell className="hidden max-w-56 md:table-cell">
-                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" title={p.send_to}>
+                  <p className="truncate text-secondary-13 text-muted-foreground" title={p.send_to}>
                     {p.send_to}
                   </p>
                 </TableCell>
@@ -161,7 +161,7 @@ export default function ProposalsPage() {
                     {canManage && p.status !== 'cancelled' && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-red-600"
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-accent-red"
                             title="Cancel this proposal" aria-label={`Cancel ${p.title}`}>
                             <Ban className="h-3.5 w-3.5" />
                           </Button>
@@ -177,7 +177,7 @@ export default function ProposalsPage() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Keep it</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => cancel(p.id)} className="bg-red-600 hover:bg-red-700">
+                            <AlertDialogAction onClick={() => cancel(p.id)} className="bg-accent-red hover:bg-accent-red">
                               Cancel proposal
                             </AlertDialogAction>
                           </AlertDialogFooter>

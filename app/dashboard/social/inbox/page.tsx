@@ -18,6 +18,7 @@ import {
 import PlatformIcon from '../PlatformIcon'
 import ConfirmAction from '../../ConfirmAction'
 import EmptyState from '../../EmptyState'
+import PageTitle from '../../ui/PageTitle'
 
 /**
  * Master/detail on a phone.
@@ -335,52 +336,49 @@ export default function InboxPage() {
     <div className="flex flex-col gap-4">
       <Link
         href="/dashboard/social"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Social channels
       </Link>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Inbox</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Comments and direct messages across every connected account, answered
-            from one place.
-          </p>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-        {/* The one filled button used to read "Schedule a post" and link to
-            /dashboard/social — which is the channels LIST, not a scheduler. A
-            primary action that goes somewhere else is worse than none. */}
-        {accounts.length > 0 && (
-          <Select value={acct} onValueChange={changeAccount}>
-            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              {accounts.map(a => (
-                <SelectItem key={a.id} value={a.provider_account_id}>{acctLabel(a)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <div className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/60">
-          {(['comments', 'messages'] as const).map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`min-h-11 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                tab === t
-                  ? 'bg-white font-medium text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
-              }`}
-            >
-              {t === 'comments' ? 'Comments' : 'Direct messages'}
-            </button>
-          ))}
-        </div>
-        </div>
-      </div>
+      <PageTitle
+        title="Inbox"
+        summary="Comments and direct messages across every connected account, answered from one place."
+        actions={<>
+          <div className="flex flex-wrap items-center gap-2">
+          {/* The one filled button used to read "Schedule a post" and link to
+              /dashboard/social — which is the channels LIST, not a scheduler. A
+              primary action that goes somewhere else is worse than none. */}
+          {accounts.length > 0 && (
+            <Select value={acct} onValueChange={changeAccount}>
+              <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.provider_account_id}>{acctLabel(a)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
+            {(['comments', 'messages'] as const).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`min-h-11 rounded-tile px-3 py-1.5 text-body-15 transition-colors ${
+                  tab === t
+                    ? 'bg-surface font-medium text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t === 'comments' ? 'Comments' : 'Direct messages'}
+              </button>
+            ))}
+          </div>
+          </div>
+        </>}
+      />
 
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
@@ -410,18 +408,18 @@ export default function InboxPage() {
                     <button
                       type="button"
                       onClick={() => void openConvo(c)}
-                      className={`flex w-full flex-col gap-0.5 rounded-lg p-2.5 text-left transition-colors ${
-                        activeConvo?.id === c.id ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'
+                      className={`flex w-full flex-col gap-0.5 rounded-inner p-2.5 text-left transition-colors ${
+                        activeConvo?.id === c.id ? 'bg-foreground/[0.06]' : 'hover:bg-foreground/[0.04]'
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
                         {c.platform && <PlatformIcon platform={c.platform} size={14} />}
-                        <span className="truncate text-sm font-medium">{convName(c)}</span>
+                        <span className="truncate text-body-15 font-medium">{convName(c)}</span>
                         {typeof c.unreadCount === 'number' && c.unreadCount > 0 && (
-                          <span className="ml-auto rounded-full bg-blue-600 px-1.5 py-0.5 font-mono text-[10px] text-white">{c.unreadCount}</span>
+                          <span className="ml-auto rounded-full bg-accent-blue px-2.5 py-1.5 font-mono text-chip-12 text-white">{c.unreadCount}</span>
                         )}
                       </span>
-                      <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{convPreview(c)}</span>
+                      <span className="truncate text-secondary-13 text-muted-foreground">{convPreview(c)}</span>
                     </button>
                   </li>
                 ))}
@@ -435,8 +433,8 @@ export default function InboxPage() {
           <CardContent className="p-4">
             {!activeConvo ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
-                <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
+                <p className="text-body-15 text-muted-foreground">
                   {visibleConvos && visibleConvos.length > 0
                     ? 'Choose a conversation on the left to read and reply.'
                     : 'Conversations open here.'}
@@ -444,36 +442,36 @@ export default function InboxPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
                   <Button variant="ghost" size="sm" className="-ml-2 lg:hidden"
                     onClick={() => { setActiveConvo(null); setMessages(null) }}>
                     <ArrowLeft className="h-4 w-4" /> All conversations
                   </Button>
-                  <p className="min-w-0 truncate text-sm font-medium">{convName(activeConvo)}</p>
+                  <p className="min-w-0 truncate text-body-15 font-medium">{convName(activeConvo)}</p>
                 </div>
                 {messages === null ? (
                   <div className="flex flex-col gap-2">{[0, 1].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
                 ) : messages.length === 0 ? (
-                  <p className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="py-6 text-body-15 text-muted-foreground">
                     Nothing in this conversation yet — write the first message below.
                   </p>
                 ) : (
                   <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto">
                     {messages.map(m => (
-                      <div key={m.id} className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
+                      <div key={m.id} className={`max-w-[80%] rounded-card px-3.5 py-2 text-body-15 ${
                         msgMine(m)
-                          ? 'self-end bg-blue-600 text-white'
-                          : 'self-start bg-zinc-100 dark:bg-zinc-800'
+                          ? 'self-end bg-accent-blue text-white'
+                          : 'self-start bg-foreground/[0.06]'
                       }`}>
                         {msgText(m)}
-                        <span className={`mt-0.5 block text-[10px] ${msgMine(m) ? 'text-blue-100' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                        <span className={`mt-0.5 block text-[12px] ${msgMine(m) ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>
                           {ago(m.createdTime ?? m.createdAt ?? m.timestamp)}
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="flex gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <div className="flex gap-2 border-t border-border pt-3">
                   <Textarea rows={1} value={msgDraft} placeholder={`Message ${convName(activeConvo)}…`}
                     onChange={e => setMsgDraft(e.target.value)} className="min-h-9" />
                   <Button size="sm" onClick={() => void sendMessage()} disabled={!msgDraft.trim() || busy === 'send-dm'}>
@@ -513,25 +511,25 @@ export default function InboxPage() {
                     <button
                       type="button"
                       onClick={() => openPost(p)}
-                      className={`flex w-full gap-3 rounded-lg p-2 text-left transition-colors ${
+                      className={`flex w-full gap-3 rounded-inner p-2 text-left transition-colors ${
                         active?.id === p.id
-                          ? 'bg-zinc-100 dark:bg-zinc-800'
-                          : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'
+                          ? 'bg-foreground/[0.06]'
+                          : 'hover:bg-foreground/[0.04]'
                       }`}
                     >
                       {p.picture
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={p.picture} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
-                        : <div className="h-12 w-12 shrink-0 rounded bg-zinc-100 dark:bg-zinc-800" />}
+                        : <div className="h-12 w-12 shrink-0 rounded bg-foreground/[0.06]" />}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <PlatformIcon platform={p.platform} size={14} />
-                          <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                          <span className="truncate font-mono text-secondary-13 text-muted-foreground">
                             @{p.accountUsername}
                           </span>
                         </div>
-                        <p className="truncate text-sm">{p.content || '(no caption)'}</p>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                        <p className="truncate text-body-15">{p.content || '(no caption)'}</p>
+                        <p className="text-secondary-13 text-muted-foreground">
                           {ago(p.createdTime)}
                           {typeof p.commentCount === 'number' && ` · ${p.commentCount} comment${p.commentCount === 1 ? '' : 's'}`}
                         </p>
@@ -549,8 +547,8 @@ export default function InboxPage() {
           <CardContent className="p-4">
             {!active ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
-                <MessageSquare className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
+                <p className="text-body-15 text-muted-foreground">
                   {visiblePosts && visiblePosts.length > 0
                     ? 'Choose a post on the left to read and reply to its comments.'
                     : 'Comments open here.'}
@@ -558,20 +556,20 @@ export default function InboxPage() {
               </div>
             ) : (
               <>
-                <div className="mb-3 flex items-start gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                <div className="mb-3 flex items-start gap-2 border-b border-border pb-3">
                   <Button variant="ghost" size="sm" className="-ml-2 lg:hidden" aria-label="Back to all posts"
                     onClick={() => { setActive(null); setComments(null) }}>
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{active.content || '(no caption)'}</p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="truncate text-body-15 font-medium">{active.content || '(no caption)'}</p>
+                    <p className="text-secondary-13 text-muted-foreground">
                       @{active.accountUsername} · {ago(active.createdTime)}
                     </p>
                   </div>
                   {active.permalink && (
                     <a href={active.permalink} target="_blank" rel="noopener noreferrer"
-                       className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                       className="inline-flex items-center gap-1 whitespace-nowrap text-secondary-13 text-muted-foreground hover:text-foreground">
                       <ExternalLink className="h-3.5 w-3.5" /> Open post
                     </a>
                   )}
@@ -582,25 +580,25 @@ export default function InboxPage() {
                     {[0, 1].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                   </div>
                 ) : comments.length === 0 ? (
-                  <p className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="py-6 text-body-15 text-muted-foreground">
                     No comments on this post yet — nothing to answer here. Pick another post.
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-3">
                     {comments.map(c => (
-                      <li key={c.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                      <li key={c.id} className="rounded-inner border border-border p-3">
                         <div className="flex items-baseline gap-2">
-                          <span className="font-mono text-xs font-medium">@{author(c)}</span>
-                          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                          <span className="font-mono text-secondary-13 font-medium">@{author(c)}</span>
+                          <span className="text-secondary-13 text-muted-foreground">
                             {ago(c.createdTime ?? c.timestamp)}
                           </span>
                           {c.hidden && (
-                            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-500 dark:bg-zinc-800">
+                            <span className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-muted-foreground">
                               hidden
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 text-sm">{text(c)}</p>
+                        <p className="mt-1 text-body-15">{text(c)}</p>
 
                         <div className="mt-2 flex flex-wrap gap-1">
                           <Button size="sm" variant="ghost"
@@ -650,7 +648,7 @@ export default function InboxPage() {
                               onChange={e => setDmDraft(e.target.value)} />
                             <Input value={dmLink} placeholder="Optional link for a button — https://…"
                               onChange={e => setDmLink(e.target.value)} />
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            <p className="text-secondary-13 text-muted-foreground">
                               One private reply is allowed per comment, and only for a
                               limited period after it was posted.
                             </p>

@@ -671,11 +671,11 @@ export default function BriefCanvas({
   const ordered = useMemo(() => [...cards].sort((a, b) => a.z - b.z), [cards])
 
   const board = (
-    <div className={fullscreen ? 'fixed inset-0 z-50 flex flex-col bg-zinc-50 dark:bg-zinc-950' : 'relative'}>
+    <div className={fullscreen ? 'fixed inset-0 z-50 flex flex-col bg-foreground/[0.04]' : 'relative'}>
       {fullscreen && (
-        <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
-          <span className="text-sm font-semibold">Board</span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">Esc to exit</span>
+        <div className="flex items-center gap-3 border-b border-border px-4 py-2">
+          <span className="text-body-15 font-semibold">Board</span>
+          <span className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Esc to exit</span>
           <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setFullscreen(false)}>
             <Minimize2 className="h-4 w-4" />
           </Button>
@@ -684,7 +684,7 @@ export default function BriefCanvas({
 
       <div
         ref={viewportRef}
-        className={`relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 ${
+        className={`relative overflow-hidden rounded-card border border-border bg-foreground/[0.04] ${
           fullscreen ? 'flex-1 rounded-none border-0' : coarse ? 'h-[70vh]' : 'h-[60vh] min-h-[420px]'
         }`}
         style={{
@@ -727,17 +727,17 @@ export default function BriefCanvas({
                 markerWidth="8" markerHeight="8" orient="auto-start-reverse">
                 <path d="M2,1.5 L8.5,5 L2,8.5" fill="none" strokeWidth="1.4"
                   strokeLinecap="round" strokeLinejoin="round"
-                  className="stroke-zinc-400 dark:stroke-zinc-500" />
+                  className="stroke-muted-foreground" />
               </marker>
               <marker id="brief-arrowhead-sel" viewBox="0 0 10 10" refX="8" refY="5"
                 markerWidth="8" markerHeight="8" orient="auto-start-reverse">
                 <path d="M2,1.5 L8.5,5 L2,8.5" fill="none" strokeWidth="1.4"
-                  strokeLinecap="round" strokeLinejoin="round" className="stroke-blue-500" />
+                  strokeLinecap="round" strokeLinejoin="round" className="stroke-accent-blue" />
               </marker>
             </defs>
             {/* the line being dragged out — driven by raw DOM, no re-renders */}
             <line ref={draftLineRef} x1={0} y1={0} x2={0} y2={0} visibility="hidden"
-              className="stroke-blue-500" strokeWidth={1.5} strokeDasharray="4 3"
+              className="stroke-accent-blue" strokeWidth={1.5} strokeDasharray="4 3"
               strokeLinecap="round" markerEnd="url(#brief-arrowhead-sel)"
               style={{ pointerEvents: 'none' }} />
             {ordered.filter(c => c.kind === 'arrow').map(arrow => {
@@ -755,7 +755,7 @@ export default function BriefCanvas({
                     style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'pointer' }}
                     onClick={e => { e.stopPropagation(); setSelected(arrow.id) }} />
                   <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
-                    className={isSel ? 'stroke-blue-500' : 'stroke-zinc-400 dark:stroke-zinc-500'}
+                    className={isSel ? 'stroke-accent-blue' : 'stroke-muted-foreground'}
                     strokeWidth={isSel ? 1.75 : 1.25}
                     strokeLinecap="round"
                     markerEnd={isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'}
@@ -772,7 +772,7 @@ export default function BriefCanvas({
               tabIndex={0}
               aria-label={`${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
-                selected === card.id ? 'rounded-lg ring-2 ring-blue-500 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950' : ''
+                selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950' : ''
               }`}
               style={{ transform: `translate(${card.x}px, ${card.y}px)` }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
@@ -811,7 +811,7 @@ export default function BriefCanvas({
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div
-                  className="absolute -right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-blue-500 bg-white shadow dark:bg-zinc-950"
+                  className="absolute -right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-accent-blue/25 bg-surface shadow"
                   title="Drag onto another card to connect"
                   onPointerDown={e => {
                     e.stopPropagation()
@@ -845,7 +845,7 @@ export default function BriefCanvas({
               )}
               {selected === card.id && !viewOnly && !editing && card.kind !== 'label' && card.kind !== 'arrow' && (
                 <div
-                  className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-blue-500 shadow dark:border-zinc-950"
+                  className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-accent-blue shadow"
                   onPointerDown={e => {
                     e.stopPropagation()
                     interactingRef.current = true
@@ -890,13 +890,13 @@ export default function BriefCanvas({
         {/* empty states */}
         {cards.length === 0 && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
-            <p className="text-sm text-zinc-400 dark:text-zinc-500">
+            <p className="text-body-15 text-muted-foreground">
               {viewOnly
                 ? 'Nothing on the board yet.'
                 : 'Your board. Drop images, paste links, or double-click anywhere to write a note.'}
             </p>
             {!viewOnly && (
-              <p className="font-mono text-[10.5px] uppercase tracking-wider text-zinc-300 dark:text-zinc-600">
+              <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 N note · drag to pan · Ctrl+scroll to zoom · Ctrl+Z undo
               </p>
             )}
@@ -904,50 +904,50 @@ export default function BriefCanvas({
         )}
 
         {connectFrom !== null && (
-          <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 shadow-sm dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-300">
+          <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-accent-blue/25 bg-tint-blue px-3 py-1 text-secondary-13 text-foreground shadow-sm">
             {connectFrom === ''
               ? 'Click the first card the arrow starts from — Esc cancels'
               : 'Now click the card it points to — Esc cancels'}
           </div>
         )}
         {coarse && (
-          <span className="absolute right-3 top-2 font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+          <span className="absolute right-3 top-2 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
             View only on mobile
           </span>
         )}
 
         {/* toolbar */}
         {!viewOnly && (
-          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg border border-zinc-200 bg-white/90 p-1 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-inner border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'note', text: '', color: 'yellow' })}>
               <StickyNote className="h-3.5 w-3.5" /> Note
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => fileRef.current?.click()}>
               <ImagePlus className="h-3.5 w-3.5" /> Image
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => { setLinkPrompt(true); setTimeout(() => linkInputRef.current?.focus(), 50) }}>
               <Link2 className="h-3.5 w-3.5" /> Link
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'label', text: '' })}>
               <Type className="h-3.5 w-3.5" /> Label
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'todo', w: 224, items: [{ id: mint(), text: 'New task', done: false }] })}>
               <ListTodo className="h-3.5 w-3.5" /> To-do
             </Button>
-            <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
               <MoveUpRight className="h-3.5 w-3.5" /> Arrow
             </Button>
-            <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-xs"
+            <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => setMockupMenu(v => !v)}>
               <Smartphone className="h-3.5 w-3.5" /> Post
             </Button>
-            <span className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            <span className="mx-0.5 h-4 w-px bg-foreground/[0.08]" />
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={undo}
               aria-label="Undo" title="Undo (Ctrl+Z)">
               <Undo2 className="h-3.5 w-3.5" />
@@ -955,13 +955,13 @@ export default function BriefCanvas({
           </div>
         )}
         {mockupMenu && (
-          <div className="absolute left-3 top-14 z-10 grid w-64 grid-cols-2 gap-x-2 gap-y-0.5 rounded-lg border border-zinc-200 bg-white p-2 shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="absolute left-3 top-14 z-10 grid w-64 grid-cols-2 gap-x-2 gap-y-0.5 rounded-inner border border-border bg-surface p-2 shadow-md">
             {MOCKUP_MENU.map(({ group, items }) => (
               <div key={group} className="flex flex-col gap-0.5">
-                <span className="px-2 pt-1.5 font-mono text-[9.5px] uppercase tracking-wider text-zinc-400">{group}</span>
+                <span className="px-2 pt-1.5 font-mono text-[9.5px] uppercase tracking-wider text-muted-foreground">{group}</span>
                 {items.map(({ pf, label, w }) => (
                   <button key={pf} type="button"
-                    className="rounded px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className="rounded px-2 py-1 text-left text-secondary-13 hover:bg-foreground/[0.06]"
                     onClick={() => { addCard({ kind: 'mockup', platform: pf, w }); setMockupMenu(false) }}>
                     {label}
                   </button>
@@ -971,9 +971,9 @@ export default function BriefCanvas({
           </div>
         )}
         {linkPrompt && (
-          <div className="absolute left-3 top-14 flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white p-2 shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="absolute left-3 top-14 flex items-center gap-1.5 rounded-inner border border-border bg-surface p-2 shadow-md">
             <input ref={linkInputRef} placeholder="https://…"
-              className="w-64 bg-transparent font-mono text-xs outline-none placeholder:text-zinc-400"
+              className="w-64 bg-transparent font-mono text-secondary-13 outline-none placeholder:text-muted-foreground"
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   const v = (e.target as HTMLInputElement).value.trim()
@@ -982,25 +982,25 @@ export default function BriefCanvas({
                 }
                 if (e.key === 'Escape') setLinkPrompt(false)
               }} />
-            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setLinkPrompt(false)}>Cancel</Button>
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-secondary-13" onClick={() => setLinkPrompt(false)}>Cancel</Button>
           </div>
         )}
 
         {/* selected-card mini toolbar */}
         {selectedCard && !viewOnly && !editing && (
-          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-zinc-200 bg-white/95 p-1 shadow-md backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur">
             {selectedCard.kind === 'note' && (
               <>
                 {CANVAS_NOTE_COLORS.map(c => (
                   <button key={c} type="button" aria-label={`Colour ${c}`}
                     onClick={() => { const next = { ...selectedCard, color: c }; upsertLocal(next); persist([next]) }}
-                    className={`h-5 w-5 rounded-full border ${NOTE_COLORS[c].split(' ').slice(0, 1).join(' ')} ${selectedCard.color === c ? 'ring-2 ring-blue-500' : 'border-zinc-300 dark:border-zinc-600'}`} />
+                    className={`h-5 w-5 rounded-full border ${NOTE_COLORS[c].split(' ').slice(0, 1).join(' ')} ${selectedCard.color === c ? 'ring-2 ring-accent-blue/25' : 'border-border'}`} />
                 ))}
-                <span className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+                <span className="mx-1 h-4 w-px bg-foreground/[0.08]" />
               </>
             )}
             {selectedCard.kind === 'mockup' && (
-              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
                 onClick={() => { mockupTargetRef.current = selectedCard.id; fileRef.current?.click() }}>
                 <ImagePlus className="h-3.5 w-3.5" />
                 {selectedCard.platform === 'ig_carousel'
@@ -1009,19 +1009,19 @@ export default function BriefCanvas({
               </Button>
             )}
             {selectedCard.kind !== 'arrow' && (
-              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs"
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
                 onClick={() => { setConnectFrom(selectedCard.id); setSelected(null) }}>
                 <MoveUpRight className="h-3.5 w-3.5" /> Arrow
               </Button>
             )}
             {selectedCard.kind === 'link' && selectedCard.url && (
-              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" asChild>
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13" asChild>
                 <a href={selectedCard.url} target="_blank" rel="noreferrer noopener">
                   <ExternalLink className="h-3.5 w-3.5" /> Open
                 </a>
               </Button>
             )}
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-600"
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-accent-red hover:text-accent-red"
               onClick={() => removeCard(selectedCard)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -1029,18 +1029,18 @@ export default function BriefCanvas({
         )}
 
         {/* zoom pill */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg border border-zinc-200 bg-white/90 p-1 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
+        <div className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-inner border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">
             <Minus className="h-3 w-3" />
           </Button>
           <button type="button" onClick={() => { camRef.current.s = 1; paint(); commitCamera() }}
-            className="min-w-11 font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+            className="min-w-11 font-mono text-[12px] tabular-nums text-muted-foreground">
             {scalePct}%
           </button>
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => zoomBy(1.2)} aria-label="Zoom in">
             <Plus className="h-3 w-3" />
           </Button>
-          <span className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+          <span className="mx-0.5 h-4 w-px bg-foreground/[0.08]" />
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={fitToCards} aria-label="Fit to cards">
             <Scan className="h-3 w-3" />
           </Button>
@@ -1062,32 +1062,32 @@ export default function BriefCanvas({
       <Sheet open={sheetCard !== null} onOpenChange={o => !o && setSheetCard(null)}>
         <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="text-sm">
+            <SheetTitle className="text-body-15">
               {sheetCard?.kind === 'note' ? 'Note'
                 : sheetCard?.kind === 'todo' ? (sheetCard.name || 'To-do')
                 : sheetCard?.name || sheetCard?.kind}
             </SheetTitle>
           </SheetHeader>
           {sheetCard?.kind === 'note' && (
-            <p className="whitespace-pre-wrap p-1 text-sm leading-relaxed">{sheetCard.text}</p>
+            <p className="whitespace-pre-wrap p-1 text-body-15 leading-relaxed">{sheetCard.text}</p>
           )}
           {sheetCard?.kind === 'todo' && (
             <div className="flex flex-col gap-1.5 p-1">
               {(sheetCard.items ?? []).map(t => (
-                <span key={t.id} className="flex items-center gap-2 text-sm">
+                <span key={t.id} className="flex items-center gap-2 text-body-15">
                   <input type="checkbox" checked={t.done} readOnly disabled className="h-4 w-4 accent-blue-600" />
-                  <span className={t.done ? 'text-zinc-400 line-through' : ''}>{t.text}</span>
+                  <span className={t.done ? 'text-muted-foreground line-through' : ''}>{t.text}</span>
                 </span>
               ))}
               {(sheetCard.items ?? []).length === 0 && (
-                <span className="text-sm text-zinc-400">Nothing to do yet.</span>
+                <span className="text-body-15 text-muted-foreground">Nothing to do yet.</span>
               )}
             </div>
           )}
           {sheetCard?.kind === 'image' && sheetCard.url && (
             <div className="flex flex-col gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={sheetCard.url} alt={sheetCard.name ?? 'reference'} className="w-full rounded-lg" />
+              <img src={sheetCard.url} alt={sheetCard.name ?? 'reference'} className="w-full rounded-inner" />
               <Button variant="outline" size="sm" asChild>
                 <a href={sheetCard.url} target="_blank" rel="noreferrer noopener">Open full size</a>
               </Button>

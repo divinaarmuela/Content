@@ -50,7 +50,7 @@ export default function TimezoneField({ value, onSave, disabled }: {
     <div className="grid gap-1.5 sm:col-span-2">
       <Label>
         Posting time zone{' '}
-        <span className="text-xs font-normal text-zinc-400">
+        <span className="text-secondary-13 font-normal text-muted-foreground">
           — where the audience is; every posting time is shown in this zone.
         </span>
       </Label>
@@ -86,7 +86,7 @@ export default function TimezoneField({ value, onSave, disabled }: {
 
         {showCustom && (
           <Input
-            className="w-64 font-mono text-sm"
+            className="w-64 font-mono text-body-15"
             placeholder="Asia/Manila"
             value={custom}
             disabled={disabled}
@@ -97,12 +97,12 @@ export default function TimezoneField({ value, onSave, disabled }: {
         )}
 
         {!error && isValidZone(value) && (
-          <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="font-mono text-secondary-13 text-muted-foreground">
             {value} · {zoneAbbrev(value)} right now
           </span>
         )}
       </div>
-      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-secondary-13 text-accent-red">{error}</p>}
     </div>
   )
 }

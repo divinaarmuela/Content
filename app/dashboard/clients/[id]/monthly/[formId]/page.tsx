@@ -64,7 +64,7 @@ export default function MonthlySubmissionPage() {
             <ArrowLeft className="h-4 w-4" /> Back to client
           </Link>
         </Button>
-        <p className="text-sm text-muted-foreground">That monthly update no longer exists.</p>
+        <p className="text-body-15 text-muted-foreground">That monthly update no longer exists.</p>
       </div>
     )
   }
@@ -83,19 +83,19 @@ export default function MonthlySubmissionPage() {
         </Button>
 
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{form.title || form.period}</h1>
-          <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          <h1 className="text-section-title">{form.title || form.period}</h1>
+          <span className="rounded-full border border-border bg-muted px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider text-muted-foreground">
             {form.period}
           </span>
-          <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          <span className="rounded-full border border-border px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider text-muted-foreground">
             {form.status.replace('_', ' ')}
           </span>
-          <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
+          <span className="ml-auto font-mono text-secondary-13 tabular-nums text-muted-foreground">
             {form.completion.answered}/{form.completion.total} answered
           </span>
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-secondary-13 text-muted-foreground">
           {(() => {
             const list = form.notify_emails ?? []
             return list.length > 0
@@ -126,14 +126,14 @@ export default function MonthlySubmissionPage() {
         const done = form.completion.sections[i]
 
         return (
-          <section key={section.id} className="rounded-lg border border-border bg-card p-5">
+          <section key={section.id} className="rounded-inner border border-border bg-card p-5">
             <div className="mb-4 flex items-baseline gap-3 border-b border-border pb-3">
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="font-mono text-secondary-13 tabular-nums text-muted-foreground">
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <h2 className="text-sm font-semibold">{section.title}</h2>
+              <h2 className="text-body-15 font-semibold">{section.title}</h2>
               {done && (
-                <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
+                <span className="ml-auto font-mono text-secondary-13 tabular-nums text-muted-foreground">
                   {done.answered}/{done.total}
                 </span>
               )}
@@ -145,9 +145,9 @@ export default function MonthlySubmissionPage() {
                 const text = Array.isArray(v) ? v.join(', ') : (v ?? '')
                 return (
                   <div key={b.id}>
-                    <dt className="text-xs text-muted-foreground">{b.label}</dt>
+                    <dt className="text-secondary-13 text-muted-foreground">{b.label}</dt>
                     <dd className={
-                      'mt-1 whitespace-pre-wrap text-sm leading-relaxed ' +
+                      'mt-1 whitespace-pre-wrap text-body-15 leading-relaxed ' +
                       (text ? '' : 'italic text-muted-foreground/60')
                     }>
                       {text || 'Not answered'}

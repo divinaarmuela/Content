@@ -37,8 +37,8 @@ export default function TeamLoadCard() {
   return (
     <Card>
       <CardHeader className="flex-row items-center">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Users className="h-4 w-4 text-zinc-400 dark:text-zinc-500" /> Team
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" /> Team
         </CardTitle>
         <Button variant="ghost" size="sm" className="ml-auto" asChild>
           <Link href="/dashboard/team/activity">Who has what <ArrowRight className="h-3.5 w-3.5" /></Link>
@@ -51,7 +51,7 @@ export default function TeamLoadCard() {
             <Skeleton className="h-6 w-2/3" />
           </>
         ) : behind.length === 0 ? (
-          <p className="py-4 text-sm text-zinc-400 dark:text-zinc-500">
+          <p className="py-4 text-body-15 text-muted-foreground">
             Nobody is behind. {holding} piece{holding === 1 ? '' : 's'} in hand across the team.
           </p>
         ) : (
@@ -59,13 +59,13 @@ export default function TeamLoadCard() {
             <Link
               key={r.id}
               href="/dashboard/team/activity"
-              className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+              className="flex items-baseline gap-3 rounded-tile px-2 py-1.5 hover:bg-foreground/[0.04]"
             >
-              <span className="truncate text-sm font-medium">{r.name || r.email}</span>
-              <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="truncate text-body-15 font-medium">{r.name || r.email}</span>
+              <span className="truncate text-secondary-13 text-muted-foreground">
                 {r.holding.total} in hand
               </span>
-              <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-red-600 dark:text-red-400">
+              <span className="ml-auto shrink-0 font-mono text-secondary-13 tabular-nums text-accent-red">
                 {r.due.overdue} overdue
               </span>
             </Link>

@@ -47,10 +47,10 @@ type Proposal = {
 type ClientRow = { id: string; name: string; email: string | null }
 
 const PROPOSAL_STYLE: Record<ShootStatus, string> = {
-  pending: 'border border-dashed border-amber-400 bg-amber-50/60 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700',
-  accepted: 'border border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
-  declined: 'border border-red-200 bg-red-50/60 text-red-500 line-through dark:bg-red-950/20 dark:text-red-400/70 dark:border-red-900',
-  cancelled: 'border border-zinc-200 bg-zinc-50 text-zinc-400 line-through dark:bg-zinc-900 dark:border-zinc-800',
+  pending: 'border border-dashed border-accent-amber/35 bg-tint-amber text-foreground',
+  accepted: 'border border-accent-green/30 bg-tint-green text-foreground',
+  declined: 'border border-accent-red/30 bg-tint-red text-accent-red line-through',
+  cancelled: 'border border-border bg-foreground/[0.04] text-muted-foreground line-through',
 }
 
 const fmtTime = (iso: string) =>
@@ -209,11 +209,11 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label>Send proposal to <span className="text-xs text-zinc-400">(everyone ticked gets it)</span></Label>
+            <Label>Send proposal to <span className="text-secondary-13 text-muted-foreground">(everyone ticked gets it)</span></Label>
             {knownEmails.length > 0 && (
               <div className="flex flex-col gap-1">
                 {knownEmails.map(o => (
-                  <label key={o.email} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                  <label key={o.email} className="flex cursor-pointer items-center gap-2 rounded-tile px-1 py-0.5 text-body-15 hover:bg-foreground/[0.04]">
                     <input
                       type="checkbox"
                       checked={picked.has(o.email)}
@@ -231,18 +231,18 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Notify on answer <span className="text-xs text-zinc-400">(prefilled with the client&rsquo;s account managers)</span></Label>
+            <Label>Notify on answer <span className="text-secondary-13 text-muted-foreground">(prefilled with the client&rsquo;s account managers)</span></Label>
             <Input
               value={notifyEmails} onChange={e => setNotifyEmails(e.target.value)}
               placeholder="hello@mdmmarketing.com.au"
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Location <span className="text-xs text-zinc-400">(optional)</span></Label>
+            <Label>Location <span className="text-secondary-13 text-muted-foreground">(optional)</span></Label>
             <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Their venue, our studio…" />
           </div>
           <div className="grid gap-1.5">
-            <Label>Note <span className="text-xs text-zinc-400">(optional, goes in the email)</span></Label>
+            <Label>Note <span className="text-secondary-13 text-muted-foreground">(optional, goes in the email)</span></Label>
             <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
               placeholder="What we're shooting, what to have ready…" />
           </div>
@@ -400,10 +400,10 @@ export default function AvailabilityView() {
             onClick={() => canManage && patchAccount({ email: a.email, enabled: !a.enabled })}
             aria-pressed={a.enabled}
             aria-label={`${a.email} — ${a.enabled ? 'shown, tap to hide' : 'hidden, tap to show'}`}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-secondary-13 transition-colors ${
               a.enabled
-                ? 'border-zinc-300 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
-                : 'border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-600'
+                ? 'border-border bg-surface text-foreground'
+                : 'border-border bg-foreground/[0.04] text-muted-foreground'
             }`}
           >
             <span
@@ -413,7 +413,7 @@ export default function AvailabilityView() {
             {a.email}
             {/* the hover-only title= said "Hide this calendar" — a hidden
                 calendar now says so on the chip, where a finger can read it */}
-            {!a.enabled && <span className="text-[10px] uppercase tracking-wider">hidden</span>}
+            {!a.enabled && <span className="text-[12px] uppercase tracking-wider">hidden</span>}
           </button>
         ))}
 
@@ -465,18 +465,18 @@ export default function AvailabilityView() {
             const dayProposals = proposalsByDay.get(key) ?? []
             const isToday = key === today
             return (
-              <Card key={key} className={isToday ? 'border-blue-300 dark:border-blue-800' : ''}>
+              <Card key={key} className={isToday ? 'border-accent-blue/25' : ''}>
                 <CardContent className="group flex min-h-40 flex-col gap-2 p-3">
                   <div className="flex items-center justify-between">
-                    <span className={`text-xs font-semibold uppercase tracking-wider ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                    <span className={`text-secondary-13 font-semibold uppercase tracking-wider ${isToday ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>
                       {dow}
                     </span>
                     {/* the hover-only `+` that used to live here is now a
                         labelled button at the foot of the card */}
-                    <span className="font-mono text-[11px] text-zinc-400">{day}</span>
+                    <span className="font-mono text-[12px] text-muted-foreground">{day}</span>
                   </div>
                   {list.length === 0 && dayProposals.length === 0 ? (
-                    <p className="my-auto text-center font-mono text-[11px] uppercase tracking-widest text-emerald-600/70 dark:text-emerald-500/60">
+                    <p className="my-auto text-center font-mono text-[12px] uppercase tracking-widest text-accent-green">
                       free
                     </p>
                   ) : (
@@ -484,13 +484,13 @@ export default function AvailabilityView() {
                       {list.map((e, i) => (
                         <div
                           key={i}
-                          className="rounded-md border-l-2 bg-zinc-50 px-2 py-1.5 dark:bg-zinc-800/60"
+                          className="rounded-tile border-l-2 bg-foreground/[0.04] px-2 py-1.5"
                           style={{ borderLeftColor: colors[e.calendar] }}
                         >
                           {/* the full title, wrapped — a truncated title with the
                               rest in a hover tooltip is a title a phone never reads */}
-                          <p className="break-words text-xs font-medium text-zinc-800 dark:text-zinc-200">{e.title}</p>
-                          <p className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
+                          <p className="break-words text-secondary-13 font-medium text-foreground">{e.title}</p>
+                          <p className="font-mono text-[12px] text-muted-foreground">
                             {e.allDay ? 'all day' : `${fmtTime(e.start)} – ${fmtTime(e.end)}`}
                           </p>
                         </div>
@@ -498,10 +498,10 @@ export default function AvailabilityView() {
                       {dayProposals.map(p => (
                         <div
                           key={p.id}
-                          className={`rounded-md px-2 py-1.5 ${PROPOSAL_STYLE[p.status]}`}
+                          className={`rounded-tile px-2 py-1.5 ${PROPOSAL_STYLE[p.status]}`}
                         >
                           <div className="flex items-start justify-between gap-1">
-                            <p className="break-words text-xs font-medium">
+                            <p className="break-words text-secondary-13 font-medium">
                               {p.title}{p.clients?.name ? ` · ${p.clients.name}` : ''}
                             </p>
                             {canManage && p.status !== 'cancelled' && (
@@ -537,16 +537,16 @@ export default function AvailabilityView() {
                               </ConfirmAction>
                             )}
                           </div>
-                          <p className="font-mono text-[10px] opacity-80">
+                          <p className="font-mono text-[12px] opacity-80">
                             {fmtTime(p.starts_at)} – {fmtTime(p.ends_at)} · {PROPOSAL_TAG[p.status]}
                           </p>
                           {p.location && (
-                            <p className="break-words font-mono text-[10px] opacity-70">{p.location}</p>
+                            <p className="break-words font-mono text-[12px] opacity-70">{p.location}</p>
                           )}
                           {/* who has it — this used to be hover-only, and "did
                               the client get it?" is the first question asked */}
-                          <p className="break-words text-[10px] opacity-70">to {p.send_to}</p>
-                          {p.note && <p className="break-words text-[10px] opacity-70">{p.note}</p>}
+                          <p className="break-words text-[12px] opacity-70">to {p.send_to}</p>
+                          {p.note && <p className="break-words text-[12px] opacity-70">{p.note}</p>}
                         </div>
                       ))}
                     </div>
@@ -561,7 +561,7 @@ export default function AvailabilityView() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setProposeDay(key)}
-                      className="mt-auto w-full justify-start text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      className="mt-auto w-full justify-start text-secondary-13 text-muted-foreground hover:text-foreground"
                     >
                       <Plus className="h-3.5 w-3.5" /> Propose a shoot
                     </Button>
@@ -582,8 +582,8 @@ export default function AvailabilityView() {
 
       {/* ── manage connected calendars ── */}
       {canManage && connected.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
-          <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wider">
+        <div className="flex flex-wrap items-center gap-3 text-secondary-13 text-muted-foreground">
+          <Badge variant="outline" className="font-mono text-[12px] uppercase tracking-wider">
             {CAL_TZ.replace('_', ' ')}
           </Badge>
           {connected.map(a => (
@@ -596,7 +596,7 @@ export default function AvailabilityView() {
             >
               <button
                 type="button"
-                className="flex min-h-11 items-center gap-1 text-zinc-400 transition-colors hover:text-red-600"
+                className="flex min-h-11 items-center gap-1 text-muted-foreground transition-colors hover:text-accent-red"
               >
                 <Unplug className="h-3 w-3" /> disconnect {a.email}
               </button>

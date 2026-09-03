@@ -30,6 +30,7 @@ import {
 import ScanPanel from './ScanPanel'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
+import PageTitle from '../ui/PageTitle'
 
 interface Lead {
   id: string
@@ -220,56 +221,56 @@ export default function LeadsPage() {
   return (
     <div className="flex flex-col gap-4">
       {today.length > 0 && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+        <div className="rounded-inner border border-accent-green/30 bg-tint-green p-4">
           <div className="flex items-center gap-2">
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-600 px-1.5 font-mono text-xs font-semibold text-white">
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent-green px-1.5 font-mono text-secondary-13 font-semibold text-white">
               +{today.length}
             </span>
-            <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+            <h3 className="text-body-15 font-semibold text-foreground">
               New lead{today.length === 1 ? '' : 's'} today
             </h3>
           </div>
           <ul className="mt-2.5 flex flex-col gap-1.5">
             {today.map(t => (
-              <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 text-sm text-emerald-950 dark:text-emerald-100">
-                <span className="font-mono text-xs tabular-nums text-emerald-700 dark:text-emerald-400">
+              <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 text-body-15 text-foreground">
+                <span className="font-mono text-secondary-13 tabular-nums text-foreground">
                   {new Date(t.created_at).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span className="font-medium">{t.name}</span>
-                {t.biz && <span className="text-emerald-800 dark:text-emerald-300">({t.biz})</span>}
+                {t.biz && <span className="text-foreground">({t.biz})</span>}
                 <span className={
-                  'rounded-full px-1.5 py-px font-mono text-[11px] uppercase tracking-wide ' +
+                  'rounded-full px-1.5 py-px font-mono text-[12px] uppercase tracking-wide ' +
                   (t.source === 'web_form'
-                    ? 'bg-emerald-600/15 text-emerald-800 dark:text-emerald-300'
-                    : 'bg-sky-600/15 text-sky-800 dark:text-sky-300')
+                    ? 'bg-accent-green text-foreground'
+                    : 'bg-accent-blue text-accent-blue-deep')
                 }>
                   {t.source === 'web_form' ? 'web form' : 'scanner'}
                 </span>
-                <span className="basis-full text-xs text-emerald-800/80 dark:text-emerald-300/80">{t.reason}</span>
+                <span className="basis-full text-secondary-13 text-foreground">{t.reason}</span>
               </li>
             ))}
           </ul>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Leads</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Contact form submissions from mdmmarketing.com.au</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {/* the table is live, so this refreshes the one thing that is not:
-              today's leads and the reason each of them exists */}
-          <Button variant="outline" size="sm" onClick={() => loadToday()}>
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </Button>
-          {/* Export is a monthly reporting job. It used to be the only filled
-              button on the page, so the page looked like it was FOR exporting
-              — the daily work is opening a lead and contacting it. */}
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
-            <Download className="h-4 w-4" /> Export ({filtered.length})
-          </Button>
-        </div>
-      </div>
+      <PageTitle
+        title="Leads"
+        summary="Contact form submissions from mdmmarketing.com.au"
+        actions={<>
+          <div className="flex items-center gap-2">
+            {/* the table is live, so this refreshes the one thing that is not:
+                today's leads and the reason each of them exists */}
+            <Button variant="outline" size="sm" onClick={() => loadToday()}>
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
+            {/* Export is a monthly reporting job. It used to be the only filled
+                button on the page, so the page looked like it was FOR exporting
+                — the daily work is opening a lead and contacting it. */}
+            <Button variant="outline" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
+              <Download className="h-4 w-4" /> Export ({filtered.length})
+            </Button>
+          </div>
+        </>}
+      />
 
       {/* Scanning reads the agency mailbox and creates leads — account_manager
           and above. The API enforces the same rule; this only stops the
@@ -281,10 +282,10 @@ export default function LeadsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search name, email, business…"
-          className="max-w-xs bg-white dark:bg-zinc-900"
+          className="max-w-xs bg-surface"
         />
         {search && (
-          <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="font-mono text-secondary-13 text-muted-foreground">
             {filtered.length} result{filtered.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -305,7 +306,7 @@ export default function LeadsPage() {
         <div className="flex flex-col gap-2 md:hidden">
           {filtered.length === 0 ? (
             <Card className="border-dashed shadow-none">
-              <CardContent className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              <CardContent className="py-10 text-center text-body-15 text-muted-foreground">
                 {emptyMessage}
               </CardContent>
             </Card>
@@ -313,11 +314,11 @@ export default function LeadsPage() {
             <Card key={l.id ?? i} className="py-0">
               <CardContent className="flex items-center gap-3 p-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{l.fname} {l.lname}</p>
-                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="truncate text-body-15 font-medium">{l.fname} {l.lname}</p>
+                  <p className="truncate text-secondary-13 text-muted-foreground">
                     {[l.biz, l.model].filter(Boolean).join(' · ') || l.email}
                   </p>
-                  <p className="mt-0.5 font-mono text-[11px] text-zinc-400">{fmt(l.created_at, 'created_at')}</p>
+                  <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">{fmt(l.created_at, 'created_at')}</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => openDetail(l)}>View</Button>
               </CardContent>
@@ -329,12 +330,12 @@ export default function LeadsPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+                <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
                   {COLS.map(c => (
                     <TableHead key={c.key}>
                       <button
                         onClick={() => toggleSort(c.key)}
-                        className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium ${sort.key === c.key ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}
+                        className={`inline-flex items-center gap-1 whitespace-nowrap text-secondary-13 font-medium ${sort.key === c.key ? 'text-foreground' : 'text-muted-foreground'}`}
                       >
                         {c.label}
                         <ArrowUpDown className="h-3 w-3" />
@@ -347,7 +348,7 @@ export default function LeadsPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLS.length + 1} className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500">
+                    <TableCell colSpan={COLS.length + 1} className="py-12 text-center text-body-15 text-muted-foreground">
                       {emptyMessage}
                     </TableCell>
                   </TableRow>
@@ -363,11 +364,11 @@ export default function LeadsPage() {
                       {COLS.map(c => (
                         <TableCell
                           key={c.key}
-                          className={`max-w-[220px] truncate text-sm ${c.mono ? 'font-mono text-xs text-zinc-500 dark:text-zinc-400' : ''}`}
+                          className={`max-w-[220px] truncate text-body-15 ${c.mono ? 'font-mono text-secondary-13 text-muted-foreground' : ''}`}
                           title={l[c.key] ?? ''}
                         >
                           {c.key === 'email'
-                            ? <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="text-blue-600 dark:text-blue-400 hover:underline">{l.email}</a>
+                            ? <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="text-accent-blue-deep hover:underline">{l.email}</a>
                             : fmt(l[c.key], c.key)}
                         </TableCell>
                       ))}
@@ -377,7 +378,7 @@ export default function LeadsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-zinc-400 dark:text-zinc-500"
+                              className="h-8 w-8 text-muted-foreground"
                               aria-label={`Actions for ${l.fname} ${l.lname}`}
                             >
                               <MoreHorizontal className="h-4 w-4" />
@@ -400,7 +401,7 @@ export default function LeadsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+                              className="text-accent-red focus:text-accent-red"
                               onClick={() => setDeleting(l)}
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -486,7 +487,7 @@ export default function LeadsPage() {
               </Button>
               <Button
                 variant="ghost"
-                className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400"
+                className="ml-auto text-accent-red hover:text-foreground"
                 onClick={() => { if (detail) { setDeleting(detail); setDetail(null) } }}
               >
                 <Trash2 className="h-4 w-4" /> Delete
@@ -516,7 +517,7 @@ export default function LeadsPage() {
             <AlertDialogAction
               onClick={e => { e.preventDefault(); confirmDelete() }}
               disabled={deleteBusy}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-accent-red hover:bg-accent-red"
             >
               {deleteBusy ? 'Deleting…' : 'Delete lead'}
             </AlertDialogAction>

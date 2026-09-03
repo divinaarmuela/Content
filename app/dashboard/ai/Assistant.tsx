@@ -129,7 +129,7 @@ function useDictation(onText: (text: string) => void) {
 
 function ToolRow({ label, done }: { label: string; done: boolean }) {
   return (
-    <div className="flex w-fit items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+    <div className="flex w-fit items-center gap-2 rounded-tile border border-border bg-muted/40 px-3 py-1.5 text-secondary-13 text-muted-foreground">
       {done ? <Wrench className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
       {done ? <span>{label}</span> : <span className={shimmerText}>{label}…</span>}
     </div>
@@ -142,11 +142,11 @@ function ApprovalCard({ title, detail, onDecide }: {
   onDecide: (approved: boolean) => void
 }) {
   return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
-      <div className="flex items-center gap-2 text-sm font-medium text-amber-900 dark:text-amber-200">
+    <div className="rounded-inner border border-accent-amber/35 bg-tint-amber p-4">
+      <div className="flex items-center gap-2 text-body-15 font-medium text-foreground">
         <ShieldAlert className="h-4 w-4" /> {title}: approval needed
       </div>
-      <p className="mt-1 break-all font-mono text-xs text-amber-800 dark:text-amber-300">{detail}</p>
+      <p className="mt-1 break-all font-mono text-secondary-13 text-foreground">{detail}</p>
       <div className="mt-3 flex gap-2">
         <Button size="sm" onClick={() => onDecide(true)}>Approve</Button>
         <Button size="sm" variant="outline" onClick={() => onDecide(false)}>Deny</Button>
@@ -208,7 +208,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Ask about your agency</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-body-15 text-muted-foreground">
                 Clients, leads, intake forms, the schedule, the scanner, the team.
                 Edits always ask you first.
               </p>
@@ -216,7 +216,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             <div className="grid w-full gap-2 sm:grid-cols-2">
               {SUGGESTIONS.map(s => (
                 <button key={s} onClick={() => send(s)}
-                  className="rounded-lg border border-border bg-card px-3 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  className="rounded-inner border border-border bg-card px-3 py-2.5 text-left text-secondary-13 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                   {s}
                 </button>
               ))}
@@ -228,7 +228,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
           {messages.map(m => (
             <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
               {m.role === 'user' ? (
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-card rounded-br-sm bg-primary px-4 py-2.5 text-body-15 text-primary-foreground">
                   {m.parts.map(p => p.type === 'text' ? p.text : '').join('')}
                 </div>
               ) : (
@@ -237,7 +237,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
                       if (part.type === 'text') {
                         return part.text
                           ? (
-                            <div key={i} className="max-w-none text-sm leading-relaxed [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5">
+                            <div key={i} className="max-w-none text-body-15 leading-relaxed [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5">
                               <Streamdown>{noEmDash(part.text)}</Streamdown>
                             </div>
                           )
@@ -282,11 +282,11 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
           {busy && (
             <div className="flex items-center gap-2.5">
               <Spark className="h-4 w-4 animate-spark text-foreground" />
-              <span className={`text-sm ${shimmerText}`}>Thinking…</span>
+              <span className={`text-body-15 ${shimmerText}`}>Thinking…</span>
             </div>
           )}
           {error && (
-            <p className="text-xs text-destructive">Something went wrong: {error.message}</p>
+            <p className="text-secondary-13 text-destructive">Something went wrong: {error.message}</p>
           )}
         </div>
       </div>
@@ -301,7 +301,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             }}
             placeholder="Ask about clients, leads, the schedule…"
             rows={1}
-            className="max-h-40 min-h-[44px] flex-1 resize-none text-base sm:text-sm"
+            className="max-h-40 min-h-[44px] flex-1 resize-none text-base sm:text-body-15"
           />
           {dictation.supported && (
             <Button size="icon" variant={dictation.listening ? 'default' : 'outline'}
@@ -315,7 +315,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
           </Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-secondary-13 text-muted-foreground">
           Answers come from live agency data. Edits always ask for approval first.
         </p>
       </div>
@@ -332,14 +332,14 @@ function ChatList({ chats, activeId, onOpen, onAskDelete }: {
   onAskDelete: (chat: ChatSummary) => void
 }) {
   if (chats.length === 0) {
-    return <p className="px-2 py-4 text-xs text-muted-foreground">No previous chats yet.</p>
+    return <p className="px-2 py-4 text-secondary-13 text-muted-foreground">No previous chats yet.</p>
   }
   return (
     <div className="flex flex-col gap-0.5">
       {chats.map(c => (
         <div key={c.id}
           className={
-            'group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm ' +
+            'group flex items-center gap-1 rounded-tile px-2 py-1.5 text-body-15 ' +
             (c.id === activeId ? 'bg-muted' : 'hover:bg-muted/60')
           }>
           <button onClick={() => onOpen(c.id)}
@@ -418,29 +418,29 @@ function SettingsSheet() {
         {loaded ? (
           <>
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Your timezone</Label>
+              <Label className="text-secondary-13">Your timezone</Label>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {zones.map(z => <SelectItem key={z} value={z}>{z.replace('_', ' ')}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-secondary-13 text-muted-foreground">
                 The assistant presents dates and times in this timezone.
               </p>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-              <Label className="text-xs">Standing instructions</Label>
+              <Label className="text-secondary-13">Standing instructions</Label>
               <Textarea
                 value={instructions}
                 onChange={e => setInstructions(e.target.value.slice(0, maxLen))}
                 placeholder={'e.g. Keep answers under five sentences.\nAlways include the client status when listing clients.'}
-                className="min-h-48 flex-1 resize-none text-sm"
+                className="min-h-48 flex-1 resize-none text-body-15"
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs tabular-nums text-muted-foreground">
+              <span className="text-secondary-13 tabular-nums text-muted-foreground">
                 {instructions.length}/{maxLen}
               </span>
               <Button size="sm" onClick={() => void save()} disabled={saving}>

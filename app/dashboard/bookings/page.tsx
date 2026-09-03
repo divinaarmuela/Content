@@ -16,6 +16,7 @@ import { bookingUrl, bookingIndexUrl } from '../../lib/site-urls'
 import ConfirmAction from '../ConfirmAction'
 import EmptyState from '../EmptyState'
 import { NotSetUp } from '../NotSetUp'
+import PageTitle from '../ui/PageTitle'
 
 type Service = { id: string; name: string; slug: string; duration_min: number; price_cents: number; currency: string; active: boolean; description: string | null; image_url?: string | null; location?: string | null; resource_id?: string | null; requires_payment?: boolean; category?: string | null; horizon_days?: number; lead_time_min?: number; capacity?: number }
 type Resource = { id: string; label: string; email: string | null; active: boolean; space_id?: string | null }
@@ -55,7 +56,7 @@ function ServiceImage({
     <>
       <button type="button" onClick={() => ref.current?.click()} disabled={busy}
         title={service.image_url ? 'Change photo' : 'Add a photo'}
-        className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900">
+        className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-foreground/[0.04] text-muted-foreground hover:border-border">
         {service.image_url
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={service.image_url} alt="" className="h-full w-full object-cover" />
@@ -146,29 +147,29 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
   }
 
   return (
-    <div className="flex flex-col border-b border-zinc-100 last:border-0 dark:border-zinc-800">
+    <div className="flex flex-col border-b border-border last:border-0">
       <div className="flex flex-wrap items-center gap-3 py-2">
         <ServiceImage service={service} onSave={onSave} />
         <button type="button" onClick={() => setOpen(o => !o)}
           className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className="truncate text-sm font-medium">{service.name}</span>
+          <span className="truncate text-body-15 font-medium">{service.name}</span>
           {service.category && (
-            <span className="hidden shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 sm:inline dark:bg-zinc-800">
+            <span className="hidden shrink-0 rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[12px] text-muted-foreground sm:inline">
               {service.category}
             </span>
           )}
-          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><Clock className="h-3 w-3" />{service.duration_min}m</span>
-          <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-zinc-500"><DollarSign className="h-3 w-3" />{money(service.price_cents, service.currency)}</span>
-          {!service.active && <span className="shrink-0 rounded bg-zinc-100 px-1.5 text-[10px] uppercase text-zinc-500 dark:bg-zinc-800">hidden</span>}
+          <span className="flex shrink-0 items-center gap-1 font-mono text-secondary-13 text-muted-foreground"><Clock className="h-3 w-3" />{service.duration_min}m</span>
+          <span className="flex shrink-0 items-center gap-1 font-mono text-secondary-13 text-muted-foreground"><DollarSign className="h-3 w-3" />{money(service.price_cents, service.currency)}</span>
+          {!service.active && <span className="shrink-0 rounded bg-foreground/[0.06] px-1.5 text-[12px] uppercase text-muted-foreground">hidden</span>}
         </button>
 
-        <button className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+        <button className="flex items-center gap-1 text-secondary-13 text-muted-foreground hover:text-foreground"
           onClick={() => void copy(bookingUrl(service.slug), 'Booking link copied')}>
           <LinkIcon className="h-3.5 w-3.5" /> Copy link
         </button>
         <a href={bookingUrl(service.slug)} target="_blank" rel="noreferrer noopener"
-          className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">Preview</a>
-        <Button size="sm" variant={open ? 'default' : 'outline'} className="h-7 text-xs"
+          className="text-secondary-13 text-muted-foreground hover:text-foreground">Preview</a>
+        <Button size="sm" variant={open ? 'default' : 'outline'} className="h-7 text-secondary-13"
           onClick={() => setOpen(o => !o)}>
           {open ? 'Close' : 'Edit'}
         </Button>
@@ -177,10 +178,10 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
       {open && (
         <div className="flex flex-col gap-3 pb-4 pl-1">
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-xs text-zinc-500">Name
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">Name
               <Input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">Group it under
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">Group it under
               <Input list="booking-studios" placeholder="e.g. MD House Podcast Studio"
                 value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} />
               <datalist id="booking-studios">
@@ -190,63 +191,63 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
             {/* Which calendar it consumes. Two services on the SAME room must
                 share a resource or they will double-book it; two services in
                 different rooms must not, or one blocks the other. */}
-            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground sm:col-span-2">
               Which bookable person or room it uses
               <select value={draft.resource_id}
                 onChange={e => setDraft(d => ({ ...d, resource_id: e.target.value }))}
-                className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800">
+                className="h-9 rounded-tile border border-border bg-transparent px-2 text-body-15">
                 {resources.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">Minutes
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">Minutes
               <Input type="number" min={5} value={draft.duration_min}
                 onChange={e => setDraft(d => ({ ...d, duration_min: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">Price (AUD)
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">Price (AUD)
               <Input type="number" min={0} step="0.01" value={draft.price}
                 onChange={e => setDraft(d => ({ ...d, price: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">Where it happens
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground sm:col-span-2">Where it happens
               <Input placeholder="Altona North, VIC" value={draft.location}
                 onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">
               How far ahead people can book
-              <span className="text-[11px] text-zinc-400">Days shown on the calendar</span>
+              <span className="text-[12px] text-muted-foreground">Days shown on the calendar</span>
               <Input type="number" min={1} max={365} value={draft.horizon_days}
                 onChange={e => setDraft(d => ({ ...d, horizon_days: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500">
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground">
               Notice needed
-              <span className="text-[11px] text-zinc-400">Minutes — 120 hides the next 2 hours</span>
+              <span className="text-[12px] text-muted-foreground">Minutes — 120 hides the next 2 hours</span>
               <Input type="number" min={0} value={draft.lead_time_min}
                 onChange={e => setDraft(d => ({ ...d, lead_time_min: e.target.value }))} />
             </label>
-            <label className="grid gap-1 text-xs text-zinc-500 sm:col-span-2">
+            <label className="grid gap-1 text-secondary-13 text-muted-foreground sm:col-span-2">
               Seats per slot
-              <span className="text-[11px] text-zinc-400">1 = private hire · more = an event several people can join</span>
+              <span className="text-[12px] text-muted-foreground">1 = private hire · more = an event several people can join</span>
               <Input type="number" min={1} max={500} value={draft.capacity}
                 onChange={e => setDraft(d => ({ ...d, capacity: e.target.value }))} />
             </label>
           </div>
 
-          <label className="grid gap-1 text-xs text-zinc-500">
+          <label className="grid gap-1 text-secondary-13 text-muted-foreground">
             What&rsquo;s included
-            <span className="text-[11px] text-zinc-400">
+            <span className="text-[12px] text-muted-foreground">
               A line in CAPS becomes a heading; a line starting with &ldquo;-&rdquo; becomes a bullet.
             </span>
             <textarea rows={10} value={draft.description}
               onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
-              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 font-mono text-xs leading-relaxed outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 font-mono text-secondary-13 leading-relaxed outline-none focus:border-border" />
           </label>
 
           <div className="flex flex-wrap items-center gap-5">
-            <label className="flex items-center gap-2 text-xs text-zinc-500">
+            <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
               <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.requires_payment}
                 onChange={e => setDraft(d => ({ ...d, requires_payment: e.target.checked }))} />
               Take payment when booking
             </label>
-            <label className="flex items-center gap-2 text-xs text-zinc-500">
+            <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
               <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.active}
                 onChange={e => setDraft(d => ({ ...d, active: e.target.checked }))} />
               Show on the public page
@@ -260,7 +261,7 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
               confirmLabel="Delete service"
               onConfirm={() => void onSave({ action: 'delete_service', id: service.id }, `${service.name} deleted`)}
             >
-              <button className="inline-flex items-center justify-center rounded p-2 text-zinc-400 hover:text-rose-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+              <button className="inline-flex items-center justify-center rounded p-2 text-muted-foreground hover:text-accent-red [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
                 aria-label={`Delete ${service.name}`}>
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -295,7 +296,7 @@ function MoveBooking({ booking, onSave, busy }: {
 
   if (!open) {
     return (
-      <button className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+      <button className="text-secondary-13 text-muted-foreground hover:text-foreground"
         onClick={() => { setWhen(local(booking.start_at)); setOpen(true) }}>
         Move
       </button>
@@ -304,8 +305,8 @@ function MoveBooking({ booking, onSave, busy }: {
   return (
     <span className="flex items-center gap-2">
       <Input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
-        className="h-8 w-52 text-xs" />
-      <Button size="sm" className="h-8 text-xs" disabled={busy}
+        className="h-8 w-52 text-secondary-13" />
+      <Button size="sm" className="h-8 text-secondary-13" disabled={busy}
         onClick={async () => {
           const at = new Date(when)
           if (Number.isNaN(at.getTime())) { toast.error('Pick a valid date and time'); return }
@@ -317,7 +318,7 @@ function MoveBooking({ booking, onSave, busy }: {
         }}>
         Save
       </Button>
-      <button className="text-xs text-zinc-400" onClick={() => setOpen(false)}>Cancel</button>
+      <button className="text-secondary-13 text-muted-foreground" onClick={() => setOpen(false)}>Cancel</button>
     </span>
   )
 }
@@ -391,30 +392,30 @@ function ClosedDays({ resources, blackouts, bookings, onSave, busy }: {
 
   return (
     <section className="flex flex-col gap-2">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Closed days</p>
+      <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Closed days</p>
       <Card><CardContent className="flex flex-col gap-3 p-4">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-body-15 text-muted-foreground">
           Shut the studio for a date — a public holiday, a shoot day, anything you don&rsquo;t want booked.
           It disappears from every booking page straight away.
         </p>
 
         {closed.length === 0 ? (
-          <p className="text-sm text-zinc-400">Nothing closed coming up.</p>
+          <p className="text-body-15 text-muted-foreground">Nothing closed coming up.</p>
         ) : (
-          <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
+          <div className="flex flex-col divide-y divide-border">
             {closed.map(c => {
               const n = bookingsOn(c.day)
               return (
                 <div key={c.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                  <span className="text-sm font-medium">{longDay(c.day)}</span>
-                  {rooms.length > 1 && <span className="text-xs text-zinc-400">{nameOf(c.roomId)}</span>}
-                  {c.reason && <span className="text-xs text-zinc-500 dark:text-zinc-400">{c.reason}</span>}
+                  <span className="text-body-15 font-medium">{longDay(c.day)}</span>
+                  {rooms.length > 1 && <span className="text-secondary-13 text-muted-foreground">{nameOf(c.roomId)}</span>}
+                  {c.reason && <span className="text-secondary-13 text-muted-foreground">{c.reason}</span>}
                   {n > 0 && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    <span className="rounded bg-tint-amber px-1.5 py-0.5 text-[12px] text-foreground">
                       {n} booking{n > 1 ? 's' : ''} already on this day
                     </span>
                   )}
-                  <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" disabled={busy}
+                  <Button size="sm" variant="ghost" className="ml-auto h-7 text-secondary-13" disabled={busy}
                     onClick={() => void onSave({ action: 'remove_blackout', ids: idsFor(c.roomId, c.day) }, `${longDay(c.day)} is open for bookings again`)}>
                     <Trash2 className="h-3.5 w-3.5" /> Reopen
                   </Button>
@@ -424,11 +425,11 @@ function ClosedDays({ resources, blackouts, bookings, onSave, busy }: {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           <Input type="date" value={day} min={today} className="w-44" onChange={e => setDay(e.target.value)} />
           {rooms.length > 1 && (
             <select value={room?.key ?? ''} onChange={e => setRoomKey(e.target.value)}
-              className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800">
+              className="h-9 rounded-tile border border-border bg-transparent px-2 text-body-15">
               {rooms.map(r => <option key={r.key} value={r.key}>{r.names.join(' / ')}</option>)}
             </select>
           )}
@@ -441,7 +442,7 @@ function ClosedDays({ resources, blackouts, bookings, onSave, busy }: {
           }}><Plus className="h-3.5 w-3.5" /> Close this day</Button>
         </div>
         {room && room.names.length > 1 && (
-          <p className="text-xs text-zinc-400">
+          <p className="text-secondary-13 text-muted-foreground">
             {room.names.join(' and ')} are the same room, so closing it closes all of them.
           </p>
         )}
@@ -494,22 +495,22 @@ export default function BookingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Bookings</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Services people can book, when you&rsquo;re open, and every appointment.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline"
-            onClick={() => void copy(bookingIndexUrl(), 'Booking link copied — this one shows everything')}>
-            <LinkIcon className="h-3.5 w-3.5" /> Copy the booking link
-          </Button>
-          <a href={bookingIndexUrl()} target="_blank" rel="noreferrer noopener"
-            className="text-xs text-zinc-400 underline-offset-4 hover:underline">
-            {bookingIndexUrl().replace(/^https:\/\//, '')}
-          </a>
-        </div>
-      </div>
+      <PageTitle
+        title="Bookings"
+        summary="Services people can book, when you&rsquo;re open, and every appointment."
+        actions={<>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline"
+              onClick={() => void copy(bookingIndexUrl(), 'Booking link copied — this one shows everything')}>
+              <LinkIcon className="h-3.5 w-3.5" /> Copy the booking link
+            </Button>
+            <a href={bookingIndexUrl()} target="_blank" rel="noreferrer noopener"
+              className="text-secondary-13 text-muted-foreground underline-offset-4 hover:underline">
+              {bookingIndexUrl().replace(/^https:\/\//, '')}
+            </a>
+          </div>
+        </>}
+      />
 
       {data.needs_schema && (
         <NotSetUp feature="Bookings" detail="booking.sql has not been run on this database" />
@@ -517,7 +518,7 @@ export default function BookingsPage() {
 
       {/* ── Services ── */}
       <section className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Services (booking types)</p>
+        <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Services (booking types)</p>
         <Card><CardContent className="flex flex-col gap-2 p-4">
           {data.services.length === 0 && (
             <EmptyState
@@ -545,7 +546,7 @@ export default function BookingsPage() {
 
       {/* ── Resources + availability ── */}
       <section className="flex flex-col gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookable people and rooms</p>
+        <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Bookable people and rooms</p>
         <Card><CardContent className="flex flex-col gap-4 p-4">
           {data.resources.length === 0 && (
             <EmptyState
@@ -558,7 +559,7 @@ export default function BookingsPage() {
           {data.resources.map(r => (
             <ResourceRow key={r.id} resource={r} availability={data.availability.filter(a => a.resource_id === r.id)} onSave={post} busy={busy} />
           ))}
-          <div className="mt-1 flex flex-wrap gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <div className="mt-1 flex flex-wrap gap-2 border-t border-border pt-3">
             <Input value={resDraft.label} placeholder="Label (e.g. Tech — tech@)" className="max-w-xs" onChange={e => setResDraft(d => ({ ...d, label: e.target.value }))} />
             <Input value={resDraft.email} placeholder="email (optional)" className="max-w-xs" onChange={e => setResDraft(d => ({ ...d, email: e.target.value }))} />
             <Button size="sm" disabled={busy || !resDraft.label.trim()} onClick={async () => {
@@ -575,12 +576,12 @@ export default function BookingsPage() {
       {/* ── Bookings ── */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Bookings</p>
-          <div className="ml-auto flex rounded-md border border-zinc-200 p-0.5 dark:border-zinc-800">
+          <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Bookings</p>
+          <div className="ml-auto flex rounded-tile border border-border p-0.5">
             {(['calendar', 'list'] as const).map(v => (
               <button key={v} type="button" onClick={() => setView(v)}
-                className={`min-h-11 rounded px-2.5 py-1 text-xs transition-colors ${
-                  view === v ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-500'
+                className={`min-h-11 rounded px-2.5 py-1 text-secondary-13 transition-colors ${
+                  view === v ? 'bg-foreground text-background' : 'text-muted-foreground'
                 }`}>
                 {/* "Calendar" already means the posting calendar elsewhere in
                     the app, and green means something different on each */}
@@ -609,22 +610,22 @@ export default function BookingsPage() {
             />
           )}
           {data.bookings.map(b => (
-            <div key={b.id} className="flex flex-col border-b border-zinc-100 py-2 last:border-0 dark:border-zinc-800">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <div key={b.id} className="flex flex-col border-b border-border py-2 last:border-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-15">
                 {/* the row opens: everything the studio needs to run the day —
                     phone, email, what they told us — used to be collected and
                     then never shown anywhere */}
                 <button type="button" onClick={() => setOpenBooking(o => o === b.id ? null : b.id)}
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left">
-                  <span className="font-mono text-xs text-zinc-500">
+                  <span className="font-mono text-secondary-13 text-muted-foreground">
                     {new Date(b.start_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
                   <span className="font-medium">{b.customer_name}</span>
-                  <span className="truncate text-zinc-500">{b.booking_services?.name} · {b.booking_resources?.label}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800'}`}>{b.payment_status}</span>
+                  <span className="truncate text-muted-foreground">{b.booking_services?.name} · {b.booking_resources?.label}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] uppercase ${b.payment_status === 'paid' ? 'bg-tint-green text-foreground' : 'bg-foreground/[0.06] text-muted-foreground'}`}>{b.payment_status}</span>
                 </button>
                 {b.status === 'cancelled'
-                  ? <span className="ml-auto text-xs text-zinc-400">cancelled</span>
+                  ? <span className="ml-auto text-secondary-13 text-muted-foreground">cancelled</span>
                   : (
                     <span className="ml-auto flex items-center gap-3">
                       <MoveBooking booking={b} onSave={post} busy={busy} />
@@ -634,7 +635,7 @@ export default function BookingsPage() {
                         confirmLabel="Cancel the booking"
                         onConfirm={() => void post({ action: 'cancel_booking', id: b.id }, `${b.customer_name}'s booking cancelled — they have been emailed`)}
                       >
-                        <button className="min-h-11 px-1 text-xs text-rose-600 hover:underline"
+                        <button className="min-h-11 px-1 text-secondary-13 text-accent-red hover:underline"
                           aria-label={`Cancel ${b.customer_name}'s booking`}>Cancel</button>
                       </ConfirmAction>
                     </span>
@@ -688,8 +689,8 @@ function ResourceRow({ resource, availability, onSave, busy }: {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {/* the email is how alerts route, not something to read here */}
-        <span className="text-sm font-medium">{resource.label}</span>
-        <Button size="sm" variant="ghost" className="h-7 text-xs text-zinc-500"
+        <span className="text-body-15 font-medium">{resource.label}</span>
+        <Button size="sm" variant="ghost" className="h-7 text-secondary-13 text-muted-foreground"
           onClick={() => { setDirty(true); setGrid(DAYS.map((_, wd) => ({ on: wd >= 1 && wd <= 5, start: '09:00', end: '17:00' }))) }}>
           Weekdays 9–5
         </Button>
@@ -699,31 +700,31 @@ function ResourceRow({ resource, availability, onSave, busy }: {
           confirmLabel="Delete it"
           onConfirm={() => void onSave({ action: 'delete_resource', id: resource.id }, `${resource.label} deleted`)}
         >
-          <button className="ml-auto inline-flex items-center justify-center rounded p-2 text-zinc-400 hover:text-rose-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+          <button className="ml-auto inline-flex items-center justify-center rounded p-2 text-muted-foreground hover:text-accent-red [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
             aria-label={`Delete ${resource.label}`}><Trash2 className="h-3.5 w-3.5" /></button>
         </ConfirmAction>
       </div>
 
       <div className="flex flex-col gap-1">
         {grid.map((g, wd) => (
-          <div key={wd} className="flex flex-wrap items-center gap-3 text-sm">
+          <div key={wd} className="flex flex-wrap items-center gap-3 text-body-15">
             <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2">
               <input type="checkbox" checked={g.on} className="h-3.5 w-3.5 accent-blue-600"
                 onChange={e => edit(wd, { on: e.target.checked })} />
-              <span className={g.on ? '' : 'text-zinc-400'}>{DAYS[wd]}</span>
+              <span className={g.on ? '' : 'text-muted-foreground'}>{DAYS[wd]}</span>
             </label>
             {g.on ? (
               <>
                 <input type="time" value={g.start} step={900}
                   onChange={e => edit(wd, { start: e.target.value })}
-                  className="rounded border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs dark:border-zinc-700" />
-                <span className="text-zinc-400">to</span>
+                  className="rounded border border-border bg-transparent px-2 py-1 font-mono text-secondary-13" />
+                <span className="text-muted-foreground">to</span>
                 <input type="time" value={g.end} step={900}
                   onChange={e => edit(wd, { end: e.target.value })}
-                  className="rounded border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs dark:border-zinc-700" />
+                  className="rounded border border-border bg-transparent px-2 py-1 font-mono text-secondary-13" />
               </>
             ) : (
-              <span className="text-xs text-zinc-400">Closed</span>
+              <span className="text-secondary-13 text-muted-foreground">Closed</span>
             )}
           </div>
         ))}

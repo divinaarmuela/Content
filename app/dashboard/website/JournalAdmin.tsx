@@ -74,10 +74,10 @@ function SectionEditor({ sections, onChange }: {
   return (
     <div className="flex flex-col gap-3">
       {sections.map((section, i) => (
-        <Card key={i} className="border-zinc-200 dark:border-zinc-800">
+        <Card key={i} className="border-border">
           <CardContent className="flex flex-col gap-2.5 py-4">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-zinc-400">
+              <span className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">
                 Section {i + 1}
               </span>
               <div className="ml-auto flex gap-1">
@@ -90,7 +90,7 @@ function SectionEditor({ sections, onChange }: {
                   onClick={() => onChange(moveItem(sections, i, 1))} aria-label="Move down">
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-accent-red hover:text-accent-red"
                   type="button" onClick={() => onChange(sections.filter((_, j) => j !== i))}
                   aria-label="Remove section">
                   <X className="h-3.5 w-3.5" />
@@ -192,11 +192,11 @@ export default function JournalAdmin() {
           <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
-          <h3 className="text-sm font-semibold">{editing.id ? 'Edit post' : 'New post'}</h3>
+          <h3 className="text-body-15 font-semibold">{editing.id ? 'Edit post' : 'New post'}</h3>
           <div className="ml-auto flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Switch checked={!!editing.published} onCheckedChange={v => set({ published: v })} />
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">Published</span>
+              <span className="text-secondary-13 text-muted-foreground">Published</span>
             </div>
             <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
           </div>
@@ -209,23 +209,23 @@ export default function JournalAdmin() {
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Slug <span className="text-xs text-zinc-400">(auto from the title)</span></Label>
+            <Label>Slug <span className="text-secondary-13 text-muted-foreground">(auto from the title)</span></Label>
             <Input
               value={editing.slug ?? ''}
               placeholder={editing.title ? slugify(editing.title) : 'my-post'}
               onChange={e => set({ slug: e.target.value })}
-              className="font-mono text-sm"
+              className="font-mono text-body-15"
             />
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Topic <span className="text-xs text-zinc-400">(becomes a filter on /journal)</span></Label>
+            <Label>Topic <span className="text-secondary-13 text-muted-foreground">(becomes a filter on /journal)</span></Label>
             <Input value={editing.category ?? ''} placeholder="Content, Branding, Paid…"
               onChange={e => set({ category: e.target.value })} />
           </div>
 
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Standfirst <span className="text-xs text-zinc-400">(the line under the title)</span></Label>
+            <Label>Standfirst <span className="text-secondary-13 text-muted-foreground">(the line under the title)</span></Label>
             <Textarea rows={2} value={editing.standfirst ?? ''}
               onChange={e => set({ standfirst: e.target.value })} />
           </div>
@@ -237,7 +237,7 @@ export default function JournalAdmin() {
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Read time <span className="text-xs text-zinc-400">(minutes)</span></Label>
+            <Label>Read time <span className="text-secondary-13 text-muted-foreground">(minutes)</span></Label>
             <div className="flex gap-2">
               <Input type="number" min={1} value={editing.read_mins ?? 3}
                 onChange={e => set({ read_mins: Number(e.target.value) || 1 })} />
@@ -253,8 +253,8 @@ export default function JournalAdmin() {
             <div className="flex items-center gap-3">
               {editing.cover_url
                 ? /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={editing.cover_url} alt="" className="h-20 w-32 rounded-md border border-zinc-200 object-cover dark:border-zinc-800" />
-                : <div className="h-20 w-32 rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800" />}
+                  <img src={editing.cover_url} alt="" className="h-20 w-32 rounded-tile border border-border object-cover" />
+                : <div className="h-20 w-32 rounded-tile border border-border bg-foreground/[0.06]" />}
               <Input value={editing.cover_url ?? ''} placeholder="Paste a URL or upload →"
                 onChange={e => set({ cover_url: e.target.value })} className="flex-1" />
               <Button variant="outline" type="button" disabled={busy}
@@ -279,15 +279,15 @@ export default function JournalAdmin() {
 
           <div className="flex items-center gap-2 sm:col-span-2">
             <Switch checked={!!editing.featured} onCheckedChange={v => set({ featured: v })} />
-            <span className="text-sm">Feature this post</span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-body-15">Feature this post</span>
+            <span className="text-secondary-13 text-muted-foreground">
               — only one post can be featured; unfeature the current one first
             </span>
           </div>
         </CardContent></Card>
 
         <div>
-          <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-zinc-400">Body</p>
+          <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Body</p>
           <SectionEditor sections={sections} onChange={next => set({ sections: next })} />
         </div>
       </div>
@@ -299,8 +299,8 @@ export default function JournalAdmin() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h3 className="text-sm font-semibold">Journal</h3>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h3 className="text-body-15 font-semibold">Journal</h3>
+          <p className="text-body-15 text-muted-foreground">
             {posts.length} post{posts.length === 1 ? '' : 's'} · these are the articles on /journal
           </p>
         </div>
@@ -329,7 +329,7 @@ export default function JournalAdmin() {
       {posts.length === 0 ? (
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               No posts yet. The site is still showing the articles written into the code —
               import them to make them editable.
             </p>
@@ -339,7 +339,7 @@ export default function JournalAdmin() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
                 <TableHead>Title</TableHead>
                 <TableHead className="w-28">Topic</TableHead>
                 <TableHead className="w-28">Date</TableHead>
@@ -352,19 +352,19 @@ export default function JournalAdmin() {
                 <TableRow key={p.id} className={p.published ? '' : 'opacity-60'}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {p.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
+                      {p.featured && <Star className="h-3.5 w-3.5 shrink-0 fill-accent-amber text-accent-amber" />}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{p.title}</p>
-                        <p className="truncate font-mono text-xs text-zinc-400">/journal/{p.slug}</p>
+                        <p className="truncate text-body-15 font-medium">{p.title}</p>
+                        <p className="truncate font-mono text-secondary-13 text-muted-foreground">/journal/{p.slug}</p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     {p.category
                       ? <Badge variant="outline" className="font-normal">{p.category}</Badge>
-                      : <span className="text-xs text-zinc-400">—</span>}
+                      : <span className="text-secondary-13 text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-500">
+                  <TableCell className="font-mono text-secondary-13 text-muted-foreground">
                     {p.published_at ?? '—'}
                   </TableCell>
                   <TableCell>
@@ -387,7 +387,7 @@ export default function JournalAdmin() {
                         onClick={() => setEditing(p)} aria-label="Edit">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-accent-red hover:text-accent-red"
                         onClick={() => setDeleting(p)} aria-label="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -411,7 +411,7 @@ export default function JournalAdmin() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-accent-red hover:bg-accent-red"
               onClick={async () => {
                 if (!deleting) return
                 const res = await fetch(`/api/website/journal/${deleting.id}`, { method: 'DELETE' })

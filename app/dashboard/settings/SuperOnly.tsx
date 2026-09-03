@@ -13,7 +13,7 @@ export default function SuperOnly({ children }: { children: React.ReactNode }) {
   if (!can('super_admin')) {
     return (
       <Card>
-        <CardContent className="flex items-center gap-2 py-10 text-sm text-zinc-500 dark:text-zinc-400">
+        <CardContent className="flex items-center gap-2 py-10 text-body-15 text-muted-foreground">
           <Lock className="h-4 w-4 shrink-0" />
           This section is for super admins.
         </CardContent>

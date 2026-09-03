@@ -75,30 +75,30 @@ export default function AsanaSetup({ onChanged }: { onChanged?: () => void }) {
       <Card className="border-dashed shadow-none">
         <CardContent className="flex flex-col gap-4 py-6">
           <div className="flex items-start gap-3">
-            <Plug className="mt-0.5 h-5 w-5 text-zinc-400" />
+            <Plug className="mt-0.5 h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">Asana isn’t connected</p>
-              <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-body-15 font-medium">Asana isn’t connected</p>
+              <p className="mt-0.5 text-body-15 text-muted-foreground">
                 Two environment variables are needed first.
               </p>
             </div>
           </div>
           <ul className="flex flex-col gap-2">
             {steps.map(s => (
-              <li key={s.label} className="flex items-start gap-2.5 rounded-md border border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
+              <li key={s.label} className="flex items-start gap-2.5 rounded-tile border border-border px-3 py-2.5">
                 {s.done
-                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  : <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-zinc-300 dark:border-zinc-600" />}
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent-green" />
+                  : <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-border" />}
                 <div>
-                  <code className="font-mono text-xs">{s.label}</code>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{s.detail}</p>
+                  <code className="font-mono text-secondary-13">{s.label}</code>
+                  <p className="mt-0.5 text-secondary-13 text-muted-foreground">{s.detail}</p>
                 </div>
               </li>
             ))}
           </ul>
           <a href="https://developers.asana.com/docs/personal-access-token"
             target="_blank" rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 self-start text-xs text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400">
+            className="inline-flex items-center gap-1 self-start text-secondary-13 text-muted-foreground underline-offset-2 hover:underline">
             How to create a token <ExternalLink className="h-3 w-3" />
           </a>
         </CardContent>
@@ -131,10 +131,10 @@ export default function AsanaSetup({ onChanged }: { onChanged?: () => void }) {
       <Card>
         <CardContent className="flex flex-col items-start gap-3 py-6">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            <p className="text-sm font-medium">Ready to connect</p>
+            <span className="h-2 w-2 rounded-full bg-accent-amber" />
+            <p className="text-body-15 font-medium">Ready to connect</p>
           </div>
-          <p className="max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="max-w-2xl text-body-15 text-muted-foreground">
             One click matches your team to their Asana accounts, starts tracking every project,
             turns on live updates, and pulls everyone’s current tasks. Takes about a minute.
           </p>
@@ -143,7 +143,7 @@ export default function AsanaSetup({ onChanged }: { onChanged?: () => void }) {
             {busy === 'connect' ? 'Connecting…' : 'Connect Asana'}
           </Button>
           {state.reachError && (
-            <p className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-400">
+            <p className="flex items-start gap-2 rounded-tile bg-tint-red px-3 py-2 text-secondary-13 text-foreground">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {state.reachError}
             </p>
           )}
@@ -157,16 +157,16 @@ export default function AsanaSetup({ onChanged }: { onChanged?: () => void }) {
     <Card>
       <CardContent className="flex flex-wrap items-center gap-x-5 gap-y-3 py-4">
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span className="text-sm font-medium">Connected to Asana</span>
+          <span className="h-2 w-2 rounded-full bg-accent-green" />
+          <span className="text-body-15 font-medium">Connected to Asana</span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-          <span><span className="font-mono tabular-nums text-zinc-900 dark:text-zinc-100">{matched}</span> people</span>
-          <span><span className="font-mono tabular-nums text-zinc-900 dark:text-zinc-100">{tracked}</span> projects</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-secondary-13 text-muted-foreground">
+          <span><span className="font-mono tabular-nums text-foreground">{matched}</span> people</span>
+          <span><span className="font-mono tabular-nums text-foreground">{tracked}</span> projects</span>
           <span className="flex items-center gap-1">
-            <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            <span className="font-mono tabular-nums text-zinc-900 dark:text-zinc-100">{live}</span> live
+            <Radio className="h-3 w-3 text-accent-green" />
+            <span className="font-mono tabular-nums text-foreground">{live}</span> live
           </span>
         </div>
 
@@ -188,7 +188,7 @@ export default function AsanaSetup({ onChanged }: { onChanged?: () => void }) {
           </Button>
         </div>
 
-        <p className="w-full text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="w-full text-secondary-13 text-muted-foreground">
           Updates arrive automatically — live for tracked projects, plus a safety sweep every 15 minutes.
           Refresh is only for when you don’t want to wait.
         </p>

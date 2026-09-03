@@ -7,9 +7,6 @@ import UiLane from '../ui/Lane'
 export type Lane = {
   key: string
   title: string
-  /** the dot colour class the old board drew, e.g. bg-blue-500. The new lane
-   *  head has no dot; kept optional so a caller that still passes one compiles. */
-  tint?: string
   count: number
   /** what is NOT here, in the column's own words */
   empty: string

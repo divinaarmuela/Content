@@ -96,13 +96,13 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
     return (
       <Card className="border-dashed shadow-none">
         <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <FileText className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-inner bg-foreground/[0.06]">
+            <FileText className="h-5 w-5 text-muted-foreground" />
           </div>
-          <p className="text-sm font-medium">No agreement on file</p>
+          <p className="text-body-15 font-medium">No agreement on file</p>
           {canManage ? (
             <>
-              <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="max-w-sm text-body-15 text-muted-foreground">
                 Record the client&rsquo;s monthly deliverables and retained services
                 so the team can plan against them.
               </p>
@@ -112,7 +112,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
               </Button>
             </>
           ) : (
-            <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="max-w-sm text-body-15 text-muted-foreground">
               An account manager hasn&rsquo;t recorded this client&rsquo;s agreement yet.
             </p>
           )}
@@ -143,20 +143,20 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
         <CardContent className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="flex items-center text-sm font-semibold">
+              <h3 className="flex items-center text-body-15 font-semibold">
                 What we owe them each month
                 <HelpHint term="deliverable" />
               </h3>
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-0.5 text-secondary-13 text-muted-foreground">
                 How many of each we promised per month. Saved as you go. A single
                 month can be adjusted later in Production.
               </p>
             </div>
-            <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
               Agreement start
               {canManage ? (
                 <Input type="date" key={agreement.start_date ?? ''} defaultValue={agreement.start_date ?? ''}
-                  disabled={busy} className="h-8 w-36 font-mono text-xs"
+                  disabled={busy} className="h-8 w-36 font-mono text-secondary-13"
                   onBlur={e => { if (e.target.value !== (agreement.start_date ?? '')) void save({ start_date: e.target.value || null }, e.target.value ? `agreement starts ${e.target.value}` : 'start date cleared') }} />
               ) : (
                 <span className="font-mono">{agreement.start_date ?? '—'}</span>
@@ -167,20 +167,20 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
             {CONTENT_TYPES.map(type => {
               const line = lineFor(type)
               return (
-                <div key={type} className="flex items-center gap-3 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                  <span className="flex-1 text-sm">{TYPE_LABELS[type]}</span>
+                <div key={type} className="flex items-center gap-3 rounded-tile border border-border px-3 py-2">
+                  <span className="flex-1 text-body-15">{TYPE_LABELS[type]}</span>
                   {canManage ? (
                     <Input type="number" min={0} key={`${type}:${line?.monthly_qty ?? 0}`}
                       defaultValue={line?.monthly_qty ?? 0} disabled={busy}
-                      className="h-8 w-20 text-center font-mono text-sm tabular-nums"
+                      className="h-8 w-20 text-center font-mono text-body-15 tabular-nums"
                       onBlur={e => {
                         const qty = Math.max(0, Number(e.target.value) || 0)
                         if (qty !== (line?.monthly_qty ?? 0)) setQty(type, qty)
                       }} />
                   ) : (
-                    <span className="font-mono text-sm tabular-nums">{line?.monthly_qty ?? 0}</span>
+                    <span className="font-mono text-body-15 tabular-nums">{line?.monthly_qty ?? 0}</span>
                   )}
-                  <span className="w-14 text-right text-[11px] text-zinc-400">/ month</span>
+                  <span className="w-14 text-right text-[12px] text-muted-foreground">/ month</span>
                 </div>
               )
             })}
@@ -190,32 +190,32 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
 
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">
-          <h3 className="text-sm font-semibold">Retained services</h3>
+          <h3 className="text-body-15 font-semibold">Retained services</h3>
           <div className="flex flex-col gap-1.5">
             {catalog.map(c => {
               const svc = serviceFor(c.key)
               return (
                 <label key={c.key}
-                  className={`flex items-center gap-3 rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800 ${canManage ? 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900' : ''}`}>
+                  className={`flex items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 ${canManage ? 'cursor-pointer hover:bg-foreground/[0.04]' : ''}`}>
                   <input type="checkbox" checked={svc?.active ?? false} disabled={!canManage || busy}
                     onChange={e => setService(c.key, c.label, { active: e.target.checked })}
                     className="h-4 w-4 shrink-0 accent-blue-600" />
                   <span className="flex-1">{c.label}</span>
                   {canManage && (svc?.active || svc?.note) && (
                     <Input key={`${c.key}:${svc?.note ?? ''}`} defaultValue={svc?.note ?? ''} placeholder="note"
-                      className="h-7 w-44 text-xs"
+                      className="h-7 w-44 text-secondary-13"
                       onBlur={e => { if (e.target.value !== (svc?.note ?? '')) setService(c.key, c.label, { note: e.target.value }) }} />
                   )}
                 </label>
               )
             })}
             {agreement.services.filter(s => s.key.startsWith('custom:')).map(s => (
-              <label key={s.key} className="flex items-center gap-3 rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800">
+              <label key={s.key} className="flex items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15">
                 <input type="checkbox" checked={s.active} disabled={!canManage || busy}
                   onChange={e => setService(s.key, s.label, { active: e.target.checked })}
                   className="h-4 w-4 shrink-0 accent-blue-600" />
                 <span className="flex-1">{s.label}</span>
-                <Badge variant="outline" className="font-normal text-zinc-400">custom</Badge>
+                <Badge variant="outline" className="font-normal text-muted-foreground">custom</Badge>
               </label>
             ))}
             {/* window.prompt was the only native browser dialog left in the
@@ -249,7 +249,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
 
       <Card>
         <CardContent className="flex flex-col gap-2 p-4">
-          <h3 className="text-sm font-semibold">Notes</h3>
+          <h3 className="text-body-15 font-semibold">Notes</h3>
           <textarea
             key={agreement.notes ?? ''}
             defaultValue={agreement.notes ?? ''}
@@ -257,7 +257,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
             rows={3}
             placeholder="Commercial notes, term dates, anything the team should know."
             onBlur={e => { if (e.target.value !== (agreement.notes ?? '')) void save({ notes: e.target.value }, 'notes updated') }}
-            className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-3 text-sm outline-none placeholder:text-zinc-400 dark:border-zinc-800"
+            className="w-full resize-y rounded-tile border border-border bg-transparent p-3 text-body-15 outline-none placeholder:text-muted-foreground"
           />
         </CardContent>
       </Card>

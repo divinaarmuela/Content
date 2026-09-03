@@ -20,6 +20,7 @@ import { ArrowLeft, Pause, Play, Plus, Trash2, Zap } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
 import EmptyState from '../../EmptyState'
 import { BUTTON_MESSAGE_LIMIT, MESSAGE_LIMIT, parseAutomationDraft } from '@/app/lib/automation-core'
+import PageTitle from '../../ui/PageTitle'
 
 type SocialAccount = {
   id: string; provider_account_id: string; platform: string
@@ -203,29 +204,26 @@ export default function AutomationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <Link href="/dashboard/social"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+        className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Social channels
       </Link>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Comment → DM automations</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            When someone comments a keyword, the account DMs them automatically —
-            the &ldquo;comment LINK and I&rsquo;ll send it to you&rdquo; loop.
-          </p>
-        </div>
-        <Button size="sm" className="ml-auto" onClick={() => setCreating(v => !v)}>
-          <Plus className="h-4 w-4" /> New automation
-        </Button>
-      </div>
+      <PageTitle
+        title="Comment → DM automations"
+        summary="When someone comments a keyword, the account DMs them automatically — the &ldquo;comment LINK and I&rsquo;ll send it to you&rdquo; loop."
+        actions={<>
+          <Button size="sm" onClick={() => setCreating(v => !v)}>
+            <Plus className="h-4 w-4" /> New automation
+          </Button>
+        </>}
+      />
 
       {creating && (
         <Card>
           <CardContent className="grid gap-3 p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Account</label>
+                <label className="text-secondary-13 font-medium text-muted-foreground">Account</label>
                 <Select value={draft.accountRowId} onValueChange={v => setDraft(d => ({ ...d, accountRowId: v, platformPostId: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Pick an account" /></SelectTrigger>
                   <SelectContent>
@@ -238,7 +236,7 @@ export default function AutomationsPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Name</label>
+                <label className="text-secondary-13 font-medium text-muted-foreground">Name</label>
                 <Input value={draft.name} placeholder="e.g. Launch link drop"
                   onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
               </div>
@@ -246,7 +244,7 @@ export default function AutomationsPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Listens to</label>
+                <label className="text-secondary-13 font-medium text-muted-foreground">Listens to</label>
                 <Select value={draft.trigger} onValueChange={v => setDraft(d => ({ ...d, trigger: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -256,8 +254,8 @@ export default function AutomationsPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                  Keywords <span className="font-normal text-zinc-400">comma separated</span>
+                <label className="text-secondary-13 font-medium text-muted-foreground">
+                  Keywords <span className="font-normal text-muted-foreground">comma separated</span>
                 </label>
                 <Input value={draft.keywords} placeholder="LINK, price, info"
                   onChange={e => setDraft(d => ({ ...d, keywords: e.target.value }))} />
@@ -266,7 +264,7 @@ export default function AutomationsPage() {
 
             {draft.trigger === 'comment' && accountPosts.length > 0 && (
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Which posts</label>
+                <label className="text-secondary-13 font-medium text-muted-foreground">Which posts</label>
                 <Select value={draft.platformPostId || 'all'}
                   onValueChange={v => setDraft(d => ({ ...d, platformPostId: v === 'all' ? '' : v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -284,8 +282,8 @@ export default function AutomationsPage() {
 
             <div className="grid gap-1.5">
               <div className="flex items-baseline justify-between">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">The DM it sends</label>
-                <span className={`font-mono text-[11px] tabular-nums ${draft.dmMessage.length > msgLimit ? 'text-red-500' : 'text-zinc-400'}`}>
+                <label className="text-secondary-13 font-medium text-muted-foreground">The DM it sends</label>
+                <span className={`font-mono text-[12px] tabular-nums ${draft.dmMessage.length > msgLimit ? 'text-accent-red' : 'text-muted-foreground'}`}>
                   {draft.dmMessage.length}/{msgLimit}
                 </span>
               </div>
@@ -296,8 +294,8 @@ export default function AutomationsPage() {
 
             {draft.trigger === 'comment' && (
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                  Public reply under their comment <span className="font-normal text-zinc-400">optional</span>
+                <label className="text-secondary-13 font-medium text-muted-foreground">
+                  Public reply under their comment <span className="font-normal text-muted-foreground">optional</span>
                 </label>
                 <Input value={draft.commentReply} maxLength={300}
                   placeholder="Check your DMs! 📩"
@@ -307,20 +305,20 @@ export default function AutomationsPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                  Button label <span className="font-normal text-zinc-400">optional</span>
+                <label className="text-secondary-13 font-medium text-muted-foreground">
+                  Button label <span className="font-normal text-muted-foreground">optional</span>
                 </label>
                 <Input value={draft.buttonTitle} placeholder="Shop now" maxLength={20}
                   onChange={e => setDraft(d => ({ ...d, buttonTitle: e.target.value }))} />
               </div>
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Button link</label>
+                <label className="text-secondary-13 font-medium text-muted-foreground">Button link</label>
                 <Input value={draft.buttonUrl} placeholder="https://…"
                   onChange={e => setDraft(d => ({ ...d, buttonUrl: e.target.value }))} />
               </div>
             </div>
 
-            <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+            <label className="flex w-fit cursor-pointer items-center gap-2 text-body-15">
               <input type="checkbox" checked={draft.alsoMatchInDms}
                 onChange={e => setDraft(d => ({ ...d, alsoMatchInDms: e.target.checked }))}
                 className="h-4 w-4 accent-blue-600" />
@@ -328,13 +326,13 @@ export default function AutomationsPage() {
             </label>
 
             {draft.buttonUrl.trim() !== '' && (
-              <label className="flex w-fit cursor-pointer items-start gap-2 text-sm">
+              <label className="flex w-fit cursor-pointer items-start gap-2 text-body-15">
                 <input type="checkbox" checked={draft.linkTracking}
                   onChange={e => setDraft(d => ({ ...d, linkTracking: e.target.checked }))}
                   className="mt-0.5 h-4 w-4 accent-blue-600" />
                 <span>
                   Count link clicks
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="block text-secondary-13 text-muted-foreground">
                     Wraps the link in a short redirect — the tapper briefly sees the
                     tracking domain. Turn off for a clean direct link (no click stats).
                   </span>
@@ -346,7 +344,7 @@ export default function AutomationsPage() {
               <Button size="sm" disabled={busy !== null || problem !== null} onClick={create}>
                 {busy === 'create' ? 'Creating…' : 'Create automation'}
               </Button>
-              {problem && <span className="text-xs text-zinc-400 dark:text-zinc-500">{problem}</span>}
+              {problem && <span className="text-secondary-13 text-muted-foreground">{problem}</span>}
             </div>
           </CardContent>
         </Card>
@@ -371,13 +369,13 @@ export default function AutomationsPage() {
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   {a.platform && <PlatformIcon platform={a.platform} size={18} />}
-                  <span className="text-sm font-semibold">{a.name ?? 'Automation'}</span>
+                  <span className="text-body-15 font-semibold">{a.name ?? 'Automation'}</span>
                   <Badge variant="outline" className={a.isActive === false
-                    ? 'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400'}>
+                    ? 'border-border text-muted-foreground'
+                    : 'border-accent-green/30 bg-tint-green text-foreground'}>
                     {a.isActive === false ? 'Paused' : 'Running'}
                   </Badge>
-                  <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="text-secondary-13 text-muted-foreground">
                     {a.trigger === 'story_reply' ? 'story replies' : a.platformPostId ? 'one post' : 'all posts'}
                     {a.alsoMatchInDms && ' · DMs too'}
                   </span>
@@ -386,7 +384,7 @@ export default function AutomationsPage() {
                       {a.isActive === false ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
                     </Button>
                     <Button size="sm" variant="outline" disabled={busy !== null}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400"
+                      className="text-accent-red hover:text-foreground"
                       onClick={() => setConfirmDelete(a)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -395,33 +393,33 @@ export default function AutomationsPage() {
 
                 <div className="flex flex-wrap gap-1.5">
                   {(a.keywords ?? []).map(k => (
-                    <span key={k} className="rounded-full bg-zinc-100 px-2 py-0.5 font-mono text-[11px] dark:bg-zinc-800">{k}</span>
+                    <span key={k} className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 font-mono text-chip-12">{k}</span>
                   ))}
                 </div>
 
                 {a.dmMessage && (
-                  <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                  <p className="rounded-inner bg-foreground/[0.04] px-3 py-2 text-body-15 text-muted-foreground">
                     {a.dmMessage}
                   </p>
                 )}
                 {a.commentReply && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Public reply: <span className="text-zinc-700 dark:text-zinc-300">{a.commentReply}</span>
+                  <p className="text-secondary-13 text-muted-foreground">
+                    Public reply: <span className="text-muted-foreground">{a.commentReply}</span>
                   </p>
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                   {STAT_LABELS.map(([k, label]) => (
-                    <span key={k} className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <span key={k} className="text-secondary-13 text-muted-foreground">
                       {label}{' '}
-                      <span className="font-mono font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                      <span className="font-mono font-medium tabular-nums text-foreground">
                         {(a.stats?.[k] ?? 0).toLocaleString()}
                       </span>
                     </span>
                   ))}
                   {(a.stats?.triggered ?? 0) > 0 && (
                     <button type="button" onClick={() => void toggleLogs(a)}
-                      className="text-xs text-blue-600 hover:underline dark:text-blue-400">
+                      className="text-secondary-13 text-accent-blue-deep hover:underline">
                       {openLogs === a.id ? 'Hide activity' : 'Who triggered it'}
                     </button>
                   )}
@@ -431,29 +429,29 @@ export default function AutomationsPage() {
                   logs[a.id] === null ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (logs[a.id] ?? []).length === 0 ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="text-secondary-13 text-muted-foreground">
                       Nothing yet — the first time someone comments the keyword, the reply it sent shows up here.
                     </p>
                   ) : (
-                    <div className="flex flex-col divide-y divide-zinc-100 rounded-lg border border-zinc-100 dark:divide-zinc-800 dark:border-zinc-800">
+                    <div className="flex flex-col divide-y divide-border rounded-inner border border-border">
                       {(logs[a.id] ?? []).map(l => (
-                        <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-xs">
+                        <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-secondary-13">
                           <span className="font-medium">{l.commenterName ?? 'someone'}</span>
                           {l.commentText && (
-                            <span className="text-zinc-500 dark:text-zinc-400">&ldquo;{l.commentText.slice(0, 60)}&rdquo;</span>
+                            <span className="text-muted-foreground">&ldquo;{l.commentText.slice(0, 60)}&rdquo;</span>
                           )}
                           <span className="ml-auto flex items-center gap-2">
                             <span className={l.status === 'sent'
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-zinc-400 dark:text-zinc-500'}>
+                              ? 'text-accent-green'
+                              : 'text-muted-foreground'}>
                               {l.status === 'sent' ? 'DM sent' : l.status ?? '—'}
                             </span>
                             {l.clickedAt ? (
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                              <span className="rounded-full bg-tint-blue px-2 py-0.5 font-medium text-foreground">
                                 Clicked{(l.clickCount ?? 0) > 1 ? ` ×${l.clickCount}` : ''}
                               </span>
                             ) : (
-                              <span className="text-zinc-300 dark:text-zinc-600">no click</span>
+                              <span className="text-muted-foreground">no click</span>
                             )}
                           </span>
                         </div>
@@ -480,7 +478,7 @@ export default function AutomationsPage() {
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy !== null}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-accent-red text-white hover:bg-accent-red"
               onClick={e => { e.preventDefault(); if (confirmDelete) void doDelete(confirmDelete) }}
             >
               {busy !== null ? 'Deleting…' : 'Delete'}

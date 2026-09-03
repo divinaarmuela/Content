@@ -136,9 +136,9 @@ export default function IntegrationsSettings() {
   if (!items) return <Skeleton className="h-80 w-full" />
 
   return (
-    <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    <Card className="border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-base">Integrations</CardTitle>
+        <CardTitle>Integrations</CardTitle>
         <CardDescription>
           What this workspace is actually connected to, checked live.
         </CardDescription>
@@ -146,23 +146,23 @@ export default function IntegrationsSettings() {
       <CardContent className="flex flex-col">
         {items.map((it, i) => {
           const dot = it.connected
-            ? 'bg-emerald-500'
+            ? 'bg-accent-green'
             : it.configured
-              ? 'bg-amber-500'
-              : 'bg-zinc-300 dark:bg-zinc-600'
+              ? 'bg-accent-amber'
+              : 'bg-foreground/[0.12]'
           return (
             <div
               key={it.key}
               className={`flex flex-wrap items-center gap-3 py-4 ${
-                i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800' : ''
+                i > 0 ? 'border-t border-border' : ''
               }`}
             >
               {/* state is never colour alone — the status line says it too */}
               <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{it.name}</p>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">{it.detail}</p>
-                <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-body-15 font-medium text-foreground">{it.name}</p>
+                <p className="text-body-15 text-muted-foreground">{it.detail}</p>
+                <p className="mt-0.5 font-mono text-secondary-13 text-muted-foreground">
                   {it.status}
                 </p>
               </div>

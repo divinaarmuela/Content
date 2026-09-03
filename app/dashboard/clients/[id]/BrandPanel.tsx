@@ -45,7 +45,7 @@ function copyText(value: string, label: string) {
 
 /** 44px tap floor on the small controls, so phones can hit them */
 const TAP = 'inline-flex min-h-[44px] min-w-[44px] items-center justify-center sm:min-h-[36px] sm:min-w-[36px]'
-const ICON_BTN = `${TAP} rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40`
+const ICON_BTN = `${TAP} rounded-tile text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40`
 
 // ── inline editing ──────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ function Editable({ value, onSave, placeholder, canEdit, multiline, className = 
         if (e.key === 'Escape') { e.preventDefault(); cancel() }
         else if (e.key === 'Enter' && (!multiline || !e.shiftKey)) { e.preventDefault(); commit() }
       },
-      className: `${className} ${font} w-full rounded-md border border-primary/50 bg-background px-2 py-1.5 text-sm outline-none ring-2 ring-primary/20`,
+      className: `${className} ${font} w-full rounded-tile border border-primary/50 bg-background px-2 py-1.5 text-body-15 outline-none ring-2 ring-primary/20`,
     }
     return multiline
       ? <textarea {...shared} rows={Math.min(8, Math.max(2, draft.split('\n').length + 1))} />
@@ -101,7 +101,7 @@ function Editable({ value, onSave, placeholder, canEdit, multiline, className = 
       type="button"
       onClick={() => setEditing(true)}
       title="Click to edit"
-      className={`${className} ${font} min-h-[36px] w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/70 ${value ? '' : 'text-muted-foreground/60'} whitespace-pre-wrap`}
+      className={`${className} ${font} min-h-[36px] w-full rounded-tile px-2 py-1.5 text-left transition-colors hover:bg-muted/70 ${value ? '' : 'text-muted-foreground/60'} whitespace-pre-wrap`}
     >
       {value || placeholder}
     </button>
@@ -131,7 +131,7 @@ function AddRow({ placeholder, onAdd, transform }: {
         onChange={e => setDraft(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
         onBlur={add}
-        className="min-h-[44px] w-full rounded-md border border-dashed border-border bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground/70 focus:border-primary/50 sm:min-h-[36px]"
+        className="min-h-[44px] w-full rounded-tile border border-dashed border-border bg-transparent px-2 text-body-15 outline-none placeholder:text-muted-foreground/70 focus:border-primary/50 sm:min-h-[36px]"
       />
     </div>
   )
@@ -148,20 +148,20 @@ function Section({ icon: Icon, title, hint, count, onClear, canEdit, copy, child
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
+    <div className="rounded-inner border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="flex items-center gap-2 text-secondary-13 font-semibold uppercase tracking-wide text-muted-foreground">
           <Icon className="h-3.5 w-3.5" /> {title}
         </h3>
-        {hint && <span className="text-[11px] text-muted-foreground/80">{hint}</span>}
+        {hint && <span className="text-[12px] text-muted-foreground/80">{hint}</span>}
         <div className="ml-auto flex items-center gap-1">
           {copy && (count ?? 0) > 0 && (
-            <button type="button" onClick={() => copyText(copy.value, copy.label)} className={`${ICON_BTN} px-2 text-[11px]`} title={`Copy all ${title.toLowerCase()}`}>
+            <button type="button" onClick={() => copyText(copy.value, copy.label)} className={`${ICON_BTN} px-2 text-[12px]`} title={`Copy all ${title.toLowerCase()}`}>
               <Copy className="mr-1 h-3 w-3" /> Copy all
             </button>
           )}
           {canEdit && onClear && (count ?? 0) > 0 && (
-            <button type="button" onClick={onClear} className={`${ICON_BTN} px-2 text-[11px]`} title={`Remove all ${title.toLowerCase()}`}>
+            <button type="button" onClick={onClear} className={`${ICON_BTN} px-2 text-[12px]`} title={`Remove all ${title.toLowerCase()}`}>
               <Trash2 className="mr-1 h-3 w-3" /> Remove all
             </button>
           )}
@@ -191,14 +191,14 @@ function TextList({ items, onChange, canEdit, placeholder, empty, transform, chi
   }
   return (
     <div className={chips ? 'flex flex-wrap items-center gap-2' : 'flex flex-col gap-1'}>
-      {items.length === 0 && !canEdit && <p className="text-sm text-muted-foreground">{empty}</p>}
+      {items.length === 0 && !canEdit && <p className="text-body-15 text-muted-foreground">{empty}</p>}
       {items.map((it, i) => (
         <div key={`${i}-${it}`} className={chips
           ? 'flex items-center rounded-full border border-border pl-1'
-          : 'group flex items-start gap-1 rounded-md'}>
+          : 'group flex items-start gap-1 rounded-tile'}>
           {!chips && <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 ml-2" />}
           <div className={chips ? '' : 'min-w-0 flex-1'}>
-            <Editable value={it} onSave={v => set(i, transform ? transform(v) : v)} placeholder={placeholder} canEdit={canEdit} className={chips ? 'text-sm' : 'text-sm leading-relaxed'} />
+            <Editable value={it} onSave={v => set(i, transform ? transform(v) : v)} placeholder={placeholder} canEdit={canEdit} className={chips ? 'text-body-15' : 'text-body-15 leading-relaxed'} />
           </div>
           {canEdit && (
             <button type="button" onClick={() => set(i, '')} className={`${ICON_BTN} ${chips ? 'min-h-[36px] min-w-[36px]' : ''}`} aria-label={`Remove "${it}"`} title="Remove">
@@ -255,7 +255,7 @@ function useDragList(onMove: (from: number, to: number) => void) {
   return props
 }
 
-const selectCls = 'min-h-[44px] rounded-md border border-border bg-background px-2 text-sm sm:min-h-[36px]'
+const selectCls = 'min-h-[44px] rounded-tile border border-border bg-background px-2 text-body-15 sm:min-h-[36px]'
 
 function ColourList({ colours, onChange, canEdit }: {
   colours: BrandColour[]
@@ -272,28 +272,28 @@ function ColourList({ colours, onChange, canEdit }: {
   }
   return (
     <div className="flex flex-col gap-1.5">
-      {colours.length === 0 && !canEdit && <p className="text-sm text-muted-foreground">No colours yet.</p>}
+      {colours.length === 0 && !canEdit && <p className="text-body-15 text-muted-foreground">No colours yet.</p>}
       {colours.map((c, i) => {
         const d = drag(i)
         return (
-          <div key={c.hex} {...d.row} className={`flex items-center gap-2 rounded-md border border-border p-1.5 ${d.row.className}`}>
+          <div key={c.hex} {...d.row} className={`flex items-center gap-2 rounded-tile border border-border p-1.5 ${d.row.className}`}>
             {canEdit && <Reorder index={i} count={colours.length} onMove={to => onChange(moveItem(colours, i, to))} dragProps={d.handle} />}
-            <label className="relative h-10 w-10 shrink-0 cursor-pointer rounded-md border border-border" style={{ backgroundColor: c.hex }} title={canEdit ? 'Pick a colour' : c.hex}>
+            <label className="relative h-10 w-10 shrink-0 cursor-pointer rounded-tile border border-border" style={{ backgroundColor: c.hex }} title={canEdit ? 'Pick a colour' : c.hex}>
               {canEdit && (
                 <input type="color" value={c.hex.toLowerCase()} onChange={e => setHex(i, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={`Pick colour for ${c.name || c.hex}`} />
               )}
             </label>
             <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-x-2 sm:grid-cols-[1fr_auto_auto]">
-              <Editable value={c.name} onSave={v => patch(i, { name: v })} placeholder="Name this colour" canEdit={canEdit} className="text-sm font-medium" />
+              <Editable value={c.name} onSave={v => patch(i, { name: v })} placeholder="Name this colour" canEdit={canEdit} className="text-body-15 font-medium" />
               <div className="flex items-center gap-1">
-                <Editable value={c.hex} onSave={v => setHex(i, v)} placeholder="#000000" canEdit={canEdit} mono className="text-xs text-muted-foreground sm:w-24" />
+                <Editable value={c.hex} onSave={v => setHex(i, v)} placeholder="#000000" canEdit={canEdit} mono className="text-secondary-13 text-muted-foreground sm:w-24" />
                 <button type="button" onClick={() => copyText(c.hex, c.hex)} className={`${ICON_BTN} min-h-[36px] min-w-[36px]`} title={`Copy ${c.hex}`} aria-label={`Copy ${c.hex}`}><Copy className="h-3.5 w-3.5" /></button>
               </div>
               {canEdit ? (
                 <select value={c.role} onChange={e => patch(i, { role: e.target.value as ColourRole })} className={selectCls} aria-label="What this colour is for">
                   {COLOUR_ROLES.map(r => <option key={r} value={r}>{COLOUR_ROLE_LABEL[r]}</option>)}
                 </select>
-              ) : <span className="text-xs text-muted-foreground">{COLOUR_ROLE_LABEL[c.role]}</span>}
+              ) : <span className="text-secondary-13 text-muted-foreground">{COLOUR_ROLE_LABEL[c.role]}</span>}
             </div>
             {canEdit && (
               <button type="button" onClick={() => onChange(colours.filter((_, j) => j !== i), c.name || c.hex)} className={ICON_BTN} aria-label={`Remove ${c.name || c.hex}`} title="Remove"><X className="h-4 w-4" /></button>
@@ -319,16 +319,16 @@ function AddColour({ existing, onAdd, first }: { existing: BrandColour[]; onAdd:
     setName('')
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border p-1.5">
-      <label className="relative h-10 w-10 shrink-0 cursor-pointer rounded-md border border-border" style={{ backgroundColor: normaliseHex(hex) ?? '#ffffff' }} title="Pick a colour">
+    <div className="flex flex-wrap items-center gap-2 rounded-tile border border-dashed border-border p-1.5">
+      <label className="relative h-10 w-10 shrink-0 cursor-pointer rounded-tile border border-border" style={{ backgroundColor: normaliseHex(hex) ?? '#ffffff' }} title="Pick a colour">
         <input type="color" value={normaliseHex(hex)?.toLowerCase() ?? '#ffffff'} onChange={e => setHex(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Pick the new colour" />
       </label>
       <input type="text" value={name} placeholder={first ? 'No colours yet — name one, e.g. Forest green' : 'Name, e.g. Forest green'} onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-        className="min-h-[44px] min-w-0 flex-1 bg-transparent px-2 text-sm outline-none sm:min-h-[36px]" />
+        className="min-h-[44px] min-w-0 flex-1 bg-transparent px-2 text-body-15 outline-none sm:min-h-[36px]" />
       <input type="text" value={hex} onChange={e => setHex(e.target.value)} placeholder="#1A2B3C"
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-        className="min-h-[44px] w-28 bg-transparent px-2 font-mono text-xs outline-none sm:min-h-[36px]" aria-label="Colour code" />
+        className="min-h-[44px] w-28 bg-transparent px-2 font-mono text-secondary-13 outline-none sm:min-h-[36px]" aria-label="Colour code" />
       <Button type="button" size="sm" variant="outline" onClick={add} className="min-h-[44px] sm:min-h-[36px]"><Plus className="mr-1 h-3.5 w-3.5" /> Add colour</Button>
     </div>
   )
@@ -347,11 +347,11 @@ function FontList({ fonts, onChange, canEdit }: {
   }
   return (
     <div className="flex flex-col gap-1.5">
-      {fonts.length === 0 && !canEdit && <p className="text-sm text-muted-foreground">No fonts yet.</p>}
+      {fonts.length === 0 && !canEdit && <p className="text-body-15 text-muted-foreground">No fonts yet.</p>}
       {fonts.map((f, i) => {
         const d = drag(i)
         return (
-          <div key={f.name} {...d.row} className={`flex items-center gap-2 rounded-md border border-border p-1.5 ${d.row.className}`}>
+          <div key={f.name} {...d.row} className={`flex items-center gap-2 rounded-tile border border-border p-1.5 ${d.row.className}`}>
             {canEdit && <Reorder index={i} count={fonts.length} onMove={to => onChange(moveItem(fonts, i, to))} dragProps={d.handle} />}
             <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-x-2 sm:grid-cols-[1fr_auto_minmax(0,1fr)]">
               <Editable value={f.name} onSave={v => { if (v) patch(i, { name: v }); else onChange(fonts.filter((_, j) => j !== i), f.name) }} placeholder="Font name" canEdit={canEdit} className="text-base font-semibold" />
@@ -359,12 +359,12 @@ function FontList({ fonts, onChange, canEdit }: {
                 <select value={f.role} onChange={e => patch(i, { role: e.target.value as FontRole })} className={selectCls} aria-label="Where this font is used">
                   {FONT_ROLES.map(r => <option key={r} value={r}>{FONT_ROLE_LABEL[r]}</option>)}
                 </select>
-              ) : <span className="text-xs text-muted-foreground">{FONT_ROLE_LABEL[f.role]}</span>}
+              ) : <span className="text-secondary-13 text-muted-foreground">{FONT_ROLE_LABEL[f.role]}</span>}
               {canEdit || f.url ? (
                 <Editable value={f.url ?? ''} onSave={v => {
                   if (v && !/^https?:\/\//i.test(v)) { toast.error('A link starts with https://'); return }
                   patch(i, { url: v || undefined })
-                }} placeholder="Link to the font (optional)" canEdit={canEdit} className="truncate text-xs text-muted-foreground" />
+                }} placeholder="Link to the font (optional)" canEdit={canEdit} className="truncate text-secondary-13 text-muted-foreground" />
               ) : null}
             </div>
             {canEdit && (
@@ -634,11 +634,11 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
         onChange={e => { const f = e.target.files?.[0]; if (f) void scan(f) }} />
 
       {/* ── guidelines: scan / rescan ── */}
-      <div className={'rounded-lg border p-4 sm:p-5 ' + (hasContent ? 'border-border bg-card' : 'border-primary/40 bg-primary/[0.04]')}>
+      <div className={'rounded-inner border p-4 sm:p-5 ' + (hasContent ? 'border-border bg-card' : 'border-primary/40 bg-primary/[0.04]')}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{hasContent ? 'Brand guidelines' : 'Start the brand profile'}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <h3 className="text-body-15 font-semibold">{hasContent ? 'Brand guidelines' : 'Start the brand profile'}</h3>
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               {scanning
                 ? 'Reading the document. A long deck takes a few minutes — you can leave this page.'
                 : hasContent
@@ -648,9 +648,9 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {canEdit && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
+              <span className="flex items-center gap-1 text-secondary-13 text-muted-foreground" aria-live="polite">
                 {saveState === 'saving' && <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</>}
-                {saveState === 'saved' && <><Check className="h-3 w-3 text-emerald-600" /> Saved</>}
+                {saveState === 'saved' && <><Check className="h-3 w-3 text-accent-green" /> Saved</>}
                 {saveState === 'error' && (
                   <button type="button" onClick={() => { dirtyRef.current = true; void flush() }} className="text-destructive underline underline-offset-2">Not saved — try again</button>
                 )}
@@ -676,20 +676,20 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
                 ? <div className="h-1 rounded bg-primary transition-[width] duration-500" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
                 : <div className="h-1 w-1/3 animate-pulse rounded bg-primary" />}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-secondary-13 text-muted-foreground">
               {progress?.total && progress.total > 1 ? `Reading section ${progress.done + 1} of ${progress.total}…` : progress?.message ?? 'Reading the document…'}
             </p>
           </div>
         )}
         {docs.length > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-secondary-13 text-muted-foreground">
             Read from {docs.map((d, i) => (
               <span key={d.url}>{i > 0 && ', '}<a href={d.url} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">{d.filename}</a></span>
             ))}
           </p>
         )}
         {pending > 0 && !scanning && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-2 text-sm">
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-tile border border-primary/30 bg-primary/[0.06] px-3 py-2 text-body-15">
             <Sparkles className="h-4 w-4 text-primary" />
             <span>The guidelines have <strong>{pending}</strong> thing{pending === 1 ? '' : 's'} not in the profile yet.</span>
             <Button size="sm" variant="outline" className="ml-auto min-h-[44px] sm:min-h-[36px]" onClick={() => { setPicked(new Set(proposal!.changes.map(c => c.id))); setReviewOpen(true) }}>
@@ -719,11 +719,11 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
         onClear={() => clearList('logo rules', profile.logo_rules.length, () => setList('logo_rules')([], `${profile.logo_rules.length} logo rules`))}>
         <TextList items={profile.logo_rules} onChange={setList('logo_rules')} canEdit={canEdit} placeholder="Add a rule" empty="No logo rules yet — add one, e.g. Keep clear space around the logo" />
         <div className="mt-4 border-t border-border pt-3">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Logo files</p>
-          {profile.logo_files.length === 0 && <p className="mb-2 text-sm text-muted-foreground">No logo files linked yet.</p>}
+          <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">Logo files</p>
+          {profile.logo_files.length === 0 && <p className="mb-2 text-body-15 text-muted-foreground">No logo files linked yet.</p>}
           <ul className="flex flex-col gap-1">
             {profile.logo_files.map((f, i) => (
-              <li key={f.url} className="flex items-center gap-2 text-sm">
+              <li key={f.url} className="flex items-center gap-2 text-body-15">
                 <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline underline-offset-2">{f.name}</a>
                 {canEdit && <button type="button" onClick={() => setList('logo_files')(profile.logo_files.filter((_, j) => j !== i), f.name)} className={ICON_BTN} aria-label={`Remove ${f.name}`}><X className="h-3.5 w-3.5" /></button>}
               </li>
@@ -746,20 +746,20 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
         copy={{ label: 'the voice', value: [profile.voice.tone, profile.voice.summary, ...profile.voice.dos.map(d => `Do: ${d}`), ...profile.voice.donts.map(d => `Don't: ${d}`)].filter(Boolean).join('\n') }}>
         <div className="flex flex-col gap-2">
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">In three words</p>
-            <Editable value={profile.voice.tone} onSave={v => update(p => ({ ...p, voice: { ...p.voice, tone: v } }))} placeholder="e.g. Warm, direct, confident" canEdit={canEdit} className="text-sm font-medium" />
+            <p className="mb-1 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">In three words</p>
+            <Editable value={profile.voice.tone} onSave={v => update(p => ({ ...p, voice: { ...p.voice, tone: v } }))} placeholder="e.g. Warm, direct, confident" canEdit={canEdit} className="text-body-15 font-medium" />
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">How the brand speaks</p>
-            <Editable value={profile.voice.summary} onSave={v => update(p => ({ ...p, voice: { ...p.voice, summary: v } }))} placeholder="A short paragraph on how the brand talks to people" canEdit={canEdit} multiline className="text-sm leading-relaxed" />
+            <p className="mb-1 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">How the brand speaks</p>
+            <Editable value={profile.voice.summary} onSave={v => update(p => ({ ...p, voice: { ...p.voice, summary: v } }))} placeholder="A short paragraph on how the brand talks to people" canEdit={canEdit} multiline className="text-body-15 leading-relaxed" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-md border border-emerald-500/30 p-2.5">
-              <p className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400"><Check className="h-3 w-3" /> Do</p>
+            <div className="rounded-tile border border-accent-green/30 p-2.5">
+              <p className="mb-1 flex items-center gap-1 text-[12px] font-medium uppercase tracking-wide text-foreground"><Check className="h-3 w-3" /> Do</p>
               <TextList items={profile.voice.dos} onChange={setVoiceList('dos')} canEdit={canEdit} placeholder="Add a do" empty="Nothing yet — e.g. Use short sentences" />
             </div>
-            <div className="rounded-md border border-rose-500/30 p-2.5">
-              <p className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-rose-700 dark:text-rose-400"><X className="h-3 w-3" /> Don&apos;t</p>
+            <div className="rounded-tile border border-accent-red/30 p-2.5">
+              <p className="mb-1 flex items-center gap-1 text-[12px] font-medium uppercase tracking-wide text-accent-red"><X className="h-3 w-3" /> Don&apos;t</p>
               <TextList items={profile.voice.donts} onChange={setVoiceList('donts')} canEdit={canEdit} placeholder="Add a don't" empty="Nothing yet — e.g. No exclamation marks" />
             </div>
           </div>
@@ -771,11 +771,11 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
         copy={{ label: 'hashtags and handles', value: [...profile.hashtags, ...profile.handles].join(' ') }}>
         <div className="flex flex-col gap-3">
           <div>
-            <p className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"><Hash className="h-3 w-3" /> Hashtags</p>
+            <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium uppercase tracking-wide text-muted-foreground"><Hash className="h-3 w-3" /> Hashtags</p>
             <TextList chips items={profile.hashtags} onChange={setList('hashtags')} canEdit={canEdit} placeholder="Add a hashtag" empty="No hashtags yet — type one and press Enter" transform={asHashtag} />
           </div>
           <div>
-            <p className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"><AtSign className="h-3 w-3" /> Handles</p>
+            <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium uppercase tracking-wide text-muted-foreground"><AtSign className="h-3 w-3" /> Handles</p>
             <TextList chips items={profile.handles} onChange={setList('handles')} canEdit={canEdit} placeholder="Add a handle" empty="No handles yet — e.g. @theclient" transform={asHandle} />
           </div>
         </div>
@@ -783,7 +783,7 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
 
       {/* ── notes ── */}
       <Section icon={StickyNote} title="Notes" canEdit={canEdit} count={profile.notes ? 1 : 0} copy={{ label: 'the notes', value: profile.notes }}>
-        <Editable value={profile.notes} onSave={v => update(p => ({ ...p, notes: v }))} placeholder="Anything else the team should know — imagery style, words to avoid, sign-off lines" canEdit={canEdit} multiline className="text-sm leading-relaxed" />
+        <Editable value={profile.notes} onSave={v => update(p => ({ ...p, notes: v }))} placeholder="Anything else the team should know — imagery style, words to avoid, sign-off lines" canEdit={canEdit} multiline className="text-body-15 leading-relaxed" />
       </Section>
 
       {/* ── review what a new scan found ── */}
@@ -802,18 +802,18 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
               const title = { colours: 'Colours', fonts: 'Fonts', logo_rules: 'Logo rules', voice_tone: 'Voice, in three words', voice_summary: 'How the brand speaks', dos: 'Do', donts: "Don't", notes: 'Notes' }[section]
               return (
                 <div key={section} className="mb-4">
-                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+                  <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
                   <ul className="flex flex-col gap-1">
                     {rows.map(c => (
                       <li key={c.id}>
-                        <label className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${picked.has(c.id) ? 'border-primary/40 bg-primary/[0.05]' : 'border-border'}`}>
+                        <label className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-tile border px-3 py-2 text-body-15 ${picked.has(c.id) ? 'border-primary/40 bg-primary/[0.05]' : 'border-border'}`}>
                           {canEdit && (
                             <input type="checkbox" checked={picked.has(c.id)} onChange={e => setPicked(prev => { const n = new Set(prev); if (e.target.checked) n.add(c.id); else n.delete(c.id); return n })} className="h-4 w-4 accent-[hsl(var(--primary))]" />
                           )}
                           {c.section === 'colours' && <span className="h-6 w-6 shrink-0 rounded border border-border" style={{ backgroundColor: (c.value as BrandColour).hex }} />}
                           <span className="min-w-0 flex-1 break-words">{c.label}</span>
-                          {c.section === 'colours' && <span className="text-xs text-muted-foreground">{COLOUR_ROLE_LABEL[(c.value as BrandColour).role]}</span>}
-                          {c.section === 'fonts' && <span className="text-xs text-muted-foreground">{FONT_ROLE_LABEL[(c.value as BrandFont).role]}</span>}
+                          {c.section === 'colours' && <span className="text-secondary-13 text-muted-foreground">{COLOUR_ROLE_LABEL[(c.value as BrandColour).role]}</span>}
+                          {c.section === 'fonts' && <span className="text-secondary-13 text-muted-foreground">{FONT_ROLE_LABEL[(c.value as BrandFont).role]}</span>}
                         </label>
                       </li>
                     ))}

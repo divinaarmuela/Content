@@ -83,10 +83,10 @@ export function CommentsButton({ onOpen, tagged, title, className = '' }: {
     <button type="button"
       onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen() }}
       aria-label={`${badge.label} — ${title}`} title={badge.label}
-      className={`relative z-10 -my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 md:-my-1 md:h-8 md:w-8 ${className}`}>
+      className={`relative z-10 -my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-tile text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-muted-foreground md:-my-1 md:h-8 md:w-8 ${className}`}>
       <MessageSquare className="h-4 w-4" />
       {badge.dot && (
-        <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-amber-500 md:right-1 md:top-1" />
+        <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent-amber md:right-1 md:top-1" />
       )}
     </button>
   )
@@ -308,15 +308,15 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
   return (
     <SheetContent side="right"
       className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[480px]">
-      <SheetHeader className="shrink-0 space-y-1 border-b border-zinc-200 px-4 py-3 pr-12 text-left dark:border-zinc-800">
-        <SheetTitle className="truncate text-sm font-semibold">
+      <SheetHeader className="shrink-0 space-y-1 border-b border-border px-4 py-3 pr-12 text-left">
+        <SheetTitle className="truncate text-body-15 font-semibold">
           Comments{title ? ` · ${title}` : ''}
         </SheetTitle>
         <SheetDescription className="sr-only">
           Read and add comments on this item without leaving the board.
         </SheetDescription>
         <Link href={`/dashboard/production/${itemId}`}
-          className="flex min-h-11 w-fit items-center gap-1 text-xs text-zinc-500 underline-offset-2 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100 md:min-h-0">
+          className="flex min-h-11 w-fit items-center gap-1 text-secondary-13 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline md:min-h-0">
           Open full item <ArrowRight className="h-3 w-3" />
         </Link>
       </SheetHeader>
@@ -326,7 +326,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
           // no "Try again": the thread is a live subscription, so this is the
           // database's current answer and pressing a button cannot change it.
           // (A dropped connection reconnects and repaints on its own.)
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{failed}</p>
+          <p className="text-body-15 text-muted-foreground">{failed}</p>
         ) : detail === null ? (
           <>
             <Skeleton className="h-14 w-full" />
@@ -347,7 +347,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
 
       {detail !== null && !failed && (
         canComment ? (
-          <div className="shrink-0 border-t border-zinc-200 p-3 dark:border-zinc-800">
+          <div className="shrink-0 border-t border-border p-3">
             <div className="flex flex-col gap-2">
               <MentionBox
                 value={draft}
@@ -359,7 +359,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
               />
               <div className="flex flex-wrap items-center gap-3">
                 {canManage && (
-                  <label className="flex min-h-11 items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+                  <label className="flex min-h-11 items-center gap-2 text-secondary-13 text-muted-foreground md:min-h-0">
                     <Switch
                       checked={visibility === 'client'}
                       onCheckedChange={v => setVisibility(v ? 'client' : 'internal')}
@@ -372,7 +372,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
                   <Send className="h-3.5 w-3.5" /> {busy ? 'Posting…' : 'Post'}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              <p className="text-secondary-13 text-muted-foreground">
                 {visibility === 'client'
                   ? `${detail.client_name ?? 'The client'} reads this on their portal.`
                   : 'Managers see every comment. To reach anyone else, tag them with @ — they are emailed and it waits on them until it is marked done.'}
@@ -380,7 +380,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
             </div>
           </div>
         ) : isTeam ? (
-          <p className="shrink-0 border-t border-zinc-200 p-3 text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+          <p className="shrink-0 border-t border-border p-3 text-secondary-13 text-muted-foreground">
             Only the people working on this item can comment here — open the full item to see where it is up to.
           </p>
         ) : null

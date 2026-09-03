@@ -32,13 +32,13 @@ export default function EmptyState({
     <Card className={`border-dashed shadow-none ${className ?? ''}`}>
       <CardContent className="flex flex-col items-center gap-3 px-6 py-12 text-center">
         {Icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <Icon className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-inner bg-foreground/[0.06]">
+            <Icon className="h-5 w-5 text-muted-foreground" />
           </div>
         )}
         <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{title}</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{body}</p>
+          <p className="text-body-15 font-medium text-foreground">{title}</p>
+          <p className="mx-auto mt-1 max-w-sm text-body-15 text-muted-foreground">{body}</p>
         </div>
         {actionLabel && (actionHref
           ? <Button size="sm" variant="outline" asChild><a href={actionHref}>{actionLabel}</a></Button>

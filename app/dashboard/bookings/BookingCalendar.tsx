@@ -85,11 +85,11 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => step(-1)} aria-label="Previous month">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-40 text-sm font-medium">{monthLabel}</span>
+        <span className="min-w-40 text-body-15 font-medium">{monthLabel}</span>
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => step(1)} aria-label="Next month">
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs"
+        <Button size="sm" variant="outline" className="h-7 text-secondary-13"
           onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}>
           Today
         </Button>
@@ -98,10 +98,10 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
           <div className="ml-auto flex flex-wrap gap-1">
             {['all', ...resources].map(r => (
               <button key={r} type="button" onClick={() => setResource(r)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                className={`rounded-full border px-2.5 py-1.5 text-chip-12 transition-colors ${
                   resource === r
-                    ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'border-zinc-200 text-zinc-500 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-400'
+                    ? 'border-border bg-foreground text-background'
+                    : 'border-border text-muted-foreground hover:border-border'
                 }`}>
                 {r === 'all' ? 'Everyone' : r}
               </button>
@@ -113,9 +113,9 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
       {/* a month grid needs room: below ~560px the cells were 55px wide and
           unreadable, with no way to scroll to the rest of the week */}
       <div className="overflow-x-auto">
-      <div className="grid min-w-[560px] grid-cols-7 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800">
+      <div className="grid min-w-[560px] grid-cols-7 gap-px overflow-hidden rounded-inner border border-border bg-foreground/[0.08]">
         {WEEKDAYS.map(d => (
-          <div key={d} className="bg-zinc-50 py-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
+          <div key={d} className="bg-foreground/[0.04] py-1.5 text-center font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
             {d}
           </div>
         ))}
@@ -126,13 +126,13 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
           const shownList = showAll ? list : list.slice(0, 4)
           return (
             <div key={i}
-              className={`min-h-24 bg-white p-1.5 dark:bg-zinc-950 ${day ? '' : 'opacity-40'}`}>
+              className={`min-h-24 bg-surface p-1.5 ${day ? '' : 'opacity-40'}`}>
               {day && (
                 <>
-                  <span className={`font-mono text-[11px] tabular-nums ${
+                  <span className={`font-mono text-[12px] tabular-nums ${
                     isToday(day)
-                      ? 'rounded bg-zinc-900 px-1 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                      : 'text-zinc-400 dark:text-zinc-500'
+                      ? 'rounded bg-foreground px-1 text-background'
+                      : 'text-muted-foreground'
                   }`}>
                     {day}
                   </span>
@@ -147,10 +147,10 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                         <button key={b.id} type="button"
                           onClick={() => setOpen(o => (o === b.id ? null : b.id))}
                           aria-label={`${timeLabel(b.start_at)} · ${b.booking_services?.name ?? 'Booking'} · ${b.customer_name}${held ? ' · awaiting payment' : ''}`}
-                          className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight ${
+                          className={`w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight ${
                             held
-                              ? 'border border-dashed border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                              : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                              ? 'border border-dashed border-accent-amber/35 bg-tint-amber text-foreground'
+                              : 'bg-tint-green text-foreground'
                           }`}>
                           <span className="font-mono">{timeLabel(b.start_at)}</span>{' '}
                           {b.customer_name}
@@ -165,7 +165,7 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                           if (next.has(dayKey)) next.delete(dayKey); else next.add(dayKey)
                           return next
                         })}
-                        className="w-full rounded px-1 py-0.5 text-left text-[10px] text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400">
+                        className="w-full rounded px-1 py-0.5 text-left text-[12px] text-muted-foreground underline-offset-2 hover:underline">
                         {showAll ? 'Show fewer' : `+${list.length - 4} more`}
                       </button>
                     )}

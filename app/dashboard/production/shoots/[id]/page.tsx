@@ -280,7 +280,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="flex flex-col gap-4">
       <Link href="/dashboard/production"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+        className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Shoots
       </Link>
 
@@ -291,7 +291,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           defaultValue={batch.title}
           disabled={!canEdit}
           onBlur={e => { const v = e.target.value.trim(); if (v && v !== batch.title) void patch('title', v) }}
-          className="min-w-0 flex-1 bg-transparent text-2xl font-semibold tracking-tight outline-none focus:border-b focus:border-zinc-300 disabled:opacity-100 dark:focus:border-zinc-700"
+          className="min-w-0 flex-1 bg-transparent text-section-title outline-none focus:border-b focus:border-border disabled:opacity-100"
         />
         {/* what actually happened, derived from the calendar — a booked shoot
             whose date has passed says "Shot" with nobody pressing anything */}
@@ -310,7 +310,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         {isManager && quiet.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400" aria-label="More actions for this shoot">
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" aria-label="More actions for this shoot">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -325,23 +325,23 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </DropdownMenu>
         )}
         {isManager && items.length === 0 && (
-          <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400"
+          <Button size="sm" variant="outline" className="text-accent-red"
             onClick={() => setDeleteOpen(true)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete shoot
           </Button>
         )}
       </div>
-      <p className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body-15 text-muted-foreground">
         <Link href="/dashboard/clients" className="underline decoration-dotted">{batch.clients?.name}</Link>
         {canEdit && (
-          <span className="font-mono text-[11px] uppercase tracking-wider">
-            {saveState === 'saving' ? <span className="text-zinc-400">· Saving…</span>
-              : saveState === 'saved' ? <span className="text-emerald-600 dark:text-emerald-400">· Saved ✓</span>
-              : <span className="text-zinc-400">· Autosaves</span>}
+          <span className="font-mono text-[12px] uppercase tracking-wider">
+            {saveState === 'saving' ? <span className="text-muted-foreground">· Saving…</span>
+              : saveState === 'saved' ? <span className="text-accent-green">· Saved ✓</span>
+              : <span className="text-muted-foreground">· Autosaves</span>}
           </span>
         )}
         {lastEdited.name && lastEdited.at && (
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="text-secondary-13 text-muted-foreground">
             · Last edited by {lastEdited.name} {timeAgo(lastEdited.at)}
           </span>
         )}
@@ -351,8 +351,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           locking the date removed the only way to raise one, and the New ▾
           menu then built a second shoot instead of joining this one. */}
       {isManager && batch.status !== 'wrapped' && !briefTask && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950/40">
-          <p className="text-sm text-sky-900 dark:text-sky-200">
+        <div className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-blue/25 bg-tint-blue px-4 py-3">
+          <p className="text-body-15 text-foreground">
             Nothing has been written up for this shoot yet. A shoot plan is what the
             client signs off before we film — writing one puts this shoot through
             review and books the date.
@@ -394,7 +394,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {batch.drive_url && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <a href={batch.drive_url} target="_blank" rel="noreferrer noopener"
-            className="w-fit font-mono text-[11px] uppercase tracking-wider text-sky-600 underline decoration-dotted dark:text-sky-400">
+            className="w-fit font-mono text-[12px] uppercase tracking-wider text-accent-blue-deep underline decoration-dotted">
             Open Drive folder →
           </a>
         </div>
@@ -418,7 +418,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         <div className="flex flex-col gap-4">
           <Card>
             <CardContent className="p-4">
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Concept & notes</p>
+              <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Concept & notes</p>
               <textarea
                 key={batch.concept ?? ''}
                 defaultValue={batch.concept ?? ''}
@@ -426,7 +426,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 rows={5}
                 placeholder="What's the idea? Moodboard notes, talent, wardrobe, props, hooks…"
                 onBlur={e => { const v = e.target.value; if (v !== (batch.concept ?? '')) void patch('concept', v) }}
-                className="w-full resize-y bg-transparent text-sm leading-relaxed outline-none placeholder:text-zinc-400"
+                className="w-full resize-y bg-transparent text-body-15 leading-relaxed outline-none placeholder:text-muted-foreground"
               />
             </CardContent>
           </Card>
@@ -434,13 +434,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
               <div className="flex items-baseline justify-between">
-                <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Shot list</p>
+                <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Shot list</p>
                 {batch.status === 'shot' && shots.length > 0 && (
-                  <span className="font-mono text-[11px] tabular-nums text-zinc-500">{captured}/{shots.length} captured</span>
+                  <span className="font-mono text-[12px] tabular-nums text-muted-foreground">{captured}/{shots.length} captured</span>
                 )}
               </div>
               {shots.length === 0 && (
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">No shots yet. List what needs to be captured on the day.</p>
+                <p className="text-body-15 text-muted-foreground">No shots yet. List what needs to be captured on the day.</p>
               )}
               {shots.map((shot, i) => (
                 <div key={shot.id} className="group flex items-center gap-2">
@@ -450,14 +450,14 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   {/* keyed by the shot's id ONLY — keying on the text remounted
                       the field on every echo and dropped focus mid-word */}
                   <Input key={shot.id} defaultValue={shot.text} disabled={!canEdit}
-                    className="h-8 border-transparent bg-transparent px-1 text-sm shadow-none hover:border-zinc-200 dark:hover:border-zinc-800"
+                    className="h-8 border-transparent bg-transparent px-1 text-body-15 shadow-none hover:border-border"
                     onBlur={e => {
                       const v = e.target.value.trim()
                       if (v !== shot.text) editShots(v === '' ? shots.filter((_, j) => j !== i) : shots.map((s, j) => j === i ? { ...s, text: v } : s))
                     }} />
                   <Select value={shot.type ?? 'none'}
                     onValueChange={v => editShots(shots.map((s, j) => j === i ? { ...s, ...(v === 'none' ? { type: undefined } : { type: v }) } : s))}>
-                    <SelectTrigger className="h-8 w-28 border-transparent text-xs shadow-none"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-8 w-28 border-transparent text-secondary-13 shadow-none"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Any use</SelectItem>
                       {CONTENT_TYPE_OPTIONS.map(([t, label]) => <SelectItem key={t} value={t}>{label}</SelectItem>)}
@@ -466,13 +466,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   {canEdit && (
                     <button type="button" className="opacity-60 transition-opacity group-hover:opacity-100"
                       onClick={() => editShots(shots.filter((_, j) => j !== i))}>
-                      <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
+                      <X className="h-3.5 w-3.5 text-muted-foreground hover:text-accent-red" />
                     </button>
                   )}
                 </div>
               ))}
               {canEdit && (
-                <Button size="sm" variant="ghost" className="w-fit text-zinc-500"
+                <Button size="sm" variant="ghost" className="w-fit text-muted-foreground"
                   onClick={() => editShots([...shots, { id: Math.random().toString(36).slice(2, 10), text: 'New shot', done: false }])}>
                   <Plus className="h-3.5 w-3.5" /> Add shot
                 </Button>
@@ -486,31 +486,31 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
           <Card>
             <CardContent className="flex flex-col gap-3 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Shoot details</p>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Shoot details</p>
               {batch.status === 'brief' ? (
                 <div className="grid gap-1.5">
-                  <label className="text-xs text-zinc-500">Shoot date</label>
+                  <label className="text-secondary-13 text-muted-foreground">Shoot date</label>
                   <Input type="date" key={batch.shoot_date ?? ''} defaultValue={batch.shoot_date ?? ''} disabled={!canEdit}
-                    className="font-mono text-xs"
+                    className="font-mono text-secondary-13"
                     onBlur={e => { if ((e.target.value || null) !== batch.shoot_date) void patch('shoot_date', e.target.value || null) }} />
                   {/* the picker's field order follows the BROWSER's locale,
                       which is not ours to set — so echo it back in words */}
-                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  <p className="text-[12px] text-muted-foreground">
                     {batch.shoot_date ? longDate(batch.shoot_date) : 'The date is read back here in words once set.'}
                   </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-0.5">
-                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
-                    <Lock className="h-3.5 w-3.5 text-zinc-400" /> {longDate(batch.shoot_date)}
+                  <span className="inline-flex items-center gap-1.5 text-body-15 font-semibold">
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" /> {longDate(batch.shoot_date)}
                   </span>
                   {batch.locked_at && (
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+                    <span className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
                       Booked by {lockedByName ?? 'the team'} · {stamp(batch.locked_at)}
                     </span>
                   )}
                   {isManager && batch.status !== 'wrapped' && (
-                    <button type="button" className="w-fit text-xs text-blue-600 hover:underline dark:text-blue-400"
+                    <button type="button" className="w-fit text-secondary-13 text-accent-blue-deep hover:underline"
                       onClick={() => { setDateDraft({ shoot_date: batch.shoot_date ?? '', reason: '' }); setDateOpen(true) }}>
                       Change date
                     </button>
@@ -518,7 +518,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 </div>
               )}
               <div className="grid gap-1.5">
-                <label className="text-xs text-zinc-500">Location</label>
+                <label className="text-secondary-13 text-muted-foreground">Location</label>
                 <LocationSearch
                   value={batch.location ?? ''}
                   disabled={!canEdit}
@@ -526,7 +526,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 />
               </div>
               {batch.month && batch.year && (
-                <p className="font-mono text-[11px] text-zinc-400">
+                <p className="font-mono text-[12px] text-muted-foreground">
                   Counts toward {new Date(batch.year, batch.month - 1).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}
                 </p>
               )}
@@ -535,7 +535,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Planned deliverables</p>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Planned deliverables</p>
               {(batch.planned_deliverables ?? []).map((d, i) => {
                 const prog = progressFor(d.type)
                 const over = prog && prog.planned + d.qty > prog.quota && prog.quota > 0
@@ -544,13 +544,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                     <div className="flex items-center gap-2">
                       <Select value={d.type} onValueChange={v => v && void patch('planned_deliverables',
                         (batch.planned_deliverables ?? []).map((x, j) => j === i ? { ...x, type: v } : x), true)}>
-                        <SelectTrigger className="h-8 flex-1 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 flex-1 text-body-15"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {CONTENT_TYPE_OPTIONS.map(([t, label]) => <SelectItem key={t} value={t}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <Input type="number" min={1} key={`${d.type}:${d.qty}`} defaultValue={d.qty} disabled={!canEdit}
-                        className="h-8 w-16 text-center font-mono text-sm tabular-nums"
+                        className="h-8 w-16 text-center font-mono text-body-15 tabular-nums"
                         onBlur={e => {
                           const qty = Math.max(1, Number(e.target.value) || 1)
                           if (qty !== d.qty) void patch('planned_deliverables',
@@ -559,12 +559,12 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       {canEdit && (
                         <button type="button" onClick={() => void patch('planned_deliverables',
                           (batch.planned_deliverables ?? []).filter((_, j) => j !== i), true)}>
-                          <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
+                          <X className="h-3.5 w-3.5 text-muted-foreground hover:text-accent-red" />
                         </button>
                       )}
                     </div>
                     {prog && prog.quota > 0 && (
-                      <p className={`font-mono text-[10.5px] ${over ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}`}>
+                      <p className={`font-mono text-[10.5px] ${over ? 'text-accent-amber' : 'text-muted-foreground'}`}>
                         {over
                           ? `Exceeds the monthly agreement by ${prog.planned + d.qty - prog.quota}`
                           : `Covers ${Math.min(d.qty, prog.quota)} of this month's ${prog.quota} ${prog.label} for this client`}
@@ -574,14 +574,14 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 )
               })}
               {progress !== null && progress.length === 0 && (
-                <p className="text-xs text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   {isManager
                     ? <Link href={`/dashboard/clients/${batch.client_id}/agreement`} className="underline decoration-dotted">No agreement on file — set one up</Link>
                     : 'No agreement on file'}
                 </p>
               )}
               {canEdit && (
-                <Button size="sm" variant="ghost" className="w-fit text-zinc-500"
+                <Button size="sm" variant="ghost" className="w-fit text-muted-foreground"
                   onClick={() => void patch('planned_deliverables', [...(batch.planned_deliverables ?? []), { type: 'reel', qty: 1 }], true)}>
                   <Plus className="h-3.5 w-3.5" /> Add deliverable
                 </Button>
@@ -591,9 +591,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Production</p>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Production</p>
               {batch.status === 'brief' ? (
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">
+                <p className="text-body-15 text-muted-foreground">
                   Book the shoot, and you can start creating items for it.
                 </p>
               ) : (
@@ -601,16 +601,16 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   {/* the BRIEF task rides this shoot too, and it is paperwork,
                       not a deliverable — counting it told an account manager
                       there was a piece of content when there was none */}
-                  <p className="text-sm">
+                  <p className="text-body-15">
                     <span className="font-mono tabular-nums">{deliverableItems.length}</span> item{deliverableItems.length === 1 ? '' : 's'} in production
                     {deliverableItems.length === 0 && (
-                      <span className="text-zinc-400 dark:text-zinc-500"> — nothing made from this shoot yet</span>
+                      <span className="text-muted-foreground"> — nothing made from this shoot yet</span>
                     )}
                   </p>
                   {deliverableItems.slice(0, 5).map(it => (
                     <Link key={it.id} href={`/dashboard/production/${it.id}`}
-                      className="flex items-center gap-2 text-sm hover:underline">
-                      <Check className={`h-3.5 w-3.5 ${['published', 'scheduled'].includes(it.status) ? 'text-emerald-500' : 'text-zinc-300 dark:text-zinc-600'}`} />
+                      className="flex items-center gap-2 text-body-15 hover:underline">
+                      <Check className={`h-3.5 w-3.5 ${['published', 'scheduled'].includes(it.status) ? 'text-accent-green' : 'text-muted-foreground'}`} />
                       <span className="truncate">{it.title}</span>
                     </Link>
                   ))}
@@ -633,10 +633,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="flex flex-col gap-3 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Client portal</p>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Client portal</p>
               {isManager ? (
                 <>
-                  <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
                     <Switch
                       checked={batch.shared_with_client ?? false}
                       onCheckedChange={async v => {
@@ -645,9 +645,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       }}
                     />
                     Visible on the client portal
-                    <span className="block text-[11px] text-zinc-400">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing.</span>
+                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing.</span>
                   </label>
-                  <label className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${batch.shared_with_client ? '' : 'opacity-50'}`}>
+                  <label className={`flex items-center gap-2 text-secondary-13 text-muted-foreground ${batch.shared_with_client ? '' : 'opacity-50'}`}>
                     <Switch
                       // nothing reaches the portal while the plan itself is off —
                       // showing a lit board toggle then reads as "still shared"
@@ -660,12 +660,12 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                     />
                     <span>
                       Also show the moodboard
-                      <span className="block text-[11px] text-zinc-400">The images-and-notes board below. Off means the client sees just the written plan.</span>
+                      <span className="block text-[12px] text-muted-foreground">The images-and-notes board below. Off means the client sees just the written plan.</span>
                     </span>
                   </label>
                 </>
               ) : (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   {batch.shared_with_client ? 'Visible on the client portal.' : 'Not shared with the client. An account manager can share it.'}
                 </p>
               )}
@@ -696,23 +696,23 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {/* ── the board: the Milanote-style canvas ── */}
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Board</p>
+          <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Board</p>
           {canEdit ? (
             <input
               key={batch.board_name ?? ''}
               defaultValue={batch.board_name ?? ''}
               placeholder="Name this board…"
               maxLength={80}
-              className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+              className="min-w-0 flex-1 bg-transparent text-body-15 font-medium outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               onBlur={e => {
                 const v = e.target.value.trim()
                 if (v !== (batch.board_name ?? '')) void patch('board_name', v)
               }}
             />
           ) : (
-            batch.board_name && <span className="text-sm font-medium">{batch.board_name}</span>
+            batch.board_name && <span className="text-body-15 font-medium">{batch.board_name}</span>
           )}
-          <span className="ml-auto font-mono text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
+          <span className="ml-auto font-mono text-[12px] tabular-nums text-muted-foreground">
             {(batch.canvas_cards ?? []).length === 1 ? '1 card' : `${(batch.canvas_cards ?? []).length} cards`}
           </span>
         </div>
@@ -746,7 +746,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             <AlertDialogTitle>Book this shoot?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="flex flex-col gap-3">
-                <span className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                <span className="text-3xl font-semibold tracking-tight text-foreground">
                   {longDate(batch.shoot_date) ?? 'No date set'}
                 </span>
                 <span>{batch.clients?.name}{batch.location ? ` · ${batch.location}` : ''}</span>
@@ -794,9 +794,9 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid gap-3">
-            <Input type="date" value={dateDraft.shoot_date} className="font-mono text-xs"
+            <Input type="date" value={dateDraft.shoot_date} className="font-mono text-secondary-13"
               onChange={e => setDateDraft(d => ({ ...d, shoot_date: e.target.value }))} />
-            <p className="-mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="-mt-2 text-[12px] text-muted-foreground">
               {dateDraft.shoot_date ? `Moving it to ${longDate(dateDraft.shoot_date)}` : 'The new date is read back here in words.'}
             </p>
             <Input value={dateDraft.reason} placeholder="Why is the date moving?"
@@ -837,7 +837,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700"
+            <AlertDialogAction className="bg-accent-red text-white hover:bg-accent-red"
               onClick={async e => {
                 e.preventDefault()
                 const res = await fetch(`/api/production/batches/${id}`, { method: 'DELETE' })

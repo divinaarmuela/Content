@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarClock, Camera, Send } from 'lucide-react'
+import PageTitle from '../ui/PageTitle'
 
 /**
  * Production shell: shoots, the calendars they get booked against, and the
@@ -45,10 +46,7 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
         {/* the board writes its own heading — it is the only view that can
             count what is on it. The other two still need one here. */}
         {active.href !== '/dashboard/production' && (
-          <div>
-            <h2 className="text-[19px] font-semibold tracking-tight">Production</h2>
-            <p className="text-[15px] text-muted-foreground">{active.blurb}</p>
-          </div>
+          <PageTitle title="Production" summary={active.blurb} />
         )}
 
         {/* link pills, the same white group the scope switch wears */}

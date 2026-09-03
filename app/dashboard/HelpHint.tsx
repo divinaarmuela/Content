@@ -29,7 +29,7 @@ export default function HelpHint({ term, className }: { term: GlossaryKey; class
           type="button"
           // 44px of tappable area around a 14px glyph — the icon can look
           // small, the target cannot be small.
-          className={`-m-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-2 align-middle text-zinc-400 transition-colors hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-zinc-200 ${className ?? ''}`}
+          className={`-m-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-2 align-middle text-muted-foreground transition-colors hover:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/25 ${className ?? ''}`}
           aria-label={`What does "${title}" mean?`}
           onClick={e => e.stopPropagation()}
         >
@@ -37,11 +37,11 @@ export default function HelpHint({ term, className }: { term: GlossaryKey; class
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-w-[18rem] p-3">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{body}</p>
+        <p className="text-body-15 font-medium">{title}</p>
+        <p className="mt-1 text-secondary-13 leading-relaxed text-muted-foreground">{body}</p>
         <Link
           href="/dashboard/settings/glossary"
-          className="mt-2 inline-block text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+          className="mt-2 inline-block text-secondary-13 font-medium text-accent-blue-deep hover:underline"
         >
           See all the words →
         </Link>

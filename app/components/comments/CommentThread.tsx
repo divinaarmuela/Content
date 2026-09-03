@@ -44,7 +44,7 @@ export default function CommentThread({
 }) {
   if (comments.length === 0) {
     return (
-      <p className="text-sm text-zinc-400 dark:text-zinc-500">
+      <p className="text-body-15 text-muted-foreground">
         {emptyText
           ?? 'No comments yet. Type @ and a name to ask someone something — they get an email and it stays on their list until it is marked done.'}
       </p>
@@ -56,28 +56,28 @@ export default function CommentThread({
         const forMe = c.assigned_to === viewerId
         const forName = c.assigned_to ? nameOf(c.assigned_to) : null
         return (
-          <div key={c.id} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 ${
-            forMe && !c.resolved ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20' : 'border-zinc-100 dark:border-zinc-800'
+          <div key={c.id} className={`flex items-start gap-2.5 rounded-inner border px-3 py-2 ${
+            forMe && !c.resolved ? 'border-accent-amber/35 bg-tint-amber' : 'border-border'
           }`}>
             <button onClick={() => isTeam && onToggleResolved(c)} disabled={!isTeam}
               aria-label={c.resolved ? 'Reopen' : 'Mark done'} title={c.resolved ? 'Reopen' : 'Mark done'}
               className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center">
               {c.resolved
-                ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                : <CircleDashed className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />}
+                ? <CheckCircle2 className="h-4 w-4 text-accent-green" />
+                : <CircleDashed className="h-4 w-4 text-muted-foreground" />}
             </button>
             <div className="min-w-0 flex-1">
-              <p className={`whitespace-pre-wrap text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
-              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-                {c.author_name && <span className="text-zinc-500 dark:text-zinc-400">{c.author_name}</span>}
+              <p className={`whitespace-pre-wrap text-body-15 ${c.resolved ? 'text-muted-foreground line-through' : ''}`}>{c.body}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+                {c.author_name && <span className="text-muted-foreground">{c.author_name}</span>}
                 <span suppressHydrationWarning>{viewerTz ? formatInZone(c.created_at, viewerTz, 'short') : ''}</span>
                 {c.assigned_to && !c.resolved && (
-                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                  <span className="rounded-full bg-tint-amber px-2.5 py-1.5 text-chip-12 font-medium text-foreground">
                     {forMe ? 'Waiting on you' : `Waiting on ${forName ?? 'someone'}`}
                   </span>
                 )}
                 {isTeam && c.visibility === 'client' && (
-                  <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">visible to client</Badge>
+                  <Badge variant="outline" className="border-accent-blue/25 bg-tint-blue font-normal text-accent-blue-deep">visible to client</Badge>
                 )}
               </p>
             </div>

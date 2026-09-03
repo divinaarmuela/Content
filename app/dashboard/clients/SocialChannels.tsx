@@ -190,7 +190,7 @@ export default function SocialChannels(
 
   if (!configured && !loading) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+      <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>Posting isn&apos;t switched on yet — nobody can schedule or publish from here until someone on our side turns it on.</span>
       </div>
@@ -200,8 +200,8 @@ export default function SocialChannels(
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Channels</span>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-body-15 font-medium">Channels</span>
+        <span className="text-secondary-13 text-muted-foreground">
           {accounts.length} connected
         </span>
         <div className="ml-auto flex items-center gap-1">
@@ -230,7 +230,7 @@ export default function SocialChannels(
                     <span className="flex-1">{brandFor(p).label}</span>
                     {busy === p
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : already && <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
+                      : already && <Check className="h-3.5 w-3.5 text-accent-green" />}
                   </DropdownMenuItem>
                 )
               })}
@@ -244,20 +244,20 @@ export default function SocialChannels(
           {[0, 1].map(i => <Skeleton key={i} className="h-14 flex-1" />)}
         </div>
       ) : linking && accounts.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+        <div className="flex items-center gap-2 rounded-inner border border-border px-3 py-3 text-secondary-13 text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Finishing the connection — the platform can take a few seconds to hand
           the account over.
         </div>
       ) : accounts.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-lg border border-dashed border-zinc-300 px-3 py-3 dark:border-zinc-700">
+        <div className="flex items-center gap-3 rounded-inner border border-dashed border-border px-3 py-3">
           {/* the platforms on offer, greyed out — shows what is possible here */}
           <div className="flex gap-1">
             {OFFERED.slice(0, 5).map(p => (
               <PlatformIcon key={p} platform={p} size={18} className="opacity-25 grayscale" />
             ))}
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-secondary-13 text-muted-foreground">
             No channels yet. “Connect” opens the platform’s own login — the client’s
             password is never entered here.
           </p>
@@ -269,7 +269,7 @@ export default function SocialChannels(
             return (
               <li
                 key={a.id}
-                className="group flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                className="group flex items-center gap-3 rounded-inner border border-border bg-surface px-3 py-2.5 transition-colors hover:border-border"
               >
                 <Link
                   href={`/dashboard/social/${a.id}`}
@@ -278,17 +278,17 @@ export default function SocialChannels(
                   <PlatformIcon platform={a.platform} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-medium">{brand.label}</span>
+                      <span className="truncate text-body-15 font-medium">{brand.label}</span>
                       <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-green"
                         title="Connected"
                       />
                     </div>
-                    <span className="block truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    <span className="block truncate font-mono text-secondary-13 text-muted-foreground">
                       {a.username ? `@${a.username}` : a.name ?? '—'}
                     </span>
                   </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition-colors group-hover:text-zinc-500 dark:text-zinc-600" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-muted-foreground" />
                 </Link>
                 <Button
                   variant="ghost" size="sm"

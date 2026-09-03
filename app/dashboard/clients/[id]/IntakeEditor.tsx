@@ -96,10 +96,10 @@ export default function IntakeEditor({
   return (
     <div className="flex flex-col gap-4">
       {/* ── sticky toolbar, so Save is never a scroll away ── */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-inner border border-border bg-card p-4 shadow-sm">
         <div>
-          <p className="text-sm font-medium">{preview ? 'Client preview' : 'Editing questions'}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-body-15 font-medium">{preview ? 'Client preview' : 'Editing questions'}</p>
+          <p className="text-secondary-13 text-muted-foreground">
             {preview
               ? 'Exactly what they see. Nothing saves until you press Save.'
               : `${draft.sections.length} sections · ${questionCount} questions`}
@@ -127,7 +127,7 @@ export default function IntakeEditor({
               onDragLeave={() => setOver(o => (o === `s-${si}` ? null : o))}
               onDrop={e => { e.preventDefault(); drop({ kind: 'section', si }) }}
               className={
-                'group/section rounded-lg border bg-card transition-colors ' +
+                'group/section rounded-inner border bg-card transition-colors ' +
                 (over === `s-${si}` ? 'border-primary ring-1 ring-primary' : 'border-border') +
                 (drag?.kind === 'section' && drag.si === si ? ' opacity-40' : '')
               }
@@ -143,13 +143,13 @@ export default function IntakeEditor({
                 >
                   <GripVertical className="h-4 w-4" />
                 </span>
-                <span className="w-6 shrink-0 text-center font-mono text-xs tabular-nums text-muted-foreground">
+                <span className="w-6 shrink-0 text-center font-mono text-secondary-13 tabular-nums text-muted-foreground">
                   {si + 1}
                 </span>
                 <Input
                   value={section.title} placeholder="Section name"
                   onChange={e => patchSection(si, { title: e.target.value })}
-                  className="h-8 flex-1 border-0 bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
+                  className="h-8 flex-1 border-0 bg-transparent px-0 text-body-15 font-semibold shadow-none focus-visible:ring-0"
                 />
                 <div className="flex opacity-60 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100">
                   <Button size="icon" variant="ghost" className="h-7 w-7" disabled={si === 0}
@@ -180,7 +180,7 @@ export default function IntakeEditor({
                   value={section.intro ?? ''}
                   placeholder="Optional intro: why you are asking this section"
                   onChange={e => patchSection(si, { intro: e.target.value })}
-                  className="h-8 border-0 bg-muted/50 text-xs italic"
+                  className="h-8 border-0 bg-muted/50 text-secondary-13 italic"
                 />
 
                 {section.blocks.map((block, bi) => (
@@ -194,7 +194,7 @@ export default function IntakeEditor({
                     onDragLeave={() => setOver(o => (o === `b-${si}-${bi}` ? null : o))}
                     onDrop={e => { e.preventDefault(); drop({ kind: 'block', si, bi }) }}
                     className={
-                      'group/block flex items-start gap-1 rounded-md border p-2 transition-colors ' +
+                      'group/block flex items-start gap-1 rounded-tile border p-2 transition-colors ' +
                       (over === `b-${si}-${bi}` ? 'border-primary ring-1 ring-primary' : 'border-transparent hover:border-border') +
                       (drag?.kind === 'block' && drag.si === si && drag.bi === bi ? ' opacity-40' : '')
                     }
@@ -217,16 +217,16 @@ export default function IntakeEditor({
                             ? 'The note they read, no answer box'
                             : 'Type the question exactly as they should read it'}
                           onChange={e => patchBlock(si, bi, { label: e.target.value })}
-                          className="h-9 min-w-[14rem] flex-1 text-sm"
+                          className="h-9 min-w-[14rem] flex-1 text-body-15"
                         />
                         <Select value={block.type}
                           onValueChange={v => patchBlock(si, bi, { type: v as BlockType })}>
-                          <SelectTrigger className="h-9 w-[160px] text-xs">
+                          <SelectTrigger className="h-9 w-[160px] text-secondary-13">
                             <SelectValue>{TYPE_LABEL(block.type)}</SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {TYPES.map(t => (
-                              <SelectItem key={t.value} value={t.value} className="text-xs">
+                              <SelectItem key={t.value} value={t.value} className="text-secondary-13">
                                 <span className="font-medium">{t.label}</span>
                                 <span className="ml-2 text-muted-foreground">{t.hint}</span>
                               </SelectItem>
@@ -240,7 +240,7 @@ export default function IntakeEditor({
                           value={block.help ?? ''}
                           placeholder="Optional hint under the question"
                           onChange={e => patchBlock(si, bi, { help: e.target.value })}
-                          className="h-8 border-dashed text-xs"
+                          className="h-8 border-dashed text-secondary-13"
                         />
                       )}
 
@@ -260,7 +260,7 @@ export default function IntakeEditor({
                             onChange={e => setOptionsDraft(d => ({ ...d, [key]: e.target.value }))}
                             onBlur={e => commit(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                            className="h-8 text-xs"
+                            className="h-8 text-secondary-13"
                           />
                         )
                       })()}
@@ -287,15 +287,15 @@ export default function IntakeEditor({
                 ))}
 
                 <div className="flex flex-wrap gap-2 pl-8">
-                  <Button size="sm" variant="secondary" className="h-7 text-xs"
+                  <Button size="sm" variant="secondary" className="h-7 text-secondary-13"
                     onClick={() => addBlock(si, 'long_text')}>
                     <Plus className="mr-1 h-3 w-3" /> Question
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs"
+                  <Button size="sm" variant="ghost" className="h-7 text-secondary-13"
                     onClick={() => addBlock(si, 'select')}>
                     <Plus className="mr-1 h-3 w-3" /> Choice
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs"
+                  <Button size="sm" variant="ghost" className="h-7 text-secondary-13"
                     onClick={() => addBlock(si, 'guidance')}>
                     <Plus className="mr-1 h-3 w-3" /> Note
                   </Button>
@@ -318,7 +318,7 @@ export default function IntakeEditor({
  *  what they get rather than an approximation of it. Inert: nothing saves. */
 function Preview({ definition }: { definition: TemplateDefinition }) {
   return (
-    <div className={`${archivo.variable} ${sometype.variable} overflow-hidden rounded-lg border border-border`}>
+    <div className={`${archivo.variable} ${sometype.variable} overflow-hidden rounded-inner border border-border`}>
       <div className="bg-ink px-6 py-10 sm:px-10">
         <div className="mx-auto flex max-w-2xl flex-col gap-14">
           {/* div, not section: globals.css gives a bare <section> 100px padding
@@ -326,7 +326,7 @@ function Preview({ definition }: { definition: TemplateDefinition }) {
           {definition.sections.map((section, i) => (
             <div key={`p-${i}`} className="flex flex-col gap-8">
               <div className="flex flex-col gap-3">
-                <span className="font-lamam text-[11px] tabular-nums tracking-widest text-cream-faint">
+                <span className="font-lamam text-[12px] tabular-nums tracking-widest text-cream-faint">
                   {String(i + 1).padStart(2, '0')} / {String(definition.sections.length).padStart(2, '0')}
                 </span>
                 <h2 className="font-lamah text-[28px] font-medium tracking-[-0.03em] text-cream">

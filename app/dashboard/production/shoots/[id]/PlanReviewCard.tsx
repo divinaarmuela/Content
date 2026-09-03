@@ -278,17 +278,17 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
 
   return (
     <>
-      <Card className="border-zinc-300 dark:border-zinc-700">
+      <Card className="border-border">
         <CardContent className="flex flex-col gap-2.5 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">
             What&rsquo;s the next move
           </p>
-          <p className="text-sm">
+          <p className="text-body-15">
             <span className="font-medium">{meaning}</span>{' '}
             {turn.hat !== null && (
               turn.mine
-                ? <span className="text-emerald-700 dark:text-emerald-400">That&rsquo;s you.</span>
-                : <span className="text-zinc-500 dark:text-zinc-400">Waiting on {turnText()}.</span>
+                ? <span className="text-foreground">That&rsquo;s you.</span>
+                : <span className="text-muted-foreground">Waiting on {turnText()}.</span>
             )}
           </p>
           {clientReview ? (
@@ -302,7 +302,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
                   {clientApprove && actionButton(clientApprove, 'default')}
                   {clientChanges && actionButton(clientChanges, 'outline')}
                 </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   The client can also approve on their own portal — these are for when they tell you by phone or email.
                 </p>
               </>
@@ -331,15 +331,15 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
             </div>
           )}
           {hints.map(h => (
-            <p key={h} className="text-xs text-amber-600 dark:text-amber-400">{h}</p>
+            <p key={h} className="text-secondary-13 text-accent-amber">{h}</p>
           ))}
           {reviewNotes.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-t border-zinc-100 pt-2 dark:border-zinc-800">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Review notes</p>
+            <div className="flex flex-col gap-1.5 border-t border-border pt-2">
+              <p className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Review notes</p>
               {reviewNotes.map(c => (
-                <p key={c.id} className="text-xs text-zinc-600 dark:text-zinc-300">
+                <p key={c.id} className="text-secondary-13 text-muted-foreground">
                   <span className="font-medium">{c.author_name ?? 'Team'}</span>
-                  <span className="text-zinc-400 dark:text-zinc-500"> · {when(c.created_at)}</span>
+                  <span className="text-muted-foreground"> · {when(c.created_at)}</span>
                   <span className="block whitespace-pre-wrap">{c.body}</span>
                 </p>
               ))}
@@ -353,30 +353,30 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>{reviewPick?.label}</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Who should review this? They&rsquo;ll be emailed as your reviewer.</p>
+            <p className="text-body-15 text-muted-foreground">Who should review this? They&rsquo;ll be emailed as your reviewer.</p>
             {reviewers === null && (
               <div className="flex flex-col gap-2 py-2"><Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" /></div>
             )}
             {reviewersFailed ? (
               <div className="flex flex-col items-center gap-2 py-4">
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">Couldn&rsquo;t load reviewers — try again</p>
+                <p className="text-body-15 text-muted-foreground">Couldn&rsquo;t load reviewers — try again</p>
                 <Button variant="outline" size="sm" className="min-h-11" disabled={busy !== null}
                   onClick={() => reviewPick && void openReviewerPick(reviewPick)}>Try again</Button>
               </div>
             ) : reviewers?.length === 0 && (
-              <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="py-4 text-center text-body-15 text-muted-foreground">
                 {soloReviewer ? 'You’re the only reviewer on this client.' : 'Nobody else to notify on this client — the move is still recorded.'}
               </p>
             )}
             {(reviewers ?? []).map(r => (
-              <label key={r.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+              <label key={r.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input type="checkbox" checked={chosen.has(r.id)}
                   onChange={() => setChosen(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n })}
                   className="h-4 w-4 shrink-0 accent-blue-600" />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
-                  <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="block truncate text-secondary-13 text-muted-foreground">{r.email}</span>
+                  <span className="block text-secondary-13 text-muted-foreground">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}{r.assigned && ' · manages this client'}
                   </span>
                 </span>
@@ -384,7 +384,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
             ))}
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">{dialogError}</p>
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">{dialogError}</p>
           )}
           <DialogFooter>
             <Button variant="outline" className="min-h-11" onClick={() => setReviewPick(null)} disabled={busy !== null}>Cancel</Button>
@@ -400,16 +400,16 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
       <Dialog open={clientSend !== null} onOpenChange={o => !o && busy === null && setClientSend(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Send to {detail.client_name ?? 'the client'}?</DialogTitle></DialogHeader>
-          <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <div className="flex flex-col gap-2 text-body-15 text-muted-foreground">
             {(detail.client_users?.length ?? 0) > 0 ? (
               <p>{detail.client_users!.length} portal {detail.client_users!.length === 1 ? 'user' : 'users'} will be emailed: {detail.client_users!.map(u => u.name || u.email).join(', ')}.</p>
             ) : (
               <p>This client has no portal account yet, so no email goes out — but the plan still moves to their side and appears the moment one is created.</p>
             )}
-            <p className="text-zinc-500 dark:text-zinc-400">The plan becomes visible on their portal, where they can approve it or ask for changes.</p>
+            <p className="text-muted-foreground">The plan becomes visible on their portal, where they can approve it or ask for changes.</p>
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">{dialogError}</p>
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">{dialogError}</p>
           )}
           <DialogFooter>
             <Button variant="outline" className="min-h-11" onClick={() => setClientSend(null)} disabled={busy !== null}>Cancel</Button>
@@ -426,15 +426,15 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>{revisionAsk?.label}</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               Say what needs to change — it lands in the comments and in {detail.owner_name ? `${detail.owner_name}’s` : 'the assignee’s'} email.
             </p>
             <textarea value={revisionNote} onChange={e => setRevisionNote(e.target.value)} rows={4} autoFocus
               placeholder="What should be different in the next version?"
-              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border" />
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">{dialogError}</p>
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">{dialogError}</p>
           )}
           <DialogFooter>
             <Button variant="outline" className="min-h-11" onClick={() => setRevisionAsk(null)} disabled={busy !== null}>Cancel</Button>

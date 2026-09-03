@@ -88,6 +88,7 @@ import PostingCard, { type PostingApproval, type PostingContext } from './Postin
 import { choosePlatform, platformLabel } from '../../../lib/posting-card-core'
 import { approvalChip } from '../../../lib/posting-approval-core'
 import type { Role } from '../../../lib/identity-core'
+import PageTitle from '../../ui/PageTitle'
 
 type Version = {
   id: string; version_number: number; created_at: string
@@ -158,15 +159,15 @@ type Detail = {
 }
 
 const STATUS_TINT: Record<string, string> = {
-  draft_uploaded: 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
-  internal_review: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
-  revision_required: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  revision_complete: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  client_review: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  client_changes_requested: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  approved_for_scheduling: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  scheduled: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-900',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+  draft_uploaded: 'bg-foreground/[0.06] text-muted-foreground border-border',
+  internal_review: 'bg-tint-blue text-foreground border-accent-blue/25',
+  revision_required: 'bg-tint-amber text-foreground border-accent-amber/35',
+  revision_complete: 'bg-tint-amber text-foreground border-accent-amber/35',
+  client_review: 'bg-tint-blue text-accent-blue-deep border-accent-blue/25',
+  client_changes_requested: 'bg-tint-blue text-accent-blue-deep border-accent-blue/25',
+  approved_for_scheduling: 'bg-tint-green text-foreground border-accent-green/30',
+  scheduled: 'bg-tint-blue text-foreground border-accent-blue/25',
+  published: 'bg-tint-green text-foreground border-accent-green/30',
 }
 
 const PLATFORMS = ['instagram', 'tiktok', 'facebook', 'linkedin', 'youtube']
@@ -651,8 +652,8 @@ export default function ItemDetailPage() {
   if (!detail && itemError) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-3">
-        <p className="text-sm font-medium">We could not load this item.</p>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-body-15 font-medium">We could not load this item.</p>
+        <p className="text-body-15 text-muted-foreground">
           The live connection to the database failed. Check your connection and try again.
         </p>
         <div>
@@ -677,7 +678,7 @@ export default function ItemDetailPage() {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-4">
         <Skeleton className="h-8 w-64" />
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Opening the shoot page…</p>
+        <p className="text-body-15 text-muted-foreground">Opening the shoot page…</p>
       </div>
     )
   }
@@ -1374,7 +1375,7 @@ export default function ItemDetailPage() {
   /** the version drop zone + form — inside "The work" */
   const versionForm = canAddVersion && (
     <div className="flex flex-col gap-3">
-      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+      <p className="text-secondary-13 font-medium text-muted-foreground">
         {isInternal ? 'Attach the work' : detail.versions.length === 0 ? 'Add the first version' : `Add v${detail.current_version_number + 1}`}
       </p>
       {/* THE path, not one of three: the export goes straight from the
@@ -1389,34 +1390,34 @@ export default function ItemDetailPage() {
           if (f.length) void uploadFiles(f)
         }}
         onClick={() => fileRef.current?.click()}
-        className={`flex min-h-11 cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors ${
+        className={`flex min-h-11 cursor-pointer flex-col items-center gap-1.5 rounded-card border-2 border-dashed px-4 py-7 text-center transition-colors ${
           dragging
-            ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
+            ? 'border-accent-blue/25 bg-tint-blue'
             : slides.length > 0
-              ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
-              : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+              ? 'border-accent-green/30 bg-tint-green'
+              : 'border-border hover:border-border'
         }`}
       >
-        <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`} />
+        <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-accent-green' : 'text-muted-foreground'}`} />
         {uploading ? (
-          <p className="text-sm font-medium">{overallProgress(versionUploads).label}</p>
+          <p className="text-body-15 font-medium">{overallProgress(versionUploads).label}</p>
         ) : slides.length > 0 ? (
           <>
-            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <p className="text-body-15 font-medium text-foreground">
               {slideCountLabel(slides.length)} ready ✓
               {slides.length === 1 && draftDims && draftDims.w > 0 ? ` · ${draftDims.w} × ${draftDims.h}` : ''}
             </p>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-[12px] text-muted-foreground">
               {slides.length >= MAX_SLIDES ? `That is the most a carousel takes (${MAX_SLIDES})` : 'Tap to add more'}
             </p>
           </>
         ) : (
           <>
             {/* the working half first: "choose" works everywhere, "drag" on a desk */}
-            <p className="text-sm font-medium">
+            <p className="text-body-15 font-medium">
               {isCarousel ? 'Choose the cards, or drag them here' : 'Choose a file, or drag the export here'}
             </p>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-[12px] text-muted-foreground">
               {isCarousel
                 ? `Any size, several at once — a carousel takes 2 to ${MAX_SLIDES} slides.`
                 : 'Any size — it goes straight to our storage.'}
@@ -1434,7 +1435,7 @@ export default function ItemDetailPage() {
       </div>
 
       {versionUploads.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+        <div className="flex flex-col gap-2 rounded-inner border border-border p-2.5">
           <UploadOverall uploads={versionUploads} />
           <UploadRows uploads={versionUploads} />
         </div>
@@ -1460,30 +1461,30 @@ export default function ItemDetailPage() {
                     setSlides(list => reorder(list, dragIndex, i))
                     setDragIndex(null)
                   }}
-                  className={`relative h-24 w-24 shrink-0 cursor-grab overflow-hidden rounded-lg border-2 bg-zinc-950 active:cursor-grabbing ${
-                    dragIndex === i ? 'border-blue-400 opacity-50' : 'border-zinc-200 dark:border-zinc-700'
+                  className={`relative h-24 w-24 shrink-0 cursor-grab overflow-hidden rounded-inner border-2 bg-foreground active:cursor-grabbing ${
+                    dragIndex === i ? 'border-accent-blue/25 opacity-50' : 'border-border'
                   }`}
                   title={`Slide ${i + 1} of ${slides.length} — ${s.name}`}
                 >
                   <SlideThumb slide={s} />
-                  <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[10px] text-white">
+                  <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-center font-mono text-[12px] text-white">
                     {i + 1} of {slides.length}
                   </span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button type="button" aria-label={`Move slide ${i + 1} earlier`} disabled={i === 0}
                     onClick={() => setSlides(list => reorder(list, i, i - 1))}
-                    className="flex h-11 w-7 items-center justify-center text-zinc-500 disabled:opacity-30 md:h-8">
+                    className="flex h-11 w-7 items-center justify-center text-muted-foreground disabled:opacity-30 md:h-8">
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" aria-label={`Move slide ${i + 1} later`} disabled={i === slides.length - 1}
                     onClick={() => setSlides(list => reorder(list, i, i + 1))}
-                    className="flex h-11 w-7 items-center justify-center text-zinc-500 disabled:opacity-30 md:h-8">
+                    className="flex h-11 w-7 items-center justify-center text-muted-foreground disabled:opacity-30 md:h-8">
                     <ArrowDown className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" aria-label={`Remove slide ${i + 1}`}
                     onClick={() => setSlides(list => list.filter((_, n) => n !== i))}
-                    className="flex h-11 w-7 items-center justify-center text-zinc-500 hover:text-red-600 md:h-8">
+                    className="flex h-11 w-7 items-center justify-center text-muted-foreground hover:text-accent-red md:h-8">
                     ✕
                   </button>
                 </div>
@@ -1491,7 +1492,7 @@ export default function ItemDetailPage() {
             ))}
           </div>
           {slides.length > 1 && (
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-[12px] text-muted-foreground">
               This is the posting order. Use the arrows to change it before you save — after that, a new order means a new version.
             </p>
           )}
@@ -1501,25 +1502,25 @@ export default function ItemDetailPage() {
       {/* secondary, and closed until asked for */}
       <div className="flex flex-col gap-2">
         <button type="button" onClick={() => setLinksOpen(v => !v)}
-          className="flex min-h-11 w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 md:min-h-6">
+          className="flex min-h-11 w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground md:min-h-6">
           <CircleDashed className={`h-3.5 w-3.5 transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
           Or paste a link instead
         </button>
         {linksOpen && (
-          <div className="flex flex-col gap-2.5 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+          <div className="flex flex-col gap-2.5 rounded-inner border border-border p-3">
             <div className="grid gap-1.5">
-              <Label className="text-xs">{isInternal ? 'Link to the work' : 'Review link'}</Label>
+              <Label className="text-secondary-13">{isInternal ? 'Link to the work' : 'Review link'}</Label>
               <Input value={verDraft.drive_url}
                 placeholder={isInternal ? 'https://docs.google.com/…' : 'https://drive.google.com/… or a YouTube link'}
                 onChange={e => setVerDraft(d => ({ ...d, drive_url: e.target.value }))} />
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">Where it can be watched, if it is not the file above.</p>
+              <p className="text-[12px] text-muted-foreground">Where it can be watched, if it is not the file above.</p>
             </div>
             {!isInternal && (
               <div className="grid gap-1.5">
-                <Label className="text-xs">Master file link</Label>
+                <Label className="text-secondary-13">Master file link</Label>
                 <Input value={verDraft.dropbox_url} placeholder="https://drive.google.com/…"
                   onChange={e => setVerDraft(d => ({ ...d, dropbox_url: e.target.value }))} />
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[12px] text-muted-foreground">
                   Optional — where the full-quality original is filed, if that is somewhere other than here.
                 </p>
               </div>
@@ -1529,7 +1530,7 @@ export default function ItemDetailPage() {
       </div>
 
       <div className="grid gap-1.5">
-        <Label className="text-xs">Notes</Label>
+        <Label className="text-secondary-13">Notes</Label>
         <Input value={verDraft.notes} placeholder={isInternal ? 'Anything the reviewer should know' : 'What changed in this version?'}
           onChange={e => setVerDraft(d => ({ ...d, notes: e.target.value }))} />
       </div>
@@ -1542,7 +1543,7 @@ export default function ItemDetailPage() {
             : isInternal ? 'Save this draft' : `Save v${detail.current_version_number + 1}`}
         </Button>
         {versionMissing && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">{versionMissing}</p>
+          <p className="text-secondary-13 text-accent-amber">{versionMissing}</p>
         )}
       </div>
     </div>
@@ -1552,49 +1553,49 @@ export default function ItemDetailPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-4 pb-24 md:pb-0">
       {/* 1 — HEADER. What this is. The status once, as a badge; whose move
           it is lives in the card below, once. */}
-      <div className="flex flex-wrap items-start gap-3">
-        <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={() => router.push(back.href)}>
-          <ArrowLeft className="h-4 w-4" /> {back.label}
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold tracking-tight">{detail.title}</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {facts.map((f, i) => (
-              <span key={i}>
-                {i > 0 && ' · '}
-                <span className={f === facts[1] ? 'capitalize' : overdue && String(f).startsWith('due') ? 'font-medium text-red-600 dark:text-red-400' : ''}>{f}</span>
-              </span>
-            ))}
-            {isBrief && <> <HelpHint term="shoot_plan" /></>}
-            {isAsset && <> <HelpHint term="item" /></>}
-          </p>
-        </div>
-        <Badge variant="outline" className={`self-center ${STATUS_TINT[detail.status] ?? ''}`}>
-          {statusWord}
-          {detail.status === 'approved_for_scheduling' && isAsset && <HelpHint term="approved_for_scheduling" className="-my-2" />}
-          {detail.status === 'draft_uploaded' && isAsset && <HelpHint term="drafting" className="-my-2" />}
-        </Badge>
-      </div>
+      <Button variant="outline" size="sm" className="w-fit" onClick={() => router.push(back.href)}>
+        <ArrowLeft className="h-4 w-4" /> {back.label}
+      </Button>
+      <PageTitle
+        title={detail.title}
+        summary={<>
+          {facts.map((f, i) => (
+            <span key={i}>
+              {i > 0 && ' · '}
+              <span className={f === facts[1] ? 'capitalize' : overdue && String(f).startsWith('due') ? 'font-medium text-accent-red' : ''}>{f}</span>
+            </span>
+          ))}
+          {isBrief && <> <HelpHint term="shoot_plan" /></>}
+          {isAsset && <> <HelpHint term="item" /></>}
+        </>}
+        actions={<>
+          <Badge variant="outline" className={STATUS_TINT[detail.status] ?? ''}>
+            {statusWord}
+            {detail.status === 'approved_for_scheduling' && isAsset && <HelpHint term="approved_for_scheduling" className="-my-2" />}
+            {detail.status === 'draft_uploaded' && isAsset && <HelpHint term="drafting" className="-my-2" />}
+          </Badge>
+        </>}
+      />
 
       {isTeam && <GettingStarted role={role} page="item" />}
 
       {/* 2 — WHAT TO DO NOW. One sentence, one blue button, the reason it is
           grey if it is grey. First on the page. */}
       {isTeam && (transitions.length > 0 || turns[detail.status] !== null || openForMe) && (
-        <Card id="next" className="scroll-mt-4 border-zinc-300 dark:border-zinc-700">
+        <Card id="next" className="scroll-mt-4 border-border">
           <CardContent className="flex flex-col gap-2.5 p-4">
             {openForMe && (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <p className="rounded-tile bg-tint-amber px-3 py-2 text-body-15 text-foreground">
                 Someone tagged you in the comments below — it stays on your list until you mark it done.{' '}
                 <a href="#comments" className="font-medium underline">Read it</a>
               </p>
             )}
-            <p className="text-sm">
+            <p className="text-body-15">
               <span className="font-medium">{meaning}</span>{' '}
               {turn.hat !== null && (
                 turn.mine
-                  ? <span className="text-emerald-700 dark:text-emerald-400">That&rsquo;s you.</span>
-                  : <span className="text-zinc-500 dark:text-zinc-400">Waiting on {turnText()}.</span>
+                  ? <span className="text-foreground">That&rsquo;s you.</span>
+                  : <span className="text-muted-foreground">Waiting on {turnText()}.</span>
               )}
             </p>
             {transitions.length > 0 && (
@@ -1624,12 +1625,12 @@ export default function ItemDetailPage() {
               </div>
             )}
             {hints.map(h => (
-              <p key={h} className="text-xs text-amber-600 dark:text-amber-400">{h}</p>
+              <p key={h} className="text-secondary-13 text-accent-amber">{h}</p>
             ))}
             {/* the flag that decides whether "approve without the client"
                 exists at all — the one place it is explained */}
             {canManage && !isInternal && (
-              <label className="flex min-h-11 items-center gap-2.5 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+              <label className="flex min-h-11 items-center gap-2.5 text-secondary-13 text-muted-foreground md:min-h-0">
                 <Switch
                   checked={detail.client_approval_required !== false}
                   disabled={busy !== null}
@@ -1646,7 +1647,7 @@ export default function ItemDetailPage() {
       {isTeam && isBrief && (
         <Card id="work" className="scroll-mt-4">
           <CardHeader className="flex-row items-center">
-            <CardTitle className="text-sm font-semibold">The plan</CardTitle>
+            <CardTitle>The plan</CardTitle>
             {detail.batch?.id && (
               <Button size="sm" variant="outline" className="ml-auto min-h-11 md:min-h-8" asChild>
                 <Link href={`/dashboard/production/shoots/${detail.batch.id}`}>Open the shoot page <ExternalLink className="h-3.5 w-3.5" /></Link>
@@ -1654,17 +1655,17 @@ export default function ItemDetailPage() {
             )}
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               The concept and shot list live on the shoot page. A link to a plan written elsewhere goes here.
             </p>
             <div className="grid gap-1.5">
-              <Label className="text-xs">Plan link{briefHasContent ? '' : ' *'}</Label>
+              <Label className="text-secondary-13">Plan link{briefHasContent ? '' : ' *'}</Label>
               <div className="flex gap-2">
                 <Input
                   ref={briefUrlRef}
                   defaultValue={detail.brief_url ?? ''}
                   placeholder="https://app.milanote.com/…"
-                  className="font-mono text-xs"
+                  className="font-mono text-secondary-13"
                   onFocus={e => { focusVal.current.brief_url = e.target.value }}
                   onBlur={e => {
                     const v = e.target.value.trim()
@@ -1680,7 +1681,7 @@ export default function ItemDetailPage() {
               </div>
             </div>
             <div className="grid gap-1.5">
-              <Label className="text-xs">Note to reviewer</Label>
+              <Label className="text-secondary-13">Note to reviewer</Label>
               <Textarea
                 ref={briefNoteRef}
                 rows={3}
@@ -1695,7 +1696,7 @@ export default function ItemDetailPage() {
               />
             </div>
             {detail.status === 'scheduled' && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-secondary-13 text-muted-foreground">
                 Shoot booked — after the shoot, mark it shot on the shoot page and create the items there.
               </p>
             )}
@@ -1706,52 +1707,52 @@ export default function ItemDetailPage() {
       {!isBrief && (
         <Card id="work" className="scroll-mt-4">
           <CardHeader className="flex-row items-center gap-2">
-            <CardTitle className="text-sm font-semibold">{isInternal ? 'The work' : 'Versions'}</CardTitle>
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">{versionSummary}</span>
+            <CardTitle>{isInternal ? 'The work' : 'Versions'}</CardTitle>
+            <span className="text-secondary-13 text-muted-foreground">{versionSummary}</span>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {/* the latest cut, as big as it deserves — and its facts on one
                 line: this IS the newest version, so the list below starts
                 from the one before it */}
             {latest && (latest.file_url || latest.drive_url) && (
-              <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+              <div className="overflow-hidden rounded-inner border border-border">
                 {latestSlides[0] && (
                   <Media key={latestSlides[0].url} src={latestSlides[0].url}
                     driveUrl={latest.drive_url}
-                    className="max-h-[420px] w-full bg-zinc-950 object-contain" onDims={setPreviewDims} />
+                    className="max-h-[420px] w-full bg-foreground object-contain" onDims={setPreviewDims} />
                 )}
                 {latestSlides.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto border-t border-zinc-100 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/50">
+                  <div className="flex gap-2 overflow-x-auto border-t border-border bg-foreground/[0.04] p-2">
                     {latestSlides.map((s, i) => (
                       <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener"
                         title={`Slide ${i + 1} of ${latestSlides.length} — ${s.name}`}
-                        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 dark:border-zinc-700">
+                        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-tile border border-border bg-foreground">
                         <SlideThumb slide={s} />
-                        <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[10px] text-white">{i + 1}</span>
+                        <span className="absolute bottom-0 left-0 rounded-tr bg-black/70 px-1 font-mono text-[12px] text-white">{i + 1}</span>
                       </a>
                     ))}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 text-xs">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 text-secondary-13">
                   <span className="font-medium">{isInternal ? `Draft ${latest.version_number}` : `v${latest.version_number}`} · latest</span>
-                  <span className="text-zinc-500 dark:text-zinc-400">
+                  <span className="text-muted-foreground">
                     {new Date(latest.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                   </span>
-                  {latestSlides.length > 1 && <span className="text-zinc-500 dark:text-zinc-400">{slideCountLabel(latestSlides.length)}</span>}
+                  {latestSlides.length > 1 && <span className="text-muted-foreground">{slideCountLabel(latestSlides.length)}</span>}
                   {previewDims && previewDims.w > 0 && (
-                    <span className="font-mono tabular-nums text-zinc-500 dark:text-zinc-400">{previewDims.w} × {previewDims.h}</span>
+                    <span className="font-mono tabular-nums text-muted-foreground">{previewDims.w} × {previewDims.h}</span>
                   )}
-                  {latest.notes && <span className="truncate text-zinc-500 dark:text-zinc-400">{latest.notes}</span>}
+                  {latest.notes && <span className="truncate text-muted-foreground">{latest.notes}</span>}
                   <span className="ml-auto flex gap-3">
-                    {latest.file_url && <a className="min-h-11 py-3 text-blue-600 hover:underline md:min-h-0 md:py-0 dark:text-blue-400" href={latest.file_url} target="_blank" rel="noreferrer noopener">Open file</a>}
-                    {latest.drive_url && <a className="min-h-11 py-3 text-blue-600 hover:underline md:min-h-0 md:py-0 dark:text-blue-400" href={latest.drive_url} target="_blank" rel="noreferrer noopener">Open in Drive</a>}
-                    {isTeam && latest.dropbox_url && <a className="min-h-11 py-3 text-zinc-500 hover:underline md:min-h-0 md:py-0 dark:text-zinc-400" href={latest.dropbox_url} target="_blank" rel="noreferrer noopener">Master file</a>}
+                    {latest.file_url && <a className="min-h-11 py-3 text-accent-blue-deep hover:underline md:min-h-0 md:py-0" href={latest.file_url} target="_blank" rel="noreferrer noopener">Open file</a>}
+                    {latest.drive_url && <a className="min-h-11 py-3 text-accent-blue-deep hover:underline md:min-h-0 md:py-0" href={latest.drive_url} target="_blank" rel="noreferrer noopener">Open in Drive</a>}
+                    {isTeam && latest.dropbox_url && <a className="min-h-11 py-3 text-muted-foreground hover:underline md:min-h-0 md:py-0" href={latest.dropbox_url} target="_blank" rel="noreferrer noopener">Master file</a>}
                   </span>
                 </div>
               </div>
             )}
             {detail.versions.length === 0 && (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="text-body-15 text-muted-foreground">
                 {isInternal
                   ? 'Nothing attached yet. Add a file or a link below, then send it for review.'
                   : canAddVersion ? 'No versions yet. Drop the first cut below.' : 'No versions yet.'}
@@ -1760,25 +1761,25 @@ export default function ItemDetailPage() {
             {/* earlier versions, folded — the latest is above */}
             {detail.versions.length > 1 && (
               <details className="group">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 md:min-h-6">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground md:min-h-6">
                   <CircleDashed className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
                   {detail.versions.length - 1} earlier {isInternal ? 'draft' : 'version'}{detail.versions.length - 1 === 1 ? '' : 's'}
                 </summary>
                 <div className="mt-2 flex flex-col gap-1.5">
                   {detail.versions.slice(1).map(v => (
-                    <div key={v.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                      <span className="font-mono text-xs font-semibold">{isInternal ? `Draft ${v.version_number}` : `v${v.version_number}`}</span>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <div key={v.id} className="flex items-baseline gap-3 rounded-inner border border-border px-3 py-2">
+                      <span className="font-mono text-secondary-13 font-semibold">{isInternal ? `Draft ${v.version_number}` : `v${v.version_number}`}</span>
+                      <span className="text-secondary-13 text-muted-foreground">
                         {new Date(v.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                       </span>
                       {slidesOf(v).length > 1 && (
-                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{slideCountLabel(slidesOf(v).length)}</span>
+                        <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 font-mono text-[12px] text-muted-foreground">{slideCountLabel(slidesOf(v).length)}</span>
                       )}
-                      {v.notes && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{v.notes}</span>}
-                      <span className="ml-auto flex gap-2 text-xs">
-                        {v.file_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
-                        {v.drive_url && <a className="text-blue-600 hover:underline dark:text-blue-400" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
-                        {isTeam && v.dropbox_url && <a className="text-zinc-500 hover:underline dark:text-zinc-400" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">master</a>}
+                      {v.notes && <span className="truncate text-secondary-13 text-muted-foreground">{v.notes}</span>}
+                      <span className="ml-auto flex gap-2 text-secondary-13">
+                        {v.file_url && <a className="text-accent-blue-deep hover:underline" href={v.file_url} target="_blank" rel="noreferrer noopener">file</a>}
+                        {v.drive_url && <a className="text-accent-blue-deep hover:underline" href={v.drive_url} target="_blank" rel="noreferrer noopener">drive</a>}
+                        {isTeam && v.dropbox_url && <a className="text-muted-foreground hover:underline" href={v.dropbox_url} target="_blank" rel="noreferrer noopener">master</a>}
                       </span>
                     </div>
                   ))}
@@ -1796,17 +1797,17 @@ export default function ItemDetailPage() {
           to say this in four places. */}
       {isTeam && (
         <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">People</CardTitle></CardHeader>
+          <CardHeader><CardTitle>People</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {/* the owner — who carries the work */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{isBrief ? 'Writing it' : isInternal ? 'Doing it' : 'Editing'}</span>
+              <span className="w-24 shrink-0 text-secondary-13 text-muted-foreground">{isBrief ? 'Writing it' : isInternal ? 'Doing it' : 'Editing'}</span>
               {canManage ? (
                 <Select
                   value={detail.owner_id ?? 'none'}
                   onValueChange={v => v && v !== (detail.owner_id ?? 'none') && saveOwner(v)}
                 >
-                  <SelectTrigger className="h-11 w-60 bg-white text-sm md:h-8 md:text-xs dark:bg-zinc-900" disabled={busy === 'owner'}>
+                  <SelectTrigger className="h-11 w-60 bg-surface text-body-15 md:h-8 md:text-secondary-13" disabled={busy === 'owner'}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1819,31 +1820,31 @@ export default function ItemDetailPage() {
                   </SelectContent>
                 </Select>
               ) : (
-                <span className="text-sm">
-                  {detail.owner_id === detail.viewer_id ? 'You' : detail.owner_name ?? <span className="text-zinc-400">nobody yet</span>}
+                <span className="text-body-15">
+                  {detail.owner_id === detail.viewer_id ? 'You' : detail.owner_name ?? <span className="text-muted-foreground">nobody yet</span>}
                 </span>
               )}
               {canClaimEditor(workItem, viewer) && <ClaimButton itemId={id} hat="editor" onDone={load} />}
             </div>
             {/* the reviewer — the client's account manager(s) */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Reviewing</span>
-              <span className="text-sm">
-                {reviewerNames.length > 0 ? reviewerNames.join(', ') : <span className="text-zinc-400">no account manager on this client</span>}
+              <span className="w-24 shrink-0 text-secondary-13 text-muted-foreground">Reviewing</span>
+              <span className="text-body-15">
+                {reviewerNames.length > 0 ? reviewerNames.join(', ') : <span className="text-muted-foreground">no account manager on this client</span>}
               </span>
               {detail.client_approval_required !== false && !isInternal && (
-                <span className="text-xs text-zinc-400 dark:text-zinc-500">then {detail.client_name ?? 'the client'} signs off</span>
+                <span className="text-secondary-13 text-muted-foreground">then {detail.client_name ?? 'the client'} signs off</span>
               )}
             </div>
             {/* the scheduling seat — assets only */}
             {isAsset && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Posting</span>
-                <span className="text-sm">
+                <span className="w-24 shrink-0 text-secondary-13 text-muted-foreground">Posting</span>
+                <span className="text-body-15">
                   {schedulerIds.includes(detail.viewer_id ?? '') ? 'You'
                     : schedulerNames.length > 0 ? schedulerNames.join(', ')
                     : schedulerIds.length > 0 ? 'someone on the team'
-                    : <span className="text-zinc-400">{SCHEDULER_STATUSES.includes(detail.status) ? 'nobody yet — any scheduler can take it' : 'decided after approval'}</span>}
+                    : <span className="text-muted-foreground">{SCHEDULER_STATUSES.includes(detail.status) ? 'nobody yet — any scheduler can take it' : 'decided after approval'}</span>}
                 </span>
                 {canClaimScheduler(workItem, viewer) && <ClaimButton itemId={id} hat="scheduler" onDone={load} />}
                 {canManage && (detail.status === 'approved_for_scheduling' || detail.status === 'scheduled') && (
@@ -1868,7 +1869,7 @@ export default function ItemDetailPage() {
       {isTeam && isAsset && (canManage || detail.brief || folderUrl || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
           <CardHeader className="flex-row items-center">
-            <CardTitle className="text-sm font-semibold">Files &amp; folder</CardTitle>
+            <CardTitle>Files &amp; folder</CardTitle>
             {folderUrl && (
               <Button variant="outline" size="sm" className="ml-auto min-h-11 md:min-h-8" asChild>
                 <a href={folderUrl} target="_blank" rel="noreferrer noopener">
@@ -1879,14 +1880,14 @@ export default function ItemDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {detail.drive_mirror?.line && (
-              <p className={`-mt-1 text-xs ${detail.drive_mirror.copying ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+              <p className={`-mt-1 text-secondary-13 ${detail.drive_mirror.copying ? 'text-accent-amber' : 'text-muted-foreground'}`}>
                 {detail.drive_mirror.line}
               </p>
             )}
             {canManage ? (
               <>
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">Editing notes</Label>
+                  <Label className="text-secondary-13">Editing notes</Label>
                   <Textarea
                     ref={jobBriefRef}
                     rows={3}
@@ -1901,13 +1902,13 @@ export default function ItemDetailPage() {
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">Folder link <span className="font-normal text-zinc-400">(Google Drive)</span></Label>
+                  <Label className="text-secondary-13">Folder link <span className="font-normal text-muted-foreground">(Google Drive)</span></Label>
                   <Input
                     ref={rawAssetsRef}
                     defaultValue={detail.raw_assets_url ?? detail.drive_url ?? ''}
                     onFocus={e => { focusVal.current.raw_assets_url = e.target.value }}
                     placeholder="https://drive.google.com/drive/folders/…"
-                    className="font-mono text-xs"
+                    className="font-mono text-secondary-13"
                     onBlur={e => {
                       const v = e.target.value.trim()
                       if (v === (focusVal.current.raw_assets_url ?? '').trim()) return
@@ -1917,7 +1918,7 @@ export default function ItemDetailPage() {
                 </div>
               </>
             ) : (
-              detail.brief && <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.brief}</p>
+              detail.brief && <p className="whitespace-pre-wrap text-body-15 text-muted-foreground">{detail.brief}</p>
             )}
             {(detail.raw_assets?.length ?? 0) > 0 && (
               <div className="flex flex-col gap-1.5">
@@ -1930,7 +1931,7 @@ export default function ItemDetailPage() {
               </div>
             )}
             {jobUploads.length > 0 && (
-              <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800">
+              <div className="flex flex-col gap-2 rounded-inner border border-border p-2.5">
                 <UploadOverall uploads={jobUploads} />
                 <UploadRows uploads={jobUploads} onDismiss={dismissUpload} />
               </div>
@@ -1952,7 +1953,7 @@ export default function ItemDetailPage() {
 
       {isTeam && isInternal && (canManage || detail.brief || (detail.raw_assets?.length ?? 0) > 0) && (
         <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold">The ask</CardTitle></CardHeader>
+          <CardHeader><CardTitle>The ask</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             {canManage ? (
               <Textarea
@@ -1969,8 +1970,8 @@ export default function ItemDetailPage() {
               />
             ) : (
               detail.brief
-                ? <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.brief}</p>
-                : <p className="text-sm text-zinc-400 dark:text-zinc-500">No notes written for this task.</p>
+                ? <p className="whitespace-pre-wrap text-body-15 text-muted-foreground">{detail.brief}</p>
+                : <p className="text-body-15 text-muted-foreground">No notes written for this task.</p>
             )}
             {(detail.raw_assets?.length ?? 0) > 0 && (
               <div className="flex flex-col gap-1.5">
@@ -1986,23 +1987,23 @@ export default function ItemDetailPage() {
       {isAsset && postingOpen && (canSchedule || canManage || detail.schedule.length > 0) && (
         <Card id="posting" className="scroll-mt-4">
           <CardHeader className="flex-row items-center gap-2">
-            <CardTitle className="text-sm font-semibold">Posting</CardTitle>
+            <CardTitle>Posting</CardTitle>
             {/* where the final post stands — drawn only once the gate has
                 actually been used on this item */}
             {(() => {
               const chip = approvalChip(detail.posting_approval?.state)
               if (!chip) return null
               const tint = chip.tone === 'approved'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400'
+                ? 'border-accent-green/30 bg-tint-green text-foreground'
                 : chip.tone === 'changes'
-                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
-                  : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400'
+                  ? 'border-accent-amber/35 bg-tint-amber text-foreground'
+                  : 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep'
               return <Badge variant="outline" className={`font-normal ${tint}`}>{chip.label}</Badge>
             })()}
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-0">
             <div className="grid gap-1.5">
-              <Label className="text-xs">Caption</Label>
+              <Label className="text-secondary-13">Caption</Label>
               {canManage || canSchedule ? (
                 <Textarea
                   ref={captionRef}
@@ -2017,33 +2018,33 @@ export default function ItemDetailPage() {
                   }}
                 />
               ) : detail.caption ? (
-                <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{detail.caption}</p>
+                <p className="whitespace-pre-wrap text-body-15 text-muted-foreground">{detail.caption}</p>
               ) : (
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">No caption yet.</p>
+                <p className="text-body-15 text-muted-foreground">No caption yet.</p>
               )}
             </div>
             {detail.schedule.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 {detail.schedule.map(s => (
-                  <div key={s.id} className="flex items-baseline gap-3 rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
+                  <div key={s.id} className="flex items-baseline gap-3 rounded-inner border border-border px-3 py-2 text-body-15">
                     <span className="capitalize">{s.platform}</span>
                     {s.scheduled_at && (
-                      <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="font-mono text-secondary-13 text-muted-foreground">
                         {formatWithZone(s.scheduled_at, clientTz, 'short')}
                         {/* the reader's own clock, in words — a tooltip is
                             dead on a phone, and this is the one line that
                             tells a Manila scheduler the AU offset */}
                         {viewerHint(s.scheduled_at, clientTz, viewerTz) && (
-                          <span className="ml-1 text-zinc-400">({viewerHint(s.scheduled_at, clientTz, viewerTz)})</span>
+                          <span className="ml-1 text-muted-foreground">({viewerHint(s.scheduled_at, clientTz, viewerTz)})</span>
                         )}
                       </span>
                     )}
                     <span className="ml-auto">
                       {s.live_url
-                        ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">live ↗</a>
+                        ? <a href={s.live_url} target="_blank" rel="noreferrer noopener" className="text-secondary-13 text-accent-green hover:underline">live ↗</a>
                         : s.publish_status === 'published'
-                          ? <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">posted — no link</span>
-                          : <span className="text-[11px] uppercase text-zinc-400 dark:text-zinc-500">{publishStatusWord(s.publish_status)}</span>}
+                          ? <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[12px] uppercase tracking-wider text-muted-foreground">posted — no link</span>
+                          : <span className="text-[12px] uppercase text-muted-foreground">{publishStatusWord(s.publish_status)}</span>}
                     </span>
                   </div>
                 ))}
@@ -2106,10 +2107,10 @@ export default function ItemDetailPage() {
       {/* 7 — THE CONVERSATION. "@Name" reaches somebody; nothing else does. */}
       {canComment && (
         <Card id="comments" className="scroll-mt-4">
-          <CardHeader><CardTitle className="text-sm font-semibold">Comments</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-2.5 pt-0">
             {detail.comments.length === 0 && (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="text-body-15 text-muted-foreground">
                 No comments yet. Type @ and a name to ask someone something — they get an email and it stays on their list until it is marked done.
               </p>
             )}
@@ -2117,28 +2118,28 @@ export default function ItemDetailPage() {
               const forMe = c.assigned_to === detail.viewer_id
               const forName = c.assigned_to ? nameOf(c.assigned_to) : null
               return (
-                <div key={c.id} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 ${
-                  forMe && !c.resolved ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20' : 'border-zinc-100 dark:border-zinc-800'
+                <div key={c.id} className={`flex items-start gap-2.5 rounded-inner border px-3 py-2 ${
+                  forMe && !c.resolved ? 'border-accent-amber/35 bg-tint-amber' : 'border-border'
                 }`}>
                   <button onClick={() => isTeam && toggleResolved(c)} disabled={!isTeam}
                     aria-label={c.resolved ? 'Reopen' : 'Mark done'} title={c.resolved ? 'Reopen' : 'Mark done'}
                     className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center">
                     {c.resolved
-                      ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      : <CircleDashed className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />}
+                      ? <CheckCircle2 className="h-4 w-4 text-accent-green" />
+                      : <CircleDashed className="h-4 w-4 text-muted-foreground" />}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <p className={`whitespace-pre-wrap text-sm ${c.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{c.body}</p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-                      {c.author_name && <span className="text-zinc-500 dark:text-zinc-400">{c.author_name}</span>}
+                    <p className={`whitespace-pre-wrap text-body-15 ${c.resolved ? 'text-muted-foreground line-through' : ''}`}>{c.body}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+                      {c.author_name && <span className="text-muted-foreground">{c.author_name}</span>}
                       <span suppressHydrationWarning>{viewerTz ? formatInZone(c.created_at, viewerTz, 'short') : ''}</span>
                       {c.assigned_to && !c.resolved && (
-                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                        <span className="rounded-full bg-tint-amber px-2.5 py-1.5 text-chip-12 font-medium text-foreground">
                           {forMe ? 'Waiting on you' : `Waiting on ${forName ?? 'someone'}`}
                         </span>
                       )}
                       {isTeam && c.visibility === 'client' && (
-                        <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">visible to client</Badge>
+                        <Badge variant="outline" className="border-accent-blue/25 bg-tint-blue font-normal text-accent-blue-deep">visible to client</Badge>
                       )}
                     </p>
                   </div>
@@ -2156,7 +2157,7 @@ export default function ItemDetailPage() {
               />
               <div className="flex flex-wrap items-center gap-3">
                 {canManage && (
-                  <label className="flex min-h-11 items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 md:min-h-0">
+                  <label className="flex min-h-11 items-center gap-2 text-secondary-13 text-muted-foreground md:min-h-0">
                     <Switch
                       checked={commentVisibility === 'client'}
                       onCheckedChange={v => setCommentVisibility(v ? 'client' : 'internal')}
@@ -2168,7 +2169,7 @@ export default function ItemDetailPage() {
                   <Send className="h-3.5 w-3.5" /> {busy === 'comment' ? 'Posting…' : 'Post'}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              <p className="text-secondary-13 text-muted-foreground">
                 {commentVisibility === 'client'
                   ? `${detail.client_name ?? 'The client'} reads this on their portal.`
                   : 'Managers see every comment. To reach anyone else, tag them with @ — they are emailed and it waits on them until it is marked done.'}
@@ -2184,13 +2185,13 @@ export default function ItemDetailPage() {
         return (
           <CollapsibleCard title="History" summary={lines.length === 0 ? 'nothing yet' : `${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}`}>
             {lines.length === 0 ? (
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="text-body-15 text-muted-foreground">
                 Nothing recorded yet — every move from here is logged with who made it.
               </p>
             ) : lines.map(l => (
-              <div key={l.id} className="flex items-baseline gap-3 text-sm">
-                <span className="text-zinc-600 dark:text-zinc-300">{l.text}</span>
-                <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400 dark:text-zinc-500" suppressHydrationWarning>
+              <div key={l.id} className="flex items-baseline gap-3 text-body-15">
+                <span className="text-muted-foreground">{l.text}</span>
+                <span className="ml-auto shrink-0 font-mono text-[12px] text-muted-foreground" suppressHydrationWarning>
                   {viewerTz ? formatInZone(l.at, viewerTz, 'long') : ''}
                 </span>
               </div>
@@ -2201,13 +2202,13 @@ export default function ItemDetailPage() {
 
       {/* 9 — the one thing that cannot be undone, last and folded */}
       {canManage && (
-        <CollapsibleCard title="Delete this item" summary="cannot be undone" className="border-red-200 dark:border-red-950">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <CollapsibleCard title="Delete this item" summary="cannot be undone" className="border-accent-red/30">
+          <p className="text-secondary-13 text-muted-foreground">
             Its versions, comments and posting times go with it — for everyone, including the client.
           </p>
           <AlertDialog open={deleteOpen}
             onOpenChange={o => { setDeleteOpen(o); if (!o) setDeleteConfirm('') }}>
-            <Button variant="outline" size="sm" className="min-h-11 w-fit text-red-600 hover:text-red-700 md:min-h-8 dark:text-red-400"
+            <Button variant="outline" size="sm" className="min-h-11 w-fit text-accent-red hover:text-foreground md:min-h-8"
               onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete item
             </Button>
@@ -2220,13 +2221,13 @@ export default function ItemDetailPage() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="grid gap-1.5">
-                <Label className="text-xs">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
+                <Label className="text-secondary-13">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
                 <Input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="delete" autoComplete="off" />
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel className="min-h-11">Keep it</AlertDialogCancel>
                 <AlertDialogAction
-                  className="min-h-11 bg-red-600 hover:bg-red-700"
+                  className="min-h-11 bg-accent-red hover:bg-accent-red"
                   disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
                   onClick={async () => {
                     const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
@@ -2245,9 +2246,9 @@ export default function ItemDetailPage() {
 
       {/* PHONE: the one button, always within thumb reach */}
       {isTeam && primary && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 p-3 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 p-3 backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-4xl items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="min-w-0 flex-1 truncate text-secondary-13 text-muted-foreground">
               {turn.mine ? 'Your move' : `Waiting on ${turnText()}`}
             </span>
             {actionButton(primary, 'default', 'shrink-0')}
@@ -2260,7 +2261,7 @@ export default function ItemDetailPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>{reviewPick?.label}</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               Who should review this? They&rsquo;ll be emailed as your reviewer.
             </p>
             {reviewers === null && (
@@ -2270,14 +2271,14 @@ export default function ItemDetailPage() {
             )}
             {reviewersFailed ? (
               <div className="flex flex-col items-center gap-2 py-4">
-                <p className="text-sm text-zinc-400 dark:text-zinc-500">Couldn&rsquo;t load reviewers — try again</p>
+                <p className="text-body-15 text-muted-foreground">Couldn&rsquo;t load reviewers — try again</p>
                 <Button variant="outline" size="sm" className="min-h-11" disabled={busy !== null}
                   onClick={() => reviewPick && void openReviewerPick(reviewPick)}>
                   Try again
                 </Button>
               </div>
             ) : reviewers?.length === 0 && (
-              <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="py-4 text-center text-body-15 text-muted-foreground">
                 {soloReviewer
                   ? 'You’re the only reviewer on this client.'
                   : 'Nobody else to notify on this client — the move is still recorded.'}
@@ -2285,7 +2286,7 @@ export default function ItemDetailPage() {
             )}
             {(reviewers ?? []).map(r => (
               <label key={r.id}
-                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={chosen.has(r.id)}
@@ -2298,8 +2299,8 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
-                  <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="block truncate text-secondary-13 text-muted-foreground">{r.email}</span>
+                  <span className="block text-secondary-13 text-muted-foreground">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
                     {r.assigned && ' · manages this client'}
                   </span>
@@ -2308,7 +2309,7 @@ export default function ItemDetailPage() {
             ))}
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">
               {dialogError}
             </p>
           )}
@@ -2333,7 +2334,7 @@ export default function ItemDetailPage() {
           <DialogHeader>
             <DialogTitle>Send to {detail.client_name ?? 'the client'}?</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <div className="flex flex-col gap-2 text-body-15 text-muted-foreground">
             {(detail.client_users?.length ?? 0) > 0 ? (
               <p>
                 {detail.client_users!.length} portal {detail.client_users!.length === 1 ? 'user' : 'users'} will be
@@ -2345,14 +2346,14 @@ export default function ItemDetailPage() {
                 work still moves to their side and appears the moment one is created.
               </p>
             )}
-            <p className="text-zinc-500 dark:text-zinc-400">
+            <p className="text-muted-foreground">
               {isBrief
                 ? 'The plan becomes visible on their portal, where they can approve it or ask for changes.'
                 : 'The item becomes visible on their portal, where they can approve it or ask for changes.'}
             </p>
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">
               {dialogError}
             </p>
           )}
@@ -2373,7 +2374,7 @@ export default function ItemDetailPage() {
             <DialogTitle>{revisionAsk?.label}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               Say what needs to change — it lands in the comments and in {detail.owner_name ? `${detail.owner_name}’s` : 'the assignee’s'} email.
             </p>
             <textarea
@@ -2382,11 +2383,11 @@ export default function ItemDetailPage() {
               rows={4}
               autoFocus
               placeholder="What should be different in the next version?"
-              className="w-full resize-y rounded-md border border-zinc-200 bg-transparent p-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+              className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border"
             />
           </div>
           {dialogError && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-body-15 text-foreground">
               {dialogError}
             </p>
           )}
@@ -2409,13 +2410,13 @@ export default function ItemDetailPage() {
             <DialogTitle>Who posts this?</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               They&rsquo;ll be emailed to set the posting time and put it out. Untick anyone who
               shouldn&rsquo;t hear about it.
             </p>
             {editors.map(s => (
               <label key={s.id}
-                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={schedChosen.has(s.id)}
@@ -2428,7 +2429,7 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{s.name || s.email}</span>
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">{ROLE_WORD[s.role ?? ''] ?? 'Team'}</span>
+                  <span className="block text-secondary-13 text-muted-foreground">{ROLE_WORD[s.role ?? ''] ?? 'Team'}</span>
                 </span>
               </label>
             ))}
@@ -2457,7 +2458,7 @@ export default function ItemDetailPage() {
             <DialogTitle>{publishPick?.publishNow ? 'Publish now' : 'Queue for the scheduled time'}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-body-15 text-muted-foreground">
               Who should be told this went out? The client&rsquo;s account manager is picked for you.
             </p>
             {pubPeople === null && (
@@ -2466,13 +2467,13 @@ export default function ItemDetailPage() {
               </div>
             )}
             {pubPeople?.length === 0 && (
-              <p className="py-4 text-center text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="py-4 text-center text-body-15 text-muted-foreground">
                 No managers found — this client&rsquo;s assigned managers will be notified.
               </p>
             )}
             {(pubPeople ?? []).map(r => (
               <label key={r.id}
-                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={pubChosen.has(r.id)}
@@ -2485,8 +2486,8 @@ export default function ItemDetailPage() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
-                  <span className="block truncate text-xs text-zinc-400 dark:text-zinc-500">{r.email}</span>
-                  <span className="block text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="block truncate text-secondary-13 text-muted-foreground">{r.email}</span>
+                  <span className="block text-secondary-13 text-muted-foreground">
                     {r.role === 'super_admin' ? 'Super admin' : 'Account manager'}
                     {r.assigned && ' · manages this client'}
                   </span>

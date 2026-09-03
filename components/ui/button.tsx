@@ -7,35 +7,37 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 /**
- * On a touch screen every button is at least 44px tall — Apple's and
- * Google's floor for a fingertip. `h-9` (36px) and `h-8` (32px) stay for a
- * mouse, where the layouts were designed at that density; the `pointer:
- * coarse` media query is what tells the two apart. `min-h` beats an explicit
- * `h-7` at a call site, so the handful of 28px icon buttons grow too.
+ * Every button is a 44px pill. 44px was already the floor for a fingertip;
+ * the new look uses that one height for every control on the page, so the old
+ * mouse-density sizes (36px, 32px) are gone and `size` only changes how wide
+ * the pill is. A call site that truly needs something smaller says so in its
+ * own `className`, which still wins.
+ *
+ * `default` is the ink pill — the one action a page is FOR. `outline` is the
+ * white surface pill beside it. Inside an ink card the primary flips to cream
+ * so it stays visible against its host.
  */
-const TOUCH_TARGET = '[@media(pointer:coarse)]:min-h-11'
-
 const buttonVariants = cva(
-  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 ${TOUCH_TARGET}`,
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground shadow hover:bg-primary/90',
+          'bg-foreground text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink',
         destructive:
-          'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
+          'bg-accent-red text-cream hover:bg-accent-red/90',
         outline:
-          'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
+          'border border-border bg-surface text-foreground hover:bg-foreground/[0.04]',
         secondary:
-          'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
+          'bg-paper text-foreground hover:bg-foreground/[0.08]',
+        ghost: 'text-foreground hover:bg-foreground/[0.06]',
+        link: 'text-accent-blue-deep underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-9 px-4 py-2',
-        sm: 'h-8 rounded-md px-3 text-xs',
-        lg: 'h-10 rounded-md px-8',
-        icon: 'h-9 w-9 [@media(pointer:coarse)]:min-w-11',
+        default: 'h-11 px-5',
+        sm: 'h-11 px-4',
+        lg: 'h-11 px-6',
+        icon: 'h-11 w-11',
       },
     },
     defaultVariants: {

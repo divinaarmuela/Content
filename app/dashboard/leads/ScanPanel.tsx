@@ -58,22 +58,22 @@ type Conn = {
 /* ── presentation for each outcome ─────────────────────────────────────── */
 
 const OUTCOME: Record<Outcome, { label: string; tone: string; Icon: typeof Inbox }> = {
-  lead_created:      { label: 'Lead created',   tone: 'text-emerald-700 dark:text-emerald-400', Icon: UserPlus },
-  not_a_lead:        { label: 'Not an enquiry', tone: 'text-zinc-500 dark:text-zinc-400',       Icon: MinusCircle },
-  prefiltered:       { label: 'Not worth reading', tone: 'text-amber-700 dark:text-amber-400',     Icon: Filter },
-  duplicate_sender:  { label: 'Already a lead', tone: 'text-sky-700 dark:text-sky-400',         Icon: MailCheck },
-  already_processed: { label: 'Seen before',    tone: 'text-zinc-400 dark:text-zinc-500',       Icon: CheckCircle2 },
-  needs_review:      { label: 'Needs review',   tone: 'text-violet-700 dark:text-violet-400',   Icon: Eye },
-  error:             { label: 'Error',          tone: 'text-red-700 dark:text-red-400',         Icon: AlertTriangle },
+  lead_created:      { label: 'Lead created',   tone: 'text-foreground', Icon: UserPlus },
+  not_a_lead:        { label: 'Not an enquiry', tone: 'text-muted-foreground',       Icon: MinusCircle },
+  prefiltered:       { label: 'Not worth reading', tone: 'text-foreground',     Icon: Filter },
+  duplicate_sender:  { label: 'Already a lead', tone: 'text-accent-blue-deep',         Icon: MailCheck },
+  already_processed: { label: 'Seen before',    tone: 'text-muted-foreground',       Icon: CheckCircle2 },
+  needs_review:      { label: 'Needs review',   tone: 'text-accent-blue-deep',   Icon: Eye },
+  error:             { label: 'Error',          tone: 'text-foreground',         Icon: AlertTriangle },
 }
 
 const STATUS: Record<LogEntry['status'], { label: string; cls: string }> = {
-  lead_created: { label: 'Lead created', cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
-  not_a_lead:   { label: 'Not an enquiry', cls: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
-  skipped:      { label: 'Not worth reading', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
-  error:        { label: 'Error',        cls: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400' },
-  pending:      { label: 'In progress',  cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
-  needs_review: { label: 'Needs review', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400' },
+  lead_created: { label: 'Lead created', cls: 'bg-tint-green text-foreground' },
+  not_a_lead:   { label: 'Not an enquiry', cls: 'bg-foreground/[0.06] text-muted-foreground' },
+  skipped:      { label: 'Not worth reading', cls: 'bg-tint-amber text-foreground' },
+  error:        { label: 'Error',        cls: 'bg-tint-red text-foreground' },
+  pending:      { label: 'In progress',  cls: 'bg-foreground/[0.06] text-muted-foreground' },
+  needs_review: { label: 'Needs review', cls: 'bg-tint-blue text-accent-blue-deep' },
 }
 
 function relative(iso: string): string {
@@ -198,10 +198,10 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Inbox className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <h3 className="text-sm font-semibold tracking-tight">Inbox scanner</h3>
+              <Inbox className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-card-title">Inbox scanner</h3>
             </div>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-secondary-13 text-muted-foreground">
               Reads recent mail, filters the obvious noise, and checks whether
               what is left is a genuine enquiry.
               {lastScan && (
@@ -211,11 +211,11 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
 
             {mailboxes.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">Monitoring</span>
+                <span className="text-secondary-13 text-muted-foreground">Monitoring</span>
                 {mailboxes.map(e => (
                   <span
                     key={e}
-                    className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                    className="rounded-full bg-tint-green px-2.5 py-1.5 font-mono text-chip-12 text-foreground"
                   >
                     {e}
                   </span>
@@ -223,7 +223,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
               </div>
             )}
             {conn && mailboxes.length === 0 && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              <p className="mt-2 text-secondary-13 text-foreground">
                 No mailbox is connected yet, so there is nothing to scan.
               </p>
             )}
@@ -238,11 +238,11 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
 
         {/* ── live phase while running ──────────────────────────────── */}
         {busy && phase && (
-          <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+          <div className="flex items-center gap-2 rounded-inner border border-border bg-foreground/[0.04] px-3 py-2 text-secondary-13 text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span className="truncate">{phase}</span>
             {live.length > 0 && (
-              <span className="ml-auto shrink-0 font-mono text-xs text-zinc-400 dark:text-zinc-500">
+              <span className="ml-auto shrink-0 font-mono text-secondary-13 text-muted-foreground">
                 {live.length} checked
               </span>
             )}
@@ -253,14 +253,14 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
         {live.length > 0 && (
           <div
             ref={liveRef}
-            className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-800"
+            className="max-h-56 space-y-1 overflow-y-auto rounded-inner border border-border p-2"
           >
             {live.map((ev, i) => {
               if (ev.type === 'mailbox_error') {
                 return (
-                  <div key={i} className="flex items-start gap-2 px-1 py-1 text-xs">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
-                    <span className="text-red-700 dark:text-red-400">
+                  <div key={i} className="flex items-start gap-2 px-1 py-1 text-secondary-13">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-red" />
+                    <span className="text-foreground">
                       {ev.email} could not be read — {ev.message}
                     </span>
                   </div>
@@ -269,17 +269,17 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
               if (ev.type !== 'message') return null
               const o = OUTCOME[ev.outcome]
               return (
-                <div key={i} className="flex items-start gap-2 px-1 py-1 text-xs">
+                <div key={i} className="flex items-start gap-2 px-1 py-1 text-secondary-13">
                   <o.Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${o.tone}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className={`shrink-0 font-medium ${o.tone}`}>{o.label}</span>
                       {ev.subject && (
-                        <span className="truncate text-zinc-600 dark:text-zinc-300">{ev.subject}</span>
+                        <span className="truncate text-muted-foreground">{ev.subject}</span>
                       )}
                     </div>
                     {ev.reason && (
-                      <p className="mt-0.5 text-xs leading-snug text-zinc-500 dark:text-zinc-400">
+                      <p className="mt-0.5 text-secondary-13 leading-snug text-muted-foreground">
                         {ev.reason}
                         {typeof ev.confidence === 'number' && (
                           <span className="ml-1 font-mono">({Math.round(ev.confidence * 100)}%)</span>
@@ -295,22 +295,22 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
 
         {/* ── outcome, stated plainly and left on screen ────────────── */}
         {fatal && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+          <div className="flex items-start gap-2 rounded-inner border border-accent-red/30 bg-tint-red px-3 py-2 text-secondary-13 text-foreground">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{fatal}</span>
           </div>
         )}
 
         {result && !fatal && (
-          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-              <p className="text-xs font-medium">
+          <div className="rounded-inner border border-border">
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-secondary-13 font-medium">
                 {newLeads > 0
                   ? `${newLeads} new lead${newLeads === 1 ? '' : 's'} added`
                   : 'No new leads — everything checked was accounted for'}
               </p>
             </div>
-            <dl className="grid grid-cols-2 divide-x divide-zinc-200 sm:grid-cols-4 dark:divide-zinc-800">
+            <dl className="grid grid-cols-2 divide-x divide-border sm:grid-cols-4">
               {[
                 { k: 'Messages read',    v: result.scanned },
                 { k: 'Checked this run', v: result.claimed },
@@ -318,13 +318,13 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
                 { k: 'Errors',           v: result.errors },
               ].map(s => (
                 <div key={s.k} className="px-3 py-2">
-                  <dt className="text-xs text-zinc-500 dark:text-zinc-400">{s.k}</dt>
-                  <dd className="font-mono text-sm tabular-nums">{s.v}</dd>
+                  <dt className="text-secondary-13 text-muted-foreground">{s.k}</dt>
+                  <dd className="font-mono text-body-15 tabular-nums">{s.v}</dd>
                 </div>
               ))}
             </dl>
             {result.claimed === 0 && result.scanned > 0 && (
-              <p className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              <p className="border-t border-border px-3 py-2 text-secondary-13 text-muted-foreground">
                 Every message had already been checked by an earlier scan, so there
                 was nothing new to look at. This is the normal result when scans run
                 often.
@@ -338,11 +338,11 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
           <button
             type="button"
             onClick={() => setOpen(o => !o)}
-            className="flex w-full items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            className="flex w-full items-center gap-1.5 text-secondary-13 font-medium text-muted-foreground hover:text-foreground"
           >
             {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             Decision history
-            {!logLoading && <span className="font-normal text-zinc-400 dark:text-zinc-500">({log.length})</span>}
+            {!logLoading && <span className="font-normal text-muted-foreground">({log.length})</span>}
           </button>
 
           {open && (
@@ -350,7 +350,7 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
               {logLoading ? (
                 <div className="space-y-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : log.length === 0 ? (
-                <p className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="py-3 text-secondary-13 text-muted-foreground">
                   Nothing scanned yet. Run a scan and every decision will be recorded here.
                 </p>
               ) : (
@@ -370,24 +370,24 @@ export default function ScanPanel({ onLeadsCreated }: { onLeadsCreated: () => vo
                         <TableRow key={e.id}>
                           <TableCell
                             title={absolute(e.created_at)}
-                            className="whitespace-nowrap font-mono text-xs text-zinc-500 dark:text-zinc-400"
+                            className="whitespace-nowrap font-mono text-secondary-13 text-muted-foreground"
                           >
                             {relative(e.created_at)}
                           </TableCell>
                           <TableCell>
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${s.cls}`}>
+                            <span className={`rounded-full px-2.5 py-1.5 text-chip-12 font-medium ${s.cls}`}>
                               {s.label}
                             </span>
                           </TableCell>
-                          <TableCell className="max-w-[260px] truncate text-xs">
-                            {e.subject || <span className="text-zinc-400 dark:text-zinc-500">—</span>}
+                          <TableCell className="max-w-[260px] truncate text-secondary-13">
+                            {e.subject || <span className="text-muted-foreground">—</span>}
                             {e.from_email && (
-                              <span className="block truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+                              <span className="block truncate font-mono text-[12px] text-muted-foreground">
                                 {e.from_email}
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[320px] text-xs text-zinc-500 dark:text-zinc-400">
+                          <TableCell className="max-w-[320px] text-secondary-13 text-muted-foreground">
                             {e.error || e.reasoning || '—'}
                             {typeof e.confidence === 'number' && (
                               <span className="ml-1 font-mono">({Math.round(e.confidence * 100)}%)</span>

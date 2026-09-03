@@ -25,6 +25,7 @@ import {
 import { ArrowLeft, ChevronDown, ChevronUp, Download, GripVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { moveItem } from '@/app/lib/website-gallery-core'
 import { friendlyError } from '@/app/lib/support-core'
+import PageTitle from '../ui/PageTitle'
 
 type Project = {
   id: string
@@ -54,8 +55,8 @@ const EMPTY: Omit<Project, 'id'> = {
 
 function MediaThumb({ url, size = 'sm' }: { url: string; size?: 'sm' | 'lg' }) {
   const cls = size === 'sm'
-    ? 'h-11 w-16 rounded-md object-cover bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-800'
-    : 'h-20 w-32 rounded-md object-cover bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-800'
+    ? 'h-11 w-16 rounded-tile object-cover bg-foreground/[0.06] border border-border'
+    : 'h-20 w-32 rounded-tile object-cover bg-foreground/[0.06] border border-border'
   if (!url) return <div className={cls} />
   if (/\.(mp4|webm|mov)(\?|$)/i.test(url)) return <video src={url} muted className={cls} />
   // eslint-disable-next-line @next/next/no-img-element
@@ -84,7 +85,7 @@ function UploadField({ label, hint, value, onChange, purpose }: {
   return (
     <div className="grid gap-1.5">
       <Label>{label}</Label>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>
+      <p className="text-secondary-13 text-muted-foreground">{hint}</p>
       <div className="flex items-center gap-3">
         <MediaThumb url={value} size="lg" />
         <Input
@@ -134,7 +135,7 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
   return (
     <div className="grid gap-1.5">
       <Label>Gallery</Label>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p className="text-secondary-13 text-muted-foreground">
         Feeds two places: the strip when this project&rsquo;s homepage row is expanded, and the
         gallery on its case study page. In this order. Images or videos.
       </p>
@@ -146,7 +147,7 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
               {/* the only element allowed to give: min-w-0 lets truncate work
                   inside a flex row, and shrink-0 on the controls stops a long
                   R2 filename pushing them past the edge of the panel */}
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{url}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-secondary-13 text-muted-foreground">{url}</span>
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" type="button" disabled={i === 0}
                 onClick={() => onChange(moveItem(urls, i, -1))} aria-label="Move up">
                 <ChevronUp className="h-3.5 w-3.5" />
@@ -155,7 +156,7 @@ function GalleryField({ urls, onChange }: { urls: string[]; onChange: (urls: str
                 onClick={() => onChange(moveItem(urls, i, 1))} aria-label="Move down">
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-accent-red hover:text-accent-red"
                 type="button" onClick={() => onChange(urls.filter((_, j) => j !== i))} aria-label="Remove">
                 <X className="h-3.5 w-3.5" />
               </Button>
@@ -319,21 +320,18 @@ export default function WebsiteAdminPage() {
   if (editing) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => setEditing(null)}>
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Button>
-          <h2 className="text-lg font-semibold tracking-tight">
-            {editing.id ? `Edit · ${editing.name}` : 'New project'}
-          </h2>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Switch checked={!!editing.published} onCheckedChange={v => set({ published: v })} id="pub" />
-              <Label htmlFor="pub" className="text-sm">{editing.published ? 'Published' : 'Draft'}</Label>
+        <PageTitle
+          title={editing.id ? `Edit · ${editing.name}` : 'New project'}
+          actions={<>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={!!editing.published} onCheckedChange={v => set({ published: v })} id="pub" />
+                <Label htmlFor="pub" className="text-body-15">{editing.published ? 'Published' : 'Draft'}</Label>
+              </div>
+              <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save project'}</Button>
             </div>
-            <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save project'}</Button>
-          </div>
-        </div>
+          </>}
+        />
 
         <Card>
           <CardContent className="grid gap-5 p-6 sm:grid-cols-2">
@@ -342,19 +340,19 @@ export default function WebsiteAdminPage() {
               <Input value={editing.name ?? ''} onChange={e => set({ name: e.target.value })} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Slug * <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500">/work/…</span></Label>
-              <Input value={editing.slug ?? ''} onChange={e => set({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} className="font-mono text-sm" />
+              <Label>Slug * <span className="font-mono text-secondary-13 text-muted-foreground">/work/…</span></Label>
+              <Input value={editing.slug ?? ''} onChange={e => set({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} className="font-mono text-body-15" />
             </div>
             <div className="grid gap-1.5">
               <Label>Industry</Label>
               <Input value={editing.industry ?? ''} onChange={e => set({ industry: e.target.value })} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Tag <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500">e.g. HOSP_01</span></Label>
-              <Input value={editing.tag ?? ''} onChange={e => set({ tag: e.target.value })} className="font-mono text-sm" />
+              <Label>Tag <span className="font-mono text-secondary-13 text-muted-foreground">e.g. HOSP_01</span></Label>
+              <Input value={editing.tag ?? ''} onChange={e => set({ tag: e.target.value })} className="font-mono text-body-15" />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Services <span className="text-xs text-zinc-400 dark:text-zinc-500">(these become the Work page filters)</span></Label>
+              <Label>Services <span className="text-secondary-13 text-muted-foreground">(these become the Work page filters)</span></Label>
               <ServicePicker
                 value={editing.services ?? []}
                 known={knownServices}
@@ -362,7 +360,7 @@ export default function WebsiteAdminPage() {
               />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Description <span className="text-xs text-zinc-400 dark:text-zinc-500">(card + case page intro)</span></Label>
+              <Label>Description <span className="text-secondary-13 text-muted-foreground">(card + case page intro)</span></Label>
               <Textarea rows={2} value={editing.description ?? ''} onChange={e => set({ description: e.target.value })} />
             </div>
             <div className="sm:col-span-2">
@@ -390,7 +388,7 @@ export default function WebsiteAdminPage() {
               />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Website URL <span className="text-xs text-zinc-400 dark:text-zinc-500">(optional — adds a &ldquo;Visit website&rdquo; button to the homepage row)</span></Label>
+              <Label>Website URL <span className="text-secondary-13 text-muted-foreground">(optional — adds a &ldquo;Visit website&rdquo; button to the homepage row)</span></Label>
               <Input
                 value={editing.website_url ?? ''}
                 placeholder="https://client-site.com"
@@ -398,12 +396,12 @@ export default function WebsiteAdminPage() {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label>Result <span className="text-xs text-zinc-400 dark:text-zinc-500">(optional, e.g. 0 → 30 bookings / day)</span></Label>
+              <Label>Result <span className="text-secondary-13 text-muted-foreground">(optional, e.g. 0 → 30 bookings / day)</span></Label>
               <Input value={editing.result ?? ''} onChange={e => set({ result: e.target.value || null })} />
             </div>
             {(['challenge', 'approach', 'outcome'] as const).map(key => (
               <div key={key} className="grid gap-1.5 sm:col-span-2">
-                <Label className="capitalize">The {key} <span className="text-xs text-zinc-400 dark:text-zinc-500">(blank line between paragraphs)</span></Label>
+                <Label className="capitalize">The {key} <span className="text-secondary-13 text-muted-foreground">(blank line between paragraphs)</span></Label>
                 <Textarea rows={4} value={(editing[key] ?? []).join('\n\n')} onChange={e => set({ [key]: paras(e.target.value) })} />
               </div>
             ))}
@@ -440,24 +438,22 @@ export default function WebsiteAdminPage() {
         </TabsList>
       </Tabs>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Website projects</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Drives the homepage rows, /work grid, and case study pages. Published changes appear immediately.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {projects !== null && projects.length === 0 && (
-            <Button variant="outline" size="sm" onClick={seed}>
-              <Download className="h-4 w-4" /> Import current site projects
+      <PageTitle
+        title="Website projects"
+        summary="Drives the homepage rows, /work grid, and case study pages. Published changes appear immediately."
+        actions={<>
+          <div className="flex items-center gap-2">
+            {projects !== null && projects.length === 0 && (
+              <Button variant="outline" size="sm" onClick={seed}>
+                <Download className="h-4 w-4" /> Import current site projects
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setEditing({ ...EMPTY })}>
+              <Plus className="h-4 w-4" /> New project
             </Button>
-          )}
-          <Button size="sm" onClick={() => setEditing({ ...EMPTY })}>
-            <Plus className="h-4 w-4" /> New project
-          </Button>
-        </div>
-      </div>
+          </div>
+        </>}
+      />
 
       {projects === null ? (
         <Card>
@@ -467,7 +463,7 @@ export default function WebsiteAdminPage() {
         </Card>
       ) : projects.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          <CardContent className="py-12 text-center text-body-15 text-muted-foreground">
             No projects in the database yet — the site currently serves the built-in list.<br />
             Click <span className="font-medium">Import current site projects</span> to bring them in, then edit freely.
           </CardContent>
@@ -476,7 +472,7 @@ export default function WebsiteAdminPage() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
                 <TableHead className="w-8" />
                 <TableHead className="w-20">Media</TableHead>
                 <TableHead>Project</TableHead>
@@ -496,19 +492,19 @@ export default function WebsiteAdminPage() {
                   onDrop={() => reorder(i)}
                   className={dragFrom === i ? 'opacity-40' : undefined}
                 >
-                  <TableCell className="cursor-grab text-zinc-300 active:cursor-grabbing dark:text-zinc-600">
+                  <TableCell className="cursor-grab text-muted-foreground active:cursor-grabbing">
                     <GripVertical className="h-4 w-4" />
                   </TableCell>
                   <TableCell><MediaThumb url={p.card_media_url} /></TableCell>
                   <TableCell>
-                    <div className="text-sm font-medium">{p.name}</div>
-                    <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">/work/{p.slug}</div>
+                    <div className="text-body-15 font-medium">{p.name}</div>
+                    <div className="font-mono text-secondary-13 text-muted-foreground">/work/{p.slug}</div>
                   </TableCell>
-                  <TableCell className="text-sm text-zinc-600 dark:text-zinc-400">{p.industry || '—'}</TableCell>
+                  <TableCell className="text-body-15 text-muted-foreground">{p.industry || '—'}</TableCell>
                   <TableCell>
                     <div className="flex max-w-72 flex-wrap gap-1">
                       {p.services.map(s => (
-                        <Badge key={s} variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">{s}</Badge>
+                        <Badge key={s} variant="outline" className="font-normal text-muted-foreground">{s}</Badge>
                       ))}
                     </div>
                   </TableCell>
@@ -520,7 +516,7 @@ export default function WebsiteAdminPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(p)} aria-label="Edit">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300" onClick={() => setDeleting(p)} aria-label="Delete">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-accent-red hover:text-accent-red" onClick={() => setDeleting(p)} aria-label="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -542,7 +538,7 @@ export default function WebsiteAdminPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} className="bg-accent-red hover:bg-accent-red">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -76,29 +76,29 @@ export default function LocationSearch({
 
   return (
     <div ref={boxRef} className="relative">
-      <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+      <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
       <Input
         value={text}
         disabled={disabled}
         placeholder={'Search a place, or type "Studio" / "TBC"'}
-        className="pl-8 text-sm"
+        className="pl-8 text-body-15"
         onChange={e => setText(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(text) } if (e.key === 'Escape') setOpen(false) }}
         onBlur={() => { if (!open) commit(text) }}
       />
       {open && (
-        <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-tile border border-border bg-surface shadow-md">
           {places.map(p => (
             <button
               key={p.label}
               type="button"
-              className="flex w-full items-start gap-2 px-2.5 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              className="flex w-full items-start gap-2 px-2.5 py-2 text-left text-body-15 hover:bg-foreground/[0.04]"
               onClick={() => { pickedRef.current = true; setText(p.label); commit(p.label) }}
             >
-              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0">
                 <span className="block truncate">{p.label.split(',')[0]}</span>
-                {p.detail && <span className="block truncate text-xs text-zinc-400">{p.detail}</span>}
+                {p.detail && <span className="block truncate text-secondary-13 text-muted-foreground">{p.detail}</span>}
               </span>
             </button>
           ))}

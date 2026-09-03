@@ -36,7 +36,7 @@ const AlertDialogContent = React.forwardRef<
         // Same reason as DialogContent: a confirmation that explains itself
         // properly is several paragraphs, and on a phone that used to push the
         // Cancel/Confirm row off the bottom of the screen.
-        'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain border border-border bg-popover text-popover-foreground p-6 shadow-lg sm:rounded-card',
         className
       )}
       {...props}

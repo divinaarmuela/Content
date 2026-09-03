@@ -107,9 +107,9 @@ export default function ProfileSettings() {
   const prefs = draft.notification_prefs ?? {}
 
   return (
-    <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    <Card className="border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-base">Profile</CardTitle>
+        <CardTitle>Profile</CardTitle>
         <CardDescription>
           Your details. Timezone and working hours are what the Team Activity page uses to
           decide what counts as overdue for you.
@@ -131,8 +131,8 @@ export default function ProfileSettings() {
             <Label htmlFor="profile-email">Email</Label>
             {/* Read-only: identity comes from Clerk, and editing it here would
                 only desynchronise the two. */}
-            <Input id="profile-email" value={me.email} readOnly className="text-zinc-500" />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <Input id="profile-email" value={me.email} readOnly className="text-muted-foreground" />
+            <p className="text-secondary-13 text-muted-foreground">
               Managed by your sign-in account.
             </p>
           </div>
@@ -149,8 +149,8 @@ export default function ProfileSettings() {
               </SelectContent>
             </Select>
             {localTime && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                It is <span className="font-mono text-zinc-700 dark:text-zinc-300">{localTime}</span> for you.
+              <p className="text-secondary-13 text-muted-foreground">
+                It is <span className="font-mono text-muted-foreground">{localTime}</span> for you.
               </p>
             )}
           </div>
@@ -164,7 +164,7 @@ export default function ProfileSettings() {
                 onChange={e => setDraft(d => ({ ...d, workday_start: e.target.value }))}
                 className="font-mono"
               />
-              <span className="text-sm text-zinc-400">to</span>
+              <span className="text-body-15 text-muted-foreground">to</span>
               <Input
                 type="time"
                 value={toTimeInput(draft.workday_end ?? '')}
@@ -176,7 +176,7 @@ export default function ProfileSettings() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+          <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
             Your access
           </span>
           <Badge variant="outline" className="font-normal">
@@ -185,23 +185,23 @@ export default function ProfileSettings() {
           <Badge variant="outline" className="font-normal capitalize">
             {me.employment_type}
           </Badge>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-secondary-13 text-muted-foreground">
             — changed by a super admin in Team, not here.
           </span>
         </div>
 
-        <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+        <Separator className="bg-foreground/[0.08]" />
 
         <div className="flex flex-col gap-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+          <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-muted-foreground">
             Email notifications
           </span>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <p className="text-body-15 font-medium text-foreground">
                 Workflow email
               </p>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-body-15 text-muted-foreground">
                 Approvals, review requests and handoffs that name you.
               </p>
             </div>
@@ -215,7 +215,7 @@ export default function ProfileSettings() {
         </div>
       </CardContent>
 
-      <CardFooter className="justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800">
+      <CardFooter className="justify-end gap-2 border-t border-border">
         {dirty && (
           <Button variant="ghost" onClick={() => setDraft(me)} disabled={saving}>
             Discard

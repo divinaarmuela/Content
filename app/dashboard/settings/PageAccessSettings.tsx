@@ -132,8 +132,8 @@ export default function PageAccessSettings() {
       <CardContent className="flex flex-col gap-4 py-5">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1">
-            <h3 className="text-sm font-semibold">Who sees which page</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <h3 className="text-body-15 font-semibold">Who sees which page</h3>
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               Pick a person and tick the pages you want them to have. Their role already
               gives them some — those show as a tick and cannot be removed here.
             </p>
@@ -152,12 +152,12 @@ export default function PageAccessSettings() {
         </div>
 
         {!person ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-body-15 text-muted-foreground">
             No team members to configure yet.
           </p>
         ) : person.role === 'super_admin' ? (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-tile border border-border bg-muted/40 px-3 py-3 text-body-15 text-muted-foreground">
               <Lock className="h-4 w-4 shrink-0" />
               {person.name || person.email} is a super admin and may see every page — but you
               can hide pages from their view. Their permissions stay untouched.
@@ -167,7 +167,7 @@ export default function PageAccessSettings() {
                 const isHidden = (hiddenBy[person.id] ?? []).includes(page.href)
                 return (
                   <label key={page.href}
-                    className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                    className="flex cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                     <input
                       type="checkbox"
                       checked={!isHidden}
@@ -197,7 +197,7 @@ export default function PageAccessSettings() {
                       className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
                     />
                     <span className={isHidden ? 'text-muted-foreground line-through' : ''}>{page.label}</span>
-                    {isHidden && <span className="ml-auto text-[11px] text-muted-foreground">hidden</span>}
+                    {isHidden && <span className="ml-auto text-[12px] text-muted-foreground">hidden</span>}
                   </label>
                 )
               })}
@@ -207,8 +207,8 @@ export default function PageAccessSettings() {
           <div className="flex flex-col gap-3">
             {/* the role IS the baseline — change it here rather than
                 approximating a role with a pile of page grants */}
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2.5">
-              <span className="text-xs text-muted-foreground">Role</span>
+            <div className="flex flex-wrap items-center gap-2 rounded-tile border border-border bg-muted/30 px-3 py-2.5">
+              <span className="text-secondary-13 text-muted-foreground">Role</span>
               {(['scheduler', 'editor', 'account_manager'] as Role[]).map(r => (
                 <button
                   key={r}
@@ -216,16 +216,16 @@ export default function PageAccessSettings() {
                   disabled={busy !== null}
                   onClick={() => void setRole(r)}
                   className={
-                    'rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ' +
+                    'rounded-full border px-3 py-1 text-secondary-13 transition-colors disabled:opacity-50 ' +
                     (person.role === r
-                      ? 'border-blue-600 bg-blue-600 text-white'
+                      ? 'border-accent-blue/25 bg-accent-blue text-white'
                       : 'border-border bg-background text-muted-foreground hover:text-foreground')
                   }
                 >
                   {ROLE_LABEL[r]}
                 </button>
               ))}
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[12px] text-muted-foreground">
                 changes their default pages and permissions everywhere
               </span>
               {theirGrants.length > 0 && (
@@ -233,7 +233,7 @@ export default function PageAccessSettings() {
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void clearGrants()}
-                  className="ml-auto rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                  className="ml-auto rounded-tile border border-border px-2.5 py-1 text-secondary-13 text-muted-foreground hover:text-accent-red disabled:opacity-50"
                 >
                   Clear {theirGrants.length} extra page{theirGrants.length > 1 ? 's' : ''}
                 </button>
@@ -248,14 +248,14 @@ export default function PageAccessSettings() {
                   key={page.href}
                   className={
                     (page.parent ? 'ml-6 ' : '') +
-                    'flex items-center gap-3 rounded-md border px-3 py-2 text-sm ' +
+                    'flex items-center gap-3 rounded-tile border px-3 py-2 text-body-15 ' +
                     (byDefault
-                      ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
+                      ? 'border-accent-green/30 bg-tint-green'
                       : 'cursor-pointer border-border hover:bg-muted/50')
                   }
                 >
                   {byDefault ? (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-emerald-600 text-white">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-tile bg-accent-green text-white">
                       <Check className="h-3 w-3" />
                     </span>
                   ) : (
@@ -270,14 +270,14 @@ export default function PageAccessSettings() {
                   <span className="min-w-0">
                     <span className="block truncate">
                       {page.label}
-                      {page.parent && <span className="ml-1.5 text-[11px] text-muted-foreground">tab inside Clients</span>}
+                      {page.parent && <span className="ml-1.5 text-[12px] text-muted-foreground">tab inside Clients</span>}
                     </span>
-                    <span className="block font-mono text-[11px] text-muted-foreground">{page.href}</span>
+                    <span className="block font-mono text-[12px] text-muted-foreground">{page.href}</span>
                   </span>
                   {/* was a hover-only title= — on a phone "by role" explained
                       nothing. Now it says who sees it, in words, on the row. */}
                   {byDefault && (
-                    <span className="ml-auto shrink-0 text-right text-[11px] text-emerald-700 dark:text-emerald-500">
+                    <span className="ml-auto shrink-0 text-right text-[12px] text-foreground">
                       every {ROLE_LABEL[person.role].toLowerCase()} sees this
                     </span>
                   )}
@@ -288,7 +288,7 @@ export default function PageAccessSettings() {
           </div>
         )}
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-secondary-13 text-muted-foreground">
           Changes apply the next time that person loads the dashboard. Granting a page
           also opens the data behind it, so the page works rather than erroring.
         </p>

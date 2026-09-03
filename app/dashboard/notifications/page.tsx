@@ -13,6 +13,7 @@ import {
 import { eventWords, notificationHref, EMAIL_FAILED_WORDS } from '@/app/lib/notification-words'
 import { LoadFailed } from '../NotSetUp'
 import HelpHint from '../HelpHint'
+import PageTitle from '../ui/PageTitle'
 
 /**
  * The person's real notification history — the same rows the email outbox
@@ -78,17 +79,10 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Notifications</h2>
-        <p className="flex flex-wrap items-center text-sm text-zinc-500 dark:text-zinc-400">
-          Everything we have sent you — the same record as your email inbox.
-          Every row opens the item
-          <HelpHint term="item" />
-          or shoot
-          <HelpHint term="shoot" />
-          it is about.
-        </p>
-      </div>
+      <PageTitle
+        title="Notifications"
+        summary={<>Everything we have sent you — the same record as your email inbox. Every row opens the item <HelpHint term="item" /> or shoot <HelpHint term="shoot" /> it is about.</>}
+      />
 
       {failed ? (
         <LoadFailed what="your notifications" detail={failed} onRetry={() => load()} />
@@ -99,49 +93,49 @@ export default function NotificationsPage() {
       ) : rows.length === 0 ? (
         <Card className="border-dashed shadow-none">
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
-            <BellOff className="h-6 w-6 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <BellOff className="h-6 w-6 text-muted-foreground" />
+            <p className="text-body-15 text-muted-foreground">
               Nothing yet — you&rsquo;ll see review requests, assignments, approvals, and reminders here as they happen.
             </p>
           </CardContent>
         </Card>
       ) : (
         <Card className="py-0">
-          <CardContent className="flex flex-col divide-y divide-zinc-100 p-0 dark:divide-zinc-800">
+          <CardContent className="flex flex-col divide-y divide-border p-0">
             {rows.map(r => {
               const Icon = ICON(r.event_type)
               const href = linkFor(r)
               const inner = (
                 <div className="flex items-center gap-3 px-4 py-3">
                   {!r.read_at
-                    ? <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" aria-label="unread" />
+                    ? <span className="h-2 w-2 shrink-0 rounded-full bg-accent-blue" aria-label="unread" />
                     : <span className="h-2 w-2 shrink-0" />}
-                  <Icon className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className={`truncate text-sm ${r.read_at ? '' : 'font-medium'}`}>{r.subject}</p>
+                    <p className={`truncate text-body-15 ${r.read_at ? '' : 'font-medium'}`}>{r.subject}</p>
                     {/* the raw enum used to sit here in mono uppercase:
                         "transition internal review", "prospect auto ingested" */}
                     {eventWords(r.event_type) && (
-                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                      <p className="truncate text-secondary-13 text-muted-foreground">
                         {eventWords(r.event_type)}
                       </p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {r.status === 'failed' && (
-                      <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 font-normal text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+                      <Badge variant="outline" className="gap-1 border-accent-red/30 bg-tint-red font-normal text-foreground">
                         <XCircle className="h-3 w-3" />
                         <span className="hidden sm:inline">{EMAIL_FAILED_WORDS}</span>
                         <span className="sm:hidden">Not delivered</span>
                       </Badge>
                     )}
-                    <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{when(r.created_at)}</span>
-                    {href && <ArrowRight className="h-3.5 w-3.5 text-zinc-300 dark:text-zinc-600" />}
+                    <span className="font-mono text-[12px] text-muted-foreground">{when(r.created_at)}</span>
+                    {href && <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />}
                   </div>
                 </div>
               )
               return href
-                ? <Link key={r.id} href={href} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/60">{inner}</Link>
+                ? <Link key={r.id} href={href} className="hover:bg-foreground/[0.04]">{inner}</Link>
                 : <div key={r.id}>{inner}</div>
             })}
           </CardContent>

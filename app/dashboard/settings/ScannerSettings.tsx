@@ -193,7 +193,7 @@ export default function ScannerSettings() {
 
   if (loading) {
     return (
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="border-border bg-surface">
         <CardContent className="space-y-3 p-6">
           {[0, 1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}
         </CardContent>
@@ -207,9 +207,9 @@ export default function ScannerSettings() {
     <div className="flex flex-col gap-4">
 
       {/* ── which mailboxes ──────────────────────────────────────────── */}
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="border-border bg-surface">
         <CardHeader>
-          <CardTitle className="text-base">Mailboxes</CardTitle>
+          <CardTitle>Mailboxes</CardTitle>
           <CardDescription>
             Which addresses the scanner reads. Shared mailboxes come from the server
             configuration; connected ones are team members who signed in with Google.
@@ -219,7 +219,7 @@ export default function ScannerSettings() {
         </CardHeader>
         <CardContent className="flex flex-col">
           {mailboxes.length === 0 && (
-            <p className="py-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="py-2 text-body-15 text-muted-foreground">
               No mailboxes yet. Connect a Google account above — or ask us to
               connect the shared agency inbox for you.
             </p>
@@ -228,11 +228,11 @@ export default function ScannerSettings() {
             <div key={m.email}>
               {i > 0 && <Separator />}
               <div className="flex flex-wrap items-center gap-3 py-3">
-                <Mail className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm">{m.email}</span>
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                    <span className="font-mono text-body-15">{m.email}</span>
+                    <span className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-muted-foreground">
                       {/* "self" means connected through the dashboard by its
                           owner — not by whoever happens to be reading this */}
                       {m.source === 'shared' ? 'shared'
@@ -241,32 +241,32 @@ export default function ScannerSettings() {
                           : 'connected'}
                     </span>
                     {m.source === 'self' && m.connected_by && m.connected_by !== myEmail && (
-                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <span className="text-[12px] text-muted-foreground">
                         by {m.connected_by}
                       </span>
                     )}
                     {m.last_status === 'error' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-tint-red px-2.5 py-1.5 text-chip-12 text-foreground">
                         <AlertTriangle className="h-3 w-3" /> failing
                       </span>
                     )}
                     {m.last_status === 'success' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-tint-green px-2.5 py-1.5 text-chip-12 text-foreground">
                         <CheckCircle2 className="h-3 w-3" /> healthy
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-0.5 text-secondary-13 text-muted-foreground">
                     Last scanned {relative(m.last_run_at)}
                     {typeof m.last_leads_created === 'number' && m.last_leads_created > 0 &&
                       ` · ${m.last_leads_created} lead${m.last_leads_created === 1 ? '' : 's'}`}
                     {m.last_error && (
-                      <span className="block truncate text-red-600 dark:text-red-400">{m.last_error}</span>
+                      <span className="block truncate text-accent-red">{m.last_error}</span>
                     )}
                   </p>
                 </div>
                 {mailboxDraft[m.email] !== undefined && mailboxDraft[m.email] !== m.enabled && (
-                  <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">not saved yet</span>
+                  <span className="text-[12px] font-medium text-foreground">not saved yet</span>
                 )}
                 <Switch
                   checked={mailboxEnabled(m)}
@@ -280,9 +280,9 @@ export default function ScannerSettings() {
       </Card>
 
       {/* ── how it scans ─────────────────────────────────────────────── */}
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="border-border bg-surface">
         <CardHeader>
-          <CardTitle className="text-base">Scanning behaviour</CardTitle>
+          <CardTitle>Scanning behaviour</CardTitle>
           <CardDescription>
             How far back each pass looks, and how confident the classifier must be
             before an email becomes a lead.
@@ -296,7 +296,7 @@ export default function ScannerSettings() {
               value={settings.lookback_days}
               onChange={e => patch({ lookback_days: Number(e.target.value) })}
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               Mail older than this is ignored. 1–30.
             </p>
           </div>
@@ -308,7 +308,7 @@ export default function ScannerSettings() {
               value={settings.max_messages}
               onChange={e => patch({ max_messages: Number(e.target.value) })}
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               Per mailbox, newest first. 1–100.
             </p>
           </div>
@@ -321,9 +321,9 @@ export default function ScannerSettings() {
               id="conf" type="range" min={0} max={100} step={5}
               value={Math.round(settings.min_confidence * 100)}
               onChange={e => patch({ min_confidence: Number(e.target.value) / 100 })}
-              className="w-full accent-zinc-900 dark:accent-zinc-100"
+              className="w-full accent-zinc-900"
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               Below this, an email is logged as “not a lead”. Higher means fewer
               false leads and more missed ones.
             </p>
@@ -336,7 +336,7 @@ export default function ScannerSettings() {
               value={settings.duplicate_window_days}
               onChange={e => patch({ duplicate_window_days: Number(e.target.value) })}
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               A sender who already became a lead this recently is not duplicated.
               0 disables the check.
             </p>
@@ -354,7 +354,7 @@ export default function ScannerSettings() {
             />
             <div className="min-w-0 flex-1">
               <Label htmlFor="selfconnect">Let the team connect their own inbox</Label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-secondary-13 text-muted-foreground">
                 Each person grants read access to their own mailbox, once. Only
                 @mdmmarketing.com.au accounts can — Google refuses the rest.
                 Switching this off hides the button; inboxes already connected
@@ -362,10 +362,10 @@ export default function ScannerSettings() {
               </p>
               {connectResult && (
                 <p className={
-                  'mt-2 rounded-md border px-2 py-1.5 text-xs ' +
+                  'mt-2 rounded-tile border px-2 py-1.5 text-secondary-13 ' +
                   (connectResult.ok
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
-                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300')
+                    ? 'border-accent-green/30 bg-tint-green text-foreground'
+                    : 'border-accent-amber/35 bg-tint-amber text-foreground')
                 }>
                   {connectResult.text}
                 </p>
@@ -380,7 +380,7 @@ export default function ScannerSettings() {
                 return (
                   <div className="mt-2 flex flex-col gap-2">
                     {already && already.source !== 'self' && (
-                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                      <p className="text-secondary-13 text-foreground">
                         Your inbox ({already.email}) is already being scanned
                         {already.source === 'shared'
                           ? ' — configured on the server, nothing to do here.'
@@ -388,11 +388,11 @@ export default function ScannerSettings() {
                       </p>
                     )}
                     {mine.map(m => (
-                      <p key={m.email} className="flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+                      <p key={m.email} className="flex flex-wrap items-center gap-2 text-secondary-13 text-foreground">
                         <span>Connected: {m.email}</span>
                         <button
                           type="button"
-                          className="text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
+                          className="text-muted-foreground underline-offset-2 hover:underline"
                           onClick={async () => {
                             const res = await fetch('/api/inbox/disconnect', {
                               method: 'POST',
@@ -412,7 +412,7 @@ export default function ScannerSettings() {
                     ))}
                     <a
                       href="/api/inbox/connect"
-                      className="inline-flex w-fit items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium transition hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
+                      className="inline-flex w-fit items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-secondary-13 font-medium transition hover:border-border"
                     >
                       {mine.length > 0 || already ? 'Connect another mailbox' : 'Connect my inbox'}
                     </a>
@@ -429,14 +429,14 @@ export default function ScannerSettings() {
             />
             <div className="min-w-0">
               <Label htmlFor="sched">Scan automatically</Label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-secondary-13 text-muted-foreground">
                 {schedule?.window ?? 'every 5 minutes, around the clock'}.
                 Off means the scanner only runs when someone presses the button.
               </p>
 
               {/* the toggle is an intention; Inngest is what makes it a fact */}
               {settings.schedule_enabled && schedule && !schedule.connected && (
-                <p className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                <p className="mt-2 flex items-start gap-1.5 rounded-tile border border-accent-amber/35 bg-tint-amber px-2 py-1.5 text-secondary-13 text-foreground">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     <strong>Not running on its own yet.</strong> Automatic scanning
@@ -447,7 +447,7 @@ export default function ScannerSettings() {
                 </p>
               )}
               {settings.schedule_enabled && schedule?.connected && (
-                <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
+                <p className="mt-2 text-secondary-13 text-foreground">
                   Connected · last automatic scan {relative(schedule.last_scheduled_run)}
                 </p>
               )}
@@ -461,7 +461,7 @@ export default function ScannerSettings() {
             />
             <div>
               <Label htmlFor="rules">Rules-only mode (no AI)</Label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-secondary-13 text-muted-foreground">
                 Skip classification entirely. Mail surviving the spam and newsletter
                 filters is flagged “needs review” instead of becoming a lead
                 automatically. Use this if the automatic sorting is down —
@@ -473,10 +473,10 @@ export default function ScannerSettings() {
       </Card>
 
       {/* ── never a lead ─────────────────────────────────────────────── */}
-      <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="border-border bg-surface">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldAlert className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
             Never a lead
           </CardTitle>
           <CardDescription>
@@ -498,7 +498,7 @@ export default function ScannerSettings() {
                 setListDraft(d => ({ ...d, domains: undefined }))
               }}
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               One per line. Subdomains are included automatically.
             </p>
           </div>
@@ -514,15 +514,15 @@ export default function ScannerSettings() {
                 setListDraft(d => ({ ...d, senders: undefined }))
               }}
             />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-secondary-13 text-muted-foreground">
               Full addresses, one per line.
             </p>
           </div>
         </CardContent>
 
         {denied && (
-          <CardFooter className="border-t border-zinc-200 dark:border-zinc-800">
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+          <CardFooter className="border-t border-border">
+            <p className="text-secondary-13 text-foreground">
               Only a super admin can change scanner settings.
             </p>
           </CardFooter>
@@ -533,12 +533,12 @@ export default function ScannerSettings() {
       {/* Sticky, so it is in view whichever of the three cards you changed.
           Before, the button lived at the foot of the LAST card and the
           mailbox switches did not use it at all. */}
-      <div className={`sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur ${
+      <div className={`sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-inner border px-4 py-3 shadow-lg backdrop-blur ${
         dirty
-          ? 'border-amber-300 bg-amber-50/95 dark:border-amber-800 dark:bg-amber-950/80'
-          : 'border-zinc-200 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/90'
+          ? 'border-accent-amber/35 bg-tint-amber'
+          : 'border-border bg-surface/95'
       }`}>
-        <p className={`text-sm ${dirty ? 'font-medium text-amber-800 dark:text-amber-300' : 'text-zinc-500 dark:text-zinc-400'}`}>
+        <p className={`text-body-15 ${dirty ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
           {dirty
             ? `You have ${pendingCount === 1 ? 'an unsaved change' : `${pendingCount} unsaved changes`}`
             : 'Everything on this page is saved'}

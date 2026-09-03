@@ -39,17 +39,17 @@ type Form = {
 
 const STATUS_STYLE: Record<Status, string> = {
   draft:
-    'border-zinc-300 bg-zinc-100 text-zinc-700 ' +
-    'dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+    'border-border bg-foreground/[0.06] text-muted-foreground ' +
+    'dark:border-border',
   sent:
-    'border-blue-300 bg-blue-50 text-blue-700 ' +
-    'dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300',
+    'border-accent-blue/25 bg-tint-blue text-foreground ' +
+    'dark:border-accent-blue/25',
   in_progress:
-    'border-amber-300 bg-amber-50 text-amber-800 ' +
-    'dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
+    'border-accent-amber/35 bg-tint-amber text-foreground ' +
+    'dark:border-accent-amber/35',
   submitted:
-    'border-emerald-300 bg-emerald-50 text-emerald-700 ' +
-    'dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300',
+    'border-accent-green/30 bg-tint-green text-foreground ' +
+    'dark:border-accent-green/30',
 }
 
 function relative(iso: string | null): string {
@@ -68,7 +68,7 @@ function RecipientPicker({
   return (
     <div className="flex max-h-52 flex-col gap-1 overflow-y-auto rounded border border-border bg-background p-2">
       {team.length === 0 && (
-        <p className="px-2 py-1.5 text-xs text-muted-foreground">No team members found.</p>
+        <p className="px-2 py-1.5 text-secondary-13 text-muted-foreground">No team members found.</p>
       )}
       {team.map(m => {
         const on = picked.includes(m.email)
@@ -76,16 +76,16 @@ function RecipientPicker({
           <button
             key={m.email} type="button" onClick={() => onToggle(m.email)}
             className={
-              'flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition ' +
+              'flex items-center gap-2 rounded px-2 py-1.5 text-left text-secondary-13 transition ' +
               (on ? 'bg-primary/10 text-foreground' : 'hover:bg-muted')
             }
           >
             <span className={
-              'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] ' +
+              'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[12px] ' +
               (on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')
             }>{on ? '✓' : ''}</span>
             <span className="font-medium">{m.name || m.email}</span>
-            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{m.email}</span>
+            <span className="ml-auto font-mono text-[12px] text-muted-foreground">{m.email}</span>
           </button>
         )
       })}
@@ -217,12 +217,12 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-4">
       {/* ── create ── */}
       {canManage && (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <div className="rounded-inner border border-border bg-card p-5">
           {!creating ? (
             <div className="flex flex-wrap items-center gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Monthly updates</h3>
-                <p className="text-xs text-muted-foreground">
+                <h3 className="text-body-15 font-semibold">Monthly updates</h3>
+                <p className="text-secondary-13 text-muted-foreground">
                   A 5-minute check-in the client fills in before each monthly planning call. One per month.
                 </p>
               </div>
@@ -232,23 +232,23 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              <h3 className="text-sm font-semibold">New monthly update</h3>
+              <h3 className="text-body-15 font-semibold">New monthly update</h3>
 
               {/* which month */}
               <div className="flex flex-wrap items-end gap-3">
-                <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <label className="flex flex-col gap-1 text-secondary-13 text-muted-foreground">
                   Month
                   <select
                     value={newMonth}
                     onChange={e => setNewMonth(Number(e.target.value))}
-                    className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    className="rounded-tile border border-border bg-background px-3 py-2 text-body-15 text-foreground"
                   >
                     {MONTH_NAMES.map((m, i) => (
                       <option key={m} value={i + 1}>{m}</option>
                     ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <label className="flex flex-col gap-1 text-secondary-13 text-muted-foreground">
                   Year
                   <Input
                     type="number" value={newYear} min={2000} max={2100}
@@ -258,12 +258,12 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
                 </label>
               </div>
 
-              <p className="-mt-1 text-xs text-muted-foreground">
+              <p className="-mt-1 text-secondary-13 text-muted-foreground">
                 Only one form per client-month. If this month already has one, we&apos;ll just open it.
               </p>
 
               {previous && (
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
                   <input
                     type="checkbox" checked={copyPrev}
                     onChange={e => {
@@ -279,8 +279,8 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
               {/* who gets emailed on submission */}
               <div className="flex flex-col gap-2">
                 <div>
-                  <p className="text-sm font-medium">Who receives it when they submit?</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-body-15 font-medium">Who receives it when they submit?</p>
+                  <p className="text-secondary-13 text-muted-foreground">
                     Pick the team members to email the answers &amp; PDF. The client is never emailed.
                     Nobody selected means nobody is emailed.
                   </p>
@@ -324,11 +324,11 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
         const isEditing = editing === form.id
 
         return (
-          <div key={form.id} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
+          <div key={form.id} className="flex flex-col gap-4 rounded-inner border border-border bg-card p-5">
             <div className="flex flex-wrap items-center gap-2">
               {renaming === form.id ? (
                 <Input
-                  autoFocus defaultValue={form.title} className="h-8 max-w-xs text-sm"
+                  autoFocus defaultValue={form.title} className="h-8 max-w-xs text-body-15"
                   onBlur={async e => {
                     await patch({ form_id: form.id, action: 'rename', title: e.target.value }, 'Renamed')
                     setRenaming(null)
@@ -336,7 +336,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
                   onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                 />
               ) : (
-                <h3 className="text-sm font-semibold">{form.title || form.period}</h3>
+                <h3 className="text-body-15 font-semibold">{form.title || form.period}</h3>
               )}
               {canManage && renaming !== form.id && (
                 <Button size="icon" variant="ghost" className="h-6 w-6"
@@ -344,13 +344,13 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
                   <Pencil className="h-3 w-3" />
                 </Button>
               )}
-              <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              <span className="rounded-full border border-border bg-muted px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider text-muted-foreground">
                 {form.period}
               </span>
-              <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
+              <span className={`rounded-full border px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
                 {form.status.replace('_', ' ')}
               </span>
-              <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="ml-auto font-mono text-secondary-13 tabular-nums text-muted-foreground">
                 {form.completion.answered}/{form.completion.total}
               </span>
             </div>
@@ -369,7 +369,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 readOnly value={url} onFocus={e => e.currentTarget.select()}
-                className="min-w-[12rem] flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+                className="min-w-[12rem] flex-1 rounded-tile border border-border bg-background px-3 py-2 font-mono text-secondary-13"
               />
               <Button size="sm" variant="secondary" onClick={() => void copy(form)}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
@@ -381,7 +381,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
               </Button>
             </div>
 
-            <p className="font-mono text-xs text-muted-foreground">
+            <p className="font-mono text-secondary-13 text-muted-foreground">
               sent {relative(form.sent_at)} · opened {relative(form.first_opened_at)}
               {form.submitted_at ? ` · submitted ${relative(form.submitted_at)}` : ''}
             </p>
@@ -393,7 +393,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
                     <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit questions
                   </Button>
                 ) : (
-                  <span className="self-center text-xs text-muted-foreground">
+                  <span className="self-center text-secondary-13 text-muted-foreground">
                     Questions are locked — the form is submitted. Reopen to edit.
                   </span>
                 )}
@@ -415,7 +415,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
             )}
 
             {isEditing && form.status === 'in_progress' && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
                 The client has this form open or started — saved answers are safe, and
                 your changes appear next time they load the link.
               </p>
@@ -438,10 +438,10 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
             {/* ── who hears about it ── */}
             {canManage && !isEditing && (
               recipientsFor === form.id ? (
-                <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-4">
+                <div className="flex flex-col gap-3 rounded-tile border border-border bg-muted/30 p-4">
                   <div>
-                    <p className="text-sm font-medium">Notify when this is submitted</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-body-15 font-medium">Notify when this is submitted</p>
+                    <p className="text-secondary-13 text-muted-foreground">
                       Pick from the team. Nobody selected means nobody is emailed. The client is never emailed.
                     </p>
                   </div>
@@ -466,7 +466,7 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
                     setEditPicked(form.notify_emails ?? [])
                     setRecipientsFor(form.id)
                   }}
-                  className="-mt-1 self-start text-left text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  className="-mt-1 self-start text-left text-secondary-13 text-muted-foreground underline-offset-2 hover:underline"
                 >
                   {(() => {
                     const list = form.notify_emails ?? []

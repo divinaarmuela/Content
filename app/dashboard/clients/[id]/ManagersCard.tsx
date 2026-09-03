@@ -83,22 +83,22 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
 
   return (
     <div className={
-      'rounded-lg border p-5 transition-colors ' +
+      'rounded-inner border p-5 transition-colors ' +
       (inviting
         ? 'border-primary/40 bg-primary/[0.04]'
         : 'border-border bg-card')
     }>
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h3 className="text-sm font-semibold">
+          <h3 className="text-body-15 font-semibold">
             {inviting ? 'Intake complete. Who will run this client?' : 'Account managers'}
           </h3>
           {inviting ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               The brief is in. Assign an account manager so it has an owner from day one.
             </p>
           ) : managers.length === 0 ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-secondary-13 text-muted-foreground">
               {canManage
                 ? 'Nobody runs this client yet. Assign any time, before or after the intake.'
                 : 'Nobody has been assigned yet.'}
@@ -116,12 +116,12 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
         <div className="mt-3 flex flex-wrap gap-2">
           {managers.map(m => (
             <span key={m.team_user_id}
-              className="group flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-sm">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+              className="group flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-body-15">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
                 {initials(m.name, m.email)}
               </span>
               {m.name || m.email}
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              <span className="text-[12px] uppercase tracking-wide text-muted-foreground">
                 {roleLabel(m.role)}
               </span>
               {canManage && (
@@ -141,17 +141,17 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
             {unassigned.map(e => (
               <button key={e.id} type="button" onClick={() => setPicked(picked === e.id ? null : e.id)}
                 className={
-                  'flex items-center gap-3 rounded-lg border p-3 text-left transition ' +
+                  'flex items-center gap-3 rounded-inner border p-3 text-left transition ' +
                   (picked === e.id
                     ? 'border-primary bg-primary/[0.06]'
                     : 'border-border bg-background hover:border-foreground/40')
                 }>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-secondary-13 font-semibold text-primary">
                   {initials(e.name, e.email)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{e.name || e.email}</span>
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="block truncate text-body-15 font-medium">{e.name || e.email}</span>
+                  <span className="block text-secondary-13 text-muted-foreground">
                     {roleLabel(e.role)} · {e.client_count === 0
                       ? 'no clients yet'
                       : `${e.client_count} client${e.client_count === 1 ? '' : 's'}`}
@@ -176,7 +176,7 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
       )}
 
       {inviting && unassigned.length === 0 && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-3 text-secondary-13 text-muted-foreground">
           Nobody with an account manager role is available to assign. Add one on the Team page first.
         </p>
       )}

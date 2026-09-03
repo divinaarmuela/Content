@@ -28,6 +28,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import PageTitle from '../ui/PageTitle'
 
 type Member = {
   id: string
@@ -52,11 +53,11 @@ type Assignment = { team_user_id: string; client_id: string; clients: { name: st
 type ClientRow = { id: string; name: string }
 
 const ROLE_STYLE: Record<string, string> = {
-  super_admin:     'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
-  account_manager: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
-  editor:          'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
-  scheduler:       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-  client:          'bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800',
+  super_admin:     'bg-tint-blue text-foreground border-accent-blue/25',
+  account_manager: 'bg-tint-green text-foreground border-accent-green/30',
+  editor:          'bg-foreground/[0.06] text-muted-foreground border-border',
+  scheduler:       'bg-tint-amber text-foreground border-accent-amber/35',
+  client:          'bg-foreground/[0.04] text-muted-foreground border-border',
 }
 
 /** Shared with Settings → Profile. Two hand-maintained lists drifted once
@@ -238,7 +239,7 @@ export default function TeamPage() {
   if (forbidden) {
     return (
       <Card className="border-dashed shadow-none">
-        <CardContent className="py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        <CardContent className="py-14 text-center text-body-15 text-muted-foreground">
           Team management is restricted to super admins.
         </CardContent>
       </Card>
@@ -247,31 +248,27 @@ export default function TeamPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Team</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {canManage
-              ? 'People, roles, and client assignments. Invites are emailed via Clerk and roles apply on first sign-in.'
-              : 'Who is on the team and what they do. Only super admins can invite people or change roles.'}
-          </p>
-        </div>
-        {canManage && (
-          <Button size="sm" className="ml-auto" onClick={() => setInviteOpen(true)}>
-            <Plus className="h-4 w-4" /> Invite person
-          </Button>
-        )}
-      </div>
+      <PageTitle
+        title="Team"
+        summary={canManage ? 'People, roles, and client assignments. Invites are emailed via Clerk and roles apply on first sign-in.' : 'Who is on the team and what they do. Only super admins can invite people or change roles.'}
+        actions={<>
+          {canManage && (
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <Plus className="h-4 w-4" /> Invite person
+            </Button>
+          )}
+        </>}
+      />
 
       {/* Pending invites */}
       {invites.length > 0 && (
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
-                <TableHead className="text-xs">Pending invite</TableHead>
-                <TableHead className="text-xs">Role</TableHead>
-                <TableHead className="text-xs">Sent</TableHead>
+              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
+                <TableHead className="text-secondary-13">Pending invite</TableHead>
+                <TableHead className="text-secondary-13">Role</TableHead>
+                <TableHead className="text-secondary-13">Sent</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -279,18 +276,18 @@ export default function TeamPage() {
               {invites.map(inv => (
                 <TableRow key={inv.id}>
                   <TableCell>
-                    <span className="flex items-center gap-2 text-sm">
-                      <Mail className="h-3.5 w-3.5 text-zinc-400" /> {inv.email}
+                    <span className="flex items-center gap-2 text-body-15">
+                      <Mail className="h-3.5 w-3.5 text-muted-foreground" /> {inv.email}
                     </span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={ROLE_STYLE[inv.role] ?? ''}>{roleLabel(inv.role)}</Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                  <TableCell className="font-mono text-secondary-13 text-muted-foreground">
                     {new Date(inv.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" className="text-zinc-500" onClick={() => revokeInvite(inv)}>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => revokeInvite(inv)}>
                       <X className="h-3.5 w-3.5" /> Revoke
                     </Button>
                   </TableCell>
@@ -310,7 +307,7 @@ export default function TeamPage() {
         </Card>
       ) : members.length === 0 ? (
         <Card className="border-dashed shadow-none">
-          <CardContent className="py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          <CardContent className="py-14 text-center text-body-15 text-muted-foreground">
             No team members yet. You&apos;ll appear here on your next page load, and invited people appear
             after they accept.
           </CardContent>
@@ -319,7 +316,7 @@ export default function TeamPage() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50 hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-900">
+              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
                 <TableHead>Person</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Type</TableHead>
@@ -335,23 +332,23 @@ export default function TeamPage() {
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <Avatar className="h-7 w-7">
-                        <AvatarFallback className="text-[11px] font-semibold">{initials(m.name, m.email)}</AvatarFallback>
+                        <AvatarFallback className="text-[12px] font-semibold">{initials(m.name, m.email)}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <div className="text-sm font-medium">{m.name || '—'}</div>
-                        <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{m.email}</div>
+                        <div className="text-body-15 font-medium">{m.name || '—'}</div>
+                        <div className="font-mono text-secondary-13 text-muted-foreground">{m.email}</div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{roleLabel(m.role)}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm capitalize text-zinc-600 dark:text-zinc-400">{m.employment_type}</TableCell>
+                  <TableCell className="text-body-15 capitalize text-muted-foreground">{m.employment_type}</TableCell>
                   {/* the zone AND what o'clock it is there: "Asia/Manila" is a
                       database value, "2:14 pm PHT" is the thing you actually
                       wanted to know before pinging somebody. Kept out of the
                       server render — the row's clock ticks in the browser. */}
-                  <TableCell className="text-xs text-zinc-500 dark:text-zinc-400" suppressHydrationWarning>
+                  <TableCell className="text-secondary-13 text-muted-foreground" suppressHydrationWarning>
                     <span className="font-mono">{zoneLabel(m.timezone)}</span>
                     {now && (
                       <span className="ml-1.5 font-mono tabular-nums opacity-70">
@@ -362,9 +359,9 @@ export default function TeamPage() {
                   <TableCell>
                     <div className="flex max-w-48 flex-wrap gap-1">
                       {clientsFor(m.id).slice(0, 3).map(n => (
-                        <Badge key={n} variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">{n}</Badge>
+                        <Badge key={n} variant="outline" className="font-normal text-muted-foreground">{n}</Badge>
                       ))}
-                      {clientsFor(m.id).length === 0 && <span className="text-xs text-zinc-400">—</span>}
+                      {clientsFor(m.id).length === 0 && <span className="text-secondary-13 text-muted-foreground">—</span>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -382,7 +379,7 @@ export default function TeamPage() {
                       }}
                       aria-label={`Toggle active for ${m.email}`}
                     /> : (
-                      <span className={`font-mono text-[11px] uppercase ${m.active_status ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`}>
+                      <span className={`font-mono text-[12px] uppercase ${m.active_status ? 'text-accent-green' : 'text-muted-foreground'}`}>
                         {m.active_status ? 'active' : 'inactive'}
                       </span>
                     )}
@@ -397,7 +394,7 @@ export default function TeamPage() {
                       {canManage && m.role !== 'super_admin' && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" aria-label={`Delete ${m.email}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-accent-red" aria-label={`Delete ${m.email}`}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </AlertDialogTrigger>
@@ -414,7 +411,7 @@ export default function TeamPage() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Keep them</AlertDialogCancel>
                               <AlertDialogAction
-                                className="bg-red-600 hover:bg-red-700"
+                                className="bg-accent-red hover:bg-accent-red"
                                 onClick={async () => {
                                   const res = await fetch(`/api/team/${m.id}?kind=member`, { method: 'DELETE' })
                                   const json = await res.json()
@@ -495,7 +492,7 @@ export default function TeamPage() {
             ) : (invite.role === 'account_manager' || invite.role === 'editor') && clients.length > 0 ? (
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Assigned clients</Label>
-                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-inner border border-border p-2">
                   {clients.map(c => {
                     const on = invite.assigned_client_ids.includes(c.id)
                     return (
@@ -508,10 +505,10 @@ export default function TeamPage() {
                             ? i.assigned_client_ids.filter(x => x !== c.id)
                             : [...i.assigned_client_ids, c.id],
                         }))}
-                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        className={`rounded-full border px-2.5 py-1 text-secondary-13 transition-colors ${
                           on
-                            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300'
-                            : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                            ? 'border-accent-blue/25 bg-tint-blue text-foreground'
+                            : 'border-border text-muted-foreground hover:bg-foreground/[0.04]'
                         }`}
                       >
                         {c.name}
@@ -593,7 +590,7 @@ export default function TeamPage() {
             {(editDraft.role === 'account_manager' || editDraft.role === 'editor') && clients.length > 0 && (
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Assigned clients</Label>
-                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-inner border border-border p-2">
                   {clients.map(c => {
                     const on = (editDraft.assigned_client_ids ?? []).includes(c.id)
                     return (
@@ -601,10 +598,10 @@ export default function TeamPage() {
                         key={c.id}
                         type="button"
                         onClick={() => toggleAssigned(c.id)}
-                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        className={`rounded-full border px-2.5 py-1 text-secondary-13 transition-colors ${
                           on
-                            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300'
-                            : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                            ? 'border-accent-blue/25 bg-tint-blue text-foreground'
+                            : 'border-border text-muted-foreground hover:bg-foreground/[0.04]'
                         }`}
                       >
                         {c.name}

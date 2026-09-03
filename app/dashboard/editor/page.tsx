@@ -89,15 +89,6 @@ type Item = {
   work_kinds?: { name: string; slug: string; color: string } | null
 }
 
-/** One dot per lane, in the same order the work moves. */
-const LANE_TINT: Record<string, string> = {
-  drafting: 'bg-foreground/40',
-  review: 'bg-accent-blue',
-  revising: 'bg-accent-amber',
-  client: 'bg-accent-blue-deep',
-  approved: 'bg-accent-green',
-}
-
 /** What is NOT in a column, said in the column's own words. */
 const LANE_EMPTY: Record<string, string> = {
   drafting: 'No drafts.',
@@ -744,7 +735,6 @@ export default function EditorPage() {
               return {
                 key: lane.key,
                 title: lane.title,
-                tint: LANE_TINT[lane.key] ?? 'bg-foreground/40',
                 count: colItems.length + colGroups.length,
                 hint: lane.key === 'drafting' ? <HelpHint term="drafting" />
                   : lane.key === 'approved' ? <HelpHint term="approved_for_scheduling" /> : undefined,

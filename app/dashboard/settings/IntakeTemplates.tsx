@@ -62,8 +62,8 @@ export default function IntakeTemplates() {
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-semibold">Question templates</h3>
-        <p className="text-xs text-muted-foreground">
+        <h3 className="text-body-15 font-semibold">Question templates</h3>
+        <p className="text-secondary-13 text-muted-foreground">
           What a new intake form starts from. Editing one never changes a form
           that already exists — each keeps its own copy, so nobody has questions
           change while they are answering.
@@ -74,11 +74,11 @@ export default function IntakeTemplates() {
         const count = r.definition.sections
           .flatMap(s => s.blocks).filter(b => b.type !== 'guidance').length
         return (
-          <div key={r.key} className="rounded-lg border border-border bg-card p-4">
+          <div key={r.key} className="rounded-inner border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium">{r.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-body-15 font-medium">{r.name}</p>
+                <p className="text-secondary-13 text-muted-foreground">
                   {r.definition.sections.length} sections · {count} questions
                   {r.customised
                     ? ` · edited${r.updated_by ? ` by ${r.updated_by}` : ''}`

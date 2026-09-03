@@ -14,6 +14,7 @@ import { LoadFailed } from '../../NotSetUp'
 import EmptyState from '../../EmptyState'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { zoneAbbrev, zoneLabel } from '@/app/lib/timezone-core'
+import PageTitle from '../../ui/PageTitle'
 
 type Account = {
   id: string; client_id: string | null; platform: string
@@ -212,24 +213,21 @@ export default function SocialAnalyticsPage() {
     <div className="flex flex-col gap-4">
       <Back />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Social analytics</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Performance across every connected account. Figures come from the
-            platforms themselves and can lag by up to 48 hours.
-          </p>
-        </div>
-        <div className="ml-auto">
-          <Select value={clientId} onValueChange={setClientId}>
-            <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {data.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <PageTitle
+        title="Social analytics"
+        summary="Performance across every connected account. Figures come from the platforms themselves and can lag by up to 48 hours."
+        actions={<>
+          <div>
+            <Select value={clientId} onValueChange={setClientId}>
+              <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {data.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </>}
+      />
 
       {/* headline numbers ── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -248,7 +246,7 @@ export default function SocialAnalyticsPage() {
       {/* channels ── */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="mb-3 text-sm font-semibold tracking-tight">Channels</h3>
+          <h3 className="mb-3 text-card-title">Channels</h3>
           {scoped.accounts.length === 0 ? (
             <EmptyState
               icon={TrendingUp}
@@ -265,13 +263,13 @@ export default function SocialAnalyticsPage() {
                 return (
                   <li key={a.id}>
                     <Link href={`/dashboard/social/${a.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-zinc-200 p-2.5 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700">
+                      className="flex items-center gap-3 rounded-inner border border-border p-2.5 transition-colors hover:border-border">
                       <PlatformIcon platform={a.platform} size={28} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
+                        <p className="truncate text-body-15 font-medium">
                           {a.username ? `@${a.username}` : brandFor(a.platform).label}
                         </p>
-                        <p className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+                        <p className="font-mono text-secondary-13 tabular-nums text-muted-foreground">
                           {(f?.currentFollowers ?? 0).toLocaleString()} followers
                           {typeof f?.growth === 'number' && f.growth !== 0 &&
                             ` · ${f.growth > 0 ? '+' : ''}${f.growth}`}
@@ -290,8 +288,8 @@ export default function SocialAnalyticsPage() {
       {daily.length > 0 && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
-              <TrendingUp className="h-3.5 w-3.5 text-zinc-400" /> Impressions by day
+            <h3 className="mb-3 flex items-center gap-1.5 text-card-title">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" /> Impressions by day
             </h3>
             <Bars points={daily} />
           </CardContent>
@@ -302,13 +300,13 @@ export default function SocialAnalyticsPage() {
       {bestSlots.length > 0 && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
-              <Clock className="h-3.5 w-3.5 text-zinc-400" /> Best times to post
+            <h3 className="mb-1 flex items-center gap-1.5 text-card-title">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" /> Best times to post
             </h3>
             {/* For a Manila scheduler posting to an Australian audience, the
                 zone is the single most consequential fact on this page — and
                 nothing on screen named one. */}
-            <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mb-3 text-secondary-13 text-muted-foreground">
               When the audience has engaged most, from your connected accounts&rsquo;
               history. Times are {zoneLabel(CAL_TZ)} ({zoneAbbrev(CAL_TZ)}) — where
               the audience is, not where you are.
@@ -321,8 +319,8 @@ export default function SocialAnalyticsPage() {
       {/* posts, best first ── */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="mb-3 text-sm font-semibold tracking-tight">
-            Top posts <span className="font-normal text-zinc-400 dark:text-zinc-500">by impressions</span>
+          <h3 className="mb-3 text-card-title">
+            Top posts <span className="font-normal text-muted-foreground">by impressions</span>
           </h3>
           {scoped.posts.length === 0 ? (
             <EmptyState
@@ -335,9 +333,9 @@ export default function SocialAnalyticsPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[640px] text-body-15">
                 <thead>
-                  <tr className="border-b border-zinc-200 text-left dark:border-zinc-800">
+                  <tr className="border-b border-border text-left">
                     <th className="pb-2 font-medium">Post</th>
                     {METRICS.map(([, label]) => (
                       <th key={label} className="pb-2 text-right font-medium">{label}</th>
@@ -351,10 +349,10 @@ export default function SocialAnalyticsPage() {
                     .map((p, i) => {
                       const url = p.platforms?.find(x => x.platformPostUrl)?.platformPostUrl
                       return (
-                        <tr key={p._id ?? i} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
+                        <tr key={p._id ?? i} className="border-b border-border last:border-0">
                           <td className="max-w-[280px] py-2 pr-3">
                             <p className="truncate">{p.content || '(no caption)'}</p>
-                            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                            <p className="text-secondary-13 text-muted-foreground">
                               {when(p.publishedAt)}
                             </p>
                           </td>
@@ -366,7 +364,7 @@ export default function SocialAnalyticsPage() {
                           <td className="py-2 pl-2 text-right">
                             {url && (
                               <a href={url} target="_blank" rel="noopener noreferrer"
-                                 className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                                 className="text-muted-foreground hover:text-foreground">
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </a>
                             )}
@@ -387,7 +385,7 @@ export default function SocialAnalyticsPage() {
 function Back() {
   return (
     <Link href="/dashboard/social"
-      className="inline-flex w-fit items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+      className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground">
       <ArrowLeft className="h-3.5 w-3.5" /> Social channels
     </Link>
   )
@@ -397,7 +395,7 @@ function Stat({ label, value, subtle }: { label: string; value: number; subtle?:
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-secondary-13 text-muted-foreground">{label}</p>
         <p className={`font-mono tabular-nums ${subtle ? 'text-lg' : 'text-2xl'}`}>
           {value.toLocaleString()}
         </p>
@@ -423,8 +421,8 @@ function BestTimes({ slots }: { slots: BestSlot[] }) {
       <div className="flex flex-wrap gap-2">
         {top.map((s, i) => (
           <span key={`${s.day}-${s.hour}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
-            {i === 0 && <span className="text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400">best</span>}
+            className="inline-flex items-center gap-1.5 rounded-full border border-accent-blue/25 bg-tint-blue px-3 py-1 text-secondary-13 font-medium text-foreground">
+            {i === 0 && <span className="text-[12px] uppercase tracking-wide text-accent-blue-deep">best</span>}
             {DAY_LABEL[s.day]} {hourLabel(s.hour)}
           </span>
         ))}
@@ -437,7 +435,7 @@ function BestTimes({ slots }: { slots: BestSlot[] }) {
         <div className="min-w-[420px]">
           {DAY_LABEL.map((label, day) => (
             <div key={label} className="flex items-center gap-1.5 py-0.5">
-              <span className="w-8 shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
+              <span className="w-8 shrink-0 text-[12px] text-muted-foreground">{label}</span>
               {range.map(h => {
                 const score = byCell.get(`${day}-${h}`)
                 return (
@@ -457,7 +455,7 @@ function BestTimes({ slots }: { slots: BestSlot[] }) {
           <div className="mt-1 flex items-center gap-1.5">
             <span className="w-8 shrink-0" />
             {range.map(h => (
-              <span key={h} className="flex-1 text-center text-[10px] text-zinc-400 dark:text-zinc-500" style={{ minWidth: 14 }}>
+              <span key={h} className="flex-1 text-center text-[12px] text-muted-foreground" style={{ minWidth: 14 }}>
                 {h % 3 === 0 ? hourLabel(h) : ''}
               </span>
             ))}
@@ -480,16 +478,16 @@ function Bars({ points }: { points: DailyPoint[] }) {
           const v = p.metrics?.impressions ?? 0
           return (
             <div key={p.date} className="flex w-10 shrink-0 flex-col items-center gap-1">
-              <span className="font-mono text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">{v}</span>
-              <div className="w-full rounded-t bg-zinc-400 dark:bg-zinc-600"
+              <span className="font-mono text-[12px] tabular-nums text-muted-foreground">{v}</span>
+              <div className="w-full rounded-t bg-foreground/[0.14]"
                    style={{ height: Math.max(3, (v / max) * 68) }}
                    title={`${p.date} · ${v} impressions`} />
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{p.date.slice(5)}</span>
+              <span className="text-[12px] text-muted-foreground">{p.date.slice(5)}</span>
             </div>
           )
         })}
       </div>
-      <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+      <p className="mt-1 text-[12px] text-muted-foreground">
         Impressions per day{recent.length === 1 ? ' — only one day of data so far' : ''}
       </p>
     </div>

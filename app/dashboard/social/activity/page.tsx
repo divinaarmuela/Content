@@ -19,6 +19,7 @@ import {
   sortForAttention, type PublishJob, type Tone,
 } from '../../../lib/publish-activity-core'
 import { formatWithZone } from '../../../lib/timezone-core'
+import PageTitle from '../../ui/PageTitle'
 
 /**
  * Every post, and what it is doing right now.
@@ -38,11 +39,11 @@ import { formatWithZone } from '../../../lib/timezone-core'
 type Client = { id: string; name: string; timezone?: string | null }
 
 const TONE: Record<Tone, { chip: string; icon: typeof CheckCircle2 }> = {
-  moving:  { chip: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300', icon: Loader2 },
-  waiting: { chip: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300', icon: CalendarClock },
-  done:    { chip: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300', icon: CheckCircle2 },
-  trouble: { chip: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300', icon: XCircle },
-  quiet:   { chip: 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400', icon: CheckCircle2 },
+  moving:  { chip: 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep', icon: Loader2 },
+  waiting: { chip: 'border-accent-amber/35 bg-tint-amber text-foreground', icon: CalendarClock },
+  done:    { chip: 'border-accent-green/30 bg-tint-green text-foreground', icon: CheckCircle2 },
+  trouble: { chip: 'border-accent-red/30 bg-tint-red text-foreground', icon: XCircle },
+  quiet:   { chip: 'border-border bg-foreground/[0.04] text-muted-foreground', icon: CheckCircle2 },
 }
 
 export default function PublishActivityPage() {
@@ -103,17 +104,15 @@ export default function PublishActivityPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Posts</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {summary ?? 'Everything you have sent or booked, and what each one is doing.'}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => void load()}>
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </Button>
-      </div>
+      <PageTitle
+        title="Posts"
+        summary={summary ?? 'Everything you have sent or booked, and what each one is doing.'}
+        actions={<>
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        </>}
+      />
 
       {jobs === null ? (
         <div className="flex flex-col gap-2">
@@ -151,25 +150,25 @@ export default function PublishActivityPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="h-16 w-16 shrink-0 rounded object-cover" />
                   ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-zinc-100 text-[11px] text-zinc-400 dark:bg-zinc-800">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-foreground/[0.06] text-[12px] text-muted-foreground">
                       {(job.media?.length ?? 0) > 0 ? 'video' : 'text'}
                     </div>
                   )}
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone.chip}`}>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-chip-12 font-medium ${tone.chip}`}>
                         <Icon className={`h-3 w-3 ${words.tone === 'moving' ? 'animate-spin' : ''}`} />
                         {words.headline}
                       </span>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">{clientName(job.client_id)}</span>
-                      <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
+                      <span className="text-secondary-13 text-muted-foreground">{clientName(job.client_id)}</span>
+                      <span className="ml-auto text-[12px] text-muted-foreground">
                         made {formatWithZone(job.created_at, tz, 'short')}
                       </span>
                     </div>
 
-                    <p className="mt-1.5 truncate text-sm">
-                      {job.caption.trim() || <span className="text-zinc-400">No caption</span>}
+                    <p className="mt-1.5 truncate text-body-15">
+                      {job.caption.trim() || <span className="text-muted-foreground">No caption</span>}
                     </p>
 
                     {/* which channels — and, on a failure, which of them the
@@ -179,10 +178,10 @@ export default function PublishActivityPage() {
                         <span
                           key={`${t.platform}-${i}`}
                           title={t.platform}
-                          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] ${
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-chip-12 ${
                             blamed.includes(t.platform)
-                              ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                              : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
+                              ? 'border-accent-red/30 text-foreground'
+                              : 'border-border text-muted-foreground'
                           }`}
                         >
                           {isKnownPlatform(t.platform) && <PlatformIcon platform={t.platform} size={12} />}
@@ -193,8 +192,8 @@ export default function PublishActivityPage() {
                     </div>
 
                     {words.detail && (
-                      <p className={`mt-1.5 text-xs ${
-                        words.tone === 'trouble' ? 'text-red-700 dark:text-red-300' : 'text-zinc-500 dark:text-zinc-400'
+                      <p className={`mt-1.5 text-secondary-13 ${
+                        words.tone === 'trouble' ? 'text-foreground' : 'text-muted-foreground'
                       }`}>
                         {words.detail}
                       </p>
@@ -233,7 +232,7 @@ export default function PublishActivityPage() {
                         </ConfirmAction>
                       )}
                       {job.attempts > 1 && (
-                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                        <span className="text-[12px] text-muted-foreground">
                           {job.attempts} attempts
                         </span>
                       )}

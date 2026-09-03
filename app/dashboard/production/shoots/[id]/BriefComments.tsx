@@ -105,14 +105,14 @@ export default function BriefComments({ batchId }: { batchId: string }) {
   return (
     <Card id="comments">
       <CardContent className="flex flex-col gap-3 p-4">
-        <p className="text-sm font-semibold">
-          Comments {rows && rows.length > 0 && <span className="ml-1 font-normal text-zinc-400">· {rows.length}</span>}
+        <p className="text-body-15 font-semibold">
+          Comments {rows && rows.length > 0 && <span className="ml-1 font-normal text-muted-foreground">· {rows.length}</span>}
         </p>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="text-secondary-13 text-muted-foreground">
           Shared with the client — they read and write this on their portal. Type @ and a name to tag a colleague; the client sees the words, not the tag.
         </p>
         <div className="flex flex-col gap-3">
-          {rows?.length === 0 && <p className="text-sm text-zinc-400 dark:text-zinc-500">No comments yet.</p>}
+          {rows?.length === 0 && <p className="text-body-15 text-muted-foreground">No comments yet.</p>}
           {(rows ?? []).map(r => {
             const fromClient = r.team_users?.role === 'client'
             const name = fromClient
@@ -120,34 +120,34 @@ export default function BriefComments({ batchId }: { batchId: string }) {
               : r.team_users?.name ?? 'Team'
             const forMe = !!r.assigned_to && r.assigned_to === viewerId
             return (
-              <div key={r.id} className={`flex items-start gap-2 border-b border-zinc-100 pb-2.5 last:border-0 dark:border-zinc-800 ${
-                forMe && !r.resolved ? 'rounded-md bg-amber-50/60 px-2 pt-2 dark:bg-amber-950/20' : ''
+              <div key={r.id} className={`flex items-start gap-2 border-b border-border pb-2.5 last:border-0 ${
+                forMe && !r.resolved ? 'rounded-tile bg-tint-amber px-2 pt-2' : ''
               }`}>
                 {r.assigned_to && (
                   <button type="button" onClick={() => void toggle(r)}
                     aria-label={r.resolved ? 'Reopen' : 'Mark done'} title={r.resolved ? 'Reopen' : 'Mark done'}
                     className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center">
                     {r.resolved
-                      ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      : <CircleDashed className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />}
+                      ? <CheckCircle2 className="h-4 w-4 text-accent-green" />
+                      : <CircleDashed className="h-4 w-4 text-muted-foreground" />}
                   </button>
                 )}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <p className="flex flex-wrap items-baseline gap-2 text-xs">
+                  <p className="flex flex-wrap items-baseline gap-2 text-secondary-13">
                     <span className="font-medium">{name}</span>
                     {fromClient && (
-                      <span className="rounded bg-violet-100 px-1 py-px text-[9px] uppercase tracking-wider text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+                      <span className="rounded bg-tint-blue px-1 py-px text-[9px] uppercase tracking-wider text-accent-blue-deep">
                         client
                       </span>
                     )}
-                    <span className="text-zinc-400 dark:text-zinc-500">{when(r.created_at)}</span>
+                    <span className="text-muted-foreground">{when(r.created_at)}</span>
                     {r.assigned_to && !r.resolved && (
-                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                      <span className="rounded-full bg-tint-amber px-2.5 py-1.5 text-chip-12 font-medium text-foreground">
                         {forMe ? 'Waiting on you' : `Waiting on ${nameOf(r.assigned_to) ?? 'someone'}`}
                       </span>
                     )}
                   </p>
-                  <p className={`whitespace-pre-wrap break-words text-sm ${r.resolved ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>{r.body}</p>
+                  <p className={`whitespace-pre-wrap break-words text-body-15 ${r.resolved ? 'text-muted-foreground line-through' : ''}`}>{r.body}</p>
                 </div>
               </div>
             )

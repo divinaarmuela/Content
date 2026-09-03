@@ -54,17 +54,17 @@ const TYPES = [
  *  the thing a status pill exists to prevent. */
 const STATUS_STYLE: Record<Status, string> = {
   draft:
-    'border-zinc-300 bg-zinc-100 text-zinc-700 ' +
-    'dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+    'border-border bg-foreground/[0.06] text-muted-foreground ' +
+    'dark:border-border',
   sent:
-    'border-blue-300 bg-blue-50 text-blue-700 ' +
-    'dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300',
+    'border-accent-blue/25 bg-tint-blue text-foreground ' +
+    'dark:border-accent-blue/25',
   in_progress:
-    'border-amber-300 bg-amber-50 text-amber-800 ' +
-    'dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
+    'border-accent-amber/35 bg-tint-amber text-foreground ' +
+    'dark:border-accent-amber/35',
   submitted:
-    'border-emerald-300 bg-emerald-50 text-emerald-700 ' +
-    'dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300',
+    'border-accent-green/30 bg-tint-green text-foreground ' +
+    'dark:border-accent-green/30',
 }
 
 const TYPE_STYLE =
@@ -274,12 +274,12 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
 
       {/* ── create ── */}
       {canManage && (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <div className="rounded-inner border border-border bg-card p-5">
           {!creating ? (
             <div className="flex flex-wrap items-center gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Intake forms</h3>
-                <p className="text-xs text-muted-foreground">
+                <h3 className="text-body-15 font-semibold">Intake forms</h3>
+                <p className="text-secondary-13 text-muted-foreground">
                   A shareable link with no login. Start from a template, then tailor the questions.
                 </p>
               </div>
@@ -289,14 +289,14 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold">New intake form</h3>
+              <h3 className="text-body-15 font-semibold">New intake form</h3>
 
               {/* start from an existing form — any client's — or a blank template */}
               {copySources.length > 0 && (
                 <select
                   value={copyFrom}
                   onChange={e => setCopyFrom(e.target.value)}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-tile border border-border bg-background px-3 py-2 text-body-15"
                 >
                   <option value="">Start from a blank template ↓</option>
                   {copySources.map(s => (
@@ -313,7 +313,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <button
                     key={t.key} type="button" onClick={() => setNewType(t.key)}
                     className={
-                      'rounded-full border px-3 py-1.5 text-xs transition ' +
+                      'rounded-full border px-3 py-1.5 text-secondary-13 transition ' +
                       (newType === t.key
                         ? 'border-primary bg-primary text-primary-foreground'
                         : 'border-border hover:border-foreground')
@@ -367,11 +367,11 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
         const isEditing = editing === form.id
 
         return (
-          <div key={form.id} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
+          <div key={form.id} className="flex flex-col gap-4 rounded-inner border border-border bg-card p-5">
             <div className="flex flex-wrap items-center gap-2">
               {renaming === form.id ? (
                 <Input
-                  autoFocus defaultValue={form.title} className="h-8 max-w-xs text-sm"
+                  autoFocus defaultValue={form.title} className="h-8 max-w-xs text-body-15"
                   onBlur={async e => {
                     await patch({ form_id: form.id, action: 'rename', title: e.target.value }, 'Renamed')
                     setRenaming(null)
@@ -379,7 +379,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                 />
               ) : (
-                <h3 className="text-sm font-semibold">{form.title || 'Intake form'}</h3>
+                <h3 className="text-body-15 font-semibold">{form.title || 'Intake form'}</h3>
               )}
               {canManage && renaming !== form.id && (
                 <Button size="icon" variant="ghost" className="h-6 w-6"
@@ -387,13 +387,13 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   <Pencil className="h-3 w-3" />
                 </Button>
               )}
-              <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
+              <span className={`rounded-full border px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider ${STATUS_STYLE[form.status]}`}>
                 {form.status.replace('_', ' ')}
               </span>
-              <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${TYPE_STYLE}`}>
+              <span className={`rounded-full border px-2.5 py-1.5 font-mono text-chip-12 uppercase tracking-wider ${TYPE_STYLE}`}>
                 {form.template_key.replace('_', ' ')}
               </span>
-              <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="ml-auto font-mono text-secondary-13 tabular-nums text-muted-foreground">
                 {form.completion.answered}/{form.completion.total}
               </span>
             </div>
@@ -412,7 +412,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 readOnly value={url} onFocus={e => e.currentTarget.select()}
-                className="min-w-[12rem] flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+                className="min-w-[12rem] flex-1 rounded-tile border border-border bg-background px-3 py-2 font-mono text-secondary-13"
               />
               <Button size="sm" variant="secondary" onClick={() => void copy(form)}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
@@ -424,7 +424,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               </Button>
             </div>
 
-            <p className="font-mono text-xs text-muted-foreground">
+            <p className="font-mono text-secondary-13 text-muted-foreground">
               sent {relative(form.sent_at)} · opened {relative(form.first_opened_at)}
               {form.submitted_at ? ` · submitted ${relative(form.submitted_at)}` : ''}
             </p>
@@ -436,7 +436,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                     <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit questions
                   </Button>
                 ) : (
-                  <span className="self-center text-xs text-muted-foreground">
+                  <span className="self-center text-secondary-13 text-muted-foreground">
                     Questions are locked — the form is submitted. Reopen to edit.
                   </span>
                 )}
@@ -467,7 +467,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             )}
 
             {isEditing && form.status === 'in_progress' && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <p className="rounded-tile border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
                 The client has this form open or started — saved answers are safe, and
                 your changes appear next time they load the link.
               </p>
@@ -490,10 +490,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
             {/* ── who hears about it ── */}
             {canManage && !isEditing && (
               recipientsFor === form.id ? (
-                <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-4">
+                <div className="flex flex-col gap-3 rounded-tile border border-border bg-muted/30 p-4">
                   <div>
-                    <p className="text-sm font-medium">Notify when this is submitted</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-body-15 font-medium">Notify when this is submitted</p>
+                    <p className="text-secondary-13 text-muted-foreground">
                       Pick from the team. Nobody selected means nobody is emailed.
                     </p>
                   </div>
@@ -506,21 +506,21 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                           onClick={() => setPicked(p =>
                             on ? p.filter(e => e !== m.email) : [...p, m.email])}
                           className={
-                            'flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition ' +
+                            'flex items-center gap-2 rounded px-2 py-1.5 text-left text-secondary-13 transition ' +
                             (on ? 'bg-primary/10 text-foreground' : 'hover:bg-muted')
                           }
                         >
                           <span className={
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] ' +
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[12px] ' +
                             (on ? 'border-primary bg-primary text-primary-foreground' : 'border-border')
                           }>{on ? '✓' : ''}</span>
                           <span className="font-medium">{m.name || m.email}</span>
-                          <span className="ml-auto font-mono text-[11px] text-muted-foreground">{m.email}</span>
+                          <span className="ml-auto font-mono text-[12px] text-muted-foreground">{m.email}</span>
                         </button>
                       )
                     })}
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
                     <input type="checkbox" checked={applyAll}
                       onChange={e => setApplyAll(e.target.checked)} />
                     Use this list for all intake forms, not just this one
@@ -546,7 +546,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                     setPicked(form.notify_emails ?? defaults)
                     setRecipientsFor(form.id)
                   }}
-                  className="-mt-1 self-start text-left text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  className="-mt-1 self-start text-left text-secondary-13 text-muted-foreground underline-offset-2 hover:underline"
                 >
                   {(() => {
                     const list = form.notify_emails ?? defaults
@@ -561,10 +561,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
 
             {/* ── show the client their own answers, on their portal ── */}
             {canManage && !isEditing && (
-              <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
+              <div className="flex items-start justify-between gap-3 rounded-tile border border-border bg-muted/30 p-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">Show answers on the client portal</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-body-15 font-medium">Show answers on the client portal</p>
+                  <p className="text-secondary-13 text-muted-foreground">
                     The client sees a read-only copy under a tab on their portal.
                     {form.status !== 'submitted' && ' Most useful once they’ve submitted.'}
                   </p>

@@ -7,8 +7,10 @@
  */
 export default function PageTitle({ title, summary, actions }: {
   title: string
-  /** one plain sentence: what this page is for, not what it is called */
-  summary?: string
+  /** one plain sentence: what this page is for, not what it is called.
+   *  A node rather than a string only so a sentence can carry a `HelpHint`
+   *  for a word inside it — it is still one sentence. */
+  summary?: React.ReactNode
   /** the page's own buttons, right-aligned on desktop and stacked on a phone */
   actions?: React.ReactNode
 }) {

@@ -165,7 +165,7 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="capitalize">{heading}</DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogDescription className="text-secondary-13">
             Drop the file or paste a link. It&rsquo;s only added once it has something in it.
           </DialogDescription>
         </DialogHeader>
@@ -176,12 +176,12 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
             onDragLeave={() => setDragging(false)}
             onDrop={e => { e.preventDefault(); setDragging(false); void onFiles(e.dataTransfer.files) }}
             onClick={() => fileRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
-              dragging ? 'border-blue-400 bg-blue-50/60 dark:border-blue-600 dark:bg-blue-950/30'
-                : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+            className={`flex cursor-pointer flex-col items-center gap-1 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors ${
+              dragging ? 'border-accent-blue/25 bg-tint-blue'
+                : 'border-border hover:border-border'
             }`}>
-            <p className="text-sm font-medium">{uploading ? 'Uploading…' : 'Choose a file, or drag it here'}</p>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-body-15 font-medium">{uploading ? 'Uploading…' : 'Choose a file, or drag it here'}</p>
+            <p className="text-[12px] text-muted-foreground">
               Any size — it goes straight to our storage.{' '}
               {target && /carousel/i.test(target.content_type) ? 'A carousel takes several — drop them all.' : ''}
             </p>
@@ -196,7 +196,7 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
             </div>
           )}
           {uploads.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-800">
+            <div className="flex flex-col gap-2 rounded-tile border border-border p-2">
               <UploadOverall uploads={uploads} />
               <UploadRows uploads={uploads} />
             </div>
@@ -206,11 +206,11 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
             onChange={e => void onFiles(e.target.files)} />
 
           <div className="grid gap-1.5">
-            <Label className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
-              …or paste a link instead <span className="text-zinc-400">(Drive, YouTube, Dropbox — anywhere it can be watched)</span>
+            <Label className="text-secondary-13 font-normal text-muted-foreground">
+              …or paste a link instead <span className="text-muted-foreground">(Drive, YouTube, Dropbox — anywhere it can be watched)</span>
             </Label>
             <Input value={driveUrl} placeholder="https://drive.google.com/…"
-              onChange={e => setDriveUrl(e.target.value)} className="font-mono text-xs" />
+              onChange={e => setDriveUrl(e.target.value)} className="font-mono text-secondary-13" />
           </div>
         </div>
 
@@ -221,7 +221,7 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
           </Button>
         </DialogFooter>
         {missing && (
-          <p className="-mt-2 text-right text-xs text-amber-600 dark:text-amber-400">{missing}</p>
+          <p className="-mt-2 text-right text-secondary-13 text-accent-amber">{missing}</p>
         )}
       </DialogContent>
     </Dialog>

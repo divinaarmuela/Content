@@ -63,10 +63,10 @@ export default function MyPages() {
     <Card>
       <CardContent className="flex flex-col gap-3 py-5">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <EyeOff className="h-4 w-4 text-zinc-400" /> My pages
+          <h3 className="flex items-center gap-2 text-body-15 font-semibold">
+            <EyeOff className="h-4 w-4 text-muted-foreground" /> My pages
           </h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-secondary-13 text-muted-foreground">
             Hide pages you don&rsquo;t want in your dashboard. This changes only what YOU see —
             your role and permissions stay exactly the same, and you can undo it here any time.
           </p>
@@ -76,7 +76,7 @@ export default function MyPages() {
             const isHidden = hidden.includes(p.href)
             return (
               <label key={p.href}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                className="flex cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input
                   type="checkbox"
                   checked={!isHidden}
@@ -85,7 +85,7 @@ export default function MyPages() {
                   className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
                 />
                 <span className={isHidden ? 'text-muted-foreground line-through' : ''}>{p.label}</span>
-                {isHidden && <span className="ml-auto text-[11px] text-muted-foreground">hidden</span>}
+                {isHidden && <span className="ml-auto text-[12px] text-muted-foreground">hidden</span>}
               </label>
             )
           })}

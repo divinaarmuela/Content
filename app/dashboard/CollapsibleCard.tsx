@@ -26,10 +26,10 @@ export default function CollapsibleCard({ title, summary, defaultOpen = false, c
     <Card id={id} className={`py-0 ${className ?? ''}`}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)}
         className="flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left">
-        <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-90' : ''}`} />
-        <span className="text-sm font-semibold">{title}</span>
+        <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="text-body-15 font-semibold">{title}</span>
         {!open && summary && (
-          <span className="ml-auto min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">{summary}</span>
+          <span className="ml-auto min-w-0 truncate text-secondary-13 text-muted-foreground">{summary}</span>
         )}
       </button>
       {open && <CardContent className="flex flex-col gap-3 px-4 pb-4 pt-0">{children}</CardContent>}

@@ -128,13 +128,13 @@ export default function LeadsReportCard() {
   }
 
   return (
-    <Card className="border-blue-200 dark:border-blue-900">
+    <Card className="border-accent-blue/25">
       <CardHeader className="flex-row items-center">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <CalendarClock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <CardTitle className="flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-accent-blue-deep" />
           Monthly leads report
         </CardTitle>
-        <label className="ml-auto flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+        <label className="ml-auto flex items-center gap-2 text-secondary-13 text-muted-foreground">
           <Switch checked={settings.enabled} disabled={!canEdit} onCheckedChange={v => canEdit && save({ enabled: v })} />
           {settings.enabled ? 'Automatic sending on' : 'Automatic sending off'}
         </label>
@@ -143,7 +143,7 @@ export default function LeadsReportCard() {
         {/* Settings */}
         <div className="flex flex-col gap-4">
           <div className="grid gap-1.5">
-            <Label className="text-xs">Recipients</Label>
+            <Label className="text-secondary-13">Recipients</Label>
             <div className="flex flex-wrap gap-1.5">
               {settings.recipients.map(r => (
                 <Badge key={r} variant="secondary" className="gap-1 font-normal">
@@ -152,7 +152,7 @@ export default function LeadsReportCard() {
                     <button
                       aria-label={`Remove ${r}`}
                       onClick={() => save({ recipients: settings.recipients.filter(x => x !== r) })}
-                      className="text-zinc-400 hover:text-red-500"
+                      className="text-muted-foreground hover:text-accent-red"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -160,7 +160,7 @@ export default function LeadsReportCard() {
                 </Badge>
               ))}
               {settings.recipients.length === 0 && (
-                <span className="text-xs text-zinc-400 dark:text-zinc-500">No recipients yet</span>
+                <span className="text-secondary-13 text-muted-foreground">No recipients yet</span>
               )}
             </div>
             {canEdit && (
@@ -170,7 +170,7 @@ export default function LeadsReportCard() {
                   placeholder="name@mdmmarketing.com.au"
                   onChange={e => setNewRecipient(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addRecipient()}
-                  className="h-8 text-sm"
+                  className="h-8 text-body-15"
                 />
                 <Button size="sm" variant="outline" onClick={addRecipient}><Plus className="h-4 w-4" /></Button>
               </div>
@@ -179,7 +179,7 @@ export default function LeadsReportCard() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
-              <Label className="text-xs">Send on day</Label>
+              <Label className="text-secondary-13">Send on day</Label>
               <Select value={String(settings.send_day)} disabled={!canEdit} onValueChange={v => v && canEdit && save({ send_day: Number(v) })}>
                 <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-64">
@@ -192,25 +192,25 @@ export default function LeadsReportCard() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label className="text-xs">Count data from</Label>
+              <Label className="text-secondary-13">Count data from</Label>
               <Input
                 type="date"
                 value={settings.data_from ?? ''}
                 disabled={!canEdit}
                 onChange={e => canEdit && save({ data_from: e.target.value || null })}
-                className="h-8 font-mono text-xs"
+                className="h-8 font-mono text-secondary-13"
               />
             </div>
           </div>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="text-secondary-13 text-muted-foreground">
             Each month&apos;s report covers the previous calendar month and goes out automatically on the chosen day.
             {settings.last_sent_for && <> Last sent: <span className="font-mono">{settings.last_sent_for}</span>.</>}
           </p>
         </div>
 
         {/* Manual generation */}
-        <div className="flex flex-col gap-3 rounded-lg border border-zinc-100 p-4 dark:border-zinc-800">
-          <Label className="text-xs">Generate a report now</Label>
+        <div className="flex flex-col gap-3 rounded-inner border border-border p-4">
+          <Label className="text-secondary-13">Generate a report now</Label>
           <Select value={period} onValueChange={v => v && setPeriod(v)}>
             <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -229,7 +229,7 @@ export default function LeadsReportCard() {
               </Button>
             )}
           </div>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="text-secondary-13 text-muted-foreground">
             Includes lead totals, source split, service interest, inbox scanner stats, and the full lead register.
           </p>
         </div>
@@ -246,10 +246,10 @@ export default function LeadsReportCard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex flex-col gap-1.5 rounded-inner border border-border bg-foreground/[0.04] p-3">
             {settings.recipients.map(r => (
-              <span key={r} className="flex items-center gap-2 font-mono text-xs text-zinc-700 dark:text-zinc-300">
-                <Mail className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span key={r} className="flex items-center gap-2 font-mono text-secondary-13 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5 shrink-0 text-accent-blue-deep" />
                 {r}
               </span>
             ))}

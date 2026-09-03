@@ -466,18 +466,18 @@ export default function ComposeDialog({
                   type="button"
                   onClick={() => i < step && setStep(i)}
                   disabled={i > step}
-                  className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-secondary-13 transition-colors ${
                     i === step
-                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                      ? 'bg-foreground text-background'
                       : i < step
-                      ? 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                      : 'text-zinc-400 dark:text-zinc-600'
+                      ? 'text-muted-foreground hover:bg-foreground/[0.06]'
+                      : 'text-muted-foreground'
                   }`}
                 >
                   {i < step ? <Check className="h-3 w-3" /> : <span className="font-mono">{i + 1}</span>}
                   {label}
                 </button>
-                {i < STEPS.length - 1 && <span className="text-zinc-300 dark:text-zinc-700">·</span>}
+                {i < STEPS.length - 1 && <span className="text-muted-foreground">·</span>}
               </li>
             ))}
           </ol>
@@ -500,9 +500,9 @@ export default function ComposeDialog({
               <div className="grid gap-1.5">
                 <Label>Channels</Label>
                 {!clientId ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Choose a client first.</p>
+                  <p className="text-secondary-13 text-muted-foreground">Choose a client first.</p>
                 ) : available.length === 0 ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <p className="text-secondary-13 text-foreground">
                     This client has no connected channels yet.
                   </p>
                 ) : (
@@ -513,10 +513,10 @@ export default function ComposeDialog({
                         <button
                           key={a.id} type="button"
                           onClick={() => setSelected(s => on ? s.filter(x => x !== a.id) : [...s, a.id])}
-                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                          className={`flex items-center gap-2 rounded-inner border px-2.5 py-1.5 text-secondary-13 transition-colors ${
                             on
-                              ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                              : 'border-zinc-200 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500'
+                              ? 'border-border bg-foreground text-background'
+                              : 'border-border hover:border-border'
                           }`}
                         >
                           <PlatformIcon platform={a.platform} size={18} />
@@ -531,7 +531,7 @@ export default function ComposeDialog({
 
               {clientId && linkable.length > 0 && (
                 <div className="grid gap-1.5">
-                  <Label>Production item <span className="font-normal text-zinc-400">(optional)</span></Label>
+                  <Label>Production item <span className="font-normal text-muted-foreground">(optional)</span></Label>
                   <Select value={linkItemId || 'none'} onValueChange={v => setLinkItemId(v === 'none' ? '' : v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -543,7 +543,7 @@ export default function ComposeDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="text-secondary-13 text-muted-foreground">
                     Link the approved item this post delivers — when it goes live, the
                     item is marked published and counts toward the client&rsquo;s agreement.
                   </p>
@@ -572,7 +572,7 @@ export default function ComposeDialog({
                   </SelectContent>
                 </Select>
 
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   {kind === 'auto'
                     ? `Each platform decides from what you attach: ${
                         media.length === 0 ? 'one video → short video, one image → feed post, several → carousel'
@@ -593,7 +593,7 @@ export default function ComposeDialog({
                     their own row below, and a sentence listing four things is
                     harder to read than four lines. */}
                 {platforms.length === 1 && (
-                  <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                  <p className="text-secondary-13 text-muted-foreground">
                     Goes out as{' '}
                     <span className="font-medium">
                       {postingAs(platforms[0], kinds[platforms[0]], media[0]?.type ?? 'video')}
@@ -609,12 +609,12 @@ export default function ComposeDialog({
                   actually has; the select above is only the default they
                   follow until one is set on its own. */}
               {platforms.length > 1 && (
-                <div className="grid gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <div className="grid gap-2 rounded-inner border border-border p-3">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium">Per channel</p>
+                    <p className="text-secondary-13 font-medium">Per channel</p>
                     {Object.keys(perKind).length > 0 && (
                       <button type="button" onClick={() => setPerKind({})}
-                        className="ml-auto text-xs text-zinc-500 underline decoration-dotted hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+                        className="ml-auto text-secondary-13 text-muted-foreground underline decoration-dotted hover:text-foreground">
                         Reset to the choice above
                       </button>
                     )}
@@ -630,7 +630,7 @@ export default function ComposeDialog({
                     return (
                       <div key={p} className="flex flex-wrap items-center gap-2">
                         <PlatformIcon platform={p} size={16} />
-                        <span className="w-20 shrink-0 text-xs">{PLATFORM_MEDIA[p].label}</span>
+                        <span className="w-20 shrink-0 text-secondary-13">{PLATFORM_MEDIA[p].label}</span>
                         <Select
                           value={perKind[p] ?? 'inherit'}
                           onValueChange={v => setPerKind(m => {
@@ -641,7 +641,7 @@ export default function ComposeDialog({
                             return { ...m, [p]: v as PostKind }
                           })}
                         >
-                          <SelectTrigger className="h-8 w-44 text-xs">
+                          <SelectTrigger className="h-8 w-44 text-secondary-13">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -653,7 +653,7 @@ export default function ComposeDialog({
                             ))}
                           </SelectContent>
                         </Select>
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <span className="text-secondary-13 text-muted-foreground">
                           {overridden
                             ? `${PLATFORM_MEDIA[p].label} has no ${kindLabel(p, kind).toLowerCase()} — posting ${postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}`
                             : postingAs(p, resolved, (perMedia[p] ?? media)[0]?.type ?? 'video')}
@@ -661,13 +661,13 @@ export default function ComposeDialog({
                         {/* the master is too big here, so this channel gets
                             the smaller copy — said on the row as it happens */}
                         {(needingCopy.includes(p) || (copy?.state.status === 'ready' && perMedia[p]?.[0]?.url === copy.state.url)) && (
-                          <span className={`basis-full text-[11px] ${
-                            copy?.state.status === 'failed' ? 'text-red-700 dark:text-red-300' : 'text-sky-700 dark:text-sky-300'
+                          <span className={`basis-full text-[12px] ${
+                            copy?.state.status === 'failed' ? 'text-foreground' : 'text-accent-blue-deep'
                           }`}>
                             {copyWords(PLATFORM_MEDIA[p].label, copy?.forUrl === sharedVideoUrl ? copy?.state : undefined)}
                             {/* and what it actually measures, off the file */}
                             {perProbes[p]?.[0]?.width && (
-                              <span className="ml-1 font-mono text-zinc-500 dark:text-zinc-400">
+                              <span className="ml-1 font-mono text-muted-foreground">
                                 · {copyMeasureWords(perProbes[p]![0])}
                               </span>
                             )}
@@ -686,17 +686,17 @@ export default function ComposeDialog({
                             }
                             return { ...c, [p]: on }
                           })}
-                          className={`ml-auto text-xs underline decoration-dotted ${
+                          className={`ml-auto text-secondary-13 underline decoration-dotted ${
                             customising[p] || perMedia[p]?.length || perCaption[p]
-                              ? 'text-zinc-900 dark:text-zinc-100'
-                              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                              ? 'text-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           {customising[p] ? 'Use the shared files and caption' : 'Own files or caption'}
                         </button>
 
                         {customising[p] && (
-                          <div className="mt-1 grid w-full gap-2 rounded-md border border-dashed border-zinc-300 p-2 dark:border-zinc-700">
+                          <div className="mt-1 grid w-full gap-2 rounded-tile border border-dashed border-border p-2">
                             <div className="flex flex-wrap items-center gap-2">
                               {(perMedia[p] ?? []).map((m, i) => (
                                 <div key={m.url} className="relative">
@@ -704,14 +704,14 @@ export default function ComposeDialog({
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img src={posters[m.url] ?? m.url} alt="" className="h-12 w-12 rounded object-cover" />
                                   ) : (
-                                    <div className="flex h-12 w-12 items-center justify-center rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800">video</div>
+                                    <div className="flex h-12 w-12 items-center justify-center rounded bg-foreground/[0.06] text-[12px] text-muted-foreground">video</div>
                                   )}
                                   <button type="button" aria-label="Remove"
                                     onClick={() => {
                                       setPerMedia(x => ({ ...x, [p]: (x[p] ?? []).filter((_, j) => j !== i) }))
                                       setPerProbes(x => ({ ...x, [p]: (x[p] ?? []).filter(q => q.url !== m.url) }))
                                     }}
-                                    className="absolute -right-1.5 -top-1.5 rounded-full bg-zinc-900 p-0.5 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                                    className="absolute -right-1.5 -top-1.5 rounded-full bg-foreground p-0.5 text-background">
                                     <X className="h-3 w-3" />
                                   </button>
                                 </div>
@@ -719,19 +719,19 @@ export default function ComposeDialog({
                               <input id={`own-media-${p}`} type="file" multiple accept="image/*,video/*" className="sr-only"
                                 onChange={e => { if (e.target.files) uploadFor(p, e.target.files); e.target.value = '' }} />
                               <Label htmlFor={`own-media-${p}`}
-                                className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                                className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-tile border border-border px-2.5 text-secondary-13 hover:bg-foreground/[0.04]">
                                 <ImagePlus className="h-3.5 w-3.5" />
                                 {perMedia[p]?.length ? 'Add another' : `Files just for ${PLATFORM_MEDIA[p].label}`}
                               </Label>
                               {!perMedia[p]?.length && (
-                                <span className="text-[11px] text-zinc-400">Until you add one, it gets the shared files.</span>
+                                <span className="text-[12px] text-muted-foreground">Until you add one, it gets the shared files.</span>
                               )}
                             </div>
                             <div className="grid gap-1">
                               <div className="flex items-center">
-                                <Label htmlFor={`own-caption-${p}`} className="text-xs">Caption just for {PLATFORM_MEDIA[p].label}</Label>
-                                <span className={`ml-auto font-mono text-[11px] tabular-nums ${
-                                  (perCaption[p]?.length ?? 0) > PLATFORM_RULES[p].captionMax ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'
+                                <Label htmlFor={`own-caption-${p}`} className="text-secondary-13">Caption just for {PLATFORM_MEDIA[p].label}</Label>
+                                <span className={`ml-auto font-mono text-[12px] tabular-nums ${
+                                  (perCaption[p]?.length ?? 0) > PLATFORM_RULES[p].captionMax ? 'text-accent-red' : 'text-muted-foreground'
                                 }`}>
                                   {perCaption[p]?.length ?? 0}/{PLATFORM_RULES[p].captionMax}
                                 </span>
@@ -744,8 +744,8 @@ export default function ComposeDialog({
                               <div className="flex items-start gap-3">
                                 <Switch id="x-long" checked={longVideo} onCheckedChange={setLongVideo} />
                                 <div>
-                                  <Label htmlFor="x-long" className="text-xs">Long video (X Premium)</Label>
-                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  <Label htmlFor="x-long" className="text-secondary-13">Long video (X Premium)</Label>
+                                  <p className="text-[12px] text-muted-foreground">
                                     Lifts the 140-second / 512 MB cap. Only works if this X account has Premium — otherwise the post is refused.
                                   </p>
                                 </div>
@@ -770,7 +770,7 @@ export default function ComposeDialog({
                           className="h-16 w-16 rounded object-cover" />
                       ) : (
                         // no frame: a camera .mov the browser will not decode
-                        <div className="flex h-16 w-16 items-center justify-center rounded bg-zinc-100 text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                        <div className="flex h-16 w-16 items-center justify-center rounded bg-foreground/[0.06] text-[12px] text-muted-foreground">
                           video
                         </div>
                       )}
@@ -786,7 +786,7 @@ export default function ComposeDialog({
                           setMedia(x => x.filter((_, j) => j !== i))
                           setProbes(p => p.filter(x => x.url !== m.url))
                         }}
-                        className="absolute -right-1.5 -top-1.5 rounded-full bg-zinc-900 p-0.5 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        className="absolute -right-1.5 -top-1.5 rounded-full bg-foreground p-0.5 text-background"
                         aria-label="Remove">
                         <X className="h-3 w-3" />
                       </button>
@@ -819,8 +819,8 @@ export default function ComposeDialog({
                 <div className="flex items-center">
                   <Label htmlFor="caption">Caption</Label>
                   {limit !== null && !captionIgnored && (
-                    <span className={`ml-auto font-mono text-xs tabular-nums ${
-                      caption.length > limit ? 'text-red-600 dark:text-red-400' : 'text-zinc-400 dark:text-zinc-500'
+                    <span className={`ml-auto font-mono text-secondary-13 tabular-nums ${
+                      caption.length > limit ? 'text-accent-red' : 'text-muted-foreground'
                     }`}>
                       {caption.length}/{limit}
                     </span>
@@ -838,13 +838,13 @@ export default function ComposeDialog({
           {step === 2 && (
             <div className="flex flex-col gap-4">
               {isReel && (
-                <div className="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                  <p className="text-xs font-medium">Reel</p>
+                <div className="grid gap-3 rounded-inner border border-border p-3">
+                  <p className="text-secondary-13 font-medium">Reel</p>
                   <div className="flex items-start gap-3">
                     <Switch id="stf" checked={shareToFeed} onCheckedChange={setShareToFeed} />
                     <div>
                       <Label htmlFor="stf">Also show in the main feed</Label>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <p className="text-secondary-13 text-muted-foreground">
                         Off puts it in the Reels tab only.
                       </p>
                     </div>
@@ -862,7 +862,7 @@ export default function ComposeDialog({
                 <Textarea id="fc" rows={2} value={firstComment}
                   onChange={e => setFirstComment(e.target.value)}
                   placeholder="Hashtags, or the link — posted automatically once live" />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   Instagram allows no clickable links in captions or stickers, so this
                   is where a link usually goes.
                 </p>
@@ -872,7 +872,7 @@ export default function ComposeDialog({
                 <Label htmlFor="collab">Collaborators</Label>
                 <Input id="collab" value={collaborators}
                   onChange={e => setCollaborators(e.target.value)} placeholder="username, username" />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   Up to 3, Business or Creator accounts only. The post appears on their
                   profile too.
                 </p>
@@ -883,38 +883,38 @@ export default function ComposeDialog({
           {/* ── 4. review ─────────────────────────────────────────────── */}
           {step === 3 && (
             <div className="flex flex-col gap-4">
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                <dt className="text-zinc-500 dark:text-zinc-400">Client</dt>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-body-15">
+                <dt className="text-muted-foreground">Client</dt>
                 <dd>{clients.find(c => c.id === clientId)?.name ?? '—'}</dd>
 
-                <dt className="text-zinc-500 dark:text-zinc-400">Channels</dt>
+                <dt className="text-muted-foreground">Channels</dt>
                 <dd className="flex flex-wrap items-center gap-1.5">
                   {chosen.map(a => (
                     <span key={a.id} className="inline-flex items-center gap-1">
                       <PlatformIcon platform={a.platform} size={16} />
-                      <span className="font-mono text-xs">@{a.username ?? a.name}</span>
+                      <span className="font-mono text-secondary-13">@{a.username ?? a.name}</span>
                     </span>
                   ))}
                 </dd>
 
-                <dt className="text-zinc-500 dark:text-zinc-400">Type</dt>
+                <dt className="text-muted-foreground">Type</dt>
                 <dd>{kind === 'auto' ? (isReel ? 'Reel (automatic)' : 'Automatic') : kind}</dd>
 
                 {linkItemId && (
                   <>
-                    <dt className="text-zinc-500 dark:text-zinc-400">Delivers</dt>
+                    <dt className="text-muted-foreground">Delivers</dt>
                     <dd className="truncate">{linkable.find(i => i.id === linkItemId)?.title ?? '—'}</dd>
                   </>
                 )}
 
-                <dt className="text-zinc-500 dark:text-zinc-400">Media</dt>
+                <dt className="text-muted-foreground">Media</dt>
                 <dd>{media.length === 0 ? 'None' : `${media.length} item${media.length === 1 ? '' : 's'}`}</dd>
 
-                <dt className="text-zinc-500 dark:text-zinc-400">Caption</dt>
+                <dt className="text-muted-foreground">Caption</dt>
                 <dd className="truncate">
-                  {captionIgnored ? <span className="text-zinc-400">Not shown on Stories</span>
+                  {captionIgnored ? <span className="text-muted-foreground">Not shown on Stories</span>
                     : caption.trim() ? caption.slice(0, 80) + (caption.length > 80 ? '…' : '')
-                    : <span className="text-zinc-400">None</span>}
+                    : <span className="text-muted-foreground">None</span>}
                 </dd>
               </dl>
 
@@ -922,7 +922,7 @@ export default function ComposeDialog({
                 <Label htmlFor="when">Schedule for</Label>
                 <Input id="when" type="datetime-local" value={when}
                   onChange={e => setWhen(e.target.value)} className="w-fit" />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-secondary-13 text-muted-foreground">
                   Leave blank to publish immediately.
                 </p>
               </div>
@@ -932,7 +932,7 @@ export default function ComposeDialog({
               <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} compact />
 
               {warnings.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                <div className="flex items-start gap-2 rounded-inner border border-border bg-foreground/[0.04] px-3 py-2 text-secondary-13 text-muted-foreground">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <ul className="flex flex-col gap-0.5">
                     {warnings.map((w, n) => <li key={n}>{w}</li>)}
@@ -941,7 +941,7 @@ export default function ComposeDialog({
               )}
 
               {issues.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <ul className="flex flex-col gap-0.5">
                     {issues.map((i, n) => <li key={n}>{i.problem}</li>)}

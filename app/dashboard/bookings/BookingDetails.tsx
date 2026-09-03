@@ -47,8 +47,8 @@ const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, '')}`
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</span>
-      <span className="text-sm">{children}</span>
+      <span className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <span className="text-body-15">{children}</span>
     </div>
   )
 }
@@ -56,42 +56,42 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function BookingDetails({ booking }: { booking: BookingDetail }) {
   const b = booking
   return (
-    <div className="grid gap-3 rounded-md border border-zinc-100 bg-zinc-50/60 p-3 sm:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900/40">
+    <div className="grid gap-3 rounded-tile border border-border bg-foreground/[0.04] p-3 sm:grid-cols-2">
       <Field label="When">
         {when(b.start_at)}{b.end_at ? ` – ${timeOnly(b.end_at)}` : ''}
       </Field>
       <Field label="What">
         {b.booking_services?.name ?? 'Booking'}
-        {b.booking_resources?.label ? <span className="text-zinc-500"> · {b.booking_resources.label}</span> : null}
+        {b.booking_resources?.label ? <span className="text-muted-foreground"> · {b.booking_resources.label}</span> : null}
       </Field>
 
       <Field label="Who">{b.customer_name}</Field>
       <Field label="Email">
         {b.customer_email
           ? <a href={`mailto:${b.customer_email}`} className="underline-offset-4 hover:underline">{b.customer_email}</a>
-          : <span className="text-zinc-400">—</span>}
+          : <span className="text-muted-foreground">—</span>}
       </Field>
 
       <Field label="Phone">
         {b.customer_phone
           ? <a href={telHref(b.customer_phone)} className="underline-offset-4 hover:underline">{b.customer_phone}</a>
-          : <span className="text-zinc-400">not given</span>}
+          : <span className="text-muted-foreground">not given</span>}
       </Field>
       <Field label="Payment">
         {b.payment_status === 'paid'
-          ? <span className="text-emerald-700 dark:text-emerald-400">Paid {money(b.amount_cents ?? 0, b.currency)}</span>
+          ? <span className="text-foreground">Paid {money(b.amount_cents ?? 0, b.currency)}</span>
           : b.status === 'pending'
-            ? <span className="text-amber-700 dark:text-amber-400">Holding the slot — not paid yet</span>
-            : <span className="text-zinc-500">{money(b.amount_cents ?? 0, b.currency)} unpaid</span>}
+            ? <span className="text-foreground">Holding the slot — not paid yet</span>
+            : <span className="text-muted-foreground">{money(b.amount_cents ?? 0, b.currency)} unpaid</span>}
       </Field>
 
       {b.public_ref && (
-        <Field label="Reference"><span className="font-mono text-xs">{b.public_ref}</span></Field>
+        <Field label="Reference"><span className="font-mono text-secondary-13">{b.public_ref}</span></Field>
       )}
       {b.notes && (
         <div className="sm:col-span-2">
           <Field label="What they told us">
-            <span className="whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">{b.notes}</span>
+            <span className="whitespace-pre-wrap text-muted-foreground">{b.notes}</span>
           </Field>
         </div>
       )}
