@@ -16,6 +16,7 @@ import {
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
+import { takeClaimLock, releaseClaimLock, briefLockKey } from '../../../lib/claim-lock'
 import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 import { slidesOf } from '../../../lib/version-files-core'
 
@@ -244,11 +245,6 @@ export async function POST(req: Request) {
     const groupById = new Map(groupRows.map(gr => [gr.id, gr]))
 
     const rows: Record<string, unknown>[] = []
-    // one shoot plan per shoot, WITHIN this request as well as against what is
-    // already stored: two brief items on one batch_id in a single body both
-    // passed the stored check (nothing is written until the loop is done), and
-    // the partial unique index that used to catch the second is gone
-    const briefBatchesClaimed = new Set<string>()
     for (const it of items) {
       if (!it.client_id || !it.title) {
         return NextResponse.json({ error: 'client_id and title are required on every item' }, { status: 400 })
@@ -313,6 +309,8 @@ export async function POST(req: Request) {
       }
 
       let briefBatchId: string | null = null
+      // minted before the write so the shoot's lock can name the plan it holds
+      let briefItemId: string | null = null
       if (kindSlug === 'shoot_brief') {
         // a brief task IS how a shoot begins: it creates its shoot with it
         // (or attaches to one still in planning), and there is exactly one
@@ -327,15 +325,26 @@ export async function POST(req: Request) {
           )
         }
         if (it.batch_id) {
-          // exactly ONE plan per shoot — the partial unique index that used to
-          // enforce it has no counterpart here, so the shoot is asked first
-          const already = await table<ContentItem>('content_items').list({ by: { batch_id: it.batch_id } })
+          // Exactly ONE plan per shoot. The partial unique index that enforced
+          // it has no counterpart here, and "does this shoot already have
+          // one?" spans rows, so it is a lock row on the shoot — claimed, not
+          // checked. That covers both races at once: two requests arriving
+          // together, and two brief items inside one body (nothing is written
+          // until the loop below is done, so a read could not see either).
           const briefKindIds = new Set(kinds.filter(k => k.slug === 'shoot_brief').map(k => k.id))
-          if (briefBatchesClaimed.has(String(it.batch_id))
-            || already.some(r => r.work_kind_id != null && briefKindIds.has(r.work_kind_id))) {
+          briefItemId = crypto.randomUUID()
+          const gate = await takeClaimLock(briefLockKey(String(it.batch_id)), briefItemId, async holder => {
+            const held = await table<ContentItem>('content_items').get(holder)
+            return !!held && held.work_kind_id != null && briefKindIds.has(held.work_kind_id)
+          })
+          // …and plans written before this lock existed, which nothing holds
+          const already = gate.ok
+            ? await table<ContentItem>('content_items').list({ by: { batch_id: it.batch_id } })
+            : []
+          if (!gate.ok || already.some(r => r.work_kind_id != null && briefKindIds.has(r.work_kind_id))) {
+            if (gate.ok) await releaseClaimLock(briefLockKey(String(it.batch_id)), briefItemId).catch(() => {})
             return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
           }
-          briefBatchesClaimed.add(String(it.batch_id))
           briefBatchId = it.batch_id
         } else {
           const newBatch = await table('batches').insert({
@@ -357,6 +366,7 @@ export async function POST(req: Request) {
         work_kind_id: kind.id,
         ...(kindSlug === 'shoot_brief'
           ? {
+              ...(briefItemId ? { id: briefItemId } : {}),
               batch_id: briefBatchId,
               content_type: 'other',
               brief_url: it.brief_url ? String(it.brief_url).trim().slice(0, 2000) : null,

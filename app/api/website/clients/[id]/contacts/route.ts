@@ -2,19 +2,33 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { ClientContact } from '@/lib/db-types'
 import { guard } from '@/app/lib/authz'
+import { takeClaimLock, releaseClaimLock, primaryContactLockKey } from '@/app/lib/claim-lock'
 
 /**
  * One primary contact per client.
  *
  * Postgres held this as a partial unique index; a JSON tree cannot express
- * one, so the rule is checked here, immediately before the write, and the
- * refusal keeps the words the index's translation used to produce.
+ * one, and "does another row have it?" spans rows, so it cannot be a
+ * compare-and-set on the contact either. It is a lock row per client instead,
+ * taken atomically — two people promoting two different contacts at the same
+ * moment produce one primary and one 409, where a read-then-write left both
+ * rows flagged. The lock heals itself if the contact holding it is deleted or
+ * demoted behind its back. The refusal keeps the words the index's
+ * translation used to produce.
  */
-async function primaryTaken(clientId: string, exceptId?: string): Promise<boolean> {
-  const rows = await table<ClientContact>('client_contacts')
-    .list({ by: { client_id: clientId }, fresh: true })
-  return rows.some(c => c.is_primary === true && c.id !== exceptId)
+async function takePrimary(clientId: string, contactId: string): Promise<boolean> {
+  // the read first, because it is the only thing that knows about a primary
+  // set before this lock existed — but it is not the guarantee
+  const rows = await table<ClientContact>('client_contacts').list({ by: { client_id: clientId } })
+  if (rows.some(c => c.is_primary === true && c.id !== contactId)) return false
+  const taken = await takeClaimLock(primaryContactLockKey(clientId), contactId, async holder => {
+    const held = await table<ClientContact>('client_contacts').get(holder)
+    return !!held && held.is_primary === true
+  })
+  return taken.ok
 }
+const releasePrimary = (clientId: string, contactId: string) =>
+  releaseClaimLock(primaryContactLockKey(clientId), contactId).catch(() => {})
 
 /** Contacts for one client. A client is an organisation, and organisations
  *  have an owner, a marketing lead, a bookkeeper — not one email address. */
@@ -47,7 +61,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'A name is required' }, { status: 400 })
   }
 
-  if (body.is_primary && await primaryTaken(id)) {
+  const contactId = crypto.randomUUID()
+  if (body.is_primary && !await takePrimary(id, contactId)) {
     return NextResponse.json(
       { error: 'This client already has a primary contact. Unset it first.' },
       { status: 409 },
@@ -56,6 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const data = await table('client_contacts').insert({
+      id: contactId,
       client_id: id,
       name: body.name,
       role: body.role ?? '',
@@ -66,6 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
+    if (body.is_primary) await releasePrimary(id, contactId)
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   })
@@ -87,7 +104,7 @@ export async function PATCH(req: Request) {
   const contacts = table<ClientContact>('client_contacts')
   const current = await contacts.get(String(body.id))
   if (!current) return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
-  if (patch.is_primary && await primaryTaken(current.client_id, current.id)) {
+  if (patch.is_primary === true && !await takePrimary(current.client_id, current.id)) {
     return NextResponse.json(
       { error: 'This client already has a primary contact. Unset it first.' },
       { status: 409 },
@@ -96,8 +113,11 @@ export async function PATCH(req: Request) {
 
   try {
     const data = await table('client_contacts').update(String(body.id), patch)
+    // demoting hands the seat back, so somebody else can be promoted
+    if (patch.is_primary === false) await releasePrimary(current.client_id, current.id)
     return NextResponse.json(data)
   } catch (e) {
+    if (patch.is_primary === true) await releasePrimary(current.client_id, current.id)
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   })
@@ -113,7 +133,10 @@ export async function DELETE(req: Request) {
   if (!contactId) return NextResponse.json({ error: 'contactId is required' }, { status: 400 })
 
   try {
+    const going = await table<ClientContact>('client_contacts').get(contactId)
     await table<ClientContact>('client_contacts').remove(contactId)
+    // a deleted primary stops holding the seat
+    if (going?.is_primary) await releasePrimary(going.client_id, contactId)
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

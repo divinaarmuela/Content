@@ -1,5 +1,5 @@
 import 'server-only'
-import { DbError, table } from '@/lib/db'
+import { DbError, encodeKey, table } from '@/lib/db'
 import type {
   Booking, BookingAvailability, BookingBlackout, BookingResource, BookingService,
 } from '@/lib/db-types'
@@ -336,6 +336,85 @@ export async function seatIsFree(input: {
 }
 
 /**
+ * The seat itself, as a row that can be claimed.
+ *
+ * `seatIsFree` above answers honestly about the moment it runs, and then the
+ * booking is written — two operations, and two customers pressing Book in the
+ * same second both pass the first one. Postgres closed that with an exclusion
+ * constraint evaluated inside the insert; here the equivalent is a row of its
+ * own: /mdm/tables/booking_seats/<space>__<seat> holds the time ranges that
+ * seat is spoken for, and taking a range is ONE compare-and-set. A loser is
+ * refused by the database, not by a check it happened to run first.
+ *
+ * The row is self-maintaining, which it has to be — a range left behind by a
+ * cancelled booking would keep a bookable slot off the calendar forever:
+ *  - ranges belonging to bookings that no longer exist, or are cancelled, are
+ *    dropped;
+ *  - but only once they are older than the snapshot that judged them, with a
+ *    minute's grace, because a range added seconds ago may belong to a booking
+ *    row that is still being written;
+ *  - and every live booking with no range yet is seeded in, so bookings that
+ *    predate this mechanism are honoured from the first claim.
+ */
+type SeatRange = { booking_id: string; start: string; end: string; at: string }
+type SeatRow = { id: string; ranges?: SeatRange[] }
+
+const seatKey = (spaceId: string, seatNo: number | null) => `${encodeKey(spaceId)}__${seatNo ?? 'x'}`
+/** A range added within this window is too young for a stale snapshot to judge. */
+const SEAT_GRACE_MS = 60_000
+
+export type SeatClaim = {
+  spaceId: string
+  seatNo: number | null
+  startAt: string
+  endAt: string
+  bookingId: string
+}
+
+/**
+ * Take `[startAt, endAt)` on one seat for one booking, atomically.
+ * `false` means somebody else holds an overlapping range — the port of
+ * `bookings_no_overlap`. Half-open on purpose: 11:00–12:00 and 12:00–13:00 are
+ * back-to-back, not a clash.
+ */
+export async function takeSeat(input: SeatClaim): Promise<boolean> {
+  const { spaceId, seatNo, startAt, endAt, bookingId } = input
+  const now = new Date().toISOString()
+  const judgedBefore = new Date(Date.now() - SEAT_GRACE_MS).toISOString()
+
+  // one fresh read of what really stands in this seat, used both to seed
+  // ranges that were never recorded and to retire ranges that died
+  const bookings = await table<Booking>('bookings').list({
+    fresh: true,
+    where: b => (b.space_id ?? b.resource_id) === spaceId && (b.seat_no ?? null) === seatNo,
+  })
+  const live = new Map(bookings.filter(b => b.status !== 'cancelled').map(b => [b.id, b]))
+
+  const claimed = await table<SeatRow>('booking_seats').claim(seatKey(spaceId, seatNo), cur => {
+    const kept = (cur?.ranges ?? []).filter(r =>
+      r.booking_id === bookingId ? false                 // our own hold, being replaced
+        : live.has(r.booking_id) ? true
+          : r.at > judgedBefore ? true                   // too young to judge
+            : false)                                    // its booking is gone or cancelled
+    for (const b of live.values()) {
+      if (b.id === bookingId || kept.some(r => r.booking_id === b.id)) continue
+      kept.push({ booking_id: b.id, start: b.start_at, end: b.end_at ?? b.start_at, at: b.created_at ?? now })
+    }
+    if (kept.some(r => r.start < endAt && r.end > startAt)) return null
+    return { id: seatKey(spaceId, seatNo), ranges: [...kept, { booking_id: bookingId, start: startAt, end: endAt, at: now }] }
+  })
+  return claimed.claimed
+}
+
+/** Give a seat range back — the booking that held it is gone. */
+export async function releaseSeat(spaceId: string, seatNo: number | null, bookingId: string): Promise<void> {
+  await table<SeatRow>('booking_seats').claim(seatKey(spaceId, seatNo), cur => {
+    if (!cur?.ranges?.some(r => r.booking_id === bookingId)) return null
+    return { ...cur, ranges: cur.ranges.filter(r => r.booking_id !== bookingId) }
+  })
+}
+
+/**
  * Insert a booking with both database guarantees applied in code: the space is
  * filled from the resource, and an overlapping live booking for the same seat
  * is refused.
@@ -356,19 +435,58 @@ export async function insertBooking(
   // Postgres supplied these, and seat_no in particular is half of the
   // no-overlap key, so a missing one would make every booking clash
   const seat_no = row.seat_no ?? 1
-  const free = await seatIsFree({
-    spaceId: space_id,
-    seatNo: seat_no,
-    startAt: row.start_at,
-    endAt: row.end_at,
+  // the id is minted here so the seat can be claimed BEFORE the booking
+  // exists: the claim is what decides, and the row is what it decided about
+  const id = crypto.randomUUID()
+  const took = await takeSeat({
+    spaceId: space_id, seatNo: seat_no, startAt: row.start_at, endAt: row.end_at, bookingId: id,
   })
-  if (!free) throw new DbError('unique', 'bookings_no_overlap: that seat is already booked')
-  return await table('bookings').insert({
-    status: 'confirmed',
-    payment_status: 'unpaid',
-    amount_cents: 0,
-    ...row,
-    seat_no,
-    space_id,
-  }) as unknown as Booking
+  if (!took) throw new DbError('unique', 'bookings_no_overlap: that seat is already booked')
+  try {
+    return await table('bookings').insert({
+      status: 'confirmed',
+      payment_status: 'unpaid',
+      amount_cents: 0,
+      ...row,
+      id,
+      seat_no,
+      space_id,
+    }) as unknown as Booking
+  } catch (e) {
+    // never hold a seat for a booking that was not written
+    await releaseSeat(space_id, seat_no, id).catch(() => {})
+    throw e
+  }
+}
+
+/**
+ * Move a live booking to a new time — the one place all three move paths go
+ * through (the dashboard, the customer's manage page, and a Stripe payment
+ * arriving for a booking that was let go).
+ *
+ * Two conditional writes, no checks: the seat is claimed at the new time, and
+ * the booking row is moved only if it is still live. A caller that finds
+ * `clash` was refused by the seat; one that finds `not_live` was cancelled
+ * underneath it. Each keeps its own wording for those.
+ */
+export async function moveBooking(
+  bookingId: string, startAt: string, endAt: string,
+): Promise<{ ok: true; booking: Booking } | { ok: false; reason: 'clash' | 'not_live' }> {
+  const bookings = table<Booking>('bookings')
+  const { row: current } = await bookings.getForUpdate(bookingId)
+  if (!current || current.status === 'cancelled') return { ok: false, reason: 'not_live' }
+
+  const spaceId = current.space_id ?? await spaceForResource(current.resource_id)
+  const seatNo = current.seat_no ?? 1
+  // the booking's own current range is replaced, so moving inside it is fine
+  const took = await takeSeat({ spaceId, seatNo, startAt, endAt, bookingId })
+  if (!took) return { ok: false, reason: 'clash' }
+
+  const moved = await bookings.claim(bookingId, cur =>
+    cur && cur.status !== 'cancelled' ? { ...cur, start_at: startAt, end_at: endAt } : null)
+  if (!moved.claimed) {
+    await releaseSeat(spaceId, seatNo, bookingId).catch(() => {})
+    return { ok: false, reason: 'not_live' }
+  }
+  return { ok: true, booking: moved.row }
 }

@@ -9,6 +9,8 @@ import { announceItemChange } from '../../../../../lib/production-live'
 import { table, withRequestCache } from '@/lib/db'
 import type { PublishJob } from '@/lib/db-types'
 import { getPublisher } from '../../../../../lib/publisher'
+import { releaseClaimLock } from '../../../../../lib/claim-lock'
+import { publishLockKey } from '../../../../../lib/publish'
 
 /** What would be published for this item, and what is stopping it. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -143,17 +145,22 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // it may have gone out while we were asking, so the job's status is
-    // read again immediately before the cancel is written
-    const live = await jobs.get(job.id, { fresh: true })
-    const cancelled = live?.status === job.status
-      ? await jobs.update(job.id, { status: 'cancelled', error: null, updated_at: new Date().toISOString() })
-      : null
-    if (!cancelled) {
+    // it may have gone out while we were asking, so the status the operator
+    // acted on is checked INSIDE the write: still where they saw it, or the
+    // cancel does not land at all
+    const cancelled = await jobs.claim(job.id, cur =>
+      cur && cur.status === job.status
+        ? { ...cur, status: 'cancelled', error: null }
+        : null)
+    if (!cancelled.claimed) {
       return NextResponse.json(
         { error: 'It moved on while you were cancelling — refresh to see where it got to' },
         { status: 409 },
       )
+    }
+    // a cancelled job stops owning its content item
+    if (job.content_item_id) {
+      await releaseClaimLock(publishLockKey(String(job.content_item_id)), job.id).catch(() => {})
     }
 
     await logActivity({

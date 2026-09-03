@@ -154,12 +154,11 @@ export async function submitIntake(token: string): Promise<IntakeForm | null> {
 
   // only the caller who still sees an unsubmitted status writes, so a
   // double-click cannot send two notifications
-  const live = await forms().get(form.id, { fresh: true })
-  if (!live || live.status === 'submitted') return form
-  const updated = await forms().update(form.id, {
-    status: 'submitted', submitted_at: new Date().toISOString(),
-  })
-  return (updated as unknown as IntakeForm) ?? form
+  const submitted = await forms().claim(form.id, cur =>
+    cur && cur.status !== 'submitted'
+      ? { ...cur, status: 'submitted', submitted_at: new Date().toISOString() }
+      : null)
+  return submitted.claimed ? (submitted.row as unknown as IntakeForm) : form
 }
 
 export async function reopenIntake(formId: string): Promise<void> {
@@ -178,9 +177,10 @@ export async function rotateIntakeToken(formId: string): Promise<string> {
 /** Marks the form as sent. Only moves a draft, so re-copying the link later
  *  never rewrites the date it actually went out. */
 export async function markIntakeSent(formId: string): Promise<void> {
-  const live = await forms().get(formId, { fresh: true })
-  if (live?.status !== 'draft') return
-  await forms().update(formId, { status: 'sent', sent_at: new Date().toISOString() })
+  await forms().claim(formId, cur =>
+    cur?.status === 'draft'
+      ? { ...cur, status: 'sent', sent_at: new Date().toISOString() }
+      : null)
 }
 
 /** Remove the form entirely so a different template can be chosen. One form per
@@ -205,9 +205,9 @@ export async function updateIntakeDefinition(
   // ids, so editing questions mid-fill never orphans what the client typed;
   // a submitted form is a document a shot list gets built on, so that one
   // stays read-only until deliberately reopened.
-  const live = await forms().get(formId, { fresh: true })
-  if (!live || live.status === 'submitted') return false
-  return Boolean(await forms().update(formId, { definition }))
+  const changed = await forms().claim(formId, cur =>
+    cur && cur.status !== 'submitted' ? { ...cur, definition } : null)
+  return changed.claimed
 }
 
 /**

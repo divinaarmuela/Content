@@ -56,17 +56,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (to === 'shot') patch.shot_at = new Date().toISOString()
 
-    // Nothing merely READ is trusted at the moment of the write: the shoot's
-    // status is re-read here and the move refused if somebody else has
-    // already made it.
-    const live = await batches.get(id, { fresh: true })
-    if (!live || live.status !== from) {
+    // Nothing merely READ is trusted at the moment of the write: the status
+    // the mover saw is checked INSIDE the write, so two people moving the
+    // same shoot at once produce one move and one 409.
+    const moved = await batches.claim(id, cur =>
+      cur && cur.status === from ? { ...cur, ...(patch as Partial<Batch>) } : null)
+    if (!moved.claimed) {
       return NextResponse.json({ error: 'Someone else moved this shoot — refresh and try again' }, { status: 409 })
     }
-    const updated = await batches.update(id, patch as Partial<Batch>)
-    if (!updated) {
-      return NextResponse.json({ error: 'Someone else moved this shoot — refresh and try again' }, { status: 409 })
-    }
+    const updated = moved.row
 
     await logActivity({
       actor: user, clientId: batch.client_id,

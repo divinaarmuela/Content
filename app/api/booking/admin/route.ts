@@ -5,7 +5,7 @@ import type {
   Booking, BookingAvailability, BookingBlackout, BookingResource, BookingService,
   UserPageAccess,
 } from '@/lib/db-types'
-import { seatIsFree, spaceForResource } from '../../../lib/booking'
+import { moveBooking, releaseSeat, spaceForResource } from '../../../lib/booking'
 import { requireRole, authzErrorResponse, AuthzError } from '../../../lib/authz'
 import { notifyBookingChanged } from '../../../lib/booking-notify'
 
@@ -248,14 +248,21 @@ export async function POST(req: Request) {
           return NextResponse.json({ ok: true })
         }
         case 'cancel_booking': {
-          // only a live booking cancels, and exactly once — the state is
-          // re-read immediately before the write rather than guarded by it
-          const live = await table<Booking>('bookings').get(String(body.id), { fresh: true })
-          if (!live || live.status === 'cancelled') {
+          // only a live booking cancels, and exactly once — one conditional
+          // write, so two clicks cannot both send the customer a cancellation
+          const id = String(body.id)
+          const cancelled = await table<Booking>('bookings').claim(id, cur =>
+            cur && cur.status !== 'cancelled' ? { ...cur, status: 'cancelled' } : null)
+          if (!cancelled.claimed) {
             return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
           }
-          const updated = await table<Booking>('bookings').update(live.id, { status: 'cancelled' })
-          const data = (await withNames([updated ?? live]))[0]
+          const updated = cancelled.row
+          // the seat it held goes back on the calendar
+          await releaseSeat(
+            updated.space_id ?? await spaceForResource(updated.resource_id),
+            updated.seat_no ?? 1, updated.id,
+          ).catch(() => {})
+          const data = (await withNames([updated]))[0]
           void user
           notifyStaffChange(data as unknown as Record<string, unknown>, data.start_at, true)
           return NextResponse.json({ booking: data })
@@ -287,24 +294,16 @@ export async function POST(req: Request) {
           const mins = (current.booking_services as { duration_min?: number } | null)?.duration_min ?? 60
           const endAt = new Date(when.getTime() + mins * 60_000)
 
-          const free = await seatIsFree({
-            spaceId: found.space_id ?? await spaceForResource(found.resource_id),
-            seatNo: found.seat_no ?? 1,
-            startAt: when.toISOString(),
-            endAt: endAt.toISOString(),
-            excludeId: found.id,
-          })
-          if (!free) {
-            return NextResponse.json({ error: 'That time is already taken' }, { status: 409 })
+          // the seat at the new time and the booking's own liveness are both
+          // taken by conditional write, in moveBooking — never checked here
+          const outcome = await moveBooking(id, when.toISOString(), endAt.toISOString())
+          if (!outcome.ok) {
+            return NextResponse.json(
+              { error: outcome.reason === 'clash' ? 'That time is already taken' : 'That booking is no longer live' },
+              { status: 409 },
+            )
           }
-          const live = await table<Booking>('bookings').get(id, { fresh: true })
-          if (!live || live.status === 'cancelled') {
-            return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
-          }
-          const updated = await table<Booking>('bookings')
-            .update(id, { start_at: when.toISOString(), end_at: endAt.toISOString() })
-          if (!updated) return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
-          const moved = (await withNames([updated]))[0]
+          const moved = (await withNames([outcome.booking]))[0]
 
           // the person who booked hears about it, not just the team
           notifyStaffChange(moved as unknown as Record<string, unknown>, previousStart, false)

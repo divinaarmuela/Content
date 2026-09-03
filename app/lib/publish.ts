@@ -5,6 +5,7 @@ import type {
   ContentAsset, PublishJob as PublishJobRow, SocialAccount,
 } from '@/lib/db-types'
 import { getPublisher } from './publisher'
+import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import {
   validatePost, isPlatform, type MediaItem, type PostKind, type Platform, type Target,
 } from './publish-core'
@@ -35,6 +36,13 @@ export type PublishJob = {
   request_id: string
   attempts: number
 }
+
+/**
+ * A job in one of these still owns its content item: 'scheduled' included,
+ * because the provider is holding that post until its time.
+ */
+export const LIVE_JOB_STATUSES = ['queued', 'publishing', 'scheduled']
+export const publishLockKey = (contentItemId: string) => `publish__${contentItemId}`
 
 /** The platform names off a job's stored targets, however loosely typed. */
 function platformsOf(targets: unknown): string[] {
@@ -75,18 +83,37 @@ export async function queuePublishJob(input: {
   // 'scheduled' counts as live: the provider is HOLDING that post until its
   // time, so the item is still spoken for — queueing a second job would put
   // the same post out twice.
+  //
+  // "Is there a live job?" spans rows, so it cannot be a compare-and-set on
+  // one of them; it is a lock row per content item instead, taken atomically
+  // (see app/lib/claim-lock.ts). The lock names the job that holds it, and
+  // is handed on the moment that job stops being live — so a settled or
+  // deleted job can never leave an item unqueueable.
+  const jobId = randomUUID()
   if (input.contentItemId) {
+    // the read first, because it is the only thing that knows about jobs
+    // queued before this lock existed — but it is not the guarantee
     const live = await table<PublishJobRow>('publish_jobs').list({
       where: j => j.content_item_id === input.contentItemId
-        && ['queued', 'publishing', 'scheduled'].includes(j.status),
+        && LIVE_JOB_STATUSES.includes(j.status),
       limit: 1,
     })
     if (live.length > 0) return { error: 'This content item is already queued to publish' }
+
+    const gate = await takeClaimLock(
+      publishLockKey(input.contentItemId), jobId,
+      async holder => {
+        const held = await table<PublishJobRow>('publish_jobs').get(holder)
+        return !!held && LIVE_JOB_STATUSES.includes(held.status)
+      },
+    )
+    if (!gate.ok) return { error: 'This content item is already queued to publish' }
   }
 
   try {
     const now = new Date().toISOString()
     const row = await table('publish_jobs').insert({
+      id: jobId,
       client_id: input.clientId ?? null,
       content_item_id: input.contentItemId ?? null,
       schedule_entry_id: input.scheduleEntryId ?? null,
@@ -105,6 +132,8 @@ export async function queuePublishJob(input: {
     })
     return { id: row.id }
   } catch (e) {
+    // the lock is only worth holding while there is a job behind it
+    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
 }
@@ -115,12 +144,13 @@ export async function queuePublishJob(input: {
  */
 export async function runPublishJob(jobId: string): Promise<string | null> {
   // ── layer 1: claim it ────────────────────────────────────────────────
-  const current = await table<PublishJobRow>('publish_jobs').get(jobId)
-  if (!current || current.status !== 'queued') return null   // ← the gate; not queued means we lost
-  const claimed = await table<PublishJobRow>('publish_jobs')
-    .update(jobId, { status: 'publishing', updated_at: new Date().toISOString() })
-
-  if (!claimed) return null
+  // queued → publishing as ONE conditional write. Reading the status and
+  // then writing it is two, and two workers can both pass the read — which
+  // on this path means the same post going out twice.
+  const taken = await table<PublishJobRow>('publish_jobs').claim(jobId, cur =>
+    cur && cur.status === 'queued' ? { ...cur, status: 'publishing' } : null)
+  if (!taken.claimed) return null                            // ← the gate; not queued means we lost
+  const claimed = taken.row
 
   const job = claimed as unknown as PublishJob & { attempts: number }
   const publisher = getPublisher()
@@ -128,6 +158,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
   const settle = async (fields: Record<string, unknown>) => {
     await table('publish_jobs')
       .update(jobId, { ...fields, updated_at: new Date().toISOString() })
+    // a job that has stopped being live stops owning its content item
+    const status = fields.status
+    if (typeof status === 'string' && !LIVE_JOB_STATUSES.includes(status) && claimed.content_item_id) {
+      await releaseClaimLock(publishLockKey(String(claimed.content_item_id)), jobId).catch(() => {})
+    }
   }
 
   try {

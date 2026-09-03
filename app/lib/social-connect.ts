@@ -36,15 +36,14 @@ export async function connectLinkFor(
   let profileId = client.social_profile_id
   if (!profileId) {
     const created = await publisher.createProfile(client.name ?? `Client ${clientId.slice(0, 8)}`)
-    // `fresh`: the guard must see the network, not this request's own
-    // earlier answer, or the loser overwrites the winner's profile id
-    const live = await clients.get(clientId, { fresh: true })
-    if (live?.social_profile_id) {
-      profileId = live.social_profile_id
-    } else {
-      const won = await clients.update(clientId, { social_profile_id: created })
-      profileId = won?.social_profile_id ?? created
-    }
+    // ONE conditional write on the client row: it lands only while the column
+    // is still empty. Reading it and then writing would let the loser
+    // overwrite the winner's id, and the two of them would then be connecting
+    // accounts to different provider profiles.
+    const mint = await clients.claim(clientId, cur =>
+      cur && cur.social_profile_id == null ? { ...cur, social_profile_id: created } : null)
+    // the loser adopts the id that is actually stored, never its own
+    profileId = (mint.claimed ? mint.row.social_profile_id : mint.current?.social_profile_id) ?? created
   }
 
   // Return to the social channels page. Redirecting to /dashboard/clients/[id]

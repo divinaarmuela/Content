@@ -44,14 +44,17 @@ export async function loadBrandProfile(clientId: string, seedBy: string): Promis
     profile = scanHasContent ? fromScan(scanProfile, lastScanAt) : emptyProfile()
     profile.rev = 1
     if (scanHasContent) {
-      const live = await clients.get(clientId, { fresh: true })
-      if (live && live.brand_profile == null) {
-        await clients.update(clientId, {
-          brand_profile: profile,
-          brand_profile_updated_at: new Date().toISOString(),
-          brand_profile_updated_by: seedBy,
-        })
-      }
+      // one conditional write, applied only while the column is still empty:
+      // two first reads cannot both seed
+      await clients.claim(clientId, cur =>
+        cur && cur.brand_profile == null
+          ? {
+              ...cur,
+              brand_profile: profile,
+              brand_profile_updated_at: new Date().toISOString(),
+              brand_profile_updated_by: seedBy,
+            }
+          : null)
     }
   }
 
@@ -78,32 +81,23 @@ export async function applyScanToEditableProfile(
 ): Promise<'updated' | 'unchanged'> {
   if (!scanProfile || Object.keys(scanProfile).length === 0) return 'unchanged'
   const clients = table<Client>('clients')
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const row = await clients.get(clientId)
-    if (!row) return 'unchanged'
-    const raw = row.brand_profile
-    const hadProfile = raw != null
+  // The rev guard IS the write. The merge runs on the row as it really is,
+  // and the result lands only if that row has not moved since — a concurrent
+  // scan or hand edit makes this lose, re-merge onto the newer profile and
+  // try again, rather than clobber it.
+  const done = await clients.claim(clientId, cur => {
+    if (!cur) return null
+    const raw = cur.brand_profile
     const current = normaliseProfile(raw ?? {})
     const { profile, changed } = foldScanIntoProfile(current, scanProfile)
-    if (!changed) return 'unchanged'
-
-    const seen = hadProfile ? current.rev : 0
-    const next: BrandProfile = { ...profile, rev: seen + 1 }
-    // rev guard: re-read immediately before the write and only commit if the
-    // revision this merge was computed from is still the one on the row
-    const live = await clients.get(clientId, { fresh: true })
-    const unchangedSince = hadProfile
-      ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
-      : live?.brand_profile == null
-    if (unchangedSince && live) {
-      await clients.update(clientId, {
-        brand_profile: next,
-        brand_profile_updated_at: new Date().toISOString(),
-        brand_profile_updated_by: by,
-      })
-      return 'updated'
+    if (!changed) return null
+    const next: BrandProfile = { ...profile, rev: (raw != null ? current.rev : 0) + 1 }
+    return {
+      ...cur,
+      brand_profile: next,
+      brand_profile_updated_at: new Date().toISOString(),
+      brand_profile_updated_by: by,
     }
-    // conflict → re-read and re-merge once
-  }
-  return 'unchanged'
+  })
+  return done.claimed ? 'updated' : 'unchanged'
 }

@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { TeamUser, TeamInvite, TeamUserClient, UserPageAccess, ContentItem } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, type Role } from '../../../lib/authz'
 import { onTeamChanged } from '../../../lib/gdrive-members'
+import { releaseClaimLock, pendingInviteLockKey } from '../../../lib/claim-lock'
 
 const ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
 
@@ -117,13 +118,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         onTeamChanged('member removed')
         return NextResponse.json({ ok: true })
       }
-      // fresh: this is a claim on the invite, so it must not be answered from
-      // a row this request already read
-      const invite = await table<TeamInvite>('team_invites').get(id, { fresh: true })
-      if (!invite || invite.status !== 'pending') {
+      // a claim on the invite: pending → revoked as ONE conditional write, so
+      // two admins revoking together cannot both be told they did it
+      const revoked = await table<TeamInvite>('team_invites').claim(id, cur =>
+        cur && cur.status === 'pending' ? { ...cur, status: 'revoked' } : null)
+      if (!revoked.claimed) {
         return NextResponse.json({ error: 'Pending invite not found' }, { status: 404 })
       }
-      await table<TeamInvite>('team_invites').update(id, { status: 'revoked' })
+      // the email is free for a new invite again
+      await releaseClaimLock(pendingInviteLockKey(revoked.row.email ?? ''), id).catch(() => {})
       return NextResponse.json({ ok: true })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)

@@ -171,6 +171,33 @@ describe('PATCH /api/clients/[id]/brand/profile', () => {
     expect(savedProfile()).toMatchObject({ rev: 1 })
   })
 
+  it('refuses a save whose revision went stale between the read and the write', async () => {
+    client.brand_profile = { rev: 5, colours: [] }
+    start(false)
+    // a colleague saves rev 6 in the gap — this save must not land on top
+    const off = fake!.onBeforeWrite('/mdm/tables/clients/client-1', () => {
+      off()
+      const tree = fake!.tree() as { mdm: { tables: { clients: Record<string, Json> } } }
+      tree.mdm.tables.clients['client-1'].brand_profile = { rev: 6, colours: [] }
+    })
+    const { status, json } = await patch({ profile: { rev: 5, colours: [] } })
+    expect(status).toBe(409)
+    expect(String(json.error)).toContain('Someone else')
+    expect(savedProfile()).toMatchObject({ rev: 6 })
+  })
+
+  it('two editors saving from the same revision leave one winner', async () => {
+    client.brand_profile = { rev: 5, colours: [] }
+    start(false)
+    const [x, y] = await Promise.all([
+      patch({ profile: { rev: 5, colours: [] } }),
+      patch({ profile: { rev: 5, colours: [] } }),
+    ])
+    expect([x, y].filter(r => r.status === 200)).toHaveLength(1)
+    expect([x, y].filter(r => r.status === 409)).toHaveLength(1)
+    expect(savedProfile()).toMatchObject({ rev: 6 })
+  })
+
   it('refuses a stale revision so nobody silently overwrites a colleague', async () => {
     client.brand_profile = { rev: 5, colours: [] }
     start(false)

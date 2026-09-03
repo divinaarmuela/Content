@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Booking, BookingResource, BookingService } from '@/lib/db-types'
 import {
-  loadPublicService, availabilityFor, seatIsFree, spaceForResource, type PublicResource,
+  loadPublicService, availabilityFor, moveBooking, releaseSeat, spaceForResource,
+  type PublicResource,
 } from '../../../../lib/booking'
 import { zonedToUtc, utcToZoned, policyFor } from '../../../../lib/booking-core'
 import { notifyBookingChanged } from '../../../../lib/booking-notify'
@@ -98,13 +99,18 @@ export async function POST(req: Request) {
       if (!policy.canCancel) {
         return NextResponse.json({ error: policy.reason }, { status: 409 })
       }
-      // only a live booking can be cancelled, and exactly once — the state is
-      // re-read immediately before the write rather than guarded by it
-      const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
-      if (!live || live.status === 'cancelled') {
+      // only a live booking can be cancelled, and exactly once — one
+      // conditional write, so a double submit cannot send two cancellations
+      const cancelled = await table<Booking>('bookings').claim(booking.id, cur =>
+        cur && cur.status !== 'cancelled' ? { ...cur, status: 'cancelled' } : null)
+      if (!cancelled.claimed) {
         return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
       }
-      await table<Booking>('bookings').update(booking.id, { status: 'cancelled' })
+      // the seat goes back on the calendar
+      await releaseSeat(
+        booking.space_id ?? await spaceForResource(booking.resource_id),
+        booking.seat_no ?? 1, booking.id,
+      ).catch(() => {})
 
       announceBookingChange({ booking_id: booking.id, kind: 'cancelled' })
       notifyBookingChanged({
@@ -142,24 +148,16 @@ export async function POST(req: Request) {
 
     // the no-overlap rule Postgres enforced with an exclusion constraint: the
     // seat this booking already holds must be free at the NEW time, ignoring
-    // the booking's own current slot
-    const free = await seatIsFree({
-      spaceId: booking.space_id ?? await spaceForResource(booking.resource_id),
-      seatNo: booking.seat_no ?? 1,
-      startAt: startAt.toISOString(),
-      endAt: endAt.toISOString(),
-      excludeId: booking.id,
-    })
-    if (!free) {
-      return NextResponse.json({ error: 'That time was just taken — pick another' }, { status: 409 })
+    // the booking's own current slot. Claimed, not checked — two customers
+    // moving into the same slot at once would both pass a check.
+    const outcome = await moveBooking(booking.id, startAt.toISOString(), endAt.toISOString())
+    if (!outcome.ok) {
+      return NextResponse.json(
+        { error: outcome.reason === 'clash' ? 'That time was just taken — pick another' : 'That booking is no longer live' },
+        { status: 409 },
+      )
     }
-    const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
-    if (!live || live.status === 'cancelled') {
-      return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
-    }
-    const moved = await table<Booking>('bookings')
-      .update(booking.id, { start_at: startAt.toISOString(), end_at: endAt.toISOString() })
-    if (!moved) return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
+    const moved = outcome.booking
 
     announceBookingChange({ booking_id: booking.id, kind: 'moved' })
     notifyBookingChanged({

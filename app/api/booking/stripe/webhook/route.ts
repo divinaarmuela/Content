@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { table, withRequestCache } from '@/lib/db'
 import type { Booking, BookingResource, BookingService } from '@/lib/db-types'
-import { seatIsFree, spaceForResource } from '../../../../lib/booking'
+import { takeSeat, spaceForResource } from '../../../../lib/booking'
 import { stripeClient, STRIPE_WEBHOOK_SECRET } from '../../../../lib/stripe'
 import { notifyNewBooking } from '../../../../lib/booking-notify'
 
@@ -63,27 +63,32 @@ async function fulfil(session: Stripe.Checkout.Session) {
   let reclaimed: 'held' | 'recovered' | 'lost' = 'held'
   if (booking.status === 'cancelled') {
     // the seat rule that used to be the exclusion constraint: it can only
-    // come back if nobody else moved into the same seat and time
-    const free = await seatIsFree({
+    // come back if nobody else moved into the same seat and time. Taking the
+    // seat IS the decision — asking whether it is free and then taking it
+    // would let a customer paying at the same moment take it twice.
+    const took = await takeSeat({
       spaceId: booking.space_id ?? await spaceForResource(booking.resource_id),
       seatNo: booking.seat_no ?? 1,
       startAt: booking.start_at,
       endAt: booking.end_at,
-      excludeId: booking.id,
+      bookingId: booking.id,
     })
-    reclaimed = free ? 'recovered' : 'lost'
-    if (!free) console.error('paid booking could not reclaim its slot:', booking.id)
+    reclaimed = took ? 'recovered' : 'lost'
+    if (!took) console.error('paid booking could not reclaim its slot:', booking.id)
   }
 
-  // re-read immediately before the write so two concurrent deliveries cannot
-  // both "first" confirm
-  const live = await table<Booking>('bookings').get(booking.id, { fresh: true })
-  if (!live || live.payment_status === 'paid') return
-  await table<Booking>('bookings').update(booking.id, {
-    payment_status: 'paid',
-    status: reclaimed === 'lost' ? 'cancelled' : 'confirmed',
-    payment_ref: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
-  })
+  // one conditional write, so two concurrent deliveries cannot both "first"
+  // confirm — and only one of them sends the customer a confirmation
+  const paid = await table<Booking>('bookings').claim(booking.id, cur =>
+    cur && cur.payment_status !== 'paid'
+      ? {
+          ...cur,
+          payment_status: 'paid',
+          status: reclaimed === 'lost' ? 'cancelled' : 'confirmed',
+          payment_ref: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
+        }
+      : null)
+  if (!paid.claimed) return
 
   if (reclaimed === 'lost') {
     // money taken, no slot to give: a person has to refund this, so say so

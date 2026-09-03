@@ -76,64 +76,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     if (hat === 'editor') {
-      let current: ContentItem | null
+      let taken: Awaited<ReturnType<typeof items.claim>>
       try {
-        // `fresh` bypasses the request cache: the seat is read from the
-        // database now, not from the copy loadItemForUser took at the top
-        current = await items.get(id, { fresh: true })
+        // ONE conditional write. Reading the seat and then filling it is two,
+        // and two clicks a millisecond apart both pass the read — the second
+        // then overwrites the first person's name. The decision runs on the
+        // row as it really is, and the write lands only if it has not moved:
+        // a transition arriving in between must not hand the edit to someone
+        // on an item that has since been approved.
+        taken = await items.claim(id, cur => {
+          const open = !!cur
+            && cur.owner_id == null
+            && !(EDITING_CLOSED_STATUSES as readonly string[]).includes(cur.status)
+          return open ? { ...cur!, owner_id: user.id, assigned_by: user.id } : null
+        })
       } catch (e) {
         console.error('claim (editor) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)
       }
-      // a transition landing between the read above and this write must not
-      // hand the edit to someone on an item that has since been approved
-      const seatOpen = !!current
-        && current.owner_id == null
-        && !(EDITING_CLOSED_STATUSES as readonly string[]).includes(current.status)
-      if (!seatOpen) {
+      if (!taken.claimed) {
+        const current = taken.current
         // you already hold it — a second click, or two tabs. Not a conflict.
         if (current?.owner_id === user.id) return NextResponse.json({ ok: true, already: true })
-        if (current?.owner_id) return lost(await nameOf(current.owner_id))
+        if (current?.owner_id) return lost(await nameOf(current.owner_id as string))
         return NextResponse.json(
           { error: 'This one moved on while you were looking — refresh and try again' },
           { status: 409 },
         )
       }
-      try {
-        await items.update(id, { owner_id: user.id, assigned_by: user.id } as Partial<ContentItem>)
-      } catch (e) {
-        console.error('claim (editor) failed:', (e as Error).message)
-        throw new AuthzError('Could not pick this up — please try again', 500)
-      }
     } else {
-      let current: ContentItem | null
+      let taken: Awaited<ReturnType<typeof items.claim>>
       try {
-        current = await items.get(id, { fresh: true })
+        // the same single write for the scheduling seat. The old guard
+        // required scheduler_ids to be exactly []; an item that never had the
+        // column written carries nothing at all, which is the same "nobody
+        // holds it" and must claim just the same.
+        taken = await items.claim(id, cur => {
+          const open = !!cur
+            && schedulerIdsOf(cur).length === 0
+            && (CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(cur.status)
+          return open ? { ...cur!, scheduler_ids: [user.id] } : null
+        })
       } catch (e) {
         console.error('claim (scheduler) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)
       }
-      const holders = schedulerIdsOf(current ?? {})
-      // still nobody's, and still at a status where there is scheduling to do.
-      // The old write required scheduler_ids to be exactly []; an item that
-      // never had the column written carries nothing at all, which is the
-      // same "nobody holds it" and must claim just the same.
-      const seatOpen = !!current
-        && holders.length === 0
-        && (CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(current.status)
-      if (!seatOpen) {
+      if (!taken.claimed) {
+        const holders = schedulerIdsOf(taken.current ?? {})
         if (holders.includes(user.id)) return NextResponse.json({ ok: true, already: true })
         if (holders.length > 0) return lost(await nameOf(holders[0]))
         return NextResponse.json(
           { error: 'This one moved on while you were looking — refresh and try again' },
           { status: 409 },
         )
-      }
-      try {
-        await items.update(id, { scheduler_ids: [user.id] })
-      } catch (e) {
-        console.error('claim (scheduler) failed:', (e as Error).message)
-        throw new AuthzError('Could not pick this up — please try again', 500)
       }
     }
 

@@ -51,6 +51,7 @@ export const UNIQUE_COLUMNS = {
   client_agreements: ['client_id'],
   content_assets: ['slug', 'provider_post_id'],
   asset_clicks: ['click_id'],
+  webhook_deliveries: ['provider_event_key'],
 }
 
 export function encodeKey(s) { return String(s).replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')) }

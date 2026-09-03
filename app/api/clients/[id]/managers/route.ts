@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { table, withRequestCache } from '@/lib/db'
+import { table, withRequestCache, DbError } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { TeamUser, TeamUserClient } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
@@ -78,17 +78,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'That person cannot manage clients' }, { status: 400 })
     }
 
-    // the row's key IS (team_user_id, client_id), so a double-click finds the
-    // row already there and leaves the original assignment date alone
-    const links = table<TeamUserClient>('team_user_clients')
-    const already = (await links.list({
-      by: { client_id: id }, where: r => r.team_user_id === teamUserId, fresh: true,
-    }))[0]
-    if (!already) {
+    // The row's id IS (team_user_id, client_id), so the insert is the guard:
+    // a natural-key table refuses a second row for the same pair. A
+    // double-click loses that race and leaves the original assignment date
+    // alone, which is exactly the old behaviour — without a read that another
+    // click can slip past.
+    try {
       await table('team_user_clients').insert({
         team_user_id: teamUserId, client_id: id, assigned_by: admin.id,
         assigned_at: new Date().toISOString(),
       })
+    } catch (e) {
+      if (!(e instanceof DbError && e.code === 'unique')) throw e
     }
 
     return NextResponse.json(await loadState(id))

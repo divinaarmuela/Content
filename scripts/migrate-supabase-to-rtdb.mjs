@@ -4,7 +4,7 @@
 //   node scripts/migrate-supabase-to-rtdb.mjs             # export JSON backup, import, verify
 import fs from 'node:fs'
 import path from 'node:path'
-import { TABLES, SKIPPED, rowToNode, buildUniq } from './migrate-core.mjs'
+import { TABLES, SKIPPED, rowToNode, buildUniq, encodeKey } from './migrate-core.mjs'
 
 const env = Object.fromEntries(fs.readFileSync('.env.local', 'utf8').split('\n').filter(l => l.includes('=') && !l.startsWith('#')).map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^"|"$/g, '')] }))
 const SB = env.NEXT_PUBLIC_SUPABASE_URL, SB_KEY = env.SUPABASE_SERVICE_ROLE_KEY
@@ -31,6 +31,12 @@ async function rt(pathname, method = 'GET', body) {
   if (!r.ok) throw new Error(`RTDB ${method} ${pathname}: ${r.status} ${await r.text()}`)
   return r.json()
 }
+/** A full (non-shallow) read — `rt` asks for keys only. */
+async function rtRead(pathname) {
+  const r = await fetch(`${RTDB}${pathname}.json`, { headers: { 'content-type': 'application/json' } })
+  if (!r.ok) throw new Error(`RTDB GET ${pathname}: ${r.status} ${await r.text()}`)
+  return r.json()
+}
 // database.rules.json grants `.write` on mdm/tables, mdm/live and mdm/meta
 // individually — there is no `.write` at /mdm or at /mdm/uniq itself (a
 // descendant's conditional rule never authorises a shallower write). So the
@@ -44,6 +50,39 @@ async function patchChunked(flat, chunkSize = 500) {
     const body = Object.fromEntries(keys.slice(i, i + chunkSize).map(k => [k, flat[k]]))
     await rt('/mdm', 'PATCH', body)
   }
+}
+
+/**
+ * Backfill webhook_deliveries.provider_event_key on rows the migration
+ * already copied.
+ *
+ * The composite unique (provider, provider_event_id) became one derived
+ * column so the database itself can refuse a duplicate delivery. Rows copied
+ * before that column existed carry neither the value nor its /mdm/uniq
+ * pointer, so an old event id would look unclaimed. This adds both, and only
+ * where they are missing, so it is safe to run twice.
+ *
+ *   node scripts/migrate-supabase-to-rtdb.mjs --backfill-provider-event-key
+ */
+if (process.argv.includes('--backfill-provider-event-key')) {
+  const node = await rtRead('/mdm/tables/webhook_deliveries')
+  const rows = Object.entries(node ?? {})
+  const patch = {}
+  let already = 0
+  for (const [id, row] of rows) {
+    if (!row?.provider || !row?.provider_event_id) continue
+    const key = `${row.provider}__${row.provider_event_id}`
+    if (row.provider_event_key === key) { already++; continue }
+    patch[`tables/webhook_deliveries/${id}/provider_event_key`] = key
+    patch[`uniq/webhook_deliveries/provider_event_key/${encodeKey(key)}`] = id
+  }
+  const n = Object.keys(patch).length / 2
+  if (DRY) console.log(`dry run — would backfill ${n} of ${rows.length} deliveries (${already} already done)`)
+  else {
+    await patchChunked(patch)
+    console.log(`backfilled ${n} of ${rows.length} deliveries (${already} already done)`)
+  }
+  process.exit(0)
 }
 
 const report = []

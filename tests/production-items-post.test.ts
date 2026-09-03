@@ -122,6 +122,20 @@ describe('POST /api/production/items — one shoot plan per shoot', () => {
     expect(fake.rows('content_items')).toHaveLength(0)
   })
 
+  it('refuses the second of two plans sent at the SAME moment', async () => {
+    // two account managers, one shoot, no ordering between them: the stored
+    // check cannot see a row nobody has written yet, so the shoot itself is
+    // claimed instead
+    const [x, y] = await Promise.all([
+      post({ client_id: 'c1', title: 'Plan A', work_kind_id: 'wk-brief', batch_id: 'b1' }),
+      post({ client_id: 'c1', title: 'Plan B', work_kind_id: 'wk-brief', batch_id: 'b1' }),
+    ])
+    expect([x, y].filter(r => r.status === 201)).toHaveLength(1)
+    const refused = [x, y].find(r => r.status === 409)
+    expect(refused?.json.error).toBe('This shoot already has a shoot plan')
+    expect(fake.rows('content_items')).toHaveLength(1)
+  })
+
   it('still allows one plan each on two different shoots', async () => {
     fake.restore()
     fake = seedDb({

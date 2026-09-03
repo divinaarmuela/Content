@@ -120,8 +120,9 @@ export const NULL_ETAG = 'null_etag'
  *     status = 'pending' (identity.sql) — accepted/revoked invites may repeat
  *     an email, so a plain always-on unique key would reject legitimate rows.
  *   - webhook_deliveries.provider_event_id: the unique index is composite,
- *     on (provider, provider_event_id) (webhook_deliveries.sql) — composite
- *     uniques are enforced by call sites already, not here.
+ *     on (provider, provider_event_id) (webhook_deliveries.sql). A JSON tree
+ *     indexes one field, so the PAIR is carried as a derived column,
+ *     `provider_event_key`, which is declared below and does hold.
  *   - publish_jobs.dedupe_key: no such column exists on publish_jobs
  *     (social_publishing.sql); the only unique index there is partial, on
  *     content_item_id.
@@ -163,6 +164,9 @@ export const UNIQUE_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
   client_agreements: ['client_id'],
   content_assets: ['slug', 'provider_post_id'],
   asset_clicks: ['click_id'],
+  // derived: the pair (provider, provider_event_id), which Postgres held as a
+  // composite unique index. See app/lib/zernio-events.ts providerEventKey.
+  webhook_deliveries: ['provider_event_key'],
 }
 
 /**

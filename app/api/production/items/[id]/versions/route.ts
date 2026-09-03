@@ -84,11 +84,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (resetTo) {
       // re-read the gate: an approval that arrived (or was withdrawn) while
       // this upload was in flight decides, not the copy read at the top
-      const live = await table<ContentItemRow>('content_items').get(id, { fresh: true })
-      if (live?.posting_approval_state === 'approved') {
-        await table('content_items').update(id, {
-          posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null,
-        })
+      const reset = await table<ContentItemRow>('content_items').claim(id, cur =>
+        cur?.posting_approval_state === 'approved'
+          ? { ...cur, posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null }
+          : null)
+      if (reset.claimed) {
         await logActivity({
           actor: user, clientId: item.client_id,
           entityType: 'content_item', entityId: id,

@@ -140,6 +140,34 @@ describe('POST /api/team — an address that is already on the team', () => {
     expect(fake!.rows('team_invites')).toHaveLength(1)
   })
 
+  it('two admins inviting the same person at once send ONE invite', async () => {
+    start()
+    const [x, y] = await Promise.all([
+      post({ email: 'new@example.invalid', role: 'editor', name: 'New Person' }),
+      post({ email: 'new@example.invalid', role: 'editor', name: 'New Person' }),
+    ])
+    expect([x, y].filter(r => r.status === 201)).toHaveLength(1)
+    const refused = [x, y].find(r => r.status === 409)
+    expect(refused?.json.error).toBe('A pending invite already exists for this email')
+    expect(fake!.rows('team_invites')).toHaveLength(1)
+    // and only one invitation email went through Clerk
+    expect(createInvitation).toHaveBeenCalledTimes(1)
+  })
+
+  it('the address is invitable again once the invite is revoked', async () => {
+    start()
+    expect((await post({ email: 'new@example.invalid', role: 'editor' })).status).toBe(201)
+    const invite = fake!.rows('team_invites')[0] as unknown as { id: string }
+    const { DELETE } = await import('../app/api/team/[id]/route')
+    const revoked = await DELETE(
+      new Request('https://x.test/api/team/x?kind=invite', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: invite.id }) },
+    )
+    expect(revoked.status).toBe(200)
+    // the address stops being spoken for the moment the invite is not pending
+    expect(fake!.rows('claim_locks')[0]).toMatchObject({ holder: '' })
+  })
+
   it('opens the person and the invite when the address is new', async () => {
     start()
     const { status } = await post({

@@ -41,24 +41,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const seen = checked.profile.rev
     const next: BrandProfile = { ...checked.profile, rev: seen + 1 }
 
-    // the row must still be at the revision the caller edited from, so it is
-    // re-read and checked here. rev 0 means "never saved" — no profile at all.
-    const live = await table<Client>('clients').get(id, { fresh: true })
-    const liveRev = (live?.brand_profile as { rev?: unknown } | null)?.rev
-    const stillTheirs = seen > 0
-      ? String(liveRev ?? '') === String(seen)
-      : live?.brand_profile == null
-    if (!live || !stillTheirs) {
+    // the row must still be at the revision the caller edited from — checked
+    // INSIDE the write, so two editors saving together cannot both pass.
+    // rev 0 means "never saved": no profile at all.
+    const saved = await table<Client>('clients').claim(id, cur => {
+      if (!cur) return null
+      const liveRev = (cur.brand_profile as { rev?: unknown } | null)?.rev
+      const stillTheirs = seen > 0
+        ? String(liveRev ?? '') === String(seen)
+        : cur.brand_profile == null
+      if (!stillTheirs) return null
+      return {
+        ...cur,
+        brand_profile: next,
+        brand_profile_updated_at: new Date().toISOString(),
+        brand_profile_updated_by: user.email,
+      }
+    })
+    if (!saved.claimed) {
       return NextResponse.json(
         { error: 'Someone else changed this brand profile just now. The page will reload with their version.' },
         { status: 409 },
       )
     }
-    await table('clients').update(id, {
-      brand_profile: next,
-      brand_profile_updated_at: new Date().toISOString(),
-      brand_profile_updated_by: user.email,
-    })
     return NextResponse.json({ profile: next })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

@@ -5,6 +5,7 @@ import { attachOne } from '@/lib/db-join'
 import type { TeamUser, TeamInvite, TeamUserClient } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError, type Role } from '../../lib/authz'
 import { onTeamChanged } from '../../lib/gdrive-members'
+import { takeClaimLock, releaseClaimLock, pendingInviteLockKey } from '../../lib/claim-lock'
 
 const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
 
@@ -65,8 +66,9 @@ export async function GET() {
 
 /** Invite a person. super_admin only.
  *  One pending invite per email: Postgres enforced that with a partial unique
- *  index, which a JSON tree cannot express, so the check lives here — read the
- *  pending invites for the address first and refuse a second one. */
+ *  index, which a JSON tree cannot express, so it is a lock row on the address
+ *  instead — claimed, not checked, so two admins inviting the same person in
+ *  the same second produce one invite and one 409. */
 export async function POST(req: Request) {
   return withRequestCache(async () => {
     try {
@@ -102,13 +104,31 @@ export async function POST(req: Request) {
         )
       }
 
+      // One pending invite per email — Postgres held that as a partial unique
+      // index (only WHILE pending), which a plain unique key here cannot
+      // express: a revoked or accepted invite may repeat the address. It
+      // spans rows, so it becomes a lock row keyed on the email, taken
+      // atomically, and handed back the moment the invite stops being
+      // pending — including by the self-heal below, if a revoke never got to.
+      //
+      // The read first, because it is the only thing that knows about invites
+      // sent before this lock existed — but it is not the guarantee.
       const pending = (await invitesTable.list({
         by: { status: 'pending' },
         where: r => (r.email ?? '').toLowerCase() === email,
         limit: 1,
-        fresh: true,
       }))[0]
       if (pending) {
+        return NextResponse.json({ error: 'A pending invite already exists for this email' }, { status: 409 })
+      }
+
+      const inviteId = crypto.randomUUID()
+      const lockKey = pendingInviteLockKey(email)
+      const slot = await takeClaimLock(lockKey, inviteId, async holder => {
+        const held = await invitesTable.get(holder)
+        return !!held && held.status === 'pending'
+      })
+      if (!slot.ok) {
         return NextResponse.json({ error: 'A pending invite already exists for this email' }, { status: 409 })
       }
 
@@ -117,6 +137,7 @@ export async function POST(req: Request) {
       let invite: TeamInvite
       try {
         invite = await table('team_invites').insert({
+          id: inviteId,
           email,
           role,
           employment_type: body.employment_type === 'contractor' ? 'contractor' : 'employee',
@@ -127,6 +148,7 @@ export async function POST(req: Request) {
           status: 'pending',
         }) as unknown as TeamInvite
       } catch (e) {
+        await releaseClaimLock(lockKey, inviteId).catch(() => {})
         const msg = e instanceof Error ? e.message : 'Invite failed'
         return NextResponse.json({ error: msg }, { status: 500 })
       }
@@ -155,6 +177,7 @@ export async function POST(req: Request) {
         // somebody claimed the address between the check above and this write
         if (e instanceof DbError && e.code === 'unique') {
           await invitesTable.remove(invite.id)
+          await releaseClaimLock(lockKey, inviteId).catch(() => {})
           return NextResponse.json(
             { error: 'This person is already on the team, waiting for their first sign-in' },
             { status: 409 },
@@ -182,6 +205,8 @@ export async function POST(req: Request) {
           const linked = await users.list({ where: r => (r.email ?? '').toLowerCase() === email })
           await Promise.all(linked.map(u => users.update(u.id, { clerk_user_id: existing[0].id })))
           await invitesTable.update(invite.id, { status: 'accepted' })
+          // no longer pending, so the address is free to be invited again
+          await releaseClaimLock(lockKey, inviteId).catch(() => {})
           onTeamChanged('invite (existing account)')
           return NextResponse.json(
             { ...invite, status: 'accepted', already_has_account: true },
@@ -197,6 +222,7 @@ export async function POST(req: Request) {
         await invitesTable.update(invite.id, { clerk_invitation_id: clerkInvite.id })
       } catch (e) {
         await invitesTable.remove(invite.id)
+        await releaseClaimLock(lockKey, inviteId).catch(() => {})
         // roll back the person row too — but only if this invite created it
         // (no sign-in yet); leaving it made every re-invite 409 as "already
         // on the team" for someone who was never actually invited

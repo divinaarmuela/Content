@@ -232,19 +232,25 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     // a crash >10 min ago) must not block the event forever. Re-claim it with
     // an optimistic guard: exactly one retrier wins, a sent row stays sent.
     const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString()
-    const held = (await log.list({
-      where: r => r.dedupe_key === dedupe_key, limit: 1, fresh: true,
-    }))[0]
-    const reclaimable = !!held && (
-      held.status === 'failed'
-      || (held.status === 'pending' && held.created_at < staleBefore)
-    )
-    if (!held || !reclaimable) return 'duplicate' // genuinely sent (or in flight) — stop
-    const reclaimed = await log.update(held.id, {
-      status: 'pending', body_html: input.bodyHtml, subject: input.subject,
-    })
-    if (!reclaimed) return 'duplicate'
-    owned = reclaimed
+    const held = (await log.list({ where: r => r.dedupe_key === dedupe_key, limit: 1 }))[0]
+    if (!held) return 'duplicate'
+    // the reclaim predicate is evaluated INSIDE the write, so two retriers
+    // cannot both take the same failed row and send the email twice
+    const reclaimed = await log.claim(held.id, cur => {
+      const reclaimable = !!cur && (
+        cur.status === 'failed'
+        || (cur.status === 'pending' && cur.created_at < staleBefore)
+      )
+      return reclaimable
+        ? { ...cur!, status: 'pending', body_html: input.bodyHtml, subject: input.subject }
+        : null
+    // ONE attempt on purpose: staleness is judged from created_at, which the
+    // winner's write does not change, so a retry would find the row it just
+    // lost still "reclaimable" and take it — and send the email twice. Losing
+    // the conditional write IS the answer here.
+    }, { attempts: 1 })
+    if (!reclaimed.claimed) return 'duplicate' // genuinely sent (or in flight) — stop
+    owned = reclaimed.row
   }
   const claimedId = owned.id
 

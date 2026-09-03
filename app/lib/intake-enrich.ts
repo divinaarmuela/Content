@@ -141,43 +141,32 @@ async function writeBrandProfile(
   clientId: string,
   build: (current: BrandProfile) => { profile: BrandProfile; changed: boolean },
 ): Promise<'updated' | 'unchanged'> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    // Read the ACTUAL persisted column, not loadBrandProfile — that returns a
-    // synthetic rev of 1 for an unsaved profile while the column is still null,
-    // and guarding on rev=1 against a null column matches zero rows, so the
-    // write silently never lands. The guard must reflect what is really stored:
-    // a null column (never saved) vs the exact rev of an existing profile.
-    const clients = table<Client>('clients')
-    const row = await clients.get(clientId)
-    if (!row) return 'unchanged'
-
-    const raw = row.brand_profile
-    const hadProfile = raw != null
+  // The merge runs on the client row as it really is, and the result lands
+  // only if that row has not moved since — a concurrent scan or edit makes
+  // this lose, re-merge onto the newer profile and try again, rather than
+  // clobber it. The guard and the write are one operation, not two.
+  //
+  // Read the ACTUAL persisted column, not loadBrandProfile — that returns a
+  // synthetic rev of 1 for an unsaved profile while the column is still null,
+  // and a guard on rev=1 against a null column can never hold, so the write
+  // would silently never land.
+  const clients = table<Client>('clients')
+  const done = await clients.claim(clientId, cur => {
+    if (!cur) return null
+    const raw = cur.brand_profile
     const current = normaliseProfile(raw ?? {})
     const { profile, changed } = build(current)
-    if (!changed) return 'unchanged'
-
+    if (!changed) return null
     // normaliseProfile carries a stored rev through; 0 means the column is null
-    const seen = hadProfile ? current.rev : 0
-    const next: BrandProfile = { ...normaliseProfile(profile), rev: seen + 1 }
-    // the row must still be where we merged from: a null column stays null, an
-    // existing one stays at its rev — a concurrent scan or edit fails the guard,
-    // which is re-checked immediately before the write
-    const live = await clients.get(clientId, { fresh: true })
-    const unchangedSince = hadProfile
-      ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
-      : live?.brand_profile == null
-    if (live && unchangedSince) {
-      await clients.update(clientId, {
-        brand_profile: next,
-        brand_profile_updated_at: new Date().toISOString(),
-        brand_profile_updated_by: 'intake enrichment',
-      })
-      return 'updated'
+    const next: BrandProfile = { ...normaliseProfile(profile), rev: (raw != null ? current.rev : 0) + 1 }
+    return {
+      ...cur,
+      brand_profile: next,
+      brand_profile_updated_at: new Date().toISOString(),
+      brand_profile_updated_by: 'intake enrichment',
     }
-    // conflict: loop once to re-read and re-merge onto the newer profile
-  }
-  return 'unchanged'
+  })
+  return done.claimed ? 'updated' : 'unchanged'
 }
 
 export async function enrichFromIntake(

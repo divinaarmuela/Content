@@ -46,14 +46,22 @@ export type DeliveryClaim =
   | { kind: 'unlogged' }
 
 /**
+ * The composite key (provider, provider_event_id), as one value.
+ *
+ * A JSON tree indexes one field at a time, so the pair is carried as a single
+ * derived column and declared unique in lib/db.ts's UNIQUE_COLUMNS — which
+ * makes the insert itself the claim, decided by the database's own rule on
+ * /mdm/uniq. Mirrored in scripts/migrate-core.mjs for the backfill.
+ */
+export const providerEventKey = (provider: string, eventId: string) => `${provider}__${eventId}`
+
+/**
  * Claim one delivery.
  *
  * The uniqueness that decides this is COMPOSITE — (provider, provider_event_id)
- * — so it is checked here rather than by the database: an existing row for the
- * same provider and event id means somebody already has the claim. Zernio's
- * retries are not spaced out enough to assume the first attempt has finished,
- * so an in-flight duplicate can still slip through this window; every handler
- * below is independently idempotent for exactly that reason.
+ * — and it is now enforced by the database: the insert takes the unique
+ * pointer for the pair, or is refused. A duplicate delivery is the loser of
+ * that claim, not the result of a lookup that happened to run first.
  *
  * An event with no id cannot be deduped this way and is NOT dropped — the
  * account webhook that has been in production since 20 Aug predates the
@@ -62,16 +70,16 @@ export type DeliveryClaim =
 export async function claimDelivery(event: string, eventId: string | null): Promise<DeliveryClaim> {
   if (!eventId) return { kind: 'unlogged' }
   try {
-    const deliveries = table<WebhookDelivery>('webhook_deliveries')
-    const held = await deliveries.list({
-      where: r => r.provider_event_id === eventId && r.provider === 'zernio',
-      limit: 1,
-    })
-    if (held.length > 0) return { kind: 'duplicate' }
+    // The unique index Postgres held was composite, on (provider,
+    // provider_event_id) — so the claim is a single derived column carrying
+    // both, and the insert takes the /mdm/uniq pointer for it or is refused
+    // by the database. Listing the table and then inserting is two
+    // operations, and two redeliveries arriving together both pass the list.
     const row = await table('webhook_deliveries').insert({
       provider: 'zernio',
       event,
       provider_event_id: eventId,
+      provider_event_key: providerEventKey('zernio', eventId),
       received_at: new Date().toISOString(),
       handled: false,
       note: null,
