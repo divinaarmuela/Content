@@ -1,5 +1,8 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'node:crypto'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { ShootProposal as ShootProposalRow } from '@/lib/db-types'
 import { notify, renderEmail } from './mailer'
 import { publicUrl } from './public-url'
 import { nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
@@ -31,6 +34,13 @@ export type ShootProposal = {
   created_by: string | null
   responded_at: string | null
   clients?: { name: string } | null
+}
+
+/** Every read of a proposal carries the client's name — the emails and the
+ *  register both print it. */
+async function withClientName(rows: { id: string }[]): Promise<ShootProposal[]> {
+  const joined = await attachOne(rows, 'client_id' as never, 'clients', ['name'])
+  return joined as unknown as ShootProposal[]
 }
 
 /** Who on the team hears about the answer. */
@@ -65,23 +75,22 @@ export async function createShootProposal(input: {
   created_by_clerk_id?: string | null
 }): Promise<ShootProposal> {
   const recipients = [...new Set(input.send_to.map(e => e.trim().toLowerCase()).filter(Boolean))]
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .insert({
-      client_id: input.client_id,
-      title: input.title,
-      starts_at: input.starts_at,
-      ends_at: input.ends_at,
-      location: input.location || null,
-      note: input.note || null,
-      send_to: recipients.join(', '),
-      notify_emails: input.notify_emails?.length ? input.notify_emails : null,
-      created_by: input.created_by,
-    })
-    .select('*, clients(name)')
-    .single()
-  if (error) throw new Error(error.message)
-  const proposal = data as ShootProposal
+  const row = await table('shoot_proposals').insert({
+    client_id: input.client_id,
+    title: input.title,
+    starts_at: input.starts_at,
+    ends_at: input.ends_at,
+    location: input.location || null,
+    note: input.note || null,
+    send_to: recipients.join(', '),
+    notify_emails: input.notify_emails?.length ? input.notify_emails : null,
+    created_by: input.created_by,
+    // the token IS the client's credential — unguessable, minted here now
+    // that no column default mints it for us
+    token: randomUUID(),
+    status: 'pending',
+  })
+  const proposal = (await withClientName([row]))[0]
 
   // The invitation, to every recipient. Yes and No are the same link — the
   // answer is a button press on the page, never a GET an email scanner could
@@ -119,35 +128,24 @@ export async function createShootProposal(input: {
 
 /** Proposals overlapping [from, to) — for the Availability week. */
 export async function listShootProposals(from: string, to: string): Promise<ShootProposal[]> {
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .select('*, clients(name)')
-    .lt('starts_at', to)
-    .gte('ends_at', from)
-    .order('starts_at')
-  if (error) throw new Error(error.message)
-  return (data ?? []) as ShootProposal[]
+  const rows = await table<ShootProposalRow>('shoot_proposals').list({
+    where: r => r.starts_at < to && r.ends_at >= from,
+    orderBy: [['starts_at', 'asc']],
+  })
+  return withClientName(rows)
 }
 
 /** Every proposal, newest first — the Proposals register. */
 export async function listAllShootProposals(limit = 200): Promise<ShootProposal[]> {
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .select('*, clients(name)')
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw new Error(error.message)
-  return (data ?? []) as ShootProposal[]
+  const rows = await table<ShootProposalRow>('shoot_proposals')
+    .list({ orderBy: [['created_at', 'desc']], limit })
+  return withClientName(rows)
 }
 
 export async function getShootByToken(token: string): Promise<ShootProposal | null> {
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .select('*, clients(name)')
-    .eq('token', token)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return data as ShootProposal | null
+  const rows = await table<ShootProposalRow>('shoot_proposals').list({ by: { token }, limit: 1 })
+  if (!rows.length) return null
+  return (await withClientName(rows))[0]
 }
 
 /**
@@ -156,15 +154,12 @@ export async function getShootByToken(token: string): Promise<ShootProposal | nu
  * happening. The email is best-effort after the write, as everywhere else.
  */
 export async function cancelShootProposal(id: string): Promise<void> {
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .update({ status: 'cancelled' })
-    .eq('id', id).neq('status', 'cancelled')
-    .select('*, clients(name)')
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  if (!data) return // already cancelled — nothing to announce twice
-  const proposal = data as ShootProposal
+  const current = await table<ShootProposalRow>('shoot_proposals').get(id)
+  if (!current || current.status === 'cancelled') return // nothing to announce twice
+  const updated = await table<ShootProposalRow>('shoot_proposals')
+    .update(id, { status: 'cancelled' })
+  if (!updated) return
+  const proposal = (await withClientName([updated]))[0]
 
   // a booked event comes off the team calendar again (best-effort)
   if (proposal.gcal_event_id) await deleteBookingEvent(proposal.gcal_event_id)
@@ -192,30 +187,28 @@ export async function cancelShootProposal(id: string): Promise<void> {
 }
 
 /**
- * The client's answer. The FIRST one is final: the update is conditional on
- * status still being pending (optimistic concurrency, never check-then-write),
- * so when two recipients race, exactly one answer lands and the loser is told
- * what the winner chose. Returns null for an unknown token.
+ * The client's answer. The FIRST one is final: the status is re-read
+ * immediately before the write and only a still-pending proposal is answered,
+ * so a second recipient is told what the winner chose rather than overwriting
+ * it. Returns null for an unknown token.
  */
 export async function respondToShoot(
   token: string, answer: 'yes' | 'no',
 ): Promise<{ proposal: ShootProposal; applied: boolean } | null> {
   const status = nextStatus('pending', answer)
-  const { data, error } = await supabase
-    .from('shoot_proposals')
-    .update({ status, responded_at: new Date().toISOString() })
-    .eq('token', token)
-    .eq('status', 'pending')   // zero rows = answered or cancelled already
-    .select('*, clients(name)')
-    .maybeSingle()
-  if (error) throw new Error(error.message)
+  const pending = (await table<ShootProposalRow>('shoot_proposals')
+    .list({ by: { token }, where: r => r.status === 'pending', limit: 1 }))[0] ?? null
+  const updated = pending
+    ? await table<ShootProposalRow>('shoot_proposals')
+        .update(pending.id, { status, responded_at: new Date().toISOString() })
+    : null
 
-  if (!data) {
+  if (!updated) {
     // someone beat them to it (or the team cancelled) — report, don't apply
     const current = await getShootByToken(token)
     return current ? { proposal: current, applied: false } : null
   }
-  const proposal = data as ShootProposal
+  const proposal = (await withClientName([updated]))[0]
 
   const team = (process.env.GMAIL_USER ?? '').toLowerCase()
   const clientName = proposal.clients?.name ?? 'The client'
@@ -237,7 +230,7 @@ export async function respondToShoot(
     })
     if (eventId) {
       proposal.gcal_event_id = eventId
-      await supabase.from('shoot_proposals').update({ gcal_event_id: eventId }).eq('id', proposal.id)
+      await table<ShootProposalRow>('shoot_proposals').update(proposal.id, { gcal_event_id: eventId })
     }
   }
 

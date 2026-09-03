@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { UserPageAccess } from '@/lib/db-types'
 import { canSeePage } from './page-access-core'
 import type { TeamUser } from './authz'
 
@@ -15,13 +16,13 @@ import type { TeamUser } from './authz'
 /** Grants and hides for one person. A hidden row is a PREFERENCE, never a
  *  grant — treating it as one let anyone self-hide a page to gain its data. */
 async function pageAccessRows(teamUserId: string): Promise<{ granted: string[]; hidden: string[] }> {
-  const { data } = await supabase
-    .from('user_page_access').select('href, hidden').eq('team_user_id', teamUserId)
+  const rows = await table<UserPageAccess & { hidden?: boolean }>('user_page_access')
+    .list({ by: { team_user_id: teamUserId } })
   const granted: string[] = []
   const hidden: string[] = []
-  for (const r of data ?? []) {
-    if (r.hidden) hidden.push(r.href as string)
-    else granted.push(r.href as string)
+  for (const r of rows) {
+    if (r.hidden) hidden.push(r.href)
+    else granted.push(r.href)
   }
   return { granted, hidden }
 }

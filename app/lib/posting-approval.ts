@@ -1,5 +1,9 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  Client, ContentItem, ScheduleEntry, TeamUser as TeamUserRow, TeamUserClient,
+} from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { actingRoles } from './workflow-core'
 import { logActivity } from './workflow'
@@ -72,13 +76,12 @@ export function readPostingApproval(row: Record<string, unknown>): {
  * null, which is "the gate is not in use": exactly today's behaviour.
  */
 export async function postingApprovalStateOf(itemId: string): Promise<PostingApprovalState | null> {
-  const { data, error } = await supabase
-    .from('content_items')
-    .select('posting_approval_state')
-    .eq('id', itemId)
-    .maybeSingle()
-  if (error) return null // column not migrated yet — behave as before it existed
-  return parseApprovalState(data?.posting_approval_state)
+  try {
+    const row = await table<ContentItem>('content_items').get(itemId)
+    return parseApprovalState(row?.posting_approval_state)
+  } catch {
+    return null // not migrated yet — behave as before the gate existed
+  }
 }
 
 export type PostingApprovalInput = {
@@ -96,19 +99,19 @@ async function previewFacts(item: ApprovableItem): Promise<{
   platforms: string
   tz: string
 }> {
-  const [{ data: client }, { data: entries }] = await Promise.all([
-    supabase.from('clients').select('timezone').eq('id', item.client_id).maybeSingle(),
-    supabase.from('schedule_entries')
-      .select('platform, scheduled_at')
-      .eq('item_id', item.id)
-      .not('scheduled_at', 'is', null)
-      .order('scheduled_at', { ascending: true }),
+  const [client, entries] = await Promise.all([
+    table<Client>('clients').get(item.client_id),
+    table<ScheduleEntry>('schedule_entries').list({
+      by: { item_id: item.id },
+      where: r => r.scheduled_at != null,
+      orderBy: [['scheduled_at', 'asc']],
+    }),
   ])
   const tz = safeZone(client?.timezone as string | null)
-  const first = entries?.[0] ?? null
+  const first = entries[0] ?? null
   const targets = Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []
   const names = [...new Set([
-    ...(entries ?? []).map(e => String(e.platform)),
+    ...entries.map(e => String(e.platform)),
     ...targets,
   ])].map(platformLabel)
   return {
@@ -122,13 +125,13 @@ async function previewFacts(item: ApprovableItem): Promise<{
 
 /** the client's assigned account managers (super admins included), active only */
 async function clientManagers(clientId: string): Promise<{ id: string; email: string; name: string }[]> {
-  const { data } = await supabase
-    .from('team_user_clients')
-    .select('team_users!team_user_clients_team_user_id_fkey!inner(id, email, name, role, active_status)')
-    .eq('client_id', clientId)
-  return (data ?? [])
-    .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean })
-    .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
+  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+  const joined = await attachOne(links, 'team_user_id', 'team_users',
+    ['id', 'email', 'name', 'role', 'active_status'])
+  return joined
+    .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean } | null)
+    .filter((u): u is { id: string; email: string; name: string; role: string; active_status: boolean } =>
+      !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
 }
 
 /** the people holding the scheduling of this item, plus its owner */
@@ -138,10 +141,8 @@ async function itemSchedulingPeople(item: ApprovableItem): Promise<{ id: string;
     ...(item.owner_id ? [String(item.owner_id)] : []),
   ].slice(0, 20)
   if (ids.length === 0) return []
-  const { data } = await supabase
-    .from('team_users').select('id, email, name')
-    .in('id', ids).eq('active_status', true)
-  return data ?? []
+  return table<TeamUserRow>('team_users')
+    .list({ where: u => ids.includes(u.id) && u.active_status })
 }
 
 /** the email the approver gets: the post as it will actually appear */
@@ -209,20 +210,21 @@ export async function actOnPostingApproval(
     patch.posting_approved_at = null
   }
 
-  // optimistic concurrency on the state itself: two people answering at once
-  // resolve to exactly one write. `is` for null (an unsent gate), `eq` else.
+  // the state is re-read immediately before the write, and only a row still
+  // sitting where this actor saw it is answered: two people answering at once
+  // resolve to exactly one write. An unsent gate is null OR 'draft'.
   const current = parseApprovalState(item.posting_approval_state)
-  let q = supabase.from('content_items').update(patch).eq('id', item.id)
-  q = current === null
-    ? q.or('posting_approval_state.is.null,posting_approval_state.eq.draft')
-    : q.eq('posting_approval_state', current)
-  const { data: updated, error } = await q.select().maybeSingle()
-  if (error) {
-    // the one honest sentence for an unmigrated database
-    if (/posting_approval_state|column|schema cache/i.test(error.message)) {
-      throw new AuthzError('Final post approval is not set up on this database yet — run supabase/posting_approval.sql first', 400)
+  const live = await table<ContentItem>('content_items').get(item.id)
+  const stillThere = live && (current === null
+    ? live.posting_approval_state == null || live.posting_approval_state === 'draft'
+    : live.posting_approval_state === current)
+  let updated: ContentItem | null = null
+  if (stillThere) {
+    try {
+      updated = await table<ContentItem>('content_items').update(item.id, patch as Partial<ContentItem>)
+    } catch (e) {
+      throw new AuthzError(e instanceof Error ? e.message : 'Could not answer this post', 500)
     }
-    throw new AuthzError(error.message, 500)
   }
   if (!updated) {
     throw new AuthzError('Somebody answered this post while you were looking — refresh to see where it stands', 409)
@@ -296,5 +298,5 @@ export async function actOnPostingApproval(
     }
   })().catch(e => console.error('posting-approval notification error:', e))
 
-  return updated as Record<string, unknown>
+  return updated as unknown as Record<string, unknown>
 }

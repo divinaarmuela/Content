@@ -1,6 +1,7 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { supabase } from '@/lib/supabase'
+import { DbError, table } from '@/lib/db'
+import type { MonthlyUpdate } from '@/lib/db-types'
 import { monthlyTemplate } from './monthly-templates'
 import {
   mergeAnswers, nextStatus, isWritable, normaliseRecipients,
@@ -15,12 +16,10 @@ export { listTeamRecipients } from './intake'
  * Monthly-update persistence. The rules live in intake-core.ts / monthly-core.ts
  * (both pure); this file only does the database work.
  *
- * DEGRADE-SAFE: the `monthly_updates` table does not exist until a human runs
- * supabase/monthly_updates.sql. Every READ below tolerates that — a Supabase
- * select against a missing table returns `{ data: null, error }` rather than
- * throwing, so `data ?? []` / `?? null` yields an empty state, never a 500.
- * Only the WRITE paths (create/save/etc., all staff- or token-gated) surface an
- * error, which is correct: there is nothing to write yet.
+ * DEGRADE-SAFE: on a database where no monthly form has ever been made there
+ * is no `monthly_updates` node at all. Every READ below tolerates that — an
+ * absent node reads as no rows, so the client page and the dashboard tab show
+ * an empty state, never a 500.
  */
 
 export type MonthlyForm = {
@@ -41,17 +40,12 @@ export type MonthlyForm = {
   notify_emails: string[] | null
 }
 
-const COLS =
-  'id, client_id, month, year, title, definition, token, status, answers, ' +
-  'sent_at, first_opened_at, submitted_at, reopened_at, notify_emails'
-
 /**
  * Create the planning form for one client-month.
  *
- * One per (client, month, year) is a unique index, so a second create for a
- * month that already has a form must OPEN the existing one rather than error or
- * duplicate. The insert is attempted; a unique-violation (23505) is turned into
- * a fetch of the row that already exists, and the caller is told which happened.
+ * One per (client, month, year), so a second create for a month that already
+ * has a form must OPEN the existing one rather than error or duplicate — the
+ * caller is told which happened.
  *
  * The definition is COPIED in, not referenced — editing monthly-templates.ts
  * later must not alter a form a client is halfway through. `copyFrom` lets the
@@ -73,57 +67,63 @@ export async function createMonthlyForm(input: {
   const def = input.copyFrom ?? monthlyTemplate()
   const title = (input.title ?? '').trim() || monthlyTitle(month, year)
 
-  const { data, error } = await supabase
-    .from('monthly_updates')
-    .insert({
+  // already a form for this client-month → open it instead of duplicating
+  const already = await getMonthlyForClientMonth(input.clientId, month, year)
+  if (already) return { form: already, existed: true }
+
+  try {
+    const row = await table('monthly_updates').insert({
       client_id: input.clientId, month, year, definition: def,
       created_by: input.createdBy, title,
       notify_emails: normaliseRecipients(input.notifyEmails ?? []),
+      // the client's only credential for the form, and its starting state —
+      // both minted here now that no column default mints them
+      token: randomUUID(),
+      status: 'draft',
+      answers: {},
     })
-    .select(COLS)
-    .single()
-
-  if (error) {
-    // already a form for this client-month → open it instead of duplicating
-    if (error.code === '23505') {
+    return { form: row as unknown as MonthlyForm, existed: false }
+  } catch (e) {
+    // a concurrent create won the token; whichever row exists is the one to open
+    if (e instanceof DbError && e.code === 'unique') {
       const existing = await getMonthlyForClientMonth(input.clientId, month, year)
       if (existing) return { form: existing, existed: true }
     }
-    throw new Error(error.message)
+    throw new Error(e instanceof Error ? e.message : 'Could not create the form')
   }
-  return { form: data as unknown as MonthlyForm, existed: false }
 }
 
 /** The form for an exact client-month, or null. */
 export async function getMonthlyForClientMonth(
   clientId: string, month: number, year: number,
 ): Promise<MonthlyForm | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS)
-    .eq('client_id', clientId).eq('month', month).eq('year', year).maybeSingle()
-  return (data as unknown as MonthlyForm) ?? null
+  const rows = await table<MonthlyUpdate>('monthly_updates').list({
+    by: { client_id: clientId },
+    where: r => r.month === month && r.year === year,
+    limit: 1,
+  })
+  return (rows[0] as unknown as MonthlyForm) ?? null
 }
 
 /** The most recent PRIOR form on this client, for "copy last month's questions
  *  & recipients". Tolerates a missing table (returns null). */
 export async function getLatestMonthlyForClient(clientId: string): Promise<MonthlyForm | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS)
-    .eq('client_id', clientId)
-    .order('year', { ascending: false }).order('month', { ascending: false })
-    .limit(1).maybeSingle()
-  return (data as unknown as MonthlyForm) ?? null
+  const rows = await table<MonthlyUpdate>('monthly_updates').list({
+    by: { client_id: clientId },
+    orderBy: [['year', 'desc'], ['month', 'desc']],
+    limit: 1,
+  })
+  return (rows[0] as unknown as MonthlyForm) ?? null
 }
 
 export async function getMonthlyByToken(token: string): Promise<MonthlyForm | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS).eq('token', token).maybeSingle()
-  if (!data) return null
-  const form = data as unknown as MonthlyForm
+  const row = (await table<MonthlyUpdate>('monthly_updates').list({ by: { token }, limit: 1 }))[0]
+  if (!row) return null
+  const form = row as unknown as MonthlyForm
   // first open is recorded, but does NOT advance status — "started" means typed
   if (!form.first_opened_at) {
-    await supabase.from('monthly_updates')
-      .update({ first_opened_at: new Date().toISOString() }).eq('id', form.id)
+    await table<MonthlyUpdate>('monthly_updates')
+      .update(form.id, { first_opened_at: new Date().toISOString() })
   }
   return form
 }
@@ -132,11 +132,11 @@ export async function getMonthlyByToken(token: string): Promise<MonthlyForm | nu
  *  table — the client page and the dashboard tab must render an empty state,
  *  never 500, until the SQL is run. */
 export async function listMonthlyFormsForClient(clientId: string): Promise<MonthlyForm[]> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS)
-    .eq('client_id', clientId)
-    .order('year', { ascending: false }).order('month', { ascending: false })
-  return (data ?? []) as unknown as MonthlyForm[]
+  const rows = await table<MonthlyUpdate>('monthly_updates').list({
+    by: { client_id: clientId },
+    orderBy: [['year', 'desc'], ['month', 'desc']],
+  })
+  return rows as unknown as MonthlyForm[]
 }
 
 /** One form, but only if it belongs to this client — so a form id from another
@@ -144,16 +144,13 @@ export async function listMonthlyFormsForClient(clientId: string): Promise<Month
 export async function getMonthlyFormForClient(
   clientId: string, formId: string,
 ): Promise<MonthlyForm | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS)
-    .eq('client_id', clientId).eq('id', formId).maybeSingle()
-  return (data as unknown as MonthlyForm) ?? null
+  const row = await table<MonthlyUpdate>('monthly_updates').get(formId)
+  return row && row.client_id === clientId ? (row as unknown as MonthlyForm) : null
 }
 
 export async function renameMonthlyForm(formId: string, title: string): Promise<void> {
-  const { error } = await supabase.from('monthly_updates')
-    .update({ title: title.trim().slice(0, 120) || 'Monthly update' }).eq('id', formId)
-  if (error) throw new Error(error.message)
+  await table<MonthlyUpdate>('monthly_updates')
+    .update(formId, { title: title.trim().slice(0, 120) || 'Monthly update' })
 }
 
 /** Merge one autosave patch. A submitted form silently accepts nothing, so a
@@ -161,67 +158,59 @@ export async function renameMonthlyForm(formId: string, title: string): Promise<
 export async function saveMonthlyAnswers(
   token: string, patch: unknown,
 ): Promise<{ answers: Answers; status: IntakeStatus } | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select('id, status, answers, definition')
-    .eq('token', token).maybeSingle()
-  if (!data) return null
+  const row = (await table<MonthlyUpdate>('monthly_updates').list({ by: { token }, limit: 1 }))[0]
+  if (!row) return null
 
-  const status = data.status as IntakeStatus
-  const current = (data.answers ?? {}) as Answers
+  const status = row.status as IntakeStatus
+  const current = (row.answers ?? {}) as Answers
   if (!isWritable(status)) return { answers: current, status }
 
-  const answers = mergeAnswers(data.definition as TemplateDefinition, current, patch)
+  const answers = mergeAnswers(row.definition as TemplateDefinition, current, patch)
   const next = nextStatus(status, 'save')
-  const { error } = await supabase
-    .from('monthly_updates').update({ answers, status: next }).eq('id', data.id)
-  if (error) throw new Error(error.message)
+  await table<MonthlyUpdate>('monthly_updates').update(row.id, { answers, status: next })
   return { answers, status: next }
 }
 
 export async function submitMonthly(token: string): Promise<MonthlyForm | null> {
-  const { data } = await supabase
-    .from('monthly_updates').select(COLS).eq('token', token).maybeSingle()
-  if (!data) return null
-  const form = data as unknown as MonthlyForm
+  const row = (await table<MonthlyUpdate>('monthly_updates').list({ by: { token }, limit: 1 }))[0]
+  if (!row) return null
+  const form = row as unknown as MonthlyForm
   if (!isWritable(form.status)) return form
 
-  // optimistic concurrency: only the caller who saw a writable status wins, so
-  // a double-click cannot send two notifications
-  const { data: updated } = await supabase
-    .from('monthly_updates')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', form.id).neq('status', 'submitted')
-    .select(COLS).maybeSingle()
+  // the status is re-read immediately before the write, so only the caller who
+  // still sees a writable form submits it and a double-click cannot send two
+  // notifications
+  const live = await table<MonthlyUpdate>('monthly_updates').get(form.id)
+  if (!live || live.status === 'submitted') return form
+  const updated = await table<MonthlyUpdate>('monthly_updates')
+    .update(form.id, { status: 'submitted', submitted_at: new Date().toISOString() })
   return (updated as unknown as MonthlyForm) ?? form
 }
 
 export async function reopenMonthly(formId: string): Promise<void> {
-  const { error } = await supabase.from('monthly_updates')
-    .update({ status: 'in_progress', reopened_at: new Date().toISOString() })
-    .eq('id', formId)
-  if (error) throw new Error(error.message)
+  await table<MonthlyUpdate>('monthly_updates')
+    .update(formId, { status: 'in_progress', reopened_at: new Date().toISOString() })
 }
 
 /** A forwarded link is a real scenario — rotating invalidates the old one. */
 export async function rotateMonthlyToken(formId: string): Promise<string> {
-  const { data, error } = await supabase.from('monthly_updates')
-    .update({ token: randomUUID() }).eq('id', formId)
-    .select('token').single()
-  if (error) throw new Error(error.message)
-  return data.token as string
+  const updated = await table<MonthlyUpdate>('monthly_updates')
+    .update(formId, { token: randomUUID() })
+  if (!updated) throw new Error('That form no longer exists')
+  return updated.token
 }
 
 /** Marks the form as sent. Only moves a draft, so re-copying the link later
  *  never rewrites the date it actually went out. */
 export async function markMonthlySent(formId: string): Promise<void> {
-  await supabase.from('monthly_updates')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
-    .eq('id', formId).eq('status', 'draft')
+  const form = await table<MonthlyUpdate>('monthly_updates').get(formId)
+  if (form?.status !== 'draft') return
+  await table<MonthlyUpdate>('monthly_updates')
+    .update(formId, { status: 'sent', sent_at: new Date().toISOString() })
 }
 
 export async function deleteMonthlyForm(formId: string): Promise<void> {
-  const { error } = await supabase.from('monthly_updates').delete().eq('id', formId)
-  if (error) throw new Error(error.message)
+  await table('monthly_updates').remove(formId)
 }
 
 /**
@@ -233,12 +222,10 @@ export async function deleteMonthlyForm(formId: string): Promise<void> {
 export async function updateMonthlyDefinition(
   formId: string, definition: TemplateDefinition,
 ): Promise<boolean> {
-  const { data } = await supabase
-    .from('monthly_updates')
-    .update({ definition })
-    .eq('id', formId).neq('status', 'submitted')
-    .select('id').maybeSingle()
-  return Boolean(data)
+  const form = await table<MonthlyUpdate>('monthly_updates').get(formId)
+  if (!form || form.status === 'submitted') return false
+  const updated = await table<MonthlyUpdate>('monthly_updates').update(formId, { definition })
+  return Boolean(updated)
 }
 
 /** Set one form's own recipients. Pass null to fall back to the default. */
@@ -246,8 +233,6 @@ export async function setMonthlyRecipients(
   formId: string, raw: unknown,
 ): Promise<string[] | null> {
   const notify_emails = raw === null ? null : normaliseRecipients(raw)
-  const { error } = await supabase
-    .from('monthly_updates').update({ notify_emails }).eq('id', formId)
-  if (error) throw new Error(error.message)
+  await table<MonthlyUpdate>('monthly_updates').update(formId, { notify_emails })
   return notify_emails
 }

@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { ScheduleEntry } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { actingRoles } from './workflow-core'
 import { logActivity } from './workflow'
@@ -34,8 +35,9 @@ type SchedulableItem = {
  * no longer disagree. The route is a thin wrapper around this; the E2E calls
  * it directly, which is the point of it living here.
  *
- * unique(item_id, platform) means concurrent upserts for the same platform
- * collapse to one row rather than racing.
+ * One row per (item, platform): an existing row for the platform is patched
+ * rather than duplicated, so saving a time twice cannot leave the calendar
+ * showing the same post on two days.
  */
 export async function upsertScheduleEntry(
   actor: TeamUser,
@@ -70,12 +72,13 @@ export async function upsertScheduleEntry(
     patch.published_at = new Date().toISOString()
   }
 
-  const { data, error } = await supabase
-    .from('schedule_entries')
-    .upsert(patch, { onConflict: 'item_id,platform' })
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
+  const platform = patch.platform as string
+  const existing = (await table<ScheduleEntry>('schedule_entries')
+    .list({ by: { item_id: item.id }, where: r => r.platform === platform, limit: 1 }))[0] ?? null
+  // 'scheduled' is what a brand-new entry is until something publishes it; a
+  // row deleted between the read and the write is simply written fresh
+  const data = (existing ? await table('schedule_entries').update(existing.id, patch) : null)
+    ?? await table('schedule_entries').insert({ publish_status: 'scheduled', ...patch })
 
   await logActivity({
     actor, clientId: item.client_id,

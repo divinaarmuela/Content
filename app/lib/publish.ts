@@ -1,5 +1,9 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'node:crypto'
+import { table } from '@/lib/db'
+import type {
+  ContentAsset, PublishJob as PublishJobRow, SocialAccount,
+} from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import {
   validatePost, isPlatform, type MediaItem, type PostKind, type Platform, type Target,
@@ -65,9 +69,21 @@ export async function queuePublishJob(input: {
     }
   }
 
-  const { data, error } = await supabase
-    .from('publish_jobs')
-    .insert({
+  // only one LIVE job per content item, ever — the rule the partial unique
+  // index enforced in Postgres. Queueing the same item twice is the one
+  // mistake that double-posts to a client's real account.
+  if (input.contentItemId) {
+    const live = await table<PublishJobRow>('publish_jobs').list({
+      where: j => j.content_item_id === input.contentItemId
+        && ['queued', 'publishing'].includes(j.status),
+      limit: 1,
+    })
+    if (live.length > 0) return { error: 'This content item is already queued to publish' }
+  }
+
+  try {
+    const now = new Date().toISOString()
+    const row = await table('publish_jobs').insert({
       client_id: input.clientId ?? null,
       content_item_id: input.contentItemId ?? null,
       schedule_entry_id: input.scheduleEntryId ?? null,
@@ -78,18 +94,16 @@ export async function queuePublishJob(input: {
       timezone: input.timezone ?? 'Australia/Melbourne',
       created_by: input.createdBy ?? null,
       status: 'queued',
+      // stable across every retry of this job — layer 2 of the duplicate
+      // defence, and no column default mints it any more
+      request_id: randomUUID(),
+      attempts: 0,
+      updated_at: now,
     })
-    .select('id')
-    .single()
-
-  if (error) {
-    // the partial unique index refuses a second live job for the same item
-    if (/publish_jobs_one_live_per_item/.test(error.message)) {
-      return { error: 'This content item is already queued to publish' }
-    }
-    return { error: error.message }
+    return { id: row.id }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
-  return { id: data.id }
 }
 
 /**
@@ -98,13 +112,10 @@ export async function queuePublishJob(input: {
  */
 export async function runPublishJob(jobId: string): Promise<string | null> {
   // ── layer 1: claim it ────────────────────────────────────────────────
-  const { data: claimed } = await supabase
-    .from('publish_jobs')
-    .update({ status: 'publishing', updated_at: new Date().toISOString() })
-    .eq('id', jobId)
-    .eq('status', 'queued')          // ← the gate; zero rows means we lost
-    .select('*')
-    .maybeSingle()
+  const current = await table<PublishJobRow>('publish_jobs').get(jobId)
+  if (!current || current.status !== 'queued') return null   // ← the gate; not queued means we lost
+  const claimed = await table<PublishJobRow>('publish_jobs')
+    .update(jobId, { status: 'publishing', updated_at: new Date().toISOString() })
 
   if (!claimed) return null
 
@@ -112,9 +123,8 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
   const publisher = getPublisher()
 
   const settle = async (fields: Record<string, unknown>) => {
-    await supabase.from('publish_jobs')
-      .update({ ...fields, updated_at: new Date().toISOString() })
-      .eq('id', jobId)
+    await table('publish_jobs')
+      .update(jobId, { ...fields, updated_at: new Date().toISOString() })
   }
 
   try {
@@ -249,17 +259,14 @@ async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
  */
 export async function reclaimStalePublishing(olderThanMinutes = 15): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString()
-  const { data } = await supabase
-    .from('publish_jobs')
-    .update({
-      status: 'queued',
-      error: 'Publishing was interrupted; the job was returned to the queue',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('status', 'publishing')
-    .lt('updated_at', cutoff)
-    .select('id')
-  return (data ?? []).length
+  const stale = await table<PublishJobRow>('publish_jobs')
+    .list({ by: { status: 'publishing' }, where: j => j.updated_at < cutoff })
+  await Promise.all(stale.map(j => table('publish_jobs').update(j.id, {
+    status: 'queued',
+    error: 'Publishing was interrupted; the job was returned to the queue',
+    updated_at: new Date().toISOString(),
+  })))
+  return stale.length
 }
 
 /**
@@ -275,15 +282,14 @@ export async function reconcilePublishedJobs(): Promise<number> {
   // 'scheduled' jobs are included: the provider posts them at their time and
   // nothing else ever flips our row to published — without this they sit as
   // "scheduled" forever while the post is live
-  const { data: jobs } = await supabase
-    .from('publish_jobs')
-    .select('id, status, provider_post_id, content_item_id, targets')
-    .in('status', ['published', 'scheduled'])
-    .gte('created_at', since)
-    .not('provider_post_id', 'is', null)
-    .limit(50)
+  const jobs = await table<PublishJobRow>('publish_jobs').list({
+    where: j => ['published', 'scheduled'].includes(j.status)
+      && j.created_at >= since
+      && j.provider_post_id != null,
+    limit: 50,
+  })
 
-  if (!jobs?.length) return 0
+  if (!jobs.length) return 0
 
   const publisher = getPublisher()
   type Remote = { status?: string; platforms?: { platformPostUrl?: string | null; status?: string }[] }
@@ -325,12 +331,16 @@ export async function reconcilePublishedJobs(): Promise<number> {
 
     if (job.status === 'scheduled' && ['published', 'posted', 'success'].includes(remote.status)) {
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl ?? null
-      await supabase.from('publish_jobs').update({
-        status: 'published',
-        published_at: new Date().toISOString(),
-        ...(url ? { permalink: url } : {}),
-        updated_at: new Date().toISOString(),
-      }).eq('id', job.id).eq('status', 'scheduled')
+      // still 'scheduled' at the moment of writing, or somebody else moved it
+      const live = await table<PublishJobRow>('publish_jobs').get(job.id)
+      if (live?.status === 'scheduled') {
+        await table('publish_jobs').update(job.id, {
+          status: 'published',
+          published_at: new Date().toISOString(),
+          ...(url ? { permalink: url } : {}),
+          updated_at: new Date().toISOString(),
+        })
+      }
       if (job.content_item_id) {
         const { recordPublishOnItem } = await import('./production-publish')
         await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
@@ -340,22 +350,23 @@ export async function reconcilePublishedJobs(): Promise<number> {
     }
 
     if (remote.status === 'failed' || remote.status === 'partial') {
-      await supabase.from('publish_jobs').update({
+      await table('publish_jobs').update(job.id, {
         status: 'failed',
         error: `Provider reported the post as ${remote.status} after creation`,
         updated_at: new Date().toISOString(),
-      }).eq('id', job.id)
+      })
       changed++
     } else {
       // capture the permalink once the platform assigns one
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
       if (url) {
-        await supabase.from('publish_jobs').update({ permalink: url }).eq('id', job.id)
+        await table('publish_jobs').update(job.id, { permalink: url })
         // mirror it onto the registered asset so evidence links to the live post
-        await supabase.from('content_assets')
-          .update({ post_url: url })
-          .eq('provider_post_id', job.provider_post_id as string)
-          .is('post_url', null)
+        const assets = await table<ContentAsset>('content_assets').list({
+          where: a => a.provider_post_id === job.provider_post_id && a.post_url == null,
+        })
+        await Promise.all(assets.map(a =>
+          table<ContentAsset>('content_assets').update(a.id, { post_url: url })))
         // the platform assigns the permalink after the fact; push it through
         // to the schedule entry so the client-facing live link is populated
         if (job.content_item_id) {
@@ -381,14 +392,13 @@ export async function reconcilePublishedJobs(): Promise<number> {
  * claim still guarantees it is handed over exactly once.
  */
 export async function dueJobIds(): Promise<string[]> {
-  const { data } = await supabase
-    .from('publish_jobs')
-    .select('id')
-    .eq('status', 'queued')
-    .lt('attempts', 5)               // stop hammering a job that keeps failing
-    .order('created_at', { ascending: true })
-    .limit(50)
-  return (data ?? []).map(r => r.id as string)
+  const rows = await table<PublishJobRow>('publish_jobs').list({
+    by: { status: 'queued' },
+    where: j => j.attempts < 5,      // stop hammering a job that keeps failing
+    orderBy: [['created_at', 'asc']],
+    limit: 50,
+  })
+  return rows.map(r => r.id)
 }
 
 /** Refresh the cached account list for a client from the provider. */
@@ -396,8 +406,8 @@ export async function syncSocialAccounts(clientId: string, profileId: string): P
   const accounts = await getPublisher().listAccounts(profileId)
   if (accounts.length === 0) return 0
 
-  const { error } = await supabase.from('social_accounts').upsert(
-    accounts.map(a => ({
+  for (const a of accounts) {
+    await table<SocialAccount>('social_accounts').upsert({
       client_id: clientId,
       platform: a.platform,
       provider_account_id: a.providerAccountId,
@@ -409,9 +419,7 @@ export async function syncSocialAccounts(clientId: string, profileId: string): P
       // unlinked stays invisible forever after being reconnected.
       active: true,
       last_synced_at: new Date().toISOString(),
-    })),
-    { onConflict: 'provider_account_id' }
-  )
-  if (error) throw new Error(error.message)
+    }, { onConflict: 'provider_account_id' })
+  }
   return accounts.length
 }

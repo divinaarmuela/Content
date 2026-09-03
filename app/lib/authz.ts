@@ -1,7 +1,8 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { TeamInvite, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import { parseAllowlist, isAllowlistedSuperAdmin, roleSatisfies, type Role } from './identity-core'
 
 export { TEAM_ROLES, parseAllowlist, isAllowlistedSuperAdmin, roleSatisfies } from './identity-core'
@@ -49,23 +50,16 @@ export async function resolveTeamUser(): Promise<TeamUser> {
   const isSuper = isAllowlistedSuperAdmin(email, allowlist)
 
   // fast path — known identity
-  const { data: existing } = await supabase
-    .from('team_users')
-    .select('*')
-    .eq('clerk_user_id', userId)
-    .maybeSingle()
+  const existing = (await table<TeamUserRow>('team_users')
+    .list({ where: r => r.clerk_user_id === userId, limit: 1 }))[0] ?? null
 
   if (existing) {
     if (isSuper && existing.role !== 'super_admin') {
-      const { data: promoted } = await supabase
-        .from('team_users')
-        .update({ role: 'super_admin' })
-        .eq('id', existing.id)
-        .select()
-        .single()
-      return (promoted ?? existing) as TeamUser
+      const promoted = await table<TeamUserRow>('team_users')
+        .update(existing.id, { role: 'super_admin' })
+      return (promoted ?? existing) as unknown as TeamUser
     }
-    return existing as TeamUser
+    return existing as unknown as TeamUser
   }
 
   // first sign-in: consume a pending invite if one exists (atomic claim —
@@ -79,23 +73,31 @@ export async function resolveTeamUser(): Promise<TeamUser> {
   // A person added by an admin exists BEFORE they ever sign in — with no
   // clerk_user_id yet — so their role, clients and page access can be set up
   // in advance. Adopt that row rather than treating them as a stranger.
-  const { data: waiting } = await supabase
-    .from('team_users')
-    .select('*')
-    .is('clerk_user_id', null)
-    .ilike('email', email)
-    .maybeSingle()
+  const waiting = (await table<TeamUserRow>('team_users').list({
+    where: r => r.clerk_user_id == null && (r.email ?? '').toLowerCase() === email,
+    limit: 1,
+  }))[0] ?? null
 
   if (!isSuper) {
-    const { data: claimed } = await supabase
-      .from('team_invites')
-      .update({ status: 'accepted' })
-      .eq('status', 'pending')
-      .ilike('email', email)
-      .select()
-      .maybeSingle()
+    // the atomic claim: the first request to find a pending invite flips it
+    const pending = (await table<TeamInvite>('team_invites').list({
+      where: r => r.status === 'pending' && (r.email ?? '').toLowerCase() === email,
+      limit: 1,
+    }))[0] ?? null
+    const claimed = pending
+      ? await table<TeamInvite>('team_invites').update(pending.id, { status: 'accepted' })
+      : null
     if (claimed) {
-      invite = claimed
+      invite = {
+        id: claimed.id,
+        role: claimed.role as Role,
+        employment_type: claimed.employment_type,
+        timezone: claimed.timezone,
+        client_id: claimed.client_id,
+        assigned_client_ids: Array.isArray(claimed.assigned_client_ids)
+          ? (claimed.assigned_client_ids as unknown as unknown[]).map(String)
+          : [],
+      }
       role = claimed.role as Role
     } else if (waiting) {
       role = waiting.role as Role
@@ -105,9 +107,9 @@ export async function resolveTeamUser(): Promise<TeamUser> {
     }
   }
 
-  const { data: created, error } = await supabase
-    .from('team_users')
-    .upsert(
+  let created: TeamUserRow
+  try {
+    created = await table<TeamUserRow>('team_users').upsert(
       {
         clerk_user_id: userId,
         email,
@@ -121,19 +123,20 @@ export async function resolveTeamUser(): Promise<TeamUser> {
       },
       { onConflict: 'email' }
     )
-    .select()
-    .single()
-  if (error || !created) throw new AuthzError(error?.message ?? 'Could not create user', 500)
-
-  // stamp m2m client assignments from the invite (composite PK absorbs re-runs)
-  if (invite && invite.assigned_client_ids.length > 0) {
-    await supabase.from('team_user_clients').upsert(
-      invite.assigned_client_ids.map(client_id => ({ team_user_id: created.id, client_id })),
-      { onConflict: 'team_user_id,client_id', ignoreDuplicates: true }
-    )
+  } catch (e) {
+    throw new AuthzError(e instanceof Error ? e.message : 'Could not create user', 500)
   }
 
-  return created as TeamUser
+  // stamp m2m client assignments from the invite (the derived composite id
+  // absorbs re-runs)
+  if (invite && invite.assigned_client_ids.length > 0) {
+    for (const client_id of invite.assigned_client_ids) {
+      await table<TeamUserClient>('team_user_clients')
+        .upsert({ team_user_id: created.id, client_id })
+    }
+  }
+
+  return created as unknown as TeamUser
 }
 
 /**

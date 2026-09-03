@@ -1,5 +1,10 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  AssetVersion, Batch, Client, ContentItem, IntakeForm, MonthlyCommitment,
+  ScheduleEntry, TeamUserClient, WorkflowActivity,
+} from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
@@ -141,32 +146,35 @@ export type PortalData = {
 /**
  * The client's toggled-on intake forms, read TOLERANTLY.
  *
- * The show_on_portal column does not exist until supabase/intake_portal.sql is
- * run by hand, and filtering on a missing column fails the select. This is its
- * OWN query, so that failure — or any error — degrades to "no intake tab"
- * without touching the rest of the portal. The portal going down over exactly
- * this kind of not-yet-migrated column has happened before.
+ * This is its OWN read, so any failure degrades to "no intake tab" without
+ * touching the rest of the portal. The portal going down over one not-yet-
+ * migrated field has happened before.
  */
 async function loadPortalIntake(clientId: string): Promise<PortalIntakeForm[]> {
-  const { data, error } = await supabase
-    .from('intake_forms')
-    .select('id, title, show_on_portal, submitted_at, created_at, definition, answers')
-    .eq('client_id', clientId)
-    .eq('show_on_portal', true)
-    .order('created_at', { ascending: false })
-  if (error) return []
-  return portalIntakeForms((data ?? []) as unknown as Parameters<typeof portalIntakeForms>[0])
+  try {
+    const rows = await table<IntakeForm>('intake_forms').list({
+      by: { client_id: clientId },
+      where: r => r.show_on_portal === true,
+      orderBy: [['created_at', 'desc']],
+    })
+    return portalIntakeForms(rows as unknown as Parameters<typeof portalIntakeForms>[0])
+  } catch {
+    return []
+  }
 }
 
 /** The first name of the manager this client deals with, or null. Shared by
  *  the portal home and the child pages so they name the same person. */
 export async function accountManagerName(clientId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('team_user_clients')
-    .select('team_users!team_user_clients_team_user_id_fkey(name, role, active_status)')
-    .eq('client_id', clientId)
-  if (error) return null
-  const managers = (data ?? [])
+  let joined: { team_users: Record<string, unknown> | null }[]
+  try {
+    const links = await table<TeamUserClient>('team_user_clients')
+      .list({ by: { client_id: clientId } })
+    joined = await attachOne(links, 'team_user_id', 'team_users', ['name', 'role', 'active_status'])
+  } catch {
+    return null
+  }
+  const managers = joined
     .map(r => r.team_users as unknown as { name: string | null; role: string | null; active_status: boolean | null })
     .filter(u => u && u.active_status !== false && (u.role === 'account_manager' || u.role === 'super_admin'))
   const am = managers.find(u => u.role === 'account_manager') ?? managers[0] ?? null
@@ -180,50 +188,31 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // night of a month the server's idea of the date and the client's are one
   // day and one month apart, and the commitment tiles would show the wrong
   // month's quota to the only person who cares about it.
-  // Columns added by hand-run migrations (timezone, brand_profile) may not
-  // exist yet on the live database: asking for a missing column fails the
-  // WHOLE select, and a null client here is a 404 for every client's portal.
-  // So the select degrades — newest columns first, the bare row last.
-  const clientRow = await (async () => {
-    for (const cols of ['id, name, timezone, brand_profile', 'id, name, timezone', 'id, name']) {
-      const { data, error } = await supabase.from('clients').select(cols).eq('id', clientId).maybeSingle()
-      if (!error) return data as Record<string, unknown> | null
-      console.error('[portal] client select failed, degrading:', cols, error.message)
-    }
-    return null
-  })()
+  const clientRow = await table<Client>('clients').get(clientId) as Record<string, unknown> | null
   if (!clientRow) return null
   const tz = safeZone(clientRow.timezone as string | null)
   const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
 
-  const [itemsRes, commitmentRes, brandRes, shootsRes, amRes, intake] = await Promise.all([
-    supabase
-      .from('content_items')
-      .select('id, title, content_type, status, updated_at, batch_id, work_kinds(slug, uses_media)')
-      .eq('client_id', clientId)
-      .order('updated_at', { ascending: false })
-      .limit(300),
-    supabase
-      .from('monthly_commitments')
-      .select('*')
-      .eq('client_id', clientId)
-      .eq('month', month)
-      .eq('year', year)
-      .maybeSingle(),
-    supabase.from('client_brand').select('profile').eq('client_id', clientId).maybeSingle(),
+  const [itemRows, commitmentRow, brandRow, shootRows, amRes, intake] = await Promise.all([
+    table<ContentItem>('content_items')
+      .list({ by: { client_id: clientId }, orderBy: [['updated_at', 'desc']], limit: 300 })
+      .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media'])),
+    table<MonthlyCommitment>('monthly_commitments')
+      .list({ by: { client_id: clientId }, where: r => r.month === month && r.year === year, limit: 1 })
+      .then(r => r[0] ?? null),
+    table('client_brand').list({ by: { client_id: clientId }, limit: 1 }).then(r => r[0] ?? null),
     // shoots an AM chose to share — plus any BOOKED shoot: a client should
     // always know their shoot is locked in (date, location), even before the
-    // working plan is shared. Errors (column not migrated) degrade to none.
-    supabase
-      .from('batches')
-      .select('id, title, status, shoot_date, location, concept, board_name, share_board, shared_with_client, planned_deliverables, shot_list, canvas_cards')
-      .eq('client_id', clientId)
-      .or('shared_with_client.eq.true,status.in.(locked,shot)')
-      .order('shoot_date', { ascending: false, nullsFirst: false })
-      .limit(6),
+    // working plan is shared. A failure degrades to none.
+    table<Batch>('batches').list({
+      by: { client_id: clientId },
+      where: r => r.shared_with_client === true || ['locked', 'shot'].includes(r.status ?? ''),
+      orderBy: [['shoot_date', 'desc']],
+      limit: 6,
+    }).catch(() => [] as Batch[]),
     // who the client actually deals with — read alongside everything else
     accountManagerName(clientId),
-    // the toggled-on intake forms — its own tolerant query (see loadPortalIntake)
+    // the toggled-on intake forms — its own tolerant read (see loadPortalIntake)
     loadPortalIntake(clientId),
   ])
   type KindRow = { slug?: string | null; uses_media?: boolean | null } | null
@@ -235,12 +224,12 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // admin. The client's lists are the things they were promised.
   const isInternal = (i: { work_kinds?: KindRow }) =>
     isBrief(i) || isInternalKind(i.work_kinds)
-  const items = (itemsRes.data ?? []).filter(i => !isInternal(i as { work_kinds?: KindRow }))
+  const items = itemRows.filter(i => !isInternal(i as unknown as { work_kinds?: KindRow }))
   // …except when the plan is with the client: the brief stays out of the item
   // lists, but its decision has to reach the shoot card it belongs to
   const briefByBatch = new Map<string, { id: string; status: string }>()
-  for (const i of itemsRes.data ?? []) {
-    const row = i as { id: string; status: string; batch_id?: string | null; work_kinds?: { slug?: string } | null }
+  for (const i of itemRows) {
+    const row = i as unknown as { id: string; status: string; batch_id?: string | null; work_kinds?: { slug?: string } | null }
     // the newest wins: items come back updated_at desc, so the first brief
     // seen for a shoot is its current one
     if (isBrief(row) && row.batch_id && !briefByBatch.has(row.batch_id)) {
@@ -257,51 +246,43 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const backIds = items
     .filter(i => (i.status as ItemStatus) === 'internal_review')
     .map(i => i.id)
-  const [versionsRes, scheduleRes, analyticsByItem, activityRes] = await Promise.all([
+  const [versionRows, scheduleRows, analyticsByItem, activityRows] = await Promise.all([
     ids.length
-      ? supabase
-          .from('asset_versions')
-          .select('item_id, version_number, file_url, files, drive_url')
-          .in('item_id', ids)
-          .order('version_number', { ascending: false })
-      : Promise.resolve({ data: [] as { item_id: string; version_number: number; file_url: string; files: unknown; drive_url: string }[] }),
+      ? table<AssetVersion>('asset_versions')
+          .list({ where: r => ids.includes(r.item_id), orderBy: [['version_number', 'desc']] })
+      : Promise.resolve([] as AssetVersion[]),
     ids.length
-      ? supabase
-          .from('schedule_entries')
-          .select('item_id, platform, scheduled_at, live_url')
-          .in('item_id', ids)
-      : Promise.resolve({ data: [] as { item_id: string; platform: string; scheduled_at: string | null; live_url: string | null }[] }),
+      ? table<ScheduleEntry>('schedule_entries').list({ where: r => ids.includes(r.item_id) })
+      : Promise.resolve([] as ScheduleEntry[]),
     // the cached per-post numbers; the cron keeps them fresh, and the
     // background refresh below shortens the wait for a post that just landed
     analyticsForItems(ids),
     backIds.length
-      ? supabase
-          .from('workflow_activity')
-          .select('entity_id, old_value, new_value, created_at')
-          .eq('entity_type', 'content_item')
-          .eq('action', 'status_change')
-          .in('entity_id', backIds)
-          .order('created_at', { ascending: false })
+      ? table<WorkflowActivity>('workflow_activity').list({
+          where: r => r.entity_type === 'content_item' && r.action === 'status_change'
+            && backIds.includes(r.entity_id),
+          orderBy: [['created_at', 'desc']],
           // newest first, so the first row seen for an item IS its last move;
           // a bound this generous only ever drops rows that could not have won
-          .limit(500)
-      : Promise.resolve({ data: [] as { entity_id: string; old_value: string | null; new_value: string | null }[] }),
+          limit: 500,
+        })
+      : Promise.resolve([] as WorkflowActivity[]),
   ])
 
   // latest version per item (rows are ordered desc — first wins)
   const latestByItem = new Map<string, { file_url: string; files?: unknown; drive_url: string }>()
-  for (const v of versionsRes.data ?? []) {
+  for (const v of versionRows) {
     if (!latestByItem.has(v.item_id)) latestByItem.set(v.item_id, v)
   }
   // the LAST status change per item — rows come back newest first, first wins
   const lastChangeByItem = new Map<string, LastStatusChange>()
-  for (const a of activityRes.data ?? []) {
+  for (const a of activityRows) {
     if (!lastChangeByItem.has(a.entity_id)) {
       lastChangeByItem.set(a.entity_id, { old_value: a.old_value, new_value: a.new_value })
     }
   }
   const scheduleByItem = new Map<string, PortalItem['schedule']>()
-  for (const s of scheduleRes.data ?? []) {
+  for (const s of scheduleRows) {
     const list = scheduleByItem.get(s.item_id) ?? []
     list.push({ platform: s.platform, scheduled_at: s.scheduled_at, live_url: s.live_url })
     scheduleByItem.set(s.item_id, list)
@@ -351,7 +332,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // published counts by type for the current month's quota bars
   const publishedThisMonth = items.filter(i => i.status === 'published')
   const countType = (t: string) => publishedThisMonth.filter(i => i.content_type === t).length
-  const c = commitmentRes.data
+  const c = commitmentRow
   const commitment = c
     ? {
         month, year,
@@ -366,7 +347,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       }
     : null
 
-  const shoots: PortalShoot[] = (shootsRes.error ? [] : shootsRes.data ?? []).map(b => {
+  const shoots: PortalShoot[] = shootRows.map(b => {
     const shared = b.shared_with_client === true
     const brief = briefByBatch.get(b.id)
     return {
@@ -395,25 +376,23 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   })
 
   // ── posts waiting on the client's FINAL sign-off (caption + timing) ──
-  // Read in its own query so the page never depends on columns that may not
-  // exist yet: on a database without supabase/posting_approval.sql this
-  // select errors and the pile is simply empty — today's behaviour.
+  // Read on its own so the page never depends on fields that may not exist
+  // yet: on a database without supabase/posting_approval.sql this pile is
+  // simply empty — today's behaviour.
   const approvalCandidates = items
     .filter(i => ['approved_for_scheduling', 'scheduled'].includes(i.status as string))
     .map(i => i.id)
   const captionByAwaiting = new Map<string, string | null>()
   if (approvalCandidates.length > 0) {
-    const { data: gateRows, error: gateErr } = await supabase
-      .from('content_items')
-      .select('id, status, caption, posting_approval_state, posting_client_required')
-      .in('id', approvalCandidates)
-    if (!gateErr) {
-      for (const r of gateRows ?? []) {
-        if (awaitsClientPostApproval(r)) {
-          captionByAwaiting.set(r.id as string, (r.caption as string | null) ?? null)
+    try {
+      const gateRows = await table<ContentItem>('content_items')
+        .list({ where: r => approvalCandidates.includes(r.id) })
+      for (const r of gateRows) {
+        if (awaitsClientPostApproval(r as unknown as Record<string, unknown>)) {
+          captionByAwaiting.set(r.id, r.caption ?? null)
         }
       }
-    }
+    } catch { /* the gate is not set up on this database — the pile stays empty */ }
   }
   const post_approvals: PortalItem[] = items
     .filter(i => captionByAwaiting.has(i.id))
@@ -437,7 +416,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // what the theme reads), the raw scan until then
     brand: clientRow.brand_profile
       ? (toScanShape(normaliseProfile(clientRow.brand_profile)) as Record<string, unknown>)
-      : (brandRes.data?.profile as Record<string, unknown> | undefined) ?? null,
+      : (brandRow?.profile as Record<string, unknown> | undefined) ?? null,
     commitment,
     needs_review: bucket(['client_review']),
     post_approvals,
@@ -462,7 +441,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
 export async function getPortalDataByToken(token: string): Promise<PortalData | null> {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null
-  const { data } = await supabase.from('clients').select('id').eq('share_token', token).maybeSingle()
-  if (!data) return null
-  return getPortalData(data.id)
+  const row = (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0]
+  if (!row) return null
+  return getPortalData(row.id)
 }

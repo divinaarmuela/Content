@@ -1,5 +1,9 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, WorkflowActivity,
+} from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
@@ -42,9 +46,8 @@ export type PortalShootDetail = {
 export async function resolvePortalClient(rawToken: string) {
   const token = decodeURIComponent(rawToken).split('--').pop() ?? rawToken
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null
-  const { data } = await supabase
-    .from('clients').select('id, name').eq('share_token', token).maybeSingle()
-  return data ? { ...data, token } : null
+  const row = (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0]
+  return row ? { id: row.id, name: row.name, token } : null
 }
 
 type AuthorRow = { name: string | null; role: string | null } | null
@@ -68,11 +71,10 @@ const toComment = (clientName: string) => (c: {
 export async function getPortalItemDetail(rawToken: string, itemId: string): Promise<PortalItemDetail | null> {
   const client = await resolvePortalClient(rawToken)
   if (!client) return null
-  const { data: item } = await supabase
-    .from('content_items')
-    .select('id, title, content_type, status, updated_at, work_kinds(slug, uses_media)')
-    .eq('id', itemId).eq('client_id', client.id)
-    .maybeSingle()
+  const itemRow = await table<ContentItem>('content_items').get(itemId)
+  const item = itemRow && itemRow.client_id === client.id
+    ? (await attachOne([itemRow], 'work_kind_id', 'work_kinds', ['slug', 'uses_media']))[0]
+    : null
   // an internal brief task is not a client-facing item — same rule as the
   // portal overview: the shoot itself lives in SHOOT PLANS, and no other
   // internal work (research, strategy, admin) is the client's content either
@@ -81,31 +83,35 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
 
   const status = item.status as ItemStatus
   const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
-  const [versionRes, commentsRes, amName, lastMoveRes] = await Promise.all([
+  const [version, comments, amName, lastMove] = await Promise.all([
     clientFacing
-      ? supabase.from('asset_versions').select('file_url, files, drive_url')
-          .eq('item_id', item.id).order('version_number', { ascending: false }).limit(1).maybeSingle()
-      : Promise.resolve({ data: null }),
-    supabase.from('item_comments')
-      // two FKs point at team_users (author, assignee) — name the author one
-      .select('id, created_at, body, team_users!item_comments_author_id_fkey(name, role)')
-      .eq('item_id', item.id).eq('visibility', 'client')
-      .order('created_at', { ascending: true })
-      .limit(200),
+      ? table<AssetVersion>('asset_versions')
+          .list({ by: { item_id: item.id }, orderBy: [['version_number', 'desc']], limit: 1 })
+          .then(r => r[0] ?? null)
+      : Promise.resolve(null),
+    table<ItemComment>('item_comments')
+      .list({
+        by: { item_id: item.id },
+        where: r => r.visibility === 'client',
+        orderBy: [['created_at', 'asc']],
+        limit: 200,
+      })
+      // the author, not the assignee — both are team_users ids on the row
+      .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])),
     accountManagerName(client.id),
     // the piece may have been pulled back out of the client's own review by a
     // new cut landing on it. This page is where they arrive from the email
     // they were sent about it, so it is the last place that may go quiet.
     status === 'internal_review'
-      ? supabase.from('workflow_activity')
-          .select('old_value, new_value')
-          .eq('entity_type', 'content_item').eq('entity_id', item.id)
-          .eq('action', 'status_change')
-          .order('created_at', { ascending: false })
-          .limit(1).maybeSingle()
-      : Promise.resolve({ data: null }),
+      ? table<WorkflowActivity>('workflow_activity').list({
+          where: r => r.entity_type === 'content_item' && r.entity_id === item.id
+            && r.action === 'status_change',
+          orderBy: [['created_at', 'desc']],
+          limit: 1,
+        }).then(r => r[0] ?? null)
+      : Promise.resolve(null),
   ])
-  const latest = versionRes.data as { file_url?: string; files?: unknown; drive_url?: string } | null
+  const latest = version as { file_url?: string; files?: unknown; drive_url?: string } | null
   // the conversation is about the whole post: a carousel's cards belong on the
   // page the client is looking at while they write "the third one is wrong"
   const slides = slidesOf(latest)
@@ -125,13 +131,13 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       slide_count: slides.length,
-      progress_line: progressLine(status, lastMoveRes.data),
+      progress_line: progressLine(status, lastMove),
       schedule: [],
       // this page is the conversation about one piece, not its scoreboard —
       // the numbers live on the card in the Published section
       metrics: null,
     },
-    comments: ((commentsRes.data ?? []) as unknown as {
+    comments: (comments as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow
     }[]).map(toComment(client.name)),
   }
@@ -140,32 +146,31 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
 export async function getPortalShootDetail(rawToken: string, batchId: string): Promise<PortalShootDetail | null> {
   const client = await resolvePortalClient(rawToken)
   if (!client) return null
-  const { data: b } = await supabase
-    .from('batches')
-    .select('id, title, status, shoot_date, location, concept, board_name, share_board, planned_deliverables, shot_list, canvas_cards, shared_with_client')
-    .eq('id', batchId).eq('client_id', client.id)
-    .maybeSingle()
+  const batch = await table<Batch>('batches').get(batchId)
+  const b = batch && batch.client_id === client.id ? batch : null
   // an unshared shoot is simply not there, as far as the client can tell
   if (!b || !b.shared_with_client) return null
 
   // thread degrades to empty until the batch_comments migration runs
-  const [commentsRes, briefRes, amName] = await Promise.all([
-    supabase.from('batch_comments')
-      .select('id, created_at, body, team_users!batch_comments_author_id_fkey(name, role)')
-      .eq('batch_id', b.id)
-      .order('created_at', { ascending: true })
-      .limit(200),
+  const [comments, briefRows, amName] = await Promise.all([
+    table<BatchComment>('batch_comments')
+      .list({ by: { batch_id: b.id }, orderBy: [['created_at', 'asc']], limit: 200 })
+      .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role']))
+      .catch(() => []),
     // the plan's own brief task, at WHATEVER stage it is at: at client_review
     // the page has to carry the two moves the state machine says are theirs,
     // and at every other stage it has to say what became of the last one
-    supabase.from('content_items')
-      .select('id, status, work_kinds(slug)')
-      .eq('batch_id', b.id).eq('client_id', client.id)
-      .order('updated_at', { ascending: false })
-      .limit(10),
+    table<ContentItem>('content_items')
+      .list({
+        by: { batch_id: b.id },
+        where: r => r.client_id === client.id,
+        orderBy: [['updated_at', 'desc']],
+        limit: 10,
+      })
+      .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug'])),
     accountManagerName(client.id),
   ])
-  const brief = ((briefRes.data ?? []) as { id: string; status: string; work_kinds: { slug?: string } | null }[])
+  const brief = (briefRows as unknown as { id: string; status: string; work_kinds: { slug?: string } | null }[])
     .find(r => (r.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief')
 
   return {
@@ -187,7 +192,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       plan_state: planState(brief?.status, b.status as string, true),
       brief_item_id: brief?.id ?? null,
     },
-    comments: ((commentsRes.error ? [] : commentsRes.data ?? []) as unknown as {
+    comments: (comments as unknown as {
       id: string; created_at: string; body: string; team_users: AuthorRow
     }[]).map(toComment(client.name)),
   }

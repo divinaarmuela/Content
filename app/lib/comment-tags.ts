@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { NotificationLog, TeamUser as TeamUserRow } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { OPEN_ITEM_CTA } from './email-voice-core'
@@ -29,12 +30,9 @@ export type Taggable = Mentionable & { email: string }
 
 /** Active, non-client team members — the people "@Name" can reach. */
 export async function taggableTeam(): Promise<Taggable[]> {
-  const { data } = await supabase
-    .from('team_users')
-    .select('id, name, email, role, active_status')
-    .neq('role', 'client')
-    .eq('active_status', true)
-  return (data ?? []).map(u => ({ id: String(u.id), name: String(u.name ?? u.email ?? ''), email: String(u.email ?? '') }))
+  const rows = await table<TeamUserRow>('team_users')
+    .list({ where: u => u.role !== 'client' && u.active_status })
+  return rows.map(u => ({ id: String(u.id), name: String(u.name ?? u.email ?? ''), email: String(u.email ?? '') }))
 }
 
 /** The pure rule lives in mention-core; re-exported so the routes import
@@ -88,10 +86,11 @@ export async function notifyTagged(input: {
  */
 export async function settleTagNotifications(targetId: string, commentId: string): Promise<void> {
   try {
-    await supabase
-      .from('notification_log')
-      .update({ read_at: new Date().toISOString() })
-      .eq('entity_id', `${targetId}#${commentId}`)
-      .is('read_at', null)
+    const entityId = `${targetId}#${commentId}`
+    const unread = await table<NotificationLog>('notification_log')
+      .list({ where: r => r.entity_id === entityId && r.read_at == null })
+    const read_at = new Date().toISOString()
+    await Promise.all(unread.map(r =>
+      table<NotificationLog>('notification_log').update(r.id, { read_at })))
   } catch { /* best-effort */ }
 }

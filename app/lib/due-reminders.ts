@@ -1,5 +1,7 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { ContentItem, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import { notify, renderEmail } from './mailer'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { itemStatusLabel } from './brief-task-core'
@@ -38,31 +40,30 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
   const tomorrow = new Date(Date.now() + 86_400_000)
     .toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 
-  const { data, error } = await supabase
-    .from('content_items')
-    .select('id, title, status, due_date, client_id, owner_id, scheduler_ids, clients(name), work_kinds(slug)')
-    .lte('due_date', tomorrow)
-    .not('due_date', 'is', null)
-    .not('status', 'in', '(scheduled,published)')
-    .limit(500)
-  if (error) throw new Error(error.message)
-  const items = (data ?? []) as unknown as DueItem[]
+  const dueRows = await table<ContentItem>('content_items').list({
+    where: r => r.due_date != null && r.due_date <= tomorrow
+      && !['scheduled', 'published'].includes(r.status),
+    limit: 500,
+  })
+  const withKinds = await attachOne(
+    await attachOne(dueRows, 'client_id', 'clients', ['name']),
+    'work_kind_id', 'work_kinds', ['slug'],
+  )
+  const items = withKinds as unknown as DueItem[]
   if (items.length === 0) return { items: 0, emails: 0 }
 
   // resolve recipients in bulk: schedulers once, managers per client, owners per id
-  const { data: schedulerRows } = await supabase
-    .from('team_users').select('id, email, name')
-    .eq('role', 'scheduler').eq('active_status', true)
-  const schedulers = (schedulerRows ?? []) as Person[]
+  const schedulers = (await table<TeamUserRow>('team_users')
+    .list({ where: u => u.role === 'scheduler' && u.active_status })) as unknown as Person[]
 
   const clientIds = [...new Set(items.map(i => i.client_id))]
-  const { data: mgrRows } = await supabase
-    .from('team_user_clients')
-    .select('client_id, team_users!team_user_clients_team_user_id_fkey(id, email, name, role, active_status)')
-    .in('client_id', clientIds)
+  const mgrLinks = await table<TeamUserClient>('team_user_clients')
+    .list({ where: r => clientIds.includes(r.client_id) })
+  const mgrRows = await attachOne(mgrLinks, 'team_user_id', 'team_users',
+    ['id', 'email', 'name', 'role', 'active_status'])
   const managersByClient = new Map<string, Person[]>()
-  for (const row of mgrRows ?? []) {
-    const u = row.team_users as unknown as Person & { role: string; active_status: boolean }
+  for (const row of mgrRows) {
+    const u = row.team_users as unknown as (Person & { role: string; active_status: boolean }) | null
     if (!u?.active_status || !['account_manager', 'super_admin'].includes(u.role)) continue
     const list = managersByClient.get(row.client_id) ?? []
     list.push(u)
@@ -70,10 +71,11 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
   }
 
   const ownerIds = [...new Set(items.map(i => i.owner_id).filter(Boolean))] as string[]
-  const { data: ownerRows } = ownerIds.length
-    ? await supabase.from('team_users').select('id, email, name').in('id', ownerIds).eq('active_status', true)
-    : { data: [] }
-  const owners = new Map(((ownerRows ?? []) as Person[]).map(o => [o.id, o]))
+  const ownerRows = ownerIds.length
+    ? await table<TeamUserRow>('team_users')
+        .list({ where: u => ownerIds.includes(u.id) && u.active_status })
+    : []
+  const owners = new Map((ownerRows as unknown as Person[]).map(o => [o.id, o]))
 
   let emails = 0
   for (const item of items) {

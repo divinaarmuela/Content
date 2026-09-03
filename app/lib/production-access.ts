@@ -1,5 +1,6 @@
 import 'server-only'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import {
   actingRoles, schedulerIdsOf, SCHEDULER_STATUSES, CLIENT_LABELS, type ItemStatus,
@@ -7,12 +8,12 @@ import {
 import { visibleComments } from './comment-access-core'
 
 /**
- * Every id interpolated into a PostgREST `.or()` string passes through here.
+ * Every id the access helpers build a query around passes through here.
  *
  * These ids are database-sourced today, which is exactly the kind of fact that
- * quietly stops being true. A filter string is not parameterised, so a value
- * carrying a comma or a paren would rewrite the filter around it; this makes
- * that impossible rather than merely unlikely.
+ * quietly stops being true — a caller-supplied id reaching a filter unchecked
+ * is how "whose rows are these" stops being a question with one answer. This
+ * makes a malformed identifier impossible rather than merely unlikely.
  */
 export function assertUuid(id: string): string {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -38,13 +39,12 @@ export async function canOpenBatch(
   if (ids === null || ids.includes(batch.client_id) || batch.owner_id === user.id) return true
   if (user.role === 'client') return false
   const me = assertUuid(user.id)
-  const { data } = await supabase
-    .from('content_items')
-    .select('id')
-    .eq('batch_id', batch.id)
-    .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
-    .limit(1)
-  if ((data?.length ?? 0) > 0) return true
+  const held = await table<ContentItem>('content_items').list({
+    by: { batch_id: batch.id },
+    where: r => r.owner_id === me || schedulerIdsOf(r).includes(me),
+    limit: 1,
+  })
+  if (held.length > 0) return true
   // tagged in the shoot's own comment thread: the email deep-links here, and
   // a link to "you are not on this client" is worse than no link
   return (await taggedBatchIds(user)).includes(batch.id)
@@ -54,13 +54,13 @@ export async function canOpenBatch(
  *  (never an error) on a database where shoot_comment_tags.sql has not run. */
 export async function taggedBatchIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
-  const { data, error } = await supabase
-    .from('batch_comments')
-    .select('batch_id')
-    .eq('assigned_to', user.id)
-    .limit(500)
-  if (error) return []
-  return [...new Set((data ?? []).map(r => r.batch_id as string).filter(Boolean))]
+  try {
+    const rows = await table<BatchComment & { assigned_to?: string | null }>('batch_comments')
+      .list({ where: r => r.assigned_to === user.id, limit: 500 })
+    return [...new Set(rows.map(r => r.batch_id).filter(Boolean))]
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -71,13 +71,16 @@ export async function taggedBatchIds(user: TeamUser): Promise<string[]> {
 export async function openTaggedIds(user: TeamUser): Promise<{ items: string[]; batches: string[] }> {
   if (user.role === 'client') return { items: [], batches: [] }
   const [items, batches] = await Promise.all([
-    supabase.from('item_comments').select('item_id').eq('assigned_to', user.id).eq('resolved', false).limit(500),
-    supabase.from('batch_comments').select('batch_id').eq('assigned_to', user.id).eq('resolved', false).limit(500),
+    table<ItemComment>('item_comments')
+      .list({ where: r => r.assigned_to === user.id && r.resolved === false, limit: 500 }),
+    // the shoot tags column may not exist yet — no rows, not an error
+    table<BatchComment & { assigned_to?: string | null; resolved?: boolean }>('batch_comments')
+      .list({ where: r => r.assigned_to === user.id && r.resolved === false, limit: 500 })
+      .catch(() => []),
   ])
   return {
-    items: [...new Set((items.data ?? []).map(r => r.item_id as string).filter(Boolean))],
-    // the shoot tags column may not exist yet — no rows, not an error
-    batches: batches.error ? [] : [...new Set((batches.data ?? []).map(r => r.batch_id as string).filter(Boolean))],
+    items: [...new Set(items.map(r => r.item_id).filter(Boolean))],
+    batches: [...new Set(batches.map(r => r.batch_id).filter(Boolean))],
   }
 }
 
@@ -93,18 +96,16 @@ export async function heldBatchIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
   const me = assertUuid(user.id)
   const [viaItems, owned, tagged] = await Promise.all([
-    supabase
-      .from('content_items')
-      .select('batch_id')
-      .not('batch_id', 'is', null)
-      .or(`owner_id.eq.${me},scheduler_ids.cs.["${me}"]`)
-      .limit(500),
-    supabase.from('batches').select('id').eq('owner_id', user.id).limit(500),
+    table<ContentItem>('content_items').list({
+      where: r => r.batch_id != null && (r.owner_id === me || schedulerIdsOf(r).includes(me)),
+      limit: 500,
+    }),
+    table<Batch>('batches').list({ by: { owner_id: user.id }, limit: 500 }),
     taggedBatchIds(user),
   ])
   return [...new Set([
-    ...(viaItems.data ?? []).map(r => r.batch_id as string),
-    ...(owned.data ?? []).map(r => r.id as string),
+    ...viaItems.map(r => r.batch_id as string),
+    ...owned.map(r => r.id),
     ...tagged,
   ].filter(Boolean))]
 }
@@ -114,16 +115,13 @@ export async function heldBatchIds(user: TeamUser): Promise<string[]> {
  *  it, and a link to a 404 is worse than no link. */
 export async function taggedItemIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
-  const { data } = await supabase
-    .from('item_comments')
-    .select('item_id')
-    .eq('assigned_to', user.id)
-    .limit(500)
-  return [...new Set((data ?? []).map(r => r.item_id as string).filter(Boolean))]
+  const rows = await table<ItemComment>('item_comments')
+    .list({ where: r => r.assigned_to === user.id, limit: 500 })
+  return [...new Set(rows.map(r => r.item_id).filter(Boolean))]
 }
 
 /**
- * ASSIGNMENT IS THE GRANT, as one PostgREST filter.
+ * ASSIGNMENT IS THE GRANT, as one predicate every list shares.
  *
  * Everything that opens an item for someone who is not on its client team:
  * owning it, holding its scheduling, being tagged on it, or holding the shoot
@@ -132,14 +130,22 @@ export async function taggedItemIds(user: TeamUser): Promise<string[]> {
  * item page will let them open — which is the bug James hit — and a shoot page
  * lists items whose detail page 404s, which is the same bug facing the other
  * way.
+ *
+ * The shoot and tag ids are resolved ONCE, when the predicate is built, so a
+ * list filtering ten thousand rows through it still costs the two reads.
  */
-export async function assignedItemsFilter(user: TeamUser): Promise<string> {
+export async function assignedItemsFilter(
+  user: TeamUser,
+): Promise<(item: ContentItem) => boolean> {
   const me = assertUuid(user.id)
-  const parts = [`owner_id.eq.${me}`, `scheduler_ids.cs.["${me}"]`]
   const [batches, tagged] = await Promise.all([heldBatchIds(user), taggedItemIds(user)])
-  if (batches.length) parts.push(`batch_id.in.(${batches.map(assertUuid).join(',')})`)
-  if (tagged.length) parts.push(`id.in.(${tagged.map(assertUuid).join(',')})`)
-  return parts.join(',')
+  const heldBatches = new Set(batches.map(assertUuid))
+  const taggedItems = new Set(tagged.map(assertUuid))
+  return (item: ContentItem) =>
+    item.owner_id === me
+    || schedulerIdsOf(item).includes(me)
+    || (item.batch_id != null && heldBatches.has(item.batch_id))
+    || taggedItems.has(item.id)
 }
 
 /** The item ids assignment opens, for the surfaces that filter in memory
@@ -147,12 +153,9 @@ export async function assignedItemsFilter(user: TeamUser): Promise<string> {
  *  express the rule as a query filter). */
 export async function heldItemIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
-  const { data } = await supabase
-    .from('content_items')
-    .select('id')
-    .or(await assignedItemsFilter(user))
-    .limit(1000)
-  return (data ?? []).map(r => r.id as string)
+  const assigned = await assignedItemsFilter(user)
+  const rows = await table<ContentItem>('content_items').list({ where: assigned, limit: 1000 })
+  return rows.map(r => r.id)
 }
 
 /**
@@ -169,16 +172,17 @@ export async function visibleClientIds(user: TeamUser): Promise<string[] | null>
   const base = await accessibleClientIds(user)
   if (base === null || user.role === 'client') return base
   const held = await heldBatchIds(user)
-  const [{ data: itemRows }, { data: batchRows }] = await Promise.all([
-    supabase.from('content_items').select('client_id').or(await assignedItemsFilter(user)).limit(1000),
+  const assigned = await assignedItemsFilter(user)
+  const [itemRows, batchRows] = await Promise.all([
+    table<ContentItem>('content_items').list({ where: assigned, limit: 1000 }),
     held.length
-      ? supabase.from('batches').select('client_id').in('id', held)
-      : Promise.resolve({ data: [] as { client_id: string }[] }),
+      ? table<Batch>('batches').list({ where: r => held.includes(r.id) })
+      : Promise.resolve([] as Batch[]),
   ])
   return [...new Set([
     ...base,
-    ...(itemRows ?? []).map(r => r.client_id as string),
-    ...(batchRows ?? []).map(r => r.client_id as string),
+    ...itemRows.map(r => r.client_id),
+    ...batchRows.map(r => r.client_id),
   ].filter(Boolean))]
 }
 
@@ -187,11 +191,9 @@ export async function accessibleClientIds(user: TeamUser): Promise<string[] | nu
   if (user.role === 'super_admin') return null
   if (user.role === 'client') return user.client_id ? [user.client_id] : []
   if (user.role === 'scheduler') return null // scheduler is gated by STATUS, not client
-  const { data } = await supabase
-    .from('team_user_clients')
-    .select('client_id')
-    .eq('team_user_id', user.id)
-  return (data ?? []).map(r => r.client_id)
+  const rows = await table<TeamUserClient>('team_user_clients')
+    .list({ by: { team_user_id: user.id } })
+  return rows.map(r => r.client_id)
 }
 
 /** Client ids for SHOOT/batch access. Unlike items, batches have no status
@@ -201,21 +203,19 @@ export async function accessibleClientIds(user: TeamUser): Promise<string[] | nu
 export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null
   if (user.role === 'client') return user.client_id ? [user.client_id] : []
-  const { data } = await supabase
-    .from('team_user_clients')
-    .select('client_id')
-    .eq('team_user_id', user.id)
-  return (data ?? []).map(r => r.client_id)
+  const rows = await table<TeamUserClient>('team_user_clients')
+    .list({ by: { team_user_id: user.id } })
+  return rows.map(r => r.client_id)
 }
 
 /** Assert this user may see this item at all; returns the item row. */
 export async function loadItemForUser(user: TeamUser, itemId: string) {
-  const { data: item, error } = await supabase
-    .from('content_items')
-    .select('*')
-    .eq('id', itemId)
-    .maybeSingle()
-  if (error) throw new AuthzError(error.message, 500)
+  let item: ContentItem | null
+  try {
+    item = await table<ContentItem>('content_items').get(itemId)
+  } catch (e) {
+    throw new AuthzError(e instanceof Error ? e.message : 'Item not found', 500)
+  }
   if (!item) throw new AuthzError('Item not found', 404)
 
   if (user.role === 'scheduler') {
@@ -239,7 +239,13 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
       throw new AuthzError('Item not found', 404) // don't reveal existence
     }
   }
-  return item
+  // the generated row types the free-form columns as `unknown`; every caller
+  // has always read them as what they actually hold, so say so once here
+  return item as ContentItem & Record<string, unknown> & {
+    status: ItemStatus
+    scheduler_ids?: string[] | null
+    raw_assets?: { url: string; name: string }[] | null
+  }
 }
 
 /**
@@ -256,13 +262,14 @@ async function assignmentOpensItem(
   item: { id: string; batch_id?: string | null; owner_id?: string | null; scheduler_ids?: unknown },
 ): Promise<boolean> {
   if (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id)) return true
-  const { data: tag } = await supabase
-    .from('item_comments')
-    .select('id').eq('item_id', item.id).eq('assigned_to', user.id).limit(1)
-  if ((tag?.length ?? 0) > 0) return true
+  const tag = await table<ItemComment>('item_comments').list({
+    by: { item_id: item.id },
+    where: r => r.assigned_to === user.id,
+    limit: 1,
+  })
+  if (tag.length > 0) return true
   if (!item.batch_id) return false
-  const { data: batch } = await supabase
-    .from('batches').select('id, client_id, owner_id').eq('id', item.batch_id).maybeSingle()
+  const batch = await table<Batch>('batches').get(item.batch_id)
   return batch ? await canOpenBatch(user, batch) : false
 }
 

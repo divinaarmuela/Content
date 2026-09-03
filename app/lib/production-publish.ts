@@ -1,6 +1,9 @@
 import 'server-only'
 import { announceItemChange } from './production-live'
-import { supabase } from '@/lib/supabase'
+import { table } from '@/lib/db'
+import type {
+  AssetVersion, Client, ContentItem as ContentItemRow, PublishJob, ScheduleEntry, SocialAccount,
+} from '@/lib/db-types'
 import { queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
 import {
@@ -83,11 +86,7 @@ export type ItemPublishPlan = {
  * unapproved item is visible up front rather than as a failed job later.
  */
 export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> {
-  const { data: item } = await supabase
-    .from('content_items')
-    .select('id, client_id, caption, title, platform_targets, status, content_type')
-    .eq('id', itemId)
-    .maybeSingle()
+  const item = await table<ContentItemRow>('content_items').get(itemId)
 
   if (!item) throw new Error('Content item not found')
 
@@ -104,8 +103,7 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   }
 
   // the client's own zone, read from the row that owns the audience
-  const { data: client } = await supabase
-    .from('clients').select('timezone').eq('id', item.client_id).maybeSingle()
+  const client = await table<Client>('clients').get(item.client_id)
   plan.timezone = safeZone(client?.timezone as string | null)
 
   // Only content that has cleared approval may go out. This is the whole point
@@ -124,13 +122,8 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   }
 
   // newest version wins; that is the one reviewers signed off
-  const { data: version } = await supabase
-    .from('asset_versions')
-    .select('file_url, files, drive_url, version_number')
-    .eq('item_id', itemId)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const version = (await table<AssetVersion>('asset_versions')
+    .list({ by: { item_id: itemId }, orderBy: [['version_number', 'desc']], limit: 1 }))[0] ?? null
 
   // ALL the slides, in the order the editor left them — that order is the
   // carousel. Taking only the first published a six-card set as one photo.
@@ -144,24 +137,21 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   }
 
   // what the client actually has connected
-  const { data: accounts } = await supabase
-    .from('social_accounts')
-    .select('platform, provider_account_id, active')
-    .eq('client_id', item.client_id)
-    .eq('active', true)
+  const accounts = await table<SocialAccount>('social_accounts')
+    .list({ by: { client_id: item.client_id }, where: a => a.active === true })
 
   // no explicit targets (the common case — nothing in the UI set them) means
   // every connected channel, rather than a permanently dead publish button
-  let wanted = ((item.platform_targets as string[]) ?? []).map(p => p.toLowerCase())
+  let wanted = ((item.platform_targets as unknown as string[]) ?? []).map(p => p.toLowerCase())
   if (wanted.length === 0) {
-    wanted = [...new Set((accounts ?? []).map(a => (a.platform as string).toLowerCase()))]
+    wanted = [...new Set(accounts.map(a => (a.platform as string).toLowerCase()))]
   }
 
   // production already knows what kind of content this is — carry it through
   // so a Reel is published as a Reel rather than a plain video post
   const kind = contentTypeToKind(item.content_type as string, plan.media)
 
-  const byPlatform = new Map((accounts ?? []).map(a => [a.platform as string, a]))
+  const byPlatform = new Map(accounts.map(a => [a.platform as string, a]))
   for (const p of wanted) {
     const account = byPlatform.get(p)
     if (account && isPlatform(p)) {
@@ -176,14 +166,13 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
   }
 
   // the earliest time the scheduler set for this item, if any
-  const { data: entries } = await supabase
-    .from('schedule_entries')
-    .select('scheduled_at')
-    .eq('item_id', itemId)
-    .not('scheduled_at', 'is', null)
-    .order('scheduled_at', { ascending: true })
-    .limit(1)
-  plan.scheduledFor = (entries?.[0]?.scheduled_at as string) ?? null
+  const entries = await table<ScheduleEntry>('schedule_entries').list({
+    by: { item_id: itemId },
+    where: r => r.scheduled_at != null,
+    orderBy: [['scheduled_at', 'asc']],
+    limit: 1,
+  })
+  plan.scheduledFor = (entries[0]?.scheduled_at as string) ?? null
 
   if (!plan.blocked && plan.targets.length === 0) {
     plan.blocked = wanted.length === 0
@@ -234,21 +223,17 @@ export type PostItemMetrics = PostMetrics & {
 export async function loadPostingContext(
   itemId: string, clientId: string,
 ): Promise<PostingContext> {
-  const [accountsRes, jobRes, analytics] = await Promise.all([
-    supabase
-      .from('social_accounts')
-      .select('platform, username, name')
-      .eq('client_id', clientId)
-      .eq('active', true),
-    supabase
-      .from('publish_jobs')
-      .select('id, status, scheduled_for, permalink, error, published_at')
-      .eq('content_item_id', itemId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  const [accounts, jobs, analytics] = await Promise.all([
+    table<SocialAccount>('social_accounts')
+      .list({ by: { client_id: clientId }, where: a => a.active === true }),
+    table<PublishJob>('publish_jobs').list({
+      where: j => j.content_item_id === itemId,
+      orderBy: [['created_at', 'desc']],
+      limit: 1,
+    }),
     analyticsForItems([itemId]),
   ])
+  const job = jobs[0] ?? null
 
   const a = analytics.get(itemId) ?? null
 
@@ -263,19 +248,19 @@ export async function loadPostingContext(
         source: a.source ?? null,
       }
       : null,
-    accounts: (accountsRes.data ?? []).map(a => ({
+    accounts: accounts.map(a => ({
       platform: String(a.platform).toLowerCase(),
       username: (a.username as string) ?? null,
       name: (a.name as string) ?? null,
     })),
-    job: jobRes.data
+    job: job
       ? {
-        id: jobRes.data.id as string,
-        status: jobRes.data.status as string,
-        scheduled_for: (jobRes.data.scheduled_for as string) ?? null,
-        permalink: (jobRes.data.permalink as string) ?? null,
-        error: (jobRes.data.error as string) ?? null,
-        published_at: (jobRes.data.published_at as string) ?? null,
+        id: job.id,
+        status: job.status,
+        scheduled_for: job.scheduled_for ?? null,
+        permalink: job.permalink ?? null,
+        error: job.error ?? null,
+        published_at: job.published_at ?? null,
       }
       : null,
   }
@@ -311,27 +296,31 @@ export async function queueItemPublish(
  * The schedule row is the board's and the client portal's version of the same
  * fact — "Instagram, Thursday 6pm". Queueing without writing it left the item
  * queued at the provider and blank on every screen that reads schedule_entries,
- * which is most of them. `onConflict` keeps a human-set time rather than
- * stamping over it.
+ * which is most of them. A human-set time is kept rather than stamped over.
  */
 async function recordQueuedSchedule(
   itemId: string, targets: Target[], scheduledFor: string | null,
 ): Promise<void> {
   if (targets.length === 0) return
   const when = scheduledFor ?? new Date().toISOString()
-  const { data: existing } = await supabase
-    .from('schedule_entries').select('platform, scheduled_at').eq('item_id', itemId)
-  const has = new Map((existing ?? []).map(r => [String(r.platform), r.scheduled_at]))
+  const existing = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: itemId } })
+  const byPlatform = new Map(existing.map(r => [String(r.platform), r]))
 
   const rows = targets
     // a platform that already carries a time keeps it — the queue used that
     // same time, so rewriting it would only churn the row
-    .filter(t => !has.get(t.platform))
+    .filter(t => !byPlatform.get(t.platform)?.scheduled_at)
     .map(t => ({ item_id: itemId, platform: t.platform, scheduled_at: when }))
   if (rows.length === 0) return
-  const { error } = await supabase
-    .from('schedule_entries').upsert(rows, { onConflict: 'item_id,platform' })
-  if (error) console.error('could not record the queued schedule', itemId, error.message)
+  try {
+    for (const row of rows) {
+      const current = byPlatform.get(row.platform)
+      if (current) await table('schedule_entries').update(current.id, row)
+      else await table('schedule_entries').insert({ publish_status: 'scheduled', ...row })
+    }
+  } catch (e) {
+    console.error('could not record the queued schedule', itemId, e instanceof Error ? e.message : e)
+  }
 }
 
 /**
@@ -393,7 +382,9 @@ export async function recordPublishOnItem(
     }
     if (permalink) patch.live_url = permalink
 
-    await supabase.from('schedule_entries').update(patch).eq('item_id', contentItemId)
+    const entries = await table<ScheduleEntry>('schedule_entries')
+      .list({ by: { item_id: contentItemId } })
+    await Promise.all(entries.map(e => table('schedule_entries').update(e.id, patch)))
 
     // The status change runs through the ordinary machine, wearing a system
     // actor: the same optimistic-concurrency guard, the same workflow_activity
@@ -401,11 +392,7 @@ export async function recordPublishOnItem(
     // code wrote content_items.status directly and hand-rolled the log entry,
     // which meant "it went live" was the one transition that skipped every
     // guarantee the rest of the workflow has.
-    const { data: row } = await supabase
-      .from('content_items')
-      .select('id, client_id, batch_id, title, content_type, status, owner_id, caption, client_approval_required, current_version_number, scheduler_ids')
-      .eq('id', contentItemId)
-      .maybeSingle()
+    const row = await table<ContentItemRow>('content_items').get(contentItemId)
     if (!row) return
 
     const actor = systemActor(systemActorLabel(platforms))
