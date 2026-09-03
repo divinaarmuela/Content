@@ -44,6 +44,20 @@ export function isAllowlistedSuperAdmin(email: string, allowlist: string[]): boo
 
 /** Role hierarchy check. `client` is its own axis: it never satisfies a team
  *  requirement and team roles never satisfy `client`. super_admin passes all. */
+/**
+ * The hats that may put a post on a client's real account.
+ *
+ * Not a rung on the ladder: an EDITOR sits above a scheduler in `TEAM_ROLES`
+ * (they do more of the work) and still must never publish, so this is a named
+ * set rather than `roleSatisfies('scheduler')`. One list, so the schedule
+ * page, the composer and the item page cannot disagree about it.
+ */
+export const MAY_PUBLISH: readonly Role[] = ['scheduler', 'account_manager', 'super_admin']
+
+export function mayPublish(role: Role | string): boolean {
+  return (MAY_PUBLISH as readonly string[]).includes(role)
+}
+
 export function roleSatisfies(actual: Role, required: Role): boolean {
   if (actual === 'super_admin') return true
   if (required === 'client') return actual === 'client'

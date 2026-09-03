@@ -32,6 +32,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       note: typeof body.note === 'string' ? body.note : undefined,
       client_too: typeof body.client_too === 'boolean' ? body.client_too : undefined,
     })
+    // the calendar's tile is the same approval seen from the other side —
+    // mirror it there before answering, so a person watching Schedule sees
+    // the tile change as the approval lands rather than on the next refresh
+    const { syncFromItem } = await import('../../../../../lib/social-schedule')
+    await syncFromItem(item.id).catch(e =>
+      console.error('schedule mirror failed:', (e as Error).message))
     return NextResponse.json({
       ok: true,
       posting_approval_state: updated.posting_approval_state ?? null,

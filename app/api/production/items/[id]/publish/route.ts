@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { mayPublish } from '../../../../../lib/identity-core'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyPublishQueued } from '../../../../../lib/workflow'
 import {
@@ -25,7 +26,6 @@ import { publishLockKey } from '../../../../../lib/publish'
  * the composer. The comment on POST below already said "Scheduler and above";
  * this is the code catching up with it.
  */
-const MAY_PUBLISH = ['scheduler', 'account_manager', 'super_admin']
 
 const NOT_ALLOWED = 'Publishing to a client account is for schedulers and account managers'
 
@@ -34,7 +34,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!MAY_PUBLISH.includes(user.role)) {
+    if (!mayPublish(user.role)) {
       return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params
@@ -55,7 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!MAY_PUBLISH.includes(user.role)) {
+    if (!mayPublish(user.role)) {
       return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params
@@ -125,7 +125,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!MAY_PUBLISH.includes(user.role)) {
+    if (!mayPublish(user.role)) {
       return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 })
     }
     const { id } = await params

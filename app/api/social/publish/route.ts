@@ -43,7 +43,13 @@ export async function POST(req: Request) {
     })
 
     if ('error' in queued) {
-      return NextResponse.json({ error: queued.error, issues: queued.issues }, { status: 400 })
+      // a post waiting on its final approval is a conflict, not a bad
+      // request: nothing about what was sent is wrong, it is simply not
+      // signed off yet — and the sentence is the gate's own words
+      return NextResponse.json(
+        { error: queued.error, issues: queued.issues },
+        { status: queued.blocked ? 409 : 400 },
+      )
     }
 
     /**

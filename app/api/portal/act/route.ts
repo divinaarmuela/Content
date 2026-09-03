@@ -125,6 +125,10 @@ export async function POST(req: Request) {
         }
         throw err
       }
+      // the client's answer is the calendar's answer too
+      const { syncFromItem } = await import('../../../lib/social-schedule')
+      await syncFromItem(item.id).catch(e =>
+        console.error('schedule mirror failed:', (e as Error).message))
       // whatever they wrote also reaches the thread, client-visible, and the
       // client's managers — the same promise every portal note gets
       if (comment) {

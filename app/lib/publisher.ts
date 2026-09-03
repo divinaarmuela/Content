@@ -510,7 +510,49 @@ class UnconfiguredPublisher implements Publisher {
   }
 }
 
+/**
+ * The provider with the network taken out — the test harness's publisher.
+ *
+ * Publishing is the one action this system cannot undo, so "the test suite
+ * must not post to a real account" is enforced HERE rather than by every test
+ * remembering to mock the module. With PUBLISH_DRY_RUN=1 the provider itself
+ * answers: a fake post id derived from the job's own request id (so a retry
+ * of the same job gets the same id, exactly as the real idempotency does),
+ * and not a single fetch.
+ *
+ * It inherits the unconfigured publisher, so anything the flow does NOT touch
+ * still refuses loudly instead of pretending to work.
+ */
+function dryRunPublisher(): Publisher {
+  // everything the flow does NOT touch still refuses loudly, so a dry run
+  // cannot quietly pretend a whole feature works
+  const base = new UnconfiguredPublisher()
+  return Object.assign(Object.create(base) as Publisher, {
+    name: 'dry-run',
+    configured: () => true,
+    createPost: async (input: CreatePostInput): Promise<PublishOutcome> =>
+      ({ kind: 'published' as const, postId: `dry-run-${input.requestId}`, replayed: false }),
+    accountHealth: async (providerAccountId: string) =>
+      ({ ok: true, accountId: providerAccountId, dryRun: true }),
+    deletePost: async () => ({ ok: true, dryRun: true }),
+    uploadMedia: async (input: { filename: string; contentType: string }): Promise<MediaItem> =>
+      ({ url: `https://dry-run.invalid/${input.filename}`, type: mediaTypeFor(input.contentType) ?? 'image' }),
+  })
+}
+
+/**
+ * Is the dry run on? Exactly the string '1', nothing else.
+ *
+ * Loose truthiness here would be a foot-gun pointed at the client's account:
+ * a stray PUBLISH_DRY_RUN=0 or =false read as "on" would stop every real post
+ * going out while every screen reported success.
+ */
+export function isPublishDryRun(): boolean {
+  return process.env.PUBLISH_DRY_RUN === '1'
+}
+
 export function getPublisher(): Publisher {
+  if (isPublishDryRun()) return dryRunPublisher()
   const zernio = new ZernioPublisher()
   return zernio.configured() ? zernio : new UnconfiguredPublisher()
 }

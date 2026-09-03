@@ -9,7 +9,13 @@ import { rtdbFetch } from './db'
  * Fire-and-forget: the write that caused it has already committed, and a lost
  * hint costs one refresh, not data.
  */
-export type LiveChannel = 'production' | 'leads' | 'brand' | 'intake' | 'monthly' | 'tracker' | 'comments'
+/**
+ * 'schedule' is the social calendar's own marker. It is separate from
+ * 'production' on purpose: a caption edit on one planned post should not make
+ * every open production board refetch, and an approval — which matters to
+ * both — announces on each.
+ */
+export type LiveChannel = 'production' | 'leads' | 'brand' | 'intake' | 'monthly' | 'tracker' | 'comments' | 'schedule'
 
 export function announce(channel: LiveChannel, hint: Record<string, unknown>): Promise<void> {
   return rtdbFetch(`/mdm/live/${channel}`, { method: 'PUT', body: JSON.stringify({ ...hint, ts: Date.now() }) })

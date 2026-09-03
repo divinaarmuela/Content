@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { PublishJob } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { mayPublish } from '../../../../lib/identity-core'
 import { getPublisher } from '../../../../lib/publisher'
 import { logActivity } from '../../../../lib/workflow'
 import { inngest } from '../../../../inngest/client'
@@ -15,7 +16,6 @@ import { inngest } from '../../../../inngest/client'
  * nowhere and stopped from nowhere.
  */
 
-const MAY_PUBLISH = ['scheduler', 'account_manager', 'super_admin']
 
 const jobs = () => table<PublishJob>('publish_jobs')
 
@@ -36,7 +36,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!MAY_PUBLISH.includes(user.role)) {
+    if (!mayPublish(user.role)) {
       return NextResponse.json({ error: 'Cancelling a post is for schedulers and account managers' }, { status: 403 })
     }
     const { id } = await params
@@ -104,7 +104,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    if (!MAY_PUBLISH.includes(user.role)) {
+    if (!mayPublish(user.role)) {
       return NextResponse.json({ error: 'Sending a post is for schedulers and account managers' }, { status: 403 })
     }
     const { id } = await params
