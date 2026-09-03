@@ -1,31 +1,157 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { Client, SocialAccount } from '@/lib/db-types'
-import PlatformIcon from '../PlatformIcon'
+import { PLATFORM_RULES } from '@/app/lib/publish-core'
+import PlatformIcon, { brandFor } from '../PlatformIcon'
 
 /**
  * Who this week is for, and which of their channels is on screen.
  *
- * The avatars are the client's connected accounts: tapping one narrows the
- * calendar to that channel, tapping it again puts them all back. "+" goes to
- * the client's own Social page, which is where an account is actually
- * connected — this page never asks for a password.
+ * ONE SLOT PER NETWORK WE CAN POST TO, always, in the same order — so the bar
+ * is a map of where this client is and where they are not, rather than a list
+ * that changes shape per client. A connected account shows its own profile
+ * picture; a network with nobody on it shows its logo greyed with a "+" that
+ * goes to Social, where an account is actually connected. Two accounts on one
+ * network get two slots: which account a post goes to is a real question.
+ *
+ * Tapping a profile narrows the calendar to it; tapping it again puts them
+ * all back.
  */
 
 export const VIEWS = ['Stories', 'Preview', 'Week', 'Month', 'List'] as const
 export type ScheduleViewName = (typeof VIEWS)[number]
 
-/** Two letters for a client, when the whole name will not fit in 34px. */
+/**
+ * The networks, in the order they are drawn.
+ *
+ * Written out rather than taken from `Object.keys(PLATFORM_RULES)`: the order
+ * is a decision (the ones this agency actually posts to first), and a test
+ * pins that it still covers every platform the publisher supports, so adding
+ * a network to `publish-core` cannot silently leave it off this bar.
+ */
+export const NETWORK_ORDER = [
+  'instagram', 'tiktok', 'facebook', 'youtube', 'linkedin',
+  'threads', 'twitter', 'pinterest', 'bluesky', 'reddit',
+] as const
+
+export type ProfileSlot =
+  | { kind: 'account'; platform: string; account: SocialAccount }
+  | { kind: 'empty'; platform: string }
+
+/** One slot per connected account, then one greyed slot for every network
+ *  this client is not on yet. */
+export function profileSlots(
+  accounts: readonly SocialAccount[] | null | undefined,
+  order: readonly string[] = NETWORK_ORDER,
+): ProfileSlot[] {
+  const live = (accounts ?? []).filter(a => a?.active !== false)
+  const out: ProfileSlot[] = []
+  for (const platform of order) {
+    const mine = live.filter(a => a.platform === platform)
+    if (mine.length === 0) out.push({ kind: 'empty', platform })
+    else for (const account of mine) out.push({ kind: 'account', platform, account })
+  }
+  return out
+}
+
+/** Two letters for an account, when there is no profile picture to show. */
 export function initialsOf(name: string): string {
   const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '—'
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
+}
+
+/** The brand's own colour as a ring — Instagram's mark is a gradient, and a
+ *  ring cannot be one, so it wears its pink. */
+function ringColour(platform: string): string {
+  const bg = brandFor(platform).background
+  return bg.startsWith('#') ? bg : '#DD2A7B'
+}
+
+function AccountSlot({ slot, selected, onPick, fallbackName }: {
+  slot: Extract<ProfileSlot, { kind: 'account' }>
+  selected: boolean
+  onPick: () => void
+  fallbackName: string
+}) {
+  const { account, platform } = slot
+  const name = account.username || account.name || fallbackName
+  const ring = ringColour(platform)
+
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      title={selected ? `Showing only ${name}` : `Show only ${name}`}
+      onClick={onPick}
+      className="flex w-[58px] shrink-0 flex-col items-center gap-1"
+    >
+      <span
+        style={selected ? { boxShadow: `0 0 0 2px var(--dbx-surface, #fff), 0 0 0 4px ${ring}` } : undefined}
+        className="relative flex h-11 w-11 items-center justify-center overflow-visible rounded-full"
+      >
+        {account.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={account.avatar_url}
+            alt=""
+            className="h-11 w-11 rounded-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <span
+            style={{ background: brandFor(platform).background }}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-bold text-white"
+          >
+            {initialsOf(name)}
+          </span>
+        )}
+        <span className="absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-surface">
+          <PlatformIcon platform={platform} size={16} />
+        </span>
+        {selected && (
+          <span
+            style={{ background: ring }}
+            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-white"
+          >
+            <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
+          </span>
+        )}
+      </span>
+      <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground">
+        {name}
+      </span>
+    </button>
+  )
+}
+
+function EmptySlot({ platform }: { platform: string }) {
+  const label = brandFor(platform).label
+  return (
+    <Link
+      href="/dashboard/social"
+      title={`Connect a ${label} account`}
+      className="flex w-[58px] shrink-0 flex-col items-center gap-1"
+    >
+      <span className="relative flex h-11 w-11 items-center justify-center rounded-full">
+        <PlatformIcon platform={platform} size={44} className="rounded-full opacity-25 grayscale" />
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background">
+            <Plus className="h-3 w-3" strokeWidth={3} aria-hidden />
+          </span>
+        </span>
+      </span>
+      <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+    </Link>
+  )
 }
 
 export default function ProfilesBar({
@@ -42,13 +168,12 @@ export default function ProfilesBar({
   onView: (v: ScheduleViewName) => void
 }) {
   const client = clients.find(c => c.id === clientId) ?? null
+  const slots = profileSlots(accounts)
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-border py-3">
-      <h1 className="text-page-title-sm sm:text-[26px] sm:leading-none">Schedule</h1>
-
+    <div className="flex flex-wrap items-center gap-3 border-b border-border py-2">
       <Select value={clientId ?? ''} onValueChange={onClient}>
-        <SelectTrigger className="h-11 w-[200px] rounded-full border-border bg-surface text-[13px] font-semibold">
+        <SelectTrigger className="h-11 w-[200px] shrink-0 rounded-full border-border bg-surface text-[13px] font-semibold">
           <SelectValue placeholder="Pick a client" />
         </SelectTrigger>
         <SelectContent>
@@ -56,46 +181,45 @@ export default function ProfilesBar({
         </SelectContent>
       </Select>
 
-      <div className="flex items-center gap-2.5">
-        {accounts.map(a => {
-          const on = channel === a.id
-          return (
-            <button
-              key={a.id}
-              type="button"
-              aria-pressed={on}
-              title={`${a.username ?? a.name ?? a.platform} — show only this channel`}
-              onClick={() => onChannel(on ? null : a.id)}
-              className={cn(
-                'relative flex h-11 w-11 items-center justify-center rounded-full text-[11px] font-bold transition-colors',
-                on ? 'bg-foreground text-background' : 'bg-paper text-foreground hover:bg-muted',
-              )}
-            >
-              {initialsOf(a.name ?? a.username ?? client?.name ?? a.platform)}
-              <span className="absolute bottom-0 right-0 rounded-full border-2 border-background">
-                <PlatformIcon platform={a.platform} size={16} />
-              </span>
-            </button>
+      {/* the networks scroll rather than wrap: ten slots and a calendar have
+          to share one row on a laptop */}
+      <div className="flex min-w-0 flex-1 items-start gap-1 overflow-x-auto pb-0.5">
+        {slots.map(slot => (
+          slot.kind === 'account' ? (
+            <AccountSlot
+              key={slot.account.id}
+              slot={slot}
+              selected={channel === slot.account.id}
+              fallbackName={client?.name ?? slot.platform}
+              onPick={() => onChannel(channel === slot.account.id ? null : slot.account.id)}
+            />
+          ) : (
+            <EmptySlot key={`empty-${slot.platform}`} platform={slot.platform} />
           )
-        })}
-        {clientId && (
-          <Link
-            href={`/dashboard/clients/${clientId}/social`}
-            title="Add a social profile"
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-            <span className="sr-only">Add a social profile</span>
-          </Link>
-        )}
+        ))}
       </div>
 
-      <div className="ml-auto flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+      <div
+        role="tablist"
+        aria-label="How to look at the week"
+        className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-border bg-surface p-1"
+      >
         {VIEWS.map(v => (
           <button
             key={v}
             type="button"
-            aria-pressed={view === v}
+            role="tab"
+            id={`schedule-view-${v}`}
+            aria-selected={view === v}
+            tabIndex={view === v ? 0 : -1}
+            onKeyDown={e => {
+              if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+              e.preventDefault()
+              const i = VIEWS.indexOf(v)
+              const next = VIEWS[(i + (e.key === 'ArrowRight' ? 1 : VIEWS.length - 1)) % VIEWS.length]
+              onView(next)
+              document.getElementById(`schedule-view-${next}`)?.focus()
+            }}
             onClick={() => onView(v)}
             className={cn(
               'min-h-9 rounded-full px-3.5 text-[13px] font-semibold transition-colors [@media(pointer:coarse)]:min-h-11',
@@ -109,3 +233,6 @@ export default function ProfilesBar({
     </div>
   )
 }
+
+/** Exported for the test that pins the bar against the publisher's own list. */
+export const PUBLISHABLE_NETWORKS = Object.keys(PLATFORM_RULES)

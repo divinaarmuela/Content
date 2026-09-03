@@ -685,6 +685,156 @@ export function applySlideLimit(
   return kept.slice(0, max)
 }
 
+/* ── one tile, joined ───────────────────────────────────────────────────── */
+
+/** Only what the join reads off a `social_posts` row. */
+export type TilePost = {
+  item_id?: string | null
+  channels?: unknown
+  publish_job_ids?: unknown
+  scheduled_for?: string | null
+  status?: string | null
+}
+/** A `publish_jobs` row, as the join needs it: its id and its status. */
+export type TileJob = ScheduleJob & { id?: string | null }
+/** A `social_accounts` row, as the join needs it. */
+export type TileAccount = { id?: string | null; platform?: string | null }
+
+/** What a tile is drawn from, once the post, its item and its jobs are read
+ *  together. Everything here is DERIVED — none of it is stored on the post. */
+export type PostTileFacts = {
+  /** the status the tile wears, from `mirrorStatus` */
+  live_status: SocialPostStatus
+  /** the colour that status is drawn in */
+  tone: TileTone
+  /** the NETWORKS this post goes to — never the account ids the row stores */
+  platforms: string[]
+  /** the one sentence the server would refuse to post with, or null */
+  block_reason: string | null
+}
+
+const asStrings = (v: unknown): string[] =>
+  (Array.isArray(v) ? v : []).map(x => String(x ?? '')).filter(Boolean)
+
+/**
+ * THIS POST'S jobs — matched only by the ids the post itself carries.
+ *
+ * Never by item. An item can carry a second post after the first was
+ * cancelled, and matching by item makes the OLD post's cancelled job speak
+ * for the new one: `mirrorStatus` sees "every job cancelled" and marks a
+ * brand-new draft `cancelled` without anybody cancelling it. The server
+ * (`social-schedule.ts`'s `jobsOf`) matches the same way, so the calendar and
+ * the API cannot tell a person two different stories about one post.
+ */
+export function jobsForPost(
+  post: TilePost | null | undefined,
+  jobsById: ReadonlyMap<string, TileJob>,
+): TileJob[] {
+  const out: TileJob[] = []
+  for (const id of asStrings(post?.publish_job_ids)) {
+    const job = jobsById.get(id)
+    if (job) out.push(job)
+  }
+  return out
+}
+
+/**
+ * The networks a post goes to.
+ *
+ * `social_posts.channels` stores ACCOUNT IDS — a client can hold two
+ * Instagram accounts, and which one a post goes to is the fact worth keeping.
+ * A logo, though, is a fact about the network, so the ids are resolved
+ * through the client's accounts. A row that stored a bare platform name
+ * (older posts did) is taken at its word rather than dropped.
+ */
+export function postPlatforms(
+  channels: unknown,
+  accounts: readonly TileAccount[] | null | undefined,
+): string[] {
+  const byId = new Map(
+    (accounts ?? []).map(a => [String(a?.id ?? ''), String(a?.platform ?? '')] as const))
+  const out: string[] = []
+  for (const ref of asStrings(channels)) {
+    const platform = byId.get(ref) ?? (PLATFORM_RULES[ref as Platform] ? ref : '')
+    if (platform && !out.includes(platform)) out.push(platform)
+  }
+  return out
+}
+
+/**
+ * One tile's facts: what this post IS right now, in what colour, on which
+ * networks, and what is standing in its way.
+ *
+ * Pure and separate from the page on purpose — this join is where a calendar
+ * quietly starts disagreeing with the API, so it is the part that gets tests.
+ */
+export function postTileFacts(
+  post: TilePost | null | undefined,
+  item: ScheduleItem | null | undefined,
+  jobsById: ReadonlyMap<string, TileJob>,
+  accounts: readonly TileAccount[] | null | undefined,
+): PostTileFacts {
+  const live = mirrorStatus(item, post as SchedulePost, jobsForPost(post, jobsById))
+  return {
+    live_status: live,
+    tone: tileTone(live),
+    platforms: postPlatforms(post?.channels, accounts),
+    // the SERVER's reason, read the server's way — `publishBlockReason` on the
+    // item's approval state, not a second opinion assembled here
+    block_reason: blockReason(item),
+  }
+}
+
+/* ── what is on screen ──────────────────────────────────────────────────── */
+
+/** Does this instant fall on one of these days, in the client's zone? */
+export function onOneOfDays(
+  iso: string | null | undefined,
+  tz: string,
+  dayKeys: ReadonlySet<string>,
+): boolean {
+  const key = dayKeyInZone(iso ?? null, tz)
+  return key !== null && dayKeys.has(key)
+}
+
+/**
+ * Is this post on the channel the profiles bar is filtering to?
+ *
+ * Matches the account id the row stores AND the platform name, so selecting
+ * an Instagram profile still finds a post written before ids were stored.
+ * No filter means every post.
+ */
+export function matchesChannel(
+  channels: unknown,
+  account: TileAccount | null | undefined,
+): boolean {
+  if (!account) return true
+  const list = asStrings(channels)
+  const id = String(account.id ?? '')
+  const platform = String(account.platform ?? '')
+  return (id !== '' && list.includes(id)) || (platform !== '' && list.includes(platform))
+}
+
+/**
+ * Where the now-line sits on the grid, or null when now is not on it.
+ *
+ * In the CLIENT's zone, like every other position on this calendar: the line
+ * says "this is where the day has got to for the audience", which is a
+ * different question from what time it is where the reader is sitting.
+ */
+export function nowLineTop(
+  grid: Pick<ScheduleWeekGrid, 'tz' | 'fromHour' | 'toHour' | 'rowPx' | 'headerPx'>,
+  now: string | number | Date,
+): number | null {
+  const wall = wallTimeIn(now, grid.tz)
+  if (!wall) return null
+  const minutes = wall.hour * 60 + wall.minute
+  const lo = grid.fromHour * 60
+  const hi = grid.toHour * 60
+  if (minutes < lo || minutes > hi) return null
+  return grid.headerPx + ((minutes - lo) / 60) * grid.rowPx
+}
+
 /* ── the list view ──────────────────────────────────────────────────────── */
 
 export type ListablePost = { scheduled_for?: string | null }

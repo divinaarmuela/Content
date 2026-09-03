@@ -7,7 +7,7 @@
  * from a fetch: a post that somebody approves, queues or cancels in another
  * tab has to appear on this week without anyone pressing anything. That is
  * the same discipline `useLiveWork` brought to the three boards, applied to
- * the six tables a post is made of:
+ * the tables a post is made of:
  *
  *   social_posts    the tiles
  *   content_items   what the post IS, and whether the client approved it
@@ -15,32 +15,39 @@
  *   asset_versions  the media a post can be made from
  *   social_accounts the client's channels — the avatars in the profiles bar
  *   schedule_notes  the team's own notes pinned to a day
+ *   batches, work_kinds, team_user_clients   what this viewer may see
  *
- * NOTHING HERE DECIDES ANYTHING. Eligibility, the status a tile wears and its
- * tone are `social-schedule-core`; what this viewer may see is
- * `scope-client`'s `visibleItems`, the same predicate the items API applies
- * on the server. This file joins rows and hands them over.
+ * NOTHING HERE DECIDES ANYTHING. The join — this post's jobs, the status it
+ * wears, the networks it goes to, what is blocking it — is `postTileFacts` in
+ * `social-schedule-core`, pure and tested. What this viewer may see is
+ * `scope-client`'s `visibleItems` with the shared `scopeContextOf`, the same
+ * pair the items API and the boards use. This file subscribes and assembles.
  */
 
 import { useMemo } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
-  AssetVersion, Client, ContentItem, PublishJob, ScheduleNote, SocialAccount,
-  SocialPost, TeamUserClient,
+  AssetVersion, Batch, Client, ContentItem, PublishJob, ScheduleNote,
+  SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import {
-  eligibility, mirrorStatus, tileTone,
-  type SocialPostStatus, type TileTone,
+  eligibility, postTileFacts,
+  type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
-import { accessibleClientIdsOf, visibleItems, type ScopeViewer } from '@/app/lib/scope-client'
+import {
+  accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
+} from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
 
-/** A post as the calendar draws it: the row, its media, and the status and
- *  tone the core rules give it once the item and the jobs are read too. */
+/** A post as the calendar draws it: the row, its media, and the status, tone
+ *  and networks the core gives it once the item and the jobs are read too. */
 export type SchedulePostRow = SocialPost & {
   slides: Slide[]
+  /** the account ids the row stores — what the channel filter matches on */
   channels: string[]
+  /** the NETWORKS those accounts are on — what a logo is drawn from */
+  platforms: string[]
   publish_job_ids: string[]
   live_status: SocialPostStatus
   tone: TileTone
@@ -69,8 +76,8 @@ export type RailMedia = {
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 
-/** The statuses that mean the work is sitting with the client, waiting to be
- *  signed off — the rail's footer count. */
+/** The statuses that mean the work is sitting with someone for approval —
+ *  the rail's footer count. */
 const WAITING_STATUSES = ['client_review', 'internal_review']
 
 export type ScheduleData = {
@@ -104,25 +111,39 @@ export function useSchedulePosts(
   const on = Boolean(clientId)
 
   const posts = useTable<SocialPost>('social_posts', { by: byClient, enabled: on })
-  const items = useTable<ContentItem>('content_items')
+  // `client_id` is an indexed column, so this is one client's items rather
+  // than a live subscription to every client's work in every browser
+  const items = useTable<ContentItem>('content_items', { by: byClient, enabled: on })
   const jobs = useTable<PublishJob>('publish_jobs', { by: byClient, enabled: on })
+  // `asset_versions` carries no client_id, so it cannot be narrowed the same
+  // way — the boards read it whole today (`useLiveWork.ts`'s `versions`), and
+  // this follows that precedent rather than inventing a second answer
   const versions = useTable<AssetVersion>('asset_versions', { enabled: on })
   const accounts = useTable<SocialAccount>('social_accounts', { by: byClient, enabled: on })
   const notes = useTable<ScheduleNote>('schedule_notes', { by: byClient, enabled: on })
   const clients = useTable<Client>('clients')
   const assignments = useTable<TeamUserClient>('team_user_clients')
+  // the two the scope context needs: a shoot opens the items under it, and a
+  // work kind is how a shoot plan is told apart from a piece of content
+  const batches = useTable<Batch>('batches', { enabled: on })
+  const workKinds = useTable<WorkKind>('work_kinds', { enabled: on })
 
   /** the items this viewer may see at all — the items API's own predicate,
-   *  restated in the browser (`tests/scope-client.test.ts` pins the two
-   *  together), then narrowed to the client on screen */
+   *  with the items API's own context (`tests/scope-client.test.ts` pins the
+   *  predicate; `scopeContextOf` is what stops the context drifting) */
   const scopedItems = useMemo(() => {
-    if (!viewer) return []
+    if (!viewer || !clientId) return []
     return visibleItems(
       viewer,
       items.rows as unknown as (ContentItem & { work_kinds?: null })[],
       assignments.rows,
+      scopeContextOf({
+        viewer,
+        batches: batches.rows,
+        workKinds: workKinds.rows,
+      }),
     ).filter(i => i.client_id === clientId)
-  }, [viewer, items.rows, assignments.rows, clientId])
+  }, [viewer, items.rows, assignments.rows, batches.rows, workKinds.rows, clientId])
 
   const itemById = useMemo(
     () => new Map(scopedItems.map(i => [i.id, i])), [scopedItems])
@@ -156,30 +177,43 @@ export function useSchedulePosts(
     () => clients.rows.find(c => c.id === clientId) ?? null, [clients.rows, clientId])
   const tz = safeZone(client?.timezone ?? null)
 
+  /** this client's channels, active ones only. Also filtered by client_id in
+   *  memory: a listener re-keys one render AFTER the client changes, and a
+   *  frame of the previous client's rows under the new client's name is a
+   *  small lie this page can do without. */
+  const liveAccounts = useMemo(
+    () => accounts.rows.filter(a => a.active && a.client_id === clientId),
+    [accounts.rows, clientId])
+
   /** the tiles — each carrying the status the CORE gives it, never the stored
    *  one on its own: an approval or a job may have moved since it was written */
   const tiles: SchedulePostRow[] = useMemo(() => {
-    return posts.rows.map(row => {
-      const item = itemById.get(row.item_id) ?? null
-      const publishJobIds = asArray<string>(row.publish_job_ids).map(String)
-      const mine = jobs.rows.filter(j =>
-        String(j.content_item_id ?? '') === row.item_id || publishJobIds.includes(j.id))
-      const live = mirrorStatus(item, row, mine)
-      return {
-        ...row,
-        slides: asArray<Slide>(row.slides),
-        channels: asArray<string>(row.channels).map(String),
-        publish_job_ids: publishJobIds,
-        live_status: live,
-        tone: tileTone(live),
-        item_title: (item?.title as string | null) ?? null,
-        item_type: (item?.content_type as string | null) ?? null,
-        block_reason: item ? eligibilityBlock(item) : null,
-      }
-    }).sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
-  }, [posts.rows, jobs.rows, itemById])
+    const jobsById = new Map<string, TileJob>(
+      jobs.rows.filter(j => j.client_id === clientId).map(j => [j.id, j as TileJob]))
+    return posts.rows
+      .filter(row => row.client_id === clientId)
+      // A post whose ITEM this person may not see is not drawn at all. Drawing
+      // it anyway showed the media and the time off the post row while
+      // `mirrorStatus(null, …)` called a scheduled post a draft — a tile that
+      // is wrong twice over, on work that was not this person's to look at.
+      .filter(row => itemById.has(row.item_id))
+      .map(row => {
+        const item = itemById.get(row.item_id)!
+        const facts = postTileFacts(row, item, jobsById, liveAccounts)
+        return {
+          ...row,
+          slides: asArray<Slide>(row.slides),
+          channels: asArray<string>(row.channels).map(String),
+          publish_job_ids: asArray<string>(row.publish_job_ids).map(String),
+          item_title: (item.title as string | null) ?? null,
+          item_type: (item.content_type as string | null) ?? null,
+          ...facts,
+        }
+      })
+      .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
+  }, [posts.rows, jobs.rows, itemById, liveAccounts, clientId])
 
-  /** the media rail: one card per item, approved ones first */
+  /** the media rail: one card per item, ready-to-use first */
   const media: RailMedia[] = useMemo(() => {
     const usedItems = new Set(posts.rows.map(p => p.item_id))
     return scopedItems
@@ -198,7 +232,6 @@ export function useSchedulePosts(
           updatedAt: String(item.updated_at ?? ''),
         }
       })
-      // ready to use first, then the most recently touched
       .sort((a, b) =>
         Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
   }, [scopedItems, versionsByItem, posts.rows])
@@ -223,22 +256,13 @@ export function useSchedulePosts(
     client,
     tz,
     posts: tiles,
-    notes: notes.rows,
-    accounts: accounts.rows.filter(a => a.active),
+    notes: notes.rows.filter(n => n.client_id === clientId),
+    accounts: liveAccounts,
     media,
     waiting,
     loading,
     error,
-  }), [pickable, client, tz, tiles, notes.rows, accounts.rows, media, waiting, loading, error])
-}
-
-/** The reason this item's post could not go out yet — the eligibility answer,
- *  which is where "the client has not approved it" is decided. */
-function eligibilityBlock(item: ContentItem): string | null {
-  const e = eligibility(item, [])
-  // no versions passed here on purpose: this asks about the item's STATE, and
-  // "No media yet" is the rail's answer, not the tile's
-  return e.ok || e.reason === 'No media yet' ? null : e.reason
+  }), [pickable, client, tz, tiles, notes.rows, liveAccounts, media, waiting, loading, error, clientId])
 }
 
 /** Something to show for an item with no publishable media: the newest

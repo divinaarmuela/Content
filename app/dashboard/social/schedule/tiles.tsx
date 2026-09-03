@@ -93,3 +93,23 @@ export function Thumb({ slide, className, label }: {
     />
   )
 }
+
+/**
+ * The time on a tile: "12:00", "18:30" — the clock, with no am/pm.
+ *
+ * Ten pixels inside an 80px tile is not enough room for a meridiem, and the
+ * calendar already says which half of the day a row is in: the tile sits on
+ * the 6 PM line. Read in the CLIENT's zone like every other time on the page.
+ */
+export function clockLabel(iso: string | null | undefined, tz: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  try {
+    return d.toLocaleTimeString('en-AU', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+  } catch {
+    return ''
+  }
+}

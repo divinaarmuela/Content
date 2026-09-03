@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
 import PlatformIcon from '../PlatformIcon'
-import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM } from './tiles'
+import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
 import type { SchedulePostRow } from './useSchedulePosts'
 
 /**
@@ -37,13 +37,13 @@ function PostRow({ post, tz }: { post: SchedulePostRow; tz: string }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-semibold">{post.item_title ?? 'Post'}</span>
         <span className="block truncate text-[13px] text-muted-foreground">
-          {formatInZone(post.scheduled_for ?? '', tz, 'time') ?? 'No time yet'}
+          {clockLabel(post.scheduled_for, tz) || 'No time yet'}
           {' · '}
           {STATUS_WORDS[post.live_status]}
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1.5">
-        {post.channels.slice(0, 3).map(c => <PlatformIcon key={c} platform={c} size={18} />)}
+        {post.platforms.slice(0, 3).map(c => <PlatformIcon key={c} platform={c} size={18} />)}
         <StatusDot tone={post.tone} />
       </span>
     </Link>
@@ -98,7 +98,7 @@ export function MonthGrid({ month, posts, tz, todayKey }: {
             <div
               key={cell.key}
               className={cn(
-                'flex min-h-[92px] flex-col gap-1 border-b border-l border-border p-1.5 first:border-l-0',
+                'flex min-h-[92px] flex-col gap-1 border-b border-l border-border p-1.5 [&:nth-child(7n+1)]:border-l-0',
                 !cell.inMonth && 'bg-foreground/[0.02] text-muted-foreground',
                 todayKey === cell.key && 'bg-foreground/[0.035]',
               )}
@@ -109,7 +109,7 @@ export function MonthGrid({ month, posts, tz, todayKey }: {
                   <Link
                     key={p.id}
                     href={`/dashboard/production/${p.item_id}`}
-                    title={`${p.item_title ?? 'Post'} · ${STATUS_WORDS[p.live_status]}`}
+                    title={[p.item_title ?? 'Post', STATUS_WORDS[p.live_status], p.block_reason].filter(Boolean).join(' · ')}
                     className={cn('relative h-9 w-9 overflow-hidden rounded-tile border border-border', TONE_DIM[p.tone])}
                   >
                     <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />

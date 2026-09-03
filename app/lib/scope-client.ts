@@ -68,6 +68,82 @@ export type ScopeContext = {
   schedulerPostFilter?: boolean
 }
 
+/** A comment row, as the tag rules read it — item or shoot, either table. */
+export type ScopeComment = {
+  item_id?: string | null
+  batch_id?: string | null
+  assigned_to?: string | null
+  resolved?: boolean | null
+}
+
+/**
+ * The ids somebody was TAGGED on — assignment, which outlives being answered.
+ *
+ * Resolved or not: being asked a question about an item is what opens it, and
+ * answering the question does not close the item again. `taggedItemIds` on the
+ * server reads exactly this way.
+ */
+export function taggedIdsOf(
+  comments: readonly ScopeComment[] | null | undefined,
+  viewerId: string,
+  key: 'item_id' | 'batch_id',
+): string[] {
+  return [...new Set((comments ?? [])
+    .filter(c => c?.assigned_to === viewerId)
+    .map(c => String(c?.[key] ?? ''))
+    .filter(Boolean))]
+}
+
+/**
+ * THE ONE PLACE THE SCOPE CONTEXT IS ASSEMBLED.
+ *
+ * `visibleItems` takes four grants a plain item array cannot carry — the
+ * shoots, the tags on items, the tags on shoots, and the work kinds that say
+ * which item is a shoot plan. Every caller has to pass all four or it scopes
+ * differently from the others: with no `workKinds` a scheduler is shown the
+ * shoot briefs the items API hides from them, and with no `batches` an editor
+ * loses the item they hold only through a shoot.
+ *
+ * The items route, the boards' live hook and the Schedule page assembled this
+ * separately, which is exactly how those two drifts happened. They call this
+ * now. Tags may arrive already resolved (the server looks them up) or as the
+ * comment rows themselves (the browser has them subscribed).
+ */
+export function scopeContextOf(input: {
+  viewer: ScopeViewer
+  batches?: ScopeBatch[]
+  workKinds?: { id: string; slug: string }[]
+  /** already-resolved tag ids — the server's way */
+  taggedItemIds?: Iterable<string>
+  taggedBatchIds?: Iterable<string>
+  /** or the comment rows to read them off — the browser's way */
+  itemComments?: readonly ScopeComment[]
+  batchComments?: readonly ScopeComment[]
+  /** the other items in hand, for "is this ONE row visible" */
+  items?: ScopeItem[]
+  schedulerPostFilter?: boolean
+}): ScopeContext {
+  const { viewer } = input
+  // a client is scoped by their own client_id and holds no tags at all
+  const tagsOff = viewer.role === 'client'
+  const itemTags = tagsOff ? [] : [
+    ...(input.taggedItemIds ?? []),
+    ...taggedIdsOf(input.itemComments, viewer.id, 'item_id'),
+  ]
+  const batchTags = tagsOff ? [] : [
+    ...(input.taggedBatchIds ?? []),
+    ...taggedIdsOf(input.batchComments, viewer.id, 'batch_id'),
+  ]
+  return {
+    batches: input.batches ?? [],
+    workKinds: input.workKinds ?? [],
+    taggedItemIds: [...new Set(itemTags)],
+    taggedBatchIds: [...new Set(batchTags)],
+    ...(input.items ? { items: input.items } : {}),
+    ...(input.schedulerPostFilter === undefined ? {} : { schedulerPostFilter: input.schedulerPostFilter }),
+  }
+}
+
 /** `accessibleClientIds` — the client ids whose work is this person's to run.
  *  null means unrestricted. Mirrors production-access.ts exactly. */
 export function accessibleClientIdsOf(

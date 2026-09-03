@@ -64,14 +64,15 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, clientName, loading,
+  media, waiting, loading,
 }: {
   media: RailMedia[]
   waiting: number
-  clientName: string | null
   loading: boolean
 }) {
-  const [filters, setFilters] = useState<Set<RailFilter>>(new Set())
+  // "Unused" starts on, as the design has it: the rail is for finding the
+  // next thing to post, and media already in a post is not that
+  const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>(['Unused']))
   const [starred, toggleStar] = useStars()
   const shown = useMemo(() => filterMedia(media, filters, starred), [media, filters, starred])
 
@@ -117,11 +118,11 @@ export default function MediaRail({
         })}
       </div>
 
+      {/* the client's name is on the picker two inches away; repeating it here
+          only truncated it */}
       <div className="flex items-center justify-between gap-2 px-0.5">
         <span className="text-[13px] font-semibold">Approved media</span>
-        {clientName && (
-          <span className="truncate text-[12px] font-semibold text-muted-foreground">{clientName}</span>
-        )}
+        <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">{shown.length}</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -160,8 +161,11 @@ export default function MediaRail({
                   aria-label={starred.has(m.itemId) ? `Unstar ${m.title}` : `Star ${m.title}`}
                   onClick={() => toggleStar(m.itemId)}
                   className={cn(
-                    'absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink/55 text-cream transition-opacity focus-visible:opacity-100 group-hover:opacity-100',
-                    starred.has(m.itemId) ? 'opacity-100' : 'opacity-0',
+                    // a phone has no hover: the rail is a bottom sheet there,
+                    // so the star is always visible (and 44px) on a touch
+                    // screen and appears on hover on a desktop
+                    'absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink/55 text-cream transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:opacity-100',
+                    starred.has(m.itemId) ? 'opacity-100' : 'opacity-60 md:opacity-0',
                   )}
                 >
                   <Star

@@ -5,19 +5,20 @@ import { ChevronLeft, ChevronRight, Images } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  scheduleWeekGrid, type SuggestedTime,
+  matchesChannel, nowLineTop, onOneOfDays, scheduleWeekGrid, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
-import { dayKeyInZone, wallTimeIn, zoneLabel } from '@/app/lib/timezone-core'
+import { dayKeyInZone, zoneLabel } from '@/app/lib/timezone-core'
 import { loadFailedMessage } from '@/app/lib/support-core'
 import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
+import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
 import MediaRail from './MediaRail'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
 import { useSchedulePosts } from './useSchedulePosts'
-import { rangeLabel, shiftDays } from './week-nav'
+import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
 
 /**
  * THE SCHEDULE: one client's week, media on the left, hours on the right.
@@ -32,11 +33,16 @@ import { rangeLabel, shiftDays } from './week-nav'
  *  1. EVERY TIME IS THE CLIENT'S. The columns, the now-line and the labels are
  *     all in `clients.timezone` — a posting time is a fact about the audience,
  *     not about whoever is looking at the screen.
- *  2. THE STATUS IS DERIVED, NEVER STORED. `mirrorStatus` reads the item's
- *     approval and the publish jobs; a tile cannot claim "scheduled" because
- *     a row said so an hour ago.
+ *  2. THE STATUS IS DERIVED, NEVER STORED. `postTileFacts` reads the item's
+ *     approval and THIS POST's jobs; a tile cannot claim "scheduled" because a
+ *     row said so an hour ago, and an old post's cancelled job never speaks
+ *     for the one that replaced it.
  *  3. IT IS LIVE. Everything on it is a database listener, so an approval
  *     landing in another tab repaints this week without a refresh.
+ *
+ * The layout is the approved mockup's: the media rail is a full-height column
+ * pinned to the left of the calendar, and the whole thing fills the window —
+ * a calendar that stops half way down the screen looks broken.
  */
 
 const CLIENT_KEY = 'md-schedule-client'
@@ -50,7 +56,7 @@ export default function SchedulePage() {
   const [clientId, setClientId] = useState<string | null>(null)
   const [channel, setChannel] = useState<string | null>(null)
   const [view, setView] = usePersistedChoice<ScheduleViewName>(VIEW_KEY, VIEWS, 'Week', 'view')
-  /** any day in the week on screen, as a 'YYYY-MM-DD' key */
+  /** any day in the week (or month) on screen, as a 'YYYY-MM-DD' key */
   const [anchor, setAnchor] = useState<string | null>(null)
   /** the clock, for the now-line — a minute is close enough to "now" */
   const [now, setNow] = useState(() => Date.now())
@@ -85,31 +91,27 @@ export default function SchedulePage() {
   const grid = useMemo(
     () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz }),
     [anchor, todayKey, tz])
+  const monthView = view === 'Month'
+  const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
 
-  /** the week's posts, narrowed to one channel when a profile is selected */
-  const weekPosts = useMemo(() => {
-    const platform = data.accounts.find(a => a.id === channel)?.platform ?? null
-    return data.posts.filter(p => {
-      if (channel && !(p.channels.includes(channel) || (platform && p.channels.includes(platform)))) return false
-      return true
-    })
-  }, [data.posts, data.accounts, channel])
+  /** the channel the profiles bar is filtering to, as the core reads it */
+  const selected = useMemo(
+    () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
 
-  const inWeek = useMemo(() => {
-    const keys = new Set(grid.days.map(d => d.iso))
-    return weekPosts.filter(p => {
-      const key = dayKeyInZone(p.scheduled_for ?? null, tz)
-      return key !== null && keys.has(key)
-    })
-  }, [weekPosts, grid.days, tz])
+  /** every post for this client on the selected channel */
+  const channelPosts = useMemo(
+    () => data.posts.filter(p => matchesChannel(p.channels, selected)),
+    [data.posts, selected])
 
-  const weekNotes = useMemo(() => {
-    const keys = new Set(grid.days.map(d => d.iso))
-    return data.notes.filter(n => {
-      const key = dayKeyInZone(n.at, tz)
-      return key !== null && keys.has(key)
-    })
-  }, [data.notes, grid.days, tz])
+  const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
+
+  const inWeek = useMemo(
+    () => channelPosts.filter(p => onOneOfDays(p.scheduled_for, tz, weekKeys)),
+    [channelPosts, weekKeys, tz])
+
+  const weekNotes = useMemo(
+    () => data.notes.filter(n => onOneOfDays(n.at, tz, weekKeys)),
+    [data.notes, weekKeys, tz])
 
   const stories = useMemo(
     () => inWeek.filter(p => String(p.item_type ?? '').toLowerCase() === 'story'), [inWeek])
@@ -123,8 +125,7 @@ export default function SchedulePage() {
    * rows this page has no other reason to hold.
    */
   const [suggested, setSuggested] = useState<SuggestedTime[]>([])
-  const network = data.accounts.find(a => a.id === channel)?.platform
-    ?? data.accounts[0]?.platform ?? 'instagram'
+  const network = selected?.platform ?? data.accounts[0]?.platform ?? 'instagram'
   useEffect(() => {
     if (!clientId) { setSuggested([]); return }
     let cancelled = false
@@ -143,28 +144,25 @@ export default function SchedulePage() {
     const taken = inWeek
       .map(p => (p.scheduled_for ? Date.parse(p.scheduled_for) : NaN))
       .filter(Number.isFinite)
-    const keys = new Set(grid.days.map(d => d.iso))
     return suggested.filter(s => {
-      if (!keys.has(s.dayKey)) return false
+      if (!weekKeys.has(s.dayKey)) return false
       const at = Date.parse(s.iso)
       return !taken.some(t => Math.abs(t - at) < 45 * 60_000)
     })
-  }, [suggested, inWeek, grid.days])
+  }, [suggested, inWeek, weekKeys])
 
   /** where "now" sits on the grid, in the client's zone */
-  const nowTop = useMemo(() => {
-    const wall = wallTimeIn(now, tz)
-    if (!wall) return null
-    const minutes = wall.hour * 60 + wall.minute
-    if (minutes < grid.fromHour * 60 || minutes > grid.toHour * 60) return null
-    return grid.headerPx + ((minutes - grid.fromHour * 60) / 60) * grid.rowPx
-  }, [now, tz, grid])
+  const nowTop = useMemo(() => nowLineTop(grid, now), [grid, now])
+
+  const step = (direction: 1 | -1) => {
+    const from = anchor ?? todayKey ?? grid.days[0].iso
+    setAnchor(monthView ? shiftMonths(from, direction) : shiftDays(grid.days[0].iso, direction * 7))
+  }
 
   const rail = (
     <MediaRail
       media={data.media}
       waiting={data.waiting}
-      clientName={data.client?.name ?? null}
       loading={data.loading}
     />
   )
@@ -174,28 +172,37 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="flex flex-col">
-      <ProfilesBar
-        clients={data.clients}
-        clientId={clientId}
-        onClient={pickClient}
-        accounts={data.accounts}
-        channel={channel}
-        onChannel={setChannel}
-        view={view}
-        onView={setView}
+    // the shell's header, the page's top padding and its bottom padding come
+    // to 9rem; taking them off the viewport is what makes the rail and the
+    // grid reach the bottom of the window instead of stopping half way
+    <div className="flex h-[calc(100vh-9rem)] min-h-[560px] flex-col">
+      <PageTitle
+        title="Schedule"
+        summary="One client's week. Approved media on the left, what is going out on the right."
       />
 
-      <div className="flex min-h-0 flex-1 gap-4 pt-3">
-        {/* The rail is a column on a desktop and a bottom sheet on a phone:
-            at 390px a 236px column would leave no calendar at all. */}
-        <aside className="hidden w-[236px] shrink-0 flex-col rounded-card border border-border bg-surface p-3.5 lg:flex">
+      <div className="flex min-h-0 flex-1">
+        {/* The rail is a full-height column beside the calendar on a desktop
+            and a bottom sheet on a phone: at 390px a 236px column would leave
+            no calendar at all. */}
+        <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border py-1 pr-3.5 lg:flex">
           {rail}
         </aside>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-4">
+          <ProfilesBar
+            clients={data.clients}
+            clientId={clientId}
+            onClient={pickClient}
+            accounts={data.accounts}
+            channel={channel}
+            onChannel={setChannel}
+            view={view}
+            onView={setView}
+          />
+
           {/* date bar */}
-          <div className="flex items-center gap-3 pb-3">
+          <div className="flex items-center gap-3 py-2">
             <button
               type="button"
               onClick={() => setAnchor(todayKey)}
@@ -205,21 +212,23 @@ export default function SchedulePage() {
             </button>
             <button
               type="button"
-              aria-label="Previous week"
-              onClick={() => setAnchor(shiftDays(grid.days[0].iso, -7))}
+              aria-label={monthView ? 'Previous month' : 'Previous week'}
+              onClick={() => step(-1)}
               className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
             >
               <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} />
             </button>
             <button
               type="button"
-              aria-label="Next week"
-              onClick={() => setAnchor(shiftDays(grid.days[0].iso, 7))}
+              aria-label={monthView ? 'Next month' : 'Next week'}
+              onClick={() => step(1)}
               className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
             >
               <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} />
             </button>
-            <span className="text-[16px] font-semibold">{rangeLabel(grid.days)}</span>
+            <span className="text-[16px] font-semibold">
+              {monthView ? monthLabel(anchor ?? todayKey ?? '') : rangeLabel(grid.days)}
+            </span>
 
             <div className="ml-auto flex items-center gap-2">
               <span className="hidden text-[12px] font-semibold text-muted-foreground sm:inline">
@@ -248,7 +257,7 @@ export default function SchedulePage() {
               {loadFailedMessage('the schedule')}
             </p>
           ) : data.loading ? (
-            <Skeleton className="h-[520px] w-full rounded-inner" />
+            <Skeleton className="min-h-0 w-full flex-1 rounded-inner" />
           ) : view === 'Week' ? (
             <>
               {/* On a phone the week grid becomes the list: seven 44px columns
@@ -264,23 +273,29 @@ export default function SchedulePage() {
                   nowTop={nowTop}
                 />
               </div>
-              <div className="md:hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
                 <ListView posts={inWeek} tz={tz} />
               </div>
             </>
           ) : view === 'Month' ? (
             <MonthGrid
-              month={grid.days[3].iso.slice(0, 7)}
-              posts={weekPosts}
+              month={monthKey}
+              posts={channelPosts}
               tz={tz}
               todayKey={todayKey}
             />
           ) : view === 'List' ? (
-            <ListView posts={inWeek} tz={tz} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ListView posts={inWeek} tz={tz} />
+            </div>
           ) : view === 'Preview' ? (
-            <PreviewGrid posts={weekPosts} tz={tz} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <PreviewGrid posts={channelPosts} tz={tz} />
+            </div>
           ) : (
-            <StoriesView posts={stories} tz={tz} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <StoriesView posts={stories} tz={tz} />
+            </div>
           )}
         </main>
       </div>
