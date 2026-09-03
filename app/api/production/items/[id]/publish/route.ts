@@ -6,11 +6,13 @@ import {
   markScheduledAfterQueue, planItemPublish, queueItemPublish,
 } from '../../../../../lib/production-publish'
 import { announceItemChange } from '../../../../../lib/production-live'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { PublishJob } from '@/lib/db-types'
 import { getPublisher } from '../../../../../lib/publisher'
 
 /** What would be published for this item, and what is stopping it. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     // the role ladder admits editors via 'scheduler'; publishing to a client's
@@ -25,6 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Send an approved item to the client's connected channels.
@@ -32,6 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  *  Scheduler and above: this is the act of putting content in front of the
  *  public, and it is gated on the workflow having approved the item. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     if (!['scheduler', 'super_admin'].includes(user.role)) {
@@ -88,6 +92,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /**
@@ -100,6 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
  * post that is still going to appear on the client's feed.
  */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     if (!['scheduler', 'super_admin'].includes(user.role)) {
@@ -108,14 +114,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { id } = await params
     const item = await loadItemForUser(user, id)
 
-    const { data: job } = await supabase
-      .from('publish_jobs')
-      .select('id, status, provider_post_id')
-      .eq('content_item_id', id)
-      .in('status', ['queued', 'publishing', 'scheduled'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const jobs = table<PublishJob>('publish_jobs')
+    const job = (await jobs.list({
+      where: r => r.content_item_id === id && ['queued', 'publishing', 'scheduled'].includes(r.status),
+      orderBy: [['created_at', 'desc']],
+      limit: 1,
+    }))[0] ?? null
 
     if (!job) return NextResponse.json({ error: 'Nothing is queued for this item' }, { status: 400 })
     if (job.status === 'publishing') {
@@ -139,13 +143,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    const { data: cancelled } = await supabase
-      .from('publish_jobs')
-      .update({ status: 'cancelled', error: null, updated_at: new Date().toISOString() })
-      .eq('id', job.id)
-      .eq('status', job.status)     // it may have gone out while we were asking
-      .select('id')
-      .maybeSingle()
+    // it may have gone out while we were asking, so the job's status is
+    // read again immediately before the cancel is written
+    const live = await jobs.get(job.id)
+    const cancelled = live?.status === job.status
+      ? await jobs.update(job.id, { status: 'cancelled', error: null, updated_at: new Date().toISOString() })
+      : null
     if (!cancelled) {
       return NextResponse.json(
         { error: 'It moved on while you were cancelling — refresh to see where it got to' },
@@ -165,4 +168,5 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

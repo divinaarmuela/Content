@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { WorkKind } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { logActivity } from '../../../../lib/workflow'
 import { ASSIGNABLE_ROLES, KIND_COLORS, RESERVED_KIND_SLUGS } from '../../../../lib/work-kinds-core'
@@ -7,6 +8,7 @@ import { ASSIGNABLE_ROLES, KIND_COLORS, RESERVED_KIND_SLUGS } from '../../../../
 /** Edit or archive a work type. Slug is immutable; kinds are archived
  *  (active=false), never deleted — old items keep their label. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const { id } = await params
@@ -14,8 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // the fixed system kind must not be renamed or archived — its slug is
     // load-bearing (one-brief-per-shoot index, item-gate branch)
-    const { data: existing } = await supabase
-      .from('work_kinds').select('slug').eq('id', id).maybeSingle()
+    const existing = await table<WorkKind>('work_kinds').get(id)
     if (!existing) return NextResponse.json({ error: 'Work type not found' }, { status: 404 })
     if (RESERVED_KIND_SLUGS.has(existing.slug) && ('name' in body || 'active' in body)) {
       return NextResponse.json({ error: 'This is a system work type — it cannot be renamed or archived' }, { status: 422 })
@@ -47,8 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
     }
 
-    const { data, error } = await supabase.from('work_kinds').update(patch).eq('id', id).select().single()
-    if (error) throw new Error(error.message)
+    const data = await table('work_kinds').update(id, patch)
     await logActivity({
       actor: user, entityType: 'work_kind', entityId: id,
       action: 'updated', detail: Object.keys(patch).join(', '),
@@ -58,4 +58,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

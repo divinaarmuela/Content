@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { addVersion, logActivity, performTransition, type ContentItem } from '../../../../../lib/workflow'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { ContentItem as ContentItemRow } from '@/lib/db-types'
 import { stateAfterPostEdit } from '../../../../../lib/posting-approval-core'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
@@ -13,6 +14,7 @@ import { normaliseSlides, slidesSatisfyType } from '../../../../../lib/version-f
 /** Append a new asset version (race-safe numbering). The editor HAT on this
  *  item — its owner, or anyone while it is unowned — plus managers. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     // NOT requireRole('editor'): the editor HAT is an assignment, not a job
     // title, so a scheduler-role person who OWNS this item wears it. The
@@ -73,19 +75,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     //
     // The final-post sign-off was given to pictures that no longer exist: a
     // new version on an approved post flips the gate back to pending, exactly
-    // as editing the caption does. Tolerant and best-effort — the '*' row only
-    // carries the key on a migrated database, and a failure here must never
+    // as editing the caption does. Tolerant and best-effort — an item that
+    // never had the gate carries no key at all, and a failure here must never
     // lose the upload.
     const resetTo = 'posting_approval_state' in item
       ? stateAfterPostEdit((item as Record<string, unknown>).posting_approval_state)
       : null
     if (resetTo) {
-      const { error: resetErr } = await supabase
-        .from('content_items')
-        .update({ posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null })
-        .eq('id', id)
-        .eq('posting_approval_state', 'approved')
-      if (!resetErr) {
+      // re-read the gate: an approval that arrived (or was withdrawn) while
+      // this upload was in flight decides, not the copy read at the top
+      const live = await table<ContentItemRow>('content_items').get(id)
+      if (live?.posting_approval_state === 'approved') {
+        await table('content_items').update(id, {
+          posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null,
+        })
         await logActivity({
           actor: user, clientId: item.client_id,
           entityType: 'content_item', entityId: id,
@@ -121,4 +124,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

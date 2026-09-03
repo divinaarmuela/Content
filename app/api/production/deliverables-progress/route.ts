@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachMany, attachOne } from '@/lib/db-join'
+import type { Batch, ClientAgreement, ContentItem, MonthlyCommitment } from '@/lib/db-types'
 import { requireSignedIn, authzErrorResponse } from '../../../lib/authz'
 import { visibleClientIds } from '../../../lib/production-access'
 import {
@@ -16,6 +18,7 @@ import { safeZone } from '../../../lib/timezone-core'
  */
 
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     const url = new URL(req.url)
@@ -33,28 +36,30 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'You are not assigned to this client' }, { status: 403 })
     }
 
-    const [{ data: agreement }, { data: commitment }, { data: items }, { data: batches }] = await Promise.all([
-      supabase.from('client_agreements').select('deliverable_lines').eq('client_id', clientId).maybeSingle(),
-      supabase.from('monthly_commitments').select('*')
-        .eq('client_id', clientId).eq('month', month).eq('year', year).maybeSingle(),
-      supabase.from('content_items')
-        .select('id, batch_id, content_type, status, due_date, created_at, work_kinds(slug, uses_media), schedule_entries(published_at)')
-        .eq('client_id', clientId).limit(1000),
-      supabase.from('batches').select('id, month, year').eq('client_id', clientId).limit(200),
+    const [agreement, commitment, itemRows, batches, client] = await Promise.all([
+      table<ClientAgreement>('client_agreements')
+        .list({ by: { client_id: clientId }, limit: 1 }).then(r => r[0] ?? null),
+      table<MonthlyCommitment>('monthly_commitments')
+        .list({ by: { client_id: clientId }, where: r => r.month === month && r.year === year, limit: 1 })
+        .then(r => r[0] ?? null),
+      table<ContentItem>('content_items').list({ by: { client_id: clientId }, limit: 1000 }),
+      table<Batch>('batches').list({ by: { client_id: clientId }, limit: 200 }),
+      // which month a published item lands in is decided on the CLIENT's
+      // calendar: a post that went out at 11 pm on the 31st is that month's
+      // delivery, whatever UTC calls it
+      table('clients').get(clientId),
     ])
-
-    // which month a published item lands in is decided on the CLIENT's
-    // calendar: a post that went out at 11 pm on the 31st is that month's
-    // delivery, whatever UTC calls it
-    const { data: client } = await supabase
-      .from('clients').select('timezone').eq('id', clientId).maybeSingle()
-    const tz = safeZone(client?.timezone as string | null)
+    const items = await attachMany(
+      await attachOne(itemRows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media']),
+      'id', 'schedule_entries', 'item_id', ['published_at'],
+    )
+    const tz = safeZone((client?.timezone ?? null) as string | null)
 
     const lines = normaliseDeliverableLines(agreement?.deliverable_lines)
-    const quotas = effectiveQuotas('lines' in lines ? lines.lines : [], commitment ?? null)
-    const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
+    const quotas = effectiveQuotas('lines' in lines ? lines.lines : [], (commitment as unknown as Record<string, unknown> | null))
+    const batchesById = new Map(batches.map(b => [b.id as string, b]))
     // brief TASKS are the plan, not the delivery — they never count
-    const producedItems = (items ?? [])
+    const producedItems = items
       .filter(i => ((i as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
       // nor does a research/strategy task — the agreement is what gets posted
       .filter(i => !isInternalKind((i as { work_kinds?: { slug?: string; uses_media?: boolean } | null }).work_kinds))
@@ -66,4 +71,5 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

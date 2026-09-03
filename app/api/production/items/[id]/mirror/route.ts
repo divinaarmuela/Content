@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { sweepMissingMirrors } from '../../../../../lib/gdrive-mirror'
@@ -20,6 +21,7 @@ import { sweepMissingMirrors } from '../../../../../lib/gdrive-mirror'
  * no Drive folder, and the whole mirror is the agency's own archive.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     if (user.role === 'client') {
@@ -36,4 +38,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

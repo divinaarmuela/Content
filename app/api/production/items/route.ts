@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  AssetVersion, Batch, ContentItem, DeliverableGroup, TeamUser, WorkflowActivity,
+  WorkKind as WorkKindRow,
+} from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../lib/authz'
 import { canCreateItemsUnder, sanitisePlannedDeliverables, type BatchStatus } from '../../../lib/batch-brief-core'
 import { announceBatchChange } from '../../../lib/production-live'
@@ -16,6 +21,7 @@ import { slidesOf } from '../../../lib/version-files-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   const t0 = Date.now()
   try {
     // Every signed-in role may LIST; what they get back is scoped below.
@@ -28,44 +34,49 @@ export async function GET(req: Request) {
     const statusFilter = url.searchParams.get('status')
     const batchFilter = url.searchParams.get('batch_id')
 
-    let q = supabase
-      .from('content_items')
-      // clients.timezone rides along: every row that prints a posting time
-      // has to print it in the audience's zone, not the reader's
-      .select('*, clients(name, timezone), batches(title, status, planned_deliverables), work_kinds(name, slug, color, uses_media)')
-      .order('updated_at', { ascending: false })
-      .limit(500)
-
     const clientIds = await accessibleClientIds(user)
-    if (clientIds !== null) {
-      if (user.role === 'client') {
-        if (clientIds.length === 0) return NextResponse.json([])
-        q = q.in('client_id', clientIds)
-      } else {
-        // ASSIGNMENT grants visibility: whoever holds the job — owner, handed
-        // the scheduling, tagged on it, or holding the shoot it sits under —
-        // sees it, whether or not they're assigned the whole client. One
-        // filter, shared with loadItemForUser, so the list and the detail page
-        // can never disagree about what this person may open.
-        const assigned = await assignedItemsFilter(user)
-        q = clientIds.length === 0
-          ? q.or(assigned)
-          : q.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)
-      }
+    if (clientIds !== null && user.role === 'client' && clientIds.length === 0) {
+      return NextResponse.json([])
     }
-    if (user.role === 'scheduler') {
-      // a scheduler OWNING a job (they can be assigned work now) must see it
-      // at any status — the status gate is for other people's items
-      q = q.or(`status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${assertUuid(user.id)}`)
-    }
-    if (clientFilter) q = q.eq('client_id', clientFilter)
-    if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)) {
-      q = q.eq('status', statusFilter)
-    }
-    if (batchFilter) q = q.eq('batch_id', batchFilter)
-
-    const { data, error } = await q
-    if (error) throw new Error(error.message)
+    const scopedClients = clientIds === null ? null : clientIds.map(assertUuid)
+    // ASSIGNMENT grants visibility: whoever holds the job — owner, handed the
+    // scheduling, tagged on it, or holding the shoot it sits under — sees it,
+    // whether or not they're assigned the whole client. One filter, shared
+    // with loadItemForUser, so the list and the detail page can never
+    // disagree about what this person may open.
+    const assigned = clientIds !== null && user.role !== 'client'
+      ? await assignedItemsFilter(user)
+      : null
+    const me = user.role === 'scheduler' ? assertUuid(user.id) : user.id
+    const rows0 = await table<ContentItem>('content_items').list({
+      by: clientFilter ? { client_id: clientFilter } : undefined,
+      where: r => {
+        if (scopedClients !== null) {
+          if (user.role === 'client') {
+            if (!scopedClients.includes(r.client_id)) return false
+          } else if (!(scopedClients.includes(r.client_id) || assigned!(r))) return false
+        }
+        // a scheduler OWNING a job (they can be assigned work now) must see it
+        // at any status — the status gate is for other people's items
+        if (user.role === 'scheduler'
+          && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === me)) return false
+        if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)
+          && r.status !== statusFilter) return false
+        if (batchFilter && r.batch_id !== batchFilter) return false
+        return true
+      },
+      orderBy: [['updated_at', 'desc']],
+      limit: 500,
+    })
+    // clients.timezone rides along: every row that prints a posting time has
+    // to print it in the audience's zone, not the reader's
+    const data = await attachOne(
+      await attachOne(
+        await attachOne(rows0, 'client_id', 'clients', ['name', 'timezone']),
+        'batch_id', 'batches', ['title', 'status', 'planned_deliverables'],
+      ),
+      'work_kind_id', 'work_kinds', ['name', 'slug', 'color', 'uses_media'],
+    )
     const tMain = Date.now()
 
     // a scheduler sees an unclaimed approved item (anyone can pick it up) or
@@ -73,7 +84,7 @@ export async function GET(req: Request) {
     // 'Hand to a scheduler' notified specific people but never actually
     // restricted the queue until now.
     const scoped = user.role === 'scheduler'
-      ? (data ?? []).filter(r => {
+      ? data.filter(r => {
           // a shoot BRIEF is never scheduling work — booking a shoot is an
           // account manager's call. Excluding it in the two scheduler pages
           // left it one new surface away from reappearing; the API is the
@@ -84,12 +95,12 @@ export async function GET(req: Request) {
           const ids = Array.isArray(r.scheduler_ids) ? r.scheduler_ids as string[] : []
           return ids.length === 0 || ids.includes(user.id)
         })
-      : (data ?? [])
+      : data
 
     if (user.role === 'client') {
       console.log(`[items] GET ${Date.now() - t0}ms (main ${tMain - t0}, annot 0)`)
       return NextResponse.json(
-        (data ?? []).map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] })),
+        data.map(r => ({ ...r, status_label: CLIENT_LABELS[r.status as ItemStatus] })),
       )
     }
 
@@ -105,7 +116,7 @@ export async function GET(req: Request) {
     // Each keeps its own try/catch: a missing badge, credit or count is a
     // smaller failure than a board that will not load, and one slow
     // annotation must never block the list.
-    let rows: Record<string, unknown>[] = scoped
+    let rows: Record<string, unknown>[] = scoped as unknown as Record<string, unknown>[]
     const ids = rows.map(r => r.id as string).slice(0, 300)
     const [waiting, credits, slideCounts] = await Promise.all([
       (async () => {
@@ -118,22 +129,18 @@ export async function GET(req: Request) {
       (async () => {
         try {
           if (ids.length === 0) return null
-          const { data: acts } = await supabase
-            .from('workflow_activity')
-            .select('entity_id, actor_id, action, new_value, created_at')
-            .eq('entity_type', 'content_item')
-            .in('entity_id', ids)
-            .in('action', ['created', 'status_change'])
-            .order('created_at', { ascending: true })
-            .limit(3000)
-          const actorIds = [...new Set((acts ?? []).map(a => a.actor_id).filter(Boolean))]
-          const { data: actors } = actorIds.length
-            ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
-            : { data: [] }
-          const nameOf = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
+          const acts = await table<WorkflowActivity>('workflow_activity').list({
+            where: a => a.entity_type === 'content_item'
+              && ids.includes(a.entity_id)
+              && ['created', 'status_change'].includes(a.action),
+            orderBy: [['created_at', 'asc']],
+            limit: 3000,
+          })
+          const actors = await table<TeamUser>('team_users').list()
+          const nameOf = new Map(actors.map(a => [a.id, a.name || a.email]))
           const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
-          for (const a of acts ?? []) {
-            const key = a.entity_id as string
+          for (const a of acts) {
+            const key = a.entity_id
             const entry = byItem.get(key) ?? { created_by: null, approved_by: null }
             const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
             if (a.action === 'created') entry.created_by = who
@@ -151,16 +158,15 @@ export async function GET(req: Request) {
           if (ids.length === 0) return null
           // ONE asset_versions read serves the slide count; anything else that
           // needs the latest version derives from the same rows in memory
-          const { data: versions } = await supabase
-            .from('asset_versions')
-            .select('item_id, version_number, file_url, files')
-            .in('item_id', ids)
-            .order('version_number', { ascending: false })
-            .limit(2000)
+          const versions = await table<AssetVersion>('asset_versions').list({
+            where: v => ids.includes(v.item_id),
+            orderBy: [['version_number', 'desc']],
+            limit: 2000,
+          })
           // rows arrive newest-first, so the first seen for an item is its latest
           const countByItem = new Map<string, number>()
-          for (const v of versions ?? []) {
-            const key = v.item_id as string
+          for (const v of versions) {
+            const key = v.item_id
             if (!countByItem.has(key)) countByItem.set(key, slidesOf(v).length)
           }
           return countByItem
@@ -181,12 +187,14 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Create one or many items (batch upload of a shoot). Any team role — the
  *  'scheduler' floor is the lowest team bar: it admits every team role and no
  *  client. What each role may create is the shoot gate's business below. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const body = await req.json()
@@ -203,34 +211,33 @@ export async function POST(req: Request) {
     const adhocReason = String(body.adhoc_reason ?? '').trim()
 
     // work kinds: resolve/validate once per request
-    const { data: kindRows } = await supabase.from('work_kinds').select('*')
-    const kinds = (kindRows ?? []) as WorkKind[]
+    const kinds = await table<WorkKindRow>('work_kinds').list() as unknown as WorkKind[]
 
     // open assignment: anyone active on the team can carry a task — validate
     // every named owner in one query, never trust a raw uuid
     const ownerIds = [...new Set(items.map((it: { owner_id?: string }) => it.owner_id).filter(Boolean))] as string[]
-    const { data: ownerRows } = ownerIds.length
-      ? await supabase.from('team_users').select('id, role, active_status').in('id', ownerIds)
-      : { data: [] }
-    const ownerById = new Map((ownerRows ?? []).map(o => [o.id as string, o]))
+    const ownerRows = ownerIds.length
+      ? await table<TeamUser>('team_users').list({ where: o => ownerIds.includes(o.id) })
+      : []
+    const ownerById = new Map(ownerRows.map(o => [o.id, o]))
     for (const oid of ownerIds) {
       if (!isValidOwner(ownerById.get(oid) ?? null)) {
         return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
       }
     }
     const batchIds = [...new Set(items.map((it: { batch_id?: string }) => it.batch_id).filter(Boolean))] as string[]
-    const { data: batchRows } = batchIds.length
-      ? await supabase.from('batches').select('id, client_id, status, owner_id').in('id', batchIds)
-      : { data: [] }
-    const batchById = new Map((batchRows ?? []).map(b => [b.id as string, b]))
+    const batchRows = batchIds.length
+      ? await table<Batch>('batches').list({ where: b => batchIds.includes(b.id) })
+      : []
+    const batchById = new Map(batchRows.map(b => [b.id, b]))
 
     // quota groups: a piece may land inside a deliverable_groups row — the
     // "Reels · 2 of 5" card. Validate every named group once.
     const groupIds = [...new Set(items.map((it: { group_id?: string }) => it.group_id).filter(Boolean))] as string[]
-    const { data: groupRows } = groupIds.length
-      ? await supabase.from('deliverable_groups').select('id, client_id, batch_id, title, target').in('id', groupIds)
-      : { data: [] }
-    const groupById = new Map((groupRows ?? []).map(gr => [gr.id as string, gr]))
+    const groupRows = groupIds.length
+      ? await table<DeliverableGroup>('deliverable_groups').list({ where: gr => groupIds.includes(gr.id) })
+      : []
+    const groupById = new Map(groupRows.map(gr => [gr.id, gr]))
 
     const rows = []
     for (const it of items) {
@@ -311,18 +318,27 @@ export async function POST(req: Request) {
           )
         }
         if (it.batch_id) {
+          // exactly ONE plan per shoot — the partial unique index that used to
+          // enforce it has no counterpart here, so the shoot is asked first
+          const already = await table<ContentItem>('content_items').list({ by: { batch_id: it.batch_id } })
+          const briefKindIds = new Set(kinds.filter(k => k.slug === 'shoot_brief').map(k => k.id))
+          if (already.some(r => r.work_kind_id != null && briefKindIds.has(r.work_kind_id))) {
+            return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
+          }
           briefBatchId = it.batch_id
         } else {
-          const { data: newBatch, error: bErr } = await supabase.from('batches').insert({
+          const newBatch = await table('batches').insert({
             client_id: it.client_id,
             title: String(it.title).slice(0, 120),
             shoot_date: it.due_date ?? null,
             planned_deliverables: sanitisePlannedDeliverables(it.planned_deliverables),
             owner_id: it.owner_id ?? user.id,
-          }).select('id, status').single()
-          if (bErr) throw new Error(bErr.message)
-          briefBatchId = newBatch.id
-          announceBatchChange({ batch_id: newBatch.id, client_id: it.client_id, status: newBatch.status ?? 'brief', kind: 'created' })
+            // Postgres defaulted the status; a shoot without one matches no
+            // gate in batch-brief-core
+            status: 'brief',
+          })
+          briefBatchId = String(newBatch.id)
+          announceBatchChange({ batch_id: briefBatchId, client_id: it.client_id, status: String(newBatch.status ?? 'brief'), kind: 'created' })
         }
       }
 
@@ -357,17 +373,17 @@ export async function POST(req: Request) {
         client_approval_required: typeof it.client_approval_required === 'boolean'
           ? it.client_approval_required
           : !isInternal,
+        // both were Postgres column defaults; an item that reads back without
+        // a status is on no board at all
+        status: 'draft_uploaded',
+        current_version_number: 0,
       })
     }
 
-    const { data, error } = await supabase.from('content_items').insert(rows).select()
-    if (error) {
-      if (/content_items_one_brief_per_batch_uidx/.test(error.message)) {
-        return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
-      }
-      throw new Error(error.message)
-    }
-    for (const item of data ?? []) {
+    const data = await Promise.all(
+      rows.map(r => table('content_items').insert(r) as Promise<unknown> as Promise<ContentItem>),
+    )
+    for (const item of data) {
       await logActivity({
         actor: user, clientId: item.client_id,
         entityType: 'content_item', entityId: item.id,
@@ -377,14 +393,15 @@ export async function POST(req: Request) {
       })
       announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
       // the handoff: an item created FOR an editor emails them the job
-      notifyJobAssigned(user, item)
+      notifyJobAssigned(user, item as unknown as Parameters<typeof notifyJobAssigned>[1])
     }
     // a folder per deliverable, and the master link prefilled from it — in
     // the background, so a slow Drive never delays a batch upload
-    onItemsCreated(data ?? [])
+    onItemsCreated(data)
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

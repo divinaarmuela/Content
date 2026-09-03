@@ -1,15 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedDb } from './helpers/fake-db'
+import type { Row } from '@/lib/db-types'
 
 /**
  * The versions endpoint, on the one question carousels made new: what
  * counts as a saveable version now that a version may be many files.
  *
- * The database and the Drive mirror are stubbed — they are exercised
+ * The version store and the Drive mirror are stubbed — they are exercised
  * elsewhere — so what is under test here is exactly the validation an editor
- * runs into, in the words they see.
+ * runs into, in the words they see. The database is not stubbed: the route
+ * runs the real `@/lib/db` against an in-memory Realtime Database, which is
+ * what the final-post approval reset at the end of the route touches.
  */
 
-const item = {
+const item: Record<string, unknown> = {
   id: 'item-1', client_id: 'client-1', status: 'draft_uploaded',
   owner_id: 'user-1', scheduler_ids: [], content_type: 'carousel',
 }
@@ -21,6 +25,7 @@ const mirrorVersionSlides = vi.fn()
 const performTransition = vi.fn(async (_actor: unknown, it: { status: string }, to: string) => ({
   ...it, status: to,
 }))
+const logActivity = vi.fn()
 
 vi.mock('../app/lib/authz', () => ({
   requireSignedIn: async () => ({ id: 'user-1', role: 'editor', email: 'e@x.invalid' }),
@@ -29,17 +34,13 @@ vi.mock('../app/lib/authz', () => ({
   }),
 }))
 vi.mock('../app/lib/production-access', () => ({ loadItemForUser: async () => item }))
-vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition, logActivity: vi.fn() }))
-// the route now touches supabase directly for the final-post approval reset —
-// stubbed for the same import-time reason as the Drive mirror. The fixture
-// item carries no posting_approval_state key, so the reset never runs here.
-vi.mock('../lib/supabase', () => ({ supabase: {} }))
+vi.mock('../app/lib/workflow', () => ({ addVersion, performTransition, logActivity }))
 const announceItemChange = vi.fn()
 vi.mock('../app/lib/production-live', () => ({ announceItemChange }))
 vi.mock('../app/lib/gdrive-mirror', () => ({ mirrorVersionSlides }))
-// same reason as the Drive mirror above: the real module builds its Supabase
-// client at import time (CLAUDE.md trap 7), so importing it here would fail
-// the suite on a missing env var rather than on anything about this route
+// same reason as the Drive mirror above: the real module builds its client at
+// import time (CLAUDE.md trap 7), so importing it here would fail the suite on
+// a missing env var rather than on anything about this route
 const previewVideos = vi.fn()
 vi.mock('../app/lib/stream', () => ({ previewVideos }))
 
@@ -56,14 +57,27 @@ const post = async (body: unknown) => {
 
 const u = (n: string) => `https://media.mdmmarketing.com.au/${n}`
 
+let fake: ReturnType<typeof seedDb>
+
 beforeEach(() => {
   addVersion.mockClear()
   mirrorVersionSlides.mockClear()
   performTransition.mockClear()
   announceItemChange.mockClear()
-  item.content_type = 'carousel'
-  item.status = 'draft_uploaded'
+  logActivity.mockClear()
+  for (const k of Object.keys(item)) delete item[k]
+  Object.assign(item, {
+    id: 'item-1', client_id: 'client-1', status: 'draft_uploaded',
+    owner_id: 'user-1', scheduler_ids: [], content_type: 'carousel',
+  })
+  fake = seedDb({
+    content_items: [{
+      id: 'item-1', client_id: 'client-1', title: 'A carousel',
+      content_type: 'carousel', status: 'draft_uploaded', owner_id: 'user-1',
+    }] as unknown as Row[],
+  })
 })
+afterEach(() => fake.restore())
 
 describe('POST /api/production/items/:id/versions — slides', () => {
   it('saves the slides in the order they were sent', async () => {
@@ -159,5 +173,51 @@ describe('POST /api/production/items/:id/versions — saving one while the clien
     const { status, json } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
     expect(status).toBe(201)
     expect(json.version_number).toBe(3)
+  })
+})
+
+describe('POST /api/production/items/:id/versions — new pictures after the post was signed off', () => {
+  it('puts the final-post approval back to pending', async () => {
+    item.posting_approval_state = 'approved'
+    fake.restore()
+    fake = seedDb({
+      content_items: [{
+        id: 'item-1', client_id: 'client-1', title: 'A carousel',
+        content_type: 'carousel', status: 'draft_uploaded', owner_id: 'user-1',
+        posting_approval_state: 'approved', posting_approved_by: 'user-9',
+      }] as unknown as Row[],
+    })
+    const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    const saved = fake.rows('content_items')[0] as Record<string, unknown>
+    expect(saved.posting_approval_state).toBe('pending')
+    expect(saved.posting_approved_by).toBeUndefined()
+    // the History says why the badge changed
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'posting_approval_reset' }),
+    )
+  })
+
+  it('leaves an approval alone when somebody withdrew it mid-upload', async () => {
+    item.posting_approval_state = 'approved'
+    fake.restore()
+    fake = seedDb({
+      content_items: [{
+        id: 'item-1', client_id: 'client-1', title: 'A carousel',
+        content_type: 'carousel', status: 'draft_uploaded', owner_id: 'user-1',
+        posting_approval_state: 'draft',
+      }] as unknown as Row[],
+    })
+    const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    expect((fake.rows('content_items')[0] as Record<string, unknown>).posting_approval_state).toBe('draft')
+    expect(logActivity).not.toHaveBeenCalled()
+  })
+
+  it('does nothing at all on an item that never had the gate', async () => {
+    const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    expect((fake.rows('content_items')[0] as Record<string, unknown>).posting_approval_state).toBeUndefined()
+    expect(logActivity).not.toHaveBeenCalled()
   })
 })

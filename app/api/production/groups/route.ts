@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Batch, DeliverableGroup, WorkKind } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds, assertUuid } from '../../../lib/production-access'
 import { canCreateItemsUnder, type BatchStatus } from '../../../lib/batch-brief-core'
@@ -19,44 +21,33 @@ import { announceItemChange } from '../../../lib/production-live'
 
 /** List groups, role-scoped the same way the board's items are. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const url = new URL(req.url)
     const clientFilter = url.searchParams.get('client_id')
     const clientIds = await accessibleClientIds(user)
     if (clientIds !== null && clientIds.length === 0) return NextResponse.json([])
-    // `planned` (the mixed-format list) is added by a hand-run migration. Ask
-    // for it, but if the column is not there yet retry WITHOUT it rather than
-    // failing the whole board — a single-format board beats a dead one.
-    const base = 'id, client_id, batch_id, content_type, title, target, work_kind_id, work_kinds(slug, uses_media, name, color), created_at'
-    const run = async (cols: string) => {
-      let q = supabase
-        .from('deliverable_groups')
-        .select(cols)
-        .order('created_at', { ascending: false })
-        .limit(300)
-      if (clientIds !== null) q = q.in('client_id', clientIds.map(assertUuid))
-      if (clientFilter) q = q.eq('client_id', clientFilter)
-      return q
-    }
-    let { data, error } = await run(`${base}, planned`)
-    if (error && /planned|PGRST204|42703|column/i.test(`${error.message} ${error.code ?? ''}`)) {
-      ;({ data, error } = await run(base))
-    }
-    if (error) {
-      // the table may not be migrated yet — an empty board beats a dead one
-      if (/relation|does not exist|could not find the table|schema cache/i.test(error.message)) return NextResponse.json([])
-      throw new Error(error.message)
-    }
-    return NextResponse.json(data ?? [])
+    const scoped = clientIds === null ? null : clientIds.map(assertUuid)
+    const rows = await table<DeliverableGroup>('deliverable_groups').list({
+      by: clientFilter ? { client_id: clientFilter } : undefined,
+      where: scoped === null ? undefined : r => scoped.includes(r.client_id),
+      orderBy: [['created_at', 'desc']],
+      limit: 300,
+    })
+    return NextResponse.json(
+      await attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media', 'name', 'color']),
+    )
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Create ONE group — the quantity from the New dialog becomes its target. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     // the lowest team floor: every team role may promise work, no client may
     const user = await requireRole('scheduler')
@@ -83,8 +74,7 @@ export async function POST(req: Request) {
     const workKindId = body.work_kind_id ? String(body.work_kind_id) : null
     let taskGroup = false
     if (workKindId) {
-      const { data: kind } = await supabase.from('work_kinds')
-        .select('id, slug, uses_media, active').eq('id', workKindId).maybeSingle()
+      const kind = await table<WorkKind>('work_kinds').get(workKindId)
       if (!kind?.active) {
         return NextResponse.json({ error: 'Pick a current work type' }, { status: 400 })
       }
@@ -98,8 +88,7 @@ export async function POST(req: Request) {
     // shoot, or the promise says where the footage will come from instead
     let batchStatus: BatchStatus | null = null
     if (batchId) {
-      const { data: batch } = await supabase.from('batches')
-        .select('id, client_id, status').eq('id', batchId).maybeSingle()
+      const batch = await table<Batch>('batches').get(batchId)
       if (!batch) return NextResponse.json({ error: 'That shoot no longer exists' }, { status: 400 })
       if (batch.client_id !== clientId) {
         return NextResponse.json({ error: 'That shoot belongs to a different client' }, { status: 403 })
@@ -122,25 +111,8 @@ export async function POST(req: Request) {
       work_kind_id: workKindId,
       created_by: user.id,
     }
-    // Try to store the mix. If `planned` (the new column) is not migrated yet,
-    // PostgREST answers PGRST204 / 42703 — retry WITHOUT it so the create still
-    // succeeds as a single-format group. Taking the create down over the new
-    // column is the one thing that must never happen.
-    let { data, error } = planned
-      ? await supabase.from('deliverable_groups').insert({ ...baseRow, planned }).select().single()
-      : await supabase.from('deliverable_groups').insert(baseRow).select().single()
-    if (error && planned && /planned|PGRST204|42703|column/i.test(`${error.message} ${error.code ?? ''}`)) {
-      ;({ data, error } = await supabase.from('deliverable_groups').insert(baseRow).select().single())
-    }
-    if (error) {
-      if (/relation|does not exist|could not find the table|schema cache/i.test(error.message)) {
-        return NextResponse.json(
-          { error: 'This part of the app isn’t switched on yet — run supabase/deliverable_groups.sql' },
-          { status: 503 },
-        )
-      }
-      throw new Error(error.message)
-    }
+    const data = await table('deliverable_groups')
+      .insert(planned ? { ...baseRow, planned } : baseRow) as unknown as DeliverableGroup
     await logActivity({
       actor: user, clientId,
       entityType: 'content_item', entityId: data.id,
@@ -155,4 +127,5 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

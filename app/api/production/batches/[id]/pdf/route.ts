@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Batch } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { canOpenBatch } from '../../../../../lib/production-access'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../../../lib/batch-brief-core'
@@ -13,15 +15,13 @@ const STATUS_LABEL: Record<string, string> = {
 
 /** The shoot brief as a PDF hand-out — same read access as the brief page. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const { id } = await params
-    const { data: batch } = await supabase
-      .from('batches')
-      .select('*, clients(name)')
-      .eq('id', id)
-      .maybeSingle()
-    if (!batch) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+    const found = await table<Batch>('batches').get(id)
+    if (!found) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+    const batch = (await attachOne([found], 'client_id', 'clients', ['name']))[0]
     if (!(await canOpenBatch(user, batch))) {
       return NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 })
     }
@@ -48,4 +48,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

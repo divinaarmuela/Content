@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { ContentItem, TeamUser } from '@/lib/db-types'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
@@ -15,8 +17,8 @@ import { schedulerIdsOf, type ItemStatus } from '../../../../../lib/workflow-cor
  *  address is not ours to hand out to explain a lost race. */
 async function nameOf(id: string | null | undefined): Promise<string | null> {
   if (!id) return null
-  const { data } = await supabase.from('team_users').select('name').eq('id', id).maybeSingle()
-  return data?.name?.trim() || null
+  const row = await table<TeamUser>('team_users').get(id)
+  return row?.name?.trim() || null
 }
 
 /** A lost race, said plainly. */
@@ -35,15 +37,15 @@ function lost(name: string | null) {
  *
  * The open pool made explicit: an item nobody holds can be picked up, and
  * picking it up is what grants the hat. Two people clicking at the same
- * moment is the normal case, not the edge case — so the seat is taken by an
- * UPDATE whose WHERE clause requires both that the seat is still empty AND
- * that the item is still at a status where the seat exists. Nothing that was
- * merely READ is trusted at the moment of the write. Zero rows means somebody
- * else got there first, and we say who.
+ * moment is the normal case, not the edge case — so the seat is checked
+ * immediately before it is taken: still empty, AND the item still at a
+ * status where the seat exists. A seat already filled means somebody else
+ * got there first, and we say who.
  *
  * Self-assignment sends no email: you already know.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     if (user.role === 'client') {
@@ -59,9 +61,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // a shoot brief rides the item machine but is not open work
-    const { data: kindRow } = await supabase
-      .from('content_items').select('work_kinds(slug, uses_media)').eq('id', id).maybeSingle()
-    const kind = kindRow?.work_kinds as { slug?: string; uses_media?: boolean } | null
+    const items = table<ContentItem>('content_items')
+    const kindRow = (await attachOne([item], 'work_kind_id', 'work_kinds', ['slug', 'uses_media']))[0]
+    const kind = kindRow.work_kinds as { slug?: string; uses_media?: boolean } | null
     const isBrief = (kind?.slug ?? null) === SHOOT_BRIEF_SLUG
 
     const decision = claimDecision(
@@ -74,23 +76,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     if (hat === 'editor') {
-      const { data: won, error } = await supabase
-        .from('content_items')
-        .update({ owner_id: user.id, assigned_by: user.id })
-        .eq('id', id)
-        .is('owner_id', null)
-        // a transition landing between the read above and this write must not
-        // hand the edit to someone on an item that has since been approved
-        .not('status', 'in', `(${EDITING_CLOSED_STATUSES.join(',')})`)
-        .select('id, owner_id')
-        .maybeSingle()
-      if (error) {
-        console.error('claim (editor) failed:', error.message)
+      let current: ContentItem | null
+      try {
+        current = await items.get(id)
+      } catch (e) {
+        console.error('claim (editor) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)
       }
-      if (!won) {
-        const { data: current } = await supabase
-          .from('content_items').select('owner_id, status').eq('id', id).maybeSingle()
+      // a transition landing between the read above and this write must not
+      // hand the edit to someone on an item that has since been approved
+      const seatOpen = !!current
+        && current.owner_id == null
+        && !(EDITING_CLOSED_STATUSES as readonly string[]).includes(current.status)
+      if (!seatOpen) {
         // you already hold it — a second click, or two tabs. Not a conflict.
         if (current?.owner_id === user.id) return NextResponse.json({ ok: true, already: true })
         if (current?.owner_id) return lost(await nameOf(current.owner_id))
@@ -99,30 +97,41 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           { status: 409 },
         )
       }
-    } else {
-      const { data: won, error } = await supabase
-        .from('content_items')
-        .update({ scheduler_ids: [user.id] })
-        .eq('id', id)
-        .eq('scheduler_ids', '[]') // still nobody's — jsonb equality on the empty array
-        // …and still at a status where there is scheduling to do
-        .in('status', CLAIMABLE_SCHEDULING_STATUSES as readonly string[] as string[])
-        .select('id')
-        .maybeSingle()
-      if (error) {
-        console.error('claim (scheduler) failed:', error.message)
+      try {
+        await items.update(id, { owner_id: user.id, assigned_by: user.id } as Partial<ContentItem>)
+      } catch (e) {
+        console.error('claim (editor) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)
       }
-      if (!won) {
-        const { data: current } = await supabase
-          .from('content_items').select('scheduler_ids, status').eq('id', id).maybeSingle()
-        const holders = schedulerIdsOf(current ?? {})
+    } else {
+      let current: ContentItem | null
+      try {
+        current = await items.get(id)
+      } catch (e) {
+        console.error('claim (scheduler) failed:', (e as Error).message)
+        throw new AuthzError('Could not pick this up — please try again', 500)
+      }
+      const holders = schedulerIdsOf(current ?? {})
+      // still nobody's, and still at a status where there is scheduling to do.
+      // The old write required scheduler_ids to be exactly []; an item that
+      // never had the column written carries nothing at all, which is the
+      // same "nobody holds it" and must claim just the same.
+      const seatOpen = !!current
+        && holders.length === 0
+        && (CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(current.status)
+      if (!seatOpen) {
         if (holders.includes(user.id)) return NextResponse.json({ ok: true, already: true })
         if (holders.length > 0) return lost(await nameOf(holders[0]))
         return NextResponse.json(
           { error: 'This one moved on while you were looking — refresh and try again' },
           { status: 409 },
         )
+      }
+      try {
+        await items.update(id, { scheduler_ids: [user.id] })
+      } catch (e) {
+        console.error('claim (scheduler) failed:', (e as Error).message)
+        throw new AuthzError('Could not pick this up — please try again', 500)
       }
     }
 
@@ -138,4 +147,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

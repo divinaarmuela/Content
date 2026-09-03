@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
@@ -22,6 +24,7 @@ const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  *  tagged person becomes the comment's assignee (the seat the "Waiting on
  *  you" card and the board badge read); everyone tagged is emailed. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     const { id } = await params
@@ -33,9 +36,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // a reply's parent must belong to THIS item — never graft across items
     let parentId: string | null = null
     if (body.parent_id) {
-      const { data: parent } = await supabase
-        .from('item_comments').select('id').eq('id', body.parent_id).eq('item_id', id).maybeSingle()
-      if (!parent) return NextResponse.json({ error: 'That comment is not on this item' }, { status: 400 })
+      const parent = await table<ItemComment>('item_comments').get(String(body.parent_id))
+      if (!parent || parent.item_id !== id) {
+        return NextResponse.json({ error: 'That comment is not on this item' }, { status: 400 })
+      }
       parentId = parent.id
     }
 
@@ -61,20 +65,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const ts = Number(body.video_timestamp_sec)
     const videoTs = Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
 
-    const { data: comment, error } = await supabase
-      .from('item_comments')
-      .insert({
-        item_id: id,
-        parent_id: parentId,
-        author_id: user.id,
-        visibility,
-        body: text,
-        video_timestamp_sec: videoTs,
-        assigned_to: assignedTo,
-      })
-      .select()
-      .single()
-    if (error) throw new Error(error.message)
+    const comment = await table('item_comments').insert({
+      item_id: id,
+      parent_id: parentId,
+      author_id: user.id,
+      visibility,
+      body: text,
+      video_timestamp_sec: videoTs,
+      assigned_to: assignedTo,
+      // an unstamped boolean reads back absent, and every "still open" filter
+      // — the badge, the Waiting-on-you card — tests `resolved === false`
+      resolved: false,
+    }) as unknown as ItemComment
 
     await logActivity({
       actor: user, clientId: item.client_id,
@@ -84,20 +86,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // gatekeeper routing: client comments → assigned AMs (fallback super admins)
     if (user.role === 'client') {
-      const { data } = await supabase
-        .from('team_user_clients')
-        // FK named explicitly — the bare embed is ambiguous (two links to
-        // team_users) and silently resolves to nobody, see workflow.ts
-        .select('team_users!team_user_clients_team_user_id_fkey!inner(id, email, name, role, active_status)')
-        .eq('client_id', item.client_id)
-      let recipients = (data ?? [])
-        .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean })
+      const links = await table<TeamUserClient>('team_user_clients')
+        .list({ by: { client_id: item.client_id } })
+      let recipients = (await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status']))
+        .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null)
+        .filter((u): u is { id: string; email: string; role: string; active_status: boolean } => u !== null)
         // assigned super admins count as the client's manager here too
         .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
       if (recipients.length === 0) {
-        const { data: admins } = await supabase.from('team_users')
-          .select('id, email, role, active_status').eq('role', 'super_admin').eq('active_status', true)
-        recipients = (admins ?? []) as typeof recipients
+        const admins = await table<TeamUser>('team_users')
+          .list({ where: u => u.role === 'super_admin' && u.active_status === true })
+        recipients = admins as unknown as typeof recipients
       }
       for (const r of recipients) {
         await notify({
@@ -137,11 +136,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Resolve/unresolve a comment. editor+. Resolving clears the tagged
  *  person's bell for it too — the badge was the "you are needed" signal. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -150,14 +151,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!body.comment_id || typeof body.resolved !== 'boolean') {
       return NextResponse.json({ error: 'comment_id and resolved are required' }, { status: 400 })
     }
-    const { data, error } = await supabase
-      .from('item_comments')
-      .update({ resolved: body.resolved })
-      .eq('id', body.comment_id)
-      .eq('item_id', id)
-      .select()
-      .single()
-    if (error) throw new Error(error.message)
+    const comments = table<ItemComment>('item_comments')
+    const existing = await comments.get(String(body.comment_id))
+    // a comment on another item is never resolvable from this one
+    if (!existing || existing.item_id !== id) throw new Error('That comment is not on this item')
+    const data = await comments.update(existing.id, { resolved: body.resolved })
     if (body.resolved) await settleTagNotifications(id, String(body.comment_id))
     announceItemChange({ item_id: id, client_id: String((data as { client_id?: string }).client_id ?? ''), status: 'draft_uploaded', kind: 'comment' })
     return NextResponse.json(data)
@@ -165,4 +163,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

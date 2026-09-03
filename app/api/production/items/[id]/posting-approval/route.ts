@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { actOnPostingApproval } from '../../../../../lib/posting-approval'
@@ -16,6 +17,7 @@ import { actOnPostingApproval } from '../../../../../lib/posting-approval'
  * function through /api/portal/act instead.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     const { id } = await params
@@ -38,4 +40,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

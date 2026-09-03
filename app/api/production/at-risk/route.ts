@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachMany, attachOne } from '@/lib/db-join'
+import type { Batch, Client, ClientAgreement, ContentItem, MonthlyCommitment } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import {
@@ -16,6 +18,7 @@ import { safeZone } from '../../../lib/timezone-core'
  * client's page. Managers only — it spans clients.
  */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const now = new Date()
@@ -26,36 +29,41 @@ export async function GET(req: Request) {
     const daysInMonth = new Date(year, month, 0).getDate()
 
     const ids = await accessibleClientIds(user)
-    let clientsQ = supabase.from('clients').select('id, name, timezone').eq('status', 'active').order('name')
-    if (ids !== null) clientsQ = clientsQ.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
-    const { data: clients } = await clientsQ
-    const clientIds = (clients ?? []).map(c => c.id)
+    const clients = await table<Client>('clients').list({
+      by: { status: 'active' },
+      where: ids === null ? undefined : r => ids.includes(r.id),
+      orderBy: [['name', 'asc']],
+    })
+    const clientIds = clients.map(c => c.id)
     if (clientIds.length === 0) return NextResponse.json({ month, year, clients: [] })
 
     // bulk-fetch everything once, then group in memory (no N+1)
-    const [{ data: agreements }, { data: commitments }, { data: items }, { data: batches }] = await Promise.all([
-      supabase.from('client_agreements').select('client_id, deliverable_lines, start_date').in('client_id', clientIds),
-      supabase.from('monthly_commitments').select('*').in('client_id', clientIds).eq('month', month).eq('year', year),
-      supabase.from('content_items')
-        .select('client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug, uses_media), schedule_entries(published_at)')
-        .in('client_id', clientIds).limit(4000),
-      supabase.from('batches').select('id, client_id, month, year').in('client_id', clientIds).limit(1000),
+    const [agreements, commitments, itemRows, batches] = await Promise.all([
+      table<ClientAgreement>('client_agreements').list({ where: r => clientIds.includes(r.client_id) }),
+      table<MonthlyCommitment>('monthly_commitments')
+        .list({ where: r => clientIds.includes(r.client_id) && r.month === month && r.year === year }),
+      table<ContentItem>('content_items').list({ where: r => clientIds.includes(r.client_id), limit: 4000 }),
+      table<Batch>('batches').list({ where: r => clientIds.includes(r.client_id), limit: 1000 }),
     ])
+    const items = await attachMany(
+      await attachOne(itemRows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media']),
+      'id', 'schedule_entries', 'item_id', ['published_at'],
+    )
 
-    const agByClient = new Map((agreements ?? []).map(a => [a.client_id as string, a]))
-    const cmByClient = new Map((commitments ?? []).map(c => [c.client_id as string, c]))
+    const agByClient = new Map(agreements.map(a => [a.client_id, a]))
+    const cmByClient = new Map(commitments.map(c => [c.client_id, c]))
     const itemsByClient = new Map<string, typeof items>()
-    for (const it of items ?? []) {
-      const arr = itemsByClient.get(it.client_id as string) ?? []
-      arr.push(it); itemsByClient.set(it.client_id as string, arr)
+    for (const it of items) {
+      const arr = itemsByClient.get(it.client_id) ?? []
+      arr.push(it); itemsByClient.set(it.client_id, arr)
     }
-    const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
+    const batchesById = new Map(batches.map(b => [b.id, b]))
 
     const RANK: Record<PaceStatus, number> = { behind: 0, tight: 1, on_track: 2, met: 3 }
-    const out = (clients ?? []).map(client => {
+    const out = clients.map(client => {
       const linesRes = normaliseDeliverableLines(agByClient.get(client.id)?.deliverable_lines)
       const lines = 'lines' in linesRes ? linesRes.lines : []
-      const quotas = effectiveQuotas(lines, cmByClient.get(client.id) ?? null)
+      const quotas = effectiveQuotas(lines, (cmByClient.get(client.id) ?? null) as unknown as Record<string, unknown> | null)
       if (quotas.length === 0) {
         return { id: client.id, name: client.name, has_agreement: false, worst: 'met' as PaceStatus, lines: [] }
       }
@@ -93,4 +101,5 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

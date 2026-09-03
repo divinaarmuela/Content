@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Batch, BatchComment } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { canOpenBatch } from '../../../../../lib/production-access'
 import { announceBatchChange } from '../../../../../lib/production-live'
@@ -18,13 +20,12 @@ import {
  * body only.
  */
 
-const COLS = 'id, created_at, body, author_id, assigned_to, resolved, team_users!batch_comments_author_id_fkey(name, role)'
-/** the wave-1 shape, for a database where the tags SQL has not run yet */
-const COLS_LEGACY = 'id, created_at, body, author_id, team_users!batch_comments_author_id_fkey(name, role)'
+/** Every comment carries who wrote it — "who said this" is half its meaning. */
+const withAuthors = (rows: BatchComment[]) =>
+  attachOne(rows, 'author_id', 'team_users', ['name', 'role'])
 
 async function guard(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
-  const { data: batch } = await supabase
-    .from('batches').select('id, client_id, owner_id, title').eq('id', id).maybeSingle()
+  const batch = await table<Batch>('batches').get(id)
   if (!batch) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
   if (!(await canOpenBatch(user, batch))) {
     return { response: NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 }) }
@@ -33,30 +34,33 @@ async function guard(user: Awaited<ReturnType<typeof requireRole>>, id: string) 
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const { id } = await params
     const g = await guard(user, id)
     if ('response' in g) return g.response
-    let { data, error } = await supabase
-      .from('batch_comments').select(COLS).eq('batch_id', id)
-      .order('created_at', { ascending: true }).limit(200)
-    if (error) {
-      const again = await supabase
-        .from('batch_comments').select(COLS_LEGACY).eq('batch_id', id)
-        .order('created_at', { ascending: true }).limit(200)
-      data = again.data as typeof data
-      error = again.error
+    let comments: unknown[] = []
+    try {
+      comments = await withAuthors(await table<BatchComment>('batch_comments').list({
+        by: { batch_id: id },
+        orderBy: [['created_at', 'asc']],
+        limit: 200,
+      }))
+    } catch {
+      // a thread that cannot be read is an empty thread, not an error page
+      comments = []
     }
-    // table not migrated yet → an empty thread, not an error page
-    return NextResponse.json({ comments: error ? [] : data ?? [], viewer_id: user.id })
+    return NextResponse.json({ comments, viewer_id: user.id })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -73,19 +77,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const tagged = resolveTags(body, explicit, await taggableTeam(), user.id)
     const assignedTo = tagged[0]?.id ?? null
 
-    let { data, error } = await supabase
-      .from('batch_comments')
-      .insert({ batch_id: id, author_id: user.id, body, assigned_to: assignedTo })
-      .select(COLS)
-      .single()
-    if (error && assignedTo === null) {
-      // the tags column may not exist yet — a plain comment still lands
-      const again = await supabase
-        .from('batch_comments').insert({ batch_id: id, author_id: user.id, body }).select(COLS_LEGACY).single()
-      data = again.data as typeof data
-      error = again.error
-    }
-    if (error) {
+    let data: (BatchComment & { team_users: Record<string, unknown> | null }) | null = null
+    try {
+      const row = await table('batch_comments').insert({
+        batch_id: id, author_id: user.id, body, assigned_to: assignedTo,
+        // an unstamped boolean reads back absent, and "still open" filters
+        // test `resolved === false`
+        resolved: false,
+      })
+      data = (await withAuthors([row as unknown as BatchComment]))[0]
+    } catch {
       return NextResponse.json({
         error: assignedTo
           ? 'Tagging on shoot comments needs supabase/shoot_comment_tags.sql run first'
@@ -105,10 +106,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Mark a tagged shoot comment done (or reopen it). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -118,13 +121,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!json.comment_id || typeof json.resolved !== 'boolean') {
       return NextResponse.json({ error: 'comment_id and resolved are required' }, { status: 400 })
     }
-    const { data, error } = await supabase
-      .from('batch_comments')
-      .update({ resolved: json.resolved })
-      .eq('id', json.comment_id).eq('batch_id', id)
-      .select(COLS)
-      .single()
-    if (error) return NextResponse.json({ error: 'Marking done needs supabase/shoot_comment_tags.sql run first' }, { status: 503 })
+    const comments = table<BatchComment>('batch_comments')
+    const existing = await comments.get(String(json.comment_id))
+    // the comment must be on THIS shoot — never mark somebody else's thread
+    if (!existing || existing.batch_id !== id) {
+      return NextResponse.json({ error: 'Marking done needs supabase/shoot_comment_tags.sql run first' }, { status: 503 })
+    }
+    const updated = await comments.update(existing.id, { resolved: json.resolved })
+    const data = updated ? (await withAuthors([updated]))[0] : null
     if (json.resolved) await settleTagNotifications(id, String(json.comment_id))
     announceBatchChange({ batch_id: id, client_id: g.batch.client_id, status: 'brief', kind: 'updated' })
     return NextResponse.json({ comment: data })
@@ -132,4 +136,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

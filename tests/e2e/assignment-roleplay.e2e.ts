@@ -11,6 +11,7 @@ import { canCreateItemsUnder, checkBatchTransition } from '../../app/lib/batch-b
 import { canEditItemFields, roleMayCreateItems, taskExemptFromClientScope } from '../../app/lib/item-edit-core'
 import { groupCard, groupLine, nextPieceTitle } from '../../app/lib/deliverable-group-core'
 import type { ItemStatus } from '../../app/lib/workflow-core'
+import type { ContentItem as DbContentItem } from '../../lib/db-types'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
 import { openTaggedIds, taggedItemIds } from '../../app/lib/production-access'
@@ -452,18 +453,14 @@ const batchRow = async (id: string) => {
 }
 
 /** The item list exactly as `GET /api/production/items` builds it — the same
- *  two lines, so what this returns is what the person's board shows. */
+ *  scope rule, so what this returns is what the person's board shows. */
 async function listedFor(user: TeamUser): Promise<string[]> {
   const ids = await accessibleClientIds(user)
-  let q = supabase.from('content_items').select('id').limit(500)
-  if (ids !== null) {
-    const assigned = await assignedItemsFilter(user)
-    q = ids.length === 0
-      ? q.or(assigned)
-      : q.or(`client_id.in.(${ids.join(',')}),${assigned}`)
-  }
-  const { data } = await q
-  return (data ?? []).map(r => r.id as string)
+  const { data } = await supabase.from('content_items').select('*').limit(500)
+  const rows = (data ?? []) as unknown as DbContentItem[]
+  if (ids === null) return rows.map(r => r.id)
+  const assigned = await assignedItemsFilter(user)
+  return rows.filter(r => ids.includes(r.client_id) || assigned(r)).map(r => r.id)
 }
 
 describe('James: assigned the shoot brief, off the client team', () => {

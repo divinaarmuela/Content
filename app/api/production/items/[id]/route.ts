@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type {
+  AssetVersion, PublishJob, Client, ContentItem, ItemComment, ScheduleEntry, TeamUser, TeamUserClient,
+  WorkflowActivity,
+} from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
@@ -17,59 +22,55 @@ import { previewVideos } from '../../../../lib/stream'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
 
-    const [versionsRes, commentsRes, scheduleRes, clientRes, kindRes] = await Promise.all([
-      supabase.from('asset_versions').select('*').eq('item_id', id).order('version_number', { ascending: false }),
-      supabase.from('item_comments').select('*').eq('item_id', id).order('created_at', { ascending: true }),
-      supabase.from('schedule_entries').select('*').eq('item_id', id),
+    const [versions, comments, schedule, client, team] = await Promise.all([
+      table<AssetVersion>('asset_versions')
+        .list({ by: { item_id: id }, orderBy: [['version_number', 'desc']] }),
+      table<ItemComment>('item_comments')
+        .list({ by: { item_id: id }, orderBy: [['created_at', 'asc']] }),
+      table<ScheduleEntry>('schedule_entries').list({ by: { item_id: id } }),
       // the zone travels with the name: every posting time on this page is
       // read and written in the client's zone, never the browser's
-      supabase.from('clients').select('name, timezone').eq('id', item.client_id).maybeSingle(),
-      supabase.from('content_items')
-        // concept + shot_list travel too: the brief's submit edge accepts
-        // either as evidence, and the page can only pre-check what it can see
-        .select('work_kinds(name, slug, color, uses_media), batches(id, title, status, planned_deliverables, concept, shot_list)')
-        .eq('id', id).maybeSingle(),
+      table<Client>('clients').get(item.client_id),
+      // ONE read of the people table names the comment authors, the audit
+      // trail's actors, the owner and the client's own logins below
+      table<TeamUser>('team_users').list(),
     ])
+    // concept + shot_list travel too: the brief's submit edge accepts either
+    // as evidence, and the page can only pre-check what it can see
+    const joined = (await attachOne(
+      await attachOne([item], 'work_kind_id', 'work_kinds', ['name', 'slug', 'color', 'uses_media']),
+      'batch_id', 'batches', ['id', 'title', 'status', 'planned_deliverables', 'concept', 'shot_list'],
+    ))[0]
 
     // name the comment authors — "who said this" is half of a comment's meaning
-    const authorIds = [...new Set((commentsRes.data ?? []).map(c => c.author_id).filter(Boolean))]
-    const { data: authors } = authorIds.length
-      ? await supabase.from('team_users').select('id, name, email').in('id', authorIds)
-      : { data: [] }
-    const authorName = new Map((authors ?? []).map(a => [a.id, a.name || a.email]))
-    const commentsNamed = (commentsRes.data ?? []).map(c => ({
+    const personName = new Map(team.map(a => [a.id, a.name || a.email]))
+    const commentsNamed = comments.map(c => ({
       ...c,
-      author_name: c.author_id ? authorName.get(c.author_id) ?? null : null,
+      author_name: c.author_id ? personName.get(c.author_id) ?? null : null,
     }))
 
-    const shaped = shapeItemDetail(user, item, versionsRes.data ?? [], commentsNamed)
+    const shaped = shapeItemDetail(user, item, versions, commentsNamed)
     // the item's craft and its shoot — every surface labels itself by these
-    ;(shaped as Record<string, unknown>).work_kind = kindRes.data?.work_kinds ?? null
-    ;(shaped as Record<string, unknown>).batch = kindRes.data?.batches ?? null
+    ;(shaped as Record<string, unknown>).work_kind = joined.work_kinds ?? null
+    ;(shaped as Record<string, unknown>).batch = joined.batches ?? null
 
     // the audit trail, named. A client never sees who inside the agency did
     // what — the history is an internal record, like the internal comments.
     let activity: Record<string, unknown>[] = []
     if (user.role !== 'client') {
-      const { data: rows } = await supabase
-        .from('workflow_activity')
-        .select('id, created_at, actor_id, action, old_value, new_value, detail')
-        .eq('entity_type', 'content_item')
-        .eq('entity_id', id)
-        .order('created_at', { ascending: false })
-        .limit(50)
-      const actorIds = [...new Set((rows ?? []).map(r => r.actor_id).filter(Boolean))]
-      const { data: actors } = actorIds.length
-        ? await supabase.from('team_users').select('id, name, email').in('id', actorIds)
-        : { data: [] }
-      const actorName = new Map((actors ?? []).map(a => [a.id, a.name || a.email]))
-      activity = (rows ?? []).map(r => ({
-        ...r, actor_name: r.actor_id ? actorName.get(r.actor_id) ?? null : null,
+      const rows = await table<WorkflowActivity>('workflow_activity').list({
+        where: r => r.entity_type === 'content_item' && r.entity_id === id,
+        orderBy: [['created_at', 'desc']],
+        limit: 50,
+      })
+      activity = rows.map(r => ({
+        ...r, actor_name: r.actor_id ? personName.get(r.actor_id) ?? null : null,
       }))
     }
 
@@ -77,28 +78,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     // the confirm dialog names them rather than asking for a leap of faith
     let client_users: { name: string; email: string }[] = []
     if (user.role !== 'client') {
-      const { data: cu } = await supabase.from('team_users')
-        .select('name, email')
-        .eq('role', 'client').eq('client_id', item.client_id).eq('active_status', true)
-      client_users = (cu ?? []).map(u => ({ name: u.name || u.email, email: u.email }))
+      client_users = team
+        .filter(u => u.role === 'client' && u.client_id === item.client_id && u.active_status === true)
+        .map(u => ({ name: u.name || u.email, email: u.email }))
     }
 
     // who's who on this job — every team role reads it at a glance
     let owner_name: string | null = null
     let managers: { name: string; email: string }[] = []
     if (user.role !== 'client') {
-      const [ownerRes, mgrRes] = await Promise.all([
-        item.owner_id
-          ? supabase.from('team_users').select('name, email').eq('id', item.owner_id).maybeSingle()
-          : Promise.resolve({ data: null }),
-        supabase
-          .from('team_user_clients')
-          .select('team_users!team_user_clients_team_user_id_fkey(name, email, role, active_status)')
-          .eq('client_id', item.client_id),
-      ])
-      owner_name = ownerRes.data?.name || ownerRes.data?.email || null
-      managers = (mgrRes.data ?? [])
-        .map(r => r.team_users as unknown as { name: string; email: string; role: string; active_status: boolean })
+      const links = await table<TeamUserClient>('team_user_clients')
+        .list({ by: { client_id: item.client_id } })
+      const owner = item.owner_id ? team.find(u => u.id === item.owner_id) ?? null : null
+      owner_name = owner?.name || owner?.email || null
+      managers = (await attachOne(links, 'team_user_id', 'team_users', ['name', 'email', 'role', 'active_status']))
+        .map(r => r.team_users as unknown as { name: string; email: string; role: string; active_status: boolean } | null)
+        .filter((u): u is { name: string; email: string; role: string; active_status: boolean } => u !== null)
         .filter(u => u.active_status && ['account_manager', 'super_admin'].includes(u.role))
         .map(u => ({ name: u.name || u.email, email: u.email }))
     }
@@ -107,8 +102,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     // job — comes down with the item so the card knows what it is before
     // anybody clicks "Check channels". Clients never see the plumbing, and a
     // shoot brief has nothing to post.
-    const kindSlug = (kindRes.data?.work_kinds as { slug?: string } | null)?.slug ?? null
-    const usesMedia = (kindRes.data?.work_kinds as { uses_media?: boolean } | null)?.uses_media
+    const kindSlug = (joined.work_kinds as { slug?: string } | null)?.slug ?? null
+    const usesMedia = (joined.work_kinds as { uses_media?: boolean } | null)?.uses_media
     const posting = user.role !== 'client' && kindSlug !== 'shoot_brief' && usesMedia !== false
       ? await loadPostingContext(id, item.client_id as string)
       : null
@@ -120,13 +115,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       // on a database the migration has not reached, and the card then draws
       // nothing new at all
       posting_approval: user.role === 'client' ? null : readPostingApproval(item),
-      client_name: clientRes.data?.name ?? null,
-      client_timezone: (clientRes.data?.timezone as string | null) || DEFAULT_TZ,
+      client_name: client?.name ?? null,
+      client_timezone: (client?.timezone as string | null) || DEFAULT_TZ,
       owner_name,
       managers,
       client_users,
       activity,
-      schedule: scheduleRes.data ?? [],
+      schedule,
       viewer_role: user.role,
       // the pickers need to know who is looking: you are never emailed about
       // your own action, so offering yourself as a reviewer is a silent no-op
@@ -142,11 +137,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Edit item fields. Managers edit anything; everyone else edits their OWN —
  *  the item they hold, or were handed the scheduling of (item-edit-core). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const body = await req.json()
     const keys = Object.keys(body ?? {})
@@ -209,8 +206,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('owner_id' in patch && patch.owner_id) {
       // anyone active on the team can carry a task — but only real, active
       // team members, never a client account or a stale id
-      const { data: owner } = await supabase.from('team_users')
-        .select('id, role, active_status').eq('id', patch.owner_id).maybeSingle()
+      const owner = await table<TeamUser>('team_users').get(String(patch.owner_id))
       const { isValidOwner } = await import('../../../../lib/work-kinds-core')
       if (!isValidOwner(owner)) {
         return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
@@ -218,8 +214,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.assigned_by = user.id
     }
     if ('work_kind_id' in patch && patch.work_kind_id) {
-      const { data: kind } = await supabase.from('work_kinds')
-        .select('id, active').eq('id', patch.work_kind_id).maybeSingle()
+      const kind = await table('work_kinds').get(String(patch.work_kind_id))
       if (!kind?.active) {
         return NextResponse.json({ error: 'Pick a current work type' }, { status: 400 })
       }
@@ -244,9 +239,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.posting_approved_at = null
     }
 
-    const { data, error } = await supabase
-      .from('content_items').update(patch).eq('id', id).select().single()
-    if (error) throw new Error(error.message)
+    const data = await table('content_items').update(id, patch) as unknown as ContentItem
     await logActivity({
       actor: user, clientId: data.client_id,
       entityType: 'content_item', entityId: id,
@@ -263,7 +256,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       })
     }
     // (re)assignment is a handoff: email the editor their job pack
-    if ('owner_id' in patch && patch.owner_id) notifyJobAssigned(user, data)
+    if ('owner_id' in patch && patch.owner_id) {
+      notifyJobAssigned(user, data as unknown as Parameters<typeof notifyJobAssigned>[1])
+    }
     // every new file lands in the item's Drive folder too — queued, never
     // awaited: a slow Drive must not slow a save
     if (addedAssets.length > 0) mirrorRawAssets(id, addedAssets)
@@ -278,11 +273,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Delete an item and everything hanging off it. Manager+ — deleting work
  *  is a management decision, and it announces so every open board updates. */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const { id } = await params
@@ -290,16 +287,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     // publish_jobs has NO fk to content_items — cancel any queued/publishing job
     // FIRST, or the cron would publish a deleted item to the client's live account
-    await supabase.from('publish_jobs')
-      .update({ status: 'cancelled' })
-      .eq('content_item_id', id)
-      .in('status', ['queued', 'publishing'])
+    const jobs = table<PublishJob>('publish_jobs')
+    const live = await jobs.list({
+      where: r => r.content_item_id === id && ['queued', 'publishing'].includes(r.status),
+    })
+    await Promise.all(live.map(j => jobs.update(j.id, { status: 'cancelled' })))
 
-    for (const table of ['schedule_entries', 'item_comments', 'asset_versions', 'approvals'] as const) {
-      await supabase.from(table).delete().eq('item_id', id)
+    for (const name of ['schedule_entries', 'item_comments', 'asset_versions', 'approvals'] as const) {
+      await table(name).removeWhere(r => r.item_id === id)
     }
-    const { error } = await supabase.from('content_items').delete().eq('id', id)
-    if (error) throw new Error(error.message)
+    await table('content_items').remove(id)
 
     await logActivity({
       actor: user, clientId: item.client_id,
@@ -312,4 +309,5 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

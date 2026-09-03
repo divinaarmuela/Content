@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { upsertScheduleEntry } from '../../../../../lib/schedule'
@@ -11,6 +12,7 @@ import { upsertScheduleEntry } from '../../../../../lib/schedule'
  *  'scheduler' as a floor here only keeps client accounts out — the real
  *  decision is per item. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const { id } = await params
@@ -21,4 +23,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

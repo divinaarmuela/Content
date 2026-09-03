@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Batch, ContentItem } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { batchClientIds, heldBatchIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
@@ -11,36 +13,42 @@ import {
 
 /** List batches (role-scoped, with per-batch item counts). */
 export async function GET() {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
-    let q = supabase
-      .from('batches')
-      .select('*, clients(name), content_items(count)')
-      .order('created_at', { ascending: false })
-      .limit(200)
     const clientIds = await batchClientIds(user)
-    if (clientIds !== null) {
-      // the shoots of my clients — plus any shoot I hold a job on, which
-      // opens for me (canOpenBatch) and so must be listed for me
-      const held = await heldBatchIds(user)
-      if (clientIds.length === 0 && held.length === 0) return NextResponse.json([])
-      const parts: string[] = []
-      if (clientIds.length) parts.push(`client_id.in.(${clientIds.join(',')})`)
-      if (held.length) parts.push(`id.in.(${held.join(',')})`)
-      q = q.or(parts.join(','))
+    // the shoots of my clients — plus any shoot I hold a job on, which
+    // opens for me (canOpenBatch) and so must be listed for me
+    const held = clientIds === null ? [] : await heldBatchIds(user)
+    if (clientIds !== null && clientIds.length === 0 && held.length === 0) return NextResponse.json([])
+    const rows = await table<Batch>('batches').list({
+      where: clientIds === null
+        ? undefined
+        : r => clientIds.includes(r.client_id) || held.includes(r.id),
+      orderBy: [['created_at', 'desc']],
+      limit: 200,
+    })
+    const withClient = await attachOne(rows, 'client_id', 'clients', ['name'])
+    // "3 items" per shoot: one read of the items, counted in memory — the
+    // shape the board reads (`content_items[0].count`) is unchanged
+    const countByBatch = new Map<string, number>()
+    for (const it of await table<ContentItem>('content_items').list()) {
+      if (it.batch_id) countByBatch.set(it.batch_id, (countByBatch.get(it.batch_id) ?? 0) + 1)
     }
-    const { data, error } = await q
-    if (error) throw new Error(error.message)
-    return NextResponse.json(data)
+    return NextResponse.json(withClient.map(b => ({
+      ...b, content_items: [{ count: countByBatch.get(b.id) ?? 0 }],
+    })))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Create a shoot brief. editor+ — it starts life as 'brief' (DB default):
  *  a plan the team works up, not yet a commitment. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const body = await req.json()
@@ -68,9 +76,9 @@ export async function POST(req: Request) {
     }
     if (month !== null && (!Number.isInteger(month) || month < 1 || month > 12)) month = null
     if (year !== null && (!Number.isInteger(year) || year < 2024 || year > 2100)) year = null
-    const { data, error } = await supabase
-      .from('batches')
-      .insert({
+    // the helper's untyped insert takes a partial row (created_at/updated_at
+    // are stamped for us); the result is a full batch row
+    const data = await table('batches').insert({
         client_id: body.client_id,
         title: String(body.title).slice(0, 120),
         description: body.description ? String(body.description).slice(0, 2000) : null,
@@ -83,10 +91,10 @@ export async function POST(req: Request) {
         month,
         year,
         owner_id: user.id,
-      })
-      .select()
-      .single()
-    if (error) throw new Error(error.message)
+        // Postgres defaulted the status; a shoot that reads back without one
+        // is a plan no gate in batch-brief-core recognises
+        status: 'brief',
+      }) as unknown as Batch
     await logActivity({
       actor: user, clientId: data.client_id,
       entityType: 'batch', entityId: data.id,
@@ -101,4 +109,5 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

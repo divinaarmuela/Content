@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { WorkKind as WorkKindRow } from '@/lib/db-types'
 import { requireSignedIn, authzErrorResponse } from '../../../../lib/authz'
 import { KIND_COLORS, type WorkKind } from '../../../../lib/work-kinds-core'
 
@@ -23,6 +24,7 @@ const anthropic = new Anthropic() // reads ANTHROPIC_API_KEY
  * click. A suggestion, never a decision — the human always confirms.
  */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireSignedIn()
     const body = await req.json()
@@ -30,8 +32,8 @@ export async function POST(req: Request) {
     const brief = String(body.brief ?? '').trim().slice(0, 2000)
     if (!title && !brief) return NextResponse.json({ suggestion: null })
 
-    const { data: kindRows } = await supabase.from('work_kinds').select('id, slug, name, color')
-    const kinds = ((kindRows ?? []) as Pick<WorkKind, 'id' | 'slug' | 'name' | 'color'>[])
+    const kindRows = await table<WorkKindRow>('work_kinds').list()
+    const kinds = (kindRows as Pick<WorkKind, 'id' | 'slug' | 'name' | 'color'>[])
       .filter(k => k.slug !== 'shoot_brief')
     if (kinds.length === 0) return NextResponse.json({ suggestion: null })
 
@@ -74,4 +76,5 @@ export async function POST(req: Request) {
       ? NextResponse.json({ error }, { status })
       : NextResponse.json({ suggestion: null })
   }
+  })
 }
