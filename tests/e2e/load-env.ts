@@ -1,17 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// Node 20 has no native WebSocket; supabase-js's realtime client wants one at
-// construction. Tests never open realtime sockets — the polyfill just lets the
-// client construct.
-if (!(globalThis as Record<string, unknown>).WebSocket) {
-  // @ts-expect-error ws ships no types here; only the constructor is needed
-  const { WebSocket } = await import('ws')
-  ;(globalThis as Record<string, unknown>).WebSocket = WebSocket
-}
-
-// Load .env.local before any app module imports — app/lib/supabase.ts builds
-// its client at module load and throws on missing env (CLAUDE.md trap 7).
+// Load .env.local before any app module imports — lib/firebase-config.ts and
+// lib/db.ts read NEXT_PUBLIC_FIREBASE_DATABASE_URL lazily at request time
+// (CLAUDE.md trap 7), so import ordering matters less than it used to, but
+// this still has to run before anything that reads process.env at load time.
 // belt AND braces: even if an upstream bug resolves a real person as a
 // recipient, the mailer refuses to send to anything not ending in .invalid
 process.env.EMAIL_TEST_ONLY = '1'

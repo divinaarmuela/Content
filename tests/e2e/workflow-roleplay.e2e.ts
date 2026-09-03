@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { supabase } from '../../lib/supabase'
+import { table } from '../../lib/db'
 import type { TeamUser } from '../../app/lib/authz'
 import { performTransition, addVersion, type ContentItem } from '../../app/lib/workflow'
 import { loadItemForUser, shapeItemDetail, accessibleClientIds } from '../../app/lib/production-access'
@@ -30,21 +30,39 @@ const IDS = {
 let am: TeamUser, editor: TeamUser, scheduler: TeamUser, clientUser: TeamUser
 let itemId: string
 
+/** item_id has no dedicated bucket per platform here — one row per (item, platform). */
+async function scheduleEntryFor(itemId: string, platform: string) {
+  return (await table('schedule_entries')
+    .list({ by: { item_id: itemId }, where: (r: any) => r.platform === platform }))[0] ?? null
+}
+async function upsertSchedule(row: Record<string, unknown>) {
+  const existing = await scheduleEntryFor(row.item_id as string, row.platform as string)
+  return existing ? table('schedule_entries').update(existing.id, row) : table('schedule_entries').insert(row as any)
+}
+async function markLiveUrl(itemId: string, platform: string, liveUrl: string) {
+  const entry = await scheduleEntryFor(itemId, platform)
+  if (entry) {
+    await table('schedule_entries').update(entry.id, {
+      live_url: liveUrl, publish_status: 'published', published_at: new Date().toISOString(),
+    })
+  }
+}
+
 const freshItem = async (): Promise<ContentItem> => {
-  const { data, error } = await supabase.from('content_items').select('*').eq('id', itemId).single()
-  if (error) throw new Error(error.message)
-  return data as ContentItem
+  const row = await table('content_items').get(itemId)
+  if (!row) throw new Error('not found')
+  return row as unknown as ContentItem
 }
 
 beforeAll(async () => {
-  const { data, error } = await supabase.from('team_users').select('*').in('id', Object.values(IDS))
-  if (error) throw new Error(error.message)
-  const by = Object.fromEntries((data ?? []).map(u => [u.id, u as TeamUser]))
+  const ids = new Set(Object.values(IDS))
+  const rows = await table('team_users').list({ where: (r: any) => ids.has(r.id) })
+  const by = Object.fromEntries(rows.map((u: any) => [u.id, u as TeamUser]))
   am = by[IDS.am]; editor = by[IDS.editor]; scheduler = by[IDS.scheduler]; clientUser = by[IDS.client]
   if (!am || !editor || !scheduler || !clientUser) throw new Error('Test accounts missing — recreate them first')
 
   // the editor creates the item, exactly as the items POST route does
-  const { data: item, error: insErr } = await supabase.from('content_items').insert({
+  const item = await table('content_items').insert({
     client_id: TEST_CLIENT_ID,
     title: `E2E roleplay ${new Date().toISOString()}`,
     content_type: 'reel',
@@ -52,8 +70,11 @@ beforeAll(async () => {
     owner_id: editor.id,
     priority: 'normal',
     client_approval_required: true,
-  }).select().single()
-  if (insErr) throw new Error(insErr.message)
+    // both were Postgres column defaults; an item that reads back without a
+    // status is on no board at all (CLAUDE.md — insert() carries no defaults)
+    status: 'draft_uploaded',
+    current_version_number: 0,
+  } as any)
   itemId = item.id
 })
 
@@ -63,12 +84,12 @@ afterAll(async () => {
   if (!itemId) return
   // let the fire-and-forget notification fan-outs settle before teardown
   await new Promise(r => setTimeout(r, 3000))
-  await supabase.from('schedule_entries').delete().eq('item_id', itemId)
-  await supabase.from('item_comments').delete().eq('item_id', itemId)
-  await supabase.from('asset_versions').delete().eq('item_id', itemId)
-  await supabase.from('approvals').delete().eq('item_id', itemId)
-  await supabase.from('content_items').delete().eq('id', itemId)
-  await supabase.from('notification_log').delete().like('entity_id', `${itemId}%`)
+  await table('schedule_entries').removeWhere((r: any) => r.item_id === itemId)
+  await table('item_comments').removeWhere((r: any) => r.item_id === itemId)
+  await table('asset_versions').removeWhere((r: any) => r.item_id === itemId)
+  await table('approvals').removeWhere((r: any) => r.item_id === itemId)
+  await table('content_items').remove(itemId)
+  await table('notification_log').removeWhere((r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(itemId))
 })
 
 describe('the funnel, role by role', () => {
@@ -121,24 +142,24 @@ describe('the funnel, role by role', () => {
   })
 
   it('comment visibility: client never sees internal notes, editor never sees client notes, scheduler sees none', async () => {
-    await supabase.from('item_comments').insert([
+    await Promise.all([
       { item_id: itemId, author_id: am.id, visibility: 'internal', body: 'Internal: watch the logo safe-zone' },
       { item_id: itemId, author_id: clientUser.id, visibility: 'client', body: 'Client: can the intro be shorter?' },
-    ])
-    const { data: item } = await supabase.from('content_items').select('*').eq('id', itemId).single()
-    const { data: versions } = await supabase.from('asset_versions').select('*').eq('item_id', itemId).order('version_number', { ascending: false })
-    const { data: comments } = await supabase.from('item_comments').select('*').eq('item_id', itemId)
+    ].map(r => table('item_comments').insert(r as any)))
+    const item = await table('content_items').get(itemId)
+    const versions = await table('asset_versions').list({ by: { item_id: itemId }, orderBy: [['version_number', 'desc']] })
+    const comments = await table('item_comments').list({ by: { item_id: itemId } })
 
     type Shaped = { versions: Record<string, unknown>[]; comments: { visibility: string }[] }
-    const asClient = shapeItemDetail(clientUser, item!, versions! as never, comments! as never) as unknown as Shaped
+    const asClient = shapeItemDetail(clientUser, item!, versions as never, comments as never) as unknown as Shaped
     expect(asClient.comments.every(c => c.visibility === 'client')).toBe(true)
     expect(asClient.versions).toHaveLength(1) // latest only
     expect(asClient.versions[0]).not.toHaveProperty('dropbox_url') // master link stays internal
 
-    const asEditor = shapeItemDetail(editor, item!, versions! as never, comments! as never) as unknown as Shaped
+    const asEditor = shapeItemDetail(editor, item!, versions as never, comments as never) as unknown as Shaped
     expect(asEditor.comments.every(c => c.visibility === 'internal')).toBe(true)
 
-    const asScheduler = shapeItemDetail(scheduler, item!, versions! as never, comments! as never) as unknown as Shaped
+    const asScheduler = shapeItemDetail(scheduler, item!, versions as never, comments as never) as unknown as Shaped
     expect(asScheduler.comments).toHaveLength(0) // stays out of revision loops
   })
 
@@ -158,8 +179,8 @@ describe('the funnel, role by role', () => {
   it('client: approves for scheduling', async () => {
     expect((await performTransition(clientUser, await freshItem(), 'approved_for_scheduling')).status)
       .toBe('approved_for_scheduling')
-    const { data: approvals } = await supabase.from('approvals').select('*').eq('item_id', itemId)
-    expect(approvals!.some(a => a.approval_type === 'client' && a.decision === 'approved')).toBe(true)
+    const approvals = await table('approvals').list({ by: { item_id: itemId } })
+    expect(approvals.some((a: any) => a.approval_type === 'client' && a.decision === 'approved')).toBe(true)
   })
 
   it('scheduler: NOW sees the item, but cannot schedule without a dated entry', async () => {
@@ -170,18 +191,16 @@ describe('the funnel, role by role', () => {
   })
 
   it('scheduler: sets a platform + time, marks scheduled, adds the live link, marks published', async () => {
-    await supabase.from('schedule_entries').upsert({
+    await upsertSchedule({
       item_id: itemId, platform: 'instagram', scheduler_id: scheduler.id,
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
-    }, { onConflict: 'item_id,platform' })
+    })
     expect((await performTransition(scheduler, await freshItem(), 'scheduled')).status).toBe('scheduled')
 
     // published needs the live URL first — evidence rule again
     await expect(performTransition(scheduler, await freshItem(), 'published'))
       .rejects.toThrow(/live link/i)
-    await supabase.from('schedule_entries')
-      .update({ live_url: 'https://instagram.com/p/test', publish_status: 'published', published_at: new Date().toISOString() })
-      .eq('item_id', itemId).eq('platform', 'instagram')
+    await markLiveUrl(itemId, 'instagram', 'https://instagram.com/p/test')
     expect((await performTransition(scheduler, await freshItem(), 'published')).status).toBe('published')
   })
 
@@ -194,16 +213,14 @@ describe('the funnel, role by role', () => {
   it('no real person was notified: every notification this item produced went to a .invalid test address', async () => {
     // give the async fan-outs a moment to write their rows
     await new Promise(r => setTimeout(r, 2500))
-    const { data } = await supabase
-      .from('notification_log')
-      .select('recipient_email, entity_id, entity_type, status')
-      .like('entity_id', `${itemId}%`)
-    expect(data!.length).toBeGreaterThan(0) // the flow really did fan out
+    const data = await table('notification_log')
+      .list({ where: (r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(itemId) })
+    expect(data.length).toBeGreaterThan(0) // the flow really did fan out
     // a claim row to a real address with status 'failed' is the kill-switch
     // doing its job (real schedulers exist on the roster now); only a SENT
     // email to a real person is a leak
-    const leaked = data!.filter(r => !r.recipient_email.endsWith('.invalid') && r.status === 'sent')
-    expect(leaked, `leaked to: ${leaked.map(r => `${r.recipient_email} (${r.entity_id})`).join(', ')}`)
+    const leaked = data.filter((r: any) => !r.recipient_email.endsWith('.invalid') && r.status === 'sent')
+    expect(leaked, `leaked to: ${leaked.map((r: any) => `${r.recipient_email} (${r.entity_id})`).join(', ')}`)
       .toHaveLength(0)
   })
 })

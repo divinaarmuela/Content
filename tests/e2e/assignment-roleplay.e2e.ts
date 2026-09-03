@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { supabase } from '../../lib/supabase'
+import { table, withRequestCache } from '../../lib/db'
+import { attachOne } from '../../lib/db-join'
 import type { TeamUser } from '../../app/lib/authz'
 import { performTransition, addVersion, type ContentItem } from '../../app/lib/workflow'
 import {
@@ -9,8 +10,9 @@ import {
 import { upsertScheduleEntry } from '../../app/lib/schedule'
 import { canCreateItemsUnder, checkBatchTransition } from '../../app/lib/batch-brief-core'
 import { canEditItemFields, roleMayCreateItems, taskExemptFromClientScope } from '../../app/lib/item-edit-core'
-import { groupCard, groupLine, nextPieceTitle } from '../../app/lib/deliverable-group-core'
+import { groupCard, groupLine, nextPieceTitle, type DeliverableGroup as DeliverableGroupCore } from '../../app/lib/deliverable-group-core'
 import type { ItemStatus } from '../../app/lib/workflow-core'
+import { schedulerIdsOf } from '../../app/lib/workflow-core'
 import type { ContentItem as DbContentItem } from '../../lib/db-types'
 import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem } from '../../app/lib/work-pages-core'
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
@@ -53,6 +55,27 @@ const batches: string[] = []
 
 const scope = (...m: ScopeMode[]) => new Set<ScopeMode>(m)
 
+/** the natural-key id `team_user_clients` rows are stored and read under (lib/db-types.ts NATURAL_KEYS) */
+const tucId = (teamUserId: string, clientId: string) => `${teamUserId}__${clientId}`
+
+/** One row per (item, platform) — the compound key `schedule_entries` used to carry as onConflict. */
+async function scheduleEntryFor(itemId: string, platform: string) {
+  return (await table('schedule_entries')
+    .list({ by: { item_id: itemId }, where: (r: any) => r.platform === platform }))[0] ?? null
+}
+async function upsertSchedule(row: Record<string, unknown>) {
+  const existing = await scheduleEntryFor(row.item_id as string, row.platform as string)
+  return existing ? table('schedule_entries').update(existing.id, row) : table('schedule_entries').insert(row as any)
+}
+async function markLiveUrl(itemId: string, platform: string, liveUrl: string) {
+  const entry = await scheduleEntryFor(itemId, platform)
+  if (entry) {
+    await table('schedule_entries').update(entry.id, {
+      live_url: liveUrl, publish_status: 'published', published_at: new Date().toISOString(),
+    })
+  }
+}
+
 /**
  * Wait for a fire-and-forget fan-out to land.
  *
@@ -78,35 +101,36 @@ async function until<T>(
 async function notificationRows(ids: string[]) {
   const rows: { recipient_email: string; entity_id: string; status: string }[] = []
   for (const id of ids) {
-    const { data } = await supabase
-      .from('notification_log')
-      .select('recipient_email, entity_id, status')
-      .like('entity_id', `${id}%`)
-    rows.push(...(data ?? []))
+    const found = await table('notification_log')
+      .list({ where: (r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(id) })
+    rows.push(...found.map((r: any) => ({ recipient_email: r.recipient_email, entity_id: r.entity_id, status: r.status })))
   }
   return rows
 }
 
 const fresh = async (id: string): Promise<ContentItem> => {
-  const { data, error } = await supabase.from('content_items').select('*').eq('id', id).single()
-  if (error) throw new Error(error.message)
-  return data as ContentItem
+  const row = await table('content_items').get(id)
+  if (!row) throw new Error('not found')
+  return row as unknown as ContentItem
 }
 
 /** A fresh item on the test client, tracked for teardown. */
 async function makeItem(fields: Record<string, unknown>): Promise<string> {
-  const { data, error } = await supabase.from('content_items').insert({
+  const row = await table('content_items').insert({
     client_id: TEST_CLIENT_ID,
     title: `E2E assignment ${new Date().toISOString()}`,
     content_type: 'reel',
     platform_targets: ['instagram'],
     priority: 'normal',
     client_approval_required: false,
+    // both were Postgres column defaults; an item that reads back without a
+    // status is on no board at all (CLAUDE.md — insert() carries no defaults)
+    status: 'draft_uploaded',
+    current_version_number: 0,
     ...fields,
-  }).select('id').single()
-  if (error) throw new Error(error.message)
-  created.push(data.id)
-  return data.id
+  } as any)
+  created.push(row.id)
+  return row.id
 }
 
 const v = (n: number) => ({
@@ -115,10 +139,10 @@ const v = (n: number) => ({
   notes: `cut ${n}`,
 })
 
-beforeAll(async () => {
-  const { data, error } = await supabase.from('team_users').select('*').in('id', Object.values(IDS))
-  if (error) throw new Error(error.message)
-  const by = Object.fromEntries((data ?? []).map(u => [u.id, u as TeamUser]))
+beforeAll(() => withRequestCache(async () => {
+  const ids = new Set(Object.values(IDS))
+  const rows = await table('team_users').list({ where: (r: any) => ids.has(r.id) })
+  const by = Object.fromEntries(rows.map((u: any) => [u.id, u as TeamUser]))
   am = by[IDS.am]; editor = by[IDS.editor]; scheduler = by[IDS.scheduler]
   if (!am || !editor || !scheduler) throw new Error('Test accounts missing — recreate them first')
 
@@ -126,36 +150,44 @@ beforeAll(async () => {
   // fan-out for this client must land on undeliverable addresses. An
   // UNASSIGNED client is unsafe too — resolveAudience falls back to emailing
   // every super admin when a client has no manager.
-  const { data: mgrs } = await supabase
-    .from('team_user_clients')
-    .select('team_users!team_user_clients_team_user_id_fkey!inner(email)')
-    .eq('client_id', TEST_CLIENT_ID)
-  const emails = (mgrs ?? []).map(r => (r.team_users as unknown as { email: string }).email)
+  const links = await table('team_user_clients').list({ by: { client_id: TEST_CLIENT_ID } })
+  const withUsers = await attachOne(links, 'team_user_id', 'team_users', ['email'])
+  const emails = withUsers
+    .map((r: any) => (r.team_users as { email: string } | null)?.email)
+    .filter((e: string | undefined): e is string => !!e)
   if (emails.length === 0) throw new Error('ZZ TEST client has no assigned manager — the AM fallback would email every super admin')
   const real = emails.filter(e => !e.endsWith('.invalid'))
   if (real.length > 0) throw new Error(`ZZ TEST client is managed by real people: ${real.join(', ')}`)
   if (process.env.EMAIL_TEST_ONLY !== '1') throw new Error('EMAIL_TEST_ONLY is not set — refusing to run')
-})
+}))
 
 afterAll(async () => {
   // let the fire-and-forget notification fan-outs settle before teardown —
   // poll for them rather than sleeping blind, so a fast run is fast and a
   // slow one still gets its full budget
   await until(() => notificationRows(created), rows => rows.length > 0)
-  for (const id of created) {
-    await supabase.from('schedule_entries').delete().eq('item_id', id)
-    await supabase.from('item_comments').delete().eq('item_id', id)
-    await supabase.from('asset_versions').delete().eq('item_id', id)
-    await supabase.from('approvals').delete().eq('item_id', id)
-    await supabase.from('workflow_activity').delete().eq('entity_id', id)
-    await supabase.from('content_items').delete().eq('id', id)
-    await supabase.from('notification_log').delete().like('entity_id', `${id}%`)
-  }
-  for (const id of batches) {
-    await supabase.from('workflow_activity').delete().eq('entity_id', id)
-    await supabase.from('notification_log').delete().like('entity_id', `${id}%`)
-    await supabase.from('batches').delete().eq('id', id)
-  }
+  // one item's rows never overlap another's, so every id's cleanup — and
+  // every batch's — runs concurrently rather than one network round trip at
+  // a time; with dozens of ids created across this file, doing it serially
+  // was slow enough to blow the hook timeout
+  await Promise.all(created.map(async id => {
+    await Promise.all([
+      table('schedule_entries').removeWhere((r: any) => r.item_id === id),
+      table('item_comments').removeWhere((r: any) => r.item_id === id),
+      table('asset_versions').removeWhere((r: any) => r.item_id === id),
+      table('approvals').removeWhere((r: any) => r.item_id === id),
+      table('workflow_activity').removeWhere((r: any) => r.entity_id === id),
+      table('notification_log').removeWhere((r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(id)),
+    ])
+    await table('content_items').remove(id)
+  }))
+  await Promise.all(batches.map(async id => {
+    await Promise.all([
+      table('workflow_activity').removeWhere((r: any) => r.entity_id === id),
+      table('notification_log').removeWhere((r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(id)),
+    ])
+    await table('batches').remove(id)
+  }))
 })
 
 describe('rights follow assignment, not job title', () => {
@@ -194,20 +226,18 @@ describe('rights follow assignment, not job title', () => {
       .toBe('approved_for_scheduling')
 
     // the AM hands it to the editor, not to the scheduling team
-    await supabase.from('content_items').update({ scheduler_ids: [editor.id] }).eq('id', id)
-    await supabase.from('schedule_entries').upsert({
+    await table('content_items').update(id, { scheduler_ids: [editor.id] })
+    await upsertSchedule({
       item_id: id, platform: 'instagram', scheduler_id: editor.id,
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
-    }, { onConflict: 'item_id,platform' })
+    })
 
     // the scheduler by TITLE holds no hat here — somebody else was handed it
     await expect(performTransition(scheduler, await fresh(id), 'scheduled')).rejects.toThrow()
 
     expect((await performTransition(editor, await fresh(id), 'scheduled')).status).toBe('scheduled')
     // marked posted in-app — no Zernio/social publish is ever triggered here
-    await supabase.from('schedule_entries')
-      .update({ live_url: 'https://instagram.com/p/e2e-assignment', publish_status: 'published', published_at: new Date().toISOString() })
-      .eq('item_id', id).eq('platform', 'instagram')
+    await markLiveUrl(id, 'instagram', 'https://instagram.com/p/e2e-assignment')
     expect((await performTransition(editor, await fresh(id), 'published')).status).toBe('published')
   })
 
@@ -216,7 +246,7 @@ describe('rights follow assignment, not job title', () => {
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [editor.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [editor.id] })
 
     // through the REAL code path the API route uses — the route is a thin
     // wrapper around this, so proving it here proves the endpoint
@@ -233,9 +263,8 @@ describe('rights follow assignment, not job title', () => {
     // the scheduler by TITLE was handed nothing here — same function, refused
     await expect(upsertScheduleEntry(scheduler, await fresh(id), { platform: 'tiktok' }))
       .rejects.toThrow(/scheduling/i)
-    const { data: entries } = await supabase
-      .from('schedule_entries').select('platform').eq('item_id', id)
-    expect((entries ?? []).map(e => e.platform)).toEqual(['instagram'])
+    const entries = await table('schedule_entries').list({ by: { item_id: id } })
+    expect(entries.map((e: any) => e.platform)).toEqual(['instagram'])
 
     // and they cannot even READ it: a taken seat is not their job to see
     await expect(loadItemForUser(scheduler, id)).rejects.toThrow(/not found/i)
@@ -246,11 +275,11 @@ describe('rights follow assignment, not job title', () => {
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [] }).eq('id', id)
-    await supabase.from('schedule_entries').upsert({
+    await table('content_items').update(id, { scheduler_ids: [] })
+    await upsertSchedule({
       item_id: id, platform: 'instagram', scheduler_id: scheduler.id,
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
-    }, { onConflict: 'item_id,platform' })
+    })
     expect((await performTransition(scheduler, await fresh(id), 'scheduled')).status).toBe('scheduled')
   })
 })
@@ -259,14 +288,13 @@ describe('a shoot brief never reaches the Scheduler', () => {
   let briefId: string, batchId: string
 
   it('is driven to "plan approved" by the account manager', async () => {
-    const { data: batch, error } = await supabase.from('batches').insert({
+    const batch = await table('batches').insert({
       client_id: TEST_CLIENT_ID,
       title: `E2E brief shoot ${new Date().toISOString()}`,
       owner_id: am.id,
       status: 'brief',
       concept: 'E2E test concept — nothing is booked with anybody',
-    }).select('id').single()
-    if (error) throw new Error(error.message)
+    } as any)
     batchId = batch.id
     batches.push(batchId)
 
@@ -284,10 +312,8 @@ describe('a shoot brief never reaches the Scheduler', () => {
   })
 
   it('never appears on the Scheduler page, not even at "all"', async () => {
-    const { data } = await supabase
-      .from('content_items').select('id, status, owner_id, scheduler_ids, batch_id, work_kinds(slug)')
-      .eq('id', briefId)
-    const rows = (data ?? []) as unknown as WorkItem[]
+    const row = await table('content_items').get(briefId)
+    const rows = (row ? await attachOne([row], 'work_kind_id', 'work_kinds', ['slug']) : []) as unknown as WorkItem[]
     expect(rows).toHaveLength(1)
     expect(isBriefTask(rows[0])).toBe(true)
     const viewer = { id: scheduler.id, role: scheduler.role }
@@ -299,9 +325,7 @@ describe('a shoot brief never reaches the Scheduler', () => {
     await expect(performTransition(am, await fresh(briefId), 'scheduled'))
       .rejects.toThrow(/book the shoot/i)
 
-    await supabase.from('batches')
-      .update({ status: 'locked', locked_at: new Date().toISOString(), locked_by: am.id })
-      .eq('id', batchId)
+    await table('batches').update(batchId, { status: 'locked', locked_at: new Date().toISOString(), locked_by: am.id })
     expect((await performTransition(am, await fresh(briefId), 'scheduled')).status).toBe('scheduled')
 
     // a booked shoot is the end of the brief — the content items publish, not it
@@ -316,10 +340,9 @@ describe('the scope pills, on real rows', () => {
     const pool = await makeItem({ owner_id: null })
     const theirs = await makeItem({ owner_id: am.id })
 
-    const { data } = await supabase
-      .from('content_items').select('id, status, owner_id, scheduler_ids, batch_id, work_kinds(slug)')
-      .in('id', [mine, pool, theirs])
-    const rows = (data ?? []) as unknown as WorkItem[]
+    const ids3 = [mine, pool, theirs]
+    const raw = await table('content_items').list({ where: (r: any) => ids3.includes(r.id) })
+    const rows = (await attachOne(raw, 'work_kind_id', 'work_kinds', ['slug'])) as unknown as WorkItem[]
     expect(rows).toHaveLength(3)
 
     const asEditor = { id: editor.id, role: editor.role }
@@ -333,40 +356,37 @@ describe('the scope pills, on real rows', () => {
 describe('two people clicking at once', () => {
   it('exactly one wins the edit — the WHERE clause is the referee, not a read', async () => {
     const id = await makeItem({ owner_id: null })
-    // the claim route's own UPDATE, run twice concurrently
-    const claim = (uid: string) => supabase
-      .from('content_items')
-      .update({ owner_id: uid, assigned_by: uid })
-      .eq('id', id)
-      .is('owner_id', null)
-      .not('status', 'in', `(${EDITING_CLOSED_STATUSES.join(',')})`)
-      .select('id, owner_id')
+    // the claim route's own conditional write, run twice concurrently
+    const claim = (uid: string) => table('content_items').claim(id, (cur: any) => {
+      const open = !!cur
+        && cur.owner_id == null
+        && !(EDITING_CLOSED_STATUSES as readonly string[]).includes(cur.status)
+      return open ? { ...cur, owner_id: uid, assigned_by: uid } : null
+    })
 
     const [a, b] = await Promise.all([claim(editor.id), claim(am.id)])
-    const winners = [...(a.data ?? []), ...(b.data ?? [])]
+    const winners = [a, b].filter(r => r.claimed)
     expect(winners).toHaveLength(1)
-    expect([a.data?.length ?? 0, b.data?.length ?? 0].sort()).toEqual([0, 1])
+    expect([a.claimed, b.claimed].sort()).toEqual([false, true])
 
-    const { data: row } = await supabase.from('content_items').select('owner_id').eq('id', id).single()
-    expect(row!.owner_id).toBe(winners[0].owner_id)
+    const row = await table('content_items').get(id)
+    expect(row!.owner_id).toBe((winners[0] as { claimed: true; row: any }).row.owner_id)
     expect([editor.id, am.id]).toContain(row!.owner_id)
   })
 
   it('exactly one wins the scheduling seat', async () => {
     const id = await makeItem({ owner_id: editor.id, status: 'approved_for_scheduling' })
-    const claim = (uid: string) => supabase
-      .from('content_items')
-      .update({ scheduler_ids: [uid] })
-      .eq('id', id)
-      .eq('scheduler_ids', '[]')
-      .in('status', CLAIMABLE_SCHEDULING_STATUSES as readonly string[] as string[])
-      .select('id')
+    const claim = (uid: string) => table('content_items').claim(id, (cur: any) => {
+      const open = !!cur
+        && schedulerIdsOf(cur).length === 0
+        && (CLAIMABLE_SCHEDULING_STATUSES as readonly string[]).includes(cur.status)
+      return open ? { ...cur, scheduler_ids: [uid] } : null
+    })
 
     const [a, b] = await Promise.all([claim(scheduler.id), claim(editor.id)])
-    expect([...(a.data ?? []), ...(b.data ?? [])]).toHaveLength(1)
-    expect([a.data?.length ?? 0, b.data?.length ?? 0].sort()).toEqual([0, 1])
+    expect([a.claimed, b.claimed].filter(Boolean)).toHaveLength(1)
 
-    const { data: row } = await supabase.from('content_items').select('scheduler_ids').eq('id', id).single()
+    const row = await table('content_items').get(id)
     expect(row!.scheduler_ids).toHaveLength(1)
     expect([scheduler.id, editor.id]).toContain((row!.scheduler_ids as string[])[0])
   })
@@ -382,14 +402,13 @@ describe('who can even SEE an unclaimed item', () => {
 
     // fixture, not a workflow move: park it at approved so the scheduler's
     // status gate opens without walking the whole funnel again
-    await supabase.from('content_items')
-      .update({ status: 'approved_for_scheduling', scheduler_ids: [] }).eq('id', id)
+    await table('content_items').update(id, { status: 'approved_for_scheduling', scheduler_ids: [] })
     await expect(loadItemForUser(scheduler, id)).resolves.toBeTruthy()
   })
 
   it('handing it to an editor moves the RIGHT to act, even off-client', async () => {
     const id = await makeItem({ owner_id: null, status: 'approved_for_scheduling' })
-    await supabase.from('content_items').update({ scheduler_ids: [editor.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [editor.id] })
 
     // the seat is TAKEN: a scheduler who was not handed this item holds no hat
     // on it and cannot even read it. Status alone used to let them in — a
@@ -397,27 +416,23 @@ describe('who can even SEE an unclaimed item', () => {
     await expect(loadItemForUser(scheduler, id)).rejects.toThrow(/not found/i)
     await expect(performTransition(scheduler, await fresh(id), 'scheduled')).rejects.toThrow()
     // …and it is off their board under the scheduler's default scope
-    const { data } = await supabase
-      .from('content_items').select('id, status, owner_id, scheduler_ids, batch_id, work_kinds(slug)')
-      .eq('id', id)
-    expect(schedulerScope((data ?? []) as unknown as WorkItem[], { id: scheduler.id, role: scheduler.role }, scope('mine', 'unassigned')))
+    const row = await table('content_items').get(id)
+    const rows = (row ? await attachOne([row], 'work_kind_id', 'work_kinds', ['slug']) : []) as unknown as WorkItem[]
+    expect(schedulerScope(rows, { id: scheduler.id, role: scheduler.role }, scope('mine', 'unassigned')))
       .toHaveLength(0)
 
     // the editor sees it because they were HANDED it — with their whole-client
     // assignment removed for the length of this assertion
-    const { data: link } = await supabase.from('team_user_clients')
-      .select('*').eq('team_user_id', editor.id).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+    const link = await table('team_user_clients').get(tucId(editor.id, TEST_CLIENT_ID))
     expect(link, 'the editor must be assigned to the ZZ TEST client to begin with').toBeTruthy()
     try {
-      await supabase.from('team_user_clients')
-        .delete().eq('team_user_id', editor.id).eq('client_id', TEST_CLIENT_ID)
+      await table('team_user_clients').remove(tucId(editor.id, TEST_CLIENT_ID))
       await expect(loadItemForUser(editor, id)).resolves.toBeTruthy()
     } finally {
       // put the roster back exactly as it was, pass or fail
-      await supabase.from('team_user_clients').upsert(link!)
+      await table('team_user_clients').upsert(link!)
     }
-    const { data: restored } = await supabase.from('team_user_clients')
-      .select('client_id').eq('team_user_id', editor.id).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+    const restored = await table('team_user_clients').get(tucId(editor.id, TEST_CLIENT_ID))
     expect(restored, 'the editor’s client assignment must be restored').toBeTruthy()
   })
 })
@@ -433,31 +448,25 @@ describe('who can even SEE an unclaimed item', () => {
  * assertions inside are authorization questions, which is where the bug was.
  */
 async function offClient<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  const { data: link } = await supabase.from('team_user_clients')
-    .select('*').eq('team_user_id', userId).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+  const link = await table('team_user_clients').get(tucId(userId, TEST_CLIENT_ID))
   try {
-    if (link) {
-      await supabase.from('team_user_clients')
-        .delete().eq('team_user_id', userId).eq('client_id', TEST_CLIENT_ID)
-    }
+    if (link) await table('team_user_clients').remove(tucId(userId, TEST_CLIENT_ID))
     return await fn()
   } finally {
-    if (link) await supabase.from('team_user_clients').upsert(link)
+    if (link) await table('team_user_clients').upsert(link)
   }
 }
 
 const batchRow = async (id: string) => {
-  const { data } = await supabase.from('batches')
-    .select('id, client_id, owner_id, status').eq('id', id).single()
-  return data as { id: string; client_id: string; owner_id: string | null; status: string }
+  const row = await table('batches').get(id)
+  return row as { id: string; client_id: string; owner_id: string | null; status: string }
 }
 
 /** The item list exactly as `GET /api/production/items` builds it — the same
  *  scope rule, so what this returns is what the person's board shows. */
 async function listedFor(user: TeamUser): Promise<string[]> {
   const ids = await accessibleClientIds(user)
-  const { data } = await supabase.from('content_items').select('*').limit(500)
-  const rows = (data ?? []) as unknown as DbContentItem[]
+  const rows = await table<DbContentItem>('content_items').list({ limit: 500 })
   if (ids === null) return rows.map(r => r.id)
   const assigned = await assignedItemsFilter(user)
   return rows.filter(r => ids.includes(r.client_id) || assigned(r)).map(r => r.id)
@@ -467,15 +476,14 @@ describe('James: assigned the shoot brief, off the client team', () => {
   let shootId: string, briefId: string, siblingId: string, strangerId: string
 
   it('sets the scene — a shoot he owns, its brief, a sibling item, and one that is nothing to do with him', async () => {
-    const { data: batch, error } = await supabase.from('batches').insert({
+    const batch = await table('batches').insert({
       client_id: TEST_CLIENT_ID,
       title: `E2E James shoot ${new Date().toISOString()}`,
       owner_id: am.id,
       status: 'brief',
       shoot_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
       concept: 'E2E visibility audit — nothing is booked with anybody',
-    }).select('id').single()
-    if (error) throw new Error(error.message)
+    } as any)
     shootId = batch.id
     batches.push(shootId)
 
@@ -533,15 +541,13 @@ describe('James: assigned the shoot brief, off the client team', () => {
       expect(checkBatchTransition(am.role, 'brief', 'locked').ok).toBe(true)
 
       // the plan edit itself, through the same guard the PATCH route uses
-      const { error } = await supabase.from('batches')
-        .update({ location: 'E2E studio' }).eq('id', shootId)
-      expect(error).toBeNull()
+      const updated = await table('batches').update(shootId, { location: 'E2E studio' })
+      expect(updated).not.toBeNull()
     })
   })
 
   it('and the roster is exactly as it was', async () => {
-    const { data } = await supabase.from('team_user_clients')
-      .select('client_id').eq('team_user_id', am.id).eq('client_id', TEST_CLIENT_ID).maybeSingle()
+    const data = await table('team_user_clients').get(tucId(am.id, TEST_CLIENT_ID))
     expect(data, 'the account manager’s client assignment must be restored').toBeTruthy()
   })
 })
@@ -550,13 +556,12 @@ describe('an editor off the team, handed one item on the shoot', () => {
   let shootId: string, itemId: string
 
   it('opens the item, its shoot page and its Drive folder, and uploads a version', async () => {
-    const { data: batch, error } = await supabase.from('batches').insert({
+    const batch = await table('batches').insert({
       client_id: TEST_CLIENT_ID,
       title: `E2E off-team editor shoot ${new Date().toISOString()}`,
       owner_id: am.id, status: 'locked',
       locked_at: new Date().toISOString(), locked_by: am.id,
-    }).select('id').single()
-    if (error) throw new Error(error.message)
+    } as any)
     shootId = batch.id
     batches.push(shootId)
     itemId = await makeItem({
@@ -593,7 +598,7 @@ describe('a scheduler handed an item off the client team', () => {
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     await offClient(scheduler.id, async () => {
       await expect(loadItemForUser(scheduler, id)).resolves.toBeTruthy()
@@ -643,11 +648,10 @@ describe('tagging: "@Name" reaches anyone on the team, and the tag is the assign
     expect(tagged.map(t => t.id)).toEqual([editor.id])
 
     // exactly what POST /comments writes, then notifies
-    const { data, error } = await supabase.from('item_comments').insert({
+    const comment = await table('item_comments').insert({
       item_id: itemId, author_id: am.id, visibility: 'internal', body: text, assigned_to: tagged[0].id,
-    }).select('id').single()
-    if (error) throw new Error(error.message)
-    commentId = data.id
+    } as any)
+    commentId = comment.id
     await notifyTagged({
       actor: am, tagged, text,
       target: { kind: 'item', id: itemId, title: 'E2E tagged item' },
@@ -657,18 +661,16 @@ describe('tagging: "@Name" reaches anyone on the team, and the tag is the assign
 
   it('the editor gets a notification row that links to the item, an email, the badge and the "Waiting on you" card', async () => {
     const rows = await until(
-      async () => (await supabase.from('notification_log')
-        .select('recipient_id, recipient_email, entity_type, entity_id, event_type, read_at')
-        .eq('entity_id', `${itemId}#${commentId}`)).data ?? [],
+      () => table('notification_log').list({ by: { entity_id: `${itemId}#${commentId}` } }),
       r => r.length > 0,
     )
     expect(rows).toHaveLength(1)
-    expect(rows[0].recipient_id).toBe(editor.id)
-    expect(rows[0].recipient_email.endsWith('.invalid')).toBe(true)
-    expect(rows[0].event_type).toBe('comment_assigned')
+    expect((rows[0] as any).recipient_id).toBe(editor.id)
+    expect((rows[0] as any).recipient_email.endsWith('.invalid')).toBe(true)
+    expect((rows[0] as any).event_type).toBe('comment_assigned')
     // the bell counts it (unread), and the Notifications page can open it
-    expect(rows[0].read_at).toBeNull()
-    expect(notificationHref(rows[0].entity_type, rows[0].entity_id)).toBe(`/dashboard/production/${itemId}`)
+    expect((rows[0] as any).read_at).toBeNull()
+    expect(notificationHref((rows[0] as any).entity_type, (rows[0] as any).entity_id)).toBe(`/dashboard/production/${itemId}`)
 
     // the board badge and the Overview card read the same answer
     const open = await openTaggedIds(editor)
@@ -686,13 +688,12 @@ describe('tagging: "@Name" reaches anyone on the team, and the tag is the assign
 
   it('marking it done clears the badge, the card and the bell', async () => {
     // exactly what PATCH /comments does
-    await supabase.from('item_comments').update({ resolved: true }).eq('id', commentId)
+    await table('item_comments').update(commentId, { resolved: true })
     await settleTagNotifications(itemId, commentId)
 
     expect((await openTaggedIds(editor)).items).not.toContain(itemId)
-    const { data } = await supabase.from('notification_log')
-      .select('read_at').eq('entity_id', `${itemId}#${commentId}`).single()
-    expect(data?.read_at).not.toBeNull()
+    const rows = await table('notification_log').list({ by: { entity_id: `${itemId}#${commentId}` } })
+    expect((rows[0] as any)?.read_at).not.toBeNull()
     // the item stays openable: the deep link in the email must not rot
     await offClient(editor.id, async () => {
       await expect(loadItemForUser(editor, itemId)).resolves.toBeTruthy()
@@ -715,13 +716,9 @@ describe('any team role creates work — the owner\'s rule, on real rows', () =>
   it('an EDITOR raises a TASK for a client they are NOT on — tasks are internal work', async ctx => {
     // a real task kind: no media, not the shoot plan. Without one seeded the
     // rule cannot be played live — skip rather than invent global data.
-    const { data: kinds } = await supabase
-      .from('work_kinds')
-      .select('id, slug, uses_media')
-      .eq('uses_media', false)
-      .neq('slug', 'shoot_brief')
-      .limit(1)
-    const taskKind = kinds?.[0]
+    const kinds = await table('work_kinds')
+      .list({ where: (r: any) => r.uses_media === false && r.slug !== 'shoot_brief', limit: 1 })
+    const taskKind = kinds[0] as { id: string; slug: string; uses_media: boolean } | undefined
     if (!taskKind) return ctx.skip()
 
     // the exemption the POST route applies: a task skips the client-team check
@@ -754,13 +751,12 @@ describe('any team role creates work — the owner\'s rule, on real rows', () =>
 
     // …and the AM's edit actually lands and is readable back
     await expect(loadItemForUser(am, id)).resolves.toBeTruthy()
-    const { error } = await supabase.from('content_items')
-      .update({ priority: 'high' }).eq('id', id)
-    expect(error).toBeNull()
+    const updated = await table('content_items').update(id, { priority: 'high' })
+    expect(updated).not.toBeNull()
     expect((await fresh(id) as ContentItem & { priority?: string }).priority).toBe('high')
 
     // anyone HANDED the scheduling edits their own too, whatever the title
-    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
     expect(canEditItemFields(scheduler, await fresh(id))).toBe(true)
   })
 })
@@ -769,29 +765,22 @@ describe('a quota group of 5 fills as pieces are added', () => {
   let groupId: string | null = null
 
   afterAll(async () => {
-    if (groupId) await supabase.from('deliverable_groups').delete().eq('id', groupId)
+    if (groupId) await table('deliverable_groups').remove(groupId)
   })
 
-  it('one group, target 5: 0 of 5 → 2 of 5 → full at 5', async ctx => {
-    // the table ships with supabase/deliverable_groups.sql — skip cleanly on
-    // a database where it has not been run yet
-    const probe = await supabase.from('deliverable_groups').select('id').limit(1)
-    if (probe.error && /does not exist|relation|could not find the table|schema cache/i.test(probe.error.message)) return ctx.skip()
-
-    const { data: group, error } = await supabase.from('deliverable_groups').insert({
+  it('one group, target 5: 0 of 5 → 2 of 5 → full at 5', async () => {
+    const group = (await table('deliverable_groups').insert({
       client_id: TEST_CLIENT_ID,
       content_type: 'reel',
       title: `E2E quota reels ${new Date().toISOString()}`,
       target: 5,
       created_by: am.id,
-    }).select().single()
-    if (error) throw new Error(error.message)
+    } as any)) as unknown as DeliverableGroupCore
     groupId = group.id
 
     const cardFor = async () => {
-      const { data } = await supabase.from('content_items')
-        .select('id, status, group_id').eq('group_id', group.id)
-      return groupCard(group, (data ?? []) as { id: string; status: ItemStatus; group_id: string }[])
+      const rows = await table('content_items').list({ where: (r: any) => r.group_id === group.id })
+      return groupCard(group, rows as { id: string; status: ItemStatus; group_id: string }[])
     }
     expect((await cardFor()).count).toBe(0)
 
@@ -816,22 +805,14 @@ describe('a quota group of 5 fills as pieces are added', () => {
 })
 
 describe('final-post approval: the caption gets its own yes before anything queues', () => {
-  /** the columns ship in supabase/posting_approval.sql — on a database where
-   *  it has not been run, skip cleanly rather than invent schema */
-  async function gateReady(): Promise<boolean> {
-    const probe = await supabase.from('content_items').select('posting_approval_state').limit(1)
-    return !probe.error
-  }
   type Item = Parameters<typeof actOnPostingApproval>[1]
 
-  it('scheduler sends → queue refused → AM approves → queue opens', async ctx => {
-    if (!(await gateReady())) return ctx.skip()
-
+  it('scheduler sends → queue refused → AM approves → queue opens', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E final caption — exactly as it will post' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
     await upsertScheduleEntry(scheduler, await fresh(id), {
       platform: 'instagram',
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
@@ -870,14 +851,12 @@ describe('final-post approval: the caption gets its own yes before anything queu
     expect(stateAfterPostEdit(approved.posting_approval_state)).toBe('pending')
   })
 
-  it('request changes sends it back with the note; a fresh send re-opens the loop', async ctx => {
-    if (!(await gateReady())) return ctx.skip()
-
+  it('request changes sends it back with the note; a fresh send re-opens the loop', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption, first attempt' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
 
@@ -900,14 +879,12 @@ describe('final-post approval: the caption gets its own yes before anything queu
     expect(resent.posting_approval_note).toBeNull()
   })
 
-  it('client_too routes it to the portal pile; approval empties it', async ctx => {
-    if (!(await gateReady())) return ctx.skip()
-
+  it('client_too routes it to the portal pile; approval empties it', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption for the client' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
     await performTransition(am, await fresh(id), 'approved_for_scheduling')
-    await supabase.from('content_items').update({ scheduler_ids: [scheduler.id] }).eq('id', id)
+    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     const sent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, {
       action: 'send', client_too: true,
