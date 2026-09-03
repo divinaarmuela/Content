@@ -96,6 +96,19 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
   },
   approved_for_scheduling: {
     scheduled: { roles: ['scheduler'], requires: 'schedule_entry', label: 'Mark scheduled' },
+    // MEDIA THE CLIENT HAS NOT SEEN LANDED ON AN APPROVED PIECE.
+    //
+    // The Schedule composer lets a file be brought in from Google Drive or
+    // uploaded straight into a post. That file is saved as a new version, and
+    // the client's yes was given to the old one — so the piece goes back to
+    // them rather than a post going out with media nobody signed off. Same
+    // shape as the `client_review → internal_review` edge above: `auto`, so
+    // it is the app's move and never a button anybody presses.
+    client_review: {
+      roles: ['editor', 'account_manager', 'scheduler'],
+      label: 'New media — back to the client',
+      auto: true,
+    },
   },
   scheduled: {
     published: { roles: ['scheduler'], requires: 'live_url', label: 'Mark published' },

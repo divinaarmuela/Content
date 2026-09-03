@@ -139,8 +139,13 @@ function EmptySlot({ platform }: { platform: string }) {
       title={`Connect a ${label} account`}
       className="flex w-[58px] shrink-0 flex-col items-center gap-1"
     >
-      <span className="relative flex h-11 w-11 items-center justify-center rounded-full">
-        <PlatformIcon platform={platform} size={44} className="rounded-full opacity-25 grayscale" />
+      {/* A greyed-out logo on a near-black page is a dark smudge on a dark
+          circle — at 25% opacity the unconnected networks were all but
+          invisible in dark mode. The circle gets a lifted fill and a real
+          border so it reads as an empty SLOT in both themes, and the logo
+          sits on top of that instead of on the page. */}
+      <span className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-paper">
+        <PlatformIcon platform={platform} size={40} className="rounded-full opacity-45 grayscale dark:opacity-70" />
         <span className="absolute inset-0 flex items-center justify-center">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background">
             <Plus className="h-3 w-3" strokeWidth={3} aria-hidden />

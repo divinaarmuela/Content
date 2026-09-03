@@ -26,7 +26,10 @@ import {
   applySlideLimit, canReschedule, eligibility, mirrorStatus, validateComposition,
   type SocialPostStatus,
 } from './social-schedule-core'
-import type { Slide } from './version-files-core'
+import { normaliseSlides, slidesSatisfyType, type Slide } from './version-files-core'
+import { addVersion, performTransition } from './workflow'
+import { mirrorVersionSlides } from './gdrive-mirror'
+import { previewVideos } from './stream'
 import { safeZone } from './timezone-core'
 import { inngest } from '../inngest/client'
 
@@ -526,6 +529,106 @@ export async function updatePost(
   }
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'updated' })
   return shape(saved.row)
+}
+
+/* ── media the client has not seen yet ──────────────────────────────────── */
+
+export type AddMediaResult = {
+  version_number: number
+  slides: Slide[]
+  /** the item's status after this — 'client_review' when it went back */
+  status: string
+  /** the one sentence to show in the composer */
+  message: string
+}
+
+/**
+ * Put media into a post that did NOT come from the approved version.
+ *
+ * The composer's picker can reach a Google Drive file or an upload from
+ * somebody's laptop. Neither has been seen by the client, and the whole point
+ * of this feature is that only media the client approved goes out — so
+ * neither is quietly slipped into the post. Instead:
+ *
+ *   1. the post's media, in the order it was arranged, becomes a NEW VERSION
+ *      of the item — the same `addVersion` the item page uses, so the
+ *      numbering, the Drive mirror and the video preview all happen as usual;
+ *   2. the piece goes back to the client for approval through the ordinary
+ *      state machine (`approved_for_scheduling → client_review`, the `auto`
+ *      edge — nobody presses a button called that);
+ *   3. the post keeps the media on it as a DRAFT, so the window still shows
+ *      what was arranged rather than emptying itself, and the final-post gate
+ *      is reset because the yes it holds was given to different pictures.
+ *
+ * The composer then shows "Waiting for approval" until the client signs the
+ * new version off, which is exactly what the picker's footer said would
+ * happen.
+ */
+export async function addMediaVersion(
+  user: TeamUser,
+  input: { item_id: string; post_id?: string | null; files: unknown },
+): Promise<AddMediaResult> {
+  const item = await loadItemForUser(user, String(input.item_id ?? ''))
+  assertCompose(user, item)
+
+  const slides = normaliseSlides(input.files)
+  if (slides.length === 0) throw new ComposeError(['Pick at least one photo or video'])
+  const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
+  if (shapeProblem) throw new ComposeError([shapeProblem])
+
+  const version = await addVersion(user, item.id, { file_url: slides[0].url, files: slides })
+  const number = Number(version.version_number ?? 0)
+  mirrorVersionSlides(item.id, number, slides)
+  previewVideos(slides.map(s => s.url))
+
+  // back to the client. Best-effort and never fatal: the version is saved
+  // either way, and a piece that stayed put is a piece somebody can still
+  // send by hand — losing the upload would not be recoverable.
+  let status = String(item.status)
+  if (status === 'approved_for_scheduling') {
+    try {
+      const moved = await performTransition(user, item as never, 'client_review')
+      status = String((moved as { status?: string }).status ?? status)
+    } catch (e) {
+      console.error('new media on an approved piece — could not send it back:', e)
+    }
+  }
+
+  // the final-post sign-off was given to media that is no longer the media
+  const resetTo = stateAfterPostEdit(
+    (item as unknown as Record<string, unknown>).posting_approval_state)
+  if (resetTo) {
+    await table<ContentItem>('content_items').claim(item.id, cur =>
+      cur?.posting_approval_state === 'approved'
+        ? { ...cur, posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null }
+        : null).catch(() => ({ claimed: false }))
+  }
+
+  // the post keeps the arrangement. Claimed rather than read-then-written, and
+  // only while the post is still something a person could change.
+  const postId = input.post_id ? String(input.post_id) : null
+  if (postId) {
+    const stamp = nowIso()
+    await posts().claim(postId, cur =>
+      cur && cur.item_id === item.id
+        && !SETTLED.includes(String(cur.status)) && cur.status !== 'scheduled'
+        ? {
+          ...cur, slides, version_id: version.id ?? null, version_number: number,
+          status: 'draft', sent_at: null, updated_at: stamp,
+        } as unknown as SocialPost
+        : null)
+  }
+
+  announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
+
+  return {
+    version_number: number,
+    slides,
+    status,
+    message: status === 'client_review'
+      ? `Saved as version ${number}. The client has to approve it before this post can be sent.`
+      : `Saved as version ${number}.`,
+  }
 }
 
 /* ── approval ───────────────────────────────────────────────────────────── */

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -133,6 +133,15 @@ export function pageTitle(path: string): string {
     .find(k => path.startsWith(`${k}/`))
   return (prefix && PAGE_TITLES[prefix]) || 'Dashboard'
 }
+
+/**
+ * How much of the window the dashboard chrome takes: the 72px header, the
+ * 8px above a page and the 64px below it. Exposed as a CSS variable on the
+ * shell so a page that has to fill the screen — the Schedule calendar —
+ * subtracts THIS rather than a copied-out `9rem` that stops being true the
+ * day the header changes.
+ */
+export const CHROME_HEIGHT = '9rem'
 
 /**
  * Which nav entry the current page belongs to.
@@ -321,7 +330,15 @@ export default function Shell({
   const nav = useMemo(() => resolveNav(role, granted, hidden, path), [role, granted, hidden, path])
 
   return (
-    <div className="dbx min-h-screen bg-background text-foreground antialiased">
+    // `--dbx-chrome` is what the header and <main>'s own padding take out of
+    // the window: 72px of header, 8px above the page and 64px below it. A
+    // full-height page (the Schedule calendar) subtracts it instead of
+    // repeating the arithmetic as a magic number that goes stale the first
+    // time this header changes height.
+    <div
+      className="dbx min-h-screen bg-background text-foreground antialiased"
+      style={{ '--dbx-chrome': CHROME_HEIGHT } as CSSProperties}
+    >
       {/* Desktop sidebar from `md`, not `lg`: at the old 1024px breakpoint an
           iPad in portrait — a real device on this team — lost the whole
           navigation and had to work through one hamburger. */}

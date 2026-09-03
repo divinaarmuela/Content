@@ -15,14 +15,19 @@ import type { RailMedia } from './useSchedulePosts'
  * a post is still shown, greyed, with the reason on it: hiding it only makes
  * someone ask where their video went.
  *
- * Read-only in this pass: dragging a card onto the calendar arrives with the
- * composer, so the rail says what it can do rather than pretending.
+ * Tapping a card starts a post from it; dragging one onto the calendar does
+ * the same with the hour it was dropped on. A card that CANNOT start a post
+ * is not clickable and says why, rather than opening a window that would
+ * immediately refuse.
  */
 
 export const RAIL_FILTERS = ['Unused', 'Videos', 'Photos', 'Starred'] as const
 export type RailFilter = (typeof RAIL_FILTERS)[number]
 
 const STAR_KEY = 'md-schedule-starred'
+
+/** What a rail card carries when it is dragged onto the calendar. */
+export const RAIL_DRAG_TYPE = 'application/x-md-item'
 
 /** Stars are a personal marker — one person's shortlist for the week, kept in
  *  their own browser. Nothing about a star reaches anybody else, so it is not
@@ -64,11 +69,15 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, loading,
+  media, waiting, loading, onNew, onPick,
 }: {
   media: RailMedia[]
   waiting: number
   loading: boolean
+  /** start a post with nothing chosen yet */
+  onNew: () => void
+  /** start a post from this piece */
+  onPick: (media: RailMedia) => void
 }) {
   // "Unused" starts on, as the design has it: the rail is for finding the
   // next thing to post, and media already in a post is not that
@@ -84,13 +93,11 @@ export default function MediaRail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* New post is the rail's one action, and it is not built yet: it says
-          so on the button rather than opening nothing. */}
+      {/* the rail's one action */}
       <button
         type="button"
-        disabled
-        title="Making a post arrives with the composer"
-        className="flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-foreground/[0.06] text-[14px] font-semibold text-muted-foreground"
+        onClick={onNew}
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-foreground text-[14px] font-semibold text-background transition-opacity hover:opacity-90"
       >
         <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
         New post
@@ -144,14 +151,27 @@ export default function MediaRail({
               <div
                 key={m.itemId}
                 title={m.ok ? m.title : `${m.title} — ${m.reason}`}
+                draggable={m.ok}
+                onDragStart={e => {
+                  e.dataTransfer.effectAllowed = 'copy'
+                  e.dataTransfer.setData(RAIL_DRAG_TYPE, m.itemId)
+                  e.dataTransfer.setData('text/plain', m.title)
+                }}
                 className={cn(
                   'group relative h-[84px] overflow-hidden rounded-tile border border-border bg-foreground/[0.06]',
                   !m.ok && 'opacity-45',
                 )}
               >
-                <Thumb slide={m.cover} label={m.title} className="h-full w-full" />
+                <button
+                  type="button"
+                  disabled={!m.ok}
+                  onClick={() => onPick(m)}
+                  aria-label={m.ok ? `Start a post from ${m.title}` : `${m.title} — ${m.reason}`}
+                  className="absolute inset-0 z-0 disabled:cursor-not-allowed"
+                />
+                <Thumb slide={m.cover} label={m.title} className="pointer-events-none h-full w-full" />
                 {m.ok && (
-                  <span className="absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-[9px] font-bold text-ink">
+                  <span className="pointer-events-none absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-[9px] font-bold text-ink">
                     ✓<span className="sr-only">Approved</span>
                   </span>
                 )}
@@ -164,7 +184,7 @@ export default function MediaRail({
                     // a phone has no hover: the rail is a bottom sheet there,
                     // so the star is always visible (and 44px) on a touch
                     // screen and appears on hover on a desktop
-                    'absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink/55 text-cream transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:opacity-100',
+                    'absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-ink/55 text-cream transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:opacity-100',
                     starred.has(m.itemId) ? 'opacity-100' : 'opacity-60 md:opacity-0',
                   )}
                 >
@@ -174,7 +194,7 @@ export default function MediaRail({
                   />
                 </button>
                 {!m.ok && m.reason && (
-                  <span className="absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
+                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
                     {m.reason}
                   </span>
                 )}
@@ -185,7 +205,7 @@ export default function MediaRail({
       </div>
 
       <p className="px-1.5 text-center text-[12px] text-muted-foreground">
-        Pick a piece of media to start a post. Moving a post arrives next.
+        Pick a piece of media to start a post, or drag it onto a time.
       </p>
 
       <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">

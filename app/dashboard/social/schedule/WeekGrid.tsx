@@ -1,12 +1,13 @@
 'use client'
 
-import Link from 'next/link'
+import { useState } from 'react'
 import { Clock, StickyNote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ScheduleWeekGrid, SuggestedTime } from '@/app/lib/social-schedule-core'
 import type { ScheduleNote } from '@/lib/db-types'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
+import { RAIL_DRAG_TYPE } from './MediaRail'
 import { layoutLanes } from './week-nav'
 import type { SchedulePostRow } from './useSchedulePosts'
 
@@ -57,7 +58,7 @@ export function StoriesStrip({ stories, tz }: { stories: SchedulePostRow[]; tz: 
 
 /** One post on the grid: its media, when it goes out, where to, and the dot
  *  that says where it stands. */
-export function PostTile({ post, tz, top, offGrid, lane, lanes }: {
+export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
   post: SchedulePostRow
   tz: string
   top: number
@@ -65,6 +66,8 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes }: {
   /** which of the side-by-side slots this tile takes at this time */
   lane: number
   lanes: number
+  /** open the post in the composer */
+  onOpen: (post: SchedulePostRow) => void
 }) {
   const when = clockLabel(post.scheduled_for, tz)
   const title = [
@@ -77,8 +80,9 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes }: {
   ].filter(Boolean).join(' · ')
 
   return (
-    <Link
-      href={`/dashboard/production/${post.item_id}`}
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onOpen(post) }}
       title={title}
       style={{
         top,
@@ -106,7 +110,7 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes }: {
         </span>
       )}
       <span className="sr-only">{title}</span>
-    </Link>
+    </button>
   )
 }
 
@@ -126,24 +130,31 @@ export function NoteTile({ note, top }: { note: ScheduleNote; top: number }) {
 
 /** A good time to post, from this client's own numbers where they have
  *  enough of them — the sentence saying which is on the hover. */
-export function SlotHint({ slot, top, tz }: { slot: SuggestedTime; top: number; tz: string }) {
+export function SlotHint({ slot, top, tz, onPick }: {
+  slot: SuggestedTime
+  top: number
+  tz: string
+  onPick: (iso: string) => void
+}) {
   return (
-    <div
+    <button
+      type="button"
       style={{ top }}
       title={slot.why}
-      className="absolute inset-x-1.5 flex h-10 items-center justify-between gap-1 rounded-tile border border-dashed border-accent-blue/45 bg-tint-blue px-2 text-accent-blue-deep dark:text-cream"
+      onClick={e => { e.stopPropagation(); onPick(slot.iso) }}
+      className="absolute inset-x-1.5 flex h-10 items-center justify-between gap-1 rounded-tile border border-dashed border-accent-blue/45 bg-tint-blue px-2 text-accent-blue-deep hover:bg-accent-blue/20 dark:text-cream"
     >
       <span className="truncate text-[10px] font-bold">
         {clockLabel(slot.iso, tz)}
       </span>
       <Clock className="h-3 w-3 shrink-0" strokeWidth={2.2} aria-hidden />
       <span className="sr-only">Good time to post — {slot.why}</span>
-    </div>
+    </button>
   )
 }
 
 export default function WeekGrid({
-  grid, posts, notes, suggested, todayKey, nowTop,
+  grid, posts, notes, suggested, todayKey, nowTop, onSlot, onOpen, onDropItem,
 }: {
   grid: ScheduleWeekGrid
   posts: SchedulePostRow[]
@@ -154,8 +165,21 @@ export default function WeekGrid({
   /** where the now-line sits in the grid, in the CLIENT's zone — null when
    *  today is not in this week or the time is outside the hours shown */
   nowTop: number | null
+  /** an empty patch of the week was clicked — start a post at that time */
+  onSlot: (iso: string) => void
+  /** a tile was clicked — open it */
+  onOpen: (post: SchedulePostRow) => void
+  /** a card was dragged out of the rail and dropped here */
+  onDropItem: (itemId: string, iso: string) => void
 }) {
   const tz = grid.tz
+  const [dropDay, setDropDay] = useState<number | null>(null)
+
+  /** the time a pointer at `clientY` is over, in the client's zone */
+  const timeAt = (el: HTMLElement, dayIndex: number, clientY: number): string | null => {
+    const box = el.getBoundingClientRect()
+    return grid.slotAt(dayIndex, clientY - box.top)?.iso ?? null
+  }
 
   return (
     <div className="flex min-h-0 flex-1 overflow-auto">
@@ -189,9 +213,27 @@ export default function WeekGrid({
           return (
             <div
               key={day.iso}
+              onClick={e => {
+                const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                if (iso) onSlot(iso)
+              }}
+              onDragOver={e => {
+                if (!e.dataTransfer.types.includes(RAIL_DRAG_TYPE)) return
+                e.preventDefault()
+                setDropDay(day.index)
+              }}
+              onDragLeave={() => setDropDay(d => (d === day.index ? null : d))}
+              onDrop={e => {
+                e.preventDefault()
+                setDropDay(null)
+                const itemId = e.dataTransfer.getData(RAIL_DRAG_TYPE)
+                const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                if (itemId && iso) onDropItem(itemId, iso)
+              }}
               className={cn(
                 'relative min-w-0 flex-1 border-l border-border first:border-l-0',
                 isToday && 'bg-foreground/[0.035]',
+                dropDay === day.index && 'bg-tint-blue ring-2 ring-inset ring-accent-blue',
               )}
               style={{ minHeight: grid.height }}
             >
@@ -219,7 +261,7 @@ export default function WeekGrid({
               {daySlots.map(slot => {
                 const pos = grid.tileTop(slot.iso)
                 return pos && !pos.offGrid
-                  ? <SlotHint key={slot.iso} slot={slot} top={pos.top} tz={tz} />
+                  ? <SlotHint key={slot.iso} slot={slot} top={pos.top} tz={tz} onPick={onSlot} />
                   : null
               })}
 
@@ -241,6 +283,7 @@ export default function WeekGrid({
                     offGrid={pos.offGrid}
                     lane={lane.lane}
                     lanes={lane.lanes}
+                    onOpen={onOpen}
                   />
                 )
               })}

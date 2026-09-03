@@ -13,7 +13,9 @@ import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
+import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
+import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
@@ -66,6 +68,54 @@ export default function SchedulePage() {
   }, [])
 
   const data = useSchedulePosts(viewer, clientId)
+
+  /**
+   * The composer.
+   *
+   * Held as "which piece, and which post" rather than as a copy of the post:
+   * the row itself is looked up in the LIVE list every render, so an approval
+   * landing in another tab changes the window's pill and its button without
+   * anything here refetching.
+   */
+  const [composing, setComposing] = useState<
+    { itemId: string; postId: string | null; at: string | null } | null>(null)
+
+  const openNew = (media: RailMedia, at: string | null) => {
+    if (!media.ok) return
+    // one post per piece: a second "new post" on a piece that has one opens
+    // the one that exists, which is what the server would insist on anyway
+    const existing = data.posts.find(p => p.item_id === media.itemId) ?? null
+    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at })
+  }
+
+  /** open an existing post in the composer */
+  const openPost = (post: SchedulePostRow) =>
+    setComposing({ itemId: post.item_id, postId: post.id, at: null })
+
+  const openAt = (at: string) => {
+    // nothing chosen yet: the first piece that could start a post is the
+    // sensible default, and the picker is one click away
+    const first = data.media.find(m => m.ok && !m.used) ?? data.media.find(m => m.ok)
+    if (first) openNew(first, at)
+  }
+
+  const target: ComposerTarget | null = useMemo(() => {
+    if (!composing) return null
+    const media = data.media.find(m => m.itemId === composing.itemId)
+    const post = composing.postId
+      ? data.posts.find(p => p.id === composing.postId) ?? null
+      : data.posts.find(p => p.item_id === composing.itemId) ?? null
+    if (!media && !post) return null
+    return {
+      itemId: composing.itemId,
+      title: media?.title ?? post?.item_title ?? 'Post',
+      contentType: media?.contentType ?? String(post?.item_type ?? ''),
+      approved: media?.slides ?? post?.slides ?? [],
+      versionNumber: post?.version_number ?? null,
+      post,
+      at: composing.at,
+    }
+  }, [composing, data.media, data.posts])
 
   // the client picked last time, then the first one this person works for —
   // a page that opens on "pick a client" every morning is a page with a step
@@ -164,6 +214,8 @@ export default function SchedulePage() {
       media={data.media}
       waiting={data.waiting}
       loading={data.loading}
+      onNew={() => openAt(weekSlots[0]?.iso ?? new Date(Date.now() + 3_600_000).toISOString())}
+      onPick={m => openNew(m, null)}
     />
   )
 
@@ -172,10 +224,11 @@ export default function SchedulePage() {
   }
 
   return (
-    // the shell's header, the page's top padding and its bottom padding come
-    // to 9rem; taking them off the viewport is what makes the rail and the
-    // grid reach the bottom of the window instead of stopping half way
-    <div className="flex h-[calc(100vh-9rem)] min-h-[560px] flex-col">
+    // the shell publishes what its chrome costs as `--dbx-chrome`; taking that
+    // off the viewport is what makes the rail and the grid reach the bottom of
+    // the window instead of stopping half way. The 9rem fallback is only for a
+    // render outside the shell (a test, a storybook), never the source of truth.
+    <div className="flex h-[calc(100vh-var(--dbx-chrome,9rem))] min-h-[560px] flex-col">
       <PageTitle
         title="Schedule"
         summary="One client's week. Approved media on the left, what is going out on the right."
@@ -271,10 +324,16 @@ export default function SchedulePage() {
                   suggested={weekSlots}
                   todayKey={todayKey}
                   nowTop={nowTop}
+                  onSlot={openAt}
+                  onOpen={openPost}
+                  onDropItem={(itemId, iso) => {
+                    const media = data.media.find(m => m.itemId === itemId)
+                    if (media) openNew(media, iso)
+                  }}
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeek} tz={tz} />
+                <ListView posts={inWeek} tz={tz} onOpen={openPost} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -283,22 +342,35 @@ export default function SchedulePage() {
               posts={channelPosts}
               tz={tz}
               todayKey={todayKey}
+              onOpen={openPost}
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeek} tz={tz} />
+              <ListView posts={inWeek} tz={tz} onOpen={openPost} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <PreviewGrid posts={channelPosts} tz={tz} />
+              <PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <StoriesView posts={stories} tz={tz} />
+              <StoriesView posts={stories} tz={tz} onOpen={openPost} />
             </div>
           )}
         </main>
       </div>
+
+      {target && (
+        <NewPostDialog
+          target={target}
+          tz={tz}
+          accounts={data.accounts}
+          suggested={suggested.slice(0, 3)}
+          role={me?.role ?? null}
+          onClose={() => setComposing(null)}
+          onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
+        />
+      )}
     </div>
   )
 }

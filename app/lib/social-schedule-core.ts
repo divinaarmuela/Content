@@ -87,6 +87,19 @@ export type Eligibility =
  * carries at least one slide that would actually go out. `postSlides` decides
  * the second half: a Reel version often carries its cover image as slide two,
  * and that still is a working file, not a post.
+ *
+ * ── THE ASSUMPTION, STATED ──
+ *
+ * "The latest version" is taken to BE the version the client approved. That
+ * holds only because of the gate in front of it: the item is at
+ * `approved_for_scheduling` or `scheduled`, and every path that adds a new
+ * version to an item — the item page's upload, and the composer's media
+ * picker — sends the item back for approval, so a version the client has not
+ * seen cannot coexist with an approved status. If a future path ever writes a
+ * version WITHOUT moving the status, this function silently starts offering
+ * unapproved media, and the returned `version` is what every caller must key
+ * off (the picker's Approved tab does exactly that) rather than re-reading
+ * "the newest" for itself.
  */
 export function eligibility(
   item: ScheduleItem | null | undefined,
@@ -438,7 +451,7 @@ export function canReschedule(post: SchedulePost | null | undefined): Reschedule
 /* ── suggested times ────────────────────────────────────────────────────── */
 
 /** What a network is CALLED, once, so no two screens spell X differently. */
-const NETWORK_LABEL: Record<string, string> = {
+export const NETWORK_LABEL: Record<string, string> = {
   instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn',
   facebook: 'Facebook', twitter: 'X', x: 'X', youtube: 'YouTube',
   threads: 'Threads', pinterest: 'Pinterest', bluesky: 'Bluesky', reddit: 'Reddit',
