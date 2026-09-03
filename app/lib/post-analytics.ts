@@ -94,7 +94,7 @@ export async function refreshOnePost(job: PublishedJob): Promise<{ updated: bool
   // hand is never stamped over by a provider that changed its mind
   if (!job.permalink) {
     const jobs = table<PublishJob>('publish_jobs')
-    const live = await jobs.get(job.id)
+    const live = await jobs.get(job.id, { fresh: true })
     if (live && live.permalink == null) await jobs.update(job.id, { permalink: url })
     linked = true
   }

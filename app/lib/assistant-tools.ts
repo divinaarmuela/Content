@@ -28,6 +28,21 @@ import { asanaConfigured, tasksForAssignee } from './asana'
 
 const iso = (d: Date) => d.toISOString()
 
+/**
+ * Every tool hands back a NAMED set of fields, never a whole row.
+ *
+ * The old code said what it wanted in `.select('...')` and Postgres enforced
+ * it. Reading whole rows and returning them would put `clients.share_token`
+ * — the portal credential, which the clients API only shows account managers
+ * — and `scan_mailboxes.refresh_token_encrypted` into the model's context.
+ * These projections ARE that select list, and are the only thing that leaves
+ * this file.
+ */
+const clientSummary = (c: Client) => ({
+  id: c.id, name: c.name, industry: c.industry, contact_name: c.contact_name,
+  email: c.email, phone: c.phone, status: c.status, created_at: c.created_at,
+})
+
 export function assistantTools(role: Role) {
   return {
     search_clients: tool({
@@ -46,7 +61,7 @@ export function assistantTools(role: Role) {
           orderBy: [['name', 'asc']],
           limit: 50,
         })
-        return { clients }
+        return { clients: clients.map(clientSummary) }
       },
     }),
 
@@ -61,7 +76,16 @@ export function assistantTools(role: Role) {
           table<IntakeForm>('intake_forms').list({ by: { client_id } }),
         ])
         if (!client) return { error: 'No such client' }
-        return { client, contacts, intake_forms: forms }
+        return {
+          client: { ...clientSummary(client), slug: client.slug },
+          contacts: contacts.map(c => ({
+            name: c.name, role: c.role, email: c.email, phone: c.phone,
+          })),
+          intake_forms: forms.map(f => ({
+            id: f.id, title: f.title, template_key: f.template_key,
+            status: f.status, sent_at: f.sent_at, submitted_at: f.submitted_at,
+          })),
+        }
       },
     }),
 
@@ -82,7 +106,15 @@ export function assistantTools(role: Role) {
           orderBy: [['created_at', 'desc']],
           limit: 100,
         })
-        return { since, count: leads.length, leads }
+        return {
+          since,
+          count: leads.length,
+          leads: leads.map(l => ({
+            id: l.id, created_at: l.created_at, fname: l.fname, lname: l.lname,
+            email: l.email, biz: l.biz, need: l.need, budget: l.budget,
+            timeline: l.timeline, source: l.source,
+          })),
+        }
       },
     }),
 
@@ -116,7 +148,11 @@ export function assistantTools(role: Role) {
           // and loses its item
           const keep = item && (!client_id || item.client_id === client_id)
           return {
-            ...r,
+            id: r.id,
+            platform: r.platform,
+            scheduled_at: r.scheduled_at,
+            publish_status: r.publish_status,
+            published_at: r.published_at,
             content_items: keep ? { ...item, clients: byClient.get(item.client_id) ?? null } : null,
           }
         })
@@ -137,8 +173,14 @@ export function assistantTools(role: Role) {
           orderBy: [['created_at', 'desc']],
           limit: 100,
         })
-        const forms = await attachOne(rows, 'client_id', 'clients', ['id', 'name'])
-        return { forms }
+        const joined = await attachOne(rows, 'client_id', 'clients', ['id', 'name'])
+        return {
+          forms: joined.map(f => ({
+            id: f.id, title: f.title, template_key: f.template_key, status: f.status,
+            sent_at: f.sent_at, first_opened_at: f.first_opened_at,
+            submitted_at: f.submitted_at, clients: f.clients,
+          })),
+        }
       },
     }),
 
@@ -210,9 +252,19 @@ export function assistantTools(role: Role) {
           }),
         ])
         return {
-          mailboxes,
-          recent_runs: runs,
-          recent_messages: picked,
+          // NEVER refresh_token_encrypted — it is a Gmail credential
+          mailboxes: mailboxes.map(m => ({
+            email: m.email, enabled: m.enabled, connected_at: m.connected_at,
+          })),
+          recent_runs: runs.map(r => ({
+            mailbox: r.mailbox, status: r.status, started_at: r.started_at,
+            scanned: r.scanned, claimed: r.claimed, leads_created: r.leads_created,
+            error: r.error,
+          })),
+          recent_messages: picked.map(m => ({
+            created_at: m.created_at, mailbox: m.mailbox, from_email: m.from_email,
+            subject: m.subject, status: m.status, is_lead: m.is_lead,
+          })),
         }
       },
     }),
@@ -222,7 +274,12 @@ export function assistantTools(role: Role) {
       inputSchema: z.object({}),
       execute: async () => {
         const team = await table<TeamUser>('team_users').list({ orderBy: [['name', 'asc']] })
-        return { team }
+        return {
+          team: team.map(u => ({
+            name: u.name, email: u.email, role: u.role,
+            employment_type: u.employment_type, active_status: u.active_status,
+          })),
+        }
       },
     }),
 

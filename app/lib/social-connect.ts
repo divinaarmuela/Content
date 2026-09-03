@@ -36,7 +36,9 @@ export async function connectLinkFor(
   let profileId = client.social_profile_id
   if (!profileId) {
     const created = await publisher.createProfile(client.name ?? `Client ${clientId.slice(0, 8)}`)
-    const live = await clients.get(clientId)
+    // `fresh`: the guard must see the network, not this request's own
+    // earlier answer, or the loser overwrites the winner's profile id
+    const live = await clients.get(clientId, { fresh: true })
     if (live?.social_profile_id) {
       profileId = live.social_profile_id
     } else {

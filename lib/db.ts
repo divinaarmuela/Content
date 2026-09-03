@@ -33,6 +33,15 @@ export type ListQuery<T> = {
   where?: (row: T) => boolean
   orderBy?: [keyof T & string, 'asc' | 'desc'][]
   limit?: number
+  /**
+   * Go to the network even inside a request cache, and replace what the cache
+   * holds with the answer.
+   *
+   * For a guard that re-reads a row it has already read: without this the
+   * second read resolves the SAME cached promise, so it can never observe a
+   * concurrent change and the check is vacuous.
+   */
+  fresh?: boolean
 }
 
 // `T extends Row` (where Row is just `{ id: string }`) lets `table<Client>(...)`
@@ -44,7 +53,7 @@ export type ListQuery<T> = {
 // argument to check it against.
 export interface Table<T extends Row> {
   name: TableName
-  get(id: string): Promise<T | null>
+  get(id: string, opts?: { fresh?: boolean }): Promise<T | null>
   list(q?: ListQuery<T>): Promise<T[]>
   count(q?: ListQuery<T>): Promise<number>
   insert(row: Omit<T, 'id'> & { id?: string }): Promise<T>
@@ -160,10 +169,17 @@ const als = new AsyncLocalStorage<Map<string, Promise<any>>>()
 export function withRequestCache<R>(fn: () => Promise<R>): Promise<R> {
   return als.run(new Map(), fn)
 }
-function cachedGet(path: string, query?: Record<string, string>): Promise<any> {
+function cachedGet(path: string, query?: Record<string, string>, fresh = false): Promise<any> {
   const store = als.getStore()
   const key = path + (query ? '?' + new URLSearchParams(query).toString() : '')
   if (!store) return rtdbFetch(path, { query })
+  if (fresh) {
+    // the fresh answer becomes the cached one: a guard that re-read the row is
+    // the most current thing this request knows about it
+    const p = rtdbFetch(path, { query })
+    store.set(key, p)
+    return p
+  }
   let p = store.get(key)
   if (!p) { p = rtdbFetch(path, { query }); store.set(key, p) }
   return p
@@ -216,7 +232,7 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
   const uniques = UNIQUE_COLUMNS[name] ?? []
   const naturalKey = NATURAL_KEYS[name]
 
-  async function readAll(by?: Partial<T>): Promise<T[]> {
+  async function readAll(by?: Partial<T>, fresh = false): Promise<T[]> {
     let node: any
     let rest: Partial<T> = by ?? {}
     if (by && Object.keys(by).length) {
@@ -229,12 +245,12 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
       if (idx >= 0) {
         const [col, val] = entries[idx]
         rest = Object.fromEntries(entries.filter((_, i) => i !== idx)) as Partial<T>
-        node = await cachedGet(base, { orderBy: JSON.stringify(col), equalTo: JSON.stringify(val) })
+        node = await cachedGet(base, { orderBy: JSON.stringify(col), equalTo: JSON.stringify(val) }, fresh)
       } else {
-        node = await cachedGet(base)
+        node = await cachedGet(base, undefined, fresh)
       }
     } else {
-      node = await cachedGet(base)
+      node = await cachedGet(base, undefined, fresh)
     }
     let rows = node ? Object.entries(node).map(([id, r]) => normalise<T>(name, id, r)) : []
     const restEntries = Object.entries(rest)
@@ -262,28 +278,33 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
 
   const t: Table<T> = {
     name,
-    async get(id) {
+    async get(id, opts) {
       // If the whole table is already cached for this request (a prior
       // list()/count() with no `by`), serve from it instead of a fresh GET —
       // that is the "touches the same table five times, pays once" contract.
+      // `fresh` opts out: a guard re-reading a row it already read must see
+      // the network, not its own earlier answer.
       const store = als.getStore()
-      const wholeTable = store?.get(base)
+      // a fresh read also drops the whole-table entry, so a later list() in
+      // this request cannot serve the version we have just proved stale
+      if (opts?.fresh) store?.delete(base)
+      const wholeTable = opts?.fresh ? undefined : store?.get(base)
       if (wholeTable) {
         const node = await wholeTable
         return node?.[id] ? normalise<T>(name, id, node[id]) : null
       }
-      const raw = await cachedGet(`${base}/${id}`)
+      const raw = await cachedGet(`${base}/${id}`, undefined, opts?.fresh)
       return raw ? normalise<T>(name, id, raw) : null
     },
     async list(q = {}) {
-      let rows = await readAll(q.by)
+      let rows = await readAll(q.by, q.fresh)
       if (q.where) rows = rows.filter(q.where)
       rows = sortRows(rows, q.orderBy)
       if (q.limit != null) rows = rows.slice(0, q.limit)
       return rows
     },
     async count(q = {}) {
-      let rows = await readAll(q.by)
+      let rows = await readAll(q.by, q.fresh)
       if (q.where) rows = rows.filter(q.where)
       return rows.length
     },

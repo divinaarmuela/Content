@@ -163,7 +163,7 @@ async function writeBrandProfile(
     // the row must still be where we merged from: a null column stays null, an
     // existing one stays at its rev — a concurrent scan or edit fails the guard,
     // which is re-checked immediately before the write
-    const live = await clients.get(clientId)
+    const live = await clients.get(clientId, { fresh: true })
     const unchangedSince = hadProfile
       ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
       : live?.brand_profile == null

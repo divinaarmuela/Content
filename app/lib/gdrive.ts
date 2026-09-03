@@ -102,41 +102,27 @@ const notConnected = (): DriveFailure =>
 
 // ── the connection row ────────────────────────────────────────────────────
 
-type ConnectionRow = {
-  account_email: string | null
-  account_name: string | null
-  refresh_token_encrypted: string | null
-  root_name: string | null
-  root_folder_id: string | null
-  connected_at: string | null
-  connected_by: string | null
-}
+/** ONE connection for the whole team; the row's primary key says so. */
+const TEAM = 'team'
 
 /**
- * The single connection row, or null.
- *
- * Read as "whatever row is there" rather than by id: there is exactly one, it
- * has been keyed 'team' since the first version, and an unreadable table means
- * "not connected" rather than a 500.
+ * The single connection row, or null. ONE connection for the whole team, so
+ * the row has been keyed 'team' since the first version. An unreadable row
+ * means "not connected" rather than a 500.
  */
-async function connectionRow(): Promise<DriveConnection | null> {
+async function connection(): Promise<DriveConnection | null> {
   try {
-    return (await table<DriveConnection>('drive_connection').list({ limit: 1 }))[0] ?? null
+    return await table<DriveConnection>('drive_connection').get(TEAM)
   } catch {
     return null
   }
 }
 
-async function connection(): Promise<ConnectionRow | null> {
-  return await connectionRow()
-}
-
 /** Write onto the one connection row, opening it the first time. */
 async function writeConnection(patch: Partial<DriveConnection>): Promise<void> {
   const rows = table<DriveConnection>('drive_connection')
-  const existing = await connectionRow()
-  if (existing) await rows.update(existing.id, patch)
-  else await table('drive_connection').insert({ id: 'team', ...patch })
+  if (await rows.get(TEAM)) await rows.update(TEAM, patch)
+  else await table('drive_connection').insert({ id: TEAM, ...patch })
 }
 
 /** The Workspace domain folders are shared with, or null for a personal

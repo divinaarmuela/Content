@@ -346,12 +346,23 @@ export async function insertBooking(
   },
 ): Promise<Booking> {
   const space_id = row.space_id ?? await spaceForResource(row.resource_id)
+  // the column defaults from supabase/booking.sql and booking_seats.sql —
+  // Postgres supplied these, and seat_no in particular is half of the
+  // no-overlap key, so a missing one would make every booking clash
+  const seat_no = row.seat_no ?? 1
   const free = await seatIsFree({
     spaceId: space_id,
-    seatNo: row.seat_no ?? null,
+    seatNo: seat_no,
     startAt: row.start_at,
     endAt: row.end_at,
   })
   if (!free) throw new DbError('unique', 'bookings_no_overlap: that seat is already booked')
-  return await table('bookings').insert({ ...row, space_id }) as unknown as Booking
+  return await table('bookings').insert({
+    status: 'confirmed',
+    payment_status: 'unpaid',
+    amount_cents: 0,
+    ...row,
+    seat_no,
+    space_id,
+  }) as unknown as Booking
 }

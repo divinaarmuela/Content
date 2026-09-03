@@ -61,7 +61,7 @@ const NATURAL_KEYS = {
   user_page_access: r => `${r.team_user_id}__${encodeKey(r.href)}`,
   asset_versions: r => `${r.item_id}__${r.version_number}`,
   client_brand: r => r.client_id,
-  drive_connection: () => 'singleton',
+  drive_connection: () => 'team',
   scan_settings: () => 'singleton',
   intake_settings: () => 'singleton',
   assistant_prefs: r => r.clerk_user_id,
@@ -70,7 +70,7 @@ const NATURAL_KEYS = {
   calendar_accounts: r => encodeKey(r.email),
   asana_project_map: r => r.project_gid,
   asana_tasks: r => r.gid,
-  asana_webhooks: r => r.gid ?? r.id,
+  asana_webhooks: r => r.webhook_gid ?? r.id,
 }
 
 export function rowToNode(table, row) {

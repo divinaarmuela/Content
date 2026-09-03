@@ -115,7 +115,7 @@ export async function ensureShootFoldersNow(batch: BatchLike): Promise<string | 
   // not overwrite each other's recorded folder — the first one to land wins
   // and the second's folder is simply an empty duplicate
   const batches = table<Batch>('batches')
-  const live = await batches.get(batch.id)
+  const live = await batches.get(batch.id, { fresh: true })
   if (live && live.drive_folder_id == null) {
     await batches.update(batch.id, { drive_folder_id: shoot.id, drive_url: url })
   }
@@ -295,14 +295,14 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
     const url = await shareWithDomain(made.id)
 
     const contentItems = table<ContentItem>('content_items')
-    const liveItem = await contentItems.get(item.id)
+    const liveItem = await contentItems.get(item.id, { fresh: true })
     if (liveItem && liveItem.drive_folder_id == null) {
       await contentItems.update(item.id, { drive_folder_id: made.id, drive_url: url })
     }
 
     // the master link, only if the editor has not set one
     if (url && !item.raw_assets_url) {
-      const fresh = await contentItems.get(item.id)
+      const fresh = await contentItems.get(item.id, { fresh: true })
       if (fresh && fresh.raw_assets_url == null) {
         await contentItems.update(item.id, { raw_assets_url: url })
       }

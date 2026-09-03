@@ -98,15 +98,17 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
 /**
  * One row per project in `asana_webhooks`.
  *
- * The table's key is its own uuid, so the "one row per project_gid" rule that
- * `onConflict: 'project_gid'` used to express is applied here: find the
- * project's row and patch it, otherwise open a new one.
+ * The row's key is the webhook's own gid, and `project_gid` is what the old
+ * `onConflict: 'project_gid'` keyed on, so the rule is applied here: find the
+ * project's row and patch it, otherwise open a new one. A row opened before
+ * Asana has issued a gid (the sync-token path) gets one minted, which is what
+ * the natural key falls back to.
  */
 async function upsertWebhook(patch: Partial<AsanaWebhook> & { project_gid: string }): Promise<void> {
   const webhooks = table<AsanaWebhook>('asana_webhooks')
   const existing = (await webhooks.list({ where: h => h.project_gid === patch.project_gid, limit: 1 }))[0]
   if (existing) await webhooks.update(existing.id, patch)
-  else await table('asana_webhooks').insert({ id: randomUUID(), ...patch })
+  else await table('asana_webhooks').insert({ ...patch, id: patch.webhook_gid ?? randomUUID() })
 }
 
 /** Reconcile every tracked project. One project's failure never stops the rest. */

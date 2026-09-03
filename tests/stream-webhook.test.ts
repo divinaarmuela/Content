@@ -1,7 +1,8 @@
 import { createHmac } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { seedDb } from './helpers/fake-db'
-import type { Row } from '@/lib/db-types'
+import { table } from '@/lib/db'
+import type { Row, VideoPreview } from '@/lib/db-types'
 
 /**
  * The Stream webhook, at its only real job: deciding whether to believe a
@@ -43,12 +44,15 @@ const preview = (id: string, uid: string): Row => ({
   source_url: `https://media.mdmmarketing.com.au/${id}.mp4`,
   stream_uid: uid,
   state: 'processing',
+  error: 'a stale reason from an earlier attempt',
   updated_at: '2026-09-01T00:00:00.000Z',
 } as unknown as Row)
 
 let fake: ReturnType<typeof seedDb>
-const rowFor = (uid: string) =>
-  (fake.rows('video_previews') as unknown as { stream_uid: string }[]).find(r => r.stream_uid === uid)
+/** read back the way the app reads it, so an absent field is the `null` the
+ *  helper normalises it to rather than a missing key */
+const rowFor = async (uid: string) =>
+  (await table<VideoPreview>('video_previews').list({ where: r => r.stream_uid === uid }))[0]
 
 beforeEach(() => {
   fake = seedDb({
@@ -67,14 +71,16 @@ describe('with a secret configured', () => {
   it('accepts a correctly signed delivery and records the encode', async () => {
     const res = await handle(READY, sign(READY))
     expect(res.status).toBe(200)
-    expect(rowFor('deadbeefcafe')).toMatchObject({
+    expect(await rowFor('deadbeefcafe')).toMatchObject({
       state: 'ready',
       playback_hls: 'https://customer-abc123.cloudflarestream.com/deadbeefcafe/manifest/video.m3u8',
       width: 1080,
       height: 1920,
+      // a successful encode clears whatever error the row was carrying
+      error: null,
     })
     // the other encode is untouched: a delivery names one uid
-    expect(rowFor('u1')).toMatchObject({ state: 'processing' })
+    expect(await rowFor('u1')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a body that was changed after signing', async () => {
@@ -82,13 +88,13 @@ describe('with a secret configured', () => {
     const tampered = READY.replace('deadbeefcafe', 'someoneelsesuid')
     const res = await handle(tampered, header)
     expect(res.status).toBe(401)
-    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
+    expect(await rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a signature made with the wrong secret', async () => {
     const res = await handle(READY, sign(READY, nowSec(), 'not-our-secret'))
     expect(res.status).toBe(401)
-    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
+    expect(await rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('refuses a replay of a delivery from an hour ago', async () => {
@@ -102,7 +108,7 @@ describe('with a secret configured', () => {
       const res = await handle(READY, header)
       expect(res.status).toBe(401)
     }
-    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
+    expect(await rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 })
 
@@ -110,13 +116,13 @@ describe('with no secret configured', () => {
   it('accepts an unsigned delivery — the poller reaches the same answer anyway', async () => {
     const res = await handle(READY, null)
     expect(res.status).toBe(200)
-    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'ready' })
+    expect(await rowFor('deadbeefcafe')).toMatchObject({ state: 'ready' })
   })
 
   it('still refuses to invent state from a payload with no video', async () => {
     expect((await handle('{"hello":"world"}', null)).status).toBe(400)
     expect((await handle('not json at all', null)).status).toBe(400)
-    expect(rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
+    expect(await rowFor('deadbeefcafe')).toMatchObject({ state: 'processing' })
   })
 
   it('records a failed encode with the reason Cloudflare gave', async () => {
@@ -125,6 +131,6 @@ describe('with no secret configured', () => {
     })
     const res = await handle(body, null)
     expect(res.status).toBe(200)
-    expect(rowFor('u1')).toMatchObject({ state: 'error', error: 'The file is not a video' })
+    expect(await rowFor('u1')).toMatchObject({ state: 'error', error: 'The file is not a video' })
   })
 })

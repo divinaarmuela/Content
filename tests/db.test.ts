@@ -98,6 +98,37 @@ describe('withRequestCache', () => {
     await table('clients').list(); await table('clients').list()
     expect(fake.calls().length - n0).toBe(2)
   })
+  it('fresh:true re-reads past the cache, and what it finds replaces it', async () => {
+    await withRequestCache(async () => {
+      const n0 = fake.calls().length
+      expect((await table<Client>('clients').get('c1'))?.name).toBe('Acme')
+      // somebody else's write, behind this request's back
+      fake.tree().mdm.tables.clients.c1.name = 'Renamed elsewhere'
+
+      // the cached read cannot see it — which is why a guard needs `fresh`
+      expect((await table<Client>('clients').get('c1'))?.name).toBe('Acme')
+      expect(fake.calls().length - n0).toBe(1)
+
+      expect((await table<Client>('clients').get('c1', { fresh: true }))?.name)
+        .toBe('Renamed elsewhere')
+      expect(fake.calls().length - n0).toBe(2)
+
+      // and the fresh answer is now the cached one
+      expect((await table<Client>('clients').get('c1'))?.name).toBe('Renamed elsewhere')
+      expect(fake.calls().length - n0).toBe(2)
+    })
+  })
+  it('fresh:true works for list() too', async () => {
+    await withRequestCache(async () => {
+      expect((await table<Client>('clients').list()).map(c => c.name).sort())
+        .toEqual(['Acme', 'Bee'])
+      fake.tree().mdm.tables.clients.c3 = { id: 'c3', name: 'Cee' }
+
+      expect((await table<Client>('clients').list())).toHaveLength(2)
+      expect((await table<Client>('clients').list({ fresh: true }))).toHaveLength(3)
+      expect((await table<Client>('clients').list())).toHaveLength(3)
+    })
+  })
 })
 
 describe('errors and misc', () => {

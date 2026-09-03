@@ -154,7 +154,7 @@ export async function submitIntake(token: string): Promise<IntakeForm | null> {
 
   // only the caller who still sees an unsubmitted status writes, so a
   // double-click cannot send two notifications
-  const live = await forms().get(form.id)
+  const live = await forms().get(form.id, { fresh: true })
   if (!live || live.status === 'submitted') return form
   const updated = await forms().update(form.id, {
     status: 'submitted', submitted_at: new Date().toISOString(),
@@ -178,7 +178,7 @@ export async function rotateIntakeToken(formId: string): Promise<string> {
 /** Marks the form as sent. Only moves a draft, so re-copying the link later
  *  never rewrites the date it actually went out. */
 export async function markIntakeSent(formId: string): Promise<void> {
-  const live = await forms().get(formId)
+  const live = await forms().get(formId, { fresh: true })
   if (live?.status !== 'draft') return
   await forms().update(formId, { status: 'sent', sent_at: new Date().toISOString() })
 }
@@ -205,7 +205,7 @@ export async function updateIntakeDefinition(
   // ids, so editing questions mid-fill never orphans what the client typed;
   // a submitted form is a document a shot list gets built on, so that one
   // stays read-only until deliberately reopened.
-  const live = await forms().get(formId)
+  const live = await forms().get(formId, { fresh: true })
   if (!live || live.status === 'submitted') return false
   return Boolean(await forms().update(formId, { definition }))
 }

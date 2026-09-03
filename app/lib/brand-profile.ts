@@ -44,7 +44,7 @@ export async function loadBrandProfile(clientId: string, seedBy: string): Promis
     profile = scanHasContent ? fromScan(scanProfile, lastScanAt) : emptyProfile()
     profile.rev = 1
     if (scanHasContent) {
-      const live = await clients.get(clientId)
+      const live = await clients.get(clientId, { fresh: true })
       if (live && live.brand_profile == null) {
         await clients.update(clientId, {
           brand_profile: profile,
@@ -91,7 +91,7 @@ export async function applyScanToEditableProfile(
     const next: BrandProfile = { ...profile, rev: seen + 1 }
     // rev guard: re-read immediately before the write and only commit if the
     // revision this merge was computed from is still the one on the row
-    const live = await clients.get(clientId)
+    const live = await clients.get(clientId, { fresh: true })
     const unchangedSince = hadProfile
       ? live?.brand_profile != null && normaliseProfile(live.brand_profile).rev === seen
       : live?.brand_profile == null

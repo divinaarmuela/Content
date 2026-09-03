@@ -418,25 +418,26 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
 
   const since = new Date(Date.now() - SWEEP_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
-  let items: ContentItem[] = []
-  let versions: AssetVersion[] = []
-  try {
-    [items, versions] = await Promise.all([
-      table<ContentItem>('content_items').list({
-        where: r => r.updated_at >= since,
-        orderBy: [['updated_at', 'desc']],
-        limit: SWEEP_ITEM_LIMIT,
-      }),
-      table<AssetVersion>('asset_versions').list({
-        where: r => r.created_at >= since,
-        orderBy: [['created_at', 'desc']],
-        limit: SWEEP_ITEM_LIMIT,
-      }),
-    ])
-  } catch (e) {
-    console.error('[stream] sweep could not read work:', e instanceof Error ? e.message : e)
+  // read separately: one side failing must still let the other be swept,
+  // which is what the two independent error checks used to give
+  const [itemsRes, versionsRes] = await Promise.allSettled([
+    table<ContentItem>('content_items').list({
+      where: r => r.updated_at >= since,
+      orderBy: [['updated_at', 'desc']],
+      limit: SWEEP_ITEM_LIMIT,
+    }),
+    table<AssetVersion>('asset_versions').list({
+      where: r => r.created_at >= since,
+      orderBy: [['created_at', 'desc']],
+      limit: SWEEP_ITEM_LIMIT,
+    }),
+  ])
+  if (itemsRes.status === 'rejected' && versionsRes.status === 'rejected') {
+    console.error('[stream] sweep could not read work:', itemsRes.reason)
     return empty
   }
+  const items = itemsRes.status === 'fulfilled' ? itemsRes.value : []
+  const versions = versionsRes.status === 'fulfilled' ? versionsRes.value : []
 
   const candidates: string[] = []
   for (const row of items) {

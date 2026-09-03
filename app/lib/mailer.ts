@@ -232,7 +232,9 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     // a crash >10 min ago) must not block the event forever. Re-claim it with
     // an optimistic guard: exactly one retrier wins, a sent row stays sent.
     const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString()
-    const held = (await log.list({ where: r => r.dedupe_key === dedupe_key, limit: 1 }))[0]
+    const held = (await log.list({
+      where: r => r.dedupe_key === dedupe_key, limit: 1, fresh: true,
+    }))[0]
     const reclaimable = !!held && (
       held.status === 'failed'
       || (held.status === 'pending' && held.created_at < staleBefore)
