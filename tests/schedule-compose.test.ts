@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   APPROVAL_LINE, addToPost, clockPillLabel, composerReducer, footerActions,
   inPost, initialComposer, joinClock, limitsLine, moreOptionsFor, moveInPost,
-  removeFromPost, replaceInPost, splitClock, to12, to24,
-  NEW_VERSION_NOTICE, type ComposerState,
+  readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
+  to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
 } from '@/app/lib/schedule-compose-core'
+import { isPageId, kindTakesLocation, toPlatformData } from '@/app/lib/publish-core'
 import { SOCIAL_POST_STATUSES } from '@/app/lib/social-schedule-core'
 import type { Slide } from '@/app/lib/version-files-core'
 
@@ -68,6 +69,59 @@ describe('the window holds one composition', () => {
     const s = base()
     expect(composerReducer(s, { type: 'channel', id: 'acc1', on: true })).toBe(s)
   })
+
+  // THE ONE THAT COST A CLIENT'S APPROVAL.
+  //
+  // The window opened with an empty caption and empty per-channel extras even
+  // when the post had both. Pressing Schedule then PATCHed the empties over
+  // them, the server read that as a content change, and the client's posting
+  // approval was taken back — from a click that was only meant to check the
+  // time.
+  it('opens holding everything the post already has', () => {
+    const seeded = initialComposer({
+      itemId: 'i1',
+      postId: 'p1',
+      slides: [slide('a')],
+      caption: 'Spring is on the menu.',
+      channels: ['acc1'],
+      scheduledFor: '2026-09-08T08:30:00.000Z',
+      perChannel: { acc1: { firstComment: '#brunch', locationId: '102938475610293' } },
+    })
+    expect(seeded.caption).toBe('Spring is on the menu.')
+    expect(seeded.perChannel.acc1.firstComment).toBe('#brunch')
+    expect(seeded.postId).toBe('p1')
+    // seeding is not an edit
+    expect(seeded.dirty).toBe(false)
+  })
+
+  it('takes the stored per-channel blob apart without trusting it', () => {
+    expect(readPerChannel({
+      acc1: {
+        caption: 'hi', kind: 'reel', firstComment: '#x', shareToFeed: true,
+        locationId: '102938475610293', collaborators: ['a', 'b', 'c', 'd'],
+        somethingElse: 'dropped',
+      },
+      acc2: 'not an object',
+    })).toEqual({
+      acc1: {
+        caption: 'hi', kind: 'reel', firstComment: '#x', shareToFeed: true,
+        locationId: '102938475610293', collaborators: ['a', 'b', 'c'],
+      },
+    })
+    expect(readPerChannel(null)).toEqual({})
+    expect(readPerChannel([1, 2])).toEqual({})
+  })
+
+  it('a load replaces what is on screen and clears dirty; nothing else does', () => {
+    const typed = composerReducer(base(), { type: 'caption', caption: 'mine' })
+    const loaded = composerReducer(typed, {
+      type: 'loaded',
+      state: { caption: 'theirs', perChannel: { acc1: { firstComment: '#x' } } },
+    })
+    expect(loaded.caption).toBe('theirs')
+    expect(loaded.perChannel.acc1.firstComment).toBe('#x')
+    expect(loaded.dirty).toBe(false)
+  })
 })
 
 describe('what each channel will take, said in words', () => {
@@ -98,7 +152,7 @@ describe('what each channel will take, said in words', () => {
 describe('More options never offers what the provider cannot do', () => {
   it('offers a first comment where Zernio takes one', () => {
     expect(moreOptionsFor(['instagram']).map(o => o.key))
-      .toEqual(['firstComment', 'collaborators', 'shareToFeed'])
+      .toEqual(['firstComment', 'collaborators', 'shareToFeed', 'location'])
   })
 
   it('does not offer collaborators on a network that has none', () => {
@@ -108,6 +162,76 @@ describe('More options never offers what the provider cannot do', () => {
   it('names the channels a row applies to, so no row is a mystery', () => {
     const rows = moreOptionsFor(['instagram', 'linkedin'])
     expect(rows.find(r => r.key === 'firstComment')?.platforms).toEqual(['instagram'])
+  })
+
+  it('takes the location row away on a Story', () => {
+    // Instagram REFUSES a Story carrying a location rather than ignoring it,
+    // so offering the field there is offering a post that cannot exist
+    expect(moreOptionsFor(['instagram'], 'story').map(o => o.key)).not.toContain('location')
+    for (const kind of ['feed', 'reel', 'carousel'] as const) {
+      expect(moreOptionsFor(['instagram'], kind).map(o => o.key)).toContain('location')
+    }
+  })
+
+  it('never offers a location anywhere but Instagram', () => {
+    for (const p of ['facebook', 'tiktok', 'linkedin', 'threads', 'youtube']) {
+      expect(moreOptionsFor([p]).map(o => o.key)).not.toContain('location')
+    }
+  })
+})
+
+describe('the places a client tags posts at', () => {
+  it('takes a Facebook Page id and refuses everything else', () => {
+    expect(isPageId('102938475610293')).toBe(true)
+    // the mistake everybody makes: the @name, which Instagram answers by
+    // refusing the post hours later with nobody watching
+    expect(isPageId('@suikitchen')).toBe(false)
+    expect(isPageId('Sui Kitchen')).toBe(false)
+    expect(isPageId('123')).toBe(false)
+    expect(isPageId(null)).toBe(false)
+  })
+
+  it('cleans a saved list rather than trusting it', () => {
+    expect(readLocations([
+      { name: 'Fitzroy', pageId: '102938475610293' },
+      { name: '', pageId: '102938475610294' },
+      { name: 'No id', pageId: 'suikitchen' },
+      { name: 'Same id again', pageId: '102938475610293' },
+    ])).toEqual([{ name: 'Fitzroy', pageId: '102938475610293' }])
+  })
+
+  it('reads a row saved under the database spelling too', () => {
+    expect(readLocations([{ name: 'Fitzroy', page_id: '102938475610293' }]))
+      .toEqual([{ name: 'Fitzroy', pageId: '102938475610293' }])
+  })
+
+  it('is a list, never null — nothing has to guard for both', () => {
+    expect(readLocations(null)).toEqual([])
+    expect(readLocations('nope')).toEqual([])
+  })
+
+  it('explains where the number comes from without saying "Graph API"', () => {
+    expect(PAGE_ID_HELP).toMatch(/Facebook Page/)
+    expect(PAGE_ID_HELP).toMatch(/not the @name/)
+    expect(PAGE_ID_HELP.toLowerCase()).not.toContain('api')
+  })
+
+  it('sends the place to Instagram, and only to Instagram', () => {
+    const o = { kind: 'feed' as const, locationId: '102938475610293' }
+    expect(toPlatformData(o, 'instagram')).toMatchObject({ locationId: '102938475610293' })
+    expect(toPlatformData(o, 'facebook')?.locationId).toBeUndefined()
+    expect(toPlatformData(o, 'tiktok')?.locationId).toBeUndefined()
+  })
+
+  it('never sends one on a Story, which Instagram would refuse', () => {
+    expect(kindTakesLocation('story')).toBe(false)
+    expect(toPlatformData({ kind: 'story', locationId: '102938475610293' }, 'instagram')?.locationId)
+      .toBeUndefined()
+  })
+
+  it('drops a place name typed into the id box rather than posting it', () => {
+    expect(toPlatformData({ kind: 'feed', locationId: 'Sui Kitchen' }, 'instagram'))
+      .toBeNull()
   })
 })
 

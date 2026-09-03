@@ -71,6 +71,15 @@ export type RailMedia = {
   reason: string | null
   /** a post already uses this item — one post, one item */
   used: boolean
+  /**
+   * Every file this piece has EVER held, across every version.
+   *
+   * Not decoration: it is how the composer tells "somebody brought a new file
+   * in" from "somebody dragged slide 3 to the front". Judging that against the
+   * APPROVED files alone said "all new" the moment the piece went back to the
+   * client, and every reorder after that made another version.
+   */
+  knownUrls: string[]
   updatedAt: string
 }
 
@@ -218,17 +227,19 @@ export function useSchedulePosts(
     const usedItems = new Set(posts.rows.map(p => p.item_id))
     return scopedItems
       .map(item => {
-        const elig = eligibility(item, versionsByItem.get(item.id) ?? [])
+        const itemVersions = versionsByItem.get(item.id) ?? []
+        const elig = eligibility(item, itemVersions)
         const slides = elig.ok ? elig.slides : []
         return {
           itemId: item.id,
           title: item.title,
           contentType: String(item.content_type ?? ''),
           slides,
-          cover: slides[0] ?? coverOf(versionsByItem.get(item.id) ?? []),
+          cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
           reason: elig.ok ? null : elig.reason,
           used: usedItems.has(item.id),
+          knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           updatedAt: String(item.updated_at ?? ''),
         }
       })

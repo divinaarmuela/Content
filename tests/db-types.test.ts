@@ -66,6 +66,18 @@ describe('db-types (generated)', () => {
     expect(UPDATED_AT_TABLES.has('social_posts')).toBe(true)
   })
 
+  // A ghost COLUMN, not a ghost table: the client row is real SQL, and this
+  // one field was added by the generator because Instagram's location is a
+  // Facebook Page id nobody can look up at post time.
+  it('knows where a client keeps the places it tags posts at', () => {
+    expect(TABLE_COLUMNS.clients).toContain('instagram_locations')
+    // it is a list, always — an empty one reads back as [] rather than null,
+    // so no caller has to guard for both
+    expect(NULLABLE_COLUMNS.clients).not.toContain('instagram_locations')
+    expect(JSON_COLUMNS.clients).toContain('instagram_locations')
+    expect(JSON_ARRAY_COLUMNS.clients).toContain('instagram_locations')
+  })
+
   it('knows the calendar note table', () => {
     expect(TABLE_COLUMNS.schedule_notes).toEqual([
       'id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at',

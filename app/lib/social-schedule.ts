@@ -19,14 +19,14 @@ import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { LIVE_JOB_STATUSES, publishLockKey, queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
 import {
-  isPlatform, validatePost,
+  isPageId, isPlatform, validatePost,
   type MediaItem, type PostKind, type Platform, type Target,
 } from './publish-core'
 import {
   applySlideLimit, canReschedule, eligibility, mirrorStatus, validateComposition,
   type SocialPostStatus,
 } from './social-schedule-core'
-import { normaliseSlides, slidesSatisfyType, type Slide } from './version-files-core'
+import { normaliseSlides, slidesOf, slidesSatisfyType, type Slide } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { previewVideos } from './stream'
@@ -85,17 +85,46 @@ const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 const asObject = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 
-/** The composer's per-channel overrides, read tolerantly off the stored json. */
-export type PerChannel = Record<string, { caption?: string; kind?: string; slides?: Slide[] }>
+/**
+ * The composer's per-channel overrides, read tolerantly off the stored json.
+ *
+ * Everything here has to survive BOTH ways: what this drops is what the
+ * composer's "More options" collect and the provider never receives — a
+ * control that silently does nothing, which is worse than not having it.
+ */
+export type PerChannel = Record<string, {
+  caption?: string
+  kind?: string
+  slides?: Slide[]
+  /** posted the moment the post is live — the usual place for hashtags */
+  firstComment?: string
+  /** up to three usernames (Instagram Business/Creator accounts) */
+  collaborators?: string[]
+  /** a Reel that also shows in the main feed */
+  shareToFeed?: boolean
+  /** the numeric Facebook Page id of the place — Instagram only, never on a
+   *  Story, both of which `toPlatformData` enforces on the way out */
+  locationId?: string
+}>
 
 const readPerChannel = (v: unknown): PerChannel => {
   const out: PerChannel = {}
   for (const [k, raw] of Object.entries(asObject(v))) {
     const o = asObject(raw)
+    const collaborators = Array.isArray(o.collaborators)
+      ? o.collaborators.map(String).map(x => x.trim().replace(/^@/, '')).filter(Boolean).slice(0, 3)
+      : []
     out[k] = {
       ...(typeof o.caption === 'string' ? { caption: o.caption } : {}),
       ...(typeof o.kind === 'string' ? { kind: o.kind } : {}),
       ...(Array.isArray(o.slides) ? { slides: o.slides as Slide[] } : {}),
+      ...(typeof o.firstComment === 'string' && o.firstComment.trim()
+        ? { firstComment: o.firstComment } : {}),
+      ...(collaborators.length > 0 ? { collaborators } : {}),
+      ...(typeof o.shareToFeed === 'boolean' ? { shareToFeed: o.shareToFeed } : {}),
+      // a place NAME typed into the id box is the mistake people make, and
+      // Instagram answers it by refusing the post hours later — dropped here
+      ...(isPageId(o.locationId as string) ? { locationId: String(o.locationId).trim() } : {}),
     }
   }
   return out
@@ -538,6 +567,8 @@ export type AddMediaResult = {
   slides: Slide[]
   /** the item's status after this — 'client_review' when it went back */
   status: string
+  /** did this actually make a version, or was it only a reorder? */
+  created: boolean
   /** the one sentence to show in the composer */
   message: string
 }
@@ -563,6 +594,16 @@ export type AddMediaResult = {
  * The composer then shows "Waiting for approval" until the client signs the
  * new version off, which is exactly what the picker's footer said would
  * happen.
+ *
+ * -- ONLY A GENUINELY NEW FILE MAKES A VERSION --
+ *
+ * The trigger is a FILE THIS ITEM HAS NEVER HELD, judged against every
+ * version of it -- not against "the approved version", which is empty the
+ * moment the piece goes back to the client. Without that, reopening the
+ * picker to drag one slide left made v5, dragging it back made v6, each with
+ * its own Drive mirror and its own encode, and the client's portal filled
+ * with versions that differed only in slide order. A reorder or a removal is
+ * an edit of the post and nothing more.
  */
 export async function addMediaVersion(
   user: TeamUser,
@@ -576,6 +617,29 @@ export async function addMediaVersion(
   const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
   if (shapeProblem) throw new ComposeError([shapeProblem])
 
+  // every file this item has EVER held, across every version -- the honest
+  // test of "has the client ever been shown this picture"
+  const versions = await versionsOf(item.id)
+  const known = new Set(versions.flatMap(v => slidesOf(v).map(s => s.url)))
+  const fresh = slides.filter(s => !known.has(s.url))
+
+  const postId = input.post_id ? String(input.post_id) : null
+  const stamp = nowIso()
+
+  // -- nothing new: this is an edit of the post, not a version --
+  if (fresh.length === 0) {
+    if (postId) await claimPostSlides(postId, item.id, slides, null, null, stamp)
+    announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
+    const current = versions.reduce((n, v) => Math.max(n, Number(v.version_number ?? 0)), 0)
+    return {
+      version_number: current,
+      slides,
+      status: String(item.status),
+      created: false,
+      message: 'Saved. Nothing new was added, so the client does not need to look again.',
+    }
+  }
+
   const version = await addVersion(user, item.id, { file_url: slides[0].url, files: slides })
   const number = Number(version.version_number ?? 0)
   mirrorVersionSlides(item.id, number, slides)
@@ -587,7 +651,8 @@ export async function addMediaVersion(
   let status = String(item.status)
   if (status === 'approved_for_scheduling') {
     try {
-      const moved = await performTransition(user, item as never, 'client_review')
+      // `auto: true` -- this edge is the app's own move; nobody may press it
+      const moved = await performTransition(user, item as never, 'client_review', { auto: true })
       status = String((moved as { status?: string }).status ?? status)
     } catch (e) {
       console.error('new media on an approved piece — could not send it back:', e)
@@ -604,19 +669,8 @@ export async function addMediaVersion(
         : null).catch(() => ({ claimed: false }))
   }
 
-  // the post keeps the arrangement. Claimed rather than read-then-written, and
-  // only while the post is still something a person could change.
-  const postId = input.post_id ? String(input.post_id) : null
   if (postId) {
-    const stamp = nowIso()
-    await posts().claim(postId, cur =>
-      cur && cur.item_id === item.id
-        && !SETTLED.includes(String(cur.status)) && cur.status !== 'scheduled'
-        ? {
-          ...cur, slides, version_id: version.id ?? null, version_number: number,
-          status: 'draft', sent_at: null, updated_at: stamp,
-        } as unknown as SocialPost
-        : null)
+    await claimPostSlides(postId, item.id, slides, version.id ?? null, number, stamp)
   }
 
   announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
@@ -625,10 +679,32 @@ export async function addMediaVersion(
     version_number: number,
     slides,
     status,
+    created: true,
     message: status === 'client_review'
       ? `Saved as version ${number}. The client has to approve it before this post can be sent.`
       : `Saved as version ${number}.`,
   }
+}
+
+/** The post keeps the arrangement. Claimed rather than read-then-written, and
+ *  only while the post is still something a person could change. */
+async function claimPostSlides(
+  postId: string, itemId: string, slides: Slide[],
+  versionId: string | null, versionNumber: number | null, stamp: string,
+): Promise<void> {
+  await posts().claim(postId, cur =>
+    cur && cur.item_id === itemId
+      && !SETTLED.includes(String(cur.status)) && cur.status !== 'scheduled'
+      ? {
+        ...cur,
+        slides,
+        ...(versionId === null ? {} : { version_id: versionId }),
+        ...(versionNumber === null ? {} : { version_number: versionNumber }),
+        // a NEW version un-sends the post; a reorder leaves it where it stood
+        ...(versionNumber === null ? {} : { status: 'draft', sent_at: null }),
+        updated_at: stamp,
+      } as unknown as SocialPost
+      : null)
 }
 
 /* ── approval ───────────────────────────────────────────────────────────── */
@@ -820,6 +896,13 @@ function targetsFor(post: PlannedPost, accounts: SocialAccount[]): Target[] {
     const options: Target['options'] = {}
     if (own.kind) options.kind = own.kind as PostKind
     if (own.caption?.trim()) options.caption = own.caption
+    // the extras the composer collects. `toPlatformData` decides where each
+    // one is actually allowed — a location goes to Instagram and never to a
+    // Story — so nothing here has to know a platform's rules.
+    if (own.firstComment?.trim()) options.firstComment = own.firstComment
+    if (own.collaborators?.length) options.collaborators = own.collaborators
+    if (own.shareToFeed !== undefined) options.shareToFeed = own.shareToFeed
+    if (own.locationId) options.locationId = own.locationId
     // a channel whose set differs from the shared one carries its own media
     if (JSON.stringify(trimmed) !== JSON.stringify(post.slides)) options.media = mediaOf(trimmed)
     out.push({

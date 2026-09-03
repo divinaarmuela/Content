@@ -271,9 +271,34 @@ export type PostOptions = {
    * limitation, so no provider can offer them.
    */
   userTags?: UserTag[]
+  /**
+   * Tag the post to a place — Instagram only, sent as `locationId`.
+   *
+   * It is a NUMERIC FACEBOOK PAGE ID, not a place name and not an Instagram
+   * handle: Instagram's own location index is the set of Facebook Pages, and
+   * neither the Graph API nor Zernio exposes a place SEARCH, so the id has to
+   * be known in advance (which is why a client keeps a saved list of theirs).
+   *
+   * Feed posts, Reels and carousels take it. STORIES DO NOT — Instagram
+   * rejects the post rather than ignoring the field — so `toPlatformData`
+   * drops it there rather than sending a post that cannot exist.
+   */
+  locationId?: string
 }
 
 export type UserTag = { username: string; x?: number; y?: number }
+
+/** Is `v` a Facebook Page id — digits, nothing else? The whole validation
+ *  there is: a name typed into the box is the mistake to catch, and it is
+ *  caught by the shape. */
+export function isPageId(v: string | null | undefined): boolean {
+  return /^\d{5,25}$/.test(String(v ?? '').trim())
+}
+
+/** May a post of this kind carry a place at all? */
+export function kindTakesLocation(kind: PostKind | undefined): boolean {
+  return kind !== 'story'
+}
 
 /** Do coordinates make any difference for this kind of post? */
 export function tagsAcceptCoordinates(kind: PostKind | undefined): boolean {
@@ -371,6 +396,13 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   if (o.thumbnailUrl) out.instagramThumbnail = o.thumbnailUrl
   if (typeof o.thumbOffset === 'number') out.thumbOffset = o.thumbOffset
   if (o.isAiGenerated) out.isAiGenerated = true
+  // Instagram only, and never on a Story: Instagram REFUSES a Story carrying
+  // a location rather than ignoring it, so sending it there would turn a
+  // harmless extra into a post that never goes out.
+  if (o.locationId && platform === 'instagram' && kindTakesLocation(o.kind)) {
+    const id = String(o.locationId).trim()
+    if (isPageId(id)) out.locationId = id
+  }
 
   if (o.userTags?.length) {
     const withCoords = tagsAcceptCoordinates(o.kind)

@@ -106,6 +106,10 @@ export default function TimePicker({
             onSelect={d => { if (d) set({ dayKey: keyOf(d) }) }}
             showOutsideDays
             weekStartsOn={1}
+            // a day that has gone cannot hold a post. Refusing it at save time
+            // with "That time has already gone" is a correct message about a
+            // click that should never have been possible.
+            disabled={dayOf(today) ? { before: dayOf(today) as Date } : undefined}
             classNames={{
               months: 'flex flex-col',
               month: 'space-y-2',

@@ -135,7 +135,15 @@ for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 //     answer that once a row has been reclaimed: the winner's write does not
 //     move it, so the next retrier would judge the row stale again and send
 //     the same email twice. Staleness is judged on claimed_at ?? created_at.
-const GHOST_COLUMNS = { notification_log: [['claimed_at', { type: 'string', nullable: true }]] }
+//   clients.instagram_locations — the places this client tags posts at, as
+//     [{ name, pageId }]. Instagram's location is a NUMERIC FACEBOOK PAGE ID
+//     and neither the Graph API nor Zernio has a place search, so the ids
+//     have to be looked up once by a person and kept; without this list every
+//     scheduler would be retyping a 15-digit number from a Facebook page.
+const GHOST_COLUMNS = {
+  notification_log: [['claimed_at', { type: 'string', nullable: true }]],
+  clients: [['instagram_locations', col('unknown', false, true, true)]],
+}
 for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {
   const existing = tables.get(t)
   if (existing) for (const [c, def] of cols) if (!existing.has(c)) existing.set(c, def)

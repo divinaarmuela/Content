@@ -15,6 +15,7 @@ import { shouldAutoWrap } from './shoot-lifecycle-core'
 import {
   actingRoles,
   checkTransitionAs,
+  clientArrivalLine,
   versionSatisfiesSubmission,
   TRANSITIONS,
   TRANSITION_NOTIFICATIONS,
@@ -416,6 +417,10 @@ export async function performTransition(
      *  "this is scheduled"; the transition it performs would then say the same
      *  thing again, to the same inboxes, in different words. */
     skipAudiences?: Audience[]
+    /** this transition is the APP's own move, not a person pressing a button
+     *  — the only way past an `auto` edge. Two callers: the versions route,
+     *  and the schedule composer's new-media path. */
+    auto?: boolean
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -469,7 +474,7 @@ export async function performTransition(
     : isBriefTask
       ? checkBriefTaskTransitionAs(hats, from, to)
       : isInternal ? checkTaskTransitionAs(hats, from, to)
-      : checkTransitionAs(hats, from, to)
+      : checkTransitionAs(hats, from, to, { auto: opts?.auto })
   if (!check.ok) throw new AuthzError(check.reason, 403)
 
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
@@ -692,7 +697,9 @@ export async function performTransition(
                 // the portal shows each in its own place
                 ? `<p>Your shoot plan for <strong>${item.title}</strong> is ready for you to look over.</p>` +
                   `<p>Open your portal to approve it or tell us what to change — it&rsquo;s under Shoot plans.</p>`
-                : `<p><strong>${item.title}</strong> is ready for your review.</p>`
+                // a piece coming BACK from approved carries a different
+                // sentence: they already said yes to the old version once
+                : `<p><strong>${item.title}</strong> — ${clientArrivalLine(from)}</p>`
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")

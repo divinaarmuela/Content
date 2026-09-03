@@ -53,6 +53,9 @@ export type DriveListing =
  * with a heap error nobody can act on — so it is refused up front, in words,
  * with the path that does work (the item page's upload, which streams).
  */
+// ACCEPTED LIMITATION: one 100 MB Buffer per import, and `maxDuration = 300`
+// on the route — two of these at once in one function instance is the memory
+// ceiling. A streaming R2 multipart upload is what lifts it.
 export const DRIVE_IMPORT_LIMIT_BYTES = 100 * 1024 * 1024
 
 const MEDIA_QUERY = "(mimeType contains 'image/' or mimeType contains 'video/')"
@@ -82,7 +85,11 @@ async function foldersToSearch(token: string, root: string): Promise<string[]> {
   return [root, ...children]
 }
 
-/** The pictures and video a person could put in a post, newest first. */
+/** The pictures and video a person could put in a post, newest first.
+ *
+ *  ACCEPTED LIMITATION: the newest 100 across the folder and its first 20
+ *  subfolders, with no paging and no search — a very busy shoot folder is
+ *  truncated without saying so. */
 export async function listDriveMedia(itemId: string): Promise<DriveListing> {
   if (!driveConfigured()) {
     return { ok: false, message: 'Google Drive is not set up for this workspace yet.' }

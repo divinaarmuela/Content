@@ -141,6 +141,9 @@ export function pageTitle(path: string): string {
  * subtracts THIS rather than a copied-out `9rem` that stops being true the
  * day the header changes.
  */
+// ACCEPTED LIMITATION: this is arithmetic (72 + 8 + 64 px) that nothing
+// checks against the classes below — change the header's height or <main>'s
+// padding and this has to change with it, by hand.
 export const CHROME_HEIGHT = '9rem'
 
 /**

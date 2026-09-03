@@ -120,6 +120,10 @@ export function NoteTile({ note, top }: { note: ScheduleNote; top: number }) {
     <div
       style={{ top }}
       title={note.text}
+      // the day column opens the composer on a click; a note is a thing on
+      // the calendar, not an empty patch of it, so clicking one must not
+      // start a post at the note's time
+      onClick={e => e.stopPropagation()}
       className="absolute inset-x-1.5 flex h-10 items-center gap-1.5 rounded-tile border border-border bg-paper px-2 text-[11px] font-semibold"
     >
       <StickyNote className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />

@@ -9,6 +9,7 @@ import {
 } from '@/app/lib/social-schedule-core'
 import { dayKeyInZone, zoneLabel } from '@/app/lib/timezone-core'
 import { loadFailedMessage } from '@/app/lib/support-core'
+import { readLocations } from '@/app/lib/schedule-compose-core'
 import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
@@ -16,6 +17,7 @@ import type { ScopeViewer } from '@/app/lib/scope-client'
 import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
+import PiecePicker from './PiecePicker'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
@@ -79,9 +81,20 @@ export default function SchedulePage() {
    */
   const [composing, setComposing] = useState<
     { itemId: string; postId: string | null; at: string | null } | null>(null)
+  /**
+   * "New post" with nothing chosen yet.
+   *
+   * NOTHING IS PICKED FOR ANYBODY. This used to load whichever approved piece
+   * sorted first, media and all, so a click on Thursday 10am meaning "put
+   * something here" opened a finished-looking composition nobody had chosen —
+   * one reflex press away from queueing the wrong piece. The time the click
+   * meant is carried into the chooser and on into the composer.
+   */
+  const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
 
   const openNew = (media: RailMedia, at: string | null) => {
     if (!media.ok) return
+    setChoosing(null)
     // one post per piece: a second "new post" on a piece that has one opens
     // the one that exists, which is what the server would insist on anyway
     const existing = data.posts.find(p => p.item_id === media.itemId) ?? null
@@ -92,12 +105,9 @@ export default function SchedulePage() {
   const openPost = (post: SchedulePostRow) =>
     setComposing({ itemId: post.item_id, postId: post.id, at: null })
 
-  const openAt = (at: string) => {
-    // nothing chosen yet: the first piece that could start a post is the
-    // sensible default, and the picker is one click away
-    const first = data.media.find(m => m.ok && !m.used) ?? data.media.find(m => m.ok)
-    if (first) openNew(first, at)
-  }
+  /** an empty slot, a suggested slot, or the rail's button: ask what goes in
+   *  it, holding on to the time that was clicked */
+  const openAt = (at: string | null) => setChoosing({ at })
 
   const target: ComposerTarget | null = useMemo(() => {
     if (!composing) return null
@@ -110,7 +120,8 @@ export default function SchedulePage() {
       itemId: composing.itemId,
       title: media?.title ?? post?.item_title ?? 'Post',
       contentType: media?.contentType ?? String(post?.item_type ?? ''),
-      approved: media?.slides ?? post?.slides ?? [],
+      approved: media?.slides ?? [],
+      knownUrls: media?.knownUrls ?? [],
       versionNumber: post?.version_number ?? null,
       post,
       at: composing.at,
@@ -135,6 +146,11 @@ export default function SchedulePage() {
   }
 
   const tz = data.tz
+  /** the places this client tags Instagram posts at — saved on their Social
+   *  page, because Instagram wants a Facebook Page id and has no search */
+  const locations = useMemo(
+    () => readLocations((data.client as { instagram_locations?: unknown } | null)?.instagram_locations),
+    [data.client])
   const todayKey = dayKeyInZone(now, tz)
   // keyed on the DAY, not the minute: the clock ticking must not rebuild the
   // week under every memo that reads it
@@ -214,7 +230,7 @@ export default function SchedulePage() {
       media={data.media}
       waiting={data.waiting}
       loading={data.loading}
-      onNew={() => openAt(weekSlots[0]?.iso ?? new Date(Date.now() + 3_600_000).toISOString())}
+      onNew={() => openAt(weekSlots[0]?.iso ?? null)}
       onPick={m => openNew(m, null)}
     />
   )
@@ -360,6 +376,16 @@ export default function SchedulePage() {
         </main>
       </div>
 
+      {choosing && (
+        <PiecePicker
+          media={data.media}
+          at={choosing.at}
+          tz={tz}
+          onPick={m => openNew(m, choosing.at)}
+          onClose={() => setChoosing(null)}
+        />
+      )}
+
       {target && (
         <NewPostDialog
           target={target}
@@ -367,6 +393,7 @@ export default function SchedulePage() {
           accounts={data.accounts}
           suggested={suggested.slice(0, 3)}
           role={me?.role ?? null}
+          locations={locations}
           onClose={() => setComposing(null)}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
         />

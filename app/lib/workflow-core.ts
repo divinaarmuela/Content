@@ -223,9 +223,22 @@ export type TransitionCheck =
 /** Is `from → to` legal for someone wearing ANY of these hats? super_admin may
  *  perform any defined transition (doc: admin can override statuses) but never
  *  an undefined one. */
-export function checkTransitionAs(roles: readonly Role[], from: ItemStatus, to: ItemStatus): TransitionCheck {
+export function checkTransitionAs(
+  roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  opts?: {
+    /** this IS the app's own move, not a person pressing something. Without
+     *  it an `auto` edge is refused outright — `auto` used to mean only "do
+     *  not OFFER this", which left the edge reachable through the ordinary
+     *  transition API by anyone whose hat matched, on items (an internal
+     *  task, a shoot brief) whose vocabulary has no words for it. */
+    auto?: boolean
+  },
+): TransitionCheck {
   const rule = TRANSITIONS[from]?.[to]
   if (!rule) return { ok: false, reason: `No transition from ${from} to ${to}` }
+  if (rule.auto && !opts?.auto) {
+    return { ok: false, reason: `"${rule.label}" is something the app does, not something to press` }
+  }
   if (roles.includes('super_admin')) return { ok: true, rule }
   if (!rule.roles.some(r => roles.includes(r))) {
     return { ok: false, reason: `${roles.join('/') || 'nobody'} may not perform "${rule.label}"` }
@@ -390,6 +403,21 @@ export function versionSatisfiesSubmission(v: { file_url?: string; drive_url?: s
   return missing.length === 0 ? { ok: true } : { ok: false, missing }
 }
 
+/**
+ * What the CLIENT is told when a piece arrives on their desk, which depends
+ * on how it got there.
+ *
+ * A piece coming back from `approved_for_scheduling` is not a first review —
+ * they already said yes to it once. Telling them "it is ready for your
+ * review" again, with no hint that anything changed, is how somebody
+ * re-approves without looking.
+ */
+export function clientArrivalLine(from: ItemStatus): string {
+  return from === 'approved_for_scheduling'
+    ? 'New media was added — please take a look.'
+    : 'It is ready for your review.'
+}
+
 /** Notification fan-out per transition (doc 1 §10 trigger map). The server
  *  resolves audiences to concrete people. */
 export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers'
@@ -410,6 +438,13 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   // thing they were reviewing has been taken away and re-made. They see it in
   // the portal as "In production", which is all it is.
   'client_review>internal_review': ['account_managers'],
+  // media the client has never seen landed on a piece they had already
+  // approved, so the piece went back to them. Silence here was the whole
+  // failure mode: the scheduler saw one sentence in the composer, nobody else
+  // heard anything, and the post sat unsendable until somebody opened the
+  // board days later. Same three audiences as every other route into
+  // client_review.
+  'approved_for_scheduling>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'client_changes_requested>revision_required': ['owner_editor'],
   'client_changes_requested>client_review': ['client_users', 'account_managers', 'owner_editor'],
   // approving prefers the people the approver picked, then the item's own

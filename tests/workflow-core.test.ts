@@ -17,6 +17,7 @@ import {
   whoseTurn,
   versionSatisfiesSubmission,
   TRANSITION_NOTIFICATIONS,
+  clientArrivalLine,
   type ActingItem,
   type ItemStatus,
 } from '../app/lib/workflow-core'
@@ -271,9 +272,33 @@ describe('checkTransitionAs — the assignment decides, not the title', () => {
   it('a super admin passes every defined edge and no undefined one', () => {
     for (const from of ITEM_STATUSES) {
       for (const to of ITEM_STATUSES) {
-        expect(checkTransitionAs(['super_admin'], from, to).ok).toBe(Boolean(TRANSITIONS[from]?.[to]))
+        const rule = TRANSITIONS[from]?.[to]
+        // …except an `auto` edge, which is the APP's move and not an
+        // override anyone holds — a super admin is still a person pressing
+        // something. It passes only when the caller says it IS the app.
+        expect(checkTransitionAs(['super_admin'], from, to).ok)
+          .toBe(Boolean(rule) && !rule?.auto)
+        expect(checkTransitionAs(['super_admin'], from, to, { auto: true }).ok)
+          .toBe(Boolean(rule))
       }
     }
+  })
+
+  it('an `auto` edge is refused to everybody until the app claims the move', () => {
+    // `auto` used to mean only "do not OFFER this", which left the edge
+    // reachable through the ordinary transition API by anyone whose hat
+    // matched — including on an internal task, whose vocabulary has no words
+    // for "back to the client".
+    for (const role of ['editor', 'account_manager', 'scheduler', 'super_admin'] as Role[]) {
+      const pressed = checkTransitionAs([role], 'approved_for_scheduling', 'client_review')
+      expect(pressed.ok, role).toBe(false)
+      if (!pressed.ok) expect(pressed.reason).toMatch(/something the app does/)
+    }
+    // the app's own move goes through, still subject to the hats
+    expect(checkTransitionAs(['scheduler'], 'approved_for_scheduling', 'client_review', { auto: true }).ok)
+      .toBe(true)
+    expect(checkTransitionAs(['client'], 'approved_for_scheduling', 'client_review', { auto: true }).ok)
+      .toBe(false)
   })
 
   it('the single-role functions are the one-hat case of the set form', () => {
@@ -380,19 +405,25 @@ describe('a new version while the piece is with the client', () => {
   const EDGE = "New version — back for the manager's check"
 
   it('the piece can come back off the client’s desk, and only from there', () => {
-    expect(checkTransition('editor', 'client_review', 'internal_review').ok).toBe(true)
-    expect(checkTransition('account_manager', 'client_review', 'internal_review').ok).toBe(true)
+    // `{ auto: true }` throughout: this is the app's own move, and nothing
+    // may reach it by pressing something
+    const auto = { auto: true }
+    expect(checkTransitionAs(['editor'], 'client_review', 'internal_review', auto).ok).toBe(true)
+    expect(checkTransitionAs(['account_manager'], 'client_review', 'internal_review', auto).ok).toBe(true)
     expect(TRANSITIONS.client_review?.internal_review?.label).toBe(EDGE)
+    // …and not at all without that claim
+    expect(checkTransition('editor', 'client_review', 'internal_review').ok).toBe(false)
     // nowhere else: a piece the client has already sent back for changes is
     // EXPECTING a new version, and must not be dragged sideways
-    expect(checkTransition('editor', 'client_changes_requested', 'internal_review').ok).toBe(false)
-    expect(checkTransition('editor', 'revision_required', 'internal_review').ok).toBe(false)
-    expect(checkTransition('editor', 'approved_for_scheduling', 'internal_review').ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'client_changes_requested', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'revision_required', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'approved_for_scheduling', 'internal_review', auto).ok).toBe(false)
   })
 
   it('the client cannot perform it, and neither can a scheduler', () => {
-    expect(checkTransition('client', 'client_review', 'internal_review').ok).toBe(false)
-    expect(checkTransition('scheduler', 'client_review', 'internal_review').ok).toBe(false)
+    const auto = { auto: true }
+    expect(checkTransitionAs(['client'], 'client_review', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['scheduler'], 'client_review', 'internal_review', auto).ok).toBe(false)
   })
 
   it('it is never a button — not on any surface, not for anyone', () => {
@@ -497,6 +528,53 @@ describe('the vocabulary guard — no database words, no jargon on screen', () =
   it('a brief never talks about scheduling — it books a shoot', () => {
     for (const label of Object.values(BRIEF_KIND_LABELS)) {
       expect(label.toLowerCase()).not.toContain('schedul')
+    }
+  })
+})
+
+/**
+ * MEDIA THE CLIENT HAS NOT SEEN, ON A PIECE THEY ALREADY APPROVED.
+ *
+ * The Schedule composer and the item page both write versions onto approved
+ * pieces now, and both send the piece back. The edge itself is pinned above;
+ * this is about who HEARS, which was the whole failure: it fired silently, so
+ * the post sat unsendable and nobody knew until somebody opened the board.
+ */
+describe('a new version on a piece the client already approved', () => {
+  const EDGE = 'New media — back to the client'
+
+  it('exists, is the app\u2019s own move, and says why in its label', () => {
+    const rule = TRANSITIONS.approved_for_scheduling?.client_review
+    expect(rule?.label).toBe(EDGE)
+    expect(rule?.auto).toBe(true)
+  })
+
+  it('is never a button, on any surface, for anyone', () => {
+    const roles: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client']
+    for (const role of roles) {
+      expect(availableTransitions(role, 'approved_for_scheduling').map(t => t.to))
+        .not.toContain('client_review')
+    }
+    // the scheduler's one real choice from here is unchanged by its existence
+    expect(availableTransitionsAs(['scheduler'], 'approved_for_scheduling').map(t => t.to))
+      .toEqual(['scheduled'])
+  })
+
+  it('tells the same three people every other route to the client tells', () => {
+    // silence here was the bug. The client has something to look at, the
+    // manager has a post that cannot go out, and the editor made the version.
+    expect(TRANSITION_NOTIFICATIONS['approved_for_scheduling>client_review'])
+      .toEqual(TRANSITION_NOTIFICATIONS['internal_review>client_review'])
+    expect(TRANSITION_NOTIFICATIONS['approved_for_scheduling>client_review'])
+      .toEqual(['client_users', 'account_managers', 'owner_editor'])
+  })
+
+  it('says something different to the client, because it is not a first look', () => {
+    expect(clientArrivalLine('approved_for_scheduling'))
+      .toBe('New media was added — please take a look.')
+    // every other arrival keeps the words it had
+    for (const from of ['internal_review', 'revision_complete', 'client_changes_requested'] as const) {
+      expect(clientArrivalLine(from)).toBe('It is ready for your review.')
     }
   })
 })

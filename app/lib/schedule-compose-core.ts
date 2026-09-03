@@ -22,7 +22,7 @@
  */
 
 import {
-  PLATFORM_RULES, type Platform,
+  isPageId, kindTakesLocation, PLATFORM_RULES, type Platform, type PostKind,
 } from './publish-core'
 import { NETWORK_LABEL, type SocialPostStatus } from './social-schedule-core'
 import { reorder, type Slide } from './version-files-core'
@@ -37,6 +37,8 @@ export type ChannelExtras = {
   firstComment?: string
   collaborators?: string[]
   shareToFeed?: boolean
+  /** the numeric Facebook Page id of the place — Instagram only */
+  locationId?: string
 }
 
 /** Everything the window is holding about one post. */
@@ -65,22 +67,56 @@ export type ComposerAction =
   | { type: 'extra'; channel: string; patch: ChannelExtras }
   | { type: 'saved'; postId?: string | null }
 
+/**
+ * The window's opening state.
+ *
+ * EVERY field the post already holds has to be seeded here, `caption` and
+ * `perChannel` included. Leaving them empty and PATCHing them anyway is how a
+ * scheduler who opened an approved post to check the time, pressed Schedule,
+ * and wiped the caption AND the client's approval in one click — the server
+ * reads a caption change as a content change and takes the approval back.
+ */
 export function initialComposer(input: {
   itemId: string
+  postId?: string | null
   slides?: readonly Slide[]
+  caption?: string | null
   scheduledFor?: string | null
   channels?: readonly string[]
+  perChannel?: Record<string, ChannelExtras> | null
 }): ComposerState {
   return {
-    postId: null,
+    postId: input.postId ?? null,
     itemId: input.itemId,
     slides: [...(input.slides ?? [])],
-    caption: '',
+    caption: String(input.caption ?? ''),
     channels: [...(input.channels ?? [])],
     scheduledFor: input.scheduledFor ?? null,
-    perChannel: {},
+    perChannel: { ...(input.perChannel ?? {}) },
     dirty: false,
   }
+}
+
+/** Read the `per_channel` blob off a stored post into the shape the window
+ *  edits, dropping anything that is not one of the fields we send. */
+export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: Record<string, ChannelExtras> = {}
+  for (const [id, raw] of Object.entries(v as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const extras: ChannelExtras = {}
+    if (typeof r.caption === 'string') extras.caption = r.caption
+    if (typeof r.kind === 'string') extras.kind = r.kind
+    if (typeof r.firstComment === 'string') extras.firstComment = r.firstComment
+    if (typeof r.shareToFeed === 'boolean') extras.shareToFeed = r.shareToFeed
+    if (typeof r.locationId === 'string') extras.locationId = r.locationId
+    if (Array.isArray(r.collaborators)) {
+      extras.collaborators = r.collaborators.map(String).filter(Boolean).slice(0, 3)
+    }
+    out[id] = extras
+  }
+  return out
 }
 
 /**
@@ -197,8 +233,10 @@ export function limitsLine(
 
 /* ── the extras the provider actually supports ──────────────────────────── */
 
+export type MoreOptionKey = 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
+
 export type MoreOption = {
-  key: 'firstComment' | 'collaborators' | 'shareToFeed'
+  key: MoreOptionKey
   label: string
   /** the channels on screen it applies to — the row says which */
   platforms: string[]
@@ -212,26 +250,74 @@ export type MoreOption = {
  * that collects something the provider will never receive is a lie the person
  * only finds out about after the post is live.
  */
-const OPTION_PLATFORMS: Record<MoreOption['key'], Platform[]> = {
+const OPTION_PLATFORMS: Record<MoreOptionKey, Platform[]> = {
   firstComment: ['instagram', 'facebook', 'threads'],
   collaborators: ['instagram'],
   shareToFeed: ['instagram', 'facebook'],
+  location: ['instagram'],
 }
-const OPTION_LABEL: Record<MoreOption['key'], string> = {
+const OPTION_LABEL: Record<MoreOptionKey, string> = {
   firstComment: 'Add first comment',
   collaborators: 'Invite collaborator',
   shareToFeed: 'Also show the Reel in the feed',
+  location: 'Add location',
 }
 
-export function moreOptionsFor(platforms: readonly string[] | null | undefined): MoreOption[] {
+/**
+ * @param kind the post type currently chosen, when one is — a Story is the
+ *   one case where Instagram REFUSES a location rather than ignoring it, so
+ *   the row goes away rather than offering a field that breaks the post.
+ */
+export function moreOptionsFor(
+  platforms: readonly string[] | null | undefined,
+  kind?: PostKind | null,
+): MoreOption[] {
   const list = [...new Set((Array.isArray(platforms) ? platforms : []).map(p => String(p)))]
-  return (Object.keys(OPTION_PLATFORMS) as MoreOption['key'][])
+  return (Object.keys(OPTION_PLATFORMS) as MoreOptionKey[])
+    .filter(key => key !== 'location' || kindTakesLocation(kind ?? undefined))
     .map(key => ({
       key,
       label: OPTION_LABEL[key],
       platforms: list.filter(p => (OPTION_PLATFORMS[key] as string[]).includes(p)),
     }))
     .filter(o => o.platforms.length > 0)
+}
+
+/* ── the places a client tags posts at ──────────────────────────────────── */
+
+/**
+ * One saved place: what the team calls it, and the id Instagram wants.
+ *
+ * The id is a NUMERIC FACEBOOK PAGE ID. Instagram's own location index IS the
+ * set of Facebook Pages, and neither the Graph API nor Zernio exposes a place
+ * search — so there is no way to look one up while writing a post. A client
+ * therefore keeps their handful of places once, and the composer picks from
+ * that list.
+ */
+export type SavedLocation = { name: string; pageId: string }
+
+/** Where a person finds that number. One sentence, no jargon, because whoever
+ *  reads it has never heard of a Page ID and should not have to care. */
+export const PAGE_ID_HELP =
+  'Open the place’s Facebook Page, go to About, and copy the number next to '
+  + 'Page ID. It is a long number — not the @name.'
+
+/** Read a saved list out of whatever the database handed back, dropping
+ *  anything that is not a name and a plain number. A half-typed row saved by
+ *  accident must never become a post that Instagram refuses. */
+export function readLocations(v: unknown): SavedLocation[] {
+  if (!Array.isArray(v)) return []
+  const out: SavedLocation[] = []
+  const seen = new Set<string>()
+  for (const raw of v) {
+    const row = (raw ?? {}) as { name?: unknown; pageId?: unknown; page_id?: unknown }
+    const pageId = String(row.pageId ?? row.page_id ?? '').trim()
+    const name = String(row.name ?? '').trim()
+    if (!name || !isPageId(pageId) || seen.has(pageId)) continue
+    seen.add(pageId)
+    out.push({ name: name.slice(0, 80), pageId })
+  }
+  return out.slice(0, 50)
 }
 
 /* ── the clock ──────────────────────────────────────────────────────────── */

@@ -4,6 +4,7 @@ import type { Client } from '@/lib/db-types'
 import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 import { isValidZone } from '@/app/lib/timezone-core'
+import { readLocations } from '@/app/lib/schedule-compose-core'
 
 /**
  * One client, for the detail page.
@@ -37,7 +38,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params
   const body = await req.json()
-  const allowed = ['name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'website', 'status', 'notes', 'clerk_user_id', 'timezone'] as const
+  const allowed = ['name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'website', 'status', 'notes', 'clerk_user_id', 'timezone', 'instagram_locations'] as const
   const patch: Record<string, unknown> = {}
   for (const key of allowed) if (key in body) patch[key] = body[key]
   if ('website' in patch) patch.website = normaliseWebsite(patch.website)
@@ -53,6 +54,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       )
     }
     patch.timezone = tz
+  }
+  // The places this client tags Instagram posts at. Cleaned rather than
+  // trusted: a row whose id is a place NAME instead of a Facebook Page id is
+  // the mistake people make here, and Instagram answers it by refusing the
+  // post hours later, so it is dropped now. `readLocations` is the same
+  // function the composer reads the list back with.
+  if ('instagram_locations' in patch) {
+    patch.instagram_locations = readLocations(patch.instagram_locations)
   }
   try {
     const data = await table('clients').update(id, patch)

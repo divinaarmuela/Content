@@ -88,18 +88,28 @@ export type Eligibility =
  * the second half: a Reel version often carries its cover image as slide two,
  * and that still is a working file, not a post.
  *
- * ── THE ASSUMPTION, STATED ──
+ * ── THE ASSUMPTION, STATED, AND WHAT ENFORCES IT ──
  *
- * "The latest version" is taken to BE the version the client approved. That
- * holds only because of the gate in front of it: the item is at
- * `approved_for_scheduling` or `scheduled`, and every path that adds a new
- * version to an item — the item page's upload, and the composer's media
- * picker — sends the item back for approval, so a version the client has not
- * seen cannot coexist with an approved status. If a future path ever writes a
- * version WITHOUT moving the status, this function silently starts offering
- * unapproved media, and the returned `version` is what every caller must key
- * off (the picker's Approved tab does exactly that) rather than re-reading
- * "the newest" for itself.
+ * "The latest version" is taken to BE the version the client approved. Two
+ * paths write a version, and BOTH now move the item off
+ * `approved_for_scheduling` when they do:
+ *
+ *   • the item page's upload — `api/production/items/[id]/versions` sends an
+ *     approved piece back to `client_review` on the `auto` edge;
+ *   • the composer's media picker — `addMediaVersion` does the same, and only
+ *     when a genuinely new FILE arrives (a reorder is not a version).
+ *
+ * So a version the client has not seen cannot sit under an approved status.
+ * The one status this does NOT cover is `scheduled`: a piece already booked
+ * in has no edge back to the client, and a version added to it would be
+ * offered here as approved. Nothing in the app writes one today — the item
+ * page's upload leaves it where it is — and closing it properly means a
+ * `scheduled → client_review` edge with the provider job cancelled, which is
+ * a bigger change than this function.
+ *
+ * The returned `version` is what every caller must key off (the picker's
+ * Approved tab does exactly that) rather than re-reading "the newest" for
+ * itself.
  */
 export function eligibility(
   item: ScheduleItem | null | undefined,

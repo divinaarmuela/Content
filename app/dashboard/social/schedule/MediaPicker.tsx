@@ -9,9 +9,9 @@ import { Thumb } from './tiles'
 import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
 import { UploadRows, useUploadGroup } from '../../UploadRows'
 import {
-  addToPost, inPost, limitsLine, moveInPost, removeFromPost,
+  addToPost, inPost, limitsLine, moveInPost, removeFromPost, replaceInPost,
   NEW_VERSION_NOTICE, PICKER_HELP, PICKER_LIBRARY_HELP,
-  type MediaSource,
+  type MediaSource, type PickerFile,
 } from '@/app/lib/schedule-compose-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
@@ -29,10 +29,11 @@ import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
  * of the piece, the client is asked, and the footer says so before anybody
  * clicks anything.
  *
- * Drag a file across to add it; drag inside the tray to reorder; drop on a
- * slot to replace it. Every one of those has a button as well, because a drag
- * is not available to somebody using a keyboard and "the feature exists but
- * not for you" is not a thing this app does.
+ * Drag a file across onto the dashed "Drop here" slot to add it; drop it on a
+ * FILLED slot to replace what is in that slot; drag inside the tray to
+ * reorder. Every one of those has a button as well, because a drag is not
+ * available to somebody using a keyboard and "the feature exists but not for
+ * you" is not a thing this app does.
  */
 
 const SOURCES: { key: MediaSource; label: string }[] = [
@@ -67,7 +68,10 @@ export default function MediaPicker({
   const [source, setSource] = useState<MediaSource>('approved')
   const [drive, setDrive] = useState<DriveRow[] | null>(null)
   const [driveNote, setDriveNote] = useState<string | null>(null)
-  const [brought, setBrought] = useState<Slide[]>([])
+  /** files brought in from Drive or a laptop this session, with where they
+   *  came from — a Drive id is the only thing that can tell "this is the same
+   *  file" once the bytes have a fresh R2 URL */
+  const [brought, setBrought] = useState<PickerFile[]>([])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [over, setOver] = useState<number | 'tray' | null>(null)
@@ -86,8 +90,17 @@ export default function MediaPicker({
   const library: Slide[] = useMemo(() => {
     if (source === 'approved') return approved
     if (source === 'drive') return []
-    return brought.filter(s => !approvedUrls.has(s.url))
+    return brought.filter(s => s.source === 'upload' && !approvedUrls.has(s.url))
   }, [source, approved, brought, approvedUrls])
+
+  /** the Drive ids already sitting in this post, so the row can say "Added"
+   *  and stop the same 40 MB file being downloaded twice. Comparing a Drive
+   *  id against a slide URL — which is what this used to do — is never true,
+   *  so every row read "Bring across" and a double click shipped the same
+   *  frame twice under two different URLs. */
+  const driveInPost = useMemo(() => new Set(
+    brought.filter(b => b.driveId && inPost(tray, b.url)).map(b => b.driveId as string),
+  ), [brought, tray])
 
   /* ── Google Drive ─────────────────────────────────────────────────────── */
 
@@ -122,7 +135,8 @@ export default function MediaPicker({
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not bring that file across'))
-      const files = (json?.files ?? []) as Slide[]
+      const files = ((json?.files ?? []) as Slide[])
+        .map(f => ({ ...f, source: 'drive' as const, driveId: row.id }))
       setBrought(b => [...files, ...b])
       setTray(t => files.reduce((acc, f) => addToPost(acc, f), t))
     } catch (e) {
@@ -140,11 +154,12 @@ export default function MediaPicker({
     try {
       const { done } = uploadFiles(chosen, { group: uploadGroup, purpose: 'social' })
       const landed = await done
-      const files: Slide[] = landed.map(({ file, url }) => ({
+      const files: PickerFile[] = landed.map(({ file, url }) => ({
         url,
         name: file.name,
         type: file.type.startsWith('video/') ? 'video' : slideTypeFromUrl(url),
         bytes: file.size,
+        source: 'upload' as const,
       }))
       setBrought(b => [...files, ...b])
       setTray(t => files.reduce((acc, f) => addToPost(acc, f), t))
@@ -173,6 +188,16 @@ export default function MediaPicker({
     } catch { return null }
   }
 
+  /**
+   * `at` is the slot the file landed on, or 'tray' for the empty space and
+   * the dashed slot at the end.
+   *
+   * A file dragged from the LIBRARY onto a filled slot REPLACES what is in
+   * it — that is what dropping something on top of something else means
+   * everywhere else, and the "Drop here" slot at the end is how you add
+   * without replacing. A file dragged from inside the tray is a reorder, and
+   * a reorder can never lose a slide.
+   */
   const dropOn = (e: React.DragEvent, at: number | 'tray') => {
     e.preventDefault()
     setOver(null)
@@ -183,7 +208,7 @@ export default function MediaPicker({
       setTray(t => (from === null ? addToPost(t, slide) : t))
       return
     }
-    setTray(t => (from === null ? addToPost(t, slide, at) : moveInPost(t, from, at)))
+    setTray(t => (from === null ? replaceInPost(t, at, slide) : moveInPost(t, from, at)))
   }
 
   const limits = limitsLine(platforms, tray)
@@ -236,7 +261,7 @@ export default function MediaPicker({
                 rows={drive}
                 note={driveNote}
                 busy={busy}
-                inTray={url => inPost(tray, url)}
+                inPost={id => driveInPost.has(id)}
                 onBring={bringAcross}
               />
             ) : source === 'upload' ? (
@@ -255,6 +280,7 @@ export default function MediaPicker({
                 onAdd={s => setTray(t => addToPost(t, s))}
                 onDragStart={dragOut}
                 empty="Nothing approved on this piece yet."
+                approved
               />
             )}
           </div>
@@ -304,7 +330,7 @@ export default function MediaPicker({
               {source === 'drive' ? (
                 <DriveTab
                   rows={drive} note={driveNote} busy={busy}
-                  inTray={url => inPost(tray, url)} onBring={bringAcross}
+                  inPost={id => driveInPost.has(id)} onBring={bringAcross}
                 />
               ) : source === 'upload' ? (
                 <UploadTab
@@ -317,9 +343,19 @@ export default function MediaPicker({
                   files={library} inTray={url => inPost(tray, url)}
                   onAdd={s => setTray(t => addToPost(t, s))} onDragStart={dragOut}
                   empty="Nothing approved on this piece yet."
+                  approved
                 />
               )}
             </div>
+            {/* Both sentences belong here too. They used to live only in the
+                380px column, which is `hidden` below `md` — so on a phone
+                somebody uploaded from their camera roll and pressed Save with
+                nothing on screen saying that this makes a new version and
+                puts the piece back in front of the client. */}
+            {source !== 'drive' && (
+              <p className="pt-2 text-[12px] text-muted-foreground">{PICKER_LIBRARY_HELP}</p>
+            )}
+            <p className="pt-1 text-[12px] text-muted-foreground">{NEW_VERSION_NOTICE}</p>
           </div>
 
           <div
@@ -333,8 +369,8 @@ export default function MediaPicker({
           >
             <div className="flex flex-wrap gap-2.5 overflow-y-auto">
               {tray.length === 0 && (
-                <p className="text-[13px] text-muted-foreground">
-                  Nothing in the post yet. Add a file from the left.
+                <p className="self-center text-[13px] text-muted-foreground">
+                  Nothing in the post yet. Tap a file, or drag one here.
                 </p>
               )}
               {tray.map((slide, i) => (
@@ -384,6 +420,22 @@ export default function MediaPicker({
                   </span>
                 </div>
               ))}
+
+              {/* The mockup's dashed slot, and the reason dropping on a filled
+                  slot can safely mean "replace": there is always somewhere to
+                  drop that means "add". */}
+              <div
+                onDragOver={e => { e.preventDefault(); setOver('tray') }}
+                onDrop={e => { e.stopPropagation(); dropOn(e, 'tray') }}
+                className={cn(
+                  'flex h-[110px] w-[88px] items-center justify-center rounded-tile border-2 border-dashed px-1 text-center text-[11px] font-bold',
+                  over === 'tray'
+                    ? 'border-accent-blue bg-accent-blue/10 text-accent-blue-deep dark:text-cream'
+                    : 'border-accent-blue/50 text-accent-blue-deep/70 dark:text-cream/70',
+                )}
+              >
+                Drop here
+              </div>
             </div>
 
             <div className="mt-auto">
@@ -428,12 +480,17 @@ export default function MediaPicker({
 }
 
 /** The grid of files on the left. Faded once they are in the post. */
-function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
+function LibraryGrid({ files, inTray, onAdd, onDragStart, empty, approved }: {
   files: Slide[]
   inTray: (url: string) => boolean
   onAdd: (slide: Slide) => void
   onDragStart: (e: React.DragEvent, slide: Slide, from: number | null) => void
   empty: string
+  /** a green tick means THE CLIENT SAID YES to this file. Drawing it on
+   *  something uploaded thirty seconds ago — directly under the notice saying
+   *  it is not approved — is the badge lying about the one fact it exists to
+   *  carry. */
+  approved: boolean
 }) {
   if (files.length === 0) {
     return <p className="px-0.5 text-[13px] text-muted-foreground">{empty}</p>
@@ -456,9 +513,15 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
             )}
           >
             <Thumb slide={slide} label={slide.name} className="h-full w-full" />
-            <span className="absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-ink">
-              <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
-            </span>
+            {approved && (
+              <span
+                title="The client approved this"
+                className="absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-ink"
+              >
+                <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
+                <span className="sr-only">Approved by the client</span>
+              </span>
+            )}
           </button>
         )
       })}
@@ -468,11 +531,13 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
 
 /** Files in the piece's Google Drive folder. They are not in the post until
  *  they have been copied across, so the button says what it does. */
-function DriveTab({ rows, note, busy, inTray, onBring }: {
+function DriveTab({ rows, note, busy, inPost: alreadyIn, onBring }: {
   rows: DriveRow[] | null
   note: string | null
   busy: boolean
-  inTray: (url: string) => boolean
+  /** by DRIVE ID — the bytes get a fresh R2 URL on the way across, so a URL
+   *  comparison can never recognise the same file */
+  inPost: (driveId: string) => boolean
   onBring: (row: DriveRow) => void
 }) {
   if (note) return <p className="px-0.5 text-[13px] text-muted-foreground">{note}</p>
@@ -484,22 +549,28 @@ function DriveTab({ rows, note, busy, inTray, onBring }: {
   }
   return (
     <ul className="flex flex-col gap-1.5">
-      {rows.map(row => (
-        <li key={row.id}>
-          <button
-            type="button"
-            onClick={() => onBring(row)}
-            disabled={busy}
-            className="flex min-h-11 w-full items-center gap-2 rounded-tile border border-border bg-surface px-2.5 text-left text-[13px] hover:bg-muted disabled:opacity-60"
-          >
-            <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
-            <span className="min-w-0 flex-1 truncate">{row.name}</span>
-            <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">
-              {inTray(row.id) ? 'Added' : 'Bring across'}
-            </span>
-          </button>
-        </li>
-      ))}
+      {rows.map(row => {
+        const done = alreadyIn(row.id)
+        return (
+          <li key={row.id}>
+            <button
+              type="button"
+              onClick={() => onBring(row)}
+              // disabled while ANY import is running, and once this one is in:
+              // a second click on a slow 40 MB download used to make a second
+              // copy with its own URL, which the tray then could not tell apart
+              disabled={busy || done}
+              className="flex min-h-11 w-full items-center gap-2 rounded-tile border border-border bg-surface px-2.5 text-left text-[13px] hover:bg-muted disabled:opacity-60"
+            >
+              <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.8} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{row.name}</span>
+              <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">
+                {done ? 'Added' : 'Bring across'}
+              </span>
+            </button>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -543,6 +614,7 @@ function UploadTab({ uploads, onFiles, files, onAdd, inTray, onDragStart }: {
         onAdd={onAdd}
         onDragStart={onDragStart}
         empty="Nothing uploaded here yet."
+        approved={false}
       />
     </div>
   )

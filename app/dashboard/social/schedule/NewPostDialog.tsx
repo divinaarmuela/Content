@@ -2,18 +2,21 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
-  ChevronDown, Clock, Plus, Trash2, X, Zap,
+  ChevronDown, Clock, MapPin, Plus, Trash2, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
   APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, initialComposer,
-  moreOptionsFor, type ComposerState, type FooterActionKey,
+  moreOptionsFor, readPerChannel, PAGE_ID_HELP,
+  type ComposerState, type FooterActionKey, type MoreOptionKey, type SavedLocation,
 } from '@/app/lib/schedule-compose-core'
 import {
   tileTone, validateComposition, type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
-import { autoKindFor, availableKinds, isPlatform, type PostKind } from '@/app/lib/publish-core'
+import {
+  autoKindFor, availableKinds, isPageId, isPlatform, type PostKind,
+} from '@/app/lib/publish-core'
 import { mayPublish as roleMayPublish, type Role } from '@/app/lib/identity-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { formatInZone } from '@/app/lib/timezone-core'
@@ -28,7 +31,7 @@ import type { SchedulePostRow } from './useSchedulePosts'
  * NEW POST — the one window where a plan becomes something a client's
  * followers will see.
  *
- * Four things it will not do:
+ * Five things it will not do:
  *
  *  1. IT NEVER PRETENDS TO POST. The footer says exactly where the post
  *     stands (that pill is the ITEM's approval, live), and the button offers
@@ -36,12 +39,18 @@ import type { SchedulePostRow } from './useSchedulePosts'
  *     "Schedule without approval" is withheld from anyone who could not have
  *     approved it. The server refuses too; this only stops the button lying.
  *  2. IT NEVER OFFERS A SETTING THE PROVIDER DOES NOT HAVE. "More options" is
- *     `moreOptionsFor`, read off what `publish-core` actually sends.
+ *     `moreOptionsFor`, read off what `publish-core` actually sends — which is
+ *     also why "Add location" disappears the moment the post type is Story:
+ *     Instagram refuses a Story carrying a location rather than ignoring it.
  *  3. IT NEVER SHOWS MEDIA THE CLIENT HAS NOT SEEN AS APPROVED. The badge is
  *     drawn from the approved version's own files, and anything else routes
  *     through the picker's new-version path.
  *  4. EVERY TIME IN IT IS THE CLIENT'S. The pill, the chips and the "goes out
  *     at" line all run through the client's zone.
+ *  5. IT NEVER SAVES A FIELD NOBODY TOUCHED. The window opens with everything
+ *     the post already holds — caption and per-channel extras included — so a
+ *     press of Schedule cannot PATCH an empty caption over somebody's words
+ *     and take the client's approval down with it.
  *
  * It is live: the post row it is given comes from the page's listeners, so an
  * approval landing on the item page in another tab changes the pill and the
@@ -55,6 +64,9 @@ export type ComposerTarget = {
   /** the approved version's files — the default media and the only media that
    *  needs no fresh approval */
   approved: Slide[]
+  /** every file this piece has ever held — what tells a NEW file from a
+   *  reorder, and so whether saving media makes a version */
+  knownUrls: string[]
   versionNumber: number | null
   /** an existing post to edit, or null for a new one */
   post: SchedulePostRow | null
@@ -62,14 +74,31 @@ export type ComposerTarget = {
   at: string | null
 }
 
+/** Everything the window opens holding — the post's own values when there is
+ *  a post, the click's values when there is not. */
+function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
+  const post = target.post
+  return {
+    itemId: target.itemId,
+    postId: post?.id ?? null,
+    slides: post?.slides ?? target.approved,
+    caption: post ? String(post.caption ?? '') : '',
+    scheduledFor: post?.scheduled_for ?? target.at,
+    channels: post?.channels?.length ? post.channels : (accounts[0] ? [accounts[0].id] : []),
+    perChannel: post ? readPerChannel(post.per_channel) : {},
+  }
+}
+
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, onClose, onOpenPost,
+  target, tz, accounts, suggested, role, locations, onClose, onOpenPost,
 }: {
   target: ComposerTarget
   tz: string
   accounts: SocialAccount[]
   suggested: SuggestedTime[]
   role: Role | null
+  /** the places this client tags posts at, saved on the client's Social page */
+  locations: SavedLocation[]
   onClose: () => void
   /** the draft became real — the page keeps its id so the live row can be
    *  handed back in */
@@ -77,48 +106,77 @@ export default function NewPostDialog({
 }) {
   const post = target.post
   const [state, dispatch] = useReducer(
-    composerReducer,
-    {
-      itemId: target.itemId,
-      slides: post?.slides ?? target.approved,
-      scheduledFor: post?.scheduled_for ?? target.at,
-      channels: post?.channels ?? (accounts[0] ? [accounts[0].id] : []),
-    },
-    initialComposer,
-  )
+    composerReducer, seedOf(target, accounts), initialComposer)
   const [busy, setBusy] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
   const [picking, setPicking] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [channelsOpen, setChannelsOpen] = useState(false)
-  const [kindOpen, setKindOpen] = useState(false)
   const [note, setNote] = useState<string | null>(null)
-  const menu = useRef<HTMLDivElement>(null)
+  /** a question that has to be answered before something is thrown away */
+  const [confirm, setConfirm] = useState<'close' | 'delete' | null>(null)
+  const card = useRef<HTMLDivElement>(null)
+  /** which post the window has taken its values from, so a listener firing
+   *  does not retype somebody's caption under their cursor */
+  const loadedId = useRef<string | null>(post?.id ?? null)
 
-  // the post row is LIVE: an approval elsewhere lands here. Only the fields
-  // this window does not own are taken back — retyping somebody's caption
-  // under their cursor because a listener fired is worse than being stale.
+  /**
+   * The post row is LIVE, and the window has to follow it WITHOUT stealing
+   * what somebody is in the middle of typing.
+   *
+   * So: a `loaded` action, once, when the window starts looking at a
+   * different post — including the moment a draft this window created gets
+   * its id. Everything after that is the person's, until they save.
+   */
   useEffect(() => {
-    if (post?.id) dispatch({ type: 'saved', postId: post.id })
-  }, [post?.id])
+    if (!post?.id || post.id === loadedId.current) return
+    loadedId.current = post.id
+    dispatch({
+      type: 'loaded',
+      state: {
+        postId: post.id,
+        slides: post.slides ?? [],
+        caption: String(post.caption ?? ''),
+        channels: post.channels ?? [],
+        scheduledFor: post.scheduled_for ?? null,
+        perChannel: readPerChannel(post.per_channel),
+      },
+    })
+  }, [post?.id, post])
 
+  /* ── closing, and not losing anything on the way ─────────────────────── */
+
+  const requestClose = () => {
+    if (state.dirty) { setConfirm('close'); return }
+    onClose()
+  }
+
+  // Escape closes the window (M6), and the focus stays inside it while it is
+  // open — a dialog you can Tab out of is a dialog a screen reader walks
+  // straight past.
   useEffect(() => {
-    if (!menuOpen && !channelsOpen && !kindOpen) return
-    const away = (e: MouseEvent) => {
-      if (menu.current && !menu.current.contains(e.target as Node)) {
-        setMenuOpen(false); setChannelsOpen(false); setKindOpen(false)
+    const el = card.current
+    el?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // the picker and the dropdowns handle their own Escape first
+        if (picking) return
+        e.stopPropagation()
+        requestClose()
+        return
       }
+      if (e.key !== 'Tab' || !el) return
+      const focusable = [...el.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])',
+      )].filter(n => n.offsetParent !== null)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
     }
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setMenuOpen(false); setChannelsOpen(false); setKindOpen(false) }
-    }
-    document.addEventListener('mousedown', away)
-    document.addEventListener('keydown', esc)
-    return () => {
-      document.removeEventListener('mousedown', away)
-      document.removeEventListener('keydown', esc)
-    }
-  }, [menuOpen, channelsOpen, kindOpen])
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picking, state.dirty])
 
   const chosen = useMemo(
     () => accounts.filter(a => state.channels.includes(a.id)), [accounts, state.channels])
@@ -142,7 +200,23 @@ export default function NewPostDialog({
 
   const approvedUrls = useMemo(
     () => new Set(target.approved.map(s => s.url)), [target.approved])
-  const allApproved = state.slides.every(s => approvedUrls.has(s.url))
+  const allApproved = state.slides.length > 0 && state.slides.every(s => approvedUrls.has(s.url))
+
+  /* ── the header's post type ───────────────────────────────────────────── */
+
+  const lead = platforms[0]
+  const media = useMemo(
+    () => state.slides.map(s => ({ url: s.url, type: s.type })), [state.slides])
+  const kinds: PostKind[] = lead && isPlatform(lead) ? availableKinds(lead, media) : []
+  const pickedKind = (state.perChannel[chosen[0]?.id ?? '']?.kind ?? '') as PostKind | ''
+  const autoKind = lead && isPlatform(lead) ? autoKindFor(lead, media) : null
+  /** what this post WILL be, chosen or worked out — the thing a location has
+   *  to be checked against */
+  const effectiveKind = pickedKind || autoKind || undefined
+
+  const options = moreOptionsFor(platforms, effectiveKind)
+  const strip = state.slides.slice(0, 3)
+  const extra = Math.max(0, state.slides.length - strip.length)
 
   /* ── talking to the server ────────────────────────────────────────────── */
 
@@ -166,6 +240,7 @@ export default function NewPostDialog({
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new ComposeProblem(json)
+      dispatch({ type: 'saved' })
       return s.postId
     }
     const res = await fetch('/api/social/schedule', {
@@ -176,6 +251,7 @@ export default function NewPostDialog({
     const json = await res.json().catch(() => ({}))
     if (!res.ok) throw new ComposeProblem(json)
     const id = String(json?.post?.id ?? '')
+    loadedId.current = id
     dispatch({ type: 'saved', postId: id })
     onOpenPost(id)
     return id
@@ -183,7 +259,7 @@ export default function NewPostDialog({
 
   const run = async (what: FooterActionKey) => {
     if (what === 'none') return
-    setBusy(true); setProblems([]); setNote(null)
+    setBusy(true); setProblems([]); setNote(null); setConfirm(null)
     try {
       const id = await ensurePost(state)
       if (what === 'draft') { setNote('Saved as a draft.'); return }
@@ -217,23 +293,33 @@ export default function NewPostDialog({
       setProblems(problemsOf(e))
     } finally {
       setBusy(false)
-      setMenuOpen(false)
     }
   }
 
   const saveMedia = async (next: Slide[]) => {
     setBusy(true); setProblems([]); setNote(null)
     try {
-      const fresh = next.filter(s => !approvedUrls.has(s.url))
-      if (fresh.length === 0) {
+      // A file this PIECE has never held is the only thing that makes a
+      // version. Judged against every version, not against the approved one:
+      // once the piece is back with the client the approved set is empty, and
+      // "everything looks new" is how a reorder used to mint v5, then v6.
+      const known = new Set(target.knownUrls)
+      const fresh = next.filter(s => !known.has(s.url))
+      if (fresh.length === 0 && !state.postId) {
         dispatch({ type: 'slides', slides: next })
         setPicking(false)
         return
       }
+      const id = await ensurePost({ ...state, slides: fresh.length === 0 ? next : state.slides })
+      if (fresh.length === 0) {
+        dispatch({ type: 'slides', slides: next })
+        dispatch({ type: 'saved' })
+        setPicking(false)
+        return
+      }
       // media the client has not seen: the whole arrangement becomes a new
-      // version and the piece goes back to them. The post has to exist first
-      // — once the item is with the client it can no longer start one.
-      const id = await ensurePost({ ...state, slides: state.slides })
+      // version and the piece goes back to them. The server checks this again
+      // — it is the one that decides.
       const res = await fetch('/api/social/schedule/media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,6 +339,7 @@ export default function NewPostDialog({
   }
 
   const remove = async () => {
+    setConfirm(null)
     if (!state.postId) { onClose(); return }
     setBusy(true)
     try {
@@ -265,127 +352,95 @@ export default function NewPostDialog({
     }
   }
 
-  /* ── the header's post type ───────────────────────────────────────────── */
-
-  const lead = platforms[0]
-  const kinds: PostKind[] = lead && isPlatform(lead)
-    ? availableKinds(lead, state.slides.map(s => ({ url: s.url, type: s.type })))
-    : []
-  const currentKind = (state.perChannel[chosen[0]?.id ?? '']?.kind ?? '') as PostKind | ''
-  const autoKind = lead && isPlatform(lead)
-    ? autoKindFor(lead, state.slides.map(s => ({ url: s.url, type: s.type })))
-    : null
-  const KIND_WORD: Record<PostKind, string> = {
-    feed: 'Feed post', reel: 'Reel', story: 'Story', carousel: 'Carousel',
-  }
-
-  const options = moreOptionsFor(platforms)
-  const strip = state.slides.slice(0, 3)
-  const extra = Math.max(0, state.slides.length - strip.length)
-
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="New post"
+      // clicking the dark area behind the window closes it — but never
+      // silently over unsaved work
+      onMouseDown={e => { if (e.target === e.currentTarget) requestClose() }}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6"
     >
       <div
-        ref={menu}
-        className="flex w-full max-w-[720px] flex-col rounded-card bg-surface shadow-xl"
+        ref={card}
+        tabIndex={-1}
+        className="flex w-full max-w-[720px] flex-col rounded-card bg-surface shadow-xl outline-none"
       >
         {/* ── header ── */}
         <div className="flex flex-wrap items-center gap-2.5 border-b border-border p-3.5">
-          {/* who it goes to */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => { setChannelsOpen(o => !o); setKindOpen(false); setMenuOpen(false) }}
-              className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
-            >
-              {chosen[0]
-                ? <PlatformIcon platform={String(chosen[0].platform)} size={26} className="rounded-full" />
-                : <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-foreground/10"><Plus className="h-3 w-3" aria-hidden /></span>}
-              <span className="flex flex-col items-start leading-[1.1]">
-                <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : 'Choose a channel'}</span>
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  {chosen.length > 1 ? `and ${chosen.length - 1} more` : (chosen[0]?.platform ?? 'none yet')}
+          <Dropdown
+            label={(
+              <>
+                {chosen[0]
+                  ? <PlatformIcon platform={String(chosen[0].platform)} size={26} className="rounded-full" />
+                  : <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-foreground/10"><Plus className="h-3 w-3" aria-hidden /></span>}
+                <span className="flex flex-col items-start leading-[1.1]">
+                  <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : 'Choose a channel'}</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {chosen.length > 1 ? `and ${chosen.length - 1} more` : (chosen[0]?.platform ?? 'none yet')}
+                  </span>
                 </span>
-              </span>
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            </button>
-            {channelsOpen && (
-              <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[260px] rounded-inner border border-border bg-popover p-1.5 shadow-lg">
-                {accounts.length === 0 && (
-                  <p className="p-2 text-[13px] text-muted-foreground">
-                    This client has no channels connected yet.
-                  </p>
-                )}
-                {accounts.map(a => {
-                  const on = state.channels.includes(a.id)
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => dispatch({ type: 'channel', id: a.id, on: !on })}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-tile px-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      <PlatformIcon platform={String(a.platform)} size={22} className="rounded-full" />
-                      <span className="min-w-0 flex-1 truncate">{a.username || a.name}</span>
-                      <span className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded-full border',
-                        on ? 'border-foreground bg-foreground text-background' : 'border-border',
-                      )}
-                      >
-                        {on ? '✓' : ''}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              </>
             )}
-          </div>
-
-          {/* what kind of post */}
-          {kinds.length > 0 && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => { setKindOpen(o => !o); setChannelsOpen(false); setMenuOpen(false) }}
-                className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
-              >
-                <Zap className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                {currentKind ? KIND_WORD[currentKind] : 'Auto publish'}
-                <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
-              {kindOpen && (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] rounded-inner border border-border bg-popover p-1.5 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: undefined } })
-                      setKindOpen(false)
-                    }}
-                    className="flex min-h-11 w-full items-center rounded-tile px-2 text-left text-[13px] hover:bg-muted"
+            width={260}
+          >
+            {accounts.length === 0 && (
+              <p className="p-2 text-[13px] text-muted-foreground">
+                This client has no channels connected yet.
+              </p>
+            )}
+            {accounts.map(a => {
+              const on = state.channels.includes(a.id)
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => dispatch({ type: 'channel', id: a.id, on: !on })}
+                  className="flex min-h-11 w-full items-center gap-2 rounded-tile px-2 text-left text-[13px] hover:bg-muted"
+                >
+                  <PlatformIcon platform={String(a.platform)} size={22} className="rounded-full" />
+                  <span className="min-w-0 flex-1 truncate">{a.username || a.name}</span>
+                  <span className={cn(
+                    'flex h-4 w-4 items-center justify-center rounded-full border text-[10px]',
+                    on ? 'border-foreground bg-foreground text-background' : 'border-border',
+                  )}
                   >
-                    Auto publish{autoKind ? ` — ${KIND_WORD[autoKind].toLowerCase()}` : ''}
-                  </button>
-                  {kinds.map(k => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => {
-                        for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: k } })
-                        setKindOpen(false)
-                      }}
-                      className="flex min-h-11 w-full items-center rounded-tile px-2 text-left text-[13px] hover:bg-muted"
-                    >
-                      {KIND_WORD[k]}
-                    </button>
-                  ))}
-                </div>
+                    {on ? '✓' : ''}
+                  </span>
+                </button>
+              )
+            })}
+          </Dropdown>
+
+          {kinds.length > 0 && (
+            <Dropdown
+              label={(
+                <>
+                  <Zap className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                  {pickedKind ? KIND_WORD[pickedKind] : 'Auto publish'}
+                </>
               )}
-            </div>
+              width={220}
+            >
+              <MenuItem
+                onClick={() => {
+                  for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: undefined } })
+                }}
+              >
+                Auto publish{autoKind ? ` — ${KIND_WORD[autoKind].toLowerCase()}` : ''}
+              </MenuItem>
+              {kinds.map(k => (
+                <MenuItem
+                  key={k}
+                  onClick={() => {
+                    for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: k } })
+                  }}
+                >
+                  {KIND_WORD[k]}
+                </MenuItem>
+              ))}
+            </Dropdown>
           )}
 
           <span className="text-[13px] text-muted-foreground">on</span>
@@ -397,7 +452,7 @@ export default function NewPostDialog({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="ml-auto flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
           >
@@ -515,6 +570,7 @@ export default function NewPostDialog({
                       channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
                       state={state}
                       dispatch={dispatch}
+                      locations={locations}
                     />
                   ))}
                 </div>
@@ -557,11 +613,38 @@ export default function NewPostDialog({
           </div>
         )}
 
+        {/* ── a question, when something is about to be thrown away ── */}
+        {confirm && (
+          <div className="mx-3.5 mt-3.5 flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+            <span className="text-[13px] font-medium">
+              {confirm === 'close'
+                ? 'You have changes that have not been saved. Close anyway?'
+                : 'Take this post off the calendar? The piece itself is not deleted.'}
+            </span>
+            <span className="ml-auto flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirm(null)}
+                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => (confirm === 'close' ? onClose() : void remove())}
+                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background"
+              >
+                {confirm === 'close' ? 'Close and lose them' : 'Take it off'}
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* ── footer ── */}
         <div className="flex flex-wrap items-center gap-3 border-t border-border p-3.5">
           <button
             type="button"
-            onClick={remove}
+            onClick={() => (state.postId ? setConfirm('delete') : requestClose())}
             disabled={busy}
             aria-label={state.postId ? 'Take this post off the calendar' : 'Close without saving'}
             className="flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-60"
@@ -583,43 +666,21 @@ export default function NewPostDialog({
             {APPROVAL_LINE[status]}
           </span>
 
+          {state.dirty && (
+            <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>
+          )}
+
           <div className="ml-auto flex items-center">
             {primary.key === 'none' ? (
               <span className="text-[13px] font-semibold text-muted-foreground">{primary.label}</span>
             ) : (
-              <div className="relative flex">
-                <button
-                  type="button"
-                  disabled={busy || !check.ok}
-                  onClick={() => void run(primary.key)}
-                  className="flex min-h-11 items-center rounded-l-full bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-60"
-                >
-                  {busy ? 'Working…' : primary.label}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label="More ways to save this post"
-                  onClick={() => { setMenuOpen(o => !o); setChannelsOpen(false); setKindOpen(false) }}
-                  className="flex min-h-11 w-10 items-center justify-center rounded-r-full border-l border-background/20 bg-foreground text-background disabled:opacity-60"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                </button>
-                {menuOpen && (
-                  <div className="absolute bottom-[calc(100%+6px)] right-0 z-50 w-[260px] rounded-inner border border-border bg-popover p-1.5 shadow-lg">
-                    {menuItems.map(m => (
-                      <button
-                        key={m.key}
-                        type="button"
-                        onClick={() => void run(m.key)}
-                        className="flex min-h-11 w-full items-center rounded-tile px-2 text-left text-[13px] hover:bg-muted"
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <SplitButton
+                label={busy ? 'Working…' : primary.label}
+                disabled={busy || !check.ok}
+                onPrimary={() => void run(primary.key)}
+                items={menuItems.map(m => ({ key: m.key, label: m.label }))}
+                onPick={k => void run(k as FooterActionKey)}
+              />
             )}
           </div>
 
@@ -647,6 +708,10 @@ export default function NewPostDialog({
   )
 }
 
+const KIND_WORD: Record<PostKind, string> = {
+  feed: 'Feed post', reel: 'Reel', story: 'Story', carousel: 'Carousel',
+}
+
 /** A server refusal that carried a whole list of things to fix. */
 class ComposeProblem extends Error {
   problems: string[]
@@ -664,18 +729,148 @@ function problemsOf(e: unknown): string[] {
   return [friendlyError(e instanceof Error ? e.message : '', 'this post')]
 }
 
-/** One row of "More options", for the channels it actually applies to. */
-function ExtraRow({ option, label, channels, state, dispatch }: {
-  option: 'firstComment' | 'collaborators' | 'shareToFeed'
+/**
+ * A pill that opens a small panel under it.
+ *
+ * Its own container, its own outside-click: the whole set used to share one
+ * ref pointing at the dialog card, so clicking the caption box left the
+ * channel list hanging open over the words being typed.
+ */
+function Dropdown({ label, width, children }: {
+  label: React.ReactNode
+  width: number
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+    }
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) }
+    }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc, true)
+    return () => {
+      document.removeEventListener('mousedown', away)
+      document.removeEventListener('keydown', esc, true)
+    }
+  }, [open])
+
+  return (
+    <div ref={box} className="relative" onClick={() => { /* clicks inside stay inside */ }}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
+      >
+        {label}
+        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+      </button>
+      {open && (
+        <div
+          style={{ width }}
+          onClick={() => setOpen(false)}
+          className="absolute left-0 top-[calc(100%+6px)] z-50 rounded-inner border border-border bg-popover p-1.5 shadow-lg"
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-11 w-full items-center rounded-tile px-2 text-left text-[13px] hover:bg-muted"
+    >
+      {children}
+    </button>
+  )
+}
+
+/** The footer's one button, with the ways to save it that are not the
+ *  obvious one tucked behind the chevron. */
+function SplitButton({ label, disabled, onPrimary, items, onPick }: {
+  label: string
+  disabled: boolean
+  onPrimary: () => void
+  items: { key: string; label: string }[]
+  onPick: (key: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+
+  return (
+    <div ref={box} className="relative flex">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onPrimary}
+        className="flex min-h-11 items-center rounded-l-full bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-60"
+      >
+        {label}
+      </button>
+      <button
+        type="button"
+        aria-label="More ways to save this post"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="flex min-h-11 w-10 items-center justify-center rounded-r-full border-l border-background/20 bg-foreground text-background"
+      >
+        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+      </button>
+      {open && (
+        <div className="absolute bottom-[calc(100%+6px)] right-0 z-50 w-[260px] rounded-inner border border-border bg-popover p-1.5 shadow-lg">
+          {items.map(m => (
+            <MenuItem key={m.key} onClick={() => { setOpen(false); onPick(m.key) }}>
+              {m.label}
+            </MenuItem>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One row of "More options", for the channels it actually applies to.
+ *
+ * Location is the interesting one. Instagram takes a NUMERIC FACEBOOK PAGE ID
+ * and there is no place search anywhere in the chain, so the row offers the
+ * client's saved places first and a box for the number second — and it is not
+ * rendered at all on a Story, because Instagram refuses those outright.
+ */
+function ExtraRow({ option, label, channels, state, dispatch, locations }: {
+  option: MoreOptionKey
   label: string
   channels: SocialAccount[]
   state: ComposerState
   dispatch: (a: { type: 'extra'; channel: string; patch: Record<string, unknown> }) => void
+  locations: SavedLocation[]
 }) {
-  const [open, setOpen] = useState(false)
-  if (channels.length === 0) return null
   const first = channels[0]
-  const value = state.perChannel[first.id] ?? {}
+  const value = first ? state.perChannel[first.id] ?? {} : {}
+  const [open, setOpen] = useState(Boolean(value.locationId || value.firstComment))
+  if (!first) return null
+
+  const applyAll = (patch: Record<string, unknown>) => {
+    for (const c of channels) dispatch({ type: 'extra', channel: c.id, patch })
+  }
 
   if (option === 'shareToFeed') {
     return (
@@ -683,15 +878,63 @@ function ExtraRow({ option, label, channels, state, dispatch }: {
         <input
           type="checkbox"
           checked={Boolean(value.shareToFeed)}
-          onChange={e => {
-            for (const c of channels) {
-              dispatch({ type: 'extra', channel: c.id, patch: { shareToFeed: e.target.checked } })
-            }
-          }}
+          onChange={e => applyAll({ shareToFeed: e.target.checked })}
           className="h-4 w-4"
         />
         {label}
       </label>
+    )
+  }
+
+  if (option === 'location') {
+    const id = String(value.locationId ?? '')
+    const bad = id !== '' && !isPageId(id)
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
+        >
+          <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
+          {label}
+          {id && !bad && (
+            <span className="text-[12px] font-normal text-muted-foreground">
+              — {locations.find(l => l.pageId === id)?.name ?? id}
+            </span>
+          )}
+        </button>
+        {open && (
+          <div className="flex flex-col gap-1.5">
+            {locations.length > 0 && (
+              <select
+                value={locations.some(l => l.pageId === id) ? id : ''}
+                onChange={e => applyAll({ locationId: e.target.value || undefined })}
+                className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
+              >
+                <option value="">No place</option>
+                {locations.map(l => (
+                  <option key={l.pageId} value={l.pageId}>{l.name}</option>
+                ))}
+              </select>
+            )}
+            <input
+              value={id}
+              inputMode="numeric"
+              onChange={e => applyAll({ locationId: e.target.value.trim() || undefined })}
+              placeholder="…or paste a Facebook Page ID"
+              className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
+            />
+            <p className={cn('text-[11px]', bad ? 'font-medium text-accent-red' : 'text-muted-foreground')}>
+              {bad
+                ? 'That does not look like a Page ID — it is a long number, not the @name.'
+                : locations.length > 0
+                  ? `Saved places come from this client's Social page. ${PAGE_ID_HELP}`
+                  : `No places saved for this client yet. ${PAGE_ID_HELP}`}
+            </p>
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -710,15 +953,12 @@ function ExtraRow({ option, label, channels, state, dispatch }: {
           value={option === 'firstComment'
             ? String(value.firstComment ?? '')
             : (value.collaborators ?? []).join(', ')}
-          onChange={e => {
-            const patch = option === 'firstComment'
-              ? { firstComment: e.target.value }
-              : {
-                collaborators: e.target.value.split(',').map(s => s.trim().replace(/^@/, ''))
-                  .filter(Boolean).slice(0, 3),
-              }
-            for (const c of channels) dispatch({ type: 'extra', channel: c.id, patch })
-          }}
+          onChange={e => applyAll(option === 'firstComment'
+            ? { firstComment: e.target.value }
+            : {
+              collaborators: e.target.value.split(',').map(s => s.trim().replace(/^@/, ''))
+                .filter(Boolean).slice(0, 3),
+            })}
           placeholder={option === 'firstComment'
             ? 'Posted as the first comment — the usual place for hashtags'
             : 'Up to three usernames, separated by commas'}
