@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  eligibility, mirrorStatus, tileTone, weekGrid, monthCells, canReschedule,
+  eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason,
   type SocialPostStatus,
@@ -57,8 +57,19 @@ describe('eligibility', () => {
     }
   })
 
+  it('says the work is still being made', () => {
+    for (const status of ['draft_uploaded', 'internal_review']) {
+      expect(eligibility({ status }, [version])).toEqual({ ok: false, reason: 'Still being made' })
+    }
+  })
+
+  it('says an already-posted item has already posted', () => {
+    expect(eligibility({ status: 'published' }, [version]))
+      .toEqual({ ok: false, reason: 'Already posted' })
+  })
+
   it('says nothing else is ready yet', () => {
-    for (const status of ['draft_uploaded', 'internal_review', 'published', '', null]) {
+    for (const status of ['', null]) {
       expect(eligibility({ status }, [version])).toEqual({ ok: false, reason: 'Not ready yet' })
     }
   })
@@ -132,6 +143,15 @@ describe('mirrorStatus', () => {
     expect(mirrorStatus({ posting_approval_state: 'pending' }, post, [{ status: 'weird' }]))
       .toBe('pending')
   })
+
+  it('agrees with canReschedule on a cancelled post with no jobs', () => {
+    // the item still reads 'approved' — only the post itself was cancelled —
+    // and that must still win, or the tile would claim it could be dragged
+    // when canReschedule would refuse the drop
+    const cancelled = { status: 'cancelled' }
+    expect(mirrorStatus({ posting_approval_state: 'approved' }, cancelled, [])).toBe('cancelled')
+    expect(canReschedule(cancelled).ok).toBe(false)
+  })
 })
 
 describe('blockReason', () => {
@@ -165,10 +185,10 @@ describe('tileTone', () => {
   })
 })
 
-/* ── weekGrid ───────────────────────────────────────────────────────────── */
+/* ── scheduleWeekGrid ───────────────────────────────────────────────────── */
 
-describe('weekGrid', () => {
-  const g = weekGrid({ start: '2026-08-26', tz: TZ })
+describe('scheduleWeekGrid', () => {
+  const g = scheduleWeekGrid({ start: '2026-08-26', tz: TZ })
 
   it('is Monday-first and seven days wide', () => {
     expect(g.days.map(d => d.iso)).toEqual([
@@ -250,7 +270,7 @@ describe('weekGrid', () => {
 
   it('survives the week the clocks go forward in Melbourne', () => {
     // AEST → AEDT at 2 am on Sunday 4 October 2026
-    const dst = weekGrid({ start: '2026-10-04', tz: TZ })
+    const dst = scheduleWeekGrid({ start: '2026-10-04', tz: TZ })
     expect(dst.days.map(d => d.iso)).toEqual([
       '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01',
       '2026-10-02', '2026-10-03', '2026-10-04',
@@ -268,7 +288,7 @@ describe('weekGrid', () => {
   })
 
   it('takes a custom range and row height', () => {
-    const tall = weekGrid({ start: '2026-08-26', tz: TZ, fromHour: 8, toHour: 12, rowPx: 60, headerPx: 0 })
+    const tall = scheduleWeekGrid({ start: '2026-08-26', tz: TZ, fromHour: 8, toHour: 12, rowPx: 60, headerPx: 0 })
     expect(tall.hours).toEqual([8, 9, 10, 11, 12])
     expect(tall.height).toBe(4 * 60)
     expect(tall.tileTop(at('2026-08-26T09:00'))!.top).toBe(60)
@@ -407,6 +427,26 @@ describe('suggestedTimes', () => {
     expect(friday.every(s => s.source === 'default')).toBe(true)
   })
 
+  it('will not trust a weekday×hour bucket with fewer than three results', () => {
+    // 20 posts total clears the client-numbers floor, but only 18 of them
+    // share an hour — the other 2, alone at 7 am, are a coincidence, not "the
+    // client's own numbers", and must not be offered as a learned time
+    const analytics = [
+      ...Array.from({ length: 18 }, () => ({
+        platform: 'instagram', published_at: at('2026-08-20T18:00'),
+        likes: 400, comments: 40, shares: 4, saves: 4,
+      })),
+      ...Array.from({ length: 2 }, () => ({
+        platform: 'instagram', published_at: at('2026-08-13T07:00'),
+        likes: 500, comments: 50, shares: 5, saves: 5,
+      })),
+    ]
+    const out = suggestedTimes({ analytics, network: 'instagram', tz: TZ, now })
+    const thursday = out.filter(s => s.dayKey === '2026-08-27')
+    expect(thursday.map(s => s.hour)).not.toContain(7)
+    expect(thursday.find(s => s.hour === 18)!.source).toBe('yours')
+  })
+
   it('offers at most three slots on a day', () => {
     const hours = [8, 9, 10, 11, 12, 13]
     const analytics = hours.flatMap((h, i) => Array.from({ length: 4 }, () => ({
@@ -443,15 +483,17 @@ describe('suggestedTimes', () => {
 /* ── slideLimits / applySlideLimit ──────────────────────────────────────── */
 
 describe('slideLimits', () => {
-  it('reads the ceiling and the mixing rule off the platform rules', () => {
+  it('reads the per-kind ceilings off the platform rules', () => {
     expect(slideLimits(['instagram', 'youtube', 'linkedin'])).toEqual({
-      instagram: { max: 10, mix: true },
-      youtube: { max: 1, mix: false },
-      linkedin: { max: 20, mix: false },
+      instagram: { images: 10, videos: 1, carousel: 10, mixedCarousel: true },
+      youtube: { images: 0, videos: 1, carousel: 0, mixedCarousel: false },
+      linkedin: { images: 20, videos: 1, carousel: 20, mixedCarousel: false },
     })
   })
   it('skips a platform it has no rules for', () => {
-    expect(slideLimits(['instagram', 'myspace'])).toEqual({ instagram: { max: 10, mix: true } })
+    expect(slideLimits(['instagram', 'myspace'])).toEqual({
+      instagram: { images: 10, videos: 1, carousel: 10, mixedCarousel: true },
+    })
   })
 })
 
@@ -467,6 +509,13 @@ describe('applySlideLimit', () => {
   it('drops the odd one out where a platform will not mix pictures and video', () => {
     expect(applySlideLimit([img(1), vid(2), img(3)], 'tiktok')).toEqual([img(1), img(3)])
     expect(applySlideLimit([vid(1), img(2)], 'tiktok')).toEqual([vid(1)])
+  })
+
+  it('caps a leading video at the platform\'s VIDEO ceiling, not its carousel ceiling', () => {
+    // TikTok's carousel holds up to 35 photos, but still only one video per
+    // post — three videos are not a video carousel, they are three posts
+    const threeVideos = [vid(1), vid(2), vid(3)]
+    expect(applySlideLimit(threeVideos, 'tiktok')).toEqual([vid(1)])
   })
 
   it('leaves a mix alone where the platform allows one', () => {
@@ -553,14 +602,24 @@ describe('validateComposition', () => {
     expect(validateComposition({ ...good, caption: '' }).ok).toBe(true)
   })
 
-  it('counts the slides against each channel', () => {
+  it('counts the graphics against each channel', () => {
+    const r = validateComposition({
+      ...good,
+      slides: Array.from({ length: 12 }, (_, i) => img(i)),
+      channels: [{ id: 'a1', platform: 'instagram' }],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.problems).toContain('Instagram takes 10 graphics — take 2 out')
+  })
+
+  it('says the true thing when a channel takes video, not pictures', () => {
     const r = validateComposition({
       ...good,
       slides: Array.from({ length: 4 }, (_, i) => img(i)),
       channels: [{ id: 'a1', platform: 'instagram' }, { id: 'y1', platform: 'youtube' }],
     })
     expect(r.ok).toBe(false)
-    expect(r.problems).toContain('YouTube takes 1 slide — take 3 out')
+    expect(r.problems).toContain('YouTube takes video, not pictures')
   })
 
   it('refuses a caption longer than the channel allows', () => {

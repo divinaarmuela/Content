@@ -28,9 +28,11 @@
  */
 
 import { publishBlockReason, parseApprovalState } from './posting-approval-core'
-import { PLATFORM_RULES, type Platform } from './publish-core'
+import { LIVE_JOB_STATUSES, PLATFORM_RULES, type Platform } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
+import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
+import type { ItemStatus } from './workflow-core'
 
 /* ── the post ───────────────────────────────────────────────────────────── */
 
@@ -61,14 +63,17 @@ export type ScheduleJob = { status?: string | null }
 /* ── eligibility ────────────────────────────────────────────────────────── */
 
 /** The two statuses that mean the client has signed the WORK off. */
-const ELIGIBLE_STATUSES = ['approved_for_scheduling', 'scheduled']
+const ELIGIBLE_STATUSES: ItemStatus[] = ['approved_for_scheduling', 'scheduled']
 
 /** Why an item cannot start a post — said the way a person would say it. */
-const NOT_ELIGIBLE: Record<string, string> = {
-  client_review: 'Still with the client',
-  client_changes_requested: 'Changes in progress',
+const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
+  draft_uploaded: 'Still being made',
+  internal_review: 'Still being made',
   revision_required: 'Changes in progress',
   revision_complete: 'Changes in progress',
+  client_review: 'Still with the client',
+  client_changes_requested: 'Changes in progress',
+  published: 'Already posted',
 }
 
 export type Eligibility =
@@ -87,7 +92,7 @@ export function eligibility(
   item: ScheduleItem | null | undefined,
   versions: readonly ScheduleVersion[] | null | undefined,
 ): Eligibility {
-  const status = String(item?.status ?? '')
+  const status = String(item?.status ?? '') as ItemStatus
   if (!ELIGIBLE_STATUSES.includes(status)) {
     return { ok: false, reason: NOT_ELIGIBLE[status] ?? 'Not ready yet' }
   }
@@ -114,13 +119,18 @@ function latestVersion(
 
 /* ── the status a tile wears ────────────────────────────────────────────── */
 
-const LIVE_JOB_STATUSES = ['queued', 'publishing', 'scheduled']
-
 /**
  * What the post IS right now, from the item's approval state and its jobs.
  *
- * The jobs win when there are any, because a queued post has moved past the
- * approval question. Their order of precedence, in the multi-channel case:
+ * A post's OWN status is read first when it is terminal: 'cancelled' is
+ * something a person did to this post directly, and it must win even with
+ * no jobs behind it — `canReschedule` already refuses to move a cancelled
+ * post, and mirroring the item's approval state instead here would make the
+ * tile claim it could still be moved when the drag handler would refuse it.
+ *
+ * Otherwise the jobs win when there are any, because a queued post has moved
+ * past the approval question. Their order of precedence, in the
+ * multi-channel case:
  *
  *   still going out  → 'scheduled'  — one channel left to go means the post
  *                                     as a whole has not happened yet
@@ -137,6 +147,8 @@ export function mirrorStatus(
   post: SchedulePost | null | undefined,
   jobs: readonly ScheduleJob[] | null | undefined,
 ): SocialPostStatus {
+  if (String(post?.status ?? '') === 'cancelled') return 'cancelled'
+
   const list = (Array.isArray(jobs) ? jobs : []).map(j => String(j?.status ?? ''))
   if (list.some(s => LIVE_JOB_STATUSES.includes(s))) return 'scheduled'
   if (list.includes('failed')) return 'failed'
@@ -147,7 +159,6 @@ export function mirrorStatus(
   if (state) return state
   // the gate was never used on this item: whatever the row calls itself, the
   // post has not been sent anywhere, and that is a draft
-  void post
   return 'draft'
 }
 
@@ -185,19 +196,9 @@ const DAY_MS = 86_400_000
 const pad = (n: number) => String(n).padStart(2, '0')
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-/** 'YYYY-MM-DD' → the UTC midnight that stands for it, or NaN. */
-function keyToUtc(key: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(key ?? ''))
-  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN
-}
 function keyOfUtc(ms: number): string {
   const d = new Date(ms)
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
-}
-/** Monday = 0 … Sunday = 6. */
-function weekdayOf(key: string): number {
-  const ms = keyToUtc(key)
-  return Number.isNaN(ms) ? 0 : (new Date(ms).getUTCDay() + 6) % 7
 }
 /** A day key out of whatever the caller had: a key, or an instant read in tz. */
 function toDayKey(start: string | number | Date, tz: string): string | null {
@@ -238,7 +239,7 @@ export type Slot = {
   label: string
 }
 
-export type WeekGrid = {
+export type ScheduleWeekGrid = {
   days: WeekDay[]
   hours: number[]
   tz: string
@@ -272,7 +273,7 @@ const SNAP_MINUTES = 15
  * `tileTop` and `slotAt` are inverses on the quarter hour, which is what makes
  * a drag land where it was dropped rather than a pixel or a DST hour away.
  */
-export function weekGrid(opts: WeekGridOptions): WeekGrid {
+export function scheduleWeekGrid(opts: WeekGridOptions): ScheduleWeekGrid {
   const tz = safeZone(opts.tz)
   const fromHour = clampHour(opts.fromHour ?? 6, 6)
   const toHour = Math.max(fromHour, clampHour(opts.toHour ?? 20, 20))
@@ -283,7 +284,7 @@ export function weekGrid(opts: WeekGridOptions): WeekGrid {
 
   const anchor = toDayKey(opts.start, tz) ?? keyOfUtc(Date.now())
   const base = keyToUtc(anchor)
-  const monday = Number.isNaN(base) ? Date.now() : base - weekdayOf(anchor) * DAY_MS
+  const monday = Number.isNaN(base) ? Date.now() : base - weekdayIndex(anchor) * DAY_MS
 
   const days: WeekDay[] = Array.from({ length: 7 }, (_, index) => {
     const ms = monday + index * DAY_MS
@@ -360,13 +361,9 @@ function clockLabel(hour: number, minute: number): string {
 
 /* ── the month grid ─────────────────────────────────────────────────────── */
 
-export type MonthCell = {
-  key: string
-  day: number
-  month: number
-  year: number
-  inMonth: boolean
-}
+/** Same shape as work-calendar-core's `GridCell` — a month cell IS a grid
+ *  cell, so this names the type without re-declaring it. */
+export type MonthCell = GridCell
 
 /**
  * A Monday-first 6 × 7 month, always 42 cells.
@@ -467,6 +464,9 @@ const FALLBACK_TIMES = ['11:00', '18:00']
 const WINDOW_DAYS = 90
 /** At most this many slots on one day. */
 const PER_DAY = 3
+/** A weekday×hour bucket needs at least this many results before it is
+ *  trusted as a pattern rather than a coincidence. */
+const MIN_BUCKET_POSTS = 3
 
 /** Only what the rule reads off a `post_analytics` row. */
 export type AnalyticsRow = {
@@ -532,7 +532,7 @@ export function suggestedTimes(input: SuggestedTimesInput): SuggestedTime[] {
   const out: SuggestedTime[] = []
   for (let i = 0; i < 7; i++) {
     const dayKey = keyOfUtc(startMs + i * DAY_MS)
-    const weekday = weekdayOf(dayKey)
+    const weekday = weekdayIndex(dayKey)
     const learned = byWeekday.get(weekday) ?? []
     const slots: { hour: number; minute: number; source: 'yours' | 'default' }[] =
       learned.length > 0
@@ -579,7 +579,7 @@ function learnedHours(
     const w = wallTimeIn(at, tz)
     if (!w) continue
     counted++
-    const key = `${weekdayOf(`${w.year}-${pad(w.month)}-${pad(w.day)}`)}:${w.hour}`
+    const key = `${weekdayIndex(`${w.year}-${pad(w.month)}-${pad(w.day)}`)}:${w.hour}`
     const b = buckets.get(key) ?? { sum: 0, count: 0 }
     b.sum += score
     b.count++
@@ -589,6 +589,10 @@ function learnedHours(
 
   const perDay = new Map<number, { hour: number; avg: number; count: number }[]>()
   for (const [key, b] of buckets) {
+    // one or two posts at an hour is a coincidence, not a pattern — offering
+    // it as "your best time" on that evidence would be a guess dressed up as
+    // a fact. Three is the floor before a weekday×hour bucket counts.
+    if (b.count < MIN_BUCKET_POSTS) continue
     const [weekday, hour] = key.split(':').map(Number)
     const list = perDay.get(weekday) ?? []
     list.push({ hour, avg: b.sum / b.count, count: b.count })
@@ -617,19 +621,24 @@ function engagementOf(row: AnalyticsRow): number | null {
 /* ── per-channel slide limits ───────────────────────────────────────────── */
 
 export type SlideLimit = {
-  /** the most slides this channel will take in one post */
-  max: number
-  /** may pictures and video go out together */
-  mix: boolean
+  /** the most still pictures this channel will take in one post */
+  images: number
+  /** the most videos this channel will take in one post */
+  videos: number
+  /** the most items in one carousel; 0 = this channel has no carousel */
+  carousel: number
+  /** may that carousel hold pictures and video together */
+  mixedCarousel: boolean
 }
 
 /**
- * What each channel will take, straight off `PLATFORM_RULES`.
+ * What each channel will take, straight off `PLATFORM_RULES` — per KIND, not
+ * one flattened number.
  *
- * A carousel has its own ceiling and its own mixing rule, and that is the pair
- * that matters here: the composer is always choosing a SET of slides, so the
- * carousel numbers are the honest ones. A platform with no carousel falls back
- * to whatever a single post takes there.
+ * A single headline "max" hid the fact that YouTube's ceiling is one VIDEO
+ * and zero pictures, not "1 slide": a caller that only ever compared a count
+ * against it could tell someone to trim twelve photos down to one photo for
+ * a channel that will not take a photo at all.
  */
 export function slideLimits(
   platforms: readonly string[] | null | undefined,
@@ -638,9 +647,10 @@ export function slideLimits(
   for (const p of Array.isArray(platforms) ? platforms : []) {
     const rules = PLATFORM_RULES[String(p) as Platform]
     if (!rules) continue
-    out[String(p)] = rules.carousel > 0
-      ? { max: rules.carousel, mix: rules.mixedCarousel }
-      : { max: Math.max(rules.images, rules.videos), mix: rules.mixed }
+    out[String(p)] = {
+      images: rules.images, videos: rules.videos,
+      carousel: rules.carousel, mixedCarousel: rules.mixedCarousel,
+    }
   }
   return out
 }
@@ -650,11 +660,11 @@ export function slideLimits(
  *
  * Where the channel will not mix, the kind of the FIRST slide wins and the
  * others go — the first slide is the one somebody chose to lead with. The
- * ceiling is then that KIND's ceiling, which is not always the headline number
- * `slideLimits` reports: YouTube takes one video and no pictures at all, and
- * trimming twelve photos to one photo for YouTube would be a post that cannot
- * exist. A platform we have no rules for is left alone rather than silently
- * emptied.
+ * ceiling is then that KIND's ceiling: even inside a carousel, a channel that
+ * will not mix pictures and video (TikTok's `mixedCarousel: false`) still
+ * posts at most one VIDEO per post — three videos are not a video carousel,
+ * they are three posts squeezed into a limit meant for a photo set. A
+ * platform we have no rules for is left alone rather than silently emptied.
  */
 export function applySlideLimit(
   slides: readonly Slide[] | null | undefined,
@@ -664,8 +674,10 @@ export function applySlideLimit(
   const rules = PLATFORM_RULES[String(platform) as Platform]
   if (!rules || list.length === 0) return list
   if (rules.carousel > 0) {
-    const kept = rules.mixedCarousel ? list : list.filter(s => s.type === list[0].type)
-    return kept.slice(0, rules.carousel)
+    const kind = list[0].type
+    const kept = rules.mixedCarousel ? list : list.filter(s => s.type === kind)
+    const max = rules.mixedCarousel ? rules.carousel : (kind === 'video' ? rules.videos : rules.carousel)
+    return kept.slice(0, max)
   }
   const kept = rules.mixed ? list : list.filter(s => s.type === list[0].type)
   const kind = kept[0]?.type
@@ -773,11 +785,26 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
       )
     }
     const limit = limits[platform]
-    if (limit && slides.length > limit.max) {
-      const over = slides.length - limit.max
-      problems.push(
-        `${name} takes ${limit.max} ${limit.max === 1 ? 'slide' : 'slides'} — take ${over} out`,
-      )
+    if (limit) {
+      const images = slides.filter(s => s.type === 'image').length
+      const videos = slides.filter(s => s.type === 'video').length
+      // count by KIND before counting at all: a channel that takes video and
+      // no pictures whatsoever (YouTube) is not "too many slides", it is the
+      // wrong kind of graphic — trimming twelve photos to one photo there is
+      // a post that still cannot exist
+      if (images > 0 && limit.images === 0 && limit.carousel === 0) {
+        problems.push(`${name} takes video, not pictures`)
+      } else if (videos > 0 && limit.videos === 0) {
+        problems.push(`${name} takes pictures, not video`)
+      } else {
+        const max = limit.carousel > 0 ? limit.carousel : Math.max(limit.images, limit.videos)
+        if (slides.length > max) {
+          const over = slides.length - max
+          problems.push(
+            `${name} takes ${max} ${max === 1 ? 'graphic' : 'graphics'} — take ${over} out`,
+          )
+        }
+      }
     }
   }
 

@@ -100,6 +100,16 @@ export function autoKindFor(platform: Platform, media: MediaItem[]): PostKind {
   return allowed.includes(guess) ? guess : allowed.includes('feed') ? 'feed' : allowed[0]
 }
 
+/**
+ * A publish job in one of these still owns its content item: 'scheduled'
+ * included, because the provider is holding that post until its time.
+ *
+ * Lives here (rather than in publish.ts, which needs `server-only`) so the
+ * pure schedule rules — `mirrorStatus` in particular — can read the same
+ * list the publisher does, instead of a second copy that could drift.
+ */
+export const LIVE_JOB_STATUSES = ['queued', 'publishing', 'scheduled']
+
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
 
 export function isPlatform(v: string): v is Platform {

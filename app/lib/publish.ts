@@ -2,14 +2,16 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import type {
-  ContentAsset, PublishJob as PublishJobRow, SocialAccount,
+  ContentAsset, ContentItem, PublishJob as PublishJobRow, SocialAccount,
 } from '@/lib/db-types'
+import { publishBlockReason } from './posting-approval-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import {
-  validatePost, isPlatform, describeRemoteOutcome, isStillProcessing,
+  validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   type MediaItem, type PostKind, type Platform, type Target, type RemotePlatformRow,
 } from './publish-core'
+export { LIVE_JOB_STATUSES }
 
 /**
  * Publishing a client's post is the least reversible thing this system does —
@@ -38,11 +40,6 @@ export type PublishJob = {
   attempts: number
 }
 
-/**
- * A job in one of these still owns its content item: 'scheduled' included,
- * because the provider is holding that post until its time.
- */
-export const LIVE_JOB_STATUSES = ['queued', 'publishing', 'scheduled']
 export const publishLockKey = (contentItemId: string) => `publish__${contentItemId}`
 
 /** The platform names off a job's stored targets, however loosely typed. */
@@ -63,7 +60,7 @@ export async function queuePublishJob(input: {
   scheduledFor?: string | null
   timezone?: string
   createdBy?: string
-}): Promise<{ id: string } | { error: string; issues?: string[] }> {
+}): Promise<{ id: string } | { error: string; issues?: string[]; blocked?: boolean }> {
   const platforms = input.targets.map(t => t.platform).filter(isPlatform)
   // carry each target's intent into validation, so a Reel with a still image
   // or a Story with a carousel is refused here rather than by the platform
@@ -85,6 +82,22 @@ export async function queuePublishJob(input: {
       error: 'This post is not valid for every selected platform',
       issues: issues.map(i => `${i.platform}: ${i.problem}`),
     }
+  }
+
+  // ── the approval gate ────────────────────────────────────────────────
+  // Nothing reaches a client's real account without their sign-off, on EVERY
+  // path — this one included. The ad-hoc composer used to walk straight past
+  // the gate the item page enforces, which made "the post is locked until it
+  // is approved" true of one screen and false of the system.
+  //
+  // Tolerant by design: no item link, no row, or a database without the
+  // column all read as "the gate is not in use", which is exactly how this
+  // behaved before the gate existed.
+  if (input.contentItemId) {
+    const item = await table<ContentItem>('content_items')
+      .get(input.contentItemId).catch(() => null)
+    const blocked = publishBlockReason(item?.posting_approval_state)
+    if (blocked) return { error: blocked, blocked: true }
   }
 
   // only one LIVE job per content item, ever — the rule the partial unique
