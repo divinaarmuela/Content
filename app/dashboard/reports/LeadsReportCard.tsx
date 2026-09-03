@@ -21,7 +21,8 @@ import { useRole } from '../useRole'
 
 type Settings = {
   enabled: boolean
-  recipients: string[]
+  /** absent on a row written before the field existed */
+  recipients?: string[]
   send_day: number
   data_from: string | null
   last_sent_for: string | null
@@ -83,8 +84,9 @@ export default function LeadsReportCard() {
   const addRecipient = () => {
     const email = newRecipient.trim().toLowerCase()
     if (!email || !settings) return
-    if (settings.recipients.includes(email)) return setNewRecipient('')
-    save({ recipients: [...settings.recipients, email] })
+    const current = settings.recipients ?? []
+    if (current.includes(email)) return setNewRecipient('')
+    save({ recipients: [...current, email] })
     setNewRecipient('')
   }
 
@@ -127,6 +129,11 @@ export default function LeadsReportCard() {
     )
   }
 
+  /* A settings row written before recipients existed has no array at all.
+     The server reads it the same way (report-send.ts), and a report card that
+     throws is worse than one with nobody on the list. */
+  const recipients = settings.recipients ?? []
+
   return (
     <Card className="border-accent-blue/25">
       <CardHeader className="flex-row items-center">
@@ -145,13 +152,13 @@ export default function LeadsReportCard() {
           <div className="grid gap-1.5">
             <Label className="text-secondary-13">Recipients</Label>
             <div className="flex flex-wrap gap-1.5">
-              {settings.recipients.map(r => (
+              {recipients.map(r => (
                 <Badge key={r} variant="secondary" className="gap-1 font-normal">
                   {r}
                   {canEdit && (
                     <button
                       aria-label={`Remove ${r}`}
-                      onClick={() => save({ recipients: settings.recipients.filter(x => x !== r) })}
+                      onClick={() => save({ recipients: recipients.filter(x => x !== r) })}
                       className="text-muted-foreground hover:text-accent-red"
                     >
                       <X className="h-3 w-3" />
@@ -159,7 +166,7 @@ export default function LeadsReportCard() {
                   )}
                 </Badge>
               ))}
-              {settings.recipients.length === 0 && (
+              {recipients.length === 0 && (
                 <span className="text-secondary-13 text-muted-foreground">No recipients yet</span>
               )}
             </div>
@@ -170,7 +177,7 @@ export default function LeadsReportCard() {
                   placeholder="name@mdmmarketing.com.au"
                   onChange={e => setNewRecipient(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addRecipient()}
-                  className="h-8 text-body-15"
+                  className="text-body-15"
                 />
                 <Button size="sm" variant="outline" onClick={addRecipient}><Plus className="h-4 w-4" /></Button>
               </div>
@@ -181,7 +188,7 @@ export default function LeadsReportCard() {
             <div className="grid gap-1.5">
               <Label className="text-secondary-13">Send on day</Label>
               <Select value={String(settings.send_day)} disabled={!canEdit} onValueChange={v => v && canEdit && save({ send_day: Number(v) })}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-64">
                   {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
                     <SelectItem key={d} value={String(d)}>
@@ -198,7 +205,7 @@ export default function LeadsReportCard() {
                 value={settings.data_from ?? ''}
                 disabled={!canEdit}
                 onChange={e => canEdit && save({ data_from: e.target.value || null })}
-                className="h-8 font-mono text-secondary-13"
+                className="font-mono text-secondary-13"
               />
             </div>
           </div>
@@ -212,7 +219,7 @@ export default function LeadsReportCard() {
         <div className="flex flex-col gap-3 rounded-inner border border-border p-4">
           <Label className="text-secondary-13">Generate a report now</Label>
           <Select value={period} onValueChange={v => v && setPeriod(v)}>
-            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {options.map((o, i) => (
                 <SelectItem key={o.label} value={String(i)}>{o.label}</SelectItem>
@@ -224,7 +231,7 @@ export default function LeadsReportCard() {
               <FileDown className="h-4 w-4" /> {busy === 'download' ? 'Building…' : 'Download PDF'}
             </Button>
             {canEdit && (
-              <Button size="sm" disabled={busy !== null || settings.recipients.length === 0} onClick={() => setConfirmSend(true)}>
+              <Button size="sm" disabled={busy !== null || recipients.length === 0} onClick={() => setConfirmSend(true)}>
                 <Send className="h-4 w-4" /> {busy === 'send' ? 'Sending…' : 'Email to recipients'}
               </Button>
             )}
@@ -242,12 +249,12 @@ export default function LeadsReportCard() {
             <AlertDialogTitle>Send the {options[Number(period)].label} report?</AlertDialogTitle>
             <AlertDialogDescription>
               This emails the PDF immediately. It will be delivered to{' '}
-              {settings.recipients.length === 1 ? 'this recipient' : `these ${settings.recipients.length} recipients`}:
+              {recipients.length === 1 ? 'this recipient' : `these ${recipients.length} recipients`}:
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="flex flex-col gap-1.5 rounded-inner border border-border bg-foreground/[0.04] p-3">
-            {settings.recipients.map(r => (
+            {recipients.map(r => (
               <span key={r} className="flex items-center gap-2 font-mono text-secondary-13 text-muted-foreground">
                 <Mail className="h-3.5 w-3.5 shrink-0 text-accent-blue-deep" />
                 {r}

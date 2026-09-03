@@ -102,7 +102,7 @@ function CanvasCardInner({
         </div>
         {onUpdate && items.length < 30 && (
           <button type="button"
-            className="mt-1.5 text-[12px] text-muted-foreground hover:text-muted-foreground"
+            className="mt-1.5 text-[12px] text-muted-foreground hover:text-foreground"
             onPointerDown={e => e.stopPropagation()}
             onClick={e => {
               e.stopPropagation()
@@ -141,7 +141,7 @@ function CanvasCardInner({
   if (card.kind === 'note') {
     const palette = NOTE_COLORS[card.color ?? 'paper'] ?? NOTE_COLORS.paper
     // 'ink' is dark in both themes — its text must not follow the theme
-    const inkText = card.color === 'ink' ? 'text-foreground' : 'text-foreground'
+    const inkText = card.color === 'ink' ? 'text-background' : 'text-foreground'
     return (
       <div className={`rounded-inner border p-3 shadow-sm ${palette} ${selected ? '' : ''}`} style={{ width: card.w }}>
         {editing ? (
@@ -288,7 +288,7 @@ function CanvasCardInner({
       return (
         <div className="overflow-hidden rounded-inner border border-border bg-surface shadow-lg shadow-foreground/10" style={{ width: card.w }}>
           <div className="flex items-center gap-2 p-2.5">
-            {avatar(`h-8 w-8 text-secondary-13 text-white ${fb ? 'bg-accent-blue' : 'bg-accent-blue'}`)}
+            {avatar(`h-8 w-8 text-secondary-13 text-cream ${fb ? 'bg-accent-blue-deep' : 'bg-accent-blue'}`)}
             <span className="min-w-0">
               <span className="block truncate text-[12px] font-semibold text-foreground">{name}</span>
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground">

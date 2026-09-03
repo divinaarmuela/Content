@@ -36,7 +36,7 @@ const BLANK = { platform: '', label: '', username: '', secret: '', url: '', note
 /** Sentinel for the free-text escape in the platform Select. */
 const OTHER = '__other'
 /** a bare 14px glyph is not a tap target — this gives the finger 44px on touch */
-const ICON_TAP = 'inline-flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-muted-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11'
+const ICON_TAP = 'inline-flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11'
 
 const SUGGESTED = [
   'Instagram', 'Facebook', 'Meta Business', 'Meta Ads', 'TikTok', 'LinkedIn',
@@ -196,7 +196,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                   type="button"
                   onClick={() => setMaskDraft(m => !m)}
                   aria-label={maskDraft ? 'Show password' : 'Hide password'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-muted-foreground"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {maskDraft ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 </button>
@@ -253,7 +253,7 @@ export default function CredentialsPanel({ endpoint }: { endpoint: string }) {
                       </div>
                       {c.url && (
                         <a href={c.url} target="_blank" rel="noreferrer noopener"
-                          className="text-muted-foreground transition-colors hover:text-muted-foreground"
+                          className="text-muted-foreground transition-colors hover:text-foreground"
                           aria-label={`Open ${c.platform}`}>
                           <ExternalLink className="h-3 w-3" />
                         </a>

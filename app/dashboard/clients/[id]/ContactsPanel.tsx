@@ -195,7 +195,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                       {c.email}
                     </a>
                     <button onClick={() => copy(c.email, 'Email')} aria-label="Copy email"
-                      className="text-muted-foreground transition-colors hover:text-muted-foreground">
+                      className="text-muted-foreground transition-colors hover:text-foreground">
                       <Copy className="h-3 w-3" />
                     </button>
                   </div>
@@ -207,7 +207,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                       {c.phone}
                     </a>
                     <button onClick={() => copy(c.phone, 'Phone')} aria-label="Copy phone"
-                      className="text-muted-foreground transition-colors hover:text-muted-foreground">
+                      className="text-muted-foreground transition-colors hover:text-foreground">
                       <Copy className="h-3 w-3" />
                     </button>
                   </div>

@@ -263,7 +263,7 @@ export default function SocialAnalyticsPage() {
                 return (
                   <li key={a.id}>
                     <Link href={`/dashboard/social/${a.id}`}
-                      className="flex items-center gap-3 rounded-inner border border-border p-2.5 transition-colors hover:border-border">
+                      className="flex items-center gap-3 rounded-inner border border-border p-2.5 transition-colors hover:border-foreground/25">
                       <PlatformIcon platform={a.platform} size={28} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-body-15 font-medium">

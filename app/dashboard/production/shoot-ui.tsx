@@ -23,8 +23,8 @@ export function AccountUnavailable() {
 /** Status badge classes shared by the shoots view, brief page, and board chips. */
 export const BATCH_STATUS_STYLE: Record<BatchStatus, string> = {
   brief: 'border-accent-amber/35 bg-tint-amber text-foreground',
-  locked: 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep',
-  shot: 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep',
+  locked: 'border-border bg-paper text-foreground',
+  shot: 'border-accent-green/30 bg-tint-green text-foreground',
   wrapped: 'border-border bg-foreground/[0.04] text-muted-foreground',
 }
 
@@ -38,7 +38,7 @@ export const PRIORITY_TINT: Record<string, string> = {
   urgent: 'text-accent-red',
   high: 'text-accent-amber',
   normal: 'text-muted-foreground',
-  low: 'text-muted-foreground',
+  low: 'text-muted-foreground/50',
 }
 
 /** The little pill naming a work kind. */

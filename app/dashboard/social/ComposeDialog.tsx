@@ -470,8 +470,8 @@ export default function ComposeDialog({
                     i === step
                       ? 'bg-foreground text-background'
                       : i < step
-                      ? 'text-muted-foreground hover:bg-foreground/[0.06]'
-                      : 'text-muted-foreground'
+                      ? 'text-foreground hover:bg-foreground/[0.06]'
+                      : 'text-muted-foreground/60'
                   }`}
                 >
                   {i < step ? <Check className="h-3 w-3" /> : <span className="font-mono">{i + 1}</span>}
@@ -516,7 +516,7 @@ export default function ComposeDialog({
                           className={`flex items-center gap-2 rounded-inner border px-2.5 py-1.5 text-secondary-13 transition-colors ${
                             on
                               ? 'border-border bg-foreground text-background'
-                              : 'border-border hover:border-border'
+                              : 'border-border hover:border-foreground/25'
                           }`}
                         >
                           <PlatformIcon platform={a.platform} size={18} />
@@ -662,7 +662,7 @@ export default function ComposeDialog({
                             the smaller copy — said on the row as it happens */}
                         {(needingCopy.includes(p) || (copy?.state.status === 'ready' && perMedia[p]?.[0]?.url === copy.state.url)) && (
                           <span className={`basis-full text-[12px] ${
-                            copy?.state.status === 'failed' ? 'text-foreground' : 'text-accent-blue-deep'
+                            copy?.state.status === 'failed' ? 'text-accent-red' : 'text-accent-blue-deep'
                           }`}>
                             {copyWords(PLATFORM_MEDIA[p].label, copy?.forUrl === sharedVideoUrl ? copy?.state : undefined)}
                             {/* and what it actually measures, off the file */}

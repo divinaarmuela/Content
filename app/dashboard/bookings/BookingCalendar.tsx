@@ -101,7 +101,7 @@ export default function BookingCalendar({ bookings }: { bookings: CalBooking[] }
                 className={`rounded-full border px-2.5 py-1.5 text-chip-12 transition-colors ${
                   resource === r
                     ? 'border-border bg-foreground text-background'
-                    : 'border-border text-muted-foreground hover:border-border'
+                    : 'border-border text-muted-foreground hover:border-foreground/25'
                 }`}>
                 {r === 'all' ? 'Everyone' : r}
               </button>

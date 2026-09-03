@@ -269,7 +269,7 @@ export default function SocialChannels(
             return (
               <li
                 key={a.id}
-                className="group flex items-center gap-3 rounded-inner border border-border bg-surface px-3 py-2.5 transition-colors hover:border-border"
+                className="group flex items-center gap-3 rounded-inner border border-border bg-surface px-3 py-2.5 transition-colors hover:border-foreground/25"
               >
                 <Link
                   href={`/dashboard/social/${a.id}`}
@@ -288,7 +288,7 @@ export default function SocialChannels(
                       {a.username ? `@${a.username}` : a.name ?? '—'}
                     </span>
                   </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
                 </Link>
                 <Button
                   variant="ghost" size="sm"

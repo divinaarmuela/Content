@@ -164,7 +164,7 @@ const STATUS_TINT: Record<string, string> = {
   revision_required: 'bg-tint-amber text-foreground border-accent-amber/35',
   revision_complete: 'bg-tint-amber text-foreground border-accent-amber/35',
   client_review: 'bg-tint-blue text-accent-blue-deep border-accent-blue/25',
-  client_changes_requested: 'bg-tint-blue text-accent-blue-deep border-accent-blue/25',
+  client_changes_requested: 'bg-tint-red text-foreground border-accent-red/30',
   approved_for_scheduling: 'bg-tint-green text-foreground border-accent-green/30',
   scheduled: 'bg-tint-blue text-foreground border-accent-blue/25',
   published: 'bg-tint-green text-foreground border-accent-green/30',
@@ -1395,7 +1395,7 @@ export default function ItemDetailPage() {
             ? 'border-accent-blue/25 bg-tint-blue'
             : slides.length > 0
               ? 'border-accent-green/30 bg-tint-green'
-              : 'border-border hover:border-border'
+              : 'border-border hover:border-foreground/25'
         }`}
       >
         <Upload className={`h-5 w-5 ${slides.length > 0 ? 'text-accent-green' : 'text-muted-foreground'}`} />

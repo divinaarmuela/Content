@@ -29,7 +29,7 @@ export default function HelpHint({ term, className }: { term: GlossaryKey; class
           type="button"
           // 44px of tappable area around a 14px glyph — the icon can look
           // small, the target cannot be small.
-          className={`-m-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-2 align-middle text-muted-foreground transition-colors hover:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/25 ${className ?? ''}`}
+          className={`-m-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-2 align-middle text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/25 ${className ?? ''}`}
           aria-label={`What does "${title}" mean?`}
           onClick={e => e.stopPropagation()}
         >

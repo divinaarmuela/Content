@@ -56,7 +56,7 @@ function ServiceImage({
     <>
       <button type="button" onClick={() => ref.current?.click()} disabled={busy}
         title={service.image_url ? 'Change photo' : 'Add a photo'}
-        className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-foreground/[0.04] text-muted-foreground hover:border-border">
+        className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-foreground/[0.04] text-muted-foreground hover:border-foreground/25">
         {service.image_url
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={service.image_url} alt="" className="h-full w-full object-cover" />

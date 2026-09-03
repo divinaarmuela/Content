@@ -83,7 +83,7 @@ export function CommentsButton({ onOpen, tagged, title, className = '' }: {
     <button type="button"
       onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen() }}
       aria-label={`${badge.label} — ${title}`} title={badge.label}
-      className={`relative z-10 -my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-tile text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-muted-foreground md:-my-1 md:h-8 md:w-8 ${className}`}>
+      className={`relative z-10 -my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-tile text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground md:-my-1 md:h-8 md:w-8 ${className}`}>
       <MessageSquare className="h-4 w-4" />
       {badge.dot && (
         <span aria-hidden className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent-amber md:right-1 md:top-1" />

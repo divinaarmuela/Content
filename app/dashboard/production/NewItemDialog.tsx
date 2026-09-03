@@ -920,7 +920,7 @@ export default function NewItemDialog({
               onClick={() => assetFileRef.current?.click()}
               className={`flex cursor-pointer flex-col items-center gap-1 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors ${
                 dragging ? 'border-accent-blue/25 bg-tint-blue'
-                  : 'border-border hover:border-border'
+                  : 'border-border hover:border-foreground/25'
               }`}>
               <p className="text-body-15 font-medium">{assetBusy ? 'Uploading…' : 'Choose files, or drag them here'}</p>
               <p className="text-[12px] text-muted-foreground">Any size — they go straight to our storage. You can skip this and add files later.</p>

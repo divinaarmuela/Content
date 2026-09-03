@@ -36,7 +36,7 @@ export default function UploadTray() {
             type="button"
             onClick={clearFinishedUploads}
             aria-label="Dismiss uploads"
-            className="ml-auto text-muted-foreground hover:text-muted-foreground"
+            className="ml-auto text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>

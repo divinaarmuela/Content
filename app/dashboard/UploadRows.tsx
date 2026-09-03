@@ -104,7 +104,7 @@ function UploadRow({ u, onDismiss, compact }: {
             type="button"
             onClick={() => onDismiss(u.id)}
             aria-label={`Dismiss ${u.name}`}
-            className="shrink-0 text-muted-foreground hover:text-muted-foreground"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>

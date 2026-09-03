@@ -444,7 +444,7 @@ function TaskList({ title, tasks, done = false }: { title: string; tasks: Task[]
 
             {t.url && (
               <a href={t.url} target="_blank" rel="noreferrer noopener"
-                className="shrink-0 text-muted-foreground transition-colors hover:text-muted-foreground"
+                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
                 aria-label={`Open "${t.name}" in Asana`}>
                 <ExternalLink className="h-3 w-3" />
               </a>

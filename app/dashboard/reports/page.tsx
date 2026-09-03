@@ -127,7 +127,7 @@ export default function ReportsPage() {
               </p>
               <p
                 className={`mt-1 flex items-center gap-1 text-secondary-13 ${
-                  m.up ? 'text-foreground' : 'text-foreground'
+                  m.up ? 'text-accent-green' : 'text-accent-red'
                 }`}
               >
                 {m.up ? (
@@ -152,16 +152,16 @@ export default function ReportsPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={TREND_DATA} margin={{ top: 4, right: 8, bottom: 0, left: -12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis
                   dataKey="week"
-                  stroke="#a1a1aa"
+                  stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="#a1a1aa"
+                  stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
@@ -179,7 +179,7 @@ export default function ReportsPage() {
                   type="monotone"
                   dataKey="reach"
                   name="Reach"
-                  stroke="#2563eb"
+                  stroke="var(--dbx-blue)"
                   strokeWidth={2}
                   dot={false}
                 />
@@ -187,7 +187,7 @@ export default function ReportsPage() {
                   type="monotone"
                   dataKey="engagement"
                   name="Engagement"
-                  stroke="#a1a1aa"
+                  stroke="hsl(var(--muted-foreground))"
                   strokeWidth={2}
                   dot={false}
                 />

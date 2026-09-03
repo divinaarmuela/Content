@@ -57,7 +57,7 @@ export default function ServicePicker({
                 type="button"
                 onClick={() => onChange(removeService(value, s))}
                 aria-label={`Remove ${s}`}
-                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-muted-foreground"
+                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-foreground"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -98,7 +98,7 @@ export default function ServicePicker({
               key={s}
               type="button"
               onClick={() => commit(s)}
-              className="rounded-full border border-border px-2.5 py-1 text-secondary-13 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="rounded-full border border-border px-2.5 py-1 text-secondary-13 text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
             >
               {s}
             </button>

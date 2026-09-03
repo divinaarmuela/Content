@@ -178,7 +178,7 @@ export default function AddPieceDialog({ open, onOpenChange, target, onCreated }
             onClick={() => fileRef.current?.click()}
             className={`flex cursor-pointer flex-col items-center gap-1 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors ${
               dragging ? 'border-accent-blue/25 bg-tint-blue'
-                : 'border-border hover:border-border'
+                : 'border-border hover:border-foreground/25'
             }`}>
             <p className="text-body-15 font-medium">{uploading ? 'Uploading…' : 'Choose a file, or drag it here'}</p>
             <p className="text-[12px] text-muted-foreground">

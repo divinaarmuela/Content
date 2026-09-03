@@ -321,7 +321,7 @@ export default function ScannerSettings() {
               id="conf" type="range" min={0} max={100} step={5}
               value={Math.round(settings.min_confidence * 100)}
               onChange={e => patch({ min_confidence: Number(e.target.value) / 100 })}
-              className="w-full accent-zinc-900"
+              className="w-full accent-[hsl(var(--foreground))]"
             />
             <p className="text-secondary-13 text-muted-foreground">
               Below this, an email is logged as “not a lead”. Higher means fewer
@@ -412,7 +412,7 @@ export default function ScannerSettings() {
                     ))}
                     <a
                       href="/api/inbox/connect"
-                      className="inline-flex w-fit items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-secondary-13 font-medium transition hover:border-border"
+                      className="inline-flex w-fit items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-secondary-13 font-medium transition hover:border-foreground/25"
                     >
                       {mine.length > 0 || already ? 'Connect another mailbox' : 'Connect my inbox'}
                     </a>
