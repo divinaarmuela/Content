@@ -8,8 +8,9 @@ Source specs: `DASHBOARD_WORKFLOW_SPEC.txt` (client + team production workflow) 
 
 ## 0. One platform, three products
 
-Everything ships inside the existing Next.js app (`Content/`), sharing one Supabase
-database, one Clerk auth system, and one design system (shadcn, light/dark):
+Everything ships inside the existing Next.js app (`Content/`), sharing one Firebase
+Realtime Database (everything under `/mdm`), one Clerk auth system, and one design
+system (shadcn, light/dark):
 
 | Product | Spec | Users | Status |
 |---|---|---|---|
@@ -92,7 +93,7 @@ resolvable, optional video timestamp), `approvals`, `schedule_entries`,
 
 **Deviation from doc §16 Q1 (decided by Akmal, 31 Jul): direct file upload IS in
 Phase 1.** Hybrid media model per `asset_versions`:
-- `file_url` — direct upload to Supabase Storage (reuses the CMS upload pipeline;
+- `file_url` — direct upload to Cloudflare R2 (reuses the CMS upload pipeline;
   ~200MB cap; upload progress UI). Renders inline (video player / image lightbox)
   in team dashboard and client portal. This is the primary review surface.
 - `dropbox_url` — internal master/archive (multi-GB raws stay out of app storage).

@@ -27,7 +27,7 @@ the codebase works and the traps in it.
 ```bash
 npm run dev        # dev server
 npm run build      # production build
-npm test           # vitest run — 636 tests, all must pass
+npm test           # vitest run — all tests must pass
 npx tsc --noEmit   # type check
 node scripts/gen-db-types.mjs  # after editing docs/schema-history/*.sql
 ```
@@ -70,7 +70,12 @@ and `npm run build` must pass. Do not report completion on tests alone.
 6. **The vitest config must be `vitest.config.mts`** (`.ts` throws ERR_REQUIRE_ESM).
    `server-only` is aliased to a stub there.
 7. **`lib/firebase-config.ts` reads env lazily.** `NEXT_PUBLIC_FIREBASE_DATABASE_URL`
-   missing fails the *request*, not the build.
+   missing fails the *request*, not the build. And the bundler's inlining of
+   `process.env.NEXT_PUBLIC_*` is TEXTUAL — it substitutes the literal
+   `process.env.NEXT_PUBLIC_FOO` it can see in the source, so a dynamic lookup
+   (`process.env[name]`, or a destructured `const { NEXT_PUBLIC_FOO } = process.env`
+   behind a variable) yields `undefined` in the browser. Always spell the
+   variable out in full.
 8. **Route protection is an explicit allowlist** in `middleware.ts`. Everything not
    listed is public. `/api/submit` (the contact form) must stay public;
    `/api/leads` must not.

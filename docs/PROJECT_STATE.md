@@ -1,4 +1,4 @@
-# Project state — as at 19 August 2026
+# Project state — as at 3 September 2026
 
 ## Firebase Realtime Database — 3 Sep 2026
 
