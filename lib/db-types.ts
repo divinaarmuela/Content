@@ -205,7 +205,7 @@ export interface BatchComment {
   resolved: boolean | null
 }
 
-export interface Batche {
+export interface Batch {
   status: string | null
   concept: string | null
   location: string | null
@@ -446,7 +446,7 @@ export interface ContentItem {
   title: string
   content_type: string
   platform_targets: string
-  status: unknown
+  status: string
   owner_id: string | null
   due_date: string | null
   priority: string
@@ -762,7 +762,7 @@ export interface RoomInviteRequest {
   created_at: string
 }
 
-export interface ScanMailboxe {
+export interface ScanMailbox {
   refresh_token_encrypted: string | null
   connected_at: string | null
   connected_by: string | null
@@ -806,7 +806,7 @@ export interface ScanSetting {
   updated_by: string | null
 }
 
-export interface ScheduleEntrie {
+export interface ScheduleEntry {
   external_match_state: string | null
   id: string
   created_at: string
@@ -918,7 +918,7 @@ export interface VideoPreview {
   updated_at: string
 }
 
-export interface WebhookDeliverie {
+export interface WebhookDelivery {
   id: string
   provider: string
   event: string

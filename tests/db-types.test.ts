@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { TABLE_COLUMNS, NULLABLE_COLUMNS, UPDATED_AT_TABLES, NATURAL_KEYS } from '@/lib/db-types'
+import type { Batch, ScheduleEntry, WebhookDelivery, ScanMailbox, ContentItem, TeamUser } from '@/lib/db-types'
+
+// Compile-time guard: these interface names must exist and be PascalCase
+// singular. If a name regresses (e.g. back to `Batche`/`ScanMailboxe`), this
+// file fails to type-check under `npx tsc --noEmit` and this test file fails
+// to even load under vitest.
+const _batch: Pick<Batch, 'id'> = { id: 'x' }
+const _entry: Pick<ScheduleEntry, 'id'> = { id: 'x' }
+const _delivery: Pick<WebhookDelivery, 'id'> = { id: 'x' }
+const _mailbox: Pick<ScanMailbox, 'id'> = { id: 'x' }
+const _item: Pick<ContentItem, 'id'> = { id: 'x' }
+const _user: Pick<TeamUser, 'id'> = { id: 'x' }
+void _batch, _entry, _delivery, _mailbox, _item, _user
 
 describe('db-types (generated)', () => {
   it('knows the core tables and their columns', () => {
