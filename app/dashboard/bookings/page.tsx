@@ -243,12 +243,12 @@ function ServiceRow({ service, onSave, busy, studios, resources }: {
 
           <div className="flex flex-wrap items-center gap-5">
             <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
-              <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.requires_payment}
+              <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--dbx-blue)]" checked={draft.requires_payment}
                 onChange={e => setDraft(d => ({ ...d, requires_payment: e.target.checked }))} />
               Take payment when booking
             </label>
             <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
-              <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={draft.active}
+              <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--dbx-blue)]" checked={draft.active}
                 onChange={e => setDraft(d => ({ ...d, active: e.target.checked }))} />
               Show on the public page
             </label>
@@ -709,7 +709,7 @@ function ResourceRow({ resource, availability, onSave, busy }: {
         {grid.map((g, wd) => (
           <div key={wd} className="flex flex-wrap items-center gap-3 text-body-15">
             <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2">
-              <input type="checkbox" checked={g.on} className="h-3.5 w-3.5 accent-blue-600"
+              <input type="checkbox" checked={g.on} className="h-3.5 w-3.5 accent-[var(--dbx-blue)]"
                 onChange={e => edit(wd, { on: e.target.checked })} />
               <span className={g.on ? '' : 'text-muted-foreground'}>{DAYS[wd]}</span>
             </label>

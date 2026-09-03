@@ -321,7 +321,7 @@ export default function AutomationsPage() {
             <label className="flex w-fit cursor-pointer items-center gap-2 text-body-15">
               <input type="checkbox" checked={draft.alsoMatchInDms}
                 onChange={e => setDraft(d => ({ ...d, alsoMatchInDms: e.target.checked }))}
-                className="h-4 w-4 accent-blue-600" />
+                className="h-4 w-4 accent-[var(--dbx-blue)]" />
               Also answer when the keyword arrives as a DM
             </label>
 
@@ -329,7 +329,7 @@ export default function AutomationsPage() {
               <label className="flex w-fit cursor-pointer items-start gap-2 text-body-15">
                 <input type="checkbox" checked={draft.linkTracking}
                   onChange={e => setDraft(d => ({ ...d, linkTracking: e.target.checked }))}
-                  className="mt-0.5 h-4 w-4 accent-blue-600" />
+                  className="mt-0.5 h-4 w-4 accent-[var(--dbx-blue)]" />
                 <span>
                   Count link clicks
                   <span className="block text-secondary-13 text-muted-foreground">
@@ -478,7 +478,7 @@ export default function AutomationsPage() {
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy !== null}
-              className="bg-accent-red text-white hover:bg-accent-red"
+              className="bg-accent-red text-cream hover:bg-accent-red/90"
               onClick={e => { e.preventDefault(); if (confirmDelete) void doDelete(confirmDelete) }}
             >
               {busy !== null ? 'Deleting…' : 'Delete'}

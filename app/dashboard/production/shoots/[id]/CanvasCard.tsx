@@ -81,7 +81,7 @@ function CanvasCardInner({
             <label key={t.id} className="group/row flex items-center gap-1.5"
               onPointerDown={e => e.stopPropagation()}>
               <input type="checkbox" checked={t.done} disabled={!onUpdate}
-                className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                className="h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
                 onChange={e => onUpdate?.({ ...card, items: items.map(x => x.id === t.id ? { ...x, done: e.target.checked } : x) })} />
               {onUpdate ? (
                 <input key={`${t.id}:${t.text}`} defaultValue={t.text}

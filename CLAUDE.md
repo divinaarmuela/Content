@@ -99,6 +99,7 @@ app/
   page.tsx, marketing/, content/, branding/, …   public marketing site
   services/ about/ journal/ events/ work/        content pages (CMS-driven)
   dashboard/                                     internal app  (Clerk-gated)
+    ui/            the shared look: Shell, PageTitle, cards, chips, tone map
   client/                                        client portal, logged in
   portal/[token]/                                client portal, no login
   (auth)/                                        sign-in / sign-up

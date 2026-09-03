@@ -120,7 +120,7 @@ export default function AudienceView({ tab }: { tab: AudienceTab }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => remove(type, id)} className="bg-accent-red hover:bg-accent-red">
+          <AlertDialogAction onClick={() => remove(type, id)} className="bg-accent-red hover:bg-accent-red/90">
             Remove
           </AlertDialogAction>
         </AlertDialogFooter>

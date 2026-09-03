@@ -18,7 +18,7 @@ export default function Stat({
   return (
     <div className={cn('flex flex-col gap-0.5', className)}>
       <span className="text-stat-30 tabular-nums tracking-[-0.02em]">{value}</span>
-      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
     </div>
   )
 }

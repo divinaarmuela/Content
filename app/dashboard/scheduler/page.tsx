@@ -29,8 +29,9 @@ import { usePersistedScope, useTeamNames } from '../production/workHooks'
 import { useRole } from '../useRole'
 import TintCard from '../ui/TintCard'
 import Stat from '../ui/Stat'
-import Chip, { type ChipTone } from '../ui/Chip'
-import WorkCard, { type WorkTone } from '../ui/WorkCard'
+import Chip from '../ui/Chip'
+import WorkCard from '../ui/WorkCard'
+import { GATE_TONE, cardTone } from '../ui/tone'
 import { useTable } from '@/lib/db-client'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 
@@ -64,24 +65,6 @@ type Item = {
  *  board's last column and the item badge use, so the hand-off says one thing. */
 const LANES = SCHEDULER_LANES
 
-/**
- * THE COLOUR OF A ROW IS THE THING THAT NEEDS A PERSON — the same rule the
- * Production and Editor boards use, so one queue teaches the other. Live work
- * is ink because it is out and finished; a post the approver sent back is
- * amber and outranks the rest; approved is green and scheduled is blue.
- */
-function cardTone(status: ItemStatus, approval: string | null | undefined): WorkTone | undefined {
-  if (status === 'published') return 'ink'
-  if (approvalChip(approval)?.tone === 'changes') return 'amber'
-  if (status === 'approved_for_scheduling') return 'green'
-  if (status === 'scheduled') return 'blue'
-  return undefined
-}
-
-/** Where the final post stands, as a chip tone. */
-const GATE_TONE: Record<string, ChipTone> = {
-  approved: 'green', changes: 'amber', pending: 'blue',
-}
 
 const SCOPE_KEY = 'md-scheduler-scope'
 
@@ -204,7 +187,7 @@ export default function SchedulerPage() {
   const gateChip = (item: Item) => {
     const chip = approvalChip(item.posting_approval_state)
     if (!chip) return null
-    return <Chip tone={GATE_TONE[chip.tone] ?? 'muted'}>{chip.label}</Chip>
+    return <Chip tone={GATE_TONE[chip.tone]}>{chip.label}</Chip>
   }
 
   /** The one thing to do with this row, named by what happens. */
@@ -365,7 +348,7 @@ export default function SchedulerPage() {
                 href={`/dashboard/production/${item.id}`}
                 client={item.clients?.name ?? '—'}
                 title={item.title}
-                tone={cardTone(item.status, item.posting_approval_state)}
+                tone={cardTone({ status: item.status, changesRequested: approvalChip(item.posting_approval_state)?.tone === 'changes' })}
                 chips={<>
                   <Chip className="capitalize">{item.content_type}</Chip>
                   <Chip className="tabular-nums">v{item.current_version_number}</Chip>
@@ -389,7 +372,11 @@ export default function SchedulerPage() {
                     <Chip>Handed to {handedNames.join(', ')}</Chip>
                   )}
                   {lane === 'approved_for_scheduling' && (
-                    <Chip tone="green">{STATUS_LABELS.approved_for_scheduling}</Chip>
+                    // `surface`, not `green`: the card underneath is already
+                    // the green tint (approved), and a green chip on a green
+                    // card is a chip nobody can see. Chip's contract has the
+                    // white pill for exactly this — a chip sitting on a tint.
+                    <Chip tone="surface">{STATUS_LABELS.approved_for_scheduling}</Chip>
                   )}
                   {entries.map(e => (
                     <span key={e.platform} className="flex items-center gap-1">

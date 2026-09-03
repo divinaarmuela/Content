@@ -80,14 +80,18 @@ export const NAV_TOOLS: NavItem[] = [
 ]
 
 /** Which group each nav entry is shown under. Settings is pinned to the
- *  bottom of the sidebar rather than sitting in a group. */
-const GROUPS: { label: string; hrefs: string[] }[] = [
+ *  bottom of the sidebar rather than sitting in a group.
+ *
+ *  Exported so a test can prove the sidebar covers every nav entry: an item
+ *  in NAV_MAIN or NAV_TOOLS that is in no group and is not the pinned one is
+ *  simply never drawn, and nothing else would notice. */
+export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },
 ]
-const PINNED_BOTTOM = '/dashboard/settings'
+export const PINNED_BOTTOM = '/dashboard/settings'
 
 export const PAGE_TITLES: Record<string, string> = {
   '/dashboard':               'Overview',
@@ -372,10 +376,13 @@ export default function Shell({
           <div className="ml-auto flex items-center gap-2">
             {/* Beta: this is in daily use while still being built, so the state
                 is stated rather than left to be discovered on a rough edge.
-                The badge is the way to tell us about a rough edge. */}
+                The badge is the way to tell us about a rough edge — which is
+                why it shows on a phone too. It used to be `sm:` and up, so the
+                people most likely to hit a rough edge had no way to report it.
+                The search pill is the phone's spare width, and it is hidden. */}
             <a
               href={techMailto({ subject: 'Feedback on the dashboard', page: path })}
-              className="hidden min-h-11 items-center rounded-full border border-accent-amber/40 bg-tint-amber px-3 text-[12px] font-semibold uppercase tracking-wider text-foreground transition-opacity hover:opacity-80 sm:inline-flex"
+              className="inline-flex min-h-11 items-center rounded-full border border-accent-amber/40 bg-tint-amber px-3 text-[12px] font-semibold uppercase tracking-wider text-foreground transition-opacity hover:opacity-80"
             >
               Beta
             </a>

@@ -411,7 +411,7 @@ export default function JournalAdmin() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-accent-red hover:bg-accent-red"
+              className="bg-accent-red hover:bg-accent-red/90"
               onClick={async () => {
                 if (!deleting) return
                 const res = await fetch(`/api/website/journal/${deleting.id}`, { method: 'DELETE' })

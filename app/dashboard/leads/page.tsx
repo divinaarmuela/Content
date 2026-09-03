@@ -517,7 +517,7 @@ export default function LeadsPage() {
             <AlertDialogAction
               onClick={e => { e.preventDefault(); confirmDelete() }}
               disabled={deleteBusy}
-              className="bg-accent-red hover:bg-accent-red"
+              className="bg-accent-red hover:bg-accent-red/90"
             >
               {deleteBusy ? 'Deleting…' : 'Delete lead'}
             </AlertDialogAction>

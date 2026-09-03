@@ -52,6 +52,7 @@ import AddPieceDialog, { type AddPieceTarget } from './AddPieceDialog'
 import PageTitle from '../ui/PageTitle'
 import Chip, { type ChipTone } from '../ui/Chip'
 import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
+import { cardTone, kindTone, todayKey } from '../ui/tone'
 import GettingStarted from '../GettingStarted'
 import HelpHint from '../HelpHint'
 import { toastOpen } from '../toastLink'
@@ -118,29 +119,6 @@ function whenShort(iso: string | null) {
     : null
 }
 
-/** Today where the reader is, as a plain YYYY-MM-DD so it compares straight
- *  against a due date without a clock or a time zone getting involved. */
-function todayKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/**
- * THE COLOUR OF A CARD IS THE THING THAT NEEDS A PERSON.
- *
- * Live work is ink because it is finished and out. Otherwise a date that has
- * arrived outranks everything — that is the card somebody has to pick up
- * today. Then the two states that are simply good news: approved, and
- * scheduled. Everything else is a plain white card, and a board where only
- * three cards are coloured is a board you can read from the doorway.
- */
-function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined {
-  if (status === 'published') return 'ink'
-  if (due && due.slice(0, 10) <= todayKey()) return 'amber'
-  if (status === 'approved_for_scheduling') return 'green'
-  if (status === 'scheduled') return 'blue'
-  return undefined
-}
 
 /**
  * A shoot with no plan yet has no item status of its own — the only thing that
@@ -163,11 +141,6 @@ const SHOOT_CHIP: Record<BatchStatus, ChipTone> = {
   brief: 'amber', locked: 'blue', shot: 'green', wrapped: 'muted',
 }
 
-/** A work kind's colour, as a chip tone — the palette has five, not eight. */
-const KIND_TONE: Record<string, ChipTone> = {
-  zinc: 'muted', pink: 'red', rose: 'red', sky: 'blue', indigo: 'blue',
-  violet: 'blue', emerald: 'green', amber: 'amber',
-}
 
 /**
  * Production: ONE board.
@@ -457,7 +430,7 @@ export default function ProductionPage() {
         href={b.batch_id ? `/dashboard/production/shoots/${b.batch_id}` : `/dashboard/production/${b.id}`}
         client={b.clients?.name ?? '—'}
         title={b.title}
-        tone={cardTone(b.status, when)}
+        tone={cardTone({ status: b.status, due: when })}
         people={holder(b.owner_id)}
         chips={<>
           <Chip tone="surface">Shoot plan</Chip>
@@ -501,7 +474,7 @@ export default function ProductionPage() {
         href={`/dashboard/production/${t.id}`}
         client={t.clients?.name ?? '—'}
         title={t.title}
-        tone={muted ? undefined : cardTone(t.status, t.due_date)}
+        tone={muted ? undefined : cardTone({ status: t.status, due: t.due_date })}
         people={holder(t.owner_id)}
         className={muted ? 'opacity-60' : ''}
         chips={<>
@@ -509,7 +482,7 @@ export default function ProductionPage() {
               card is the only place that can tell them apart */}
           <Chip>{taskStatusLabel(t.work_kinds, t.status, t.status, { hasWork: (t.current_version_number ?? 0) > 0 })}</Chip>
           {t.work_kinds?.name && (
-            <Chip tone={KIND_TONE[t.work_kinds.color] ?? 'muted'}>{t.work_kinds.name}</Chip>
+            <Chip tone={kindTone(t.work_kinds.color)}>{t.work_kinds.name}</Chip>
           )}
           {viewer && (
             <TurnChip status={t.status} item={t} viewer={viewer} turns={TASK_STATUS_TURN}
@@ -610,7 +583,7 @@ export default function ProductionPage() {
         </div>
         {card.group.work_kinds?.name && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone={KIND_TONE[card.group.work_kinds.color ?? 'zinc'] ?? 'muted'}>
+            <Chip tone={kindTone(card.group.work_kinds.color)}>
               {card.group.work_kinds.name}
             </Chip>
           </div>
@@ -677,7 +650,7 @@ export default function ProductionPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem className="text-rose-600 dark:text-rose-400"
+                <DropdownMenuItem className="text-accent-red"
                   onClick={e => { e.preventDefault(); setToDelete(s) }}>
                   <Trash2 className="h-3.5 w-3.5" /> Delete shoot
                 </DropdownMenuItem>
@@ -962,7 +935,7 @@ export default function ProductionPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={delBusy}>Keep it</AlertDialogCancel>
             <AlertDialogAction disabled={delBusy}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="bg-accent-red text-cream hover:bg-accent-red/90"
               onClick={e => { e.preventDefault(); void remove() }}>
               {delBusy ? 'Deleting…' : 'Delete shoot'}
             </AlertDialogAction>
@@ -989,7 +962,7 @@ export default function ProductionPage() {
             <AlertDialogCancel disabled={deletingGroup}>Keep it</AlertDialogCancel>
             <AlertDialogAction
               disabled={deletingGroup}
-              className="bg-rose-600 hover:bg-rose-700"
+              className="bg-accent-red text-cream hover:bg-accent-red/90"
               onClick={e => { e.preventDefault(); if (groupToDelete) void deleteGroupCard(groupToDelete) }}>
               {deletingGroup ? 'Deleting…' : 'Delete this card'}
             </AlertDialogAction>

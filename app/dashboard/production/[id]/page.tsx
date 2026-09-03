@@ -2227,7 +2227,7 @@ export default function ItemDetailPage() {
               <AlertDialogFooter>
                 <AlertDialogCancel className="min-h-11">Keep it</AlertDialogCancel>
                 <AlertDialogAction
-                  className="min-h-11 bg-accent-red hover:bg-accent-red"
+                  className="min-h-11 bg-accent-red hover:bg-accent-red/90"
                   disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
                   onClick={async () => {
                     const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
@@ -2295,7 +2295,7 @@ export default function ItemDetailPage() {
                     if (next.has(r.id)) next.delete(r.id); else next.add(r.id)
                     return next
                   })}
-                  className="h-4 w-4 shrink-0 accent-blue-600"
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]"
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
@@ -2425,7 +2425,7 @@ export default function ItemDetailPage() {
                     if (next.has(s.id)) next.delete(s.id); else next.add(s.id)
                     return next
                   })}
-                  className="h-4 w-4 shrink-0 accent-blue-600"
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]"
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{s.name || s.email}</span>
@@ -2482,7 +2482,7 @@ export default function ItemDetailPage() {
                     if (next.has(r.id)) next.delete(r.id); else next.add(r.id)
                     return next
                   })}
-                  className="h-4 w-4 shrink-0 accent-blue-600"
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]"
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>

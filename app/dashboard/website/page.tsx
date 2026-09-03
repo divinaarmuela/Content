@@ -538,7 +538,7 @@ export default function WebsiteAdminPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-accent-red hover:bg-accent-red">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} className="bg-accent-red hover:bg-accent-red/90">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

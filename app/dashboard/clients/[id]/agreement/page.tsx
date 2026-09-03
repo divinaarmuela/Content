@@ -199,7 +199,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
                   className={`flex items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 ${canManage ? 'cursor-pointer hover:bg-foreground/[0.04]' : ''}`}>
                   <input type="checkbox" checked={svc?.active ?? false} disabled={!canManage || busy}
                     onChange={e => setService(c.key, c.label, { active: e.target.checked })}
-                    className="h-4 w-4 shrink-0 accent-blue-600" />
+                    className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]" />
                   <span className="flex-1">{c.label}</span>
                   {canManage && (svc?.active || svc?.note) && (
                     <Input key={`${c.key}:${svc?.note ?? ''}`} defaultValue={svc?.note ?? ''} placeholder="note"
@@ -213,7 +213,7 @@ export default function AgreementPage({ params }: { params: Promise<{ id: string
               <label key={s.key} className="flex items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15">
                 <input type="checkbox" checked={s.active} disabled={!canManage || busy}
                   onChange={e => setService(s.key, s.label, { active: e.target.checked })}
-                  className="h-4 w-4 shrink-0 accent-blue-600" />
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]" />
                 <span className="flex-1">{s.label}</span>
                 <Badge variant="outline" className="font-normal text-muted-foreground">custom</Badge>
               </label>

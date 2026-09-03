@@ -6,6 +6,7 @@ import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Streamdown } from 'streamdown'
 import { toast } from 'sonner'
+import PageTitle from '../ui/PageTitle'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -207,7 +208,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
               <Sparkles className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold">Ask about your agency</h2>
+              <h2 className="text-section-title">Ask about your agency</h2>
               <p className="mt-1 text-body-15 text-muted-foreground">
                 Clients, leads, intake forms, the schedule, the scanner, the team.
                 Edits always ask you first.
@@ -521,40 +522,50 @@ export default function Assistant({ chatId, initialMessages }: {
   )
 
   return (
-    <div className="flex h-[calc(100vh-9rem)] gap-4">
-      {/* history, persistent on desktop */}
-      <aside className="hidden w-56 shrink-0 flex-col md:flex">
-        <div className="mb-2 flex items-center gap-1">
-          <Button size="sm" variant="outline" className="flex-1 justify-start" onClick={newChat}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New chat
-          </Button>
-          <SettingsSheet />
-        </div>
-        <div className="flex-1 overflow-y-auto">{list}</div>
-      </aside>
-
-      {/* history on mobile */}
-      <div className="absolute right-4 top-4 flex gap-1 md:hidden">
-        <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Chat history">
-              <History className="h-4 w-4" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72">
-            <SheetHeader><SheetTitle>Chats</SheetTitle></SheetHeader>
-            <Button size="sm" variant="outline" className="mb-2 w-full justify-start" onClick={newChat}>
+    <div className="flex flex-col">
+      <PageTitle
+        title="AI Assistant"
+        summary="Ask about your clients, leads, forms and schedule. It always asks before it changes anything."
+      />
+      {/* `relative` so the phone's history and settings buttons hang off THIS
+          box rather than the page — before the heading existed there was
+          nothing above them to sit under. */}
+      <div className="relative flex h-[calc(100vh-17rem)] min-h-[26rem] gap-4">
+        {/* history, persistent on desktop */}
+        <aside className="hidden w-56 shrink-0 flex-col md:flex">
+          <div className="mb-2 flex items-center gap-1">
+            <Button size="sm" variant="outline" className="flex-1 justify-start" onClick={newChat}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> New chat
             </Button>
-            <div className="overflow-y-auto">{list}</div>
-          </SheetContent>
-        </Sheet>
-        <SettingsSheet />
+            <SettingsSheet />
+          </div>
+          <div className="flex-1 overflow-y-auto">{list}</div>
+        </aside>
+
+        {/* history on mobile */}
+        <div className="absolute right-4 top-4 flex gap-1 md:hidden">
+          <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Chat history">
+                <History className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72">
+              <SheetHeader><SheetTitle>Chats</SheetTitle></SheetHeader>
+              <Button size="sm" variant="outline" className="mb-2 w-full justify-start" onClick={newChat}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> New chat
+              </Button>
+              <div className="overflow-y-auto">{list}</div>
+            </SheetContent>
+          </Sheet>
+          <SettingsSheet />
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1">
         <Conversation key={localId} chatId={localId} initialMessages={initial}
           onResponseDone={onResponseDone} />
+      </div>
+
       </div>
 
       <AlertDialog open={Boolean(confirmDelete)} onOpenChange={o => !o && setConfirmDelete(null)}>

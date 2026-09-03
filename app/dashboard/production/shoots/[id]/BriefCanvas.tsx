@@ -772,7 +772,7 @@ export default function BriefCanvas({
               tabIndex={0}
               aria-label={`${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
-                selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950' : ''
+                selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
               style={{ transform: `translate(${card.x}px, ${card.y}px)` }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
@@ -1075,7 +1075,7 @@ export default function BriefCanvas({
             <div className="flex flex-col gap-1.5 p-1">
               {(sheetCard.items ?? []).map(t => (
                 <span key={t.id} className="flex items-center gap-2 text-body-15">
-                  <input type="checkbox" checked={t.done} readOnly disabled className="h-4 w-4 accent-blue-600" />
+                  <input type="checkbox" checked={t.done} readOnly disabled className="h-4 w-4 accent-[var(--dbx-blue)]" />
                   <span className={t.done ? 'text-muted-foreground line-through' : ''}>{t.text}</span>
                 </span>
               ))}

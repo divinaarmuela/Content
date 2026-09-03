@@ -411,7 +411,7 @@ export default function TeamPage() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Keep them</AlertDialogCancel>
                               <AlertDialogAction
-                                className="bg-accent-red hover:bg-accent-red"
+                                className="bg-accent-red hover:bg-accent-red/90"
                                 onClick={async () => {
                                   const res = await fetch(`/api/team/${m.id}?kind=member`, { method: 'DELETE' })
                                   const json = await res.json()

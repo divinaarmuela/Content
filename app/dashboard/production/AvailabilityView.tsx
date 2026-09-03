@@ -218,7 +218,7 @@ function ProposeShootDialog({ day, clients, onClose, onCreated }: {
                       type="checkbox"
                       checked={picked.has(o.email)}
                       onChange={() => toggleRecipient(o.email)}
-                      className="h-3.5 w-3.5 accent-blue-600"
+                      className="h-3.5 w-3.5 accent-[var(--dbx-blue)]"
                     />
                     <span className="truncate">{o.label}</span>
                   </label>

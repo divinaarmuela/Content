@@ -194,7 +194,7 @@ export default function PageAccessSettings() {
                           setBusy(null)
                         }
                       }}
-                      className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                      className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)] disabled:opacity-50"
                     />
                     <span className={isHidden ? 'text-muted-foreground line-through' : ''}>{page.label}</span>
                     {isHidden && <span className="ml-auto text-[12px] text-muted-foreground">hidden</span>}
@@ -264,7 +264,7 @@ export default function PageAccessSettings() {
                       checked={granted}
                       disabled={busy !== null}
                       onChange={() => void toggle(page.href)}
-                      className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                      className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)] disabled:opacity-50"
                     />
                   )}
                   <span className="min-w-0">

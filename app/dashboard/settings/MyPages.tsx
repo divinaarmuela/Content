@@ -82,7 +82,7 @@ export default function MyPages() {
                   checked={!isHidden}
                   disabled={busy === p.href}
                   onChange={() => void toggle(p.href)}
-                  className="h-4 w-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)] disabled:opacity-50"
                 />
                 <span className={isHidden ? 'text-muted-foreground line-through' : ''}>{p.label}</span>
                 {isHidden && <span className="ml-auto text-[12px] text-muted-foreground">hidden</span>}

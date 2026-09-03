@@ -36,8 +36,9 @@ import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/ca
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
-import Chip, { type ChipTone } from '../ui/Chip'
-import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
+import Chip from '../ui/Chip'
+import WorkCard, { type Person } from '../ui/WorkCard'
+import { cardTone, kindTone } from '../ui/tone'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
 import AddPieceDialog, { type AddPieceTarget } from '../production/AddPieceDialog'
@@ -111,39 +112,7 @@ function initialsOf(name: string): string {
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
 }
 
-/** Today where the reader is, as a plain YYYY-MM-DD so it compares straight
- *  against a due date with no clock or time zone getting involved. */
-function todayKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
-/**
- * THE COLOUR OF A CARD IS THE THING THAT NEEDS A PERSON.
- *
- * The same rule the Production board uses, so one board teaches the other:
- * live work is ink, a date that has arrived is amber and outranks everything
- * else, then approved (green) and scheduled (blue). Everything else is a
- * plain white card — a board where three cards are coloured is a board you
- * can read from the doorway.
- */
-function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined {
-  // `published` and `scheduled` cannot reach this board — `editorScope` drops
-  // both before the lanes are built. They are kept so the three boards share
-  // ONE rule rather than three that agree by coincidence, and so a card looks
-  // the same the day someone widens the scope.
-  if (status === 'published') return 'ink'
-  if (due && due.slice(0, 10) <= todayKey()) return 'amber'
-  if (status === 'approved_for_scheduling') return 'green'
-  if (status === 'scheduled') return 'blue'
-  return undefined
-}
-
-/** A work kind's colour, as a chip tone — the palette has five, not eight. */
-const KIND_TONE: Record<string, ChipTone> = {
-  zinc: 'muted', pink: 'red', rose: 'red', sky: 'blue', indigo: 'blue',
-  violet: 'blue', emerald: 'green', amber: 'amber',
-}
 
 /** How loud a piece of work is asking to be picked up. */
 const PRIORITY_TONE: Record<string, string> = {
@@ -753,7 +722,7 @@ export default function EditorPage() {
                           href={`/dashboard/production/${item.id}`}
                           client={item.clients?.name ?? '—'}
                           title={item.title}
-                          tone={cardTone(item.status, item.due_date)}
+                          tone={cardTone({ status: item.status, due: item.due_date })}
                           people={people}
                           className={selectMode && selectedIds.has(item.id)
                             ? 'ring-2 ring-inset ring-accent-blue' : ''}
@@ -761,7 +730,7 @@ export default function EditorPage() {
                             <Chip className="capitalize">{item.content_type}</Chip>
                             <Chip>{itemStatusLabel(item.work_kinds?.slug, item.status, STATUS_LABELS[item.status])}</Chip>
                             {item.work_kinds && item.work_kinds.slug !== 'edit' && (
-                              <Chip tone={KIND_TONE[item.work_kinds.color] ?? 'muted'}>{item.work_kinds.name}</Chip>
+                              <Chip tone={kindTone(item.work_kinds.color)}>{item.work_kinds.name}</Chip>
                             )}
                             {/* TurnChip is the single answer to "is this on
                                 me?" — the old `you` pill said it twice. The
@@ -876,7 +845,7 @@ export default function EditorPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700"
+            <AlertDialogAction className="bg-accent-red text-cream hover:bg-accent-red/90"
               disabled={bulkBusy}
               onClick={e => { e.preventDefault(); void bulkDelete() }}>
               {bulkBusy ? 'Deleting…' : 'Delete'}
@@ -918,7 +887,7 @@ export default function EditorPage() {
             <AlertDialogAction
               disabled={deletingGroup}
               onClick={e => { e.preventDefault(); if (groupToDelete) void deleteGroupCard(groupToDelete) }}
-              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600">
+              className="bg-accent-red text-cream hover:bg-accent-red/90 focus:ring-accent-red">
               {deletingGroup ? 'Deleting…' : 'Delete this card'}
             </AlertDialogAction>
           </AlertDialogFooter>

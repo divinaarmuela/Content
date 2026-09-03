@@ -10,6 +10,7 @@ import {
   KeyRound, MessageSquare, RefreshCw, XCircle,
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import PageTitle from '../../ui/PageTitle'
 import { tokenNotice } from '../../../lib/token-health-core'
 import { Button } from '@/components/ui/button'
 
@@ -127,6 +128,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="flex flex-col gap-4">
         <Back />
+        <PageTitle title="Social channel" summary={CHANNEL_SUMMARY} />
         <Card><CardContent className="p-6 text-body-15 text-accent-red">{error}</CardContent></Card>
       </div>
     )
@@ -136,6 +138,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="flex flex-col gap-4">
         <Back />
+        <PageTitle title="Social channel" summary={CHANNEL_SUMMARY} />
         <Skeleton className="h-24 w-full" />
         <div className="grid gap-3 sm:grid-cols-4">
           {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}
@@ -171,6 +174,13 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="flex flex-col gap-4">
       <Back />
+      {/* the account's own handle IS the name of this page — the card below
+          keeps the icon, the chips and the health line, but the heading is
+          said once, up here, where every other page says it */}
+      <PageTitle
+        title={account.username ? `@${account.username}` : account.name ?? brand.label}
+        summary={CHANNEL_SUMMARY}
+      />
 
       {/* ── identity + health ─────────────────────────────────────────── */}
       <Card>
@@ -178,9 +188,6 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
           <PlatformIcon platform={account.platform} size={48} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-section-title">
-                {account.username ? `@${account.username}` : account.name ?? brand.label}
-              </h2>
               <span className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 text-chip-12 text-muted-foreground">
                 {brand.label}
               </span>
@@ -396,6 +403,10 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
     </div>
   )
 }
+
+/** One sentence, the same one whether the account has loaded yet or not. */
+const CHANNEL_SUMMARY =
+  'How this account is connected, what it has posted, and how those posts are doing.'
 
 /* ── pieces ────────────────────────────────────────────────────────────── */
 

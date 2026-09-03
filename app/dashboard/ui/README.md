@@ -6,8 +6,20 @@ hooks and hands the result down. Colours come from the `.dbx` tokens in
 `app/globals.css` through the Tailwind names in `tailwind.config.js` (`ink`,
 `cream`, `paper`, `surface`, `tint-*`, `accent-*`, radii `card`/`inner`/`tile`),
 so a card that is amber in light mode becomes the 18% amber overlay in dark mode
-without any component knowing about it. Anything a finger can hit is at least
-44px. Only `MiniCalendar` is a client component; the rest render on the server.
+without any component knowing about it.
+
+Anything a finger can hit is at least 44px. Controls here are 44px outright;
+`components/ui/button.tsx` also carries a `[@media(pointer:coarse)]` 44px floor
+in its base classes, so a call site that shrinks a button for a dense desktop
+row (`h-7 w-7`) still hands a phone a real target. Losing those two classes is
+invisible on a laptop, which is how they once went missing — `tests/button-touch-floor.test.ts` pins them.
+
+`Shell` and `MiniCalendar` are client components — the shell holds the mobile
+sheet, the theme toggle and Clerk's user button. The rest render on the server.
+
+`tone.ts` is not a component: it is the one map from a row's state to a card
+tint and a chip colour, shared by Production, Editor and Scheduler so the same
+fact cannot be two colours on two pages. `tests/tone.test.ts` pins it.
 
 ---
 
@@ -57,7 +69,7 @@ from the canvas.
 
 ## Stat
 
-One 30/700 number with a 12/500 muted label under it. Several sit in a row
+One 30/700 number with a 13/500 muted label under it. Several sit in a row
 inside a `TintCard`. Write the label in lower-case plain words that read
 straight on from the number — "4 waiting on you", not "4 PENDING_REVIEW".
 

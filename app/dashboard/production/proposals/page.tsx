@@ -177,7 +177,7 @@ export default function ProposalsPage() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Keep it</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => cancel(p.id)} className="bg-accent-red hover:bg-accent-red">
+                            <AlertDialogAction onClick={() => cancel(p.id)} className="bg-accent-red hover:bg-accent-red/90">
                               Cancel proposal
                             </AlertDialogAction>
                           </AlertDialogFooter>

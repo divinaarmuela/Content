@@ -285,14 +285,22 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       </Link>
 
       {/* ── header ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          key={batch.title}
-          defaultValue={batch.title}
-          disabled={!canEdit}
-          onBlur={e => { const v = e.target.value.trim(); if (v && v !== batch.title) void patch('title', v) }}
-          className="min-w-0 flex-1 bg-transparent text-section-title outline-none focus:border-b focus:border-border disabled:opacity-100"
-        />
+      <div className="flex flex-wrap items-center gap-3 pb-2 pt-2">
+        {/* The shoot's name IS this page's name, and it is editable in place.
+            So the box is the h1 rather than sitting under one: the page gets
+            the heading every other page has, and a screen reader still hears
+            what the field is for from the label. */}
+        <h1 className="min-w-0 flex-1">
+          <label htmlFor="shoot-title" className="sr-only">Shoot name</label>
+          <input
+            id="shoot-title"
+            key={batch.title}
+            defaultValue={batch.title}
+            disabled={!canEdit}
+            onBlur={e => { const v = e.target.value.trim(); if (v && v !== batch.title) void patch('title', v) }}
+            className="w-full min-w-0 bg-transparent text-page-title-sm outline-none focus:border-b focus:border-border disabled:opacity-100"
+          />
+        </h1>
         {/* what actually happened, derived from the calendar — a booked shoot
             whose date has passed says "Shot" with nobody pressing anything */}
         <Badge variant="outline" className={`font-normal ${BATCH_STATUS_STYLE[stateStyle[state]]}`}>
@@ -446,7 +454,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 <div key={shot.id} className="group flex items-center gap-2">
                   <input type="checkbox" checked={shot.done} disabled={!canEdit}
                     onChange={e => editShots(shots.map((s, j) => j === i ? { ...s, done: e.target.checked } : s))}
-                    className="h-4 w-4 shrink-0 accent-blue-600" />
+                    className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]" />
                   {/* keyed by the shot's id ONLY — keying on the text remounted
                       the field on every echo and dropped focus mid-word */}
                   <Input key={shot.id} defaultValue={shot.text} disabled={!canEdit}
@@ -837,7 +845,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-accent-red text-white hover:bg-accent-red"
+            <AlertDialogAction className="bg-accent-red text-cream hover:bg-accent-red/90"
               onClick={async e => {
                 e.preventDefault()
                 const res = await fetch(`/api/production/batches/${id}`, { method: 'DELETE' })

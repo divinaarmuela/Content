@@ -372,7 +372,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
               <label key={r.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-tile border border-border px-3 py-2 text-body-15 hover:bg-muted/50">
                 <input type="checkbox" checked={chosen.has(r.id)}
                   onChange={() => setChosen(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n })}
-                  className="h-4 w-4 shrink-0 accent-blue-600" />
+                  className="h-4 w-4 shrink-0 accent-[var(--dbx-blue)]" />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{r.name || r.email}</span>
                   <span className="block truncate text-secondary-13 text-muted-foreground">{r.email}</span>

@@ -11,14 +11,17 @@ import { cn } from '@/lib/utils'
  * the new look uses that one height for every control on the page, so the old
  * mouse-density sizes (36px, 32px) are gone and `size` only changes how wide
  * the pill is. A call site that truly needs something smaller says so in its
- * own `className`, which still wins.
+ * own `className`, which still wins — but only on a mouse. On a touch screen
+ * the base keeps a `[@media(pointer:coarse)]` 44px floor, so an `h-7 w-7`
+ * icon button is still a fingertip target on a phone or tablet while staying
+ * 28px on a desktop. Nothing changes for a pointer device.
  *
  * `default` is the ink pill — the one action a page is FOR. `outline` is the
  * white surface pill beside it. Inside an ink card the primary flips to cream
  * so it stays visible against its host.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
   {
     variants: {
       variant: {
