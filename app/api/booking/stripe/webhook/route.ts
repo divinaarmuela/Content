@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import type Stripe from 'stripe'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Booking, BookingResource, BookingService } from '@/lib/db-types'
+import { seatIsFree, spaceForResource } from '../../../../lib/booking'
 import { stripeClient, STRIPE_WEBHOOK_SECRET } from '../../../../lib/stripe'
 import { notifyNewBooking } from '../../../../lib/booking-notify'
 
@@ -22,16 +24,27 @@ import { notifyNewBooking } from '../../../../lib/booking-notify'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+/**
+ * The booking a Checkout Session belongs to: by the id Stripe carries in its
+ * metadata, else by the session id we stored on the booking when the payment
+ * was started. `checkout_ref` holds one booking per session — a second
+ * delivery for the same session finds the same row, which is what keeps this
+ * webhook idempotent.
+ */
+async function findBooking(session: Stripe.Checkout.Session): Promise<Booking | null> {
+  const bookingId = session.metadata?.booking_id
+  if (bookingId) return await table<Booking>('bookings').get(bookingId)
+  return await table<Booking>('bookings')
+    .list({ where: b => b.checkout_ref === session.id, limit: 1 })
+    .then(r => r[0] ?? null)
+}
+
 /** Confirm the booking behind a paid session. Idempotent: Stripe retries. */
 async function fulfil(session: Stripe.Checkout.Session) {
   // an unpaid session reaches us for delayed payment methods; it is not money
   if (session.payment_status === 'unpaid') return
 
-  const bookingId = session.metadata?.booking_id
-  const query = bookingId
-    ? supabase.from('bookings').select('id, status, payment_status, service_id, resource_id, start_at, end_at, customer_name, customer_email, customer_phone, notes, public_ref').eq('id', bookingId)
-    : supabase.from('bookings').select('id, status, payment_status, service_id, resource_id, start_at, end_at, customer_name, customer_email, customer_phone, notes, public_ref').eq('checkout_ref', session.id)
-  const { data: booking } = await query.maybeSingle()
+  const booking = await findBooking(session)
   if (!booking) {
     console.error('stripe webhook: no booking for session', session.id)
     return
@@ -45,27 +58,32 @@ async function fulfil(session: Stripe.Checkout.Session) {
    * arrives a couple of minutes later — by which time the sweep has freed
    * the slot. Leaving that as "cancelled but paid" charges a customer for
    * nothing, silently. So a paid booking tries to take its slot back, and
-   * the unique seat index decides whether it still can.
+   * the seat rule decides whether it still can.
    */
   let reclaimed: 'held' | 'recovered' | 'lost' = 'held'
   if (booking.status === 'cancelled') {
-    const { error: reErr } = await supabase.from('bookings')
-      .update({ status: 'confirmed' }).eq('id', booking.id)
-    // 23505 = somebody else took the seat while this one was released
-    reclaimed = reErr ? 'lost' : 'recovered'
-    if (reErr) console.error('paid booking could not reclaim its slot:', booking.id, reErr.message)
+    // the seat rule that used to be the exclusion constraint: it can only
+    // come back if nobody else moved into the same seat and time
+    const free = await seatIsFree({
+      spaceId: booking.space_id ?? await spaceForResource(booking.resource_id),
+      seatNo: booking.seat_no ?? 1,
+      startAt: booking.start_at,
+      endAt: booking.end_at,
+      excludeId: booking.id,
+    })
+    reclaimed = free ? 'recovered' : 'lost'
+    if (!free) console.error('paid booking could not reclaim its slot:', booking.id)
   }
 
-  // optimistic guard so two concurrent deliveries cannot both "first" confirm
-  const { data: claimed } = await supabase.from('bookings')
-    .update({
-      payment_status: 'paid',
-      status: reclaimed === 'lost' ? 'cancelled' : 'confirmed',
-      payment_ref: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
-    })
-    .eq('id', booking.id).neq('payment_status', 'paid')
-    .select('id').maybeSingle()
-  if (!claimed) return
+  // re-read immediately before the write so two concurrent deliveries cannot
+  // both "first" confirm
+  const live = await table<Booking>('bookings').get(booking.id)
+  if (!live || live.payment_status === 'paid') return
+  await table<Booking>('bookings').update(booking.id, {
+    payment_status: 'paid',
+    status: reclaimed === 'lost' ? 'cancelled' : 'confirmed',
+    payment_ref: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
+  })
 
   if (reclaimed === 'lost') {
     // money taken, no slot to give: a person has to refund this, so say so
@@ -77,11 +95,11 @@ async function fulfil(session: Stripe.Checkout.Session) {
 
   // the customer never got a confirmation while the booking was pending —
   // now that it is paid, send the same one a free booking would have had
-  const [{ data: service }, { data: resource }] = await Promise.all([
-    supabase.from('booking_services')
-      .select('id, name, slug, description, duration_min, price_cents, currency, resource_id, lead_time_min, horizon_days, requires_payment')
-      .eq('id', booking.service_id).maybeSingle(),
-    supabase.from('booking_resources').select('id, label, timezone').eq('id', booking.resource_id).maybeSingle(),
+  const [service, resource] = await Promise.all([
+    booking.service_id
+      ? table<BookingService>('booking_services').get(booking.service_id)
+      : Promise.resolve(null),
+    table<BookingResource>('booking_resources').get(booking.resource_id),
   ])
   if (service && resource) {
     await notifyNewBooking({
@@ -127,14 +145,14 @@ async function notifyPaymentWithoutSlot(
 
 /** Payment failed after the fact — release the slot rather than hold it. */
 async function releaseUnpaid(session: Stripe.Checkout.Session) {
-  const bookingId = session.metadata?.booking_id
-  const match = bookingId
-    ? supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId)
-    : supabase.from('bookings').update({ status: 'cancelled' }).eq('checkout_ref', session.id)
-  await match.eq('payment_status', 'unpaid').neq('status', 'cancelled')
+  const booking = await findBooking(session)
+  if (!booking) return
+  if (booking.payment_status !== 'unpaid' || booking.status === 'cancelled') return
+  await table<Booking>('bookings').update(booking.id, { status: 'cancelled' })
 }
 
 export async function POST(req: Request) {
+ return withRequestCache(async () => {
   const stripe = stripeClient()
   const secret = STRIPE_WEBHOOK_SECRET()
   if (!stripe || !secret) {
@@ -176,4 +194,5 @@ export async function POST(req: Request) {
     console.error('stripe webhook handler error:', e)
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
+ })
 }

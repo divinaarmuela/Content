@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Booking, BookingResource, BookingService } from '@/lib/db-types'
 import { stripeClient, stripeReady } from '../../../../lib/stripe'
 
 /**
@@ -15,6 +16,7 @@ import { publicUrl } from '../../../../lib/site-urls'
 const REF = /^[0-9a-f]{18}$/
 
 export async function POST(req: Request) {
+ return withRequestCache(async () => {
   try {
     if (!stripeReady()) {
       return NextResponse.json(
@@ -26,10 +28,9 @@ export async function POST(req: Request) {
     const ref = String((body as { ref?: unknown })?.ref ?? '')
     if (!REF.test(ref)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const { data: booking } = await supabase
-      .from('bookings')
-      .select('id, service_id, resource_id, start_at, status, payment_status, amount_cents, customer_email, customer_name, public_ref, checkout_ref')
-      .eq('public_ref', ref).maybeSingle()
+    const booking = await table<Booking>('bookings')
+      .list({ where: b => b.public_ref === ref, limit: 1 })
+      .then(r => r[0] ?? null)
     if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (booking.status === 'cancelled') {
       return NextResponse.json({ error: 'That booking was cancelled' }, { status: 409 })
@@ -41,9 +42,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Nothing to pay' }, { status: 400 })
     }
 
-    const [{ data: service }, { data: resource }] = await Promise.all([
-      supabase.from('booking_services').select('name, currency').eq('id', booking.service_id).maybeSingle(),
-      supabase.from('booking_resources').select('timezone').eq('id', booking.resource_id).maybeSingle(),
+    const [service, resource] = await Promise.all([
+      booking.service_id
+        ? table<BookingService>('booking_services').get(booking.service_id)
+        : Promise.resolve(null),
+      table<BookingResource>('booking_resources').get(booking.resource_id),
     ])
     // This runs on a server in UTC. Formatting a time without naming the zone
     // showed an 11am Melbourne booking as "1:00 am" on Stripe's checkout —
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
 
     // remember the session so the webhook can find its booking even if the
     // metadata is ever lost in a replay
-    await supabase.from('bookings').update({ checkout_ref: session.id }).eq('id', booking.id)
+    await table<Booking>('bookings').update(booking.id, { checkout_ref: session.id })
 
     // the client secret mounts the form; the expiry lets the page count down
     // and offer a way forward instead of leaving a dead form on screen
@@ -113,4 +116,5 @@ export async function POST(req: Request) {
       ...(err?.code || err?.param ? { detail: [err.type, err.code, err.param].filter(Boolean).join(' / ') } : {}),
     }, { status: 500 })
   }
+ })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import {
   submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
 } from '../../../../lib/intake'
@@ -18,12 +19,12 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const form = await submitIntake(token)
   if (!form) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { data: client } = await supabase
-    .from('clients').select('name').eq('id', form.client_id).maybeSingle()
+  const client = await table<Client>('clients').get(form.client_id)
   const name = client?.name ?? 'A client'
   const progress = completion(form.definition, form.answers)
   // An email link must be absolute. NEXT_PUBLIC_APP_URL is set in production;
@@ -145,4 +146,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   })
 
   return NextResponse.json({ status: form.status })
+ })
 }

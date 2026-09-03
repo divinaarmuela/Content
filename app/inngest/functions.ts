@@ -1,4 +1,5 @@
 import { inngest } from './client'
+import { table, withRequestCache } from '@/lib/db'
 import { scanSingleMailbox } from '../lib/email-lead'
 import { getScanSettings, enabledMailboxEmails } from '../lib/scan-settings'
 import {
@@ -42,7 +43,7 @@ export const scanInboxScheduled = inngest.createFunction(
     // the dispatcher is cheap; one at a time is plenty and avoids double-sends
     concurrency: { limit: 1 },
   },
-  async ({ step }) => {
+  async ({ step }) => withRequestCache(async () => {
     // One step, not three. Inngest bills the run plus every step inside it, and
     // at a 5-minute cadence three cheap lookups cost as much as the work. They
     // are all reads with no side effects, so collapsing them loses nothing on
@@ -79,7 +80,7 @@ export const scanInboxScheduled = inngest.createFunction(
       }))
     )
     return { dispatched: mailboxes.length, mailboxes }
-  }
+  })
 )
 
 /** Scan one mailbox. The unit of work, of retry, and of failure.
@@ -102,13 +103,13 @@ export const scanMailbox = inngest.createFunction(
     concurrency: { limit: 3, key: 'event.data.email' },
     idempotency: 'event.data.dedupe',
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const email = String(event.data?.email ?? '')
     if (!email) return { skipped: 'no mailbox on event' }
     const trigger = (event.data?.trigger ?? 'event') as 'manual' | 'scheduled' | 'event'
 
     return step.run('scan', async () => scanSingleMailbox(email, trigger))
-  }
+  })
 )
 
 /** Daily tick that sends the monthly leads report on the configured day.
@@ -121,9 +122,9 @@ export const leadsReportScheduled = inngest.createFunction(
     retries: 3,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => {
+  async ({ step }) => withRequestCache(async () => {
     return step.run('report-tick', async () => runLeadsReportTick())
-  }
+  })
 )
 
 /** Out-of-band trigger: `app/inbox.scan.requested` fans out over every enabled
@@ -136,7 +137,7 @@ export const scanInboxOnDemand = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 1 },
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const mailboxes = await step.run('list-mailboxes', async () => enabledMailboxEmails())
     if (mailboxes.length === 0) return { skipped: 'no mailboxes enabled' }
 
@@ -150,7 +151,7 @@ export const scanInboxOnDemand = inngest.createFunction(
       }))
     )
     return { dispatched: mailboxes.length, mailboxes }
-  }
+  })
 )
 
 /** Every minute, dispatch any publish job whose time has come.
@@ -171,7 +172,7 @@ export const publishDispatcher = inngest.createFunction(
     retries: 1,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => {
+  async ({ step }) => withRequestCache(async () => {
     // Three reads collapsed into one step for the same billing reason as the
     // scan dispatcher. Each is independently idempotent, so a retry replaying
     // all three is safe.
@@ -189,7 +190,7 @@ export const publishDispatcher = inngest.createFunction(
       ids.map(id => ({ name: 'app/post.publish.requested', data: { jobId: id } }))
     )
     return { due: ids.length, reclaimed, corrected }
-  }
+  })
 )
 
 /** Publish one job. Retries are safe: the claim, the stored x-request-id and
@@ -203,11 +204,11 @@ export const publishPost = inngest.createFunction(
     concurrency: { limit: 5 },
     idempotency: 'event.data.jobId',
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const jobId = String(event.data?.jobId ?? '')
     if (!jobId) return { skipped: 'no jobId' }
     return step.run('publish', async () => ({ status: await runPublishJob(jobId) }))
-  }
+  })
 )
 
 /**
@@ -238,7 +239,7 @@ export const postAnalyticsRefresh = inngest.createFunction(
     // one sweep at a time: two would ask the provider about the same posts
     concurrency: { limit: 1 },
   },
-  async ({ step }) => {
+  async ({ step }) => withRequestCache(async () => {
     const analytics = await step.run('refresh', async () => {
       const { refreshRecentPostAnalytics } = await import('../lib/post-analytics')
       return refreshRecentPostAnalytics()
@@ -279,20 +280,19 @@ export const postAnalyticsRefresh = inngest.createFunction(
     })
 
     // …and keep the database path warm. The first board load of the morning
-    // paid ~870ms for its opening select against ~180ms warm — a cold pooler
-    // connection, not a slow query. Three trivial primary-key reads against
-    // the tables every dashboard page opens with keep that path exercised
-    // between real requests, riding this cron for the same reason the sweeps
-    // do (a NEW function does nothing until re-synced — CLAUDE.md trap 5b).
+    // paid ~870ms for its opening read against ~180ms warm — a cold
+    // connection, not a slow query. Three trivial reads against the tables
+    // every dashboard page opens with keep that path exercised between real
+    // requests, riding this cron for the same reason the sweeps do (a NEW
+    // function does nothing until re-synced — CLAUDE.md trap 5b).
     // Best-effort: a failed warm-up must never fail the run it rides.
     const warm = await step.run('keep-db-warm', async () => {
       try {
-        const { supabase } = await import('@/lib/supabase')
         const started = Date.now()
         await Promise.all([
-          supabase.from('content_items').select('id').limit(1),
-          supabase.from('team_users').select('id').limit(1),
-          supabase.from('batches').select('id').limit(1),
+          table('content_items').list({ limit: 1 }),
+          table('team_users').list({ limit: 1 }),
+          table('batches').list({ limit: 1 }),
         ])
         return { ok: true, ms: Date.now() - started }
       } catch (e) {
@@ -301,7 +301,7 @@ export const postAnalyticsRefresh = inngest.createFunction(
     })
 
     return { analytics, mirrors, previews, warm }
-  }
+  })
 )
 
 /**
@@ -331,7 +331,7 @@ export const postAnalyticsFirstFetch = inngest.createFunction(
     concurrency: { limit: 5 },
     idempotency: 'event.data.providerPostId',
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const providerPostId = String(event.data?.providerPostId ?? '')
     if (!providerPostId) return { skipped: 'no providerPostId' }
 
@@ -342,7 +342,7 @@ export const postAnalyticsFirstFetch = inngest.createFunction(
       const { refreshPostById } = await import('../lib/post-analytics')
       return { providerPostId, ...(await refreshPostById(providerPostId)) }
     })
-  }
+  })
 )
 
 /**
@@ -370,7 +370,7 @@ export const asanaReconcile = inngest.createFunction(
     // is a rounding error against that budget.
     concurrency: { limit: 1 },
   },
-  async ({ step }) => step.run('reconcile', () => reconcileAll())
+  async ({ step }) => withRequestCache(async () => step.run('reconcile', () => reconcileAll()))
 )
 
 /**
@@ -392,7 +392,7 @@ export const brandScan = inngest.createFunction(
     // scans of the same client would race on the stored profile
     concurrency: { limit: 2, key: 'event.data.clientId' },
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const { clientId, url, filename, by } = (event.data ?? {}) as Record<string, string>
     if (!clientId || !url) return { skipped: 'missing clientId or url' }
 
@@ -400,7 +400,7 @@ export const brandScan = inngest.createFunction(
       const { runBrandScan } = await import('../lib/brand-scan')
       return runBrandScan({ clientId, url, filename: filename ?? 'brand.pdf', by: by ?? '' })
     })
-  }
+  })
 )
 
 /**
@@ -426,7 +426,7 @@ export const intakeEnrich = inngest.createFunction(
     // profile, the same reason the brand scan is keyed on the client
     concurrency: { limit: 2, key: 'event.data.client_id' },
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const data = (event.data ?? {}) as Record<string, unknown>
     const form_id = String(data.form_id ?? '')
     const client_id = String(data.client_id ?? '')
@@ -439,7 +439,7 @@ export const intakeEnrich = inngest.createFunction(
       const { enrichFromIntake } = await import('../lib/intake-enrich')
       return enrichFromIntake({ formId: form_id, clientId: client_id, force })
     })
-  }
+  })
 )
 
 /**
@@ -458,12 +458,12 @@ export const dueReminders = inngest.createFunction(
     triggers: [{ cron: 'TZ=Australia/Melbourne 0 8 * * 1-5' }],
     retries: 1,
   },
-  async ({ step }) => {
+  async ({ step }) => withRequestCache(async () => {
     return step.run('remind', async () => {
       const { runDueReminders } = await import('../lib/due-reminders')
       return runDueReminders()
     })
-  }
+  })
 )
 
 /**
@@ -492,7 +492,7 @@ export const driveMirrorFile = inngest.createFunction(
     retries: 3,
     concurrency: { limit: 3, key: 'event.data.scope' },
   },
-  async ({ event, step }) => {
+  async ({ event, step }) => withRequestCache(async () => {
     const data = (event.data ?? {}) as Record<string, unknown>
     const { isMirrorTarget } = await import('../lib/gdrive-mirror-core')
     const target = data.target
@@ -511,7 +511,7 @@ export const driveMirrorFile = inngest.createFunction(
         received_at: data.received_at ? String(data.received_at) : null,
       })
     })
-  }
+  })
 )
 
 export const functions = [

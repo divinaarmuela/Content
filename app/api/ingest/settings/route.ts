@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import {
   getScanSettings, saveScanSettings, listMailboxEntries, setMailboxEnabled,
@@ -15,13 +15,10 @@ import {
  */
 async function scheduleStatus() {
   const connected = Boolean(process.env.INNGEST_EVENT_KEY && process.env.INNGEST_SIGNING_KEY)
-  const { data } = await supabase
-    .from('scan_runs')
-    .select('started_at')
-    .eq('trigger', 'scheduled')
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const data = await table('scan_runs')
+    .list({ by: { trigger: 'scheduled' }, orderBy: [['started_at', 'desc']], limit: 1 })
+    .then(r => r[0] ?? null)
+    .catch(() => null)
 
   return {
     connected,
@@ -38,34 +35,38 @@ async function scheduleStatus() {
  *  the route rather than by hiding controls. */
 
 export async function GET() {
-  try {
-    await requireRole('editor')
-    const [settings, mailboxes, schedule] = await Promise.all([
-      getScanSettings(), listMailboxEntries(), scheduleStatus(),
-    ])
-    return NextResponse.json({ settings, mailboxes, schedule })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
+  return withRequestCache(async () => {
+    try {
+      await requireRole('editor')
+      const [settings, mailboxes, schedule] = await Promise.all([
+        getScanSettings(), listMailboxEntries(), scheduleStatus(),
+      ])
+      return NextResponse.json({ settings, mailboxes, schedule })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
+    }
+  })
 }
 
 export async function PUT(req: Request) {
-  try {
-    const admin = await requireRole('super_admin')
-    const body = await req.json()
+  return withRequestCache(async () => {
+    try {
+      const admin = await requireRole('super_admin')
+      const body = await req.json()
 
-    // { mailbox: "a@b.com", enabled: false } toggles one address
-    if (typeof body?.mailbox === 'string') {
-      await setMailboxEnabled(body.mailbox, Boolean(body.enabled), admin.email)
-      const mailboxes = await listMailboxEntries()
-      return NextResponse.json({ mailboxes })
+      // { mailbox: "a@b.com", enabled: false } toggles one address
+      if (typeof body?.mailbox === 'string') {
+        await setMailboxEnabled(body.mailbox, Boolean(body.enabled), admin.email)
+        const mailboxes = await listMailboxEntries()
+        return NextResponse.json({ mailboxes })
+      }
+
+      const settings = await saveScanSettings(body?.settings ?? body, admin.email)
+      return NextResponse.json({ settings })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
     }
-
-    const settings = await saveScanSettings(body?.settings ?? body, admin.email)
-    return NextResponse.json({ settings })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
+  })
 }

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachMany, attachOne } from '@/lib/db-join'
+import type {
+  Batch, ClientAgreement, ContentItem, PostAnalytic,
+} from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { accessibleClientIds } from '../../../lib/production-access'
 import {
@@ -28,6 +32,7 @@ import {
  * One bulk fetch per table, grouped in memory. Never N+1 across clients.
  */
 export async function GET(req: Request) {
+ return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const now = new Date()
@@ -45,10 +50,13 @@ export async function GET(req: Request) {
     const monthKey = monthKeyOf(month, year)
 
     const ids = await accessibleClientIds(user)
-    let clientsQ = supabase.from('clients').select('id, name, timezone').eq('status', 'active').order('name')
-    if (ids !== null) clientsQ = clientsQ.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
-    const { data: clients } = await clientsQ
-    const clientIds = (clients ?? []).map(c => c.id as string)
+    // an empty id list scopes to nothing on its own — no sentinel needed
+    const clients = await table('clients').list({
+      by: { status: 'active' },
+      where: ids === null ? undefined : r => ids.includes(r.id),
+      orderBy: [['name', 'asc']],
+    })
+    const clientIds = clients.map(c => c.id)
     if (clientIds.length === 0) {
       return NextResponse.json({ month, year, month_key: monthKey, tz: PORTAL_TZ, clients: [] })
     }
@@ -59,13 +67,15 @@ export async function GET(req: Request) {
     const from = new Date(Date.UTC(year, month - 1, 1) - 86_400_000).toISOString()
     const to = new Date(Date.UTC(year, month, 1) + 86_400_000).toISOString()
 
-    const [{ data: agreements }, { data: commitments }, { data: items }, { data: batches }] = await Promise.all([
-      supabase.from('client_agreements').select('client_id, deliverable_lines, start_date').in('client_id', clientIds),
-      supabase.from('monthly_commitments').select('*').in('client_id', clientIds).eq('month', month).eq('year', year),
-      supabase.from('content_items')
-        .select('id, title, client_id, batch_id, content_type, status, due_date, created_at, work_kinds(slug, uses_media), schedule_entries(published_at)')
-        .in('client_id', clientIds).limit(4000),
-      supabase.from('batches').select('id, client_id, month, year').in('client_id', clientIds).limit(1000),
+    const [agreements, commitments, items, batches] = await Promise.all([
+      table<ClientAgreement>('client_agreements').list({ where: r => clientIds.includes(r.client_id) }),
+      table('monthly_commitments')
+        .list({ where: r => clientIds.includes(r.client_id as string) && r.month === month && r.year === year }),
+      table<ContentItem>('content_items')
+        .list({ where: r => clientIds.includes(r.client_id), limit: 4000 })
+        .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media']))
+        .then(rows => attachMany(rows, 'id', 'schedule_entries', 'item_id', ['published_at'])),
+      table<Batch>('batches').list({ where: r => clientIds.includes(r.client_id), limit: 1000 }),
     ])
 
     type ItemRow = {
@@ -74,7 +84,7 @@ export async function GET(req: Request) {
       work_kinds?: { slug?: string; uses_media?: boolean } | null
       schedule_entries?: { published_at?: string | null }[] | null
     }
-    const itemRows = (items ?? []) as unknown as ItemRow[]
+    const itemRows = items as unknown as ItemRow[]
 
     // the month's cached numbers, keyed by item so the kind of piece — and
     // therefore whether it is judged on views or reach — comes from OUR data,
@@ -82,13 +92,11 @@ export async function GET(req: Request) {
     // "—" in the Views column, which is what it said yesterday.
     const analyticsByClient = new Map<string, MonthAnalyticsRow[]>()
     const itemById = new Map(itemRows.map(i => [i.id, i]))
-    const { data: analytics } = await supabase
-      .from('post_analytics')
-      .select('item_id, published_at, views, reach, impressions')
-      .gte('published_at', from)
-      .lt('published_at', to)
-      .limit(5000)
-    for (const a of analytics ?? []) {
+    const analytics = await table<PostAnalytic>('post_analytics').list({
+      where: r => r.published_at != null && r.published_at >= from && r.published_at < to,
+      limit: 5000,
+    }).catch(() => [])
+    for (const a of analytics) {
       const item = itemById.get(a.item_id as string)
       if (!item) continue                       // a post outside this caller's clients
       const arr = analyticsByClient.get(item.client_id) ?? []
@@ -102,16 +110,16 @@ export async function GET(req: Request) {
       analyticsByClient.set(item.client_id, arr)
     }
 
-    const agByClient = new Map((agreements ?? []).map(a => [a.client_id as string, a]))
-    const cmByClient = new Map((commitments ?? []).map(c => [c.client_id as string, c]))
+    const agByClient = new Map(agreements.map(a => [a.client_id, a]))
+    const cmByClient = new Map(commitments.map(c => [c.client_id as string, c]))
     const itemsByClient = new Map<string, ItemRow[]>()
     for (const it of itemRows) {
       const arr = itemsByClient.get(it.client_id) ?? []
       arr.push(it); itemsByClient.set(it.client_id, arr)
     }
-    const batchesById = new Map((batches ?? []).map(b => [b.id as string, b]))
+    const batchesById = new Map(batches.map(b => [b.id, b]))
 
-    const inputs: MonthClientInput[] = (clients ?? []).map(client => {
+    const inputs: MonthClientInput[] = clients.map(client => {
       const id = client.id as string
       const name = client.name as string
       // this client's month, on this client's calendar — the table spans
@@ -179,4 +187,5 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }

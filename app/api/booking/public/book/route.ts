@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { loadPublicService, availabilityFor } from '../../../../lib/booking'
+import { table, DbError, withRequestCache } from '@/lib/db'
+import type { Booking } from '@/lib/db-types'
+import { loadPublicService, availabilityFor, insertBooking } from '../../../../lib/booking'
 import { zonedToUtc, isUsablePhone } from '../../../../lib/booking-core'
 import { notifyNewBooking } from '../../../../lib/booking-notify'
 import { announceBookingChange } from '../../../../lib/production-live'
@@ -8,9 +9,10 @@ import { announceBookingChange } from '../../../../lib/production-live'
 /**
  * PUBLIC, unauthenticated: take a booking.
  *
- * The double-booking guard is the unique index, never a read-then-write: two
- * people clicking the same 10:00 slot both reach the insert, and exactly one
- * wins. The loser is told the slot just went, not handed a silent duplicate.
+ * The double-booking guard lives in insertBooking (the port of the
+ * bookings_no_overlap constraint), never in this route: two people clicking
+ * the same 10:00 slot both reach the insert, and one of them is refused. The
+ * loser is told the slot just went, not handed a silent duplicate.
  */
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i
@@ -22,6 +24,7 @@ function publicRef(): string {
 }
 
 export async function POST(req: Request) {
+ return withRequestCache(async () => {
   try {
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
@@ -62,10 +65,10 @@ export async function POST(req: Request) {
 
     // one person cannot paper the calendar: a soft daily cap per email
     const since = new Date(Date.now() - 86_400_000).toISOString()
-    const { count: recent } = await supabase
-      .from('bookings').select('id', { count: 'exact', head: true })
-      .eq('customer_email', email).gte('created_at', since).neq('status', 'cancelled')
-    if ((recent ?? 0) >= 5) {
+    const recent = await table<Booking>('bookings').count({
+      where: b => b.customer_email === email && b.created_at >= since && b.status !== 'cancelled',
+    })
+    if (recent >= 5) {
       return NextResponse.json(
         { error: 'That is a lot of bookings for one day — email us and we will sort it out.' },
         { status: 429 },
@@ -94,41 +97,38 @@ export async function POST(req: Request) {
     // decides each one. Counting rows then inserting is the check-then-write
     // race this codebase designs out.
     const capacity = Math.max(1, service.capacity ?? 1)
-    let booking: { id: string; start_at: string; end_at: string; public_ref: string | null } | null = null
+    let booking: Booking | null = null
     let lastError: string | null = null
     for (let seat = 1; seat <= capacity; seat++) {
-      const { data, error } = await supabase.from('bookings').insert({
-        service_id: service.id,
-        resource_id: resource.id,
-        start_at: startAt.toISOString(),
-        end_at: endAt.toISOString(),
-        customer_name: name,
-        customer_email: email,
-        customer_phone: phone,
-        notes: notes || null,
-        // an unpaid-but-required booking holds the seat only until it is paid
-        status: needsPayment ? 'pending' : 'confirmed',
-        payment_status: 'unpaid',
-        amount_cents: service.price_cents,
-        public_ref: ref,
-        seat_no: seat,
-        policy_agreed_at: new Date().toISOString(),
-      }).select('id, start_at, end_at, public_ref').single()
-
-      if (!error) { booking = data; break }
-      lastError = error.message
-      // this seat is gone — try the next one
-      if (/duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(error.message)) continue
-      break
+      try {
+        booking = await insertBooking({
+          service_id: service.id,
+          resource_id: resource.id,
+          start_at: startAt.toISOString(),
+          end_at: endAt.toISOString(),
+          customer_name: name,
+          customer_email: email,
+          customer_phone: phone,
+          notes: notes || null,
+          // an unpaid-but-required booking holds the seat only until it is paid
+          status: needsPayment ? 'pending' : 'confirmed',
+          payment_status: 'unpaid',
+          amount_cents: service.price_cents,
+          public_ref: ref,
+          seat_no: seat,
+          policy_agreed_at: new Date().toISOString(),
+        })
+        break
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e)
+        // this seat is gone — try the next one
+        if (e instanceof DbError && e.code === 'unique'
+          && /duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(lastError)) continue
+        break
+      }
     }
 
     if (!booking) {
-      if (lastError && /column .* does not exist|public_ref|seat_no/.test(lastError)) {
-        return NextResponse.json(
-          { error: 'Bookings are not fully switched on yet — run the supabase/booking_*.sql migrations' },
-          { status: 503 },
-        )
-      }
       if (lastError && /duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(lastError)) {
         return NextResponse.json({ error: 'That time just filled up — please pick another' }, { status: 409 })
       }
@@ -162,4 +162,5 @@ export async function POST(req: Request) {
     console.error('public booking error:', e)
     return NextResponse.json({ error: 'Something went wrong — try again' }, { status: 500 })
   }
+ })
 }

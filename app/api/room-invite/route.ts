@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { RoomInviteRequest } from '@/lib/db-types'
 import { sendSystemEmail } from '../../lib/mailer'
 
 /**
@@ -10,49 +11,51 @@ import { sendSystemEmail } from '../../lib/mailer'
  */
 
 export async function POST(req: NextRequest) {
-  let body: { name?: string; email?: string; about?: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  return withRequestCache(async () => {
+    let body: { name?: string; email?: string; about?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
 
-  const name = String(body.name ?? '').trim().slice(0, 120)
-  const email = String(body.email ?? '').trim().toLowerCase()
-  const about = String(body.about ?? '').trim().slice(0, 500)
+    const name = String(body.name ?? '').trim().slice(0, 120)
+    const email = String(body.email ?? '').trim().toLowerCase()
+    const about = String(body.about ?? '').trim().slice(0, 500)
 
-  if (!name) {
-    return NextResponse.json({ error: 'Tell us your name' }, { status: 400 })
-  }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 })
-  }
+    if (!name) {
+      return NextResponse.json({ error: 'Tell us your name' }, { status: 400 })
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 })
+    }
 
-  // asking twice updates the request rather than erroring — people refine
-  // their one-liner
-  const { error } = await supabase
-    .from('room_invite_requests')
-    .upsert({ name, email, about: about || null }, { onConflict: 'email' })
-  if (error) {
-    console.error('room invite insert error:', error)
-    return NextResponse.json(
-      { error: 'Something went wrong — please try again in a moment.' },
-      { status: 502 },
-    )
-  }
+    // asking twice updates the request rather than erroring — people refine
+    // their one-liner
+    try {
+      await table<RoomInviteRequest>('room_invite_requests')
+        .upsert({ name, email, about: about || null }, { onConflict: 'email' })
+    } catch (error) {
+      console.error('room invite insert error:', error)
+      return NextResponse.json(
+        { error: 'Something went wrong — please try again in a moment.' },
+        { status: 502 },
+      )
+    }
 
-  // best-effort heads-up so requests are visible without a dashboard page
-  try {
-    await sendSystemEmail({
-      to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
-      subject: `The Room — invite request from ${name}`,
-      html:
-        `<p><strong>${name}</strong> &lt;${email}&gt; requested an invite to The Room.</p>` +
-        (about ? `<p><strong>What they do:</strong> ${about}</p>` : ''),
-    })
-  } catch (err) {
-    console.error('room invite notification error:', err)
-  }
+    // best-effort heads-up so requests are visible without a dashboard page
+    try {
+      await sendSystemEmail({
+        to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
+        subject: `The Room — invite request from ${name}`,
+        html:
+          `<p><strong>${name}</strong> &lt;${email}&gt; requested an invite to The Room.</p>` +
+          (about ? `<p><strong>What they do:</strong> ${about}</p>` : ''),
+      })
+    } catch (err) {
+      console.error('room invite notification error:', err)
+    }
 
-  return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true })
+  })
 }

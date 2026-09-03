@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
 import { sendSystemEmail } from '../../lib/mailer'
 import { autoIngestLead } from '../../lib/lead-enrichment'
 import { announce } from '@/lib/live'
 
 export async function POST(req: NextRequest) {
+ return withRequestCache(async () => {
   let body: Record<string, string>
   try {
     body = await req.json()
@@ -84,14 +85,21 @@ export async function POST(req: NextRequest) {
 
   // The database is the source of truth for leads — persist FIRST, so an email
   // outage can never lose an enquiry. Email is the notification layer.
-  const { data: savedLead, error: dbError } = await supabase.from('leads').insert({
+  const leadInput = {
     fname, lname, email, phone, biz,
     model: model ?? null,
     need:  need ?? null,
     budget: budget ?? null,
     timeline: timeline ?? null,
-  }).select().single()
-  if (dbError) console.error('Supabase insert error:', dbError)
+  }
+  let savedLead: (typeof leadInput & { id: string }) | null = null
+  let dbError: unknown = null
+  try {
+    savedLead = await table('leads').insert(leadInput) as typeof leadInput & { id: string }
+  } catch (e) {
+    dbError = e
+    console.error('lead insert error:', e)
+  }
 
   // Auto-ingest: verified companies become prospect clients automatically.
   // Fire-and-forget — never delays or fails the visitor's submission.
@@ -103,7 +111,7 @@ export async function POST(req: NextRequest) {
     // Fire-and-forget, so the receiver treats it as a hint and refetches
     // rather than trusting it.
     announce('leads', {
-      id: savedLead.id as string,
+      id: savedLead.id,
       label: biz || `${fname} ${lname}`.trim() || email,
       source: 'web_form',
     })
@@ -144,4 +152,5 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true })
+ })
 }

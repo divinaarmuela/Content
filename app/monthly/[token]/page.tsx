@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { notFound } from 'next/navigation'
 import { archivo, sometype } from '../../components/lama/fonts'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { getMonthlyByToken } from '../../lib/monthly'
 import { monthLabel } from '../../lib/monthly-core'
 import MonthlyForm from './MonthlyForm'
@@ -25,12 +26,12 @@ export const dynamic = 'force-dynamic'
  *  the token is the credential, which is why a submitted form stops accepting
  *  writes. */
 export default async function MonthlyPage({ params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const form = await getMonthlyByToken(token)
   if (!form) notFound()
 
-  const { data: client } = await supabase
-    .from('clients').select('name').eq('id', form.client_id).maybeSingle()
+  const client = await table<Client>('clients').get(form.client_id)
 
   return (
     <div className={`${archivo.variable} ${sometype.variable}`}>
@@ -45,4 +46,5 @@ export default async function MonthlyPage({ params }: { params: Promise<{ token:
       />
     </div>
   )
+ })
 }

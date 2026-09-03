@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, DbError, withRequestCache } from '@/lib/db'
 import { sendSystemEmail } from '../../lib/mailer'
 
 /**
@@ -11,41 +11,52 @@ import { sendSystemEmail } from '../../lib/mailer'
  */
 
 export async function POST(req: NextRequest) {
-  let body: { email?: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  return withRequestCache(async () => {
+    let body: { email?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
 
-  const email = String(body.email ?? '').trim().toLowerCase()
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 })
-  }
+    const email = String(body.email ?? '').trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 })
+    }
 
-  // upsert so subscribing twice is a quiet success, not an error the visitor
-  // has to puzzle over
-  const { error } = await supabase
-    .from('newsletter_subscribers')
-    .upsert({ email, source: 'journal' }, { onConflict: 'email', ignoreDuplicates: true })
-  if (error) {
-    console.error('subscribe insert error:', error)
-    return NextResponse.json(
-      { error: 'Something went wrong — please try again in a moment.' },
-      { status: 502 },
-    )
-  }
+    // subscribing twice is a quiet success, not an error the visitor has to
+    // puzzle over — and the first signup keeps the source it came in with
+    try {
+      const subscribers = table('newsletter_subscribers')
+      const already = await subscribers.list({ by: { email }, limit: 1 })
+      if (!already.length) {
+        try {
+          await subscribers.insert({ email, source: 'journal' })
+        } catch (e) {
+          // two clicks in the same second: the unique email decides, and the
+          // loser is still subscribed — which is all the visitor asked for
+          if (!(e instanceof DbError && e.code === 'unique')) throw e
+        }
+      }
+    } catch (error) {
+      console.error('subscribe insert error:', error)
+      return NextResponse.json(
+        { error: 'Something went wrong — please try again in a moment.' },
+        { status: 502 },
+      )
+    }
 
-  // best-effort heads-up so signups are visible without a dashboard page
-  try {
-    await sendSystemEmail({
-      to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
-      subject: `New field notes subscriber — ${email}`,
-      html: `<p><strong>${email}</strong> subscribed to field notes via the journal page.</p>`,
-    })
-  } catch (err) {
-    console.error('subscribe notification error:', err)
-  }
+    // best-effort heads-up so signups are visible without a dashboard page
+    try {
+      await sendSystemEmail({
+        to: process.env.GMAIL_USER ?? 'hello@mdmmarketing.com.au',
+        subject: `New field notes subscriber — ${email}`,
+        html: `<p><strong>${email}</strong> subscribed to field notes via the journal page.</p>`,
+      })
+    } catch (err) {
+      console.error('subscribe notification error:', err)
+    }
 
-  return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true })
+  })
 }

@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { notFound } from 'next/navigation'
 import { archivo, sometype } from '../../components/lama/fonts'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { getIntakeByToken, listIntakeFiles } from '../../lib/intake'
 import IntakeForm from './IntakeForm'
 
@@ -25,12 +26,12 @@ export const dynamic = 'force-dynamic'
  *  token is the credential, which is why nothing sensitive is collected here
  *  and a submitted form stops accepting writes. */
 export default async function IntakePage({ params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const form = await getIntakeByToken(token)
   if (!form) notFound()
 
-  const { data: client } = await supabase
-    .from('clients').select('name').eq('id', form.client_id).maybeSingle()
+  const client = await table<Client>('clients').get(form.client_id)
 
   return (
     <div className={`${archivo.variable} ${sometype.variable}`}>
@@ -45,4 +46,5 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
       />
     </div>
   )
+ })
 }

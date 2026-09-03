@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, encodeKey, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Batch, ContentItem, Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
 import {
   accessibleClientIds, assertUuid, assignedItemsFilter, openTaggedIds,
@@ -33,39 +35,46 @@ type ItemLite = {
 }
 
 export async function GET() {
+ return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
     if (user.role === 'client') throw new AuthzError('Not available to client accounts', 403)
 
     const clientIds = await accessibleClientIds(user)
 
-    let itemsQ = supabase
-      .from('content_items')
-      .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name), work_kinds(slug, uses_media)')
-      .order('updated_at', { ascending: false })
-      .limit(500)
-    if (clientIds !== null) {
-      // assignment grants visibility, the SAME rule as the items API and
-      // loadItemForUser: owning the job, holding its scheduling, being tagged
-      // on it, or holding the shoot it sits under. "Assigned to you" that
-      // omits a job you were assigned is the whole complaint.
-      const assigned = await assignedItemsFilter(user)
-      itemsQ = clientIds.length === 0
-        ? itemsQ.or(assigned)
-        : itemsQ.or(`client_id.in.(${clientIds.map(assertUuid).join(',')}),${assigned}`)
+    // assignment grants visibility, the SAME rule as the items API and
+    // loadItemForUser: owning the job, holding its scheduling, being tagged
+    // on it, or holding the shoot it sits under. "Assigned to you" that
+    // omits a job you were assigned is the whole complaint. The predicate
+    // below is the items GET's, line for line, so the Overview's numbers can
+    // never disagree with the board they link to.
+    const scopedClients = clientIds === null ? null : clientIds.map(assertUuid)
+    const assigned = clientIds !== null ? await assignedItemsFilter(user) : null
+    // a scheduler is gated by STATUS, not by client (accessibleClientIds is
+    // null for them) — but a scheduler who OWNS a job must see it at any
+    // status; the status gate is for other people's items.
+    const me = user.role === 'scheduler' ? assertUuid(user.id) : user.id
+    let items: ItemLite[] = []
+    try {
+      const rows = await table<ContentItem>('content_items').list({
+        where: r => {
+          if (scopedClients !== null && !(scopedClients.includes(r.client_id) || assigned!(r))) return false
+          if (user.role === 'scheduler'
+            && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === me)) return false
+          return true
+        },
+        orderBy: [['updated_at', 'desc']],
+        limit: 500,
+      })
+      items = await attachOne(
+        await attachOne(rows, 'client_id', 'clients', ['name']),
+        'work_kind_id', 'work_kinds', ['slug', 'uses_media'],
+      ) as unknown as ItemLite[]
+    } catch {
+      // a fresh environment may hold no production rows at all — the overview
+      // degrades to zeros rather than erroring the whole page
+      items = []
     }
-    if (user.role === 'scheduler') {
-      // accessibleClientIds is null for a scheduler — they are gated by STATUS,
-      // not by client — so without this the pipeline counts on their Overview
-      // included pre-approval work their pages would refuse to show them.
-      // Same rule as the items list: the approved queue, plus anything they own.
-      itemsQ = itemsQ.or(
-        `status.in.(${SCHEDULER_STATUSES.join(',')}),owner_id.eq.${assertUuid(user.id)}`)
-    }
-    const { data: itemRows, error: itemsErr } = await itemsQ
-    // the production tables may not exist yet in a fresh environment — the
-    // overview should degrade to zeros, not error the whole page
-    const items: ItemLite[] = itemsErr ? [] : ((itemRows ?? []) as unknown as ItemLite[])
 
     const pipeline: Record<string, number> = Object.fromEntries(ITEM_STATUSES.map(s => [s, 0]))
     for (const i of items) {
@@ -90,19 +99,22 @@ export async function GET() {
     const taggedItems = items.filter(i => tagged.items.includes(i.id))
     // an item off the roster is still theirs to answer — fetch the ones the
     // scoped list above did not carry
-    const missing = tagged.items.filter(id => !items.some(i => i.id === id))
+    const missing = tagged.items.filter(id => !items.some(i => i.id === id)).map(assertUuid)
     if (missing.length > 0) {
-      const { data: extra } = await supabase
-        .from('content_items')
-        .select('id, title, status, content_type, priority, due_date, client_id, owner_id, scheduler_ids, updated_at, clients(name)')
-        .in('id', missing.map(assertUuid))
-      taggedItems.push(...((extra ?? []) as unknown as ItemLite[]))
+      const extra = await table<ContentItem>('content_items')
+        .list({ where: r => missing.includes(r.id) })
+        .then(rows => attachOne(rows, 'client_id', 'clients', ['name']))
+        .catch(() => [])
+      taggedItems.push(...(extra as unknown as ItemLite[]))
     }
     let taggedShoots: { id: string; title: string; client_id: string; clients: { name: string } | null }[] = []
     if (tagged.batches.length > 0) {
-      const { data: shoots } = await supabase
-        .from('batches').select('id, title, client_id, clients(name)').in('id', tagged.batches.map(assertUuid))
-      taggedShoots = (shoots ?? []) as unknown as typeof taggedShoots
+      const shootIds = tagged.batches.map(assertUuid)
+      taggedShoots = await table<Batch>('batches')
+        .list({ where: r => shootIds.includes(r.id) })
+        .then(rows => attachOne(rows, 'client_id', 'clients', ['name']))
+        .then(rows => rows as unknown as typeof taggedShoots)
+        .catch(() => [])
     }
     const waitingOnYou = {
       items: taggedItems.map(i => ({ ...i, tagged: true })),
@@ -173,15 +185,27 @@ export async function GET() {
       let upcoming: unknown[] = []
       let upcomingCount = 0
       let publishedWeek = 0
-      const { data: entries } = await supabase
-        .from('schedule_entries')
-        .select('id, item_id, platform, scheduled_at, live_url, published_at, content_items(id, title, client_id, clients(name, timezone))')
-        // lower-bounded: without this, 200 historical rows fill the window
-        // and both panels go permanently blank on a busy account
-        .gte('scheduled_at', weekAgo)
-        .order('scheduled_at', { ascending: true })
-        .limit(200)
-      if (entries) {
+      // lower-bounded: without this, 200 historical rows fill the window
+      // and both panels go permanently blank on a busy account
+      const entryRows = await table<ScheduleEntry>('schedule_entries').list({
+        where: r => r.scheduled_at != null && r.scheduled_at >= weekAgo,
+        orderBy: [['scheduled_at', 'asc']],
+        limit: 200,
+      }).catch(() => [])
+      // the item, and nested inside it its client's name and posting zone —
+      // the shape the dashboard reads (e.content_items.clients.timezone)
+      const withItems = await attachOne(entryRows, 'item_id', 'content_items', ['id', 'title', 'client_id'])
+      const clientsById = new Map(
+        (await table('clients').list().catch(() => []))
+          .map(c => [c.id, { name: c.name, timezone: c.timezone }]),
+      )
+      const entries = withItems.map(e => ({
+        ...e,
+        content_items: e.content_items
+          ? { ...e.content_items, clients: clientsById.get(e.content_items.client_id as string) ?? null }
+          : null,
+      }))
+      {
         const now = new Date().toISOString()
         const upcomingAll = entries
           .filter(e => e.scheduled_at && e.scheduled_at >= now && e.scheduled_at <= weekAhead)
@@ -207,23 +231,23 @@ export async function GET() {
     // account_manager / super_admin — the funnel plus the front door.
     // Lead data only for those who may see the Leads page: supers by role,
     // an AM only via an explicit per-person grant.
-    const { data: leadsRow } = await supabase.from('user_page_access')
-      .select('hidden').eq('team_user_id', user.id).eq('href', '/dashboard/leads').maybeSingle()
+    // the row's id IS (team_user_id, href) — one grant per person per page
+    const leadsRow = await table<UserPageAccess & { hidden?: boolean }>('user_page_access')
+      .get(`${user.id}__${encodeKey('/dashboard/leads')}`)
+      .catch(() => null)
     // hidden wins for everyone — a super admin who muted Leads sees none of it
     const mayLeads = !leadsRow?.hidden
       && (user.role === 'super_admin' || (!!leadsRow && !leadsRow.hidden))
-    let clientsQ = supabase.from('clients').select('id, name').order('name')
-    if (clientIds !== null) clientsQ = clientsQ.in('id', clientIds.length ? clientIds : ['00000000-0000-0000-0000-000000000000'])
-    const [{ data: clientRows }, { data: leadRows }] = await Promise.all([
-      clientsQ,
+    const [clientRows, leads] = await Promise.all([
+      // an empty id list scopes to nothing on its own — no sentinel needed
+      table('clients').list({
+        where: clientIds === null ? undefined : r => clientIds.includes(r.id),
+        orderBy: [['name', 'asc']],
+      }).catch(() => []),
       mayLeads
-        ? supabase.from('leads')
-            .select('id, fname, lname, biz, source, created_at')
-            .order('created_at', { ascending: false })
-            .limit(50)
-        : Promise.resolve({ data: null }),
+        ? table<Lead>('leads').list({ orderBy: [['created_at', 'desc']], limit: 50 }).catch(() => [])
+        : Promise.resolve([] as Lead[]),
     ])
-    const leads = leadRows ?? []
     // the manager's own queue: the three statuses whose turn is theirs.
     // 'client_review' is the CLIENT's move and already has its own stat
     // ("With client"); 'revision_complete' is a manager sign-off and used to
@@ -252,7 +276,7 @@ export async function GET() {
       pipeline,
       waiting_on_you: waitingOnYou,
       manager: {
-        clients: (clientRows ?? []).length,
+        clients: clientRows.length,
         // both stages that wait on a manager: the first look and the re-look
         awaiting_internal_review: (pipeline.internal_review ?? 0) + (pipeline.revision_complete ?? 0),
         awaiting_client: (pipeline.client_review ?? 0) + (pipeline.client_changes_requested ?? 0),
@@ -275,4 +299,5 @@ export async function GET() {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }

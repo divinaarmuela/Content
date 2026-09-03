@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { loadPublicService, availabilityFor, type PublicResource } from '../../../../lib/booking'
+import { table, withRequestCache } from '@/lib/db'
+import type { Booking, BookingResource, BookingService } from '@/lib/db-types'
+import {
+  loadPublicService, availabilityFor, seatIsFree, spaceForResource, type PublicResource,
+} from '../../../../lib/booking'
 import { zonedToUtc, utcToZoned, policyFor } from '../../../../lib/booking-core'
 import { notifyBookingChanged } from '../../../../lib/booking-notify'
 import { announceBookingChange } from '../../../../lib/production-live'
@@ -17,20 +20,22 @@ const REF = /^[0-9a-f]{18}$/
 
 async function load(ref: string) {
   if (!REF.test(ref)) return null
-  const { data } = await supabase
-    .from('bookings')
-    .select('id, service_id, resource_id, start_at, end_at, status, customer_name, customer_email, customer_phone, notes, public_ref')
-    .eq('public_ref', ref).maybeSingle()
+  const data = await table<Booking>('bookings')
+    .list({ where: b => b.public_ref === ref, limit: 1 })
+    .then(r => r[0] ?? null)
   if (!data) return null
-  const [{ data: svc }, { data: res }] = await Promise.all([
-    supabase.from('booking_services').select('slug, name, duration_min').eq('id', data.service_id).maybeSingle(),
-    supabase.from('booking_resources').select('id, label, timezone').eq('id', data.resource_id).maybeSingle(),
+  const [svc, res] = await Promise.all([
+    data.service_id
+      ? table<BookingService>('booking_services').get(data.service_id)
+      : Promise.resolve(null),
+    table<BookingResource>('booking_resources').get(data.resource_id),
   ])
   if (!svc || !res) return null
-  return { booking: data, svc, resource: res as PublicResource }
+  return { booking: data, svc, resource: res as unknown as PublicResource }
 }
 
 export async function GET(req: Request) {
+ return withRequestCache(async () => {
   try {
     const ref = String(new URL(req.url).searchParams.get('ref') ?? '')
     const found = await load(ref)
@@ -69,9 +74,11 @@ export async function GET(req: Request) {
     console.error('booking manage read error:', e)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
+ })
 }
 
 export async function POST(req: Request) {
+ return withRequestCache(async () => {
   try {
     const body = await req.json().catch(() => null)
     const ref = String((body as { ref?: unknown })?.ref ?? '')
@@ -91,12 +98,13 @@ export async function POST(req: Request) {
       if (!policy.canCancel) {
         return NextResponse.json({ error: policy.reason }, { status: 409 })
       }
-      // optimistic guard: only a live booking can be cancelled, exactly once
-      const { data: done } = await supabase.from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', booking.id).neq('status', 'cancelled')
-        .select('id').maybeSingle()
-      if (!done) return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
+      // only a live booking can be cancelled, and exactly once — the state is
+      // re-read immediately before the write rather than guarded by it
+      const live = await table<Booking>('bookings').get(booking.id)
+      if (!live || live.status === 'cancelled') {
+        return NextResponse.json({ error: 'That booking is already cancelled' }, { status: 409 })
+      }
+      await table<Booking>('bookings').update(booking.id, { status: 'cancelled' })
 
       announceBookingChange({ booking_id: booking.id, kind: 'cancelled' })
       notifyBookingChanged({
@@ -132,16 +140,25 @@ export async function POST(req: Request) {
     const endAt = new Date(startAt.getTime() + (svc.duration_min as number) * 60_000)
     const previousStart = booking.start_at
 
-    const { data: moved, error } = await supabase.from('bookings')
-      .update({ start_at: startAt.toISOString(), end_at: endAt.toISOString() })
-      .eq('id', booking.id).neq('status', 'cancelled')
-      .select('id, start_at, public_ref').maybeSingle()
-    if (error) {
-      if (/duplicate key|23505|23P01|bookings_no_overlap|exclusion/.test(error.message)) {
-        return NextResponse.json({ error: 'That time was just taken — pick another' }, { status: 409 })
-      }
-      throw new Error(error.message)
+    // the no-overlap rule Postgres enforced with an exclusion constraint: the
+    // seat this booking already holds must be free at the NEW time, ignoring
+    // the booking's own current slot
+    const free = await seatIsFree({
+      spaceId: booking.space_id ?? await spaceForResource(booking.resource_id),
+      seatNo: booking.seat_no ?? 1,
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      excludeId: booking.id,
+    })
+    if (!free) {
+      return NextResponse.json({ error: 'That time was just taken — pick another' }, { status: 409 })
     }
+    const live = await table<Booking>('bookings').get(booking.id)
+    if (!live || live.status === 'cancelled') {
+      return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
+    }
+    const moved = await table<Booking>('bookings')
+      .update(booking.id, { start_at: startAt.toISOString(), end_at: endAt.toISOString() })
     if (!moved) return NextResponse.json({ error: 'That booking is no longer live' }, { status: 409 })
 
     announceBookingChange({ booking_id: booking.id, kind: 'moved' })
@@ -154,4 +171,5 @@ export async function POST(req: Request) {
     console.error('booking manage error:', e)
     return NextResponse.json({ error: 'Something went wrong — try again' }, { status: 500 })
   }
+ })
 }

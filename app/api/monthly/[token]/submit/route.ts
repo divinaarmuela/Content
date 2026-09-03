@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { submitMonthly } from '../../../../lib/monthly'
 import { notify, renderEmail } from '../../../../lib/mailer'
 import { completion, resolveRecipients } from '../../../../lib/intake-core'
@@ -17,12 +18,12 @@ export const maxDuration = 60
  * an internal planning form.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const form = await submitMonthly(token)
   if (!form) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { data: client } = await supabase
-    .from('clients').select('name').eq('id', form.client_id).maybeSingle()
+  const client = await table<Client>('clients').get(form.client_id)
   const name = client?.name ?? 'A client'
   const progress = completion(form.definition, form.answers)
   const period = monthLabel(form.month, form.year)
@@ -91,4 +92,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   })
 
   return NextResponse.json({ status: form.status })
+ })
 }
