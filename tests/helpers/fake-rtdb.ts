@@ -89,12 +89,20 @@ export function installFakeRtdb(seed: Json = {}) {
     const url = new URL(typeof input === 'string' ? input : input.url)
     if (url.origin !== ORIGIN) return real(input, init)
     const method = (init.method ?? 'GET').toUpperCase()
-    const segs = url.pathname.replace(/\.json$/, '').split('/').filter(Boolean)
+    // The real server URL-decodes each path segment before resolving it —
+    // reproduce that here (rather than taking the raw, still-encoded
+    // segment) so a caller that forgets to encode `%` in a key gets the same
+    // 400 production does, instead of the fake silently accepting a path a
+    // real database would reject.
+    const rawSegs = url.pathname.replace(/\.json$/, '').split('/').filter(Boolean)
+    const segs = rawSegs.map(s => decodeURIComponent(s))
     const path = '/' + segs.join('/')
-    calls.push({ method, path, query: url.search })
+    calls.push({ method, path: '/' + rawSegs.join('/'), query: url.search })
     const body = init.body ? JSON.parse(init.body) : undefined
     const respond = (v: Json, status = 200, extra: Record<string, string> = {}) =>
       new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json', ...extra } })
+    const illegal = segs.some(s => /[.#$[\]/]/.test(s))
+    if (illegal) return respond({ error: 'Invalid path: Invalid token in path' }, 400)
 
     if (method !== 'GET') {
       // the seam a race test writes through: a rival's write lands here,

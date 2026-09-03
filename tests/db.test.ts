@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { installFakeRtdb } from './helpers/fake-rtdb'
 import { table, withRequestCache, DbError, listTables, rtdbFetch, encodeKey } from '@/lib/db'
 import type { Table } from '@/lib/db'
-import type { Client, ContentItem, ClientBrand } from '@/lib/db-types'
+import type { Client, ContentItem, ClientBrand, ScanMailbox } from '@/lib/db-types'
 
 let fake: ReturnType<typeof installFakeRtdb>
 const seed = () => ({ mdm: { tables: {
@@ -79,6 +79,30 @@ describe('table() writes', () => {
   it('natural-key tables derive their id', async () => {
     const r = await table('team_user_clients').insert({ team_user_id: 'u1', client_id: 'c1' } as any)
     expect(r.id).toBe('u1__c1')
+  })
+
+  // Regression coverage for the production bug: encodeKey() puts literal `%`
+  // escapes INSIDE a path segment (e.g. `.` -> `%2E`), and the real Firebase
+  // REST server URL-decodes each segment before resolving it. Unless the
+  // transport re-encodes `%` as `%25`, the server's decode undoes encodeKey's
+  // escaping and hands back an illegal key (a bare `.`) — 400 "Invalid path".
+  it('round-trips a natural-key row whose id is an encoded email', async () => {
+    const row = await table<ScanMailbox>('scan_mailboxes').insert({ email: 'a.b@x.com', enabled: true, source: 'gmail' } as any)
+    expect(row.id).toBe(encodeKey('a.b@x.com'))
+    const back = await table<ScanMailbox>('scan_mailboxes').get(encodeKey('a.b@x.com'))
+    expect(back?.email).toBe('a.b@x.com')
+    // the wire path must carry the DOUBLY-escaped key (`%` re-encoded to
+    // `%25`) so the server's one decode pass lands back on encodeKey's output
+    const getCall = fake.calls().find(c => c.method === 'GET' && c.path.includes('scan_mailboxes'))
+    expect(getCall?.path).toContain('%25')
+  })
+  it('a uniq lookup for an email key round-trips and rejects a second claim', async () => {
+    const row = await table('team_users').insert({ email: 'a.b@x.com', name: 'First' } as any)
+    expect(fake.tree().mdm.uniq.team_users.email[encodeKey('a.b@x.com')]).toBe(row.id)
+    await expect(table('team_users').insert({ email: 'a.b@x.com', name: 'Second' } as any)).rejects.toBeInstanceOf(DbError)
+    await expect(table('team_users').insert({ email: 'a.b@x.com', name: 'Second' } as any)).rejects.toMatchObject({ code: 'unique' })
+    const uniqCall = fake.calls().find(c => c.path.includes('/uniq/team_users/email/'))
+    expect(uniqCall?.path).toContain('%25')
   })
 })
 

@@ -187,10 +187,30 @@ const ROOT = '/mdm'
 
 // ---- transport ------------------------------------------------------------
 
+/**
+ * Percent-encode each path segment for the wire, independent of what
+ * `encodeKey()` already did to the key.
+ *
+ * `encodeKey()` (lib/db-types.ts) turns illegal RTDB key characters —
+ * `. # $ [ ] /` — into their OWN literal `%XX` escapes so the key can live
+ * inside a path segment at all (e.g. `a.b@x.com` -> `a%2Eb@x%2Ecom`). But the
+ * Firebase REST server URL-decodes each path segment before resolving it, so
+ * a URL built by simple string concatenation hands it `a%2Eb@x%2Ecom`, the
+ * server decodes `%2E` back to `.`, and a `.` inside a key is illegal —
+ * 400 "Invalid path: Invalid token in path". The fix is transport-only:
+ * encode every segment with encodeURIComponent (which turns `%` into `%25`,
+ * leaving `@` and `-` untouched) so the SERVER's one decode pass lands back
+ * on the exact string encodeKey() produced. The key stored in the database
+ * is unaffected — only the URL changes.
+ */
+function encodePath(path: string): string {
+  return path.split('/').map(seg => (seg === '' ? '' : encodeURIComponent(seg))).join('/')
+}
+
 export async function rtdbFetch(path: string, init: RequestInit & { query?: Record<string, string>; table?: string } = {}): Promise<any> {
   const { query, table: tableCtx, ...rest } = init
   const qs = query ? '?' + new URLSearchParams(query).toString() : ''
-  const url = `${rtdbUrl()}${path}.json${qs}`
+  const url = `${rtdbUrl()}${encodePath(path)}.json${qs}`
   let res: Response
   try {
     res = await fetch(url, { ...rest, headers: { 'content-type': 'application/json', ...(rest.headers ?? {}) }, cache: 'no-store' })
@@ -217,7 +237,7 @@ export async function rtdbFetch(path: string, init: RequestInit & { query?: Reco
  * ask is the whole difference between this and rtdbFetch.
  */
 async function rtdbGetWithEtag(path: string): Promise<{ value: any; etag: string }> {
-  const url = `${rtdbUrl()}${path}.json`
+  const url = `${rtdbUrl()}${encodePath(path)}.json`
   let res: Response
   try {
     res = await fetch(url, { headers: { 'content-type': 'application/json', 'X-Firebase-ETag': 'true' }, cache: 'no-store' })
@@ -238,7 +258,7 @@ async function rtdbGetWithEtag(path: string): Promise<{ value: any; etag: string
 async function rtdbPutIfMatch(
   path: string, etag: string, body: unknown,
 ): Promise<{ ok: true } | { ok: false; current: any; etag: string }> {
-  const url = `${rtdbUrl()}${path}.json`
+  const url = `${rtdbUrl()}${encodePath(path)}.json`
   let res: Response
   try {
     res = await fetch(url, {
