@@ -21,7 +21,8 @@ import Chip, { type ChipTone } from './ui/Chip'
 import MiniCalendar, { type Marker } from './ui/MiniCalendar'
 import Timeline, { type TimelineItem } from './ui/Timeline'
 import {
-  DEFAULT_TZ, dayKeyInZone, formatInZone, greetingInZone, viewerHint, zoneLabel,
+  DEFAULT_TZ, dayKeyInZone, formatInZone, greetingInZone, toZonedInput,
+  viewerHint, zoneLabel,
 } from '../lib/timezone-core'
 import { useTable } from '@/lib/db-client'
 import type { Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
@@ -107,6 +108,9 @@ const statusLabel = (i: ItemLite) =>
 /** "1 item" / "4 items" — the summary sentence reads as English or not at all. */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+/** "instagram" is a proper noun on screen, exactly as the old badge printed it. */
+const platformName = (p: string) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : p)
+
 /* ─────────────────────────────────────────────────────────────────────────
    The page's own small pieces: a section heading, a plain panel, and the
    tinted row the mockup's "Assigned to you" list is made of. Everything
@@ -190,7 +194,9 @@ function WorkRow({ href, tone = 'surface', title, detail, chip }: {
   const Icon = ROW_ICON[tone]
   return (
     <Link href={href}
-      className={cn('flex min-h-[64px] items-center gap-3.5 rounded-inner border px-4 py-2.5 transition-opacity hover:opacity-90', ROW_BG[tone])}>
+      /* the hover is a border, not opacity: fading a dark row against a dark
+         canvas is a change nobody can see */
+      className={cn('flex min-h-[64px] items-center gap-3.5 rounded-inner border px-4 py-2.5 transition-colors hover:border-foreground/25', ROW_BG[tone])}>
       <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-tile', ROW_TILE[tone])}>
         <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
       </span>
@@ -214,12 +220,10 @@ function toneOf(i: ItemLite, todayKey: string | null): RowTone {
 }
 
 /** The rows for a list of items, with the list's own loading and empty words. */
-function ItemRows({ items, empty, todayKey, hash = '' }: {
+function ItemRows({ items, empty, todayKey }: {
   items: ItemLite[] | undefined
   empty: string
   todayKey: string | null
-  /** e.g. '#comments' for the rows that are a question to answer */
-  hash?: string
 }) {
   if (items === undefined) {
     return (
@@ -239,11 +243,14 @@ function ItemRows({ items, empty, todayKey, hash = '' }: {
           && !['published', 'scheduled'].includes(i.status)
         return (
           <WorkRow key={i.id}
-            href={`/dashboard/production/${i.id}${hash}`}
+            href={`/dashboard/production/${i.id}`}
             tone={tone}
             title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
+            /* the status is the detail line; the chip only ever adds a SECOND
+               fact — printing "Being revised" twice on one row said nothing
+               twice */
             detail={statusLabel(i)}
-            chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : statusLabel(i)}
+            chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : undefined}
           />
         )
       })}
@@ -722,6 +729,14 @@ export default function OverviewPage() {
   const role = data?.role
   const zone = viewerTz || me?.timezone || DEFAULT_TZ
   const todayKey = now ? dayKeyInZone(now, zone) : null
+  /* MiniCalendar reads a Date with the BROWSER's own calendar. This hands it
+     one whose local year/month/day are the viewer zone's today, so the filled
+     cell and the markers can never disagree about which day it is. */
+  const todayDate = useMemo(() => {
+    if (!todayKey) return undefined
+    const [y, m, d] = todayKey.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }, [todayKey])
 
   /* ── the rail: the shoots, posts and client reviews the page already holds ── */
 
@@ -761,7 +776,10 @@ export default function OverviewPage() {
       if (!b.shoot_date || dayKeyInZone(b.shoot_date, zone) !== todayKey) continue
       const timed = String(b.shoot_date).includes('T')
       rows.push({
-        at: timed ? String(b.shoot_date) : `${todayKey}T00:00`,
+        // the sort key is WALL time in the viewer's zone, never the raw stamp:
+        // an all-day shoot's "00:00" and a 9 am Melbourne post's UTC "T23:00"
+        // sort the wrong way round as plain strings
+        at: timed ? (toZonedInput(b.shoot_date, zone) || `${todayKey}T00:00`) : `${todayKey}T00:00`,
         time: timed ? (formatInZone(b.shoot_date, zone, 'time') ?? '') : 'All day',
         title: `Shoot · ${b.clients?.name ?? 'a client'}`,
         detail: [b.title, b.location].filter(Boolean).join(' · ') || undefined,
@@ -775,10 +793,10 @@ export default function OverviewPage() {
       const it = itemById.get(e.item_id)
       if (!it) continue
       rows.push({
-        at: e.scheduled_at,
+        at: toZonedInput(e.scheduled_at, zone) || `${todayKey}T00:00`,
         time: formatInZone(e.scheduled_at, zone, 'time') ?? '',
         title: `Post goes live · ${clientNameOf.get(it.client_id)?.name ?? 'a client'}`,
-        detail: [it.title, e.platform].filter(Boolean).join(' · '),
+        detail: [it.title, platformName(e.platform)].filter(Boolean).join(' · '),
         tone: 'blue',
         href: `/dashboard/production/${it.id}`,
       })
@@ -825,7 +843,7 @@ export default function OverviewPage() {
       const m = data.manager
       const leads = m.latest_leads ? `, and ${plural(m.leads_week ?? 0, 'new lead')} came in this week` : ''
       return `${plural(m.awaiting_internal_review, 'item')} waiting on you, `
-        + `${m.awaiting_client} with clients${leads}.`
+        + `${m.awaiting_client} with ${m.awaiting_client === 1 ? 'a client' : 'clients'}${leads}.`
     }
     return undefined
   }, [data])
@@ -1044,7 +1062,7 @@ export default function OverviewPage() {
                           title={e.content_items?.clients?.name
                             ? `${e.content_items.clients.name} · ${e.content_items?.title ?? '—'}`
                             : (e.content_items?.title ?? '—')}
-                          detail={[e.platform, mine].filter(Boolean).join(' · ')}
+                          detail={[platformName(e.platform), mine].filter(Boolean).join(' · ')}
                           chip={when ?? undefined} />
                       )
                     })}
@@ -1079,6 +1097,7 @@ export default function OverviewPage() {
               <MiniCalendar
                 month={month}
                 markers={markers}
+                today={todayDate}
                 onMonthChange={setMonth}
                 action={mayBook ? { label: 'Book a shoot', href: '/dashboard/bookings' } : undefined}
               />
