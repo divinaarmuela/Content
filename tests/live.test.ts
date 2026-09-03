@@ -14,11 +14,10 @@ describe('announce', () => {
     expect(node.item_id).toBe('i1')
     expect(typeof node.ts).toBe('number')
   })
-  it('swallows transport failures', async () => {
+  it('swallows transport failures — the returned promise resolves, never rejects', async () => {
     fake.restore()
     globalThis.fetch = (async () => { throw new Error('down') }) as any
     process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL = 'https://fake.firebasedatabase.app'
-    expect(() => announce('leads', { id: 'x' })).not.toThrow()
-    await new Promise(r => setTimeout(r, 0))
+    await expect(announce('leads', { id: 'x' })).resolves.toBeUndefined()
   })
 })

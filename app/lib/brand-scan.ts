@@ -19,7 +19,7 @@ import { mergeProfiles, type BrandProfile } from './brand-core'
 async function say(
   clientId: string, status: string, done: number, total: number, message?: string,
 ): Promise<void> {
-  announce('brand', {
+  await announce('brand', {
     client_id: clientId, status, done, total,
     ...(message ? { message } : {}),
   })

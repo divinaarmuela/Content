@@ -10,7 +10,8 @@ import { rtdbFetch } from './db'
  */
 export type LiveChannel = 'production' | 'leads' | 'brand' | 'intake' | 'monthly' | 'tracker' | 'comments'
 
-export function announce(channel: LiveChannel, hint: Record<string, unknown>): void {
-  void rtdbFetch(`/mdm/live/${channel}`, { method: 'PUT', body: JSON.stringify({ ...hint, ts: Date.now() }) })
-    .catch(e => console.error(`live announce (${channel}) failed:`, (e as Error).message))
+export function announce(channel: LiveChannel, hint: Record<string, unknown>): Promise<void> {
+  return rtdbFetch(`/mdm/live/${channel}`, { method: 'PUT', body: JSON.stringify({ ...hint, ts: Date.now() }) })
+    .then(() => {})
+    .catch(e => { console.error(`live announce (${channel}) failed:`, (e as Error).message) })
 }
