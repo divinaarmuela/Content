@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getMonthlyByToken, saveMonthlyAnswers } from '../../../lib/monthly'
 import { completion } from '../../../lib/intake-core'
-import { inngest } from '../../../inngest/client'
-import { monthlyChannel } from '../../../inngest/channels'
+import { announce } from '@/lib/live'
 
 /**
  * Public monthly-update form, resolved by token alone.
@@ -45,14 +44,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   const form = await getMonthlyByToken(token)
   if (form) {
     const c = completion(form.definition, saved.answers)
-    void inngest.realtime.publish(monthlyChannel.progress, {
+    announce('monthly', {
       form_id: form.id,
       client_id: form.client_id,
       status: saved.status,
       answered: c.answered,
       total: c.total,
-      ts: Date.now(),
-    }).catch(e => console.error('monthly realtime publish failed:', e))
+    })
   }
 
   return NextResponse.json(saved)

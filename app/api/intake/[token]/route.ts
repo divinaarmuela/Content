@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getIntakeByToken, saveIntakeAnswers, listIntakeFiles } from '../../../lib/intake'
 import { completion } from '../../../lib/intake-core'
-import { inngest } from '../../../inngest/client'
-import { intakeChannel } from '../../../inngest/channels'
+import { announce } from '@/lib/live'
 
 /**
  * Public intake form, resolved by token alone.
@@ -46,14 +45,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   const form = await getIntakeByToken(token)
   if (form) {
     const c = completion(form.definition, saved.answers)
-    void inngest.realtime.publish(intakeChannel.progress, {
+    announce('intake', {
       form_id: form.id,
       client_id: form.client_id,
       status: saved.status,
       answered: c.answered,
       total: c.total,
-      ts: Date.now(),
-    }).catch(e => console.error('intake realtime publish failed:', e))
+    })
   }
 
   return NextResponse.json(saved)

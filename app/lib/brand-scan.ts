@@ -1,7 +1,6 @@
 import 'server-only'
 import { supabase } from '@/lib/supabase'
-import { inngest } from '../inngest/client'
-import { brandChannel } from '../inngest/channels'
+import { announce } from '@/lib/live'
 import { extractBrandProfile, pdfPageCount } from './brand-extract'
 import { mergeProfiles, type BrandProfile } from './brand-core'
 
@@ -20,10 +19,10 @@ import { mergeProfiles, type BrandProfile } from './brand-core'
 async function say(
   clientId: string, status: string, done: number, total: number, message?: string,
 ): Promise<void> {
-  await inngest.realtime.publish(brandChannel.progress, {
+  announce('brand', {
     client_id: clientId, status, done, total,
-    ...(message ? { message } : {}), ts: Date.now(),
-  }).catch(e => console.error('brand realtime publish failed:', e))
+    ...(message ? { message } : {}),
+  })
 
   const { error } = await supabase.from('client_brand').upsert({
     client_id: clientId,

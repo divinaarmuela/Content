@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRealtime } from 'inngest/react'
-import { intakeChannel } from '@/app/inngest/channels'
-import { fetchIntakeSubscriptionToken } from './actions'
+import { useLive } from '@/lib/db-client'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -118,62 +116,21 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
   useEffect(() => { void load() }, [load])
 
   /**
-   * Watch the client fill it in, live. Every autosaved field publishes a
-   * progress message; this refetches on the ones for this client.
+   * Watch the client fill it in, live. Every autosaved field marks the intake
+   * channel; this refetches on the ones for this client. Includes its own
+   * visibility-aware poll, so a dropped socket still catches up.
    *
    * Never while editing — a refetch mid-edit would replace the draft you are
    * typing into with whatever the server last saw, which is a good way to lose
    * a rewritten question.
    */
-  const { messages, connectionStatus, error: rtError } = useRealtime({
-    channel: intakeChannel,
-    topics: ['progress'] as const,
-    token: () => fetchIntakeSubscriptionToken(),
-    // a fan-out channel never "completes"
-    autoCloseOnTerminal: false,
-    // a client typing produces a message per field; batch so the panel
-    // re-renders a few times a second at most, not per keystroke burst
-    bufferInterval: 1_000,
-    historyLimit: 10,
-  })
-
-  useEffect(() => {
+  const onIntakeChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
     if (editing) return
-    const latest = messages.last
-    if (!latest) return
-    const d = latest.data as { client_id?: string }
-    if (d?.client_id !== clientId) return
+    const d = hint as { client_id?: string }
+    if (d.client_id && d.client_id !== clientId) return
     void load(true)
-  }, [messages.last, clientId, editing, load])
-
-  // a websocket that never connects looks identical to one that connects and
-  // receives nothing — the poll below covers the difference. Only a real
-  // error is worth a line in the console; the status chatter is gone.
-  useEffect(() => {
-    if (rtError) console.error('[intake realtime]', connectionStatus, rtError)
-  }, [connectionStatus, rtError])
-
-  /**
-   * Fallback poll, active only while the socket is NOT open.
-   *
-   * Realtime is the mechanism; this exists so that a subscription which fails
-   * to connect degrades to "a few seconds behind" rather than to "nothing
-   * updates until you switch tabs" — which is what shipping realtime and
-   * deleting the poll in the same change actually produced.
-   *
-   * Costs nothing when realtime is healthy: `connectionStatus === 'open'`
-   * tears the interval down.
-   */
-  useEffect(() => {
-    if (editing || connectionStatus === 'open') return
-    const tick = () => { if (!document.hidden) void load(true) }
-    const id = window.setInterval(tick, 8_000)
-    document.addEventListener('visibilitychange', tick)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', tick)
-    }
-  }, [load, editing, connectionStatus])
+  }, [clientId, editing, load])
+  useLive('intake', onIntakeChange, { pollMs: 8_000 })
 
   const post = async (body: unknown, ok: string) => {
     setBusy(true)

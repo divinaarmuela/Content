@@ -8,7 +8,7 @@ import { completion, resolveRecipients } from '../../../../lib/intake-core'
 import { renderIntakePdf } from '../../../../lib/intake-pdf'
 import { packIntakeFiles } from '../../../../lib/intake-attachments'
 import { inngest } from '../../../../inngest/client'
-import { intakeChannel } from '../../../../inngest/channels'
+import { announce } from '@/lib/live'
 import { mirrorIntakeFiles } from '../../../../lib/gdrive-mirror'
 import { previewVideos } from '../../../../lib/stream'
 
@@ -136,14 +136,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     console.error('intake enrich dispatch failed:', e)
   }
 
-  void inngest.realtime.publish(intakeChannel.progress, {
+  announce('intake', {
     form_id: form.id,
     client_id: form.client_id,
     status: form.status,
     answered: progress.answered,
     total: progress.total,
-    ts: Date.now(),
-  }).catch(e => console.error('intake realtime publish failed:', e))
+  })
 
   return NextResponse.json({ status: form.status })
 }

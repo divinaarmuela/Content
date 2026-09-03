@@ -11,19 +11,17 @@ import {
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
-import { useRealtime } from 'inngest/react'
+import { useLive } from '@/lib/db-client'
 import {
   ArrowDown, ArrowUp, AtSign, Check, Copy, FileUp, GripVertical, Hash, Image as ImageIcon,
   Loader2, MessageSquare, Palette, Plus, RefreshCw, Sparkles, StickyNote, Trash2, Type, X,
 } from 'lucide-react'
-import { brandChannel } from '@/app/inngest/channels'
 import { LoadOrder } from '@/app/lib/load-order'
 import {
   COLOUR_ROLES, COLOUR_ROLE_LABEL, FONT_ROLES, FONT_ROLE_LABEL, applyProposal, asHandle, asHashtag,
   emptyProfile, moveItem, normaliseHex, normaliseProfile, profileHasContent,
   type BrandColour, type BrandFont, type BrandProfile, type ColourRole, type FontRole, type Proposal,
 } from '@/app/lib/brand-profile-core'
-import { fetchBrandSubscriptionToken } from './brandActions'
 
 /**
  * The client's brand, kept by the team. A scan of the guidelines PDF fills it
@@ -458,25 +456,16 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
     }
   }, [scanning, load])
 
-  const { messages } = useRealtime({
-    channel: brandChannel,
-    topics: ['progress'] as const,
-    token: () => fetchBrandSubscriptionToken(),
-    autoCloseOnTerminal: false,
-    historyLimit: 20,
-  })
   /** set when a scan finishes: the `loads` count at that moment, so the
    *  review waits for the refetch that carries the scan's result */
   const awaitingReview = useRef<number | null>(null)
   const loadsRef = useRef(loads)
   loadsRef.current = loads
-  useEffect(() => {
-    const latest = messages.last
-    if (!latest) return
-    const d = latest.data as { client_id: string; status: string; done: number; total: number; message?: string }
-    if (!d || d.client_id !== clientId) return
+  const onBrandChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
+    const d = hint as { client_id?: string; status?: string; done?: number; total?: number; message?: string }
+    if (!d.client_id || d.client_id !== clientId) return
     if (d.status === 'scanning') {
-      setScanning(true); setProgress({ done: d.done, total: d.total, message: d.message })
+      setScanning(true); setProgress({ done: d.done ?? 0, total: d.total ?? 0, message: d.message })
     } else if (d.status === 'done') {
       setScanning(false); setProgress(null)
       awaitingReview.current = loadsRef.current
@@ -485,7 +474,8 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
       setScanning(false); setProgress(null)
       toast.error(d.message || 'The scan failed')
     }
-  }, [messages.last, clientId, load])
+  }, [clientId, load])
+  useLive('brand', onBrandChange)
 
   // a scan just finished: open the review straight away when it has
   // something to offer, otherwise say so — silence reads as failure

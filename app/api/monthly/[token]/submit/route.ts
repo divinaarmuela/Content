@@ -5,8 +5,7 @@ import { notify, renderEmail } from '../../../../lib/mailer'
 import { completion, resolveRecipients } from '../../../../lib/intake-core'
 import { renderMonthlyPdf } from '../../../../lib/monthly-pdf'
 import { monthLabel } from '../../../../lib/monthly-core'
-import { inngest } from '../../../../inngest/client'
-import { monthlyChannel } from '../../../../inngest/channels'
+import { announce } from '@/lib/live'
 
 export const dynamic = 'force-dynamic'
 // Building the PDF takes longer than a default serverless slice allows.
@@ -83,14 +82,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     console.error('monthly submit notification failed:', e)
   }
 
-  void inngest.realtime.publish(monthlyChannel.progress, {
+  announce('monthly', {
     form_id: form.id,
     client_id: form.client_id,
     status: form.status,
     answered: progress.answered,
     total: progress.total,
-    ts: Date.now(),
-  }).catch(e => console.error('monthly realtime publish failed:', e))
+  })
 
   return NextResponse.json({ status: form.status })
 }

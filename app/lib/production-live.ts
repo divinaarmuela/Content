@@ -1,6 +1,5 @@
 import 'server-only'
-import { inngest } from '../inngest/client'
-import { productionChannel } from '../inngest/channels'
+import { announce } from '@/lib/live'
 
 /**
  * Announce that a production item changed, so every open board, queue,
@@ -16,9 +15,7 @@ export function announceItemChange(args: {
   status: string
   kind: 'created' | 'transition' | 'version' | 'comment' | 'schedule' | 'updated'
 }) {
-  void inngest.realtime
-    .publish(productionChannel.changed, { ...args, ts: Date.now() })
-    .catch(e => console.error('production realtime publish failed:', e))
+  announce('production', args)
 }
 
 /** Same contract for shoot briefs: open shoot lists and brief pages refetch
@@ -27,15 +24,12 @@ export function announceItemChange(args: {
  *  refreshes itself. Rides the same channel as production changes; the
  *  `booking:` prefix keeps it distinguishable from an item id. */
 export function announceBookingChange(args: { booking_id: string; kind: string }) {
-  void inngest.realtime
-    .publish(productionChannel.changed, {
-      item_id: `booking:${args.booking_id}`,
-      client_id: 'booking',
-      status: args.kind,
-      kind: 'updated' as const,
-      ts: Date.now(),
-    })
-    .catch(e => console.error('booking realtime publish failed:', e))
+  announce('production', {
+    item_id: `booking:${args.booking_id}`,
+    client_id: 'booking',
+    status: args.kind,
+    kind: 'updated' as const,
+  })
 }
 
 export function announceBatchChange(args: {
@@ -44,13 +38,10 @@ export function announceBatchChange(args: {
   status: string
   kind: 'created' | 'updated' | 'transition' | 'deleted'
 }) {
-  void inngest.realtime
-    .publish(productionChannel.changed, {
-      item_id: `batch:${args.batch_id}`,
-      client_id: args.client_id,
-      status: args.status,
-      kind: 'updated' as const,
-      ts: Date.now(),
-    })
-    .catch(e => console.error('production realtime publish failed:', e))
+  announce('production', {
+    item_id: `batch:${args.batch_id}`,
+    client_id: args.client_id,
+    status: args.status,
+    kind: 'updated' as const,
+  })
 }

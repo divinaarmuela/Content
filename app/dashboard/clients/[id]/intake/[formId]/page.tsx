@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useRealtime } from 'inngest/react'
-import { intakeChannel } from '@/app/inngest/channels'
-import { fetchIntakeSubscriptionToken } from '../../actions'
+import { useLive } from '@/lib/db-client'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react'
@@ -58,46 +56,16 @@ export default function IntakeSubmissionPage() {
    * This page is where someone sits WATCHING a client fill the form in, so of
    * all places it must be live — yet it shipped as a fetch-once snapshot,
    * which is why answers only appeared after leaving and coming back. Same
-   * wiring as IntakePanel: every autosaved field publishes a progress
-   * message; refetch on the ones for this form.
+   * wiring as IntakePanel: every autosaved field marks the intake channel;
+   * refetch on the ones for this form. Includes its own visibility-aware
+   * poll, so a dropped socket still catches up.
    */
-  const { messages, connectionStatus } = useRealtime({
-    channel: intakeChannel,
-    topics: ['progress'] as const,
-    token: () => fetchIntakeSubscriptionToken(),
-    autoCloseOnTerminal: false,
-    // a typing client produces a message per field; batch so the page
-    // refetches at most once a second, not per keystroke burst
-    bufferInterval: 1_000,
-    historyLimit: 10,
-  })
-
-  useEffect(() => {
-    const latest = messages.last
-    if (!latest) return
-    const d = latest.data as { form_id?: string }
-    if (d?.form_id !== params.formId) return
+  const onIntakeChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
+    const d = hint as { form_id?: string }
+    if (d.form_id && d.form_id !== params.formId) return
     void load()
-  }, [messages.last, params.formId, load])
-
-  /**
-   * Fallback, active only while the socket is NOT open, plus a refetch when
-   * the tab regains focus. Degrades a failed subscription to "a few seconds
-   * behind" instead of "frozen until remount"; costs nothing while realtime
-   * is healthy.
-   */
-  useEffect(() => {
-    const onVisible = () => { if (!document.hidden) void load() }
-    document.addEventListener('visibilitychange', onVisible)
-    if (connectionStatus === 'open') {
-      return () => document.removeEventListener('visibilitychange', onVisible)
-    }
-    const id = window.setInterval(() => { if (!document.hidden) void load() }, 8_000)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [load, connectionStatus])
+  }, [params.formId, load])
+  useLive('intake', onIntakeChange, { pollMs: 8_000 })
 
   if (missing) {
     return (

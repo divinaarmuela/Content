@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useRealtime } from 'inngest/react'
-import { monthlyChannel } from '@/app/inngest/channels'
-import { fetchMonthlySubscriptionToken } from '../../monthly-actions'
+import { useLive } from '@/lib/db-client'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react'
@@ -49,35 +47,14 @@ export default function MonthlySubmissionPage() {
 
   useEffect(() => { void load() }, [load])
 
-  const { messages, connectionStatus } = useRealtime({
-    channel: monthlyChannel,
-    topics: ['progress'] as const,
-    token: () => fetchMonthlySubscriptionToken(),
-    autoCloseOnTerminal: false,
-    bufferInterval: 1_000,
-    historyLimit: 10,
-  })
-
-  useEffect(() => {
-    const latest = messages.last
-    if (!latest) return
-    const d = latest.data as { form_id?: string }
-    if (d?.form_id !== params.formId) return
+  /** Same wiring as the intake submission page: refetch on hints for this
+   *  form; useLive's own visibility-aware poll covers a dropped socket. */
+  const onMonthlyChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
+    const d = hint as { form_id?: string }
+    if (d.form_id && d.form_id !== params.formId) return
     void load()
-  }, [messages.last, params.formId, load])
-
-  useEffect(() => {
-    const onVisible = () => { if (!document.hidden) void load() }
-    document.addEventListener('visibilitychange', onVisible)
-    if (connectionStatus === 'open') {
-      return () => document.removeEventListener('visibilitychange', onVisible)
-    }
-    const id = window.setInterval(() => { if (!document.hidden) void load() }, 8_000)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [load, connectionStatus])
+  }, [params.formId, load])
+  useLive('monthly', onMonthlyChange, { pollMs: 8_000 })
 
   if (missing) {
     return (

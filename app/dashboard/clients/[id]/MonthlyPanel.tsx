@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRealtime } from 'inngest/react'
-import { monthlyChannel } from '@/app/inngest/channels'
-import { fetchMonthlySubscriptionToken } from './monthly-actions'
+import { useLive } from '@/lib/db-client'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -134,39 +132,13 @@ export default function MonthlyPanel({ clientId }: { clientId: string }) {
   useEffect(() => { void load() }, [load])
 
   // ── watch the client fill it in, live (same wiring as IntakePanel) ──
-  const { messages, connectionStatus, error: rtError } = useRealtime({
-    channel: monthlyChannel,
-    topics: ['progress'] as const,
-    token: () => fetchMonthlySubscriptionToken(),
-    autoCloseOnTerminal: false,
-    bufferInterval: 1_000,
-    historyLimit: 10,
-  })
-
-  useEffect(() => {
+  const onMonthlyChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
     if (editing) return
-    const latest = messages.last
-    if (!latest) return
-    const d = latest.data as { client_id?: string }
-    if (d?.client_id !== clientId) return
+    const d = hint as { client_id?: string }
+    if (d.client_id && d.client_id !== clientId) return
     void load(true)
-  }, [messages.last, clientId, editing, load])
-
-  useEffect(() => {
-    if (rtError) console.error('[monthly realtime]', connectionStatus, rtError)
-  }, [connectionStatus, rtError])
-
-  // fallback poll, active only while the socket is NOT open
-  useEffect(() => {
-    if (editing || connectionStatus === 'open') return
-    const tick = () => { if (!document.hidden) void load(true) }
-    const id = window.setInterval(tick, 8_000)
-    document.addEventListener('visibilitychange', tick)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', tick)
-    }
-  }, [load, editing, connectionStatus])
+  }, [clientId, editing, load])
+  useLive('monthly', onMonthlyChange, { pollMs: 8_000 })
 
   const patch = async (body: unknown, ok: string) => {
     setBusy(true)

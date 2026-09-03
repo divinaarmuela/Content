@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { sendSystemEmail } from '../../lib/mailer'
 import { autoIngestLead } from '../../lib/lead-enrichment'
-import { inngest } from '../../inngest/client'
-import { leadsChannel } from '../../inngest/channels'
+import { announce } from '@/lib/live'
 
 export async function POST(req: NextRequest) {
   let body: Record<string, string>
@@ -101,14 +100,13 @@ export async function POST(req: NextRequest) {
 
     // A form lead is the one kind that is genuinely instant — it exists the
     // moment they press submit, with no scanner cron in between. Announce it.
-    // Publishing outside a function is not retry-safe, so the receiver treats
-    // messages as hints and refetches rather than trusting them.
-    void inngest.realtime.publish(leadsChannel.created, {
+    // Fire-and-forget, so the receiver treats it as a hint and refetches
+    // rather than trusting it.
+    announce('leads', {
       id: savedLead.id as string,
       label: biz || `${fname} ${lname}`.trim() || email,
       source: 'web_form',
-      ts: Date.now(),
-    }).catch(e => console.error('realtime publish failed:', e))
+    })
   }
 
   let emailOk = true
