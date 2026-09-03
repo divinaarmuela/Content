@@ -15,9 +15,7 @@ export default function PageTitle({ title, summary, actions }: {
   return (
     <div className="flex flex-col gap-4 pb-6 pt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
       <div className="min-w-0">
-        <h1 className="text-[30px] font-semibold tracking-[-0.03em] sm:text-[40px] sm:leading-[1.05]">
-          {title}
-        </h1>
+        <h1 className="text-page-title-sm sm:text-page-title">{title}</h1>
         {summary && (
           <p className="mt-2 max-w-2xl text-[15px] text-muted-foreground">{summary}</p>
         )}

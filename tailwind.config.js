@@ -73,6 +73,8 @@ module.exports = {
       // title everywhere rather than a different arbitrary px value per page.
       fontSize: {
         'page-title': ['40px', { lineHeight: '1.05', letterSpacing: '-0.03em', fontWeight: '600' }],
+        // the same title on a phone, where 40px wraps to three lines
+        'page-title-sm': ['30px', { lineHeight: '1.1', letterSpacing: '-0.03em', fontWeight: '600' }],
         'section-title': ['19px', { lineHeight: '1.3', fontWeight: '600' }],
         'card-title': ['17px', { lineHeight: '1.35', fontWeight: '600' }],
         'body-15': ['15px', { lineHeight: '1.5' }],

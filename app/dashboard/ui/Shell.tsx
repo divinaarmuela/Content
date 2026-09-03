@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -144,6 +144,35 @@ export function activeNavHref(path: string, hrefs: string[]): string | null {
     .sort((a, b) => b.length - a.length)[0] ?? null
 }
 
+/** What this person may see, and where they are — worked out once per render
+ *  of the shell rather than once per place the nav is drawn (the rail and the
+ *  mobile sheet are both mounted at once, and the rail draws twice: the
+ *  scrolling groups and the pinned footer). */
+export type ResolvedNav = {
+  /** every entry this person may see, by href */
+  allowed: Map<string, NavItem>
+  /** Social's children, empty when Social itself is not visible */
+  children: NavItem[]
+  /** the entry the current page belongs to */
+  current: string | null
+}
+
+export function resolveNav(
+  role: Role | null, granted: string[], hidden: string[], path: string,
+): ResolvedNav {
+  // the role ladder decides by default; a super admin's grants can only add
+  const main = visiblePages(role, NAV_MAIN, granted, hidden)
+  const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
+  // Social's children ride on Social's own permission
+  const socialOpen = main.some(i => i.href === '/dashboard/social')
+  const children = socialOpen ? NAV_SOCIAL_CHILDREN : []
+  return {
+    allowed: new Map([...main, ...tools].map(i => [i.href, i] as const)),
+    children,
+    current: activeNavHref(path, [...main, ...children, ...tools].map(i => i.href)),
+  }
+}
+
 /**
  * The rail's links.
  *
@@ -153,22 +182,12 @@ export function activeNavHref(path: string, hrefs: string[]): string | null {
  * so the list has to scroll — and a Settings link that scrolls out of sight is
  * exactly the one people hunt for.
  */
-function NavLinks({ role, granted, hidden, path, onNavigate, part }: {
-  role: Role | null
-  granted: string[]
-  hidden: string[]
-  path: string
+function NavLinks({ nav, onNavigate, part }: {
+  nav: ResolvedNav
   onNavigate?: () => void
   part: 'groups' | 'pinned'
 }) {
-  // the role ladder decides by default; a super admin's grants can only add
-  const main = visiblePages(role, NAV_MAIN, granted, hidden)
-  const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
-  // Social's children ride on Social's own permission
-  const socialOpen = main.some(i => i.href === '/dashboard/social')
-  const children = socialOpen ? NAV_SOCIAL_CHILDREN : []
-  const current = activeNavHref(path, [...main, ...children, ...tools].map(i => i.href))
-  const allowed = new Map([...main, ...tools].map(i => [i.href, i] as const))
+  const { allowed, children, current } = nav
 
   const link = (item: NavItem, nested = false) => {
     const active = current === item.href
@@ -185,7 +204,7 @@ function NavLinks({ role, granted, hidden, path, onNavigate, part }: {
         } ${
           active
             ? 'bg-cream/[0.12] font-medium text-cream'
-            : 'text-cream/70 hover:bg-cream/[0.07] hover:text-cream'
+            : 'text-cream/[0.72] hover:bg-cream/[0.07] hover:text-cream'
         }`}
       >
         <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
@@ -195,7 +214,7 @@ function NavLinks({ role, granted, hidden, path, onNavigate, part }: {
   }
 
   const groupLabel = (text: string) => (
-    <p className="px-3 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-cream/40">
+    <p className="px-3 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-cream/[0.38]">
       {text}
     </p>
   )
@@ -291,6 +310,8 @@ export default function Shell({
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  // one pass over the nav for the rail, its pinned footer and the mobile sheet
+  const nav = useMemo(() => resolveNav(role, granted, hidden, path), [role, granted, hidden, path])
 
   return (
     <div className="dbx min-h-screen bg-background text-foreground antialiased">
@@ -300,10 +321,10 @@ export default function Shell({
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] flex-col bg-ink text-cream md:flex dark:bg-surface">
         <SidebarHeader />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <NavLinks role={role} granted={granted} hidden={hidden} path={path} part="groups" />
+          <NavLinks nav={nav} part="groups" />
         </div>
         <div className="shrink-0 border-t border-cream/10 pb-2 pt-2">
-          <NavLinks role={role} granted={granted} hidden={hidden} path={path} part="pinned" />
+          <NavLinks nav={nav} part="pinned" />
           <a
             href="https://www.mdmmarketing.com.au"
             target="_blank"
@@ -330,20 +351,14 @@ export default function Shell({
                 <Menu className="h-5 w-5" strokeWidth={1.8} />
               </button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex w-[280px] flex-col border-0 bg-ink p-0 text-cream">
+            <SheetContent side="left" className="flex w-[280px] flex-col border-0 bg-ink p-0 text-cream dark:border-r dark:border-cream/10 dark:bg-surface">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <NavLinks
-                  role={role} granted={granted} hidden={hidden} path={path} part="groups"
-                  onNavigate={() => setMobileOpen(false)}
-                />
+                <NavLinks nav={nav} part="groups" onNavigate={() => setMobileOpen(false)} />
               </div>
               <div className="shrink-0 border-t border-cream/10 py-2">
-                <NavLinks
-                  role={role} granted={granted} hidden={hidden} path={path} part="pinned"
-                  onNavigate={() => setMobileOpen(false)}
-                />
+                <NavLinks nav={nav} part="pinned" onNavigate={() => setMobileOpen(false)} />
               </div>
             </SheetContent>
           </Sheet>
@@ -377,10 +392,7 @@ export default function Shell({
             >
               {dark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.8} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
             </button>
-            {/* the bell is 32px on its own; the wrapper makes the tap area 44 */}
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface">
-              <NotificationBell />
-            </div>
+            <NotificationBell />
             <AvatarPill />
           </div>
         </header>
