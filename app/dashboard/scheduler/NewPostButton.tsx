@@ -96,10 +96,12 @@ export default function NewPostButton() {
 
   return (
     <>
-      <Button size="sm" onClick={start} disabled={loading}>
+      <Button
+        className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60"
+        onClick={start} disabled={loading}>
         {loading
-          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Opening…</>
-          : <><Plus className="h-3.5 w-3.5" /> New post</>}
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening…</>
+          : <><Plus className="h-4 w-4" /> New post</>}
       </Button>
 
       {/* the provider is off for this workspace — say so once, properly,

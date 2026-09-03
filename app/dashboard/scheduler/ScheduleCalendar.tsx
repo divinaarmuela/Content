@@ -114,41 +114,46 @@ export default function ScheduleCalendar() {
     }
   }
 
-  if (entries === null) return <Skeleton className="h-[480px] w-full" />
+  if (entries === null) return <Skeleton className="h-[480px] w-full rounded-card" />
 
   const dueCount = held.filter(i => i.due_date).length
 
   return (
-    <WorkCalendar
-      events={calendar}
-      viewer={viewer}
-      tz={DEFAULT_TZ}
-      view={range as CalendarView}
-      onViewChange={setRange}
-      onMove={moveEvent}
-      openOn={openOn}
-      undatedLabel={null}
-      controls={
-        <button type="button" aria-pressed={showDue} onClick={() => setShowDue(!showDue)}
-          title="Show the due dates of the items you are scheduling, under the posting times"
-          className={`min-h-11 rounded-full border px-3 py-1 text-xs transition-colors md:min-h-8 ${
-            showDue
-              ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-              : 'border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'
-          }`}>
-          Due dates
-          {dueCount > 0 && (
-            <span className="ml-1.5 font-mono text-[10px] tabular-nums opacity-70">{dueCount}</span>
-          )}
-        </button>
-      }
-      legend={
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Every post on the day its audience sees it. Green is live, with a link; grey has a
-          time but is not out yet. Times are the client&rsquo;s, not yours. Switch on
-          &ldquo;Due dates&rdquo; to see the deadlines behind them — those are outlined, and can be dragged.
-        </p>
-      }
-    />
+    /* the calendar sits ON a card rather than loose on the canvas — the same
+       22px white panel the rest of the new look uses, so the month reads as
+       one object instead of a grid floating on cream */
+    <section className="rounded-card border border-border bg-surface p-4 sm:p-6">
+      <WorkCalendar
+        events={calendar}
+        viewer={viewer}
+        tz={DEFAULT_TZ}
+        view={range as CalendarView}
+        onViewChange={setRange}
+        onMove={moveEvent}
+        openOn={openOn}
+        undatedLabel={null}
+        controls={
+          <button type="button" aria-pressed={showDue} onClick={() => setShowDue(!showDue)}
+            title="Show the due dates of the items you are scheduling, under the posting times"
+            className={`flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-[14px] font-semibold transition-colors ${
+              showDue
+                ? 'border-transparent bg-foreground text-background'
+                : 'border-border bg-surface text-muted-foreground hover:text-foreground'
+            }`}>
+            Due dates
+            {dueCount > 0 && (
+              <span className="text-[12px] font-bold tabular-nums opacity-70">{dueCount}</span>
+            )}
+          </button>
+        }
+        legend={
+          <p className="text-[15px] text-muted-foreground">
+            Every post on the day its audience sees it. Green is live, with a link; grey has a
+            time but is not out yet. Times are the client&rsquo;s, not yours. Switch on
+            &ldquo;Due dates&rdquo; to see the deadlines behind them — those are outlined, and can be dragged.
+          </p>
+        }
+      />
+    </section>
   )
 }

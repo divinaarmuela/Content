@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarDays, ListChecks } from 'lucide-react'
 import NewPostButton from './NewPostButton'
+import PageTitle from '../ui/PageTitle'
 
 /**
  * Scheduler shell: the views are real CHILD ROUTES, not tab state —
@@ -33,38 +34,38 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Scheduler</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{active.blurb}</p>
-        </div>
+      <PageTitle
+        title="Scheduler"
+        summary={active.blurb}
+        actions={<>
+          {/* link pills, on the page's own pill rail */}
+          <nav aria-label="Scheduler views"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface p-1">
+            {VIEWS.map(v => {
+              const Icon = v.icon
+              const isActive = v.href === active.href
+              return (
+                <Link
+                  key={v.href}
+                  href={v.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
+                    isActive
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" strokeWidth={1.8} /> {v.label}
+                </Link>
+              )
+            })}
+          </nav>
 
-        {/* link pills styled like the shadcn TabsList they replace */}
-        <nav className="ml-auto inline-flex h-auto items-center justify-center rounded-lg bg-zinc-100 p-1 md:h-9 dark:bg-zinc-800">
-          {VIEWS.map(v => {
-            const Icon = v.icon
-            const isActive = v.href === active.href
-            return (
-              <Link
-                key={v.href}
-                href={v.href}
-                aria-current={isActive ? 'page' : undefined}
-                className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all md:min-h-7 ${
-                  isActive
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" /> {v.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        {/* posting is decided here, so starting one belongs here — the same
-            composer the Social page opens, not a second one to keep in step */}
-        <NewPostButton />
-      </div>
+          {/* posting is decided here, so starting one belongs here — the same
+              composer the Social page opens, not a second one to keep in step */}
+          <NewPostButton />
+        </>}
+      />
 
       {children}
     </div>

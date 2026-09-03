@@ -31,26 +31,26 @@ const LONG_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', '
 
 /** The dot beside an event — the client it belongs to, as colour. */
 const DOT: Record<CalTone, string> = {
-  zinc: 'bg-zinc-400',
-  blue: 'bg-blue-500',
-  amber: 'bg-amber-500',
-  violet: 'bg-violet-500',
-  emerald: 'bg-emerald-500',
-  sky: 'bg-sky-500',
-  cyan: 'bg-cyan-500',
-  rose: 'bg-rose-500',
+  zinc: 'bg-foreground/40',
+  blue: 'bg-accent-blue',
+  amber: 'bg-accent-amber',
+  violet: 'bg-accent-blue-deep',
+  emerald: 'bg-accent-green',
+  sky: 'bg-accent-blue',
+  cyan: 'bg-accent-blue-deep',
+  rose: 'bg-accent-red',
 }
 
 /** The event's own face — its STATE, which is the other half of the read. */
 const FACE: Record<CalTone, string> = {
-  zinc: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700',
-  blue: 'bg-blue-50 text-blue-800 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-950',
-  amber: 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-950',
-  violet: 'bg-violet-50 text-violet-800 hover:bg-violet-100 dark:bg-violet-950/50 dark:text-violet-300 dark:hover:bg-violet-950',
-  emerald: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-950',
-  sky: 'bg-sky-50 text-sky-800 hover:bg-sky-100 dark:bg-sky-950/50 dark:text-sky-300 dark:hover:bg-sky-950',
-  cyan: 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:text-cyan-300 dark:hover:bg-cyan-950',
-  rose: 'bg-rose-50 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950',
+  zinc: 'bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1]',
+  blue: 'bg-tint-blue text-accent-blue-deep hover:brightness-95 dark:text-cream',
+  amber: 'bg-tint-amber text-foreground hover:brightness-95',
+  violet: 'bg-tint-blue text-accent-blue-deep hover:brightness-95 dark:text-cream',
+  emerald: 'bg-tint-green text-foreground hover:brightness-95',
+  sky: 'bg-tint-blue text-accent-blue-deep hover:brightness-95 dark:text-cream',
+  cyan: 'bg-tint-blue text-accent-blue-deep hover:brightness-95 dark:text-cream',
+  rose: 'bg-tint-red text-foreground hover:brightness-95',
 }
 
 export type CalendarView = 'month' | 'week'
@@ -68,18 +68,18 @@ export function ViewSwitch<T extends string>({ value, onChange, options, label }
 }) {
   return (
     <nav aria-label={label}
-      className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-surface p-1">
       {options.map(o => {
         const Icon = o.icon
         const active = o.value === value
         return (
           <button key={o.value} type="button" aria-pressed={active} onClick={() => onChange(o.value)}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+            className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
               active
-                ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-950 dark:text-zinc-50'
-                : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
             }`}>
-            {Icon && <Icon className="h-3.5 w-3.5" />} {o.label}
+            {Icon && <Icon className="h-4 w-4" />} {o.label}
           </button>
         )
       })}
@@ -132,13 +132,13 @@ function EventChip({ e, viewer, onMove, dense, onDragStart, onDragEnd }: {
         ev.preventDefault()
         void onMove?.(e, shiftDay(e.day, step))
       }}
-      className={`group flex items-center gap-1 rounded px-1 py-0.5 text-left leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:focus-visible:ring-zinc-100 ${
+      className={`group flex items-center gap-1 rounded-tile px-1.5 py-1 text-left leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${
         dense ? 'text-[11px]' : 'text-xs'
       } ${FACE[e.tone]} ${
         // the due layer is the QUIETER one: outlined rather than filled, so a
         // booked post stays louder than a deadline sitting under it
         e.layer === 'due'
-          ? 'border border-dashed border-zinc-300 bg-transparent hover:bg-zinc-50 dark:border-zinc-600 dark:bg-transparent dark:hover:bg-zinc-800/50'
+          ? 'border border-dashed border-border bg-transparent hover:bg-foreground/[0.04]'
           : ''
       } ${
         movable ? 'cursor-grab active:cursor-grabbing' : ''
@@ -188,13 +188,13 @@ function MorePopover({ day, events, viewer, onMove, label }: {
       <button type="button" aria-expanded={open}
         aria-label={`Show all ${events.length} on ${label}`}
         onClick={() => setOpen(o => !o)}
-        className="w-full rounded px-1 text-left text-[11px] text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-100">
+        className="w-full rounded-tile px-1.5 py-1 text-left text-[12px] font-semibold text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
         +{events.length} more
       </button>
       {open && (
         <div role="dialog" aria-label={label}
-          className="absolute left-0 top-full z-30 mt-1 w-64 rounded-lg border border-zinc-200 bg-popover p-2 shadow-lg dark:border-zinc-700">
-          <p className="mb-1.5 px-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
+          className="absolute left-0 top-full z-30 mt-1 w-64 rounded-inner border border-border bg-popover p-2 shadow-[0_6px_24px_rgba(11,11,11,0.14)]">
+          <p className="mb-1.5 px-1 text-[12px] font-semibold text-muted-foreground">{label}</p>
           <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
             {events.map(e => (
               <li key={e.uid} data-day={day}>
@@ -312,23 +312,23 @@ export default function WorkCalendar({
         onDragOver={ev => { if (takes) { ev.preventDefault(); setOver(c.key) } }}
         onDragLeave={() => setOver(o => (o === c.key ? null : o))}
         onDrop={ev => { ev.preventDefault(); drop(c.key) }}
-        className={`flex flex-col bg-white p-1.5 transition-colors dark:bg-zinc-900 ${
+        className={`flex flex-col bg-surface p-1.5 transition-colors ${
           view === 'month' ? 'min-h-[104px]' : 'min-h-[132px]'
         } ${c.inMonth ? '' : 'opacity-45'} ${
-          over === c.key && takes ? 'ring-2 ring-inset ring-zinc-900 dark:ring-zinc-100' : ''
+          over === c.key && takes ? 'ring-2 ring-inset ring-foreground' : ''
         }`}>
         <div className="flex items-center gap-1.5">
-          <span className={`text-xs tabular-nums ${
+          <span className={`text-[13px] tabular-nums ${
             isToday
-              ? 'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900'
-              : 'text-zinc-400 dark:text-zinc-500'
+              ? 'flex h-6 w-6 items-center justify-center rounded-full bg-foreground font-bold text-background'
+              : 'text-muted-foreground'
           }`}>
             {c.day}
           </span>
           {/* the week view has room to name the day; the month grid has a
               header row doing it once */}
           {view === 'week' && (
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 md:hidden">
+            <span className="text-[12px] text-muted-foreground md:hidden">
               {LONG_WEEKDAYS[(new Date(Date.UTC(c.year, c.month - 1, c.day)).getUTCDay() + 6) % 7]}
             </span>
           )}
@@ -354,18 +354,22 @@ export default function WorkCalendar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" className="h-11 w-11 p-0 md:h-8 md:w-8"
+        <Button className="h-11 w-11 rounded-full border border-border bg-surface p-0 text-foreground hover:bg-foreground/[0.06]"
           aria-label={view === 'month' ? 'Previous month' : 'Previous week'}
           onClick={() => step(-1)}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-36 text-sm font-medium md:min-w-44">{heading}</span>
-        <Button variant="outline" size="sm" className="h-11 w-11 p-0 md:h-8 md:w-8"
+        {/* the month itself is the ink pill — the one thing on the bar that
+            says where you are */}
+        <span className="flex min-h-11 min-w-36 items-center justify-center rounded-full bg-foreground px-4 text-[14px] font-semibold text-background md:min-w-44">
+          {heading}
+        </span>
+        <Button className="h-11 w-11 rounded-full border border-border bg-surface p-0 text-foreground hover:bg-foreground/[0.06]"
           aria-label={view === 'month' ? 'Next month' : 'Next week'}
           onClick={() => step(1)}>
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="sm" className="min-h-11 md:min-h-8" onClick={goToday}>Today</Button>
+        <Button className="h-11 rounded-full bg-transparent px-4 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.06]" onClick={goToday}>Today</Button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {controls}
@@ -392,22 +396,22 @@ export default function WorkCalendar({
       {view === 'month' ? (
         <div className="overflow-x-auto">
           <div className="min-w-[720px]">
-            <div className="grid grid-cols-7 gap-px rounded-t-lg bg-zinc-200 dark:bg-zinc-800">
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-t-inner bg-border">
               {WEEKDAYS.map(d => (
-                <div key={d} className="bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                <div key={d} className="bg-surface px-2 py-2 text-[12px] font-semibold text-muted-foreground">
                   {d}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-px rounded-b-lg bg-zinc-200 dark:bg-zinc-800">
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-b-inner bg-border">
               {cells.map(cell)}
             </div>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg bg-zinc-200 md:grid-cols-7 dark:bg-zinc-800">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-inner bg-border md:grid-cols-7">
           {cells.map(c => (
-            <div key={`h-${c.key}`} className="hidden bg-white px-2 py-1.5 text-xs font-medium text-zinc-500 md:block dark:bg-zinc-900 dark:text-zinc-400">
+            <div key={`h-${c.key}`} className="hidden bg-surface px-2 py-2 text-[12px] font-semibold text-muted-foreground md:block">
               {WEEKDAYS[(new Date(Date.UTC(c.year, c.month - 1, c.day)).getUTCDay() + 6) % 7]}
             </div>
           ))}
@@ -416,11 +420,11 @@ export default function WorkCalendar({
       )}
 
       {undatedLabel && events.undated.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-zinc-200 p-3 dark:border-zinc-800">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+        <div className="flex flex-col gap-1.5 rounded-inner border border-dashed border-border p-3">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
             {undatedLabel} <span className="tabular-nums">{events.undated.length}</span>
           </p>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="text-[13px] text-muted-foreground">
             Nothing here has a date, so nothing here is on the grid. Drop one on a day
             from its own page, or set the date there.
           </p>
@@ -435,7 +439,7 @@ export default function WorkCalendar({
       )}
 
       {total === 0 && events.undated.length === 0 && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-[13px] text-muted-foreground">
           Nothing dated in this {view === 'month' ? 'month' : 'week'}.
         </p>
       )}

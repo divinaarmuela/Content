@@ -5,8 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -37,25 +35,29 @@ import {
 import WorkCalendar, { ViewSwitch, type CalendarView } from '../../components/calendar/WorkCalendar'
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
+import PageTitle from '../ui/PageTitle'
+import Chip, { type ChipTone } from '../ui/Chip'
+import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
 import { defaultAllows } from '../../lib/page-access-core'
 import NewItemDialog, { type Batch, type ClientRow } from '../production/NewItemDialog'
 import AddPieceDialog, { type AddPieceTarget } from '../production/AddPieceDialog'
-import { AccountUnavailable, KIND_CARD, KIND_CHIP, PRIORITY_TINT, ShootChips } from '../production/shoot-ui'
+import { AccountUnavailable, ShootChips } from '../production/shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from '../production/workHooks'
 
 /** One colour per stage, for the segmented bar on a group card. The pipeline
- *  reads left to right: grey while it is ours, amber while it is with the
- *  client, emerald once the client has said yes. */
+ *  reads left to right: neutral while it is ours, amber while it is with the
+ *  client, green once the client has said yes. Brand accents only — the board
+ *  has five colours and a bar is not the place to invent a sixth. */
 const SEGMENT_TINT: Record<ItemStatus, string> = {
-  draft_uploaded: 'bg-zinc-300 dark:bg-zinc-600',
-  internal_review: 'bg-sky-400 dark:bg-sky-500',
-  revision_required: 'bg-orange-400 dark:bg-orange-500',
-  revision_complete: 'bg-sky-400 dark:bg-sky-500',
-  client_review: 'bg-amber-400 dark:bg-amber-500',
-  client_changes_requested: 'bg-red-400 dark:bg-red-500',
-  approved_for_scheduling: 'bg-emerald-400 dark:bg-emerald-500',
-  scheduled: 'bg-cyan-400 dark:bg-cyan-500',
-  published: 'bg-emerald-600 dark:bg-emerald-500',
+  draft_uploaded: 'bg-foreground/25',
+  internal_review: 'bg-accent-blue',
+  revision_required: 'bg-accent-amber',
+  revision_complete: 'bg-accent-blue',
+  client_review: 'bg-accent-amber',
+  client_changes_requested: 'bg-accent-red',
+  approved_for_scheduling: 'bg-accent-green',
+  scheduled: 'bg-accent-blue-deep',
+  published: 'bg-accent-green',
 }
 import { ScopeSwitch } from '../production/ScopeSwitch'
 import { ClaimButton } from '../production/ClaimButton'
@@ -89,11 +91,11 @@ type Item = {
 
 /** One dot per lane, in the same order the work moves. */
 const LANE_TINT: Record<string, string> = {
-  drafting: 'bg-zinc-400',
-  review: 'bg-blue-500',
-  revising: 'bg-amber-500',
-  client: 'bg-violet-500',
-  approved: 'bg-emerald-500',
+  drafting: 'bg-foreground/40',
+  review: 'bg-accent-blue',
+  revising: 'bg-accent-amber',
+  client: 'bg-accent-blue-deep',
+  approved: 'bg-accent-green',
 }
 
 /** What is NOT in a column, said in the column's own words. */
@@ -117,6 +119,50 @@ function initialsOf(name: string): string {
   if (parts.length === 0) return '—'
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
 }
+
+/** Today where the reader is, as a plain YYYY-MM-DD so it compares straight
+ *  against a due date with no clock or time zone getting involved. */
+function todayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * THE COLOUR OF A CARD IS THE THING THAT NEEDS A PERSON.
+ *
+ * The same rule the Production board uses, so one board teaches the other:
+ * live work is ink, a date that has arrived is amber and outranks everything
+ * else, then approved (green) and scheduled (blue). Everything else is a
+ * plain white card — a board where three cards are coloured is a board you
+ * can read from the doorway.
+ */
+function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined {
+  if (status === 'published') return 'ink'
+  if (due && due.slice(0, 10) <= todayKey()) return 'amber'
+  if (status === 'approved_for_scheduling') return 'green'
+  if (status === 'scheduled') return 'blue'
+  return undefined
+}
+
+/** A work kind's colour, as a chip tone — the palette has five, not eight. */
+const KIND_TONE: Record<string, ChipTone> = {
+  zinc: 'muted', pink: 'red', rose: 'red', sky: 'blue', indigo: 'blue',
+  violet: 'blue', emerald: 'green', amber: 'amber',
+}
+
+/** How loud a piece of work is asking to be picked up. */
+const PRIORITY_TONE: Record<string, string> = {
+  urgent: 'text-accent-red',
+  high: 'text-accent-amber',
+  normal: 'text-muted-foreground',
+  low: 'text-muted-foreground/50',
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** A date on a card, in the shortest form that is still unambiguous. */
+const whenShort = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 
 /**
  * The Editor board: items in the edit, and nothing else.
@@ -264,6 +310,17 @@ export default function EditorPage() {
   // the scope is applied or both numbers are structurally zero
   const tail = editorTail(filtered)
 
+  /** The board in one plain sentence: what is on your hands, and what is out
+   *  of them. Counted from the rows the columns are drawn from, so the
+   *  sentence can never disagree with what is underneath it. */
+  const toEdit = visible.filter(i =>
+    ['draft_uploaded', 'revision_required', 'revision_complete'].includes(i.status)).length
+  const withClient = visible.filter(i =>
+    ['client_review', 'client_changes_requested'].includes(i.status)).length
+  const boardSummary = !items
+    ? 'Everything being edited, from first cut to client sign-off — it updates the moment anyone moves something.'
+    : `${plural(toEdit, 'item')} to edit · ${withClient} waiting on a client`
+
   /** The same rows the lanes are drawn from, filed by due date instead of by
    *  step. The scope switch and the client / shoot chips have already had
    *  their say, so the two views can never disagree about what is here. */
@@ -389,17 +446,19 @@ export default function EditorPage() {
     const breakdown = mixed ? formatBreakdown(card.group, card.items) : []
     const owed = mixed ? remainingTypes(card.group, card.items) : []
     return (
-      <div key={`group-${card.group.id}`}>
-        <Card className="py-0 transition-shadow hover:shadow-md">
-          <CardContent className="flex flex-col gap-2 p-3">
+      <div key={`group-${card.group.id}`}
+        className="flex flex-col gap-2.5 rounded-inner border border-border bg-surface p-3.5 text-foreground">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
+              {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
+            </span>
             <div className="flex items-start justify-between gap-2">
               {mixed ? (
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-sm font-medium leading-snug">{card.group.title}</span>
-                  <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{mixedGroupLine(card.group, card.items)}</span>
+                  <span className="truncate text-[15px] font-semibold leading-[1.25]">{card.group.title}</span>
+                  <span className="text-[13px] text-muted-foreground">{mixedGroupLine(card.group, card.items)}</span>
                 </div>
               ) : (
-                <span className="text-sm font-medium leading-snug">{groupLine(card)}</span>
+                <span className="text-[15px] font-semibold leading-[1.25]">{groupLine(card)}</span>
               )}
               <div className="flex shrink-0 items-center">
                 <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
@@ -408,12 +467,12 @@ export default function EditorPage() {
                     if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
                     return next
                   })}
-                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                  className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
                   {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
                 <button type="button" aria-label="Delete this card"
                   onClick={() => setGroupToDelete(card)}
-                  className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-red-600 dark:hover:text-red-400">
+                  className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-accent-red">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -426,7 +485,7 @@ export default function EditorPage() {
              *  "Client wants changes" lane — the only card on the board that
              *  could read finished and stuck at once. Segments show where the
              *  work actually is; the empty tail is what is still owed. */}
-            <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+            <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-foreground/[0.08]">
               {statusSpread(card.items).map(s => (
                 <div
                   key={s.status}
@@ -438,7 +497,7 @@ export default function EditorPage() {
             </div>
             {/* …and the same fact in words, only when the pieces disagree */}
             {spreadLine(card.items, STATUS_LABELS) && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="text-[13px] text-muted-foreground">
                 {spreadLine(card.items, STATUS_LABELS)}
                 {card.count < card.target && ` · ${card.target - card.count} not started`}
               </p>
@@ -449,41 +508,35 @@ export default function EditorPage() {
                 {breakdown.map(f => {
                   const chip = formatChip(f)
                   return (
-                    <span key={f.type}
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.done
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'}`}>
+                    <Chip key={f.type} tone={chip.done ? 'green' : 'muted'}>
                       {chip.label}{chip.done ? ' ✓' : ''}
-                    </span>
+                    </Chip>
                   )
                 })}
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
-              </Badge>
-              {!mixed && (
-                <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{card.group.content_type}</span>
-              )}
-            </div>
+            {!mixed && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Chip className="capitalize">{card.group.content_type}</Chip>
+              </div>
+            )}
             {open && (
               <div className="flex flex-col gap-1">
                 {card.items.length === 0 && (
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">No pieces yet — add the first one below.</p>
+                  <p className="text-[13px] text-muted-foreground">No pieces yet — add the first one below.</p>
                 )}
                 {card.items.map(i => (
                   <Link key={i.id} href={`/dashboard/production/${i.id}`}
-                    className="flex min-h-8 items-center justify-between gap-2 rounded px-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                    className="flex min-h-11 items-center justify-between gap-2 rounded-tile px-2 text-[13px] hover:bg-foreground/[0.05]">
                     <span className="flex min-w-0 items-center gap-1.5 truncate">
                       {mixed && (
-                        <span className="shrink-0 rounded bg-zinc-100 px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                        <span className="shrink-0 rounded-tile bg-foreground/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           {i.content_type}
                         </span>
                       )}
                       <span className="truncate">{i.title}</span>
                     </span>
-                    <span className="shrink-0 text-zinc-400 dark:text-zinc-500">{STATUS_LABELS[i.status]}</span>
+                    <span className="shrink-0 text-muted-foreground">{STATUS_LABELS[i.status]}</span>
                   </Link>
                 ))}
               </div>
@@ -494,15 +547,15 @@ export default function EditorPage() {
               owed.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="min-h-11 w-fit md:min-h-8">
-                      <Plus className="h-3.5 w-3.5" />
+                    <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90">
+                      <Plus className="h-4 w-4" />
                       Add the next piece
-                      <ChevronDown className="h-3.5 w-3.5" />
+                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     {owed.map(t => (
-                      <DropdownMenuItem key={t} onSelect={() => openAddPiece(card, t)}>
+                      <DropdownMenuItem key={t} className="min-h-11" onSelect={() => openAddPiece(card, t)}>
                         {addTypeLabel(t)}
                       </DropdownMenuItem>
                     ))}
@@ -510,14 +563,12 @@ export default function EditorPage() {
                 </DropdownMenu>
               )
             ) : (!card.full && (
-              <Button size="sm" className="min-h-11 w-fit md:min-h-8"
+              <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90"
                 onClick={() => openAddPiece(card, card.group.content_type)}>
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
                 {addNextLabel(card.group)}
               </Button>
             ))}
-          </CardContent>
-        </Card>
       </div>
     )
   }
@@ -534,15 +585,26 @@ export default function EditorPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <PageTitle
+        title="Editor"
+        summary={boardSummary}
+        actions={<>
+          {/* one place, always on screen — a control that moves with the data
+              is a control nobody learns */}
+          <ScopeSwitch scope={scope} onChange={setScope}
+            unassignedCount={openPool} unassignedHint={unassignedHint} />
+          <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+            onClick={() => setNewOpen(true)}>
+            <Plus className="h-4 w-4" /> New item
+          </Button>
+        </>}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Editor</h2>
-          {/* the purpose, in a new hire's words: what is here and what you do with it */}
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Every item <HelpHint term="item" /> being edited, from first cut to client
-            sign-off. Take one, attach your work, send it for review.
-          </p>
-        </div>
+        {/* the purpose, in a new hire's words: what is here and what you do with it */}
+        <p className="text-[13px] text-muted-foreground">
+          Every item <HelpHint term="item" /> being edited — take one, attach your work, send it for review
+        </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {/* the lanes say whose step a job is on; the calendar says when it
               is due. Same rows, same filters, two questions. */}
@@ -555,22 +617,24 @@ export default function EditorPage() {
               { value: 'calendar', label: 'Calendar', icon: CalendarDays },
             ]}
           />
-          <ScopeSwitch scope={scope} onChange={setScope}
-            unassignedCount={openPool} unassignedHint={unassignedHint} />
           <Select value={clientFilter} onValueChange={v => { if (!v) return; setClientFilter(v); setBatchFilter('all') }}>
-            <SelectTrigger className="w-44 bg-white dark:bg-zinc-900"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-11 w-44 rounded-full border-border bg-surface px-4"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All clients</SelectItem>
               {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           {isManager && (
-            <Button variant={selectMode ? 'default' : 'outline'} size="sm"
+            <Button
+              className={`h-11 rounded-full px-4 text-[14px] font-semibold ${
+                selectMode
+                  ? 'bg-foreground text-background hover:bg-foreground/90'
+                  : 'border border-border bg-surface text-foreground hover:bg-foreground/[0.04]'
+              }`}
               onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
               <CheckSquare className="h-4 w-4" /> {selectMode ? 'Cancel' : 'Select to delete'}
             </Button>
           )}
-          <Button size="sm" className="min-h-11 md:min-h-9" onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> New item</Button>
         </div>
       </div>
 
@@ -583,45 +647,42 @@ export default function EditorPage() {
 
       {strip && strip.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+          <span className="mr-1 text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
             {new Date().toLocaleDateString('en-AU', { month: 'long' })}
           </span>
           {strip.map(r => (
             <span key={r.type}
-              title={`${r.posted ?? r.delivered} posted · ${r.scheduled ?? 0} scheduled · ${r.approved ?? 0} approved · ${r.in_production ?? Math.max(0, r.planned - r.delivered)} in production · ${Math.max(0, r.quota - r.planned)} not started`}
-              className={`rounded-full border px-2.5 py-1 font-mono text-xs tabular-nums ${
-                r.delivered > r.quota
-                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
-                  : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400'
-              }`}>
-              {r.label} {r.delivered}/{r.quota}
+              title={`${r.posted ?? r.delivered} posted · ${r.scheduled ?? 0} scheduled · ${r.approved ?? 0} approved · ${r.in_production ?? Math.max(0, r.planned - r.delivered)} in production · ${Math.max(0, r.quota - r.planned)} not started`}>
+              <Chip tone={r.delivered > r.quota ? 'amber' : 'muted'} className="tabular-nums">
+                {r.label} {r.delivered}/{r.quota}
+              </Chip>
             </span>
           ))}
         </div>
       )}
 
       {!ready ? (
-        <div className="flex gap-3 overflow-x-hidden">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-44 flex-1" />)}
+        <div className="flex gap-3.5 overflow-x-hidden">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[220px] flex-1 rounded-card" />)}
         </div>
       ) : scoped.length === 0 && groupCards.length === 0 ? (
         /* the scope itself is empty — a real "there is nothing here". A client
            or shoot chip matching nothing is not that, and keeps its board. */
-        <Card className="border-dashed shadow-none">
-          <CardContent className="flex flex-col items-center gap-3 py-14 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-col items-center gap-3 rounded-card border border-border bg-surface px-6 py-14 text-center">
             {showingOnlyMineAndPool ? (
               <>
                 {/* say what THIS filter is empty of — "nothing assigned to
                     you" beside a pill reading "Free to take 1" is a page
                     arguing with itself */}
-                <p>
+                <p className="max-w-sm text-[15px] text-muted-foreground">
                   {scope.has('mine') && scope.has('unassigned')
                     ? 'Nothing assigned to you, and nothing waiting to be picked up.'
                     : scope.has('mine')
                       ? 'Nothing is assigned to you right now.'
                       : 'Nothing is waiting to be picked up.'}
                 </p>
-                <Button variant="outline" size="sm" className="min-h-11" onClick={() => setScope(new Set<ScopeMode>(['all']))}>
+                <Button className="h-11 rounded-full border border-border bg-surface px-4 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.04]"
+                  onClick={() => setScope(new Set<ScopeMode>(['all']))}>
                   Show everyone&rsquo;s
                 </Button>
               </>
@@ -629,22 +690,22 @@ export default function EditorPage() {
               /* scope Everyone and still nothing — the first thing a new
                  account manager sees. A dead end needs a next step. */
               <>
-                <p className="font-medium text-zinc-700 dark:text-zinc-200">Nothing to edit yet.</p>
-                <p className="max-w-sm">
+                <p className="text-[17px] font-semibold">Nothing to edit yet</p>
+                <p className="max-w-sm text-[15px] text-muted-foreground">
                   When a shoot <HelpHint term="shoot" /> is locked, its items land here in {DRAFTING_LANE} — or create one now.
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button size="sm" className="min-h-11" onClick={() => setNewOpen(true)}>
+                  <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+                    onClick={() => setNewOpen(true)}>
                     <Plus className="h-4 w-4" /> New item
                   </Button>
-                  <Button variant="outline" size="sm" className="min-h-11" asChild>
+                  <Button className="h-11 rounded-full border border-border bg-surface px-4 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.04]" asChild>
                     <Link href="/dashboard/production">Plan a shoot <ArrowRight className="h-3.5 w-3.5" /></Link>
                   </Button>
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+        </div>
       ) : view === 'calendar' ? (
         <WorkCalendar
           events={calendar}
@@ -654,7 +715,7 @@ export default function EditorPage() {
           onMove={moveEvent}
           undatedLabel="No due date"
           legend={
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-[15px] text-muted-foreground">
               Every item on its due date, coloured by the step it is on. Drag one to
               another day to move the date.
             </p>
@@ -674,7 +735,7 @@ export default function EditorPage() {
               return {
                 key: lane.key,
                 title: lane.title,
-                tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
+                tint: LANE_TINT[lane.key] ?? 'bg-foreground/40',
                 count: colItems.length + colGroups.length,
                 hint: lane.key === 'drafting' ? <HelpHint term="drafting" />
                   : lane.key === 'approved' ? <HelpHint term="approved_for_scheduling" /> : undefined,
@@ -682,103 +743,85 @@ export default function EditorPage() {
                 cards: [...colGroups.map(renderGroupCard), ...colItems.map(item => {
                       const assignment = editorAssignment(item, viewer!)
                       const ownerName = item.owner_id ? nameById.get(item.owner_id) : undefined
+                      // who is holding it — the 26px face on the card, the
+                      // same one this person wears on every other board
+                      const people: Person[] = assignment === 'other' && ownerName
+                        ? [{ id: item.owner_id ?? undefined, name: ownerName, initials: initialsOf(ownerName) }]
+                        : []
                       return (
                       <div key={item.id} className="relative">
-                        <Card className={`cursor-pointer py-0 transition-shadow hover:shadow-md ${
-                          KIND_CARD[item.work_kinds?.color ?? 'zinc'] ?? ''
-                        } ${selectMode && selectedIds.has(item.id) ? 'ring-2 ring-inset ring-blue-500' : ''}`}>
-                          <CardContent className="flex flex-col gap-1.5 p-3">
-                            {/* the whole card opens the item, but as a stretched
-                                link rather than a wrapper — a button inside an
-                                anchor is invalid, and the claim button is one */}
-                            <Link href={`/dashboard/production/${item.id}`} aria-label={item.title}
-                              className="absolute inset-0 rounded-xl"
-                              onClick={e => { if (selectMode) { e.preventDefault(); toggleSelected(item.id) } }} />
-                            <div className="flex items-start justify-between gap-2">
-                              {selectMode && (
-                                <input type="checkbox" checked={selectedIds.has(item.id)} readOnly
-                                  className="pointer-events-none mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
-                              )}
-                              <span className="text-sm font-medium leading-snug">{item.title}</span>
-                              <Flag className={`mt-0.5 h-3 w-3 shrink-0 ${PRIORITY_TINT[item.priority] ?? ''}`} />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                                {item.clients?.name ?? '—'}
-                              </Badge>
-                              <span className="font-mono text-[11px] capitalize text-zinc-400 dark:text-zinc-500">{item.content_type}</span>
-                              <Badge variant="outline" className="font-normal text-zinc-600 dark:text-zinc-400">
-                                {itemStatusLabel(item.work_kinds?.slug, item.status, STATUS_LABELS[item.status])}
-                              </Badge>
-                              {item.work_kinds && item.work_kinds.slug !== 'edit' && (
-                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_CHIP[item.work_kinds.color] ?? KIND_CHIP.zinc}`}>
-                                  {item.work_kinds.name}
-                                </span>
-                              )}
-                              {item.current_version_number > 0 && (
-                                <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500">v{item.current_version_number}</span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {/* TurnChip is the single answer to "is this on
-                                  me?" — the old `you` pill said it twice. The
-                                  initials answer a different question (who
-                                  OWNS it, whoever's turn it is) and stay. */}
-                              <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName}
-                                openTask={item.my_open_task}
-                                onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
-                              {assignment === 'other' && ownerName && (
-                                <span title={ownerName}
-                                  className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                                  {initialsOf(ownerName)}
-                                </span>
-                              )}
-                              {/* the conversation, right here — the drawer,
-                                  not a trip to the item page */}
-                              <CommentsButton className="ml-auto" tagged={item.my_open_task} title={item.title}
-                                onOpen={() => commentsDrawer.open(item.id, item.title)} />
-                            </div>
-                            {(item.due_date || item.status === 'revision_required' || item.status === 'client_changes_requested') && (
-                              <div className="flex items-center gap-2">
-                                {item.due_date && (
-                                  <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-                                    <CalendarDays className="h-3 w-3" />
-                                    {new Date(item.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                                  </span>
-                                )}
-                                {item.status === 'revision_required' && (
-                                  <Badge variant="outline" className="border-amber-200 bg-amber-50 font-normal text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">needs edit</Badge>
-                                )}
-                                {item.status === 'client_changes_requested' && (
-                                  <Badge variant="outline" className="border-violet-200 bg-violet-50 font-normal text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400">client changes</Badge>
-                                )}
-                              </div>
+                        <WorkCard
+                          href={`/dashboard/production/${item.id}`}
+                          client={item.clients?.name ?? '—'}
+                          title={item.title}
+                          tone={cardTone(item.status, item.due_date)}
+                          people={people}
+                          className={selectMode && selectedIds.has(item.id)
+                            ? 'ring-2 ring-inset ring-accent-blue' : ''}
+                          chips={<>
+                            <Chip className="capitalize">{item.content_type}</Chip>
+                            <Chip>{itemStatusLabel(item.work_kinds?.slug, item.status, STATUS_LABELS[item.status])}</Chip>
+                            {item.work_kinds && item.work_kinds.slug !== 'edit' && (
+                              <Chip tone={KIND_TONE[item.work_kinds.color] ?? 'muted'}>{item.work_kinds.name}</Chip>
                             )}
-                            {assignment === 'unassigned' && !selectMode && (
-                              // above the stretched link, so these are clicks on
-                              // a control and not on the card
-                              <div className="relative z-10 flex flex-wrap items-center gap-1.5">
-                                {canClaimEditor(item, viewer!) && (
-                                  <ClaimButton itemId={item.id} hat="editor" onDone={() => {}} />
-                                )}
-                                {isManager && nameById.size > 0 && (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button size="sm" variant="outline" className="min-h-11 md:min-h-8">Assign…</Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                                      {[...nameById].map(([id, name]) => (
-                                        <DropdownMenuItem key={id} onClick={() => void assignTo(item.id, id)}>
-                                          {name}
-                                        </DropdownMenuItem>
-                                      ))}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                )}
-                              </div>
+                            {/* TurnChip is the single answer to "is this on
+                                me?" — the old `you` pill said it twice. The
+                                avatar answers a different question (who OWNS
+                                it, whoever's turn it is) and stays. */}
+                            <TurnChip status={item.status} item={item} viewer={viewer!} ownerName={ownerName}
+                              openTask={item.my_open_task}
+                              onOpenComments={() => commentsDrawer.open(item.id, item.title)} />
+                            {item.status === 'revision_required' && <Chip tone="amber">needs edit</Chip>}
+                            {item.status === 'client_changes_requested' && <Chip tone="amber">client changes</Chip>}
+                            {item.due_date && (
+                              <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(item.due_date)}</Chip>
                             )}
-                          </CardContent>
-                        </Card>
+                            {item.current_version_number > 0 && (
+                              <Chip className="tabular-nums">v{item.current_version_number}</Chip>
+                            )}
+                            <Flag className={`h-3.5 w-3.5 shrink-0 ${PRIORITY_TONE[item.priority] ?? PRIORITY_TONE.normal}`} />
+                            {/* the conversation, right here — the drawer,
+                                not a trip to the item page */}
+                            <CommentsButton className="ml-auto" tagged={item.my_open_task} title={item.title}
+                              onOpen={() => commentsDrawer.open(item.id, item.title)} />
+                          </>}
+                          actions={assignment === 'unassigned' && !selectMode ? <>
+                            {canClaimEditor(item, viewer!) && (
+                              <ClaimButton itemId={item.id} hat="editor" onDone={() => {}} />
+                            )}
+                            {isManager && nameById.size > 0 && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button className="h-11 rounded-full border border-border bg-surface px-4 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.04]">Assign…</Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                                  {[...nameById].map(([id, name]) => (
+                                    <DropdownMenuItem key={id} className="min-h-11" onClick={() => void assignTo(item.id, id)}>
+                                      {name}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </> : <></>}
+                        />
+                        {/* SELECT MODE takes the card over: the tick is the
+                            whole surface, so a tap cannot half-open an item
+                            it was meant to select. */}
+                        {selectMode && (
+                          <button type="button" aria-label={`Select ${item.title}`}
+                            aria-pressed={selectedIds.has(item.id)}
+                            onClick={() => toggleSelected(item.id)}
+                            className="absolute inset-0 z-20 flex items-start justify-start rounded-inner p-2.5">
+                            <span className={`flex h-5 w-5 items-center justify-center rounded-[6px] border ${
+                              selectedIds.has(item.id)
+                                ? 'border-accent-blue bg-accent-blue text-cream'
+                                : 'border-border bg-surface'
+                            }`}>
+                              {selectedIds.has(item.id) && <CheckSquare className="h-3.5 w-3.5" />}
+                            </span>
+                          </button>
+                        )}
                       </div>
                       )
                     })],
@@ -790,30 +833,30 @@ export default function EditorPage() {
       {/* done, but kept visible: the two counts that belong to the next page */}
       {ready && canSeeScheduler && (
         <Link href="/dashboard/scheduler"
-          className="flex min-h-11 items-center gap-1.5 self-start rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100">
-          <span className="font-mono font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{tail.scheduled}</span>
+          className="flex min-h-11 items-center gap-1.5 self-start rounded-full border border-border bg-surface px-4 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground">
+          <span className="font-semibold tabular-nums text-foreground">{tail.scheduled}</span>
           scheduled ·
-          <span className="font-mono font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{tail.published}</span>
+          <span className="font-semibold tabular-nums text-foreground">{tail.published}</span>
           published
-          <ArrowRight className="h-3 w-3" /> Scheduler
+          <ArrowRight className="h-3.5 w-3.5" /> Scheduler
         </Link>
       )}
 
       {/* select-mode action bar */}
       {selectMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-zinc-200 bg-white/95 px-4 py-2 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
-          <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+        <div className="fixed bottom-6 left-1/2 z-40 flex max-w-[92vw] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-border bg-surface/95 px-4 py-2 shadow-[0_6px_24px_rgba(11,11,11,0.14)] backdrop-blur">
+          <span className="text-[13px] font-semibold tabular-nums text-muted-foreground">
             {selectedIds.size} selected
           </span>
-          <Button size="sm" variant="ghost" className="min-h-11 px-2 text-xs"
+          <Button className="h-11 rounded-full bg-transparent px-3 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.06]"
             onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>
             Select all
           </Button>
-          <Button size="sm" variant="destructive" className="min-h-11 gap-1.5 px-3 text-xs"
+          <Button className="h-11 gap-1.5 rounded-full bg-accent-red px-4 text-[14px] font-semibold text-cream hover:bg-accent-red/90 disabled:opacity-50"
             disabled={selectedIds.size === 0} onClick={() => setBulkOpen(true)}>
-            <Trash2 className="h-3.5 w-3.5" /> Delete
+            <Trash2 className="h-4 w-4" /> Delete
           </Button>
-          <Button size="sm" variant="ghost" className="min-h-11 px-2 text-xs" onClick={exitSelect}>Cancel</Button>
+          <Button className="h-11 rounded-full bg-transparent px-3 text-[14px] font-semibold text-foreground hover:bg-foreground/[0.06]" onClick={exitSelect}>Cancel</Button>
         </div>
       )}
 
