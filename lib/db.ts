@@ -1,12 +1,13 @@
 import 'server-only'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { rtdbUrl } from './firebase-config'
+import { INDEXED_COLUMNS } from './db-indexes'
 import {
   NATURAL_KEYS, NULLABLE_COLUMNS, TABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
   type Row, type TableName,
 } from './db-types'
 
-export { encodeKey }
+export { encodeKey, INDEXED_COLUMNS }
 
 /**
  * Server-side access to Firebase Realtime Database over its REST API.
@@ -117,11 +118,12 @@ export const UNIQUE_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
  * would work against the fake in tests and break in production the moment a
  * real database enforces its rules. `readAll` below only pushes an
  * indexed key down; everything else is filtered in memory after a full read.
+ *
+ * Defined in `lib/db-indexes.ts` (which imports nothing, including no
+ * `server-only`) so the browser module `lib/db-client.ts` can import the
+ * same set without pulling in this server-only module; re-exported here
+ * (see the import above) so existing callers of `lib/db.ts` don't change.
  */
-export const INDEXED_COLUMNS: ReadonlySet<string> = new Set([
-  'client_id', 'status', 'batch_id', 'owner_id', 'team_user_id', 'created_at',
-  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at',
-])
 
 const ROOT = '/mdm'
 

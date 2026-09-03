@@ -2,11 +2,17 @@
   "rules": {
     "mdm": {
       ".read": true,
-      ".write": true,
       "tables": {
+        ".write": true,
         "$table": {
           ".indexOn": ["client_id", "status", "batch_id", "owner_id", "team_user_id", "created_at", "scheduled_for", "due_date", "item_id", "email", "token", "updated_at"]
         }
+      },
+      "live": {
+        ".write": true
+      },
+      "meta": {
+        ".write": true
       },
       "uniq": {
         "$table": {

@@ -23,7 +23,9 @@ export const TABLES = [
   'work_kinds', 'workflow_activity',
 ]
 
-// Copied verbatim from lib/db.ts UNIQUE_COLUMNS — keep in sync.
+// Copied byte-for-byte from lib/db.ts UNIQUE_COLUMNS — keep in sync.
+// tests/migrate-core.test.ts asserts deep equality against @/lib/db so the
+// two can never silently drift again.
 export const UNIQUE_COLUMNS = {
   team_users: ['email', 'clerk_user_id'],
   newsletter_subscribers: ['email'],
@@ -32,13 +34,21 @@ export const UNIQUE_COLUMNS = {
   post_analytics: ['provider_post_id'],
   notification_log: ['dedupe_key'],
   asana_project_map: ['project_gid'],
+  asana_events: ['dedup_key'],
   work_kinds: ['slug'],
   projects: ['slug'],
   intake_forms: ['token'],
   monthly_updates: ['token'],
-  clients: ['share_token'],
+  clients: ['share_token', 'slug'],
   client_brand: ['client_id'],
   social_accounts: ['provider_account_id'],
+  journal_posts: ['slug'],
+  booking_services: ['slug'],
+  shoot_proposals: ['token'],
+  room_invite_requests: ['email'],
+  client_agreements: ['client_id'],
+  content_assets: ['slug', 'provider_post_id'],
+  asset_clicks: ['click_id'],
 }
 
 export function encodeKey(s) { return String(s).replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')) }

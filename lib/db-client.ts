@@ -4,6 +4,7 @@ import { getApp, getApps, initializeApp } from 'firebase/app'
 import { getDatabase, ref, query, orderByChild, equalTo, onValue, type Query } from 'firebase/database'
 import { firebaseConfig } from './firebase-config'
 import { NULLABLE_COLUMNS, type Row, type TableName } from './db-types'
+import { pickPushdown } from './db-indexes'
 import type { LiveChannel } from './live'
 
 /**
@@ -48,6 +49,13 @@ export function applyQuery<T>(rows: T[], q: ClientQuery<T>): T[] {
   return out
 }
 
+/**
+ * `where`/`orderBy` run inside a `useMemo` keyed on their identity, so pass
+ * referentially stable callbacks/arrays (`useCallback`/`useMemo` at the call
+ * site) — a fresh arrow function every render defeats the memo and, worse,
+ * re-subscribes nothing (the live listener doesn't depend on them) but still
+ * re-sorts/re-filters every render.
+ */
 export function useTable<T extends Row>(
   name: TableName,
   opts: ClientQuery<T> & { by?: Partial<T>; enabled?: boolean } = {},
@@ -62,10 +70,11 @@ export function useTable<T extends Row>(
     if (!enabled) { setLoading(false); return }
     let q: Query = ref(db(), `/mdm/tables/${name}`)
     const by = byKey ? (JSON.parse(byKey) as Record<string, unknown>) : null
-    if (by) {
-      const [[col, val]] = Object.entries(by)
-      if (val != null) q = query(q, orderByChild(col), equalTo(val as string | number | boolean))
-    }
+    // Only push a key down as an orderBy/equalTo query when it is a declared
+    // indexed column — an unindexed query 400s against the real database
+    // the moment rules are enforced. Mirrors lib/db.ts's readAll exactly.
+    const pushed = pickPushdown(by)
+    if (pushed) q = query(q, orderByChild(pushed.key), equalTo(pushed.value as string | number | boolean))
     setLoading(true)
     const off = onValue(q, snap => { setRaw(snap.val()); setLoading(false); setError(null) }, e => { setError(e.message); setLoading(false) })
     return off
@@ -74,7 +83,15 @@ export function useTable<T extends Row>(
   const rows = useMemo(() => {
     let r = snapshotToRows<T>(name, raw)
     const by = byKey ? (JSON.parse(byKey) as Record<string, unknown>) : null
-    if (by) { const entries = Object.entries(by).slice(1); if (entries.length) r = r.filter((row: any) => entries.every(([k, v]) => row[k] === v)) }
+    if (by) {
+      // Filter in memory every `by` key EXCEPT the one actually pushed down
+      // as a query above (matched by key name, not position) — including a
+      // pushdown-eligible key whose value happened to be null/undefined,
+      // which was never sent to the server as a query in the first place.
+      const pushed = pickPushdown(by)
+      const entries = Object.entries(by).filter(([k]) => k !== pushed?.key)
+      if (entries.length) r = r.filter((row: any) => entries.every(([k, v]) => (v == null ? row[k] == null : row[k] === v)))
+    }
     return applyQuery(r, opts)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raw, name, byKey, opts.where, opts.orderBy, opts.limit])

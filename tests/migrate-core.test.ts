@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { rowToNode, buildUniq, TABLES, SKIPPED } from '../scripts/migrate-core.mjs'
+import { rowToNode, buildUniq, TABLES, SKIPPED, UNIQUE_COLUMNS as JS_UNIQUE_COLUMNS } from '../scripts/migrate-core.mjs'
+import { UNIQUE_COLUMNS as TS_UNIQUE_COLUMNS } from '@/lib/db'
 
 describe('migrate-core', () => {
   it('skips exactly the two log tables', () => {
@@ -16,5 +17,8 @@ describe('migrate-core', () => {
   it('builds uniq pointers only for declared unique columns', () => {
     const uniq = buildUniq('team_users', [['u1', { email: 'a@x.com' }], ['u2', { email: null }]])
     expect(uniq).toEqual({ 'team_users/email/a@x%2Ecom': 'u1' })
+  })
+  it('UNIQUE_COLUMNS never drifts from lib/db.ts', () => {
+    expect(JS_UNIQUE_COLUMNS).toEqual(TS_UNIQUE_COLUMNS)
   })
 })

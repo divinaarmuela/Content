@@ -37,7 +37,14 @@ fs.mkdirSync(OUT_DIR, { recursive: true })
 let uniqAll = {}
 for (const t of TABLES) {
   const rows = await readTable(t)
-  if (rows === null) { report.push([t, 'missing in Supabase', 0, '-']); continue }
+  if (rows === null) {
+    // Not created in Supabase (yet, or ever) — still PUT null on a real run
+    // so a re-run after a table is dropped there can't leave stale rows
+    // behind in RTDB from an earlier migration.
+    if (!DRY) await rt(`/mdm/tables/${t}`, 'PUT', null)
+    report.push([t, 'missing in Supabase', 0, '-'])
+    continue
+  }
   fs.writeFileSync(path.join(OUT_DIR, `${t}.json`), JSON.stringify(rows, null, 1))
   const entries = rows.map(r => rowToNode(t, r))
   const ids = new Set(entries.map(([id]) => id))
