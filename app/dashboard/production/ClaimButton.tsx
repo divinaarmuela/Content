@@ -62,7 +62,7 @@ export function ClaimButton({ itemId, hat, label = 'Take this', onDone, variant 
       className={`h-11 rounded-full px-4 text-[14px] font-semibold ${
         variant === 'outline'
           ? 'border-border bg-surface'
-          : 'bg-foreground text-background hover:bg-foreground/90'
+          : 'bg-foreground text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink [[data-tone=ink]_&]:hover:bg-cream/90'
       }`}>
       {busy ? 'Taking…' : label}
     </Button>

@@ -49,7 +49,7 @@ function avatarColor(p: Person) {
 }
 
 export default function WorkCard({
-  client, title, thumb, chips, people = [], tone, href, className, actions,
+  client, title, thumb, chips, people = [], tone, href, className, actions, note,
 }: {
   /** the client's name — shown small and upper case above the title */
   client: string
@@ -65,12 +65,16 @@ export default function WorkCard({
   href: string
   className?: string
   /**
-   * the card's own controls, on their own row at the bottom. Given at all —
-   * even empty — the card stops being an anchor and the link stretches under
-   * the content instead, so the buttons are real buttons. An empty row hides
-   * itself rather than leaving a gap.
+   * the card's own CONTROLS — buttons, nothing else. Given at all, even empty,
+   * the card stops being an anchor and the link stretches under the content
+   * instead, so the buttons are real buttons. The row sits above the link, so
+   * a sentence put in here would swallow clicks meant for the card: plain text
+   * belongs in `note`.
    */
   actions?: React.ReactNode
+  /** one line of plain text under the chips — the credits, a next step. It is
+   *  part of the card, so clicking it opens the card like anywhere else. */
+  note?: React.ReactNode
 }) {
   const shown = people.slice(0, 3)
   const extra = people.length - shown.length
@@ -120,12 +124,15 @@ export default function WorkCard({
           )}
         </div>
       )}
+      {note && (
+        <p className={cn('text-[13px]', tone === 'ink' ? 'text-cream/70' : 'text-muted-foreground')}>{note}</p>
+      )}
     </>
   )
 
   if (actions !== undefined) {
     return (
-      <div className={cn('relative', face)}>
+      <div data-tone={tone ?? 'surface'} className={cn('relative', face)}>
         {/* the whole card is still the target — the buttons simply sit on top */}
         <Link href={href} aria-label={title} className="absolute inset-0 rounded-inner" />
         {body}
@@ -135,7 +142,7 @@ export default function WorkCard({
   }
 
   return (
-    <Link href={href} className={face}>
+    <Link href={href} data-tone={tone ?? 'surface'} className={face}>
       {body}
     </Link>
   )

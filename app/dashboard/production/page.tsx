@@ -103,17 +103,6 @@ const RANGE_KEY = 'md-production-cal-range'
 const VIEWS = ['board', 'calendar'] as const
 const RANGES = ['month', 'week'] as const
 
-/** One dot per lane, in the order work moves — the Editor board's colours,
- *  because a lane called "Ready for review" should look the same everywhere
- *  it appears. */
-const LANE_TINT: Record<string, string> = {
-  doing: 'bg-zinc-400',
-  review: 'bg-blue-500',
-  revising: 'bg-amber-500',
-  client: 'bg-violet-500',
-  approved: 'bg-emerald-500',
-}
-
 /** What FILLS an empty column, in plain words — not just "nothing here". */
 const LANE_EMPTY: Record<string, string> = {
   doing: 'New shoots, plans and tasks start here while they are being written.',
@@ -151,6 +140,15 @@ function cardTone(status: ItemStatus, due: string | null): WorkTone | undefined 
   if (status === 'approved_for_scheduling') return 'green'
   if (status === 'scheduled') return 'blue'
   return undefined
+}
+
+/**
+ * A shoot with no plan yet has no item status of its own — the only thing that
+ * can colour it is its date. Said in its own words rather than by borrowing a
+ * status the row does not have.
+ */
+function shootTone(s: { shoot_date: string | null }): WorkTone | undefined {
+  return s.shoot_date && s.shoot_date.slice(0, 10) <= todayKey() ? 'amber' : undefined
 }
 
 /** "Jess Mackay" → "JM", for a 26px avatar. */
@@ -480,14 +478,12 @@ export default function ProductionPage() {
           <CommentsButton className="ml-auto" tagged={b.my_open_task} title={b.title}
             onOpen={() => commentsDrawer.open(b.id, b.title)} />
         </>}
+        note={credits(b)}
         actions={<>
-          {credits(b) && (
-            <p className="w-full text-[13px] text-muted-foreground">{credits(b)}</p>
-          )}
           {laneKey === 'approved' && shoot && (
             // the ONE action an approved plan wants: the date is picked and
             // committed on the shoot page
-            <Button className="h-11 rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90" asChild>
+            <Button className="h-11 rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink" asChild>
               <Link href={`/dashboard/production/shoots/${shoot.id}`}>Book the shoot</Link>
             </Button>
           )}
@@ -528,10 +524,8 @@ export default function ProductionPage() {
           <CommentsButton className="ml-auto" tagged={t.my_open_task} title={t.title}
             onOpen={() => commentsDrawer.open(t.id, t.title)} />
         </>}
+        note={credits(t)}
         actions={<>
-          {credits(t) && (
-            <p className="w-full text-[13px] text-muted-foreground">{credits(t)}</p>
-          )}
           {assignment === 'unassigned' && viewer && !muted && (
             <>
               {canClaimEditor(t, viewer) && (
@@ -660,7 +654,7 @@ export default function ProductionPage() {
           href={`/dashboard/production/shoots/${s.id}`}
           client={s.clients?.name ?? '—'}
           title={s.title}
-          tone={cardTone('draft_uploaded', s.shoot_date)}
+          tone={shootTone(s)}
           chips={<>
             <Chip tone="surface">Shoot</Chip>
             <Chip tone={SHOOT_CHIP[s.status ?? 'brief']}>{SHOWN_SHOOT_LABEL[shownShootState(s)]}</Chip>
@@ -668,7 +662,7 @@ export default function ProductionPage() {
               <Chip><CalendarDays className="h-3.5 w-3.5" />{whenShort(s.shoot_date)}</Chip>
             )}
           </>}
-          actions={<p className="w-full text-[13px] font-semibold">Write the shoot plan →</p>}
+          note={<span className="font-semibold text-foreground">Write the shoot plan →</span>}
         />
         {canDelete && (
           // an overflow menu, not a hover-only icon: on a tablet a control
@@ -885,7 +879,6 @@ export default function ProductionPage() {
               return {
                 key: lane.key,
                 title: lane.title,
-                tint: LANE_TINT[lane.key] ?? 'bg-zinc-400',
                 count: laneShoots.length + laneBriefs.length + laneGroups.length + laneTasks.length,
                 empty: LANE_EMPTY[lane.key] ?? 'Nothing here.',
                 cards,
