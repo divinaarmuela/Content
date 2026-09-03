@@ -73,6 +73,23 @@ describe('a file that is only too big', () => {
     expect(byPlatform.tiktok).toBeUndefined()
   })
 
+  it('blocks a 600 MB video on LinkedIn, which caps at 500 MB', () => {
+    const findings = assessAssets({
+      probes: [reel({ bytes: 600 * MB })],
+      platforms: ['linkedin'],
+    })
+    expect(findings[0].level).toBe('blocked')
+    expect(findings[0].detail).toContain('500 MB')
+  })
+
+  it('passes a 400 MB video on LinkedIn, which is under its 500 MB cap', () => {
+    const findings = assessAssets({
+      probes: [reel({ bytes: 400 * MB })],
+      platforms: ['linkedin'],
+    })
+    expect(findings).toEqual([])
+  })
+
   it('recompresses a phone photo for Bluesky and says the quality drops', () => {
     const findings = assessAssets({
       probes: [photo({ bytes: 4 * MB })],

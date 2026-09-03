@@ -6,6 +6,10 @@ import { queuePublishJob, runPublishJob } from '../../../lib/publish'
 import { inngest } from '../../../inngest/client'
 import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-core'
 
+// relayMedia (lib/publish.ts) streams multi-hundred-MB files through this
+// function synchronously; the platform default timeout is too short for that.
+export const maxDuration = 300
+
 /** Queue a post, and optionally push it straight away.
  *
  *  Publishing to a client's real account is a scheduler/account_manager
