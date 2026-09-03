@@ -49,6 +49,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const data = await table('work_kinds').update(id, patch)
+    if (!data) return NextResponse.json({ error: 'Work type not found' }, { status: 404 })
     await logActivity({
       actor: user, entityType: 'work_kind', entityId: id,
       action: 'updated', detail: Object.keys(patch).join(', '),

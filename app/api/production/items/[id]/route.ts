@@ -239,7 +239,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.posting_approved_at = null
     }
 
-    const data = await table('content_items').update(id, patch) as unknown as ContentItem
+    const data = await table('content_items').update(id, patch) as unknown as ContentItem | null
+    if (!data) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     await logActivity({
       actor: user, clientId: data.client_id,
       entityType: 'content_item', entityId: id,

@@ -154,7 +154,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const comments = table<ItemComment>('item_comments')
     const existing = await comments.get(String(body.comment_id))
     // a comment on another item is never resolvable from this one
-    if (!existing || existing.item_id !== id) throw new Error('That comment is not on this item')
+    if (!existing || existing.item_id !== id) {
+      return NextResponse.json({ error: 'That comment is not on this item' }, { status: 400 })
+    }
     const data = await comments.update(existing.id, { resolved: body.resolved })
     if (body.resolved) await settleTagNotifications(id, String(body.comment_id))
     announceItemChange({ item_id: id, client_id: String((data as { client_id?: string }).client_id ?? ''), status: 'draft_uploaded', kind: 'comment' })

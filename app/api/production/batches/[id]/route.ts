@@ -97,7 +97,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const d = new Date(newDate)
       const data = await table('batches')
-        .update(id, { shoot_date: newDate, month: d.getUTCMonth() + 1, year: d.getUTCFullYear() }) as unknown as Batch
+        .update(id, { shoot_date: newDate, month: d.getUTCMonth() + 1, year: d.getUTCFullYear() }) as unknown as Batch | null
+      if (!data) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
       await logActivity({
         actor: user, clientId: batch.client_id,
         entityType: 'batch', entityId: id, action: 'date_changed',
@@ -176,7 +177,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
     }
 
-    const data = await table('batches').update(id, patch) as unknown as Batch
+    const data = await table('batches').update(id, patch) as unknown as Batch | null
+    if (!data) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
     // stamp who last edited — best-effort, so a failure here never loses the
     // edit the user just made
     try {

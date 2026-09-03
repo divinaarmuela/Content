@@ -38,7 +38,11 @@ export async function GET(req: Request) {
     if (clientIds !== null && user.role === 'client' && clientIds.length === 0) {
       return NextResponse.json([])
     }
-    const scopedClients = clientIds === null ? null : clientIds.map(assertUuid)
+    // the ids are asserted only where they used to be interpolated into a
+    // filter string — the client branch never was
+    const scopedClients = clientIds === null || user.role === 'client'
+      ? clientIds
+      : clientIds.map(assertUuid)
     // ASSIGNMENT grants visibility: whoever holds the job — owner, handed the
     // scheduling, tagged on it, or holding the shoot it sits under — sees it,
     // whether or not they're assigned the whole client. One filter, shared
@@ -239,7 +243,12 @@ export async function POST(req: Request) {
       : []
     const groupById = new Map(groupRows.map(gr => [gr.id, gr]))
 
-    const rows = []
+    const rows: Record<string, unknown>[] = []
+    // one shoot plan per shoot, WITHIN this request as well as against what is
+    // already stored: two brief items on one batch_id in a single body both
+    // passed the stored check (nothing is written until the loop is done), and
+    // the partial unique index that used to catch the second is gone
+    const briefBatchesClaimed = new Set<string>()
     for (const it of items) {
       if (!it.client_id || !it.title) {
         return NextResponse.json({ error: 'client_id and title are required on every item' }, { status: 400 })
@@ -322,9 +331,11 @@ export async function POST(req: Request) {
           // enforce it has no counterpart here, so the shoot is asked first
           const already = await table<ContentItem>('content_items').list({ by: { batch_id: it.batch_id } })
           const briefKindIds = new Set(kinds.filter(k => k.slug === 'shoot_brief').map(k => k.id))
-          if (already.some(r => r.work_kind_id != null && briefKindIds.has(r.work_kind_id))) {
+          if (briefBatchesClaimed.has(String(it.batch_id))
+            || already.some(r => r.work_kind_id != null && briefKindIds.has(r.work_kind_id))) {
             return NextResponse.json({ error: 'This shoot already has a shoot plan' }, { status: 409 })
           }
+          briefBatchesClaimed.add(String(it.batch_id))
           briefBatchId = it.batch_id
         } else {
           const newBatch = await table('batches').insert({
@@ -380,9 +391,24 @@ export async function POST(req: Request) {
       })
     }
 
-    const data = await Promise.all(
+    // Each row is its own write, so a batch upload can half-succeed. Saying
+    // "500" over eight items that were created and two that were not is the
+    // worst answer available — the caller is told exactly what landed.
+    const settled = await Promise.allSettled(
       rows.map(r => table('content_items').insert(r) as Promise<unknown> as Promise<ContentItem>),
     )
+    const data: ContentItem[] = []
+    const failed: { index: number; title: string; error: string }[] = []
+    settled.forEach((res, i) => {
+      if (res.status === 'fulfilled') data.push(res.value)
+      else {
+        failed.push({
+          index: i,
+          title: String(rows[i].title),
+          error: res.reason instanceof Error ? res.reason.message : String(res.reason),
+        })
+      }
+    })
     for (const item of data) {
       await logActivity({
         actor: user, clientId: item.client_id,
@@ -398,6 +424,8 @@ export async function POST(req: Request) {
     // a folder per deliverable, and the master link prefilled from it — in
     // the background, so a slow Drive never delays a batch upload
     onItemsCreated(data)
+    // 207: some of this landed and some did not, and the body says which
+    if (failed.length > 0) return NextResponse.json({ created: data, failed }, { status: 207 })
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

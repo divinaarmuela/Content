@@ -145,7 +145,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     // it may have gone out while we were asking, so the job's status is
     // read again immediately before the cancel is written
-    const live = await jobs.get(job.id)
+    const live = await jobs.get(job.id, { fresh: true })
     const cancelled = live?.status === job.status
       ? await jobs.update(job.id, { status: 'cancelled', error: null, updated_at: new Date().toISOString() })
       : null

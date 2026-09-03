@@ -78,7 +78,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (hat === 'editor') {
       let current: ContentItem | null
       try {
-        current = await items.get(id)
+        // `fresh` bypasses the request cache: the seat is read from the
+        // database now, not from the copy loadItemForUser took at the top
+        current = await items.get(id, { fresh: true })
       } catch (e) {
         console.error('claim (editor) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)
@@ -106,7 +108,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } else {
       let current: ContentItem | null
       try {
-        current = await items.get(id)
+        current = await items.get(id, { fresh: true })
       } catch (e) {
         console.error('claim (scheduler) failed:', (e as Error).message)
         throw new AuthzError('Could not pick this up — please try again', 500)

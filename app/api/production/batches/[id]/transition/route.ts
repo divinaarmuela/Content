@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Nothing merely READ is trusted at the moment of the write: the shoot's
     // status is re-read here and the move refused if somebody else has
     // already made it.
-    const live = await batches.get(id)
+    const live = await batches.get(id, { fresh: true })
     if (!live || live.status !== from) {
       return NextResponse.json({ error: 'Someone else moved this shoot — refresh and try again' }, { status: 409 })
     }
