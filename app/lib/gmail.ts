@@ -219,40 +219,11 @@ export function mailboxAddress(): string {
   return (process.env.GMAIL_USER ?? '').toLowerCase()
 }
 
-/** Send a raw RFC822 message from the primary mailbox via the Gmail REST API.
- *  Unlike SMTP (port 465) this rides plain HTTPS — immune to the SMTP TLS
- *  interception seen on some networks. Verified working 31 Jul 2026.
- *
- *  Sending needs a send scope, so under domain-wide delegation the service
- *  account must also be authorised for gmail.send. */
-/** Send a raw RFC822 message from WHOEVER owns this access token — used to
- *  send workflow notifications from the acting person's own Gmail, so the
- *  conversation is genuinely between them and the recipient. */
-export async function gmailSendRawAs(accessToken: string, rfc822: Buffer): Promise<string> {
-  const raw = rfc822.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw }),
-  })
-  if (!res.ok) throw new Error(`Gmail send-as failed (${res.status}): ${await res.text()}`)
-  return (await res.json()).id
-}
-
-export async function gmailSendRaw(rfc822: Buffer): Promise<string> {
-  const boxes = getMailboxes()
-  const primary = boxes.find(m => m.email === mailboxAddress()) ?? boxes[0]
-  if (!primary) throw new Error('No Gmail mailbox configured')
-  const token = await accessTokenForMailbox(
-    primary,
-    primary.delegated ? 'https://www.googleapis.com/auth/gmail.send' : GMAIL_READ_SCOPE
-  )
-  const raw = rfc822.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw }),
-  })
-  if (!res.ok) throw new Error(`Gmail send failed (${res.status}): ${await res.text()}`)
-  return (await res.json()).id
-}
+// There is deliberately NO Gmail send path here. Every outbound email in this
+// codebase goes through app/lib/mailer.ts, whose one transport (smtp2goSend)
+// is module-private and reached only via sendRawEmail / sendSystemEmail /
+// notify — all three of which call assertTestSafeRecipients first. Two raw
+// Gmail senders used to live here, unused and ungated; they were a standing
+// invitation to add a send path that skips the EMAIL_TEST_ONLY kill-switch,
+// so they are gone. Read-only Gmail access (the inbox → leads pipeline) is
+// everything above.

@@ -191,6 +191,21 @@ export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'
 
 /** Queue-and-send with the exactly-once guarantee described above. */
 export async function notify(input: NotifyInput): Promise<NotifyResult> {
+  // The kill-switch covers the BELL too. A bell-only notification never
+  // reaches smtp2goSend, so the guard down in the send path never runs for it
+  // — and a test would otherwise write a real in_app row against a real team
+  // member's recipient_id (WATCHERS in booking-notify.ts is a literal list of
+  // agency addresses). Checked here, before the notification_log claim, so
+  // under EMAIL_TEST_ONLY nothing at all is written for a real address.
+  if (input.bellOnly && process.env.EMAIL_TEST_ONLY === '1') {
+    try {
+      assertTestSafeRecipients(input.recipientEmail)
+    } catch (e) {
+      console.error('notification refused:', e instanceof Error ? e.message : e)
+      return 'failed'
+    }
+  }
+
   // the Settings → "email notifications" toggle is a promise, not decoration:
   // a recipient who switched email off gets nothing, checked here so every
   // notification path honours it. Only an explicit false mutes — no row, no

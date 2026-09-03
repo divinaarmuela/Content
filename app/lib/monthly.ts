@@ -177,14 +177,16 @@ export async function submitMonthly(token: string): Promise<MonthlyForm | null> 
   const form = row as unknown as MonthlyForm
   if (!isWritable(form.status)) return form
 
-  // the status is re-read immediately before the write, so only the caller who
-  // still sees a writable form submits it and a double-click cannot send two
-  // notifications
-  const live = await table<MonthlyUpdate>('monthly_updates').get(form.id)
-  if (!live || live.status === 'submitted') return form
-  const updated = await table<MonthlyUpdate>('monthly_updates')
-    .update(form.id, { status: 'submitted', submitted_at: new Date().toISOString() })
-  return (updated as unknown as MonthlyForm) ?? form
+  // Exactly one submit wins — the same claim() shape submitIntake uses. A
+  // re-read followed by an update() is two operations and two concurrent
+  // submits could both pass the check; the conditional write cannot.
+  const submitted = await table<MonthlyUpdate>('monthly_updates').claim(form.id, cur =>
+    cur && cur.status !== 'submitted'
+      ? { ...cur, status: 'submitted', submitted_at: new Date().toISOString() }
+      : null)
+  // The loser is handed the row that beat it, not its own stale read, so a
+  // double-click reports the submission that actually happened.
+  return (submitted.claimed ? submitted.row : submitted.current ?? form) as unknown as MonthlyForm
 }
 
 export async function reopenMonthly(formId: string): Promise<void> {

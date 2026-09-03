@@ -209,13 +209,18 @@ function isAnswered(value: string | string[] | undefined): boolean {
 
 /** Progress, for a client filling this in over three sittings. Never blocking —
  *  incomplete submission is explicitly allowed. */
-export function completion(def: TemplateDefinition, answers: Answers): Completion {
-  const sections = def.sections.map(s => {
+export function completion(def: TemplateDefinition, answers: Answers | null | undefined): Completion {
+  // A brand-new form is created with `answers: {}` and the Realtime Database
+  // stores no empty object, so the row can read back with the key missing.
+  // lib/db.ts puts it back, but this is the one place every caller funnels
+  // through: treat missing as empty rather than throwing on `answers[b.id]`.
+  const given = answers ?? {}
+  const sections = (def?.sections ?? []).map(s => {
     const blocks = s.blocks.filter(b => b.type !== 'guidance')
     return {
       id: s.id,
       title: s.title,
-      answered: blocks.filter(b => isAnswered(answers[b.id])).length,
+      answered: blocks.filter(b => isAnswered(given[b.id])).length,
       total: blocks.length,
     }
   })

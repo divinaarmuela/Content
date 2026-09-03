@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { rtdbUrl } from './firebase-config'
 import { INDEXED_COLUMNS } from './db-indexes'
 import {
-  NATURAL_KEYS, NULLABLE_COLUMNS, TABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
+  JSON_ARRAY_COLUMNS, JSON_COLUMNS, NATURAL_KEYS, NULLABLE_COLUMNS, TABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
   type Row, type TableName,
 } from './db-types'
 
@@ -350,7 +350,20 @@ function stripNulls<T extends object>(row: T): T {
 }
 function normalise<T>(name: TableName, id: string, raw: any): T {
   const row: any = { ...raw, id: raw?.id ?? id }
-  for (const c of NULLABLE_COLUMNS[name] ?? []) if (row[c] === undefined) row[c] = null
+  const nullable = NULLABLE_COLUMNS[name] ?? []
+  for (const c of nullable) if (row[c] === undefined) row[c] = null
+  // The Realtime Database stores no empty object/array, so a json column
+  // written as `{}` reads back missing. Put it back: null if the column is
+  // nullable, otherwise the empty value its Postgres default had — a NOT NULL
+  // jsonb never meant "absent", and one that defaulted to `[]` must not come
+  // back as `{}` (spreading a plain object into an array throws).
+  const jsonArray = JSON_ARRAY_COLUMNS[name] ?? []
+  for (const c of JSON_COLUMNS[name] ?? []) {
+    if (row[c] !== undefined && row[c] !== null) continue
+    row[c] = (nullable as readonly string[]).includes(c)
+      ? null
+      : (jsonArray as readonly string[]).includes(c) ? [] : {}
+  }
   return row as T
 }
 function idFor(name: TableName, row: any): string {

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import { getDatabase, ref, query, orderByChild, equalTo, onValue, type Query } from 'firebase/database'
 import { firebaseConfig } from './firebase-config'
-import { NULLABLE_COLUMNS, type Row, type TableName } from './db-types'
+import { JSON_ARRAY_COLUMNS, JSON_COLUMNS, NULLABLE_COLUMNS, type Row, type TableName } from './db-types'
 import { pickPushdown } from './db-indexes'
 import type { LiveChannel } from './live'
 
@@ -21,9 +21,21 @@ function db() {
 export function snapshotToRows<T>(name: TableName, val: Record<string, any> | null): T[] {
   if (!val) return []
   const nullable = NULLABLE_COLUMNS[name] ?? []
+  const json = JSON_COLUMNS[name] ?? []
+  const jsonArray = JSON_ARRAY_COLUMNS[name] ?? []
   return Object.entries(val).map(([id, r]) => {
     const row: any = { ...r, id: r?.id ?? id }
     for (const c of nullable) if (row[c] === undefined) row[c] = null
+    // The Realtime Database stores no empty object/array: a json column
+    // written as `{}` reads back missing. Restore it — null if the column is
+    // nullable, else the empty value its Postgres default had. Mirrors
+    // normalise() in lib/db.ts.
+    for (const c of json) {
+      if (row[c] !== undefined && row[c] !== null) continue
+      row[c] = (nullable as readonly string[]).includes(c)
+        ? null
+        : (jsonArray as readonly string[]).includes(c) ? [] : {}
+    }
     return row as T
   })
 }

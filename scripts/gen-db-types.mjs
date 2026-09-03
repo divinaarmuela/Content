@@ -26,6 +26,14 @@ function tsType(pg) {
   // on the wire — only json/jsonb (handled above) should stay `unknown`.
   return 'string'
 }
+// json/jsonb columns need naming separately: the Realtime Database stores no
+// empty object, so a column written as `{}` reads back missing. lib/db.ts and
+// lib/db-client.ts put it back (null if nullable, else {}) using this list.
+const isJson = pg => /^(jsonb|json)\b/i.test(pg.trim()) && !/\[\]\s*$/.test(pg)
+// …and which of those held a JSON ARRAY (`default '[]'::jsonb`). Restoring one
+// as `{}` would be worse than leaving it missing: `[...(row.docs ?? [])]`
+// throws on a plain object, where it coped with undefined.
+const isJsonArrayDefault = decl => /default\s*'\s*\[/i.test(decl)
 
 const tables = new Map() // name -> Map(col -> {type, nullable})
 const updatedAt = new Set()
@@ -43,14 +51,14 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
       if (!cm) continue
       const [, col, type] = cm
       const nullable = !/not null/i.test(t) && !/primary key/i.test(t)
-      cols.set(col, { type: tsType(type.trim()), nullable })
+      cols.set(col, { type: tsType(type.trim()), nullable, json: isJson(type), jsonArray: isJson(type) && isJsonArrayDefault(t) })
     }
     tables.set(name, cols)
   }
   for (const m of sql.matchAll(/alter table(?: if exists)?\s+(?:public\.)?([a-z_]+)\s+add column(?: if not exists)?\s+"?([a-z_]+)"?\s+([a-z_ \[\]]+(?:\([^)]*\))?)([^;]*);/gi)) {
     const [, name, col, type, rest] = m
     const cols = tables.get(name) ?? new Map()
-    cols.set(col, { type: tsType(type.trim()), nullable: !/not null/i.test(rest) })
+    cols.set(col, { type: tsType(type.trim()), nullable: !/not null/i.test(rest), json: isJson(type), jsonArray: isJson(type) && isJsonArrayDefault(type + rest) })
     tables.set(name, cols)
   }
   for (const m of sql.matchAll(/create trigger\s+[a-z_]+_updated_at\s+before update on\s+(?:public\.)?([a-z_]+)/gi)) updatedAt.add(m[1])
@@ -111,6 +119,8 @@ for (const n of names) {
 }
 out += `export const TABLE_COLUMNS = {\n${names.map(n => `  ${n}: [${[...tables.get(n).keys()].map(c => `'${c}'`).join(', ')}],`).join('\n')}\n} as const satisfies Record<TableName, readonly string[]>\n\n`
 out += `export const NULLABLE_COLUMNS = {\n${names.map(n => `  ${n}: [${[...tables.get(n)].filter(([, v]) => v.nullable).map(([c]) => `'${c}'`).join(', ')}],`).join('\n')}\n} as const satisfies Record<TableName, readonly string[]>\n\n`
+out += `/**\n * json/jsonb columns. The Realtime Database stores no empty object or array, so\n * a column written as an empty object reads back missing; normalise() (lib/db.ts)\n * and snapshotToRows() (lib/db-client.ts) restore it — null when the column is\n * nullable, {} when it is not — or [] when the column is listed in\n * JSON_ARRAY_COLUMNS below.\n */\nexport const JSON_COLUMNS = {\n${names.map(n => `  ${n}: [${[...tables.get(n)].filter(([, v]) => v.json).map(([c]) => `'${c}'`).join(', ')}],`).join('\n')}\n} as const satisfies Record<TableName, readonly string[]>\n\n`
+out += `/**\n * The subset of JSON_COLUMNS whose Postgres default was a JSON ARRAY\n * (default '[]'::jsonb). Restoring one of these as {} would be worse than\n * leaving it missing — spreading a plain object into an array throws, where\n * undefined was absorbed by the callers' \\u0060?? []\\u0060.\n */\nexport const JSON_ARRAY_COLUMNS = {\n${names.map(n => `  ${n}: [${[...tables.get(n)].filter(([, v]) => v.jsonArray).map(([c]) => `'${c}'`).join(', ')}],`).join('\n')}\n} as const satisfies Record<TableName, readonly string[]>\n\n`
 out += `export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>([${[...updatedAt].sort().map(t => `'${t}'`).join(', ')}])\n\n`
 out += `export function encodeKey(s: string): string {\n  return s.replace(/[.#$\\[\\]\\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))\n}\n\n`
 out += `/** Tables whose Postgres key was not a uuid \`id\`. The id stored in RTDB is derived from the row. */\nexport const NATURAL_KEYS: Partial<Record<TableName, (row: any) => string>> = {

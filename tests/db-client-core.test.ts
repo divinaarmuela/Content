@@ -11,6 +11,22 @@ describe('db-client pure parts', () => {
     expect(rows.find(r => r.id === 'i2')?.due_date).toBe('d')
     expect(snapshotToRows('content_items', null)).toEqual([])
   })
+  it('snapshotToRows restores a json column the database dropped', () => {
+    // RTDB stores no empty object, so a form created with `answers: {}` reads
+    // back with the key missing. NOT NULL json → {}, nullable json → null.
+    const [form] = snapshotToRows<any>('intake_forms', { f1: { token: 't', status: 'draft' } })
+    expect(form.answers).toEqual({})
+    expect(form.definition).toEqual({})
+    const [brand] = snapshotToRows<any>('client_brand', { c1: { client_id: 'c1' } })
+    expect(brand.profile).toEqual({})
+    expect(brand.docs).toEqual([])          // jsonb default '[]' — not {}
+    const [client] = snapshotToRows<any>('clients', { c1: { name: 'Acme' } })
+    expect(client.brand_profile).toBeNull()   // nullable jsonb
+  })
+  it('snapshotToRows leaves a json column that really is there alone', () => {
+    const [form] = snapshotToRows<any>('intake_forms', { f1: { answers: { q1: 'yes' } } })
+    expect(form.answers).toEqual({ q1: 'yes' })
+  })
   it('applyQuery filters, sorts, limits', () => {
     const out = applyQuery([{ n: 2, s: 'x' }, { n: 1, s: 'x' }, { n: 3, s: 'y' }], { where: r => r.s === 'x', orderBy: [['n', 'desc']], limit: 1 })
     expect(out).toEqual([{ n: 2, s: 'x' }])

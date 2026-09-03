@@ -39,6 +39,32 @@ describe('table().get / list', () => {
   it('count', async () => {
     expect(await table<ContentItem>('content_items').count({ by: { status: 'draft' } })).toBe(2)
   })
+  it('a json column the database dropped reads back as {} (or null when nullable)', async () => {
+    // The Realtime Database stores no empty object: a row written with
+    // `answers: {}` comes back with no `answers` key at all, and every reader
+    // that indexed into it threw. NOT NULL json → {}, nullable json → null.
+    fake.restore()
+    fake = installFakeRtdb({ mdm: { tables: {
+      intake_forms: { f1: { id: 'f1', client_id: 'c1', token: 't1', status: 'draft' } },
+      clients: { c9: { id: 'c9', name: 'No brand' } },
+      client_brand: { c9: { id: 'c9', client_id: 'c9' } },
+    } } })
+    const form = await table('intake_forms').get('f1') as any
+    expect(form.answers).toEqual({})
+    expect(form.definition).toEqual({})
+    const listed = (await table('intake_forms').list())[0] as any
+    expect(listed.answers).toEqual({})
+    expect(((await table<Client>('clients').get('c9')) as any).brand_profile).toBeNull()
+    // …and a jsonb that defaulted to '[]' comes back as [], never {} —
+    // `[...(brand.docs ?? [])]` throws on a plain object.
+    const brand = await table<ClientBrand>('client_brand').get('c9')
+    expect(brand?.docs).toEqual([])
+    expect(brand?.profile).toEqual({})
+  })
+  it('a json column that is present is left untouched', async () => {
+    const brand = await table<ClientBrand>('client_brand').get('c1')
+    expect(brand?.profile).toEqual({ voice: 'friendly' })
+  })
   it('empty table lists as []', async () => {
     expect(await table('website' as any).list()).toEqual([])
   })

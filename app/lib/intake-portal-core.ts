@@ -71,14 +71,17 @@ function isAnswered(value: string | string[] | undefined): boolean {
  */
 export function intakeAnswerView(
   definition: TemplateDefinition,
-  answers: Answers,
+  answers: Answers | null | undefined,
 ): IntakeAnswerSection[] {
+  // A form nobody has typed into yet can read back with no `answers` key at
+  // all — the Realtime Database stores no empty object. Missing is empty.
+  const given = answers ?? {}
   const out: IntakeAnswerSection[] = []
-  for (const section of definition.sections ?? []) {
+  for (const section of definition?.sections ?? []) {
     const rows: IntakeAnswerRow[] = []
     for (const b of section.blocks ?? []) {
       if (b.type === 'guidance') continue
-      const v = answers[b.id]
+      const v = given[b.id]
       const text = Array.isArray(v) ? v.join(', ') : (v ?? '')
       rows.push({ id: b.id, label: b.label, text, answered: isAnswered(v) })
     }

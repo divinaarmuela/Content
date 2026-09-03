@@ -158,7 +158,9 @@ export async function submitIntake(token: string): Promise<IntakeForm | null> {
     cur && cur.status !== 'submitted'
       ? { ...cur, status: 'submitted', submitted_at: new Date().toISOString() }
       : null)
-  return submitted.claimed ? (submitted.row as unknown as IntakeForm) : form
+  // The loser is handed the row that beat it, not its own stale read, so a
+  // double-click reports the submission that actually happened.
+  return (submitted.claimed ? submitted.row : submitted.current ?? form) as unknown as IntakeForm
 }
 
 export async function reopenIntake(formId: string): Promise<void> {
