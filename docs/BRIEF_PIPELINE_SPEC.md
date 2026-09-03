@@ -17,7 +17,7 @@ J. **Quota safety belt is the kind join, not content_type**: exclude `work_kinds
 
 # THE FINAL BUILD LIST — execute top-down
 
-## 1) SQL — new file `supabase/shoot_brief_tasks.sql` (idempotent, run by hand per repo convention)
+## 1) No SQL step: `work_kinds` and `content_items` rows are created on first write (Firebase Realtime Database — this plan predates the move off Supabase; it was originally `supabase/shoot_brief_tasks.sql`, now `docs/schema-history/shoot_brief_tasks.sql`)
 
 ```sql
 -- 1. the kind, with a FIXED uuid so the index predicate below is a constant

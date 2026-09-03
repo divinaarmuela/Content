@@ -1,7 +1,7 @@
 /**
  * Pure identity/notification logic — no imports, no server dependencies.
  * Lives separately from authz.ts/mailer.ts so unit tests can exercise it
- * without pulling in `server-only`, Clerk, Supabase, or nodemailer.
+ * without pulling in `server-only`, Clerk, the database, or nodemailer.
  */
 
 export const TEAM_ROLES = ['scheduler', 'editor', 'account_manager', 'super_admin'] as const

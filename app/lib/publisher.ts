@@ -368,7 +368,7 @@ class ZernioPublisher implements Publisher {
   /** Presign → PUT → return the public URL.
    *
    *  The provider does not accept arbitrary public URLs, so assets held in
-   *  Supabase Storage must be relayed through here rather than linked. */
+   *  our own storage (Cloudflare R2) must be relayed through here rather than linked. */
   async uploadMedia({ bytes, filename, contentType }: {
     bytes: ArrayBuffer; filename: string; contentType: string
   }): Promise<MediaItem> {

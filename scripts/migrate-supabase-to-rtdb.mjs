@@ -1,5 +1,10 @@
 // scripts/migrate-supabase-to-rtdb.mjs
 // One-shot copy of Supabase → Firebase Realtime Database under /mdm.
+// Ran once, on 3 September 2026 — kept for history, not for reuse. The
+// Supabase project is now a cold backup and NEXT_PUBLIC_SUPABASE_URL /
+// SUPABASE_SERVICE_ROLE_KEY have been removed from .env.local and Vercel, so
+// this script cannot run again without putting them back (Supabase itself
+// still holds the data, untouched, if that is ever needed).
 //   node scripts/migrate-supabase-to-rtdb.mjs --dry-run   # read + report, write nothing
 //   node scripts/migrate-supabase-to-rtdb.mjs             # export JSON backup, import, verify
 import fs from 'node:fs'

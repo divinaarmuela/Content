@@ -193,8 +193,9 @@ if only the rollup matters.
 Estimates: #1 ≈ 1–2 days · #2 ≈ 4–6 days · #3 ≈ 2–3 days · #4 ≈ 3–5 days.
 
 ## 5. Open items needing human action
-- Replace `SUPABASE_SERVICE_ROLE_KEY` value (currently the anon key) — blocks all CMS writes.
-- Run `supabase/website_cms.sql` in the Supabase SQL editor.
+- Superseded by the 3 Sep 2026 move to Firebase Realtime Database (see
+  `docs/PROJECT_STATE.md`): no SQL step remains — tables are created on
+  first write, and there is no service-role key to replace.
 - Create the Asana service account + PAT when milestone 4 starts.
 - Confirm the super-admin shared-mailbox caveat (§1.3) is accepted or hardened.
 - Legal sign-off flow for the activity dashboard notice (§3.3).

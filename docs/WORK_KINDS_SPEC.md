@@ -17,7 +17,7 @@ PRESSURE-TEST RULINGS
 
 # FINAL MINI-SPEC — Work Kinds + Open Assignment (v1, build order)
 
-## 1. SQL — `supabase/work_kinds.sql` (idempotent, run by hand in SQL editor)
+## 1. No SQL step: `work_kinds` rows are created on first write (Firebase Realtime Database — this plan predates the move off Supabase; it was originally `supabase/work_kinds.sql`, now `docs/schema-history/work_kinds.sql`)
 
 ```sql
 -- Work kinds: the craft/discipline of an item (edit, graphics, copy…).

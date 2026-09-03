@@ -17,7 +17,7 @@ const MONO = 'var(--font-space-mono), monospace'
 const SANS = "'Helvetica Neue', Helvetica, Arial, sans-serif"
 const HERO_VIDEO = media('jason-hero.mp4')
 
-// Future CMS seam: this array becomes a Supabase fetch in the CMS pass.
+// Future CMS seam: this array becomes a database fetch in the CMS pass.
 
 const manifesto = [
   'It’s for you if you’ve ever left a “networking” event feeling like everyone was selling and no one was listening.',

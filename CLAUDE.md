@@ -15,7 +15,7 @@ the codebase works and the traps in it.
 | Framework | Next.js 16 App Router, React 19, TypeScript strict |
 | Styling | **Tailwind v3.4** — NOT v4 |
 | Components | shadcn/ui **classic (Radix-based)** |
-| Data | Supabase (Postgres + Storage) |
+| Data | Firebase Realtime Database under /mdm — server via REST (lib/db.ts), browser live via firebase/database (lib/db-client.ts) |
 | Auth | Clerk 7 |
 | Scheduling | Inngest v4 |
 | AI | `@anthropic-ai/sdk`, `claude-haiku-4-5` for email classification |
@@ -29,6 +29,7 @@ npm run dev        # dev server
 npm run build      # production build
 npm test           # vitest run — 636 tests, all must pass
 npx tsc --noEmit   # type check
+node scripts/gen-db-types.mjs  # after editing docs/schema-history/*.sql
 ```
 
 Before claiming any work is done, all three of `npm test`, `npx tsc --noEmit`,
@@ -68,12 +69,23 @@ and `npm run build` must pass. Do not report completion on tests alone.
    Installing Inngest's Vercel integration makes this automatic on every deploy.
 6. **The vitest config must be `vitest.config.mts`** (`.ts` throws ERR_REQUIRE_ESM).
    `server-only` is aliased to a stub there.
-7. **`app/lib/supabase.ts` builds its client at module load** with non-null
-   assertions. Missing env vars throw at import time, which fails the *build*, not
-   just the request.
+7. **`lib/firebase-config.ts` reads env lazily.** `NEXT_PUBLIC_FIREBASE_DATABASE_URL`
+   missing fails the *request*, not the build.
 8. **Route protection is an explicit allowlist** in `middleware.ts`. Everything not
    listed is public. `/api/submit` (the contact form) must stay public;
    `/api/leads` must not.
+9. **RTDB keys cannot contain `. # $ [ ] /`.** Use `encodeKey()` (`lib/db-types.ts`)
+   for any natural key built from user-supplied text (an email, a URL) before it
+   becomes part of a path.
+10. **No `firebase-admin`.** Server access is the RTDB REST API over plain `fetch`
+    (`lib/db.ts`). Open read/write rules (`database.rules.json`) are the owner's
+    decision, not a default to relax further — never write outside `/mdm`.
+11. **Never check-then-write.** Use `table().claim()` or `compareAndSet()`
+    (`lib/db.ts`) for anything that must have exactly one winner — the same
+    discipline the old "`UPDATE … WHERE status = <expected>`" pattern enforced.
+    The request cache (`withRequestCache`) serves repeated reads of the same
+    table from one network call; pass `{ fresh: true }` to bypass it when a
+    guard must see the network, not its own earlier answer.
 
 ## Layout
 
@@ -98,7 +110,8 @@ app/
     report-pdf.ts      monthly leads PDF
     clerk-gmail.ts     per-user mailbox access via Clerk
   inngest/functions.ts scheduled jobs
-supabase/*.sql         idempotent migrations, run by hand in the SQL editor
+docs/schema-history/*.sql   Postgres schema history — read by scripts/gen-db-types.mjs
+                            to generate lib/db-types.ts; not run against anything live
 docs/BUILD_PLAN.md     the governing plan
 docs/PROJECT_STATE.md  current status — read this
 ```
@@ -111,8 +124,10 @@ docs/PROJECT_STATE.md  current status — read this
   unique-constraint claims (`email_ingest_log.gmail_message_id`), optimistic
   concurrency (`UPDATE … WHERE status = <expected>`, zero rows means someone beat
   you), and append-only version numbers. Never "check then write".
-- **The service-role key is server-only.** Every table is RLS deny-by-default;
-  browser code never touches Supabase directly.
+- **Server writes go through `lib/db.ts` (REST, no `firebase-admin`); the
+  browser reads live via `lib/db-client.ts` (`firebase/database`).** Rules are
+  open read/write today — that is the owner's call, not something to tighten
+  or loosen without asking.
 - **Authorization is enforced server-side**, in the API route. Hiding a button is
   presentation, not security.
 - Prefer editing an existing page over adding a parallel one. Pages still on

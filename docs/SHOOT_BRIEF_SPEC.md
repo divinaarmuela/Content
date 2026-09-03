@@ -19,7 +19,7 @@ DECISIONS LOG (one line each)
 - D13: Gate wording is editor+ (schedulers can't create anything); hide "Plan shoot" CTA for schedulers (critic #13).
 
 =====================================================================
-STEP 1 — SQL MIGRATION: supabase/agreements_and_briefs.sql (idempotent, hand-run)
+STEP 1 — no SQL step: tables are created on first write (Firebase Realtime Database — this plan predates the move off Supabase; it was originally supabase/agreements_and_briefs.sql, now docs/schema-history/agreements_and_briefs.sql)
 =====================================================================
 ```sql
 -- A) client_agreements: the standing deal (one row per client)

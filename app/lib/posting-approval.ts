@@ -27,9 +27,9 @@ const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  * carries the expected current state, and zero rows means somebody answered
  * first.
  *
- * TOLERANT throughout: on a database where supabase/posting_approval.sql has
- * not been run, reads degrade to "the gate is not in use" and writes explain
- * themselves instead of stack-tracing.
+ * TOLERANT throughout: on a row that has never carried these fields, reads
+ * degrade to "the gate is not in use" and writes explain themselves instead
+ * of stack-tracing.
  */
 
 type ApprovableItem = {

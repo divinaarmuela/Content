@@ -2,8 +2,8 @@
  * What a non-technical person sees when something is broken or switched off.
  *
  * The dashboard used to print its own plumbing at people: "run
- * supabase/identity.sql", "check NEXT_PUBLIC_SUPABASE_URL in .env.local",
- * "Could not find the table 'public.batches' in the schema cache". An editor in
+ * supabase/identity.sql", "check NEXT_PUBLIC_FIREBASE_DATABASE_URL in
+ * .env.local", "Database GET /mdm/tables/batches failed (500)". An editor in
  * Manila reading that learns two wrong things — that the app is broken, and
  * that it is somehow their fault.
  *

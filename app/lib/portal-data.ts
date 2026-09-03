@@ -377,8 +377,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
   // ── posts waiting on the client's FINAL sign-off (caption + timing) ──
   // Read on its own so the page never depends on fields that may not exist
-  // yet: on a database without supabase/posting_approval.sql this pile is
-  // simply empty — today's behaviour.
+  // yet: an item that has never been through final-post approval simply has
+  // no posting_approval_state written, and this pile stays empty for it.
   const approvalCandidates = items
     .filter(i => ['approved_for_scheduling', 'scheduled'].includes(i.status as string))
     .map(i => i.id)

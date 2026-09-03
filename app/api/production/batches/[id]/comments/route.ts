@@ -14,10 +14,9 @@ import {
  * and writes on their portal shoot page. One thread, two windows.
  *
  * Since wave 2 a team member can tag a colleague here with "@Name": that
- * sets `assigned_to` (supabase/shoot_comment_tags.sql), emails them with a
- * link to this shoot, and keeps the note under "Waiting on you" until it is
- * marked done. The client never sees who is tagged — the portal reads the
- * body only.
+ * sets `assigned_to`, emails them with a link to this shoot, and keeps the
+ * note under "Waiting on you" until it is marked done. The client never sees
+ * who is tagged — the portal reads the body only.
  */
 
 /** Every comment carries who wrote it — "who said this" is half its meaning. */
@@ -86,12 +85,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         resolved: false,
       })
       data = (await withAuthors([row as unknown as BatchComment]))[0]
-    } catch {
-      return NextResponse.json({
-        error: assignedTo
-          ? 'Tagging on shoot comments needs supabase/shoot_comment_tags.sql run first'
-          : 'Comments need supabase/portal_comments.sql run first',
-      }, { status: 503 })
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not save the comment' }, { status: 500 })
     }
     if (tagged.length > 0 && data) {
       await notifyTagged({
@@ -125,7 +120,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const existing = await comments.get(String(json.comment_id))
     // the comment must be on THIS shoot — never mark somebody else's thread
     if (!existing || existing.batch_id !== id) {
-      return NextResponse.json({ error: 'Marking done needs supabase/shoot_comment_tags.sql run first' }, { status: 503 })
+      return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     }
     const updated = await comments.update(existing.id, { resolved: json.resolved })
     const data = updated ? (await withAuthors([updated]))[0] : null

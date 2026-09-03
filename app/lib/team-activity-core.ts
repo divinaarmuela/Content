@@ -1,5 +1,5 @@
 /**
- * Pure logic for the Team activity page — no I/O, no Supabase, no clock read
+ * Pure logic for the Team activity page — no I/O, no database, no clock read
  * unless a caller hands one in.
  *
  * The page answers one question a manager asks out loud every morning: *who

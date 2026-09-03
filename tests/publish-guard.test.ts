@@ -9,16 +9,16 @@ import type { Row } from '@/lib/db-types'
  *
  * Both are about the least reversible thing the system does: you cannot
  * un-post to somebody's real Instagram, and you cannot un-overwrite the cut a
- * reviewer signed off. Each was a real constraint in supabase/*.sql, so each
- * gets a test that fails if the replacement is dropped.
+ * reviewer signed off. Each was a real constraint in docs/schema-history/*.sql,
+ * so each gets a test that fails if the replacement is dropped.
  */
 
 vi.mock('../app/lib/publisher', () => ({
   getPublisher: () => ({ configured: () => true }),
 }))
 // workflow.ts reaches these two only from performTransition, never from
-// addVersion — stubbed so this file does not drag in a Supabase client that
-// builds at import time (CLAUDE.md trap 7) from modules a later task rewrites
+// addVersion — stubbed so this file does not drag in a module that builds a
+// client at import time (CLAUDE.md trap 7) from modules a later task rewrites
 vi.mock('../app/lib/gdrive-mirror', () => ({ mirrorLatestVersionSoon: vi.fn() }))
 vi.mock('../app/lib/mailer', () => ({
   notify: vi.fn(), renderEmail: () => '', escapeHtml: (s: string) => s,
@@ -54,8 +54,8 @@ let fake: ReturnType<typeof seedDb>
 afterEach(() => fake?.restore())
 
 describe('one live publish job per item — publish_jobs_one_live_per_item', () => {
-  // supabase/social_publishing.sql recreates the partial unique index over
-  // status in ('queued','publishing','scheduled')
+  // docs/schema-history/social_publishing.sql recreates the partial unique
+  // index over status in ('queued','publishing','scheduled')
   for (const status of ['queued', 'publishing', 'scheduled']) {
     it(`refuses a second job while one is ${status}`, async () => {
       fake = seedDb({ publish_jobs: [job('j1', status)] })

@@ -263,8 +263,8 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
 /**
  * Move a job's media onto the provider.
  *
- * The provider will not fetch arbitrary URLs, so assets living in Supabase
- * Storage have to be relayed: download the bytes, presign, PUT, and swap in
+ * The provider will not fetch arbitrary URLs, so assets living in our own
+ * storage (Cloudflare R2) have to be relayed: download the bytes, presign, PUT, and swap in
  * the returned URL. Already-relayed items are left alone, which makes this
  * safe to run again after a retry.
  */

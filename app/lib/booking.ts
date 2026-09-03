@@ -292,7 +292,7 @@ export async function listPublicServices(): Promise<PublicService[]> {
 
 /**
  * The physical space a resource occupies — the port of the `bookings_fill_space`
- * trigger (supabase/booking_space.sql).
+ * trigger (docs/schema-history/booking_space.sql).
  *
  * A booking row carries the space so the no-overlap guarantee can read it
  * without a join. A resource with no space of its own IS its own space.
@@ -304,7 +304,7 @@ export async function spaceForResource(resourceId: string): Promise<string> {
 
 /**
  * The port of the `bookings_no_overlap` exclusion constraint
- * (supabase/booking_space.sql): no two live bookings for the same seat in the
+ * (docs/schema-history/booking_space.sql): no two live bookings for the same seat in the
  * same room may overlap in TIME.
  *
  * `[)` is half-open on purpose: a session ending at 11:00 and one starting at
@@ -439,7 +439,7 @@ export async function insertBooking(
   },
 ): Promise<Booking> {
   const space_id = row.space_id ?? await spaceForResource(row.resource_id)
-  // the column defaults from supabase/booking.sql and booking_seats.sql —
+  // the column defaults from docs/schema-history/booking.sql and booking_seats.sql —
   // Postgres supplied these, and seat_no in particular is half of the
   // no-overlap key, so a missing one would make every booking clash
   const seat_no = row.seat_no ?? 1

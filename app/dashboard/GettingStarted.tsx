@@ -20,9 +20,9 @@ import type { Role } from '@/app/lib/identity-core'
  * panel that flashes in and vanishes on every page load is worse than no
  * panel. It also renders nothing for roles with no panel (clients).
  *
- * Storage is the team_users row (supabase/getting_started.sql and
- * getting_started_pages.sql). If the pages column is not migrated yet the
- * dismissal is remembered in this browser instead — "Got it" must always
+ * Storage is the team_users row (docs/schema-history/getting_started.sql and
+ * getting_started_pages.sql). If the pages field has never been written yet
+ * the dismissal is remembered in this browser instead — "Got it" must always
  * stick, or people stop pressing it.
  */
 const LOCAL_KEY = 'md-getting-started-dismissed'

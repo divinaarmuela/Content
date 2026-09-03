@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
- * Pure Asana logic — no I/O, no Supabase, no fetch. Everything here is
+ * Pure Asana logic — no I/O, no database, no fetch. Everything here is
  * unit-tested (`tests/asana-core.test.ts`); the wrappers in `asana.ts` do the
  * network and database work.
  *

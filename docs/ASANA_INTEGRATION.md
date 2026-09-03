@@ -82,7 +82,7 @@ same pattern as `email_ingest_log.gmail_message_id`.
 At our scale (a dozen projects, ~15 people) none of this should bite; the
 15-minute poll across all projects is a handful of requests.
 
-## 2. Schema — `supabase/asana_activity.sql` (idempotent, run by hand)
+## 2. Schema — no SQL step: tables are created on first write (planned as `supabase/asana_activity.sql`, now `docs/schema-history/asana_activity.sql`)
 
 ```sql
 -- Webhook registrations owned by the service-account PAT

@@ -7,7 +7,7 @@
  *      unanswered flagged) that the portal renders.
  *
  * The server layer (portal-data.ts) reads the database and hands rows here;
- * nothing here touches Supabase, so the rules can be tested in isolation and
+ * nothing here touches the database, so the rules can be tested in isolation and
  * the portal never depends on the shape of a query.
  */
 

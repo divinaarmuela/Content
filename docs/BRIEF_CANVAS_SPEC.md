@@ -18,10 +18,7 @@ PRESSURE-TEST RESULTS (what changed and why)
 1) DEPENDENCY
 - `npm i @use-gesture/react@^10.3.1` — the ONLY new package (MIT, ~7kb gz, headless, React-19 clean). Used solely for wheel/pinch/pan normalization on the viewport. Card dragging is raw pointer events + setPointerCapture (no library).
 
-2) SQL — supabase/canvas_board.sql (NEW, run by hand per convention)
-```sql
-alter table batches add column if not exists canvas_cards jsonb not null default '[]'::jsonb;
-```
+2) No SQL step: `batches.canvas_cards` is created on first write (Firebase Realtime Database — this plan predates the move off Supabase; the field was originally `supabase/canvas_board.sql`, now `docs/schema-history/canvas_board.sql`).
 
 3) PURE CORE + TESTS — C:/Users/User/myProjects/content/Content/app/lib/batch-brief-core.ts (extend)
 - Type: `CanvasCard = { id: string; kind: 'note'|'image'|'link'|'label'; x: number; y: number; w: number; z: number; text?: string; url?: string; name?: string; color?: 'paper'|'yellow'|'pink'|'blue'|'green'|'purple' }`. Height intrinsic, never stored. No resize in v1 (w fixed per kind: note 208, image 240, link 240, label auto→store 240).

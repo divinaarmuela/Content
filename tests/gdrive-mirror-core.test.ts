@@ -18,7 +18,7 @@ describe('isMirrorableUrl', () => {
   it('mirrors a file on our own storage', () => {
     expect(isMirrorableUrl('https://media.mdmmarketing.com.au/1755043200000-k3f9a1-hook.mp4')).toBe(true)
     expect(isMirrorableUrl('https://pub-abc.r2.dev/1755043200000-k3f9a1-hook.mp4')).toBe(true)
-    expect(isMirrorableUrl('https://xyz.supabase.co/storage/v1/object/public/website-assets/a.png')).toBe(true)
+    expect(isMirrorableUrl('https://pub-813c3e66befd45a9abcb40de26c719f2.r2.dev/website-assets/a.png')).toBe(true)
   })
 
   it('never mirrors a pasted link — there is no file of ours behind it', () => {

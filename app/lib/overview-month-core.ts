@@ -2,7 +2,7 @@
  * "This month across clients" — the Overview's one-screen answer to *what did
  * every client actually get, and where does that leave us?*
  *
- * Pure. No I/O, no Supabase, no dates read from the machine unless a caller
+ * Pure. No I/O, no database, no dates read from the machine unless a caller
  * hands them in. The route gathers rows; this decides what they MEAN:
  *
  *   - **Posted is the only delivery.** Same rule the agreement tab runs on

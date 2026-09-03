@@ -43,12 +43,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ...result, report })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Scan failed'
-    if (/relation .*email_ingest_log/i.test(msg)) {
-      return NextResponse.json(
-        { error: 'Run supabase/email_ingest.sql in the Supabase SQL editor first' },
-        { status: 503 }
-      )
-    }
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -75,12 +69,7 @@ function streamScan(): Response {
         write({ type: 'report', report })
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Scan failed'
-        write({
-          type: 'fatal',
-          message: /relation .*email_ingest_log/i.test(msg)
-            ? 'Run supabase/email_ingest.sql in the Supabase SQL editor first'
-            : msg,
-        })
+        write({ type: 'fatal', message: msg })
       } finally {
         controller.close()
       }

@@ -763,8 +763,8 @@ export default function ProductionPage() {
       {needsSchema && (
         <Card className="border-amber-200 dark:border-amber-900">
           <CardContent className="p-4 text-sm text-amber-800 dark:text-amber-300">
-            This part of the app isn&rsquo;t switched on yet. Send this to your developer:
-            run <span className="font-mono">supabase/agreements_and_briefs.sql</span>.
+            This part of the app isn&rsquo;t switched on yet. Send this to your developer —
+            shoots are missing their status.
           </CardContent>
         </Card>
       )}

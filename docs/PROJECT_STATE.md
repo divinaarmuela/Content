@@ -1,5 +1,113 @@
 # Project state — as at 19 August 2026
 
+## Firebase Realtime Database — 3 Sep 2026
+
+**Why.** A single route such as `app/api/production/batches/[id]` made 11
+sequential Supabase calls, each ~370ms from Vercel — boards waited on that
+chain, and "realtime" meant Inngest's realtime channel pushing a hint that
+triggered a refetch, never the data itself. Firebase Realtime Database (RTDB)
+fixes both: hot screens read straight off a live listener with no API hop at
+all, and server routes read a whole table once per request through a
+request-scoped cache instead of one round trip per row.
+
+**What moved.** Every table, every route, every Inngest function, the browser
+hooks, the join logic — all of it. Postgres/Supabase is gone from the
+codebase; RTDB (project `test-agent-88a4c`) is the only data store. Existing
+Postgres uuids were kept verbatim as RTDB ids; a handful of tables whose
+Postgres key was composite or non-uuid (`team_user_clients`, `asset_versions`,
+`client_brand`, `intake_templates`, `scan_mailboxes`, `asana_project_map`, …)
+got a deterministic id instead — see `lib/db-types.ts` `NATURAL_KEYS`.
+
+**The `/mdm` layout:**
+
+```
+/mdm
+  /tables/<table>/<id>          one row per child, same column names as before
+  /uniq/<table>/<field>/<key>   -> id, for fields that were UNIQUE in Postgres
+  /live/<channel>               tiny "something changed" markers
+  /meta/migrated_at             ISO timestamp of the import
+```
+
+Everything the app writes lives under `/mdm`. The Firebase project's
+Firestore holds another app's data entirely and is never touched.
+
+**Access layer.** Server code reads and writes through `lib/db.ts` —
+`table<T>('name')` gives `get`/`list`/`insert`/`update`/`upsert`/`remove`, all
+over the RTDB REST API with plain `fetch` (no `firebase-admin`). Reads inside
+one request share a cache (`withRequestCache`) so a route that used to make
+11 Supabase calls now makes 2–3 REST reads. Joins (the old
+`select('*, clients(name)')` style) are `attachOne`/`attachMany` in
+`lib/db-join.ts`. The browser reads live via `lib/db-client.ts`
+(`useTable`/`useRow`/`useLive`, backed by the `firebase/database` web SDK) —
+this is the only code that imports `firebase/*`.
+
+**Realtime.** Inngest's realtime channel (`inngest/react`,
+`app/inngest/channels.ts`, subscription tokens) is gone — Inngest itself
+stays for cron and background jobs only. In its place, `announce()`
+(`lib/live.ts`) writes a `{ ...hint, ts }` marker to `/mdm/live/<channel>`
+with one REST `PUT`; browser hooks (`useProductionLive`, leads, brand,
+intake, comments) listen on that node with `onValue` and refetch through the
+same Clerk-guarded API they used before — messages are hints, never data,
+exactly as before. **Hot screens go one step further and skip the refetch
+entirely**, rendering straight from a live `useTable`/`useRow` listener: the
+`/dashboard` overview cards, the Production board, Editor, Scheduler, the
+item detail page and its comments drawer, and `/dashboard/leads`. Two browser
+tabs on `/dashboard/production` now update the instant either one changes
+something — no reload, no poll window to wait out.
+
+**No more check-then-write.** Postgres's `UPDATE … WHERE status = <expected>`
+optimistic-concurrency pattern has a direct RTDB equivalent: `table().claim()`
+wraps a conditional PUT keyed to the row's current ETag
+(`compareAndSet` underneath) — exactly one caller's write lands, everyone
+else gets back the row that beat them, never a throw. The "I'll take this
+one" claim button, the scheduling-seat claim, and every optimistic-concurrency
+transition in `workflow.ts` all run on this.
+
+**What was skipped or never existed.** `scan_runs` (23,652 rows) and
+`asana_events` (17,078 rows) were deliberately left behind and start fresh —
+neither is load-bearing history. `website`, `content_assets` and
+`asset_clicks` never had Postgres tables at all; the code already treated a
+missing table as empty, so RTDB just… is empty for them, no error.
+
+**The backup.** `scripts/migrate-supabase-to-rtdb.mjs` (+ `migrate-core.mjs`)
+did the one-shot copy and wrote a raw JSON export to
+`parked/supabase-export-2026-09-03/` (gitignored) before writing anything to
+RTDB. The Supabase project itself is untouched and left as a cold backup —
+nobody has deleted it. Both migration scripts stay in the repo for the
+record, but neither can run again once `NEXT_PUBLIC_SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are gone from the environment (see below) — that
+is deliberate, not a bug.
+
+**Env vars.** Five `NEXT_PUBLIC_FIREBASE_*` vars replace the two Supabase
+ones, in `.env.local` and in Vercel (production + preview):
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_APP_ID
+NEXT_PUBLIC_FIREBASE_DATABASE_URL
+```
+
+None of the five are secret — they are the public web config Firebase expects
+in the browser bundle. `NEXT_PUBLIC_SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` have been removed from both places.
+
+**Security rules.** `database.rules.json` at the repo root is open read
+everywhere under `/mdm`, with write granted on `tables`/`live`/`meta` and an
+atomic claim rule on `/uniq` — the owner's explicit decision (raised and
+accepted: no auth check happens at the database layer, only in the Next.js
+API routes and Clerk gating). **The owner still has to paste this file into
+the Firebase console** (Realtime Database → Rules) — committing it to the
+repo does not deploy it.
+
+**Follow-ups, not part of this move:**
+- Signed Cloudflare Stream playback URLs — unchanged, still the open item
+  described lower in this file.
+- The dashboard's visual revamp (new shadcn skill pass) is a separate,
+  later project — nothing about how the screens look changed here, only
+  where the data comes from and how fast it arrives.
+
 ## Team activity — 27 Aug
 
 `/dashboard/team/activity` answers the question the boards cannot: *who is
@@ -44,7 +152,7 @@ and it plays before Stream has finished thinking about it. Only when the
 256 KB probe says the browser will refuse the file does anything ask Cloudflare
 for a copy. So an ordinary mp4 costs nothing and behaves exactly as before.
 
-- `supabase/video_previews.sql` — **run this once in the SQL editor.**
+- `video_previews` — no SQL step: the table is created on first write.
   `source_url` is unique: the row is the claim, so the same 2 GB master is
   never encoded twice (Stream bills per minute *stored*).
 - `app/lib/stream-core.ts` — pure: `previewStateFor` (play-native / play-stream
@@ -68,14 +176,13 @@ for a copy. So an ordinary mp4 costs nothing and behaves exactly as before.
 
 ### What the owner has to do
 
-1. Run `supabase/video_previews.sql` in the Supabase SQL editor.
-2. Enable **Stream** on the same Cloudflare account that holds R2
+1. Enable **Stream** on the same Cloudflare account that holds R2
    (dash.cloudflare.com → Stream → it asks once).
-3. Make an API token with **Stream:Edit** on that account, and set two env vars
+2. Make an API token with **Stream:Edit** on that account, and set two env vars
    in Vercel (Production + Preview):
    - `CLOUDFLARE_ACCOUNT_ID`
    - `CLOUDFLARE_STREAM_TOKEN`
-4. Optional but worth it — register the webhook so a ready encode is noticed in
+3. Optional but worth it — register the webhook so a ready encode is noticed in
    seconds rather than within 30 minutes. Copy the URL from
    Settings → Integrations → "Video previews", then:
    ```bash
@@ -193,12 +300,8 @@ Either of these is a complete setup — the handler accepts both.
    the events in** rather than creating a second registration. (Zernio allows
    50 webhooks and de-duplicates none of them: a second one means every event
    delivered twice, forever, with no error anywhere.) Requires
-   `CREDENTIALS_KEY` (already set) and one-off SQL:
-   ```sql
-   -- Supabase SQL editor, idempotent
-   supabase/zernio_webhook.sql       -- creates provider_webhooks
-   supabase/webhook_deliveries.sql   -- the idempotency key + the card's stats
-   ```
+   `CREDENTIALS_KEY` (already set); no SQL step — `provider_webhooks` and
+   `webhook_deliveries` are created on first write.
 2. **By hand.** Add a webhook in the Zernio dashboard pointing at
    `https://app.mdmmarketing.com.au/api/social/webhook` (the card has a **Copy
    webhook URL** button), subscribed to every event in `ZERNIO_WEBHOOK_EVENTS`
@@ -228,7 +331,7 @@ mode pill covering a control — screenshots land in `.mobile-check/`.
 
 The folder tree below created folders and links. This fills them: **every file
 that lands in our storage is copied into Drive**, so someone with nothing but
-Drive has the whole archive. Run `supabase/gdrive_mirror.sql`.
+Drive has the whole archive. No SQL step: `drive_files` is created on first write.
 
 **What goes where**
 
@@ -328,7 +431,7 @@ database.
   moving the root into a Shared Drive later keeps working.
 - **Who connects.** A **super admin only**, from Settings → Integrations →
   Google Drive → Connect. There is one connection for the whole agency, stored
-  encrypted in `drive_connection` (run `supabase/gdrive_connect.sql` first).
+  encrypted in `drive_connection` — no SQL step, the row is created on connect.
 
 ## Items with no shoot — 27 Aug
 
@@ -418,7 +521,7 @@ Verified green: `npm test` (230 passing), `npx tsc --noEmit`, `npm run build`.
 | `notifications` | **Demo data** — email notifications are real, this inbox is a mock |
 | `ai` | Live — real agent (AI SDK 6 + Sonnet 5) over agency data: 10 typed tools, approval-gated edits, per-user chat history at `/dashboard/ai/[chatId]`, per-user behaviour + timezone, dictation |
 | clients → Intake tab | Live — per-client intake forms: templates, editing, step UI, PDF+attachments email, submissions page, realtime progress |
-| clients → Brand tab | Live — brand guidelines PDF scanned once by Haiku into a structured profile (fonts, colours, voice, rules); requires `client_brand.sql` |
+| clients → Brand tab | Live — brand guidelines PDF scanned once by Haiku into a structured profile (fonts, colours, voice, rules); no SQL step, `client_brand` is created on first write |
 | clients → Overview | Live — account-manager assignment card (any time, not intake-gated) |
 
 Pages on sample data carry a visible "Demo data" badge. Keep that honest — do not
@@ -443,18 +546,11 @@ remove a badge until the page actually reads from the database.
 
 ### Database
 
-**`supabase/scan_settings.sql` is NOT yet applied anywhere** (added 1 Aug 2026).
-Until it is run, the scanner settings API returns defaults and mailbox toggles
-do not persist. Run it in the Supabase SQL editor before relying on the Inbox
-scanner tab. It creates `scan_settings`, `scan_mailboxes` and `scan_runs`, and
-widens the `email_ingest_log` status check to allow `needs_review`.
-
-Migrations in `supabase/*.sql`, idempotent, applied by hand in the Supabase SQL
-editor. Confirmed live: `clients`, `projects`, `assets`, `leads`, `team_users`,
-`team_user_clients`, `team_invites`, `notification_log`, `email_ingest_log`,
-`report_settings`. **Verify the `production.sql` and `portal_share.sql` tables
-exist in the production project before deploying** — they were developed last and
-may only be applied locally.
+Firebase Realtime Database, as of 3 Sep 2026 — see the section at the top of
+this file. No SQL step for anything: `scan_settings`, `scan_mailboxes` and
+every other table listed here are created on first write. The historical
+column shapes this section used to point at now live at
+`docs/schema-history/*.sql`, read only by `scripts/gen-db-types.mjs`.
 
 ---
 
@@ -530,7 +626,7 @@ Access was the blocker; it is resolved. The project sits in the `md-media` Verce
 team, not `lxuuryy` (Akmal's). Do not create a project under Akmal's account; that
 is the wrong target and has already been rejected once.
 
-### Env vars — verified against Vercel on 1 Aug 2026
+### Env vars — verified against Vercel on 1 Aug 2026, updated 3 Sep 2026
 
 The Vercel account is the team **`md-media`** and the project is **`content`**
 (production URL `https://www.mdmmarketing.com.au`). Not `lxuuryy`.
@@ -538,7 +634,9 @@ The Vercel account is the team **`md-media`** and the project is **`content`**
 All required vars are now set. Confirmed present, on production + preview:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL   SUPABASE_SERVICE_ROLE_KEY
+NEXT_PUBLIC_FIREBASE_API_KEY   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID   NEXT_PUBLIC_FIREBASE_APP_ID
+NEXT_PUBLIC_FIREBASE_DATABASE_URL
 GMAIL_USER   GMAIL_CLIENT_ID   GMAIL_CLIENT_SECRET   GMAIL_REFRESH_TOKEN
 NEXT_PUBLIC_ASSET_URL
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY   CLERK_SECRET_KEY
@@ -578,7 +676,8 @@ GitHub remote that auto-deploys, so a hardcoded key is a published key.
 
 1. Sync the Inngest app at `https://<domain>/api/inngest`, then add
    `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
-2. Confirm the Supabase migrations above are all applied.
+2. No SQL step — confirm the Firebase rules file has been pasted into the
+   console (see the top section of this file) instead.
 3. Sign in and confirm the super-admin role attaches.
 4. Watch the first scheduled inbox scan — it creates **real leads** from live mail
    the moment it runs.
@@ -601,5 +700,6 @@ GitHub remote that auto-deploys, so a hardcoded key is a published key.
    (Dashboard links now redirect to sign-in rather than 404 — fixed 8 Aug.)
 7. Image optimisation on upload (no resizing/WebP today).
 8. Rotate the two pasted Google client secrets (scanner + sign-in apps).
-9. Migrations pending: `client_brand.sql` (awaiting run). `assistant.sql`,
-   `intake*.sql`, `inbox_connect.sql` are applied.
+9. Superseded by the 3 Sep 2026 move to Firebase Realtime Database: no
+   migrations are pending anywhere — every table, `client_brand` included, is
+   created on first write.
