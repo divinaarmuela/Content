@@ -177,6 +177,102 @@ describe('natural-key upsert/insert', () => {
   })
 })
 
+describe('compare-and-set', () => {
+  it('getForUpdate returns the row and an ETag, and a null row for a missing id', async () => {
+    const a = await table<Client>('clients').getForUpdate('c1')
+    expect(a.row?.name).toBe('Acme')
+    expect(a.etag).toBeTruthy()
+    const b = await table<Client>('clients').getForUpdate('nope')
+    expect(b.row).toBeNull()
+    expect(b.etag).toBe('null_etag')
+  })
+  it('getForUpdate always sees the network, even inside a request cache', async () => {
+    await withRequestCache(async () => {
+      expect((await table<Client>('clients').get('c1'))?.name).toBe('Acme')
+      fake.tree().mdm.tables.clients.c1.name = 'Renamed elsewhere'
+      expect((await table<Client>('clients').getForUpdate('c1')).row?.name).toBe('Renamed elsewhere')
+      // and what it found replaces the cached copy
+      expect((await table<Client>('clients').get('c1'))?.name).toBe('Renamed elsewhere')
+    })
+  })
+  it('compareAndSet writes on a matching etag and stamps updated_at', async () => {
+    const items = table<ContentItem>('content_items')
+    const { row, etag } = await items.getForUpdate('i1')
+    const res = await items.compareAndSet('i1', etag, { ...row!, title: 'CAS' })
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.row.title).toBe('CAS')
+    expect(fake.tree().mdm.tables.content_items.i1.title).toBe('CAS')
+    expect(fake.tree().mdm.tables.content_items.i1.updated_at).not.toBe('2026-01-02T00:00:00Z')
+  })
+  it('compareAndSet loses quietly on a stale etag and hands back the current row', async () => {
+    const items = table<ContentItem>('content_items')
+    const { row, etag } = await items.getForUpdate('i1')
+    // somebody else writes first
+    await items.update('i1', { title: 'Theirs' })
+    const res = await items.compareAndSet('i1', etag, { ...row!, title: 'Mine' })
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.current?.title).toBe('Theirs')
+      expect(res.etag).toBeTruthy()
+      // the handed-back etag is usable: retrying with it wins
+      const again = await items.compareAndSet('i1', res.etag, { ...res.current!, title: 'Mine' })
+      expect(again.ok).toBe(true)
+    }
+    expect(fake.tree().mdm.tables.content_items.i1.title).toBe('Mine')
+  })
+  it('compareAndSet creates a row that does not exist yet, and only one creator wins', async () => {
+    const locks = table('claim_locks')
+    const { row, etag } = await locks.getForUpdate('publish__i1')
+    expect(row).toBeNull()
+    const first = await locks.compareAndSet('publish__i1', etag, { id: 'publish__i1', holder: 'a' } as any)
+    expect(first.ok).toBe(true)
+    const second = await locks.compareAndSet('publish__i1', etag, { id: 'publish__i1', holder: 'b' } as any)
+    expect(second.ok).toBe(false)
+    expect(fake.tree().mdm.tables.claim_locks.publish__i1.holder).toBe('a')
+  })
+  it('compareAndSet refuses to move a unique column onto another row', async () => {
+    await table('team_users').insert({ email: 'b@x.com', name: 'B' } as any)
+    const t = table('team_users')
+    const { row, etag } = await t.getForUpdate('u1')
+    await expect(t.compareAndSet('u1', etag, { ...row!, email: 'b@x.com' } as any))
+      .rejects.toMatchObject({ code: 'unique' })
+  })
+  it('claim runs the mutation on the winning read and reports the loser', async () => {
+    const items = table<ContentItem>('content_items')
+    const won = await items.claim('i1', cur => cur && cur.status === 'draft' ? { ...cur, status: 'approved' } : null)
+    expect(won.claimed).toBe(true)
+    const lost = await items.claim('i1', cur => cur && cur.status === 'draft' ? { ...cur, status: 'approved' } : null)
+    expect(lost.claimed).toBe(false)
+    if (!lost.claimed) expect(lost.current?.status).toBe('approved')
+  })
+  it('claim re-runs the mutation on the fresh row when it loses the race, and exactly one claimant wins', async () => {
+    const items = table<ContentItem>('content_items')
+    let mutations = 0
+    // a rival takes the seat between this claimant's read and its write, once
+    const off = fake.onBeforeWrite('/mdm/tables/content_items/i1', () => {
+      off()
+      fake.tree().mdm.tables.content_items.i1.owner_id = 'rival'
+    })
+    const res = await items.claim('i1', cur => {
+      mutations++
+      return cur && cur.owner_id == null ? { ...cur, owner_id: 'me' } : null
+    })
+    expect(mutations).toBe(2)              // read, lost, re-read, decided again
+    expect(res.claimed).toBe(false)        // the rival holds it — no overwrite
+    expect(fake.tree().mdm.tables.content_items.i1.owner_id).toBe('rival')
+  })
+  it('claim gives up after `attempts` conditional writes rather than spinning', async () => {
+    const items = table<ContentItem>('content_items')
+    let n = 0
+    fake.onBeforeWrite('/mdm/tables/content_items/i1', () => {
+      fake.tree().mdm.tables.content_items.i1.title = `moved ${++n}`
+    })
+    const res = await items.claim('i1', cur => cur ? { ...cur, status: 'approved' } : null, { attempts: 2 })
+    expect(res.claimed).toBe(false)
+    expect(n).toBe(2)
+  })
+})
+
 describe('typed write safety', () => {
   it('rejects an unknown property on a typed table at compile time', () => {
     const check = (t: Table<Client>) => {

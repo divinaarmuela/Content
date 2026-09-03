@@ -8,6 +8,16 @@
  * ".indexOn" 400s, exactly like the real database would; and a PATCH that
  * would overwrite an existing, different, non-null /mdm/uniq/... claim 401s
  * with nothing applied — the atomic half of the unique-claim race guard.
+ *
+ * …and the third: conditional writes. A GET carrying `X-Firebase-ETag: true`
+ * answers with an `ETag` header; a PUT carrying `if-match` is applied only if
+ * the node still hashes to that tag, and otherwise 412s with the node's
+ * current value and a fresh `ETag`. That is the compare-and-set lib/db.ts's
+ * claim paths are built on, so the fake has to be honest about it.
+ *
+ * `onBeforeWrite(path, fn)` runs `fn` immediately before a write at `path`
+ * lands — the seam a test uses to stage a rival's write landing between a
+ * claimant's read and its conditional PUT.
  */
 import { INDEXED_COLUMNS } from '@/lib/db'
 
@@ -38,9 +48,28 @@ function prune(node: Json): Json {
   return node
 }
 
+/** The node's ETag: a stable hash of its JSON. A missing node has a well-known one. */
+const NULL_ETAG = 'null_etag'
+function etagOf(node: Json): string {
+  if (node === null || node === undefined) return NULL_ETAG
+  const s = JSON.stringify(node)
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return 'v' + (h >>> 0).toString(36)
+}
+/** Header lookup that does not care how the caller cased the name. */
+function headerOf(init: any, name: string): string | null {
+  const h = init?.headers
+  if (!h) return null
+  if (typeof h.get === 'function') return h.get(name)
+  for (const [k, v] of Object.entries(h)) if (k.toLowerCase() === name.toLowerCase()) return String(v)
+  return null
+}
+
 export function installFakeRtdb(seed: Json = {}) {
   let tree: Json = structuredClone(seed)
   const calls: { method: string; path: string; query: string }[] = []
+  const hooks: { path: string; fn: () => void | Promise<void> }[] = []
   const real = globalThis.fetch
   process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL = ORIGIN
 
@@ -49,9 +78,17 @@ export function installFakeRtdb(seed: Json = {}) {
     if (url.origin !== ORIGIN) return real(input, init)
     const method = (init.method ?? 'GET').toUpperCase()
     const segs = url.pathname.replace(/\.json$/, '').split('/').filter(Boolean)
-    calls.push({ method, path: '/' + segs.join('/'), query: url.search })
+    const path = '/' + segs.join('/')
+    calls.push({ method, path, query: url.search })
     const body = init.body ? JSON.parse(init.body) : undefined
-    const respond = (v: Json, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } })
+    const respond = (v: Json, status = 200, extra: Record<string, string> = {}) =>
+      new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json', ...extra } })
+
+    if (method !== 'GET') {
+      // the seam a race test writes through: a rival's write lands here,
+      // after this caller read and before its own write is applied
+      for (const h of [...hooks]) if (h.path === path) await h.fn()
+    }
 
     if (method === 'GET') {
       const orderBy = url.searchParams.get('orderBy'), equalTo = url.searchParams.get('equalTo')
@@ -68,9 +105,20 @@ export function installFakeRtdb(seed: Json = {}) {
         if (!Object.keys(node).length) node = null
       }
       if (url.searchParams.get('shallow') === 'true' && node && typeof node === 'object') node = Object.fromEntries(Object.keys(node).map(k => [k, true]))
-      return respond(node)
+      const wantsEtag = (headerOf(init, 'X-Firebase-ETag') ?? '') !== ''
+      return respond(node, 200, wantsEtag ? { ETag: etagOf(node) } : {})
     }
-    if (method === 'PUT') { tree = prune(setAt(tree, segs, body)) ?? {}; return respond(body) }
+    if (method === 'PUT') {
+      const ifMatch = headerOf(init, 'if-match')
+      if (ifMatch != null) {
+        const current = getAt(tree, segs)
+        if (etagOf(current) !== ifMatch) {
+          return respond(current, 412, { ETag: etagOf(current) })
+        }
+      }
+      tree = prune(setAt(tree, segs, body)) ?? {}
+      return respond(body, 200, ifMatch != null ? { ETag: etagOf(getAt(tree, segs)) } : {})
+    }
     if (method === 'PATCH') {
       // The atomic half of the unique-claim guard (database.rules.json
       // ".write" on /mdm/uniq/$table/$field/$key): a losing claimant's
@@ -93,5 +141,15 @@ export function installFakeRtdb(seed: Json = {}) {
     return respond({ error: 'unsupported' }, 400)
   }) as typeof fetch
 
-  return { tree: () => tree, calls: () => calls, restore: () => { globalThis.fetch = real } }
+  return {
+    tree: () => tree,
+    calls: () => calls,
+    restore: () => { globalThis.fetch = real },
+    /** Run `fn` just before any write at `path` lands. Returns an unregister. */
+    onBeforeWrite(path: string, fn: () => void | Promise<void>) {
+      const hook = { path, fn }
+      hooks.push(hook)
+      return () => { const i = hooks.indexOf(hook); if (i >= 0) hooks.splice(i, 1) }
+    },
+  }
 }

@@ -53,8 +53,14 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
   for (const m of sql.matchAll(/create trigger\s+[a-z_]+_updated_at\s+before update on\s+(?:public\.)?([a-z_]+)/gi)) updatedAt.add(m[1])
 }
 
-// tables the code queries but no SQL ever created
-for (const ghost of ['website']) if (!tables.has(ghost)) tables.set(ghost, new Map([['id', { type: 'string', nullable: false }]]))
+// Tables the code queries but no SQL ever created.
+//   website        — the CMS singleton node
+//   claim_locks    — one row per "exactly one winner" rule that spans rows
+//                    (id = `<rule>__<key>`), compare-and-set by lib/db.ts's
+//                    claim(). Never migrated: it holds no history.
+//   booking_seats  — one row per (space, seat) holding the time ranges that
+//                    seat is spoken for, so no-overlap is one atomic write.
+for (const ghost of ['website', 'claim_locks', 'booking_seats']) if (!tables.has(ghost)) tables.set(ghost, new Map([['id', { type: 'string', nullable: false }]]))
 for (const t of tables.values()) if (!t.has('id')) t.set('id', { type: 'string', nullable: false })
 
 function splitTopLevel(s) {

@@ -61,7 +61,52 @@ export interface Table<T extends Row> {
   upsert(row: Partial<T> & { id?: string }, opts?: { onConflict?: keyof T & string }): Promise<T>
   remove(id: string): Promise<void>
   removeWhere(where: (row: T) => boolean): Promise<number>
+
+  /**
+   * Read a row together with its ETag, always from the network.
+   *
+   * The ETag is the row node's current version: hand it back to
+   * compareAndSet and the write lands only if nothing has touched the row in
+   * between. A missing row reads as `{ row: null, etag: NULL_ETAG }`, which
+   * is a claimable state — CAS with it creates the row, and exactly one
+   * creator can win.
+   */
+  getForUpdate(id: string): Promise<{ row: T | null; etag: string }>
+
+  /**
+   * Replace the row, but only if it is still at `etag`.
+   *
+   * Returns `{ ok: true, row }` on success and `{ ok: false, current, etag }`
+   * when somebody wrote first — a lost race is an answer, never a throw.
+   * Stamps `updated_at` on trigger tables and `created_at` on a row it
+   * creates.
+   *
+   * CAS does NOT move unique columns. It owns one row node, while a unique
+   * key lives in a second node under /mdm/uniq, and one conditional PUT
+   * cannot cover both — so a value change there could only be applied
+   * non-atomically, which is the very thing this method exists to remove.
+   * It verifies instead: a unique value in `next` that another row already
+   * claims throws DbError('unique'). Use insert()/update() to change one.
+   */
+  compareAndSet(id: string, etag: string, next: T): Promise<{ ok: true; row: T } | { ok: false; current: T | null; etag: string }>
+
+  /**
+   * Read → decide → conditionally write, retried on a lost race.
+   *
+   * `mutate` receives the row as it really is right now and returns the row
+   * to write, or null to stand down (the seat is taken, the guard fails,
+   * there is nothing to do). On a lost race the row is re-read and `mutate`
+   * runs again on the newer version, up to `attempts` conditional writes.
+   *
+   * This is the shape every "exactly one winner" rule in this codebase takes:
+   * one claimant leaves with `{ claimed: true }`, everyone else with
+   * `{ claimed: false, current }` and the row that beat them.
+   */
+  claim(id: string, mutate: (current: T | null) => T | null, opts?: { attempts?: number }): Promise<{ claimed: true; row: T } | { claimed: false; current: T | null }>
 }
+
+/** The ETag of a node that does not exist. Claiming with it creates the row. */
+export const NULL_ETAG = 'null_etag'
 
 /**
  * Single-column UNIQUE constraints carried over from Postgres.
@@ -159,6 +204,53 @@ export async function rtdbFetch(path: string, init: RequestInit & { query?: Reco
     throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database ${rest.method ?? 'GET'} ${path} failed (${res.status})`)
   }
   return res.json()
+}
+
+/**
+ * GET a node and its ETag.
+ *
+ * The REST API only sends the header when the request asks for it, so the
+ * ask is the whole difference between this and rtdbFetch.
+ */
+async function rtdbGetWithEtag(path: string): Promise<{ value: any; etag: string }> {
+  const url = `${rtdbUrl()}${path}.json`
+  let res: Response
+  try {
+    res = await fetch(url, { headers: { 'content-type': 'application/json', 'X-Firebase-ETag': 'true' }, cache: 'no-store' })
+  } catch (e) {
+    throw new DbError('network', `Database unreachable: ${(e as Error).message}`)
+  }
+  if (!res.ok) throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database GET ${path} failed (${res.status})`)
+  return { value: await res.json(), etag: res.headers.get('ETag') ?? NULL_ETAG }
+}
+
+/**
+ * PUT a node only if it is still at `etag`.
+ *
+ * 412 is not a failure: it is the database answering "somebody else got here
+ * first", with the value that beat us and the tag to retry against. Every
+ * other non-2xx is still an error.
+ */
+async function rtdbPutIfMatch(
+  path: string, etag: string, body: unknown,
+): Promise<{ ok: true } | { ok: false; current: any; etag: string }> {
+  const url = `${rtdbUrl()}${path}.json`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'if-match': etag },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    })
+  } catch (e) {
+    throw new DbError('network', `Database unreachable: ${(e as Error).message}`)
+  }
+  if (res.status === 412) {
+    return { ok: false, current: await res.json().catch(() => null), etag: res.headers.get('ETag') ?? NULL_ETAG }
+  }
+  if (!res.ok) throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database PUT ${path} failed (${res.status})`)
+  return { ok: true }
 }
 
 // ---- request cache ----------------------------------------------------------
@@ -364,6 +456,50 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
       const body: Record<string, unknown> = { [`tables/${name}/${id}`]: null, ...uniqClears(current) }
       await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body), table: name })
       invalidate(name)
+    },
+    async getForUpdate(id) {
+      const { value, etag } = await rtdbGetWithEtag(`${base}/${id}`)
+      // like get({ fresh: true }): what the network just said replaces both
+      // the row's own cache entry and any whole-table copy this request holds
+      const store = als.getStore()
+      if (store) { store.delete(base); store.set(`${base}/${id}`, Promise.resolve(value)) }
+      return { row: value ? normalise<T>(name, id, value) : null, etag }
+    },
+    async compareAndSet(id, etag, next) {
+      // CAS cannot move a unique key (see the interface doc) — but it can and
+      // must refuse to write a value another row already owns, so a misuse
+      // fails loudly here instead of quietly forking the key.
+      for (const col of uniques) {
+        const v = (next as any)[col]
+        if (v == null) continue
+        const owner = await cachedGet(`${ROOT}/uniq/${name}/${col}/${encodeKey(String(v))}`)
+        if (owner && owner !== id) throw new DbError('unique', `${name}.${col} already exists`)
+      }
+      const now = new Date().toISOString()
+      const row: any = { ...(next as any), id }
+      const hasCreatedAt = (TABLE_COLUMNS[name] as readonly string[]).includes('created_at')
+      if (hasCreatedAt && row.created_at == null) row.created_at = now
+      if (UPDATED_AT_TABLES.has(name)) row.updated_at = now
+      const body = stripNulls(row)
+      const res = await rtdbPutIfMatch(`${base}/${id}`, etag, body)
+      invalidate(name)
+      if (res.ok) return { ok: true, row: normalise<T>(name, id, body) }
+      return { ok: false, current: res.current ? normalise<T>(name, id, res.current) : null, etag: res.etag }
+    },
+    async claim(id, mutate, opts) {
+      const attempts = Math.max(1, opts?.attempts ?? 3)
+      let { row: current, etag } = await t.getForUpdate(id)
+      for (let i = 0; i < attempts; i++) {
+        const next = mutate(current)
+        if (next === null) return { claimed: false, current }
+        const res = await t.compareAndSet(id, etag, next)
+        if (res.ok) return { claimed: true, row: res.row }
+        // the 412 carried the row that beat us and a usable tag, so the retry
+        // decides again on real current state without a second read
+        current = res.current
+        etag = res.etag
+      }
+      return { claimed: false, current }
     },
     async removeWhere(where) {
       const rows = (await readAll()).filter(where)

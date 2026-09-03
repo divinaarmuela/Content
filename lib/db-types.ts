@@ -19,9 +19,11 @@ export type TableName =
   | 'booking_availability'
   | 'booking_blackouts'
   | 'booking_resources'
+  | 'booking_seats'
   | 'booking_services'
   | 'bookings'
   | 'calendar_accounts'
+  | 'claim_locks'
   | 'client_agreements'
   | 'client_brand'
   | 'client_contacts'
@@ -261,6 +263,10 @@ export interface BookingResource {
   space_id: string | null
 }
 
+export interface BookingSeat {
+  id: string
+}
+
 export interface BookingService {
   id: string
   created_at: string
@@ -312,6 +318,10 @@ export interface CalendarAccount {
   connected_at: string | null
   connected_by: string | null
   created_at: string
+  id: string
+}
+
+export interface ClaimLock {
   id: string
 }
 
@@ -974,9 +984,11 @@ export const TABLE_COLUMNS = {
   booking_availability: ['id', 'resource_id', 'weekday', 'start_min', 'end_min'],
   booking_blackouts: ['id', 'resource_id', 'day', 'reason'],
   booking_resources: ['id', 'created_at', 'label', 'email', 'timezone', 'active', 'space_id'],
+  booking_seats: ['id'],
   booking_services: ['id', 'created_at', 'name', 'slug', 'description', 'duration_min', 'price_cents', 'currency', 'active', 'sort_order', 'policy_text', 'resource_id', 'lead_time_min', 'horizon_days', 'requires_payment', 'image_url', 'location', 'category', 'capacity'],
   bookings: ['id', 'created_at', 'service_id', 'resource_id', 'start_at', 'end_at', 'customer_name', 'customer_email', 'customer_phone', 'notes', 'status', 'payment_status', 'payment_ref', 'amount_cents', 'policy_agreed_at', 'checkout_ref', 'public_ref', 'seat_no', 'space_id'],
   calendar_accounts: ['email', 'refresh_token_encrypted', 'enabled', 'connected_at', 'connected_by', 'created_at', 'id'],
+  claim_locks: ['id'],
   client_agreements: ['id', 'created_at', 'updated_at', 'client_id', 'deliverable_lines', 'services', 'notes', 'updated_by', 'start_date'],
   client_brand: ['client_id', 'updated_at', 'updated_by', 'profile', 'docs', 'scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at', 'id'],
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
@@ -1041,9 +1053,11 @@ export const NULLABLE_COLUMNS = {
   booking_availability: [],
   booking_blackouts: ['reason'],
   booking_resources: ['email', 'space_id'],
+  booking_seats: [],
   booking_services: ['description', 'policy_text', 'resource_id', 'lead_time_min', 'horizon_days', 'requires_payment', 'image_url', 'location', 'category', 'capacity'],
   bookings: ['service_id', 'customer_phone', 'notes', 'payment_ref', 'policy_agreed_at', 'checkout_ref', 'public_ref', 'seat_no', 'space_id'],
   calendar_accounts: ['refresh_token_encrypted', 'connected_at', 'connected_by'],
+  claim_locks: [],
   client_agreements: ['notes', 'updated_by', 'start_date'],
   client_brand: ['scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at'],
   client_contacts: [],

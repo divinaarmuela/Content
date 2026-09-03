@@ -6,7 +6,9 @@
 // pins the shape.
 export const SKIPPED = ['scan_runs', 'asana_events']
 
-// Every TableName from lib/db-types.ts except SKIPPED.
+// Every TableName from lib/db-types.ts except SKIPPED — and except the lock
+// tables (claim_locks, booking_seats), which hold live claims rather than
+// history and have no Postgres counterpart to copy.
 export const TABLES = [
   'agency_credentials', 'approvals', 'asana_project_map', 'asana_tasks', 'asana_webhooks',
   'asset_clicks', 'asset_versions', 'assets', 'assistant_chats', 'assistant_prefs',
