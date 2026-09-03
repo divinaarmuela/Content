@@ -103,8 +103,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         try {
           await table<TeamUser>('team_users').remove(id)
         } catch {
-          // something we don't know about still points at them (comments,
-          // approvals…) — keep the record
+          // Vestigial on a Realtime Database: nothing there refuses a delete
+          // for a reference, so only a network failure now reaches this. Kept
+          // because the answer is still the right one — if the row survives,
+          // the honest thing to tell an admin is to deactivate instead.
+          // (Under Postgres this was an FK violation: comments, approvals…)
           return NextResponse.json(
             { error: 'This person has work history attached. Deactivate them instead.' },
             { status: 409 },
@@ -114,7 +117,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         onTeamChanged('member removed')
         return NextResponse.json({ ok: true })
       }
-      const invite = await table<TeamInvite>('team_invites').get(id)
+      // fresh: this is a claim on the invite, so it must not be answered from
+      // a row this request already read
+      const invite = await table<TeamInvite>('team_invites').get(id, { fresh: true })
       if (!invite || invite.status !== 'pending') {
         return NextResponse.json({ error: 'Pending invite not found' }, { status: 404 })
       }

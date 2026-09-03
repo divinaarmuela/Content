@@ -82,7 +82,7 @@ export async function PATCH(req: Request) {
     }
 
     const row = await table('team_users').update(me.id, patch)
-    if (!row) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    if (!row) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
 
     // the response is a deliberate projection — the same columns the old
     // select named, so the browser sees no more of the row than it did

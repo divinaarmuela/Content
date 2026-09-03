@@ -17,7 +17,7 @@ export async function GET() {
   try {
     await requireRole('account_manager')
     const data = await table<ReportSetting>('report_settings').get('leads_report')
-    if (!data) return NextResponse.json({ error: 'Run supabase/report_settings.sql first' }, { status: 503 })
+    if (!data) return NextResponse.json({ error: 'Report settings are not set up yet.' }, { status: 503 })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -54,7 +54,7 @@ export async function PUT(req: Request) {
     if ('data_from' in body) patch.data_from = body.data_from || null
 
     const data = await table('report_settings').update('leads_report', patch)
-    if (!data) return NextResponse.json({ error: 'Run supabase/report_settings.sql first' }, { status: 503 })
+    if (!data) return NextResponse.json({ error: 'Report settings are not set up yet.' }, { status: 503 })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

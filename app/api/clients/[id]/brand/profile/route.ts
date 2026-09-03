@@ -43,7 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // the row must still be at the revision the caller edited from, so it is
     // re-read and checked here. rev 0 means "never saved" — no profile at all.
-    const live = await table<Client>('clients').get(id)
+    const live = await table<Client>('clients').get(id, { fresh: true })
     const liveRev = (live?.brand_profile as { rev?: unknown } | null)?.rev
     const stillTheirs = seen > 0
       ? String(liveRev ?? '') === String(seen)

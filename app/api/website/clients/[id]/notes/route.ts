@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { ClientNote } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
-import { explainDbError } from '@/app/lib/db-errors'
 
 /**
  * Notes on a client, each stamped with who wrote it and when.
@@ -23,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         by: { client_id: id }, orderBy: [['created_at', 'desc']],
       })
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
 
     // Filtered HERE, not in the UI. A note marked private or admins-only that
@@ -65,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         author_name: me.name || me.email,
       })
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
@@ -85,7 +84,7 @@ export async function DELETE(req: Request) {
     try {
       await table<ClientNote>('client_notes').remove(noteId)
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json({ ok: true })
   } catch (e) {

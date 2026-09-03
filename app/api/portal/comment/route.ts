@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       } catch {
         // the thread could not be written — say so rather than pretending the
         // comment landed
-        return NextResponse.json({ error: 'Comments are not switched on yet — run supabase/portal_comments.sql' }, { status: 503 })
+        return NextResponse.json({ error: 'Comments are not set up yet — ask your account manager.' }, { status: 503 })
       }
       await logActivity({
         actor, clientId: client.id,

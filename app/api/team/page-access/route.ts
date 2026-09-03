@@ -23,13 +23,19 @@ const access = () => table<UserPageAccess & { hidden?: boolean }>('user_page_acc
 /**
  * Replace one person's GRANT rows or their HIDE rows, never both.
  *
- * The row id is (team_user_id, href), so a hide and a grant for the same page
- * are the same row — which is why the two sets are written one at a time and
- * the other set is left exactly as it was.
+ * The row id is (team_user_id, href), so a hide and a grant for the SAME page
+ * would be the same row. Postgres had one row per (person, href) too, and the
+ * two sets were kept apart by writing one at a time — so a page the person has
+ * muted for themselves is skipped when grants are replaced, and vice versa.
+ * Silently flipping their hide into a grant is the bug that would look like
+ * "Settings keeps un-hiding Leads for me".
  */
 async function replaceRows(teamUserId: string, hidden: boolean, hrefs: string[], by: string) {
+  const mine = await access().list({ by: { team_user_id: teamUserId }, fresh: true })
+  const otherSet = new Set(mine.filter(r => Boolean(r.hidden) !== hidden).map(r => r.href))
   await access().removeWhere(r => r.team_user_id === teamUserId && Boolean(r.hidden) === hidden)
   for (const href of hrefs) {
+    if (otherSet.has(href)) continue
     await table('user_page_access').upsert({
       id: `${teamUserId}__${encodeKey(href)}`,
       team_user_id: teamUserId, href, hidden, granted_by: by,

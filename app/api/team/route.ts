@@ -106,6 +106,7 @@ export async function POST(req: Request) {
         by: { status: 'pending' },
         where: r => (r.email ?? '').toLowerCase() === email,
         limit: 1,
+        fresh: true,
       }))[0]
       if (pending) {
         return NextResponse.json({ error: 'A pending invite already exists for this email' }, { status: 409 })
@@ -135,8 +136,13 @@ export async function POST(req: Request) {
       // nothing to attach page access or client assignments to until they
       // happen to log in, which is the wrong way round — the admin is setting
       // them up precisely because they have not arrived yet.
+      //
+      // INSERT, not upsert: an address that is already on the team belongs to
+      // somebody, and writing the invite's name/role/timezone over their row
+      // would quietly demote or rename a colleague. `team_users.email` is a
+      // unique key, so a second insert loses — which is the answer we want.
       try {
-        await users.upsert({
+        await table('team_users').insert({
           email,
           name: String(body.name ?? '').trim() || email,
           role,
@@ -144,7 +150,7 @@ export async function POST(req: Request) {
           timezone: body.timezone || 'Australia/Melbourne',
           client_id: role === 'client' ? (body.client_id ?? null) : null,
           active_status: true,
-        }, { onConflict: 'email' })
+        })
       } catch (e) {
         // somebody claimed the address between the check above and this write
         if (e instanceof DbError && e.code === 'unique') {

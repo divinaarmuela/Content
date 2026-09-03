@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { AgencyCredential } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
-import { explainDbError } from '@/app/lib/db-errors'
 import { encryptSecret, decryptSecret, credentialsKeyConfigured } from '@/app/lib/secret-box'
 
 /**
@@ -36,7 +35,7 @@ export async function GET() {
     try {
       rows = await table<AgencyCredential>('agency_credentials').list({ orderBy: [['platform', 'asc']] })
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json(rows.map(r => redact(listShape(r))))
   } catch (e) {
@@ -60,7 +59,7 @@ export async function POST(req: Request) {
       try {
         data = await table<AgencyCredential>('agency_credentials').get(String(body.credentialId))
       } catch (e) {
-        throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+        throw new Error((e as Error).message)
       }
       if (!data?.secret_cipher) return NextResponse.json({ secret: '' })
       try {
@@ -97,7 +96,7 @@ export async function POST(req: Request) {
         updated_by_name: me.name || me.email,
       }) as unknown as AgencyCredential
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json(redact(listShape(created)), { status: 201 })
   } catch (e) {
@@ -136,7 +135,7 @@ export async function PATCH(req: Request) {
     try {
       updated = await table('agency_credentials').update(String(body.id), patch) as unknown as AgencyCredential | null
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     if (!updated) return NextResponse.json({ error: 'Credential not found' }, { status: 404 })
     return NextResponse.json(redact(listShape(updated)))
@@ -157,7 +156,7 @@ export async function DELETE(req: Request) {
     try {
       await table<AgencyCredential>('agency_credentials').remove(credentialId)
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json({ ok: true })
   } catch (e) {

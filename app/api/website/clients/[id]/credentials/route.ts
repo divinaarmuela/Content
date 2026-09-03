@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { ClientCredential } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
-import { explainDbError } from '@/app/lib/db-errors'
 import { encryptSecret, decryptSecret, credentialsKeyConfigured } from '@/app/lib/secret-box'
 
 /**
@@ -45,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         by: { client_id: id }, orderBy: [['platform', 'asc']],
       })
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json(rows.map(r => redact(listShape(r))))
   } catch (e) {
@@ -74,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       try {
         data = await table<ClientCredential>('client_credentials').get(String(body.credentialId))
       } catch (e) {
-        throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+        throw new Error((e as Error).message)
       }
       if (!data?.secret_cipher) return NextResponse.json({ secret: '' })
 
@@ -116,7 +115,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         updated_by_name: me.name || me.email,
       }) as unknown as ClientCredential
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json(redact(listShape(created)), { status: 201 })
   } catch (e) {
@@ -156,7 +155,7 @@ export async function PATCH(req: Request) {
     try {
       updated = await table('client_credentials').update(String(body.id), patch) as unknown as ClientCredential | null
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     if (!updated) return NextResponse.json({ error: 'Credential not found' }, { status: 404 })
     return NextResponse.json(redact(listShape(updated)))
@@ -177,7 +176,7 @@ export async function DELETE(req: Request) {
     try {
       await table<ClientCredential>('client_credentials').remove(credentialId)
     } catch (e) {
-      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      throw new Error((e as Error).message)
     }
     return NextResponse.json({ ok: true })
   } catch (e) {

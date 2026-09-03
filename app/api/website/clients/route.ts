@@ -31,17 +31,24 @@ export async function GET(req: Request) {
   }
 
   if (scoped !== null && scoped.length === 0) return NextResponse.json([])
-  const data = await table<Client>('clients').list({
-    where: scoped === null ? undefined : c => scoped.includes(c.id),
-    orderBy: [['created_at', 'desc']],
-  })
 
-  // Who runs each client, attached here rather than fetched per row: the list
-  // is the page where "who owns this?" is actually asked, and N requests for
-  // N clients would be the slowest possible way to answer it.
-  const links = await table<TeamUserClient>('team_user_clients').list()
-  const assignments = await attachOne(links, 'team_user_id', 'team_users',
-    ['id', 'name', 'email', 'role', 'active_status'])
+  let data: Client[]
+  let assignments: (TeamUserClient & { team_users: Record<string, unknown> | null })[]
+  try {
+    data = await table<Client>('clients').list({
+      where: scoped === null ? undefined : c => scoped.includes(c.id),
+      orderBy: [['created_at', 'desc']],
+    })
+
+    // Who runs each client, attached here rather than fetched per row: the
+    // list is the page where "who owns this?" is actually asked, and N
+    // requests for N clients would be the slowest possible way to answer it.
+    const links = await table<TeamUserClient>('team_user_clients').list()
+    assignments = await attachOne(links, 'team_user_id', 'team_users',
+      ['id', 'name', 'email', 'role', 'active_status'])
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
 
   const byClient = new Map<string, { id: string; name: string; email: string }[]>()
   for (const row of assignments) {

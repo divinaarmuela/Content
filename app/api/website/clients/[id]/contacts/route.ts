@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { ClientContact } from '@/lib/db-types'
 import { guard } from '@/app/lib/authz'
-import { explainDbError } from '@/app/lib/db-errors'
 
 /**
  * One primary contact per client.
@@ -12,7 +11,8 @@ import { explainDbError } from '@/app/lib/db-errors'
  * refusal keeps the words the index's translation used to produce.
  */
 async function primaryTaken(clientId: string, exceptId?: string): Promise<boolean> {
-  const rows = await table<ClientContact>('client_contacts').list({ by: { client_id: clientId } })
+  const rows = await table<ClientContact>('client_contacts')
+    .list({ by: { client_id: clientId }, fresh: true })
   return rows.some(c => c.is_primary === true && c.id !== exceptId)
 }
 
@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(data)
   } catch (e) {
-    return NextResponse.json({ error: explainDbError((e as Error).message, 'client_records.sql') }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   })
 }
@@ -66,7 +66,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
-    return NextResponse.json({ error: explainDbError((e as Error).message, 'client_records.sql') }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   })
 }
@@ -98,7 +98,7 @@ export async function PATCH(req: Request) {
     const data = await table('client_contacts').update(String(body.id), patch)
     return NextResponse.json(data)
   } catch (e) {
-    return NextResponse.json({ error: explainDbError((e as Error).message, 'client_records.sql') }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   })
 }
@@ -115,7 +115,7 @@ export async function DELETE(req: Request) {
   try {
     await table<ClientContact>('client_contacts').remove(contactId)
   } catch (e) {
-    return NextResponse.json({ error: explainDbError((e as Error).message, 'client_records.sql') }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
   })

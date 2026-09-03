@@ -45,9 +45,11 @@ beforeEach(() => {
   notify.mockClear()
   fake = seedDb({
     clients: [{ id: 'client-1', name: 'ZZ TEST', share_token: TOKEN }] as unknown as Row[],
-    content_items: [{
-      id: 'item-1', client_id: 'client-1', title: 'Winter shoot', status: 'client_review',
-    }] as unknown as Row[],
+    content_items: [
+      { id: 'item-1', client_id: 'client-1', title: 'Winter shoot', status: 'client_review' },
+      // somebody else's work, in the same table
+      { id: 'item-2', client_id: 'client-2', title: 'Their shoot', status: 'client_review' },
+    ] as unknown as Row[],
     team_users: [{
       id: 'portal-1', email: 'portal+client-1@mdmmarketing.com.au',
       name: 'ZZ TEST (client portal)', role: 'client', active_status: false,
@@ -119,6 +121,14 @@ describe('POST /api/portal/act — approving a plan with a note', () => {
   })
 
   it('an item belonging to another client is not reachable with this token', async () => {
+    const { status } = await post({
+      token: TOKEN, item_id: 'item-2', action: 'approve',
+    })
+    expect(status).toBe(404)
+    expect(performTransition).not.toHaveBeenCalled()
+  })
+
+  it('an item that does not exist at all is a 404 too', async () => {
     const { status } = await post({
       token: TOKEN, item_id: 'no-such-item', action: 'approve',
     })

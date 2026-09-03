@@ -81,7 +81,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // the row's key IS (team_user_id, client_id), so a double-click finds the
     // row already there and leaves the original assignment date alone
     const links = table<TeamUserClient>('team_user_clients')
-    const already = (await links.list({ by: { client_id: id }, where: r => r.team_user_id === teamUserId }))[0]
+    const already = (await links.list({
+      by: { client_id: id }, where: r => r.team_user_id === teamUserId, fresh: true,
+    }))[0]
     if (!already) {
       await table('team_user_clients').insert({
         team_user_id: teamUserId, client_id: id, assigned_by: admin.id,

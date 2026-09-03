@@ -21,9 +21,11 @@ export async function POST(req: Request) {
   const name = (lead.biz || `${lead.fname} ${lead.lname}`).trim()
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
-  // dedupe: same slug OR same contact email → point at the existing client
+  // dedupe: same slug OR same contact email → point at the existing client.
+  // A lead with no email must not match every client that has none either:
+  // Postgres compared null to null as unknown, so the clause never fired.
   const existing = (await table<Client>('clients').list({
-    where: c => c.slug === slug || c.email === lead.email, limit: 1,
+    where: c => c.slug === slug || (!!lead.email && c.email === lead.email), limit: 1,
   }))[0]
   if (existing) {
     return NextResponse.json(
