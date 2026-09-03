@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { PublishJob } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
+import { mayPublish } from '../../../lib/identity-core'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
 import { inngest } from '../../../inngest/client'
 import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-core'
@@ -18,6 +19,16 @@ export async function POST(req: Request) {
   return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
+    // the ladder is not the gate here: an EDITOR sits ABOVE a scheduler in
+    // TEAM_ROLES, so requireRole('scheduler') admits them — and this is the
+    // ad-hoc door onto a client's real account, the one place that must never
+    // be open to somebody who may only draft
+    if (!mayPublish(user.role)) {
+      return NextResponse.json(
+        { error: 'Posting to a channel is for schedulers and account managers' },
+        { status: 403 },
+      )
+    }
     const body = await req.json()
 
     const targets = (Array.isArray(body.targets) ? body.targets : [])
@@ -95,7 +106,13 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   return withRequestCache(async () => {
   try {
-    await requireRole('scheduler')
+    const user = await requireRole('scheduler')
+    if (!mayPublish(user.role)) {
+      return NextResponse.json(
+        { error: 'Seeing what went out is for schedulers and account managers' },
+        { status: 403 },
+      )
+    }
     const url = new URL(req.url)
     const clientId = url.searchParams.get('clientId')
 

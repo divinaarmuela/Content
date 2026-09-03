@@ -54,7 +54,7 @@ export async function DELETE(req: Request) {
       const note = await table<ScheduleNote>('schedule_notes').get(id)
       if (!note) return NextResponse.json({ error: 'That note is already gone' }, { status: 404 })
       await assertClientAccess(user, note.client_id)
-      await removeNote(id)
+      await removeNote(user, id)
       return NextResponse.json({ ok: true })
     } catch (e) {
       return scheduleErrorResponse(e)

@@ -17,7 +17,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const body = await req.json().catch(() => ({}))
       const at = String(body.at ?? body.scheduled_for ?? '')
       const moved = await reschedule(user, id, at)
-      if (!moved.ok) return NextResponse.json({ error: moved.error }, { status: 409 })
+      if (!moved.ok) {
+        return NextResponse.json({ error: moved.error }, { status: moved.status ?? 409 })
+      }
       return NextResponse.json({ post: moved.post, mode: moved.mode })
     } catch (e) {
       return scheduleErrorResponse(e)

@@ -180,11 +180,46 @@ async function versionsOf(itemId: string): Promise<AssetVersion[]> {
   return table<AssetVersion>('asset_versions').list({ where: v => v.item_id === itemId })
 }
 
-async function jobsOf(post: { item_id: string; publish_job_ids?: unknown }): Promise<PublishJobRow[]> {
+/**
+ * THIS post's jobs -- the ones it queued itself, named in `publish_job_ids`.
+ *
+ * Never "every job on the item". An item can carry a second post after the
+ * first was cancelled (cancelling releases the one-post-per-item lock), and
+ * matching by item made the old post's cancelled job speak for the new one:
+ * `mirrorStatus` reads "every job cancelled" and marks a brand-new draft
+ * `cancelled` without anybody cancelling it. The id list is written on every
+ * queue and emptied whenever a hand-over is rolled back, so it is the honest
+ * answer to "what is out there for this post".
+ */
+async function jobsOf(post: { publish_job_ids?: unknown }): Promise<PublishJobRow[]> {
   const ids = asArray<string>(post.publish_job_ids).map(String)
-  return jobs().list({
-    where: j => j.content_item_id === post.item_id || ids.includes(j.id),
-  })
+  if (ids.length === 0) return []
+  return jobs().list({ where: j => ids.includes(j.id) })
+}
+
+/**
+ * The status a post really wears, from the item, its own jobs, and two facts
+ * `mirrorStatus` cannot see because they are about THIS post rather than the
+ * item's approval:
+ *
+ *   • A post nobody has SENT is a draft, whatever the item's gate says. The
+ *     gate is shared with whatever was sent before — cancel an approved post,
+ *     start a new one on the same item, and the item still reads 'approved'.
+ *     Mirroring that onto the new composition would hand it an approval
+ *     nobody gave for these words and these pictures, and let it be booked in
+ *     without anybody looking at it.
+ *   • A post somebody CANCELLED stays cancelled. It has been taken off the
+ *     calendar by a person; an approval arriving on the item afterwards must
+ *     not raise it from the dead.
+ */
+function statusOf(
+  item: ContentItem | null,
+  post: { status?: string | null; sent_at?: string | null },
+  ownJobs: readonly PublishJobRow[],
+): SocialPostStatus {
+  if (post.status === 'cancelled') return 'cancelled'
+  if (!post.sent_at && ownJobs.length === 0) return 'draft'
+  return mirrorStatus(item, post, ownJobs)
 }
 
 async function zoneOf(clientId: string, given?: string | null): Promise<string> {
@@ -470,7 +505,7 @@ export async function updatePost(
     }
   }
 
-  const next = mirrorStatus({ ...item, posting_approval_state: state }, post, [])
+  const next = statusOf({ ...item, posting_approval_state: state } as ContentItem, post, [])
   const patch: Partial<SocialPost> = {
     slides: slides as unknown as SocialPost['slides'],
     caption,
@@ -531,18 +566,33 @@ export async function sendForApproval(
     client_too: opts.client_too,
   })
 
+  // ONLY a post still sitting where this person saw it. The condition used to
+  // be "anything that is not already pending", which let a post somebody else
+  // had just BOOKED IN be dragged back to pending -- item and post both saying
+  // "waiting on approval" over a job the provider was already holding, which
+  // is the one outcome this whole gate exists to prevent.
   const stamp = nowIso()
   const saved = await posts().claim(id, cur =>
-    cur && cur.status !== 'pending'
+    cur && cur.status === post.status && cur.status !== 'pending'
       ? {
         ...cur, status: 'pending', sent_at: stamp,
         approval_mode: 'client', updated_at: stamp,
       } as SocialPost
       : null)
+  if (!saved.claimed) {
+    // a second click landing on an already-pending post is not an error: the
+    // ask has been made, which is what the caller wanted
+    const live = saved.current ?? await posts().get(id)
+    if (live?.status !== 'pending') {
+      throw new AuthzError(
+        'This post moved on while you were sending it -- refresh to see where it got to', 409,
+      )
+    }
+    announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'sent' })
+    return shape(live)
+  }
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'sent' })
-  // a second click landing on an already-pending post is not an error: the
-  // ask has been made, which is what the caller wanted
-  return saved.claimed ? shape(saved.row) : shape(saved.current ?? (await posts().get(id))!)
+  return shape(saved.row)
 }
 
 /**
@@ -597,7 +647,7 @@ export async function scheduleWithoutApproval(
   })
 
   const stamp = nowIso()
-  await posts().claim(id, cur =>
+  const cleared = await posts().claim(id, cur =>
     cur && cur.status === post.status
       ? {
         ...cur, status: 'approved', sent_at: cur.sent_at ?? stamp,
@@ -605,6 +655,14 @@ export async function scheduleWithoutApproval(
         updated_at: stamp,
       } as SocialPost
       : null)
+  // losing here and carrying on would leave a post that WAS cleared by a
+  // person with `approval_mode` and `approved_by` unset, and the whole point
+  // of those two columns is that nobody has to guess later who cleared it
+  if (!cleared.claimed) {
+    throw new AuthzError(
+      'Somebody else was already dealing with this post -- refresh to see where it got to', 409,
+    )
+  }
 
   return schedulePost(user, id)
 }
@@ -624,7 +682,7 @@ export async function syncFromItem(itemId: string): Promise<void> {
 
   for (const row of rows) {
     if (row.status === 'cancelled') continue
-    const next = mirrorStatus(item, row, await jobsOf(row))
+    const next = statusOf(item, row, await jobsOf(row))
     if (next === row.status) continue
     const stamp = nowIso()
     await posts().claim(row.id, cur =>
@@ -793,7 +851,8 @@ async function liveJobsOf(post: PlannedPost): Promise<PublishJobRow[]> {
 
 export type RescheduleResult =
   | { ok: true; post: PlannedPost; mode: 'move' | 'requeue' }
-  | { ok: false; error: string }
+  /** `status` is the code the route should answer with; 409 unless it says */
+  | { ok: false; error: string; status?: number }
 
 /**
  * Move a post to another time.
@@ -807,7 +866,13 @@ export type RescheduleResult =
 export async function reschedule(user: TeamUser, id: string, iso: string): Promise<RescheduleResult> {
   const { post, item } = await loadPostForUser(user, id)
   const when = new Date(String(iso)).getTime()
-  if (!Number.isFinite(when)) return { ok: false, error: 'That is not a time we can read — pick one from the calendar' }
+  if (!Number.isFinite(when)) {
+    // nothing is in conflict here: what arrived simply is not a time
+    return {
+      ok: false, status: 400,
+      error: 'That is not a time we can read — pick one from the calendar',
+    }
+  }
   if (when <= Date.now()) return { ok: false, error: 'That time has already gone — pick a later one' }
   const at = new Date(when).toISOString()
 
@@ -852,16 +917,27 @@ export async function reschedule(user: TeamUser, id: string, iso: string): Promi
     return { ok: false, error: queued.error }
   }
 
-  const saved = await posts().update(id, {
-    scheduled_for: at,
-    publish_job_ids: [queued.id] as unknown as SocialPost['publish_job_ids'],
-    status: 'scheduled',
-    updated_at: nowIso(),
-  })
+  // the same one-winner rule the cancel step used: a `cancelPost` landing
+  // between the queue and this write must not be overwritten by 'scheduled'
+  const saved = await posts().claim(id, cur =>
+    cur && cur.status === 'scheduled'
+      ? {
+        ...cur,
+        scheduled_for: at,
+        publish_job_ids: [queued.id],
+        updated_at: nowIso(),
+      } as SocialPost
+      : null)
+  if (!saved.claimed) {
+    return {
+      ok: false,
+      error: 'This post changed while it was being moved — refresh to see where it got to',
+    }
+  }
   await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
     .catch(e => console.error('reschedule dispatch failed:', (e as Error).message))
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'moved' })
-  return { ok: true, post: shape(saved ?? (await posts().get(id))!), mode: 'requeue' }
+  return { ok: true, post: shape(saved.row), mode: 'requeue' }
 }
 
 /**
@@ -933,11 +1009,11 @@ export async function listPosts(input: {
   return inRange.map(row => {
     const post = shape(row)
     const item = itemById.get(post.item_id) ?? null
-    const mine = allJobs.filter(j =>
-      String(j.content_item_id) === post.item_id || post.publish_job_ids.includes(j.id))
+    // this post's own jobs only -- see jobsOf
+    const mine = allJobs.filter(j => post.publish_job_ids.includes(j.id))
     return {
       ...post,
-      live_status: mirrorStatus(item, post, mine),
+      live_status: statusOf(item, post, mine),
       item_title: (item?.title as string | null) ?? null,
       block_reason: publishBlockReason(item?.posting_approval_state),
     }
@@ -971,9 +1047,25 @@ export async function addNote(
   return row
 }
 
-export async function removeNote(id: string): Promise<void> {
+/**
+ * Take a note off the calendar.
+ *
+ * The person who wrote it, or an account manager / super admin. A note is
+ * often the reason something is NOT being posted ("client is away until the
+ * 19th, hold everything"), so anybody who can see the calendar being able to
+ * delete anybody's is one mis-click away from losing the only record of a
+ * decision.
+ */
+export async function removeNote(user: TeamUser, id: string): Promise<void> {
   const row = await notes().get(id)
   if (!row) throw new AuthzError('That note is already gone', 404)
+  const mine = row.created_by === user.id
+  const senior = user.role === 'account_manager' || user.role === 'super_admin'
+  if (!mine && !senior) {
+    throw new AuthzError(
+      'Only the person who wrote this note, or an account manager, can remove it', 403,
+    )
+  }
   await notes().remove(id)
   announceAfter('schedule', { client_id: row.client_id, note_id: id, kind: 'note' })
 }

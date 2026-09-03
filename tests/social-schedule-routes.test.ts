@@ -63,6 +63,7 @@ const notesRoute = await import('../app/api/social/schedule/notes/route')
 const suggested = await import('../app/api/social/schedule/suggested/route')
 const approval = await import('../app/api/production/items/[id]/posting-approval/route')
 const adhoc = await import('../app/api/social/publish/route')
+const lib = await import('../app/lib/social-schedule')
 
 /* ── the cast ───────────────────────────────────────────────────────────── */
 
@@ -147,6 +148,20 @@ const approve = (action: 'approve' | 'request_changes', note = 'Looks good') => 
     new Request('https://x.test/posting-approval', { method: 'POST', body: JSON.stringify({ action, note }) }),
     params(ITEM),
   ))
+
+/** Make every write whose payload contains `needle` fail the way a dropped
+ *  connection does. Returns the undo. */
+function failWritesNaming(needle: string) {
+  const inner = globalThis.fetch
+  globalThis.fetch = (async (input: any, init: any = {}) => {
+    if ((init?.method ?? 'GET').toUpperCase() !== 'GET'
+      && typeof init?.body === 'string' && init.body.includes(needle)) {
+      throw new TypeError('fetch failed')
+    }
+    return inner(input, init)
+  }) as typeof globalThis.fetch
+  return () => { globalThis.fetch = inner }
+}
 
 const row = (id: string) => fake.rows('social_posts').find(p => p.id === id) as any
 const jobs = () => fake.rows('publish_jobs') as any[]
@@ -409,12 +424,121 @@ describe('the approval lock', () => {
     expect(jobs()).toHaveLength(1)
   })
 
+  it('refuses an editor the ad-hoc publish door, approved item or not', async () => {
+    fake.restore()
+    fake = seed({ posting_approval_state: 'approved' })
+    as(OWNER)
+    const res = await adhocPost()
+    expect(res.status).toBe(403)
+    expect(res.body.error).toBe('Posting to a channel is for schedulers and account managers')
+    expect(jobs()).toHaveLength(0)
+
+    // …and with nothing linked, where the approval gate has nothing to say
+    const loose = await adhocPost({ contentItemId: null })
+    expect(loose.status).toBe(403)
+    expect(jobs()).toHaveLength(0)
+  })
+
+  it('refuses an editor the list of what went out', async () => {
+    as(OWNER)
+    const res = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
+    expect(res.status).toBe(403)
+  })
+
   it('leaves a post with no item linked exactly as it was', async () => {
     fake.restore()
     fake = seed({ posting_approval_state: 'pending' })
     const res = await adhocPost({ contentItemId: null })
     expect(res.status).toBe(200)
     expect(jobs()).toHaveLength(1)
+  })
+})
+
+/* ── a post reads its OWN jobs ──────────────────────────────────────────── */
+
+describe('one item, one post at a time', () => {
+  it('leaves a fresh post alone after the previous one was cancelled', async () => {
+    // A: made, approved, booked in, then taken off the calendar
+    const a = (await create()).body.post.id as string
+    await post(a)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+    await bookIn(a)
+    await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(a)))
+    expect(row(a).status).toBe('cancelled')
+    expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
+
+    // B: a new post on the same item — cancelling A freed the item
+    const made = await create()
+    expect(made.status).toBe(200)
+    const b = made.body.post.id as string
+    expect(made.body.post.status).toBe('draft')
+
+    // the mirror must read B's own jobs (it has none), not A's cancelled one
+    await lib.syncFromItem(ITEM)
+    expect(row(b).status).toBe('draft')
+    expect(row(a).status).toBe('cancelled')
+
+    const listed = await json(schedule.GET(
+      new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
+    const tile = listed.body.posts.find((x: { id: string }) => x.id === b)
+    expect(tile.live_status).toBe('draft')
+  })
+
+  it('reads an approved post as approved when the requeue could not be made', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+    await bookIn(id)
+    expect(jobs()).toHaveLength(1)
+
+    // the channel takes the cancel but the new booking will not go in
+    const off = failWritesNaming('"status":"queued"')
+    const moved = await moveTo(id, IN_THREE_DAYS())
+    off()
+
+    expect(moved.status).toBe(409)
+    expect(row(id).status).toBe('approved')
+    expect(row(id).publish_job_ids ?? []).toEqual([])
+    const listed = await json(schedule.GET(
+      new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
+    expect(listed.body.posts[0].live_status).toBe('approved')
+  })
+})
+
+/* ── sending, when somebody got there first ─────────────────────────────── */
+
+describe('send for approval, against a moving post', () => {
+  it('will not drag a post that was booked in the meantime back to pending', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('request_changes', 'Shorten the caption')
+    as(SCHEDULER)
+    expect(row(id).status).toBe('changes')
+
+    // the rival's write lands between this send's read and its own write
+    const off = fake.onBeforeWrite(`/mdm/tables/social_posts/${id}`, () => {
+      off()
+      const live = (fake.tree() as any).mdm.tables.social_posts[id]
+      live.status = 'scheduled'
+    })
+    const sent = await post(id)
+
+    expect(sent.status).toBe(409)
+    expect(sent.body.error).toContain('moved on while you were sending it')
+    expect(row(id).status).toBe('scheduled')
+  })
+
+  it('treats a second click on an already-pending post as done, not as an error', async () => {
+    const id = (await create()).body.post.id as string
+    expect((await post(id)).status).toBe(200)
+    const again = await post(id)
+    expect(again.status).toBe(200)
+    expect(again.body.post.status).toBe('pending')
   })
 })
 
@@ -488,6 +612,44 @@ describe('the calendar reads', () => {
       new Request(`https://x.test/notes?id=${made.body.note.id}`, { method: 'DELETE' })))
     expect(gone.status).toBe(200)
     expect(fake.rows('schedule_notes')).toHaveLength(0)
+  })
+
+  it('lets only the writer or an account manager take a note away', async () => {
+    as(AM)
+    const hers = await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Client away until the 19th' }),
+    })))
+    expect(hers.status).toBe(200)
+
+    as(OWNER)
+    const refused = await json(notesRoute.DELETE(
+      new Request(`https://x.test/notes?id=${hers.body.note.id}`, { method: 'DELETE' })))
+    expect(refused.status).toBe(403)
+    expect(refused.body.error)
+      .toBe('Only the person who wrote this note, or an account manager, can remove it')
+    expect(fake.rows('schedule_notes')).toHaveLength(1)
+
+    // …their own, they may
+    const mine = await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Reshoot the second slide' }),
+    })))
+    expect((await json(notesRoute.DELETE(
+      new Request(`https://x.test/notes?id=${mine.body.note.id}`, { method: 'DELETE' })))).status).toBe(200)
+
+    // …and an account manager may take anybody's
+    as(AM)
+    expect((await json(notesRoute.DELETE(
+      new Request(`https://x.test/notes?id=${hers.body.note.id}`, { method: 'DELETE' })))).status).toBe(200)
+    expect(fake.rows('schedule_notes')).toHaveLength(0)
+  })
+
+  it('answers a time it cannot read with a bad request, not a conflict', async () => {
+    const id = (await create()).body.post.id as string
+    const moved = await moveTo(id, 'next tuesday-ish')
+    expect(moved.status).toBe(400)
+    expect(moved.body.error).toBe('That is not a time we can read — pick one from the calendar')
   })
 
   it('suggests times, and admits when they are the starting list', async () => {
