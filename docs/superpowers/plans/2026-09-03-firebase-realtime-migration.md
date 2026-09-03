@@ -201,7 +201,7 @@ export function rtdbUrl(): string {
 Add to `.env.local` (values from the owner's config message; `DATABASE_URL` from the console once the instance exists):
 
 ```
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDCuEs_N8in_7h2Esmii91UTObj8r7n344
+NEXT_PUBLIC_FIREBASE_API_KEY=<your Firebase web apiKey>
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=test-agent-88a4c.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=test-agent-88a4c
 NEXT_PUBLIC_FIREBASE_APP_ID=1:574214432022:web:a7b9f9bfccfc5df45cdc37
