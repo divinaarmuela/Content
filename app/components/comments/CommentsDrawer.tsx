@@ -153,7 +153,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
   // render with loading already false and no snapshot yet, and the drawer
   // would read that as "Item not found" (see useLiveWork.ts)
   const { me } = useRole()
-  const { row: item, loading: itemLoading } = useRow<ContentItem>('content_items', itemId)
+  const { row: item, loading: itemLoading, error: itemError } = useRow<ContentItem>('content_items', itemId)
   const byItem = useMemo(() => ({ item_id: itemId }), [itemId])
   const { rows: commentRows } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -173,6 +173,10 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
 
   /** the item, shaped for this viewer — or the reason the drawer is empty */
   const { detail, failed } = useMemo((): { detail: DrawerDetail | null; failed: string | null } => {
+    // the live listener itself failed — that is not a missing item, and
+    // saying "Item not found" would send somebody looking for a deletion
+    // that never happened
+    if (itemError) return { detail: null, failed: 'We could not load this conversation. Check your connection.' }
     if (!viewer || itemLoading || assignmentsLoading || scopeLoading) return { detail: null, failed: null }
     if (!item) return { detail: null, failed: 'Item not found' }
     if (!itemIsVisible(viewer, item, assignments, scopeCtx)) {
@@ -197,7 +201,7 @@ function DrawerBody({ itemId, fallbackTitle }: { itemId: string; fallbackTitle?:
       },
       failed: null,
     }
-  }, [viewer, item, itemLoading, assignmentsLoading, scopeLoading, assignments, scopeCtx, team, commentRows, client])
+  }, [viewer, item, itemLoading, itemError, assignmentsLoading, scopeLoading, assignments, scopeCtx, team, commentRows, client])
 
   /** the people "@" can reach: everyone active on the team but you */
   const mentionable = useMemo(

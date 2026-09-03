@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { loadPublicService, availabilityFor } from '../../../../lib/booking'
 
 /**
@@ -9,6 +10,7 @@ import { loadPublicService, availabilityFor } from '../../../../lib/booking'
  * exists but is switched off.
  */
 export async function GET(req: Request) {
+ return withRequestCache(async () => {
   try {
     const url = new URL(req.url)
     const slug = String(url.searchParams.get('slug') ?? '').toLowerCase()
@@ -28,4 +30,5 @@ export async function GET(req: Request) {
     console.error('public slots error:', e)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
+ })
 }

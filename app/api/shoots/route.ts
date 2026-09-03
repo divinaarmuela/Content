@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
 import { normaliseRecipients } from '../../lib/intake-core'
 import { createShootProposal, listShootProposals, listAllShootProposals } from '../../lib/shoots'
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic'
 /** With from/to: proposals overlapping that window (the Availability week).
  *  Without: every proposal, newest first (the Proposals register). */
 export async function GET(req: NextRequest) {
+ return withRequestCache(async () => {
   try {
     // scheduler+ may READ proposals (they live on Availability/Proposals);
     // creating and cancelling stays editor+.
@@ -27,9 +29,11 @@ export async function GET(req: NextRequest) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }
 
 export async function POST(req: NextRequest) {
+ return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const body = await req.json()
@@ -76,4 +80,5 @@ export async function POST(req: NextRequest) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }

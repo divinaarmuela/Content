@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { snapshotToRows, applyQuery } from '@/lib/db-client'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { pickPushdown, INDEXED_COLUMNS } from '@/lib/db-indexes'
 
 describe('db-client pure parts', () => {
@@ -28,10 +30,24 @@ describe('pickPushdown', () => {
     expect(pickPushdown({ client_id: null, title: 'x' })).toBeNull()
     expect(pickPushdown({ client_id: null, status: 'open' })).toEqual({ key: 'status', value: 'open' })
   })
-  it('mirrors database.rules.json .indexOn exactly (12 columns)', () => {
-    expect([...INDEXED_COLUMNS].sort()).toEqual([
-      'batch_id', 'client_id', 'created_at', 'due_date', 'email', 'item_id',
-      'owner_id', 'scheduled_for', 'status', 'team_user_id', 'token', 'updated_at',
-    ])
+  it('mirrors database.rules.json .indexOn exactly', () => {
+    // read the rules file rather than restating it: a column added to
+    // .indexOn and not to db-indexes.ts (or the reverse) is exactly the
+    // drift this test exists to catch, and a hardcoded literal here would
+    // have had to be edited in the same breath to stay green.
+    const rules = JSON.parse(
+      readFileSync(join(process.cwd(), 'database.rules.json'), 'utf8'),
+    ) as Record<string, unknown>
+    const declared = new Set<string>()
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (k === '.indexOn') { for (const c of ([] as string[]).concat(v as string[])) declared.add(c) }
+        else walk(v)
+      }
+    }
+    walk(rules)
+    expect(declared.size).toBeGreaterThan(0)
+    expect([...INDEXED_COLUMNS].sort()).toEqual([...declared].sort())
   })
 })

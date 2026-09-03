@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { DbError, table } from '@/lib/db'
 import type { Client, EmailIngestLog, Lead, ScanRun } from '@/lib/db-types'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 import { autoIngestLead } from './lead-enrichment'
 import { prefilterSkipReason } from './gmail-core'
 import { matchExistingCompany, type IngestLead } from './lead-enrichment-core'
@@ -408,7 +408,7 @@ async function scanOneMailbox(
       // Tell any open leads page immediately. Fire-and-forget — a lead that is
       // saved but unannounced is a refresh away, whereas a publish failure
       // that threw here would lose the scan.
-      announce('leads', {
+      announceAfter('leads', {
         id: lead.id as string,
         label: [c.business, [c.fname, c.lname].filter(Boolean).join(' ')]
           .filter(Boolean)[0] || msg.fromEmail,

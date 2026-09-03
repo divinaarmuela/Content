@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { sendSystemEmail } from '../../lib/mailer'
 import { autoIngestLead } from '../../lib/lead-enrichment'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 
 export async function POST(req: NextRequest) {
  return withRequestCache(async () => {
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     // moment they press submit, with no scanner cron in between. Announce it.
     // Fire-and-forget, so the receiver treats it as a hint and refetches
     // rather than trusting it.
-    announce('leads', {
+    announceAfter('leads', {
       id: savedLead.id,
       label: biz || `${fname} ${lname}`.trim() || email,
       source: 'web_form',

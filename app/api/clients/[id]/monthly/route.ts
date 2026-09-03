@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import {
   createMonthlyForm, listMonthlyFormsForClient, getMonthlyFormForClient,
@@ -28,6 +29,7 @@ import {
  */
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+ return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -67,9 +69,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+ return withRequestCache(async () => {
   try {
     const admin = await requireRole('super_admin')
     const { id } = await params
@@ -112,9 +116,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+ return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
@@ -170,6 +176,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }
 
 /**
@@ -177,6 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
  * undo, so a form with answers requires `?confirm=answers`.
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+ return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
@@ -199,4 +207,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }

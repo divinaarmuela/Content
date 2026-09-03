@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import { table, encodeKey, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { Batch, ContentItem, Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
+import type {
+  Batch, ContentItem, Lead, ScheduleEntry, TeamUserClient, UserPageAccess, WorkKind,
+} from '@/lib/db-types'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
 import {
-  accessibleClientIds, assertUuid, assignedItemsFilter, openTaggedIds,
+  accessibleClientIds, assertUuid, openTaggedIds, taggedBatchIds, taggedItemIds,
 } from '../../lib/production-access'
-import { SCHEDULER_STATUSES } from '../../lib/workflow-core'
+import { visibleItems, type ScopeViewer } from '../../lib/scope-client'
 import { buildOverview, type OverviewItem } from '../../lib/overview-core'
 
 /**
@@ -32,30 +34,47 @@ export async function GET() {
 
     const clientIds = await accessibleClientIds(user)
 
-    // assignment grants visibility, the SAME rule as the items API and
+    // Assignment grants visibility, the SAME rule as the items API and
     // loadItemForUser: owning the job, holding its scheduling, being tagged
     // on it, or holding the shoot it sits under. "Assigned to you" that
-    // omits a job you were assigned is the whole complaint. The predicate
-    // below is the items GET's, line for line, so the Overview's numbers can
-    // never disagree with the board they link to.
-    const scopedClients = clientIds === null ? null : clientIds.map(assertUuid)
-    const assigned = clientIds !== null ? await assignedItemsFilter(user) : null
-    // a scheduler is gated by STATUS, not by client (accessibleClientIds is
-    // null for them) — but a scheduler who OWNS a job must see it at any
-    // status; the status gate is for other people's items.
-    const me = user.role === 'scheduler' ? assertUuid(user.id) : user.id
+    // omits a job you were assigned is the whole complaint.
+    //
+    // There is one predicate, and it is `visibleItems` — the same call the items API
+    // and the live boards make. `schedulerPostFilter: false` is deliberate
+    // and is what the Overview PAGE passes too: this endpoint counts a
+    // scheduler's whole scoped list and lets each card decide, so turning
+    // the board's post-filter on here would quietly change every number.
+    const viewer: ScopeViewer = {
+      id: user.id,
+      role: user.role,
+      client_id: (user as { client_id?: string | null }).client_id ?? null,
+    }
     let items: ItemLite[] = []
     try {
-      const rows = await table<ContentItem>('content_items').list({
-        where: r => {
-          if (scopedClients !== null && !(scopedClients.includes(r.client_id) || assigned!(r))) return false
-          if (user.role === 'scheduler'
-            && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === me)) return false
-          return true
-        },
+      const [assignments, batches, workKinds, itemTags, batchTags] = await Promise.all([
+        clientIds === null
+          ? Promise.resolve([] as TeamUserClient[])
+          : table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }),
+        table<Batch>('batches').list({ limit: 2000 }),
+        table<WorkKind>('work_kinds').list(),
+        taggedItemIds(user),
+        taggedBatchIds(user),
+      ])
+      const all = await table<ContentItem>('content_items').list({
         orderBy: [['updated_at', 'desc']],
-        limit: 500,
       })
+      const rows = visibleItems(
+        viewer,
+        all as unknown as (ContentItem & { work_kinds?: null })[],
+        assignments,
+        {
+          batches,
+          taggedItemIds: itemTags,
+          taggedBatchIds: batchTags,
+          workKinds: workKinds as unknown as { id: string; slug: string }[],
+          schedulerPostFilter: false,
+        },
+      ).slice(0, 500) as unknown as ContentItem[]
       items = await attachOne(
         await attachOne(rows, 'client_id', 'clients', ['name']),
         'work_kind_id', 'work_kinds', ['slug', 'uses_media'],

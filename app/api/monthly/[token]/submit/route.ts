@@ -6,7 +6,7 @@ import { notify, renderEmail } from '../../../../lib/mailer'
 import { completion, resolveRecipients } from '../../../../lib/intake-core'
 import { renderMonthlyPdf } from '../../../../lib/monthly-pdf'
 import { monthLabel } from '../../../../lib/monthly-core'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 
 export const dynamic = 'force-dynamic'
 // Building the PDF takes longer than a default serverless slice allows.
@@ -83,7 +83,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     console.error('monthly submit notification failed:', e)
   }
 
-  announce('monthly', {
+  announceAfter('monthly', {
     form_id: form.id,
     client_id: form.client_id,
     status: form.status,

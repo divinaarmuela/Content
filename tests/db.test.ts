@@ -187,6 +187,27 @@ describe('unique-claim atomicity', () => {
       rtdbFetch('/mdm', { method: 'PATCH', body: JSON.stringify({ 'uniq/x/f/k': 'owner2' }), table: 'x' }),
     ).rejects.toMatchObject({ code: 'unique', message: expect.stringContaining('x') })
   })
+
+  it('a rules refusal that touches no uniq pointer is a bad_request, not a phantom duplicate', async () => {
+    fake.restore()
+    process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL = 'https://fake.firebasedatabase.app'
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403 })) as any
+    // an ordinary row PATCH the rules said no to
+    await expect(
+      rtdbFetch('/mdm', { method: 'PATCH', body: JSON.stringify({ 'tables/clients/c1/name': 'X' }), table: 'clients' }),
+    ).rejects.toMatchObject({ code: 'bad_request', message: 'Database refused the write (rules)' })
+    // …while one that does reach a pointer still reads as a lost claim,
+    // whether the pointer is named in the body or in the path
+    await expect(
+      rtdbFetch('/mdm', { method: 'PATCH', body: JSON.stringify({ 'uniq/clients/slug/acme': 'c2' }), table: 'clients' }),
+    ).rejects.toMatchObject({ code: 'unique' })
+    await expect(
+      rtdbFetch('/mdm/uniq/clients/slug/acme', { method: 'PUT', body: JSON.stringify('c2'), table: 'clients' }),
+    ).rejects.toMatchObject({ code: 'unique' })
+    // a GET is never a claim, whatever the status
+    await expect(rtdbFetch('/mdm/tables/clients')).rejects.toMatchObject({ code: 'network' })
+  })
 })
 
 describe('natural-key upsert/insert', () => {
@@ -283,6 +304,34 @@ describe('compare-and-set', () => {
     const other = await t.getForUpdate('u8')
     await expect(t.compareAndSet('u8', other.etag, { id: 'u8', email: 'a@x.com', name: 'Thief' } as any))
       .rejects.toMatchObject({ code: 'unique' })
+  })
+
+  it('a row created through claim() leaves its uniq pointer behind, so a later insert of the same email is refused', async () => {
+    const t = table('team_users')
+    const won = await t.claim('u9', cur => (cur ? null : { id: 'u9', email: 'new@x.com', name: 'New' } as any))
+    expect(won.claimed).toBe(true)
+    // the pointer, not just the row
+    expect(fake.tree().mdm.uniq.team_users.email[encodeKey('new@x.com')]).toBe('u9')
+    await expect(t.insert({ id: 'u10', email: 'new@x.com', name: 'Dup' } as any))
+      .rejects.toMatchObject({ code: 'unique' })
+  })
+
+  it('a CAS create that loses the uniq PATCH undoes its own row and reports a lost race', async () => {
+    const t = table('team_users')
+    const { etag } = await t.getForUpdate('u9')
+    // a rival claims the pointer between this caller's pre-check and its own
+    // PATCH — the rules refuse the PATCH, so the row must not survive either
+    const off = fake.onBeforeWrite('/mdm', () => {
+      fake.tree().mdm.uniq.team_users.email = {
+        ...(fake.tree().mdm.uniq.team_users.email ?? {}),
+        [encodeKey('rival@x.com')]: 'uRival',
+      }
+    })
+    const res = await t.compareAndSet('u9', etag, { id: 'u9', email: 'rival@x.com', name: 'Late' } as any)
+    off()
+    expect(res.ok).toBe(false)
+    expect(fake.tree().mdm.tables.team_users.u9).toBeUndefined()
+    expect(fake.tree().mdm.uniq.team_users.email[encodeKey('rival@x.com')]).toBe('uRival')
   })
 
   it('getForUpdate drops the filtered query variants too, not just the whole-table read', async () => {

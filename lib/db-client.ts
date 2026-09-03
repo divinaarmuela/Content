@@ -102,16 +102,20 @@ export function useTable<T extends Row>(
 export function useRow<T extends Row>(name: TableName, id: string | null | undefined) {
   const [row, setRow] = useState<T | null>(null)
   const [loading, setLoading] = useState(Boolean(id))
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (!id) { setRow(null); setLoading(false); return }
+    if (!id) { setRow(null); setLoading(false); setError(null); return }
     setLoading(true)
+    // Without the error callback a listener that is refused or drops never
+    // calls back at all: `loading` stays true and the page spins forever.
     return onValue(ref(db(), `/mdm/tables/${name}/${id}`), snap => {
       const v = snap.val()
       setRow(v ? snapshotToRows<T>(name, { [id]: v })[0] : null)
       setLoading(false)
-    })
+      setError(null)
+    }, e => { setError(e.message); setLoading(false) })
   }, [name, id])
-  return { row, loading }
+  return { row, loading, error }
 }
 
 /**

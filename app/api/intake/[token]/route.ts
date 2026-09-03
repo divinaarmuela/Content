@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getIntakeByToken, saveIntakeAnswers, listIntakeFiles } from '../../../lib/intake'
 import { completion } from '../../../lib/intake-core'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 
 /**
  * Public intake form, resolved by token alone.
@@ -45,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   const form = await getIntakeByToken(token)
   if (form) {
     const c = completion(form.definition, saved.answers)
-    announce('intake', {
+    announceAfter('intake', {
       form_id: form.id,
       client_id: form.client_id,
       status: saved.status,

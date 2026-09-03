@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getMonthlyByToken, saveMonthlyAnswers } from '../../../lib/monthly'
 import { completion } from '../../../lib/intake-core'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 
 /**
  * Public monthly-update form, resolved by token alone.
@@ -44,7 +44,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   const form = await getMonthlyByToken(token)
   if (form) {
     const c = completion(form.definition, saved.answers)
-    announce('monthly', {
+    announceAfter('monthly', {
       form_id: form.id,
       client_id: form.client_id,
       status: saved.status,

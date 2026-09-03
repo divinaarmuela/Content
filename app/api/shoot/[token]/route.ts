@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { respondToShoot } from '../../../lib/shoots'
 
 /**
@@ -13,14 +14,17 @@ export const dynamic = 'force-dynamic'
  *  answers first. Returns nothing but the status — the token grants a vote,
  *  not a data feed. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const { getShootByToken } = await import('../../../lib/shoots')
   const proposal = await getShootByToken(token)
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ status: proposal.status })
+ })
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+ return withRequestCache(async () => {
   const { token } = await params
   const body = await req.json().catch(() => ({}))
   const answer = body.answer === 'yes' ? 'yes' : body.answer === 'no' ? 'no' : null
@@ -31,4 +35,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // applied=false: someone answered first (or the team cancelled) — the page
   // shows the standing answer instead of pretending this click counted
   return NextResponse.json({ status: result.proposal.status, applied: result.applied })
+ })
 }

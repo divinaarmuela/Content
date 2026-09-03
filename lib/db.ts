@@ -87,6 +87,15 @@ export interface Table<T extends Row> {
    * non-atomically, which is the very thing this method exists to remove.
    * It verifies instead: a unique value in `next` that another row already
    * claims throws DbError('unique'). Use insert()/update() to change one.
+   *
+   * CREATING a row is the exception, and it does write: a row that appears
+   * out of nothing has to leave its /mdm/uniq pointers behind, or a later
+   * insert() of a different id with the same unique value sees a free key
+   * and duplicates it. So after the conditional PUT that created the row
+   * lands, the pointers are PATCHed for it. If that PATCH is refused —
+   * somebody claimed the key in between — the row just created is deleted
+   * again and the call reports a lost race (`{ ok: false, current: null,
+   * etag: NULL_ETAG }`), which is exactly what claim() retries on.
    */
   compareAndSet(id: string, etag: string, next: T): Promise<{ ok: true; row: T } | { ok: false; current: T | null; etag: string }>
 
@@ -207,6 +216,20 @@ function encodePath(path: string): string {
   return path.split('/').map(seg => (seg === '' ? '' : encodeURIComponent(seg))).join('/')
 }
 
+/**
+ * Does this write reach a /mdm/uniq pointer — either directly by path, or
+ * through a multi-path PATCH key? Only such a write can be refused for being
+ * a lost unique claim.
+ */
+function touchesUniq(path: string, body: unknown): boolean {
+  if (path.includes('/uniq/') || path.endsWith('/uniq')) return true
+  if (typeof body !== 'string') return false
+  let parsed: unknown
+  try { parsed = JSON.parse(body) } catch { return false }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
+  return Object.keys(parsed as Record<string, unknown>).some(k => k.startsWith('uniq/') || k.includes('/uniq/'))
+}
+
 export async function rtdbFetch(path: string, init: RequestInit & { query?: Record<string, string>; table?: string } = {}): Promise<any> {
   const { query, table: tableCtx, ...rest } = init
   const qs = query ? '?' + new URLSearchParams(query).toString() : ''
@@ -221,9 +244,18 @@ export async function rtdbFetch(path: string, init: RequestInit & { query?: Reco
     // The RTDB security rules make a losing unique-claim PATCH fail at the
     // database itself (belt to the pre-check's suspenders — see uniqChecks).
     // A write rejected by rules comes back 401/403, never a GET.
+    //
+    // Only a write that actually TOUCHES /mdm/uniq can be a lost unique
+    // claim, though. Every other rules refusal — a misconfigured rule, a
+    // path the rules do not allow — is not a duplicate key, and reporting it
+    // as one sent callers down the "that email is taken" branch for a
+    // failure that had nothing to do with the value they wrote.
     const isWrite = !!rest.method && rest.method.toUpperCase() !== 'GET'
     if (isWrite && (res.status === 401 || res.status === 403)) {
-      throw new DbError('unique', tableCtx ? `${tableCtx} unique key already taken` : 'unique key already taken')
+      if (touchesUniq(path, rest.body)) {
+        throw new DbError('unique', tableCtx ? `${tableCtx} unique key already taken` : 'unique key already taken')
+      }
+      throw new DbError('bad_request', 'Database refused the write (rules)')
     }
     throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database ${rest.method ?? 'GET'} ${path} failed (${res.status})`)
   }
@@ -499,8 +531,10 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
       // read is free inside a request — getForUpdate seeded exactly this key
       // — and is skipped entirely for a table with no unique columns, which
       // is every lock table and every hot claim path.
+      let creating = false
       if (uniques.length) {
         const before = await cachedGet(`${base}/${id}`)
+        creating = !before
         for (const col of uniques) {
           const v = (next as any)[col]
           if (before) {
@@ -524,7 +558,27 @@ export function table<T extends Row = Row & Record<string, unknown>>(name: Table
       const body = stripNulls(row)
       const res = await rtdbPutIfMatch(`${base}/${id}`, etag, body)
       invalidate(name)
-      if (res.ok) return { ok: true, row: normalise<T>(name, id, body) }
+      if (res.ok) {
+        if (creating) {
+          // the row exists now but its unique keys do not point at it yet —
+          // claim them, and undo the creation if somebody got there first
+          try {
+            const patch = await uniqChecks(body, id)
+            if (Object.keys(patch).length) {
+              await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(patch), table: name })
+              invalidate(name)
+            }
+          } catch (e) {
+            await rtdbFetch(`${base}/${id}`, { method: 'DELETE', table: name }).catch(() => {})
+            invalidate(name)
+            if (e instanceof DbError && e.code === 'unique') {
+              return { ok: false, current: null, etag: NULL_ETAG }
+            }
+            throw e
+          }
+        }
+        return { ok: true, row: normalise<T>(name, id, body) }
+      }
       return { ok: false, current: res.current ? normalise<T>(name, id, res.current) : null, etag: res.etag }
     },
     async claim(id, mutate, opts) {

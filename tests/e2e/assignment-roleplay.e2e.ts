@@ -185,9 +185,22 @@ afterAll(async () => {
     await Promise.all([
       table('workflow_activity').removeWhere((r: any) => r.entity_id === id),
       table('notification_log').removeWhere((r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(id)),
+      // shoot-thread comments belong to the shoot, not to any one item, so
+      // the per-item sweep above never reaches them
+      table('batch_comments').removeWhere((r: any) => r.batch_id === id).catch(() => 0),
     ])
     await table('batches').remove(id)
   }))
+  // The shoot-plan lock (`brief__<batchId>`) is HELD BY the plan item's id,
+  // and it survives everything above: it is keyed on the shoot, not on the
+  // item, and it is deliberately never deleted by the app. Left behind, the
+  // next run's plan for the same shoot loses a race against a holder that no
+  // longer exists. Match on the holder, so only locks this run took are
+  // removed — never one a real request is holding right now.
+  const mine = new Set([...created, ...batches])
+  await table('claim_locks')
+    .removeWhere((r: any) => typeof r.holder === 'string' && mine.has(r.holder))
+    .catch(() => 0)
 })
 
 describe('rights follow assignment, not job title', () => {

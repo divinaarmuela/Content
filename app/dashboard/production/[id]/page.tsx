@@ -403,7 +403,7 @@ export default function ItemDetailPage() {
   // leaves one render where `loading` is false and no snapshot has arrived,
   // and "no rows yet" then reads as "not yours" (see useLiveWork.ts)
   const { me } = useRole()
-  const { row: itemRow, loading: itemLoading } = useRow<ContentItem>('content_items', id)
+  const { row: itemRow, loading: itemLoading, error: itemError } = useRow<ContentItem>('content_items', id)
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: versionRows } = useTable<AssetVersion>('asset_versions', { by: byItem })
   const { rows: commentRows } = useTable<ItemComment>('item_comments', { by: byItem })
@@ -539,12 +539,14 @@ export default function ItemDetailPage() {
     // "not on this client" into "assigned to me", and every leg of scopeCtx
     // can only ever GRANT — so wait for all of them
     if (!liveViewer || itemLoading || assignmentsLoading || scopeLoading) return
+    // a failed listener is not a missing item — the page shows the failure
+    if (itemError) return
     if (itemRow && itemIsVisible(liveViewer, itemRow, assignments, scopeCtx)) return
     toast.error('Item not found')
     // no detail to ask where this came from — the editor board is where an
     // unreadable content item would have been listed
     router.push('/dashboard/editor')
-  }, [liveViewer, itemRow, itemLoading, assignmentsLoading, scopeLoading, assignments, scopeCtx, router])
+  }, [liveViewer, itemRow, itemLoading, itemError, assignmentsLoading, scopeLoading, assignments, scopeCtx, router])
 
   // A shoot plan lives on its SHOOT page now — the two pages used to ping-pong,
   // so a shoot_brief item just forwards to its shoot, keeping old links and
@@ -644,6 +646,21 @@ export default function ItemDetailPage() {
       }))]
     })
   }, [versionUploads, versionGroup])
+
+  // the live listener itself failed — say so instead of spinning forever
+  if (!detail && itemError) {
+    return (
+      <div className="mx-auto flex max-w-4xl flex-col gap-3">
+        <p className="text-sm font-medium">We could not load this item.</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          The live connection to the database failed. Check your connection and try again.
+        </p>
+        <div>
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try again</Button>
+        </div>
+      </div>
+    )
+  }
 
   if (!detail) {
     return (

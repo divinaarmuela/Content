@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
+import type { TeamUserClient } from '@/lib/db-types'
 import type {
   AssetVersion, Batch, ContentItem, DeliverableGroup, TeamUser, WorkflowActivity,
   WorkKind as WorkKindRow,
@@ -11,13 +12,15 @@ import { announceBatchChange } from '../../../lib/production-live'
 import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/work-kinds-core'
 import { taskExemptFromClientScope } from '../../../lib/item-edit-core'
 import {
-  accessibleClientIds, assertUuid, assignedItemsFilter, canOpenBatch, openTaggedIds,
+  accessibleClientIds, canOpenBatch, openTaggedIds,
+  taggedBatchIds, taggedItemIds,
 } from '../../../lib/production-access'
+import { visibleItems, type ScopeViewer } from '../../../lib/scope-client'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { takeClaimLock, releaseClaimLock, briefLockKey } from '../../../lib/claim-lock'
-import { SCHEDULER_STATUSES, CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
+import { CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 import { slidesOf } from '../../../lib/version-files-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
@@ -35,72 +38,67 @@ export async function GET(req: Request) {
     const statusFilter = url.searchParams.get('status')
     const batchFilter = url.searchParams.get('batch_id')
 
-    const clientIds = await accessibleClientIds(user)
-    if (clientIds !== null && user.role === 'client' && clientIds.length === 0) {
-      return NextResponse.json([])
+    // ONE scoping predicate, and it is `visibleItems` (app/lib/scope-client.ts)
+    // — the same function the live boards scope with. It used to be restated
+    // here, line for line, kept honest only by a test comparing the two; a
+    // rule that has to be written twice is a rule that will one day be
+    // written differently. The route now READS what the rule needs and calls
+    // it. Everything server-only stays here: auth, the joins, the
+    // annotations. `visibleItems` imports nothing server-side.
+    const viewer: ScopeViewer = {
+      id: user.id,
+      role: user.role,
+      client_id: (user as { client_id?: string | null }).client_id ?? null,
     }
-    // the ids are asserted only where they used to be interpolated into a
-    // filter string — the client branch never was
-    const scopedClients = clientIds === null || user.role === 'client'
-      ? clientIds
-      : clientIds.map(assertUuid)
-    // ASSIGNMENT grants visibility: whoever holds the job — owner, handed the
-    // scheduling, tagged on it, or holding the shoot it sits under — sees it,
-    // whether or not they're assigned the whole client. One filter, shared
-    // with loadItemForUser, so the list and the detail page can never
-    // disagree about what this person may open.
-    const assigned = clientIds !== null && user.role !== 'client'
-      ? await assignedItemsFilter(user)
-      : null
-    const me = user.role === 'scheduler' ? assertUuid(user.id) : user.id
+    // the same tables the boards subscribe to (see useLiveWork.ts), read once
+    // inside this request's cache
+    const [assignments, batches, workKinds, itemTags, batchTags] = await Promise.all([
+      user.role === 'super_admin' || user.role === 'client'
+        ? Promise.resolve([] as TeamUserClient[])
+        : table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }),
+      user.role === 'client' ? Promise.resolve([] as Batch[]) : table<Batch>('batches').list({ limit: 2000 }),
+      table<WorkKindRow>('work_kinds').list(),
+      taggedItemIds(user),
+      taggedBatchIds(user),
+    ])
+    if (user.role === 'client' && !viewer.client_id) return NextResponse.json([])
+
     const rows0 = await table<ContentItem>('content_items').list({
       by: clientFilter ? { client_id: clientFilter } : undefined,
       where: r => {
-        if (scopedClients !== null) {
-          if (user.role === 'client') {
-            if (!scopedClients.includes(r.client_id)) return false
-          } else if (!(scopedClients.includes(r.client_id) || assigned!(r))) return false
-        }
-        // a scheduler OWNING a job (they can be assigned work now) must see it
-        // at any status — the status gate is for other people's items
-        if (user.role === 'scheduler'
-          && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === me)) return false
         if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)
           && r.status !== statusFilter) return false
         if (batchFilter && r.batch_id !== batchFilter) return false
         return true
       },
       orderBy: [['updated_at', 'desc']],
-      limit: 500,
     })
+    // scope FIRST, cap second — a 500-row cap taken before scoping would hand
+    // a person the first 500 of everybody's work and then show them their
+    // share of it
+    const visible = visibleItems(
+      viewer,
+      rows0 as unknown as (ContentItem & { work_kinds?: null })[],
+      assignments,
+      {
+        batches,
+        taggedItemIds: itemTags,
+        taggedBatchIds: batchTags,
+        workKinds: workKinds as unknown as { id: string; slug: string }[],
+      },
+    ).slice(0, 500)
+
     // clients.timezone rides along: every row that prints a posting time has
     // to print it in the audience's zone, not the reader's
     const data = await attachOne(
       await attachOne(
-        await attachOne(rows0, 'client_id', 'clients', ['name', 'timezone']),
+        await attachOne(visible as unknown as ContentItem[], 'client_id', 'clients', ['name', 'timezone']),
         'batch_id', 'batches', ['title', 'status', 'planned_deliverables'],
       ),
       'work_kind_id', 'work_kinds', ['name', 'slug', 'color', 'uses_media'],
     )
     const tMain = Date.now()
-
-    // a scheduler sees an unclaimed approved item (anyone can pick it up) or
-    // one explicitly handed to them — never someone else's private handoff.
-    // 'Hand to a scheduler' notified specific people but never actually
-    // restricted the queue until now.
-    const scoped = user.role === 'scheduler'
-      ? data.filter(r => {
-          // a shoot BRIEF is never scheduling work — booking a shoot is an
-          // account manager's call. Excluding it in the two scheduler pages
-          // left it one new surface away from reappearing; the API is the
-          // place that guarantees it. Owning one is the only way to see it.
-          const slug = (r.work_kinds as { slug?: string } | null)?.slug ?? ''
-          if (r.owner_id === user.id) return true
-          if (slug === 'shoot_brief') return false
-          const ids = Array.isArray(r.scheduler_ids) ? r.scheduler_ids as string[] : []
-          return ids.length === 0 || ids.includes(user.id)
-        })
-      : data
+    const scoped = data
 
     if (user.role === 'client') {
       console.log(`[items] GET ${Date.now() - t0}ms (main ${tMain - t0}, annot 0)`)

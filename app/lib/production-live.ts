@@ -1,5 +1,5 @@
 import 'server-only'
-import { announce } from '@/lib/live'
+import { announceAfter } from '@/lib/live'
 
 /**
  * Announce that a production item changed, so every open board, queue,
@@ -15,7 +15,7 @@ export function announceItemChange(args: {
   status: string
   kind: 'created' | 'transition' | 'version' | 'comment' | 'schedule' | 'updated'
 }) {
-  announce('production', args)
+  announceAfter('production', args)
 }
 
 /** Same contract for shoot briefs: open shoot lists and brief pages refetch
@@ -24,7 +24,7 @@ export function announceItemChange(args: {
  *  refreshes itself. Rides the same channel as production changes; the
  *  `booking:` prefix keeps it distinguishable from an item id. */
 export function announceBookingChange(args: { booking_id: string; kind: string }) {
-  announce('production', {
+  announceAfter('production', {
     item_id: `booking:${args.booking_id}`,
     client_id: 'booking',
     status: args.kind,
@@ -38,7 +38,7 @@ export function announceBatchChange(args: {
   status: string
   kind: 'created' | 'updated' | 'transition' | 'deleted'
 }) {
-  announce('production', {
+  announceAfter('production', {
     item_id: `batch:${args.batch_id}`,
     client_id: args.client_id,
     status: args.status,

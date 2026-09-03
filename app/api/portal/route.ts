@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
 import { accessibleClientIds } from '../../lib/production-access'
 import { getPortalData } from '../../lib/portal-data'
@@ -6,6 +7,7 @@ import { getPortalData } from '../../lib/portal-data'
 /** Portal payload for the signed-in viewer. Clients get their own workspace;
  *  AMs/admins may preview any client they can access via ?client_id=. */
 export async function GET(req: Request) {
+ return withRequestCache(async () => {
   try {
     const user = await requireRole('client')
     const url = new URL(req.url)
@@ -30,4 +32,5 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+ })
 }
