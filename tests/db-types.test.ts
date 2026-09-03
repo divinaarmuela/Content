@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { TABLE_COLUMNS, NULLABLE_COLUMNS, UPDATED_AT_TABLES, NATURAL_KEYS } from '@/lib/db-types'
-import type { Batch, ScheduleEntry, WebhookDelivery, ScanMailbox, ContentItem, TeamUser } from '@/lib/db-types'
+import {
+  TABLE_COLUMNS, NULLABLE_COLUMNS, UPDATED_AT_TABLES, NATURAL_KEYS,
+  JSON_COLUMNS, JSON_ARRAY_COLUMNS,
+} from '@/lib/db-types'
+import type {
+  Batch, ScheduleEntry, WebhookDelivery, ScanMailbox, ContentItem, TeamUser,
+  SocialPost, ScheduleNote,
+} from '@/lib/db-types'
 
 // Compile-time guard: these interface names must exist and be PascalCase
 // singular. If a name regresses (e.g. back to `Batche`/`ScanMailboxe`), this
@@ -12,7 +18,9 @@ const _delivery: Pick<WebhookDelivery, 'id'> = { id: 'x' }
 const _mailbox: Pick<ScanMailbox, 'id'> = { id: 'x' }
 const _item: Pick<ContentItem, 'id'> = { id: 'x' }
 const _user: Pick<TeamUser, 'id'> = { id: 'x' }
-void _batch, _entry, _delivery, _mailbox, _item, _user
+const _post: Pick<SocialPost, 'id'> = { id: 'x' }
+const _note: Pick<ScheduleNote, 'id'> = { id: 'x' }
+void _batch, _entry, _delivery, _mailbox, _item, _user, _post, _note
 
 describe('db-types (generated)', () => {
   it('knows the core tables and their columns', () => {
@@ -29,6 +37,41 @@ describe('db-types (generated)', () => {
       expect(UPDATED_AT_TABLES.has(t as any)).toBe(true)
     }
   })
+  // The two ghost tables behind the Schedule calendar: no SQL ever created
+  // them, so the generator is the only place their shape is written down.
+  it('knows the planned post table', () => {
+    expect(TABLE_COLUMNS.social_posts).toEqual([
+      'id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides',
+      'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone',
+      'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at',
+      'sent_at', 'approved_at', 'approved_by', 'note',
+    ])
+    // a post always belongs to a client and an item; a draft may not have
+    // picked its version, its time or its words yet
+    expect(NULLABLE_COLUMNS.social_posts).not.toContain('client_id')
+    expect(NULLABLE_COLUMNS.social_posts).not.toContain('item_id')
+    expect(NULLABLE_COLUMNS.social_posts).not.toContain('status')
+    for (const c of ['version_id', 'version_number', 'scheduled_for', 'caption', 'note']) {
+      expect(NULLABLE_COLUMNS.social_posts).toContain(c)
+    }
+    // the jsonb columns lib/db.ts has to put back when they read empty
+    expect(JSON_COLUMNS.social_posts)
+      .toEqual(['slides', 'per_channel', 'channels', 'publish_job_ids'])
+    expect(JSON_ARRAY_COLUMNS.social_posts)
+      .toEqual(['slides', 'channels', 'publish_job_ids'])
+    expect(JSON_ARRAY_COLUMNS.social_posts).not.toContain('per_channel')
+    expect(UPDATED_AT_TABLES.has('social_posts')).toBe(true)
+  })
+
+  it('knows the calendar note table', () => {
+    expect(TABLE_COLUMNS.schedule_notes).toEqual([
+      'id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at',
+    ])
+    expect(NULLABLE_COLUMNS.schedule_notes).toEqual(['created_by'])
+    expect(JSON_COLUMNS.schedule_notes).toEqual([])
+    expect(UPDATED_AT_TABLES.has('schedule_notes')).toBe(true)
+  })
+
   it('derives natural keys for composite tables', () => {
     expect(NATURAL_KEYS.team_user_clients!({ team_user_id: 'u1', client_id: 'c1' })).toBe('u1__c1')
     expect(NATURAL_KEYS.user_page_access!({ team_user_id: 'u1', href: '/dashboard/x' })).toBe('u1__%2Fdashboard%2Fx')

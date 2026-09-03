@@ -71,7 +71,59 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //                    claim(). Never migrated: it holds no history.
 //   booking_seats  — one row per (space, seat) holding the time ranges that
 //                    seat is spoken for, so no-overlap is one atomic write.
-for (const ghost of ['website', 'claim_locks', 'booking_seats']) if (!tables.has(ghost)) tables.set(ghost, new Map([['id', { type: 'string', nullable: false }]]))
+//   social_posts   — a PLANNED post: the composition (chosen slides, caption,
+//                    channels, time) that has to exist BEFORE anything is
+//                    queued, because it sits in final-post approval first.
+//                    One post <-> one item; its approval IS the item's
+//                    posting_approval_state, never a second state machine.
+//   schedule_notes — a short note pinned to a day and time on the Schedule
+//                    calendar. Team-only; it never reaches a client or a
+//                    provider.
+const t = (type, nullable, json = false, jsonArray = false) => ({ type, nullable, json, jsonArray })
+const GHOST_TABLES = {
+  website: [['id', t('string', false)]],
+  claim_locks: [['id', t('string', false)]],
+  booking_seats: [['id', t('string', false)]],
+  social_posts: [
+    ['id', t('string', false)],
+    ['client_id', t('string', false)],
+    ['item_id', t('string', false)],
+    // a draft dragged onto the calendar before graphics are chosen has no
+    // version yet; eligibility() is what refuses to SEND such a post
+    ['version_id', t('string', true)],
+    ['version_number', t('number', true)],
+    ['slides', t('unknown', false, true, true)],
+    ['caption', t('string', true)],
+    ['per_channel', t('unknown', false, true, false)],
+    ['channels', t('unknown', false, true, true)],
+    ['scheduled_for', t('string', true)],
+    ['timezone', t('string', false)],
+    ['status', t('string', false)],
+    ['publish_job_ids', t('unknown', false, true, true)],
+    ['created_by', t('string', true)],
+    ['created_at', t('string', false)],
+    ['updated_at', t('string', false)],
+    ['sent_at', t('string', true)],
+    ['approved_at', t('string', true)],
+    ['approved_by', t('string', true)],
+    ['note', t('string', true)],
+  ],
+  schedule_notes: [
+    ['id', t('string', false)],
+    ['client_id', t('string', false)],
+    ['at', t('string', false)],
+    ['text', t('string', false)],
+    ['created_by', t('string', true)],
+    ['created_at', t('string', false)],
+    ['updated_at', t('string', false)],
+  ],
+}
+for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
+  if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
+}
+// Ghost tables have no `create trigger` line to be read from, so the ones that
+// carry updated_at say so here — lib/db.ts stamps the column from this set.
+for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

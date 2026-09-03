@@ -58,8 +58,10 @@ export type TableName =
   | 'scan_runs'
   | 'scan_settings'
   | 'schedule_entries'
+  | 'schedule_notes'
   | 'shoot_proposals'
   | 'social_accounts'
+  | 'social_posts'
   | 'team_invites'
   | 'team_user_clients'
   | 'team_users'
@@ -831,6 +833,16 @@ export interface ScheduleEntry {
   published_at: string | null
 }
 
+export interface ScheduleNote {
+  id: string
+  client_id: string
+  at: string
+  text: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ShootProposal {
   batch_id: string | null
   id: string
@@ -861,6 +873,29 @@ export interface SocialAccount {
   active: boolean
   connected_at: string
   last_synced_at: string
+}
+
+export interface SocialPost {
+  id: string
+  client_id: string
+  item_id: string
+  version_id: string | null
+  version_number: number | null
+  slides: unknown
+  caption: string | null
+  per_channel: unknown
+  channels: unknown
+  scheduled_for: string | null
+  timezone: string
+  status: string
+  publish_job_ids: unknown
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  sent_at: string | null
+  approved_at: string | null
+  approved_by: string | null
+  note: string | null
 }
 
 export interface TeamInvite {
@@ -1024,8 +1059,10 @@ export const TABLE_COLUMNS = {
   scan_runs: ['id', 'mailbox', 'trigger', 'status', 'started_at', 'finished_at', 'scanned', 'claimed', 'leads_created', 'skipped', 'errors', 'error'],
   scan_settings: ['allow_self_connect', 'id', 'lookback_days', 'max_messages', 'min_confidence', 'duplicate_window_days', 'rules_only', 'schedule_enabled', 'blocked_domains', 'blocked_senders', 'updated_at', 'updated_by'],
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
+  schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at'],
+  social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'note'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status'],
@@ -1093,8 +1130,10 @@ export const NULLABLE_COLUMNS = {
   scan_runs: ['finished_at', 'error'],
   scan_settings: ['allow_self_connect', 'updated_by'],
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],
+  schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['client_id', 'name', 'username', 'avatar_url'],
+  social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'note'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid'],
@@ -1169,8 +1208,10 @@ export const JSON_COLUMNS = {
   scan_runs: [],
   scan_settings: [],
   schedule_entries: [],
+  schedule_notes: [],
   shoot_proposals: [],
   social_accounts: [],
+  social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids'],
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages', 'notification_prefs'],
@@ -1244,8 +1285,10 @@ export const JSON_ARRAY_COLUMNS = {
   scan_runs: [],
   scan_settings: [],
   schedule_entries: [],
+  schedule_notes: [],
   shoot_proposals: [],
   social_accounts: [],
+  social_posts: ['slides', 'channels', 'publish_job_ids'],
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages'],
@@ -1257,7 +1300,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'journal_posts', 'projects', 'report_settings', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
