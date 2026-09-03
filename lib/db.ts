@@ -1,0 +1,293 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { rtdbUrl } from './firebase-config'
+import {
+  NATURAL_KEYS, NULLABLE_COLUMNS, UPDATED_AT_TABLES, encodeKey,
+  type Row, type TableName,
+} from './db-types'
+
+export { encodeKey }
+
+/**
+ * Server-side access to Firebase Realtime Database over its REST API.
+ *
+ * No firebase-admin and no sockets: a serverless function that opens a
+ * websocket to read one row pays for the handshake on every cold start and
+ * then has to remember to close it. A REST GET is one HTTPS call and done.
+ *
+ * Every table is a flat node /mdm/tables/<table>/<id>. list() reads the node
+ * (or an indexed orderBy/equalTo slice) and filters in memory — honest for a
+ * JSON tree, instant at this size, and every read inside one request is
+ * served from a request-scoped cache so a route that touches the same table
+ * five times pays once.
+ */
+
+export class DbError extends Error {
+  code: 'unique' | 'network' | 'not_found' | 'bad_request'
+  constructor(code: DbError['code'], message: string) { super(message); this.code = code; this.name = 'DbError' }
+}
+
+export type ListQuery<T> = {
+  by?: Partial<T>
+  where?: (row: T) => boolean
+  orderBy?: [keyof T & string, 'asc' | 'desc'][]
+  limit?: number
+}
+
+// `T extends Row` (where Row is just `{ id: string }`) lets `table<Client>(...)`
+// bind to a concrete generated interface. But when `table('clients')` is
+// called with no explicit type argument, T defaults to the bare constraint —
+// so write methods intersect with `Record<string, unknown>` too, or a plain
+// `{ name: 'New' }` patch on an untyped call would be rejected as having no
+// known properties.
+export interface Table<T extends Row> {
+  name: TableName
+  get(id: string): Promise<T | null>
+  list(q?: ListQuery<T>): Promise<T[]>
+  count(q?: ListQuery<T>): Promise<number>
+  insert(row: Omit<T, 'id'> & { id?: string } & Record<string, unknown>): Promise<T>
+  update(id: string, patch: Partial<T> & Record<string, unknown>): Promise<T | null>
+  upsert(row: Partial<T> & { id?: string } & Record<string, unknown>, opts?: { onConflict?: keyof T & string }): Promise<T>
+  remove(id: string): Promise<void>
+  removeWhere(where: (row: T) => boolean): Promise<number>
+}
+
+/**
+ * Single-column UNIQUE constraints carried over from Postgres.
+ *
+ * Verified against supabase/*.sql (grep -rniE "unique"). Every column below
+ * really is enforced as a standalone unique constraint or unique index (or is
+ * the table's primary key). Three entries the migration brief listed did not
+ * hold up and are intentionally left out:
+ *   - team_invites.email: only a PARTIAL unique index on lower(email) WHERE
+ *     status = 'pending' (identity.sql) — accepted/revoked invites may repeat
+ *     an email, so a plain always-on unique key would reject legitimate rows.
+ *   - webhook_deliveries.provider_event_id: the unique index is composite,
+ *     on (provider, provider_event_id) (webhook_deliveries.sql) — composite
+ *     uniques are enforced by call sites already, not here.
+ *   - publish_jobs.dedupe_key: no such column exists on publish_jobs
+ *     (social_publishing.sql); the only unique index there is partial, on
+ *     content_item_id. This looks like it was meant to be notification_log's
+ *     dedupe_key (see below), so it is dropped rather than fabricated.
+ * Two entries were corrected to match the actual schema:
+ *   - notification_log: the real column is `dedupe_key` (identity.sql), not
+ *     `dedup_key`.
+ *   - social_accounts: the real unique column is `provider_account_id`
+ *     (social_publishing.sql), not `provider_post_id`.
+ */
+export const UNIQUE_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
+  team_users: ['email', 'clerk_user_id'],
+  newsletter_subscribers: ['email'],
+  video_previews: ['source_url'],
+  email_ingest_log: ['gmail_message_id'],
+  post_analytics: ['provider_post_id'],
+  notification_log: ['dedupe_key'],
+  asana_project_map: ['project_gid'],
+  work_kinds: ['slug'],
+  projects: ['slug'],
+  intake_forms: ['token'],
+  monthly_updates: ['token'],
+  clients: ['share_token'],
+  client_brand: ['client_id'],
+  social_accounts: ['provider_account_id'],
+}
+
+const ROOT = '/mdm'
+
+// ---- transport ------------------------------------------------------------
+
+export async function rtdbFetch(path: string, init: RequestInit & { query?: Record<string, string> } = {}): Promise<any> {
+  const { query, ...rest } = init
+  const qs = query ? '?' + new URLSearchParams(query).toString() : ''
+  const url = `${rtdbUrl()}${path}.json${qs}`
+  let res: Response
+  try {
+    res = await fetch(url, { ...rest, headers: { 'content-type': 'application/json', ...(rest.headers ?? {}) }, cache: 'no-store' })
+  } catch (e) {
+    throw new DbError('network', `Database unreachable: ${(e as Error).message}`)
+  }
+  if (!res.ok) throw new DbError(res.status === 400 ? 'bad_request' : 'network', `Database ${rest.method ?? 'GET'} ${path} failed (${res.status})`)
+  return res.json()
+}
+
+// ---- request cache ----------------------------------------------------------
+
+const als = new AsyncLocalStorage<Map<string, Promise<any>>>()
+
+/** Run `fn` with a read cache: identical GETs inside it hit the network once. Writes invalidate the table. */
+export function withRequestCache<R>(fn: () => Promise<R>): Promise<R> {
+  return als.run(new Map(), fn)
+}
+function cachedGet(path: string, query?: Record<string, string>): Promise<any> {
+  const store = als.getStore()
+  const key = path + (query ? '?' + new URLSearchParams(query).toString() : '')
+  if (!store) return rtdbFetch(path, { query })
+  let p = store.get(key)
+  if (!p) { p = rtdbFetch(path, { query }); store.set(key, p) }
+  return p
+}
+function invalidate(name: string) {
+  const store = als.getStore()
+  if (!store) return
+  for (const k of [...store.keys()]) if (k.startsWith(`${ROOT}/tables/${name}`) || k.startsWith(`${ROOT}/uniq/${name}`)) store.delete(k)
+}
+
+// ---- row shaping ------------------------------------------------------------
+
+function stripNulls<T extends object>(row: T): T {
+  const out: any = {}
+  for (const [k, v] of Object.entries(row)) if (v !== null && v !== undefined) out[k] = v
+  return out
+}
+function normalise<T>(name: TableName, id: string, raw: any): T {
+  const row: any = { ...raw, id: raw?.id ?? id }
+  for (const c of (NULLABLE_COLUMNS as any)[name] ?? []) if (row[c] === undefined) row[c] = null
+  return row as T
+}
+function idFor(name: TableName, row: any): string {
+  if (row.id) return String(row.id)
+  const nk = NATURAL_KEYS[name]
+  return nk ? nk(row) : crypto.randomUUID()
+}
+function sortRows<T>(rows: T[], orderBy: ListQuery<T>['orderBy']) {
+  if (!orderBy?.length) return rows
+  return rows.sort((a: any, b: any) => {
+    for (const [col, dir] of orderBy) {
+      const x = a[col], y = b[col]
+      if (x === y) continue
+      if (x == null) return 1
+      if (y == null) return -1
+      const c = x < y ? -1 : 1
+      return dir === 'desc' ? -c : c
+    }
+    return 0
+  })
+}
+
+// ---- the table -------------------------------------------------------------
+
+export function table<T extends Row>(name: TableName): Table<T> {
+  const base = `${ROOT}/tables/${name}`
+  const uniques = UNIQUE_COLUMNS[name] ?? []
+
+  async function readAll(by?: Partial<T>): Promise<T[]> {
+    let node: any
+    let rest: Partial<T> = {}
+    if (by && Object.keys(by).length) {
+      const [[col, val], ...others] = Object.entries(by)
+      rest = Object.fromEntries(others) as Partial<T>
+      node = val == null ? await cachedGet(base) : await cachedGet(base, { orderBy: JSON.stringify(col), equalTo: JSON.stringify(val) })
+      if (val == null) rest = by
+    } else node = await cachedGet(base)
+    let rows = node ? Object.entries(node).map(([id, r]) => normalise<T>(name, id, r)) : []
+    const restEntries = Object.entries(rest)
+    if (restEntries.length) rows = rows.filter((r: any) => restEntries.every(([k, v]) => r[k] === v))
+    return rows
+  }
+
+  async function uniqChecks(row: any, selfId: string): Promise<Record<string, string>> {
+    const patch: Record<string, string> = {}
+    for (const col of uniques) {
+      const v = row[col]
+      if (v == null) continue
+      const key = `${ROOT}/uniq/${name}/${col}/${encodeKey(String(v))}`
+      const owner = await cachedGet(key)
+      if (owner && owner !== selfId) throw new DbError('unique', `${name}.${col} already exists`)
+      patch[`uniq/${name}/${col}/${encodeKey(String(v))}`] = selfId
+    }
+    return patch
+  }
+  function uniqClears(row: any): Record<string, null> {
+    const patch: Record<string, null> = {}
+    for (const col of uniques) if (row?.[col] != null) patch[`uniq/${name}/${col}/${encodeKey(String(row[col]))}`] = null
+    return patch
+  }
+
+  const t: Table<T> = {
+    name,
+    async get(id) {
+      // If the whole table is already cached for this request (a prior
+      // list()/count() with no `by`), serve from it instead of a fresh GET —
+      // that is the "touches the same table five times, pays once" contract.
+      const store = als.getStore()
+      const wholeTable = store?.get(base)
+      if (wholeTable) {
+        const node = await wholeTable
+        return node?.[id] ? normalise<T>(name, id, node[id]) : null
+      }
+      const raw = await cachedGet(`${base}/${id}`)
+      return raw ? normalise<T>(name, id, raw) : null
+    },
+    async list(q = {}) {
+      let rows = await readAll(q.by)
+      if (q.where) rows = rows.filter(q.where)
+      rows = sortRows(rows, q.orderBy)
+      if (q.limit != null) rows = rows.slice(0, q.limit)
+      return rows
+    },
+    async count(q = {}) {
+      let rows = await readAll(q.by)
+      if (q.where) rows = rows.filter(q.where)
+      return rows.length
+    },
+    async insert(input) {
+      const id = idFor(name, input)
+      const now = new Date().toISOString()
+      const row: any = stripNulls({ created_at: now, ...(input as any), id })
+      if (UPDATED_AT_TABLES.has(name)) row.updated_at = row.updated_at ?? now
+      const patch: Record<string, unknown> = { [`tables/${name}/${id}`]: row, ...(await uniqChecks(row, id)) }
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(patch) })
+      invalidate(name)
+      return normalise<T>(name, id, row)
+    },
+    async update(id, patch) {
+      const current = await cachedGet(`${base}/${id}`)
+      if (!current) return null
+      const next: any = { ...current, ...(patch as any), id }
+      if (UPDATED_AT_TABLES.has(name)) next.updated_at = new Date().toISOString()
+      const body: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(patch as any)) body[`tables/${name}/${id}/${k}`] = v === undefined ? null : v
+      if (UPDATED_AT_TABLES.has(name)) body[`tables/${name}/${id}/updated_at`] = next.updated_at
+      const changedUniques = uniques.filter(c => c in (patch as any) && (patch as any)[c] !== current[c])
+      if (changedUniques.length) {
+        Object.assign(body, uniqClears(Object.fromEntries(changedUniques.map(c => [c, current[c]]))))
+        Object.assign(body, await uniqChecks(Object.fromEntries(changedUniques.map(c => [c, next[c]])), id))
+      }
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      invalidate(name)
+      return normalise<T>(name, id, stripNulls(next))
+    },
+    async upsert(row, opts) {
+      const key = opts?.onConflict
+      if (key && (row as any)[key] != null) {
+        const existing = (await readAll({ [key]: (row as any)[key] } as Partial<T>))[0]
+        if (existing) return (await t.update(existing.id, row)) as T
+      } else if (row.id) {
+        const existing = await t.get(row.id)
+        if (existing) return (await t.update(row.id, row)) as T
+      }
+      return t.insert(row as any)
+    },
+    async remove(id) {
+      const current = await cachedGet(`${base}/${id}`)
+      const body: Record<string, unknown> = { [`tables/${name}/${id}`]: null, ...uniqClears(current) }
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      invalidate(name)
+    },
+    async removeWhere(where) {
+      const rows = (await readAll()).filter(where)
+      if (!rows.length) return 0
+      const body: Record<string, unknown> = {}
+      for (const r of rows) { body[`tables/${name}/${r.id}`] = null; Object.assign(body, uniqClears(r)) }
+      await rtdbFetch(ROOT, { method: 'PATCH', body: JSON.stringify(body) })
+      invalidate(name)
+      return rows.length
+    },
+  }
+  return t
+}
+
+/** Names of tables that currently hold at least one row. */
+export async function listTables(): Promise<string[]> {
+  const node = await rtdbFetch(`${ROOT}/tables`, { query: { shallow: 'true' } })
+  return node ? Object.keys(node).sort() : []
+}
