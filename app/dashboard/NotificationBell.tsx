@@ -33,12 +33,14 @@ export default function NotificationBell() {
     <Link
       href="/dashboard/notifications"
       aria-label={`Notifications, ${unread} unread`}
-      className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      /* a 44px surface pill, the same shape as the theme toggle beside it —
+         it is its own hit target, so nothing has to wrap it */
+      className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors hover:bg-muted"
       onClick={() => setUnread(0)}
     >
-      <Bell className="h-4 w-4" />
+      <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
       {unread > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 font-mono text-[10px] tabular-nums text-white">
+        <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-red px-1 text-[10px] font-bold tabular-nums text-cream">
           {unread > 9 ? '9+' : unread}
         </span>
       )}
