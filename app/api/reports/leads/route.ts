@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { ReportSetting } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { buildLeadsReportData } from '../../../lib/report-data'
 import { renderLeadsReportPdf } from '../../../lib/report-pdf'
@@ -12,21 +13,22 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 /** Read report settings. Account managers see the Reports page by default,
  *  so reading must not 403 for them; changing settings stays super_admin. */
 export async function GET() {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
-    const { data, error } = await supabase
-      .from('report_settings').select('*').eq('id', 'leads_report').maybeSingle()
-    if (error) throw new Error(error.message)
+    const data = await table<ReportSetting>('report_settings').get('leads_report')
     if (!data) return NextResponse.json({ error: 'Run supabase/report_settings.sql first' }, { status: 503 })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Update settings. super_admin only. */
 export async function PUT(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const body = await req.json()
@@ -51,20 +53,21 @@ export async function PUT(req: Request) {
     }
     if ('data_from' in body) patch.data_from = body.data_from || null
 
-    const { data, error } = await supabase
-      .from('report_settings').update(patch).eq('id', 'leads_report').select().single()
-    if (error) throw new Error(error.message)
+    const data = await table('report_settings').update('leads_report', patch)
+    if (!data) return NextResponse.json({ error: 'Run supabase/report_settings.sql first' }, { status: 503 })
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Generate a report. body: { month, year, action: 'download' | 'send' }.
  *  Downloading is account_manager+; SENDING it to the configured recipients
  *  is an outbound email and stays super_admin. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const body = await req.json()
@@ -77,15 +80,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Valid month and year are required' }, { status: 400 })
     }
 
-    const { data: settings } = await supabase
-      .from('report_settings').select('*').eq('id', 'leads_report').maybeSingle()
+    const settings = await table<ReportSetting>('report_settings').get('leads_report')
 
     const data = await buildLeadsReportData(month, year, settings?.data_from)
     const pdf = await renderLeadsReportPdf(data)
     const filename = `md-media-leads-report-${year}-${String(month).padStart(2, '0')}.pdf`
 
     if (body.action === 'send') {
-      const recipients: string[] = settings?.recipients ?? []
+      const recipients: string[] = (settings?.recipients as unknown as string[] | null) ?? []
       if (recipients.length === 0) {
         return NextResponse.json({ error: 'Add at least one recipient in the report settings first' }, { status: 400 })
       }
@@ -113,4 +115,5 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

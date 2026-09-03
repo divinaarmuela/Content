@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Lead } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 
 /** Editing and deleting leads is an account_manager action. Middleware alone
  *  would admit any signed-in account, including a client. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
   } catch (e) {
@@ -24,18 +26,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('leads')
-    .update(patch)
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  try {
+    const data = await table('leads').update(id, patch)
+    if (!data) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    return NextResponse.json(data)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
+  })
 }
 
 /** Delete a lead. Clerk-protected via middleware (/api/leads(.*)). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
   } catch (e) {
@@ -43,14 +46,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error }, { status })
   }
   const { id } = await params
-  const { data, error } = await supabase
-    .from('leads')
-    .delete()
-    .eq('id', id)
-    .select('id')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!data || data.length === 0) {
-    return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+  const leads = table<Lead>('leads')
+  try {
+    // the old delete reported what it removed; a missing row is still a 404
+    const existing = await leads.get(id)
+    if (!existing) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    await leads.remove(id)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
+  })
 }

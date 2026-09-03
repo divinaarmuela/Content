@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../../lib/authz'
 import { loadBrandProfile } from '../../../../../lib/brand-profile'
 import { validateProfile, type BrandProfile } from '../../../../../lib/brand-profile-core'
@@ -14,6 +15,7 @@ import { validateProfile, type BrandProfile } from '../../../../../lib/brand-pro
  */
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const { id } = await params
@@ -24,9 +26,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const { id } = await params
@@ -36,23 +40,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const seen = checked.profile.rev
     const next: BrandProfile = { ...checked.profile, rev: seen + 1 }
-    let q = supabase.from('clients')
-      .update({ brand_profile: next, brand_profile_updated_at: new Date().toISOString(), brand_profile_updated_by: user.email })
-      .eq('id', id)
-    // optimistic concurrency: the row must still be at the revision the
-    // caller edited from. rev 0 means "never saved" — the column is null.
-    q = seen > 0 ? q.eq('brand_profile->>rev', String(seen)) : q.is('brand_profile', null)
-    const { data, error } = await q.select('id')
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!data || data.length === 0) {
+
+    // the row must still be at the revision the caller edited from, so it is
+    // re-read and checked here. rev 0 means "never saved" — no profile at all.
+    const live = await table<Client>('clients').get(id)
+    const liveRev = (live?.brand_profile as { rev?: unknown } | null)?.rev
+    const stillTheirs = seen > 0
+      ? String(liveRev ?? '') === String(seen)
+      : live?.brand_profile == null
+    if (!live || !stillTheirs) {
       return NextResponse.json(
         { error: 'Someone else changed this brand profile just now. The page will reload with their version.' },
         { status: 409 },
       )
     }
+    await table('clients').update(id, {
+      brand_profile: next,
+      brand_profile_updated_at: new Date().toISOString(),
+      brand_profile_updated_by: user.email,
+    })
     return NextResponse.json({ profile: next })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

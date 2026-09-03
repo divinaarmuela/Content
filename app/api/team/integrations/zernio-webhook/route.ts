@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { ProviderWebhook } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError } from '@/app/lib/authz'
 import { encryptSecret, credentialsKeyConfigured } from '@/app/lib/secret-box'
 import { registerZernioWebhook } from '@/app/lib/publisher'
@@ -22,9 +23,10 @@ export const dynamic = 'force-dynamic'
  *
  * Safe to press twice — `registerZernioWebhook` updates the existing
  * registration for the same URL rather than adding a second one, and the row
- * here is upserted on (provider, url).
+ * here is found by (provider, url) and patched rather than added again.
  */
 export async function POST() {
+  return withRequestCache(async () => {
   try {
     const viewer = await requireRole('super_admin')
 
@@ -48,7 +50,7 @@ export async function POST() {
       name: 'MD Media dashboard',
     })
 
-    const { error } = await supabase.from('provider_webhooks').upsert({
+    const row = {
       provider: 'zernio',
       provider_hook_id: hook.id,
       url: hook.url,
@@ -57,15 +59,23 @@ export async function POST() {
       active: true,
       registered_by: viewer.email,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'provider,url' })
-
-    if (error) {
+    }
+    try {
+      // (provider, url) is the key the old upsert conflicted on; it is a pair,
+      // so the match is made here
+      const hooks = table<ProviderWebhook>('provider_webhooks')
+      const existing = (await hooks.list({
+        by: { provider: 'zernio' }, where: r => r.url === hook.url, limit: 1,
+      }))[0]
+      if (existing) await hooks.update(existing.id, row)
+      else await table('provider_webhooks').insert(row)
+    } catch (e) {
       // The registration itself succeeded, so say so rather than implying
       // nothing happened — but the secret is now only at the provider, and a
       // delivery we cannot verify is a delivery we will reject.
       return NextResponse.json({
-        error: `Zernio accepted the webhook but the secret could not be saved (${error.message}). `
-          + 'Run supabase/zernio_webhook.sql, then press this again.',
+        error: `Zernio accepted the webhook but the secret could not be saved (${(e as Error).message}). `
+          + 'Press this again.',
       }, { status: 500 })
     }
 
@@ -85,4 +95,5 @@ export async function POST() {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

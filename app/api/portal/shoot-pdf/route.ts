@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client, Batch } from '@/lib/db-types'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../lib/batch-brief-core'
 import { renderBriefPdf } from '../../../lib/brief-pdf'
 import { shootStatusLabel } from '../../../lib/portal-words'
@@ -10,6 +11,7 @@ import { shootStatusLabel } from '../../../lib/portal-words'
  *  token — only for a shoot the AM explicitly shared. Public, token-gated,
  *  same trust model as every other /api/portal route. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const url = new URL(req.url)
     const rawToken = url.searchParams.get('token') ?? ''
@@ -18,14 +20,13 @@ export async function GET(req: Request) {
     if (!/^[0-9a-f-]{36}$/i.test(token) || !id) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     }
-    const { data: client } = await supabase.from('clients').select('id, name').eq('share_token', token).maybeSingle()
+    const client = (await table<Client>('clients').list({
+      where: c => c.share_token === token, limit: 1,
+    }))[0]
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
 
-    const { data: batch } = await supabase
-      .from('batches')
-      .select('title, status, shoot_date, location, concept, planned_deliverables, shot_list, shared_with_client')
-      .eq('id', id).eq('client_id', client.id)
-      .maybeSingle()
+    const found = await table<Batch>('batches').get(id)
+    const batch = found && found.client_id === client.id ? found : null
     if (!batch || !batch.shared_with_client) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
@@ -51,4 +52,5 @@ export async function GET(req: Request) {
     console.error('portal shoot pdf error:', e)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
+  })
 }

@@ -1,33 +1,40 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { SocialAccount, Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { getPublisher } from '../../../lib/publisher'
 import { SUPPORTED_PLATFORMS } from '../../../lib/publish-core'
 
+/** The columns every account list has returned; the row carries no more. */
+const accountShape = (r: SocialAccount) => ({
+  id: r.id, client_id: r.client_id, platform: r.platform,
+  provider_account_id: r.provider_account_id, name: r.name,
+  username: r.username, avatar_url: r.avatar_url, active: r.active,
+  connected_at: r.connected_at,
+})
+
 /** Connected accounts, optionally for one client, plus whether publishing is
  *  configured at all — so the UI can explain rather than fail silently. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
     const clientId = new URL(req.url).searchParams.get('clientId')
 
-    let q = supabase
-      .from('social_accounts')
-      .select('id, client_id, platform, provider_account_id, name, username, avatar_url, active, connected_at')
-      .order('platform', { ascending: true })
-    if (clientId) q = q.eq('client_id', clientId)
-
-    const { data, error } = await q
-    if (error) throw new Error(error.message)
+    const rows = await table<SocialAccount>('social_accounts').list({
+      where: clientId ? a => a.client_id === clientId : undefined,
+      orderBy: [['platform', 'asc']],
+    })
+    const data = rows.map(accountShape)
 
     // Token health is opt-in: it is one upstream call per account, and the
     // common case (rendering a list) does not need it. Failures collapse to
     // null so a slow or unavailable provider never blanks the page.
     let health: Record<string, { valid: boolean; expiresAt: string | null; needsRefresh: boolean }> = {}
-    if (new URL(req.url).searchParams.get('health') === '1' && (data ?? []).length > 0) {
+    if (new URL(req.url).searchParams.get('health') === '1' && data.length > 0) {
       const publisher = getPublisher()
       const results = await Promise.all(
-        (data ?? []).map(async row => {
+        data.map(async row => {
           const h = await publisher.accountHealth(row.provider_account_id as string) as {
             tokenStatus?: { valid?: boolean; expiresAt?: string; needsRefresh?: boolean }
           } | null
@@ -48,13 +55,12 @@ export async function GET(req: Request) {
     // had a profile cannot have accounts waiting for us.
     let hasProfile: boolean | null = null
     if (clientId) {
-      const { data: c } = await supabase
-        .from('clients').select('social_profile_id').eq('id', clientId).maybeSingle()
+      const c = await table<Client>('clients').get(clientId)
       hasProfile = Boolean(c?.social_profile_id)
     }
 
     return NextResponse.json({
-      accounts: data ?? [],
+      accounts: data,
       hasProfile,
       health,
       platforms: SUPPORTED_PLATFORMS,
@@ -67,6 +73,7 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Disconnect an account.
@@ -77,6 +84,7 @@ export async function GET(req: Request) {
  *  first: if it fails we keep the local row, so the two never disagree in the
  *  direction that matters (us thinking it is gone when it is not). */
 export async function DELETE(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
     const { id } = await req.json()
@@ -84,17 +92,17 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    const { data: row } = await supabase
-      .from('social_accounts').select('provider_account_id').eq('id', id).maybeSingle()
+    const accounts = table<SocialAccount>('social_accounts')
+    const row = await accounts.get(id)
     if (!row) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
-    await getPublisher().disconnectAccount(row.provider_account_id as string)
+    await getPublisher().disconnectAccount(row.provider_account_id)
 
-    const { error } = await supabase.from('social_accounts').delete().eq('id', id)
-    if (error) throw new Error(error.message)
+    await accounts.remove(id)
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache, encodeKey } from '@/lib/db'
+import type { TeamUser, UserPageAccess } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { normaliseGrantedPages, isGrantablePage } from '../../../lib/page-access-core'
 import type { Role } from '../../../lib/identity-core'
@@ -17,43 +18,70 @@ import type { Role } from '../../../lib/identity-core'
  */
 export const dynamic = 'force-dynamic'
 
+const access = () => table<UserPageAccess & { hidden?: boolean }>('user_page_access')
+
+/**
+ * Replace one person's GRANT rows or their HIDE rows, never both.
+ *
+ * The row id is (team_user_id, href), so a hide and a grant for the same page
+ * are the same row — which is why the two sets are written one at a time and
+ * the other set is left exactly as it was.
+ */
+async function replaceRows(teamUserId: string, hidden: boolean, hrefs: string[], by: string) {
+  await access().removeWhere(r => r.team_user_id === teamUserId && Boolean(r.hidden) === hidden)
+  for (const href of hrefs) {
+    await table('user_page_access').upsert({
+      id: `${teamUserId}__${encodeKey(href)}`,
+      team_user_id: teamUserId, href, hidden, granted_by: by,
+      granted_at: new Date().toISOString(),
+    })
+  }
+}
+
 export async function GET() {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')   // any team role
 
-    const { data: mineRows } = await supabase
-      .from('user_page_access').select('href, hidden').eq('team_user_id', user.id)
-    const mine = (mineRows ?? []).filter(r => !r.hidden).map(r => r.href as string)
-    const hidden = (mineRows ?? []).filter(r => r.hidden).map(r => r.href as string)
+    const mineRows = await access().list({ by: { team_user_id: user.id } })
+    const mine = mineRows.filter(r => !r.hidden).map(r => r.href)
+    const hidden = mineRows.filter(r => r.hidden).map(r => r.href)
 
     if (user.role !== 'super_admin') return NextResponse.json({ mine, hidden })
 
-    const [{ data: grants }, { data: members }] = await Promise.all([
-      supabase.from('user_page_access').select('team_user_id, href, hidden'),
-      supabase.from('team_users')
-        .select('id, name, email, role, active_status, clerk_user_id')
-        .eq('active_status', true)
-        .neq('role', 'client')
-        .order('name'),
+    const [grants, memberRows] = await Promise.all([
+      access().list(),
+      table<TeamUser>('team_users').list({
+        by: { active_status: true },
+        where: r => r.role !== 'client',
+        orderBy: [['name', 'asc']],
+      }),
     ])
+    // the projection the old select named
+    const members = memberRows.map(r => ({
+      id: r.id, name: r.name, email: r.email, role: r.role,
+      active_status: r.active_status, clerk_user_id: r.clerk_user_id,
+    }))
 
     const byUser: Record<string, string[]> = {}
     const hiddenByUser: Record<string, string[]> = {}
-    for (const g of grants ?? []) {
+    for (const g of grants) {
       const map = g.hidden ? hiddenByUser : byUser
       map[g.team_user_id] = [...(map[g.team_user_id] ?? []), g.href]
     }
 
-    return NextResponse.json({ mine, hidden, grants: byUser, hiddenByUser, members: members ?? [] })
+    return NextResponse.json({ mine, hidden, grants: byUser, hiddenByUser, members })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Replace one person's granted pages (super admin), or replace YOUR OWN
  *  hidden pages (any team role — `self_hidden` in the body). */
 export async function PATCH(req: NextRequest) {
+  return withRequestCache(async () => {
   try {
     const body = await req.json().catch(() => ({}))
 
@@ -66,14 +94,7 @@ export async function PATCH(req: NextRequest) {
           // the Overview stays: a dashboard with no landing page is a trap
           .filter(h => h !== '/dashboard' && isGrantablePage(h))
       )]
-      await supabase.from('user_page_access')
-        .delete().eq('team_user_id', user.id).eq('hidden', true)
-      if (hrefs.length > 0) {
-        const { error } = await supabase.from('user_page_access').insert(
-          hrefs.map(href => ({ team_user_id: user.id, href, hidden: true, granted_by: user.email })),
-        )
-        if (error) throw new Error(error.message)
-      }
+      await replaceRows(user.id, true, hrefs, user.email)
       return NextResponse.json({ hidden: hrefs })
     }
 
@@ -90,21 +111,13 @@ export async function PATCH(req: NextRequest) {
           .filter((h): h is string => typeof h === 'string')
           .filter(h => h !== '/dashboard' && isGrantablePage(h))
       )]
-      await supabase.from('user_page_access')
-        .delete().eq('team_user_id', teamUserId).eq('hidden', true)
-      if (hrefs.length > 0) {
-        const { error } = await supabase.from('user_page_access').insert(
-          hrefs.map(href => ({ team_user_id: teamUserId, href, hidden: true, granted_by: admin.email })),
-        )
-        if (error) throw new Error(error.message)
-      }
+      await replaceRows(teamUserId, true, hrefs, admin.email)
       return NextResponse.json({ hidden: hrefs })
     }
 
     // the person's own role decides which grants are meaningful, so it is read
     // here rather than trusted from the browser
-    const { data: target } = await supabase
-      .from('team_users').select('id, role').eq('id', teamUserId).maybeSingle()
+    const target = await table<TeamUser>('team_users').get(teamUserId)
     if (!target) return NextResponse.json({ error: 'No such team member' }, { status: 404 })
     if (target.role === 'client') {
       return NextResponse.json({ error: 'Client accounts have no dashboard pages' }, { status: 400 })
@@ -114,18 +127,11 @@ export async function PATCH(req: NextRequest) {
 
     // replace wholesale — but only the GRANT rows; a person's own hides are
     // their preference and survive an admin's grant edit
-    await supabase.from('user_page_access')
-      .delete().eq('team_user_id', teamUserId).eq('hidden', false)
-    if (hrefs.length > 0) {
-      const { error } = await supabase.from('user_page_access').insert(
-        hrefs.map(href => ({ team_user_id: teamUserId, href, granted_by: admin.email })),
-      )
-      if (error) throw new Error(error.message)
-    }
+    await replaceRows(teamUserId, false, hrefs, admin.email)
 
-    const { data: grants } = await supabase.from('user_page_access').select('team_user_id, href, hidden')
+    const grants = await access().list()
     const byUser: Record<string, string[]> = {}
-    for (const g of grants ?? []) {
+    for (const g of grants) {
       if (g.hidden) continue
       byUser[g.team_user_id] = [...(byUser[g.team_user_id] ?? []), g.href]
     }
@@ -134,4 +140,5 @@ export async function PATCH(req: NextRequest) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

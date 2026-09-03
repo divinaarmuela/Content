@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { TableName } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
 import { driveStatus } from '@/app/lib/gdrive'
@@ -35,6 +36,7 @@ function sinceWords(iso: string | null): string {
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  return withRequestCache(async () => {
   try {
     const viewer = await requireRole('account_manager')
     // ONE Drive connection serves the whole agency, so connecting and
@@ -42,14 +44,10 @@ export async function GET() {
     // the routes enforce the same rule themselves.
     const canConnect = viewer.role === 'super_admin'
 
-    // counted rather than assumed; a missing table means zero, not a crash
-    const count = async (table: string, filter?: (q: never) => unknown) => {
-      try {
-        let q = supabase.from(table).select('id', { count: 'exact', head: true })
-        if (filter) q = filter(q as never) as typeof q
-        const { count: n } = await q
-        return n ?? 0
-      } catch { return 0 }
+    // counted rather than assumed; an empty table means zero, not a crash
+    const count = async (name: TableName, where?: (row: never) => boolean) => {
+      try { return await table(name).count(where ? { where: where as (row: { id: string }) => boolean } : {}) }
+      catch { return 0 }
     }
 
     // Is the provider pushing outcomes to us, or are we still finding out from
@@ -58,10 +56,8 @@ export async function GET() {
     const instantUpdates = await (async () => {
       if (process.env.ZERNIO_WEBHOOK_SECRET) return true
       try {
-        const { count: n } = await supabase
-          .from('provider_webhooks').select('id', { count: 'exact', head: true })
-          .eq('provider', 'zernio').eq('active', true)
-        return (n ?? 0) > 0
+        const n = await table('provider_webhooks').count({ by: { provider: 'zernio', active: true } })
+        return n > 0
       } catch { return false }
     })()
 
@@ -75,11 +71,8 @@ export async function GET() {
     const [socialAccounts, activeSocial, asanaProjects, asanaHooks] = await Promise.all([
       count('social_accounts'),
       (async () => {
-        try {
-          const { count: n } = await supabase
-            .from('social_accounts').select('id', { count: 'exact', head: true }).eq('active', true)
-          return n ?? 0
-        } catch { return 0 }
+        try { return await table('social_accounts').count({ by: { active: true } }) }
+        catch { return 0 }
       })(),
       count('asana_project_map'),
       count('asana_webhooks'),
@@ -190,9 +183,7 @@ export async function GET() {
         detail: 'Where uploaded images and video live.',
         connected: true,
         configured: true,
-        status: storageBackend() === 'r2'
-          ? 'Cloudflare R2'
-          : 'Supabase Storage — files above ~45MB will be refused until R2 is configured',
+        status: storageBackend() === 'r2' ? 'Cloudflare R2' : 'Not configured',
         href: '/dashboard/website',
       },
       {
@@ -250,4 +241,5 @@ export async function GET() {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 import { isValidZone } from '@/app/lib/timezone-core'
@@ -12,6 +13,7 @@ import { isValidZone } from '@/app/lib/timezone-core'
  * with a menu on it. Editing stays account_manager, as it always was.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   let mayShare = false
   try {
     const user = await requireRole('scheduler')
@@ -21,14 +23,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: msg }, { status })
   }
   const { id } = await params
-  const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const data = await table<Client>('clients').get(id)
   if (!data) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
   // the portal link stays with the client's managers
   return NextResponse.json({ ...data, share_token: mayShare ? data.share_token : null })
+  })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   const denied = await guard('account_manager')
   if (denied) return denied
 
@@ -51,17 +54,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     patch.timezone = tz
   }
-  const { data, error } = await supabase.from('clients').update(patch).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  try {
+    const data = await table('clients').update(id, patch)
+    if (!data) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    return NextResponse.json(data)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
+  })
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   const denied = await guard('account_manager')
   if (denied) return denied
 
   const { id } = await params
-  const { error } = await supabase.from('clients').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    await table<Client>('clients').remove(id)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
+  })
 }

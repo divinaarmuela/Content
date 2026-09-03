@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { TeamUser } from '@/lib/db-types'
 import { resolveTeamUser, authzErrorResponse } from '@/app/lib/authz'
 import { isValidZone } from '@/app/lib/timezone-core'
 
@@ -19,30 +20,28 @@ import { isValidZone } from '@/app/lib/timezone-core'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  try {
-    const me = await resolveTeamUser()
-    const { data } = await supabase
-      .from('team_users')
-      .select('workday_start, workday_end, notification_prefs')
-      .eq('id', me.id)
-      .maybeSingle()
+  return withRequestCache(async () => {
+    try {
+      const me = await resolveTeamUser()
+      const data = await table<TeamUser>('team_users').get(me.id)
 
-    return NextResponse.json({
-      id: me.id,
-      email: me.email,
-      name: me.name,
-      role: me.role,
-      employment_type: me.employment_type,
-      timezone: me.timezone,
-      active: me.active_status,
-      workday_start: data?.workday_start ?? '09:00',
-      workday_end: data?.workday_end ?? '17:00',
-      notification_prefs: data?.notification_prefs ?? { email: true },
-    })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
+      return NextResponse.json({
+        id: me.id,
+        email: me.email,
+        name: me.name,
+        role: me.role,
+        employment_type: me.employment_type,
+        timezone: me.timezone,
+        active: me.active_status,
+        workday_start: data?.workday_start ?? '09:00',
+        workday_end: data?.workday_end ?? '17:00',
+        notification_prefs: data?.notification_prefs ?? { email: true },
+      })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
+    }
+  })
 }
 
 /**
@@ -58,6 +57,7 @@ export async function GET() {
  * this becomes "edit anyone's profile".
  */
 export async function PATCH(req: Request) {
+  return withRequestCache(async () => {
   try {
     const me = await resolveTeamUser()
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
@@ -81,17 +81,21 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
-      .from('team_users')
-      .update(patch)
-      .eq('id', me.id)
-      .select('id,email,name,role,employment_type,timezone,active_status,workday_start,workday_end,notification_prefs')
-      .single()
+    const row = await table('team_users').update(me.id, patch)
+    if (!row) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // the response is a deliberate projection — the same columns the old
+    // select named, so the browser sees no more of the row than it did
+    const data = {
+      id: row.id, email: row.email, name: row.name, role: row.role,
+      employment_type: row.employment_type, timezone: row.timezone,
+      active_status: row.active_status, workday_start: row.workday_start,
+      workday_end: row.workday_end, notification_prefs: row.notification_prefs,
+    }
     return NextResponse.json({ ...data, active: data.active_status })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

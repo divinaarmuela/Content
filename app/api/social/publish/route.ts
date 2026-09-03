@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { PublishJob } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
 import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-core'
@@ -9,6 +10,7 @@ import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-
  *  Publishing to a client's real account is a scheduler/account_manager
  *  action; editors submit content through the production workflow instead. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('scheduler')
     const body = await req.json()
@@ -49,27 +51,34 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Recent publish jobs, newest first — the audit trail for what went out. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
     const url = new URL(req.url)
     const clientId = url.searchParams.get('clientId')
 
-    let q = supabase
-      .from('publish_jobs')
-      .select('id, client_id, caption, targets, status, scheduled_for, provider_post_id, permalink, error, attempts, created_at, published_at')
-      .order('created_at', { ascending: false })
-      .limit(Math.min(Number(url.searchParams.get('limit') ?? 40), 200))
-    if (clientId) q = q.eq('client_id', clientId)
-
-    const { data, error } = await q
-    if (error) throw new Error(error.message)
-    return NextResponse.json({ jobs: data ?? [] })
+    const rows = await table<PublishJob>('publish_jobs').list({
+      where: clientId ? j => j.client_id === clientId : undefined,
+      orderBy: [['created_at', 'desc']],
+      limit: Math.min(Number(url.searchParams.get('limit') ?? 40), 200),
+    })
+    // the columns the old select named — the media payload stays server-side
+    const jobs = rows.map(j => ({
+      id: j.id, client_id: j.client_id, caption: j.caption, targets: j.targets,
+      status: j.status, scheduled_for: j.scheduled_for,
+      provider_post_id: j.provider_post_id, permalink: j.permalink,
+      error: j.error, attempts: j.attempts,
+      created_at: j.created_at, published_at: j.published_at,
+    }))
+    return NextResponse.json({ jobs })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

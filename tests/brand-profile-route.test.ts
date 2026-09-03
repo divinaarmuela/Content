@@ -7,55 +7,17 @@ import type { Row } from '@/lib/db-types'
  * told, the first-read seed from the scan, and the revision check that stops
  * two account managers undoing each other.
  *
- * GET runs against a miniature Realtime Database, because everything it does
- * happens inside `loadBrandProfile`. PATCH is still route code on the old
- * client and keeps its own spy until that route is rewritten.
+ * Both halves run against an in-memory Realtime Database — the real `@/lib/db`
+ * on a fake of the REST surface — so the revision check is exercised as the
+ * route actually performs it: read the live row, compare, then write.
  */
 
 type Json = Record<string, unknown>
-const tables: Record<string, Json[]> = {}
-const updates: { table: string; patch: Json; filters: [string, string, unknown][] }[] = []
-
-const supabase = {
-  from(table: string) {
-    const filters: [string, string, unknown][] = []
-    let single = false
-    let patch: Json | null = null
-    const matching = () => (tables[table] ?? []).filter(r => filters.every(([op, c, v]) => {
-      if (op === 'is') return r[c] === v
-      if (c.includes('->>')) {
-        const [col, key] = c.split('->>')
-        const obj = r[col] as Json | null
-        return String(obj?.[key]) === String(v)
-      }
-      return r[c] === v
-    }))
-    const chain = {
-      select: () => chain,
-      eq: (c: string, v: unknown) => { filters.push(['eq', c, v]); return chain },
-      is: (c: string, v: unknown) => { filters.push(['is', c, v]); return chain },
-      maybeSingle: () => { single = true; return chain },
-      update: (p: Json) => { patch = p; return chain },
-      then: (ok: (r: unknown) => unknown, no?: (e: unknown) => unknown) => {
-        const rows = matching()
-        if (patch) {
-          updates.push({ table, patch, filters })
-          for (const r of rows) Object.assign(r, patch)
-          return Promise.resolve({ data: rows.map(r => ({ id: r.id })), error: null }).then(ok, no)
-        }
-        const out = rows.map(r => ({ ...r }))
-        return Promise.resolve({ data: single ? out[0] ?? null : out, error: null }).then(ok, no)
-      },
-    }
-    return chain
-  },
-}
 
 let role = 'account_manager'
 const RANK: Record<string, number> = { client: 0, editor: 1, scheduler: 2, account_manager: 3, super_admin: 4 }
 class AuthzError extends Error { constructor(m: string, public status: number) { super(m) } }
 
-vi.mock('@/lib/supabase', () => ({ supabase }))
 vi.mock('../app/lib/authz', () => ({
   requireRole: async (required: string) => {
     if (RANK[role] < RANK[required]) throw new AuthzError('Insufficient permissions', 403)
@@ -87,34 +49,33 @@ const SCAN = {
   logo_rules: ['Never stretch the logo'],
 }
 
-beforeEach(() => {
-  role = 'account_manager'
-  updates.length = 0
-  tables.clients = [{ id: 'client-1', name: 'ZZ TEST', brand_profile: null }]
-})
+let fake: ReturnType<typeof seedDb> | null = null
+let client: Json
 
-describe('GET /api/clients/[id]/brand/profile', () => {
-  let client: Json
-  let fake: ReturnType<typeof seedDb>
-
-  const start = () => {
-    fake = seedDb({
-      clients: [client] as unknown as Row[],
+/** Seed the database. Called after a test has adjusted the client row. */
+const start = (withScan = true) => {
+  fake = seedDb({
+    clients: [client] as unknown as Row[],
+    ...(withScan ? {
       client_brand: [{
         id: 'client-1', client_id: 'client-1',
         updated_at: '2026-08-20T00:00:00.000Z', scan_status: 'done', docs: [],
         profile: SCAN,
       }] as unknown as Row[],
-    })
-  }
-  const savedProfile = () =>
-    (fake.rows('clients')[0] as unknown as Json).brand_profile as Json | null
-
-  beforeEach(() => {
-    client = { id: 'client-1', name: 'ZZ TEST', brand_profile: null }
+    } : {}),
   })
-  afterEach(() => fake?.restore())
+}
+const savedProfile = () =>
+  (fake!.rows('clients')[0] as unknown as Json).brand_profile as Json | null
 
+beforeEach(() => {
+  role = 'account_manager'
+  fake = null
+  client = { id: 'client-1', name: 'ZZ TEST', brand_profile: null }
+})
+afterEach(() => { fake?.restore(); fake = null })
+
+describe('GET /api/clients/[id]/brand/profile', () => {
   it('seeds the profile from the scan on first read, and writes it once', async () => {
     start()
     const { status, json } = await get()
@@ -164,21 +125,24 @@ describe('GET /api/clients/[id]/brand/profile', () => {
 
 describe('PATCH /api/clients/[id]/brand/profile', () => {
   it('refuses anyone below account manager', async () => {
+    start(false)
     role = 'scheduler'
     const { status } = await patch({ profile: { rev: 0 } })
     expect(status).toBe(403)
-    expect(updates).toEqual([])
+    expect(savedProfile() ?? null).toBeNull()
   })
 
   it('tells the person which colour code is wrong', async () => {
+    start(false)
     const { status, json } = await patch({ profile: { rev: 0, colours: [{ name: 'Sky', hex: 'blue' }] } })
     expect(status).toBe(400)
     expect(String(json.error)).toContain('Sky')
-    expect(updates).toEqual([])
+    expect(savedProfile() ?? null).toBeNull()
   })
 
   it('saves a valid profile and bumps the revision', async () => {
-    tables.clients[0].brand_profile = { rev: 3, colours: [] }
+    client.brand_profile = { rev: 3, colours: [] }
+    start(false)
     const { status, json } = await patch({
       profile: { rev: 3, colours: [{ name: 'Sky', hex: '#abc', role: 'accent' }], hashtags: ['summer'] },
     })
@@ -187,14 +151,32 @@ describe('PATCH /api/clients/[id]/brand/profile', () => {
     expect(saved.rev).toBe(4)
     expect(saved.colours[0].hex).toBe('#AABBCC')
     expect(saved.hashtags).toEqual(['#summer'])
-    expect(updates[0].filters).toContainEqual(['eq', 'brand_profile->>rev', '3'])
+    // the row itself moved to rev 4 — the response is not the only witness
+    expect(savedProfile()).toMatchObject({ rev: 4 })
+  })
+
+  it('writes the first profile when the row has never had one', async () => {
+    start(false)
+    const { status, json } = await patch({ profile: { rev: 0, colours: [] } })
+    expect(status).toBe(200)
+    expect((json.profile as { rev: number }).rev).toBe(1)
+    expect(savedProfile()).toMatchObject({ rev: 1 })
+  })
+
+  it('refuses a first write when somebody has already saved one', async () => {
+    client.brand_profile = { rev: 1, colours: [] }
+    start(false)
+    const { status } = await patch({ profile: { rev: 0, colours: [] } })
+    expect(status).toBe(409)
+    expect(savedProfile()).toMatchObject({ rev: 1 })
   })
 
   it('refuses a stale revision so nobody silently overwrites a colleague', async () => {
-    tables.clients[0].brand_profile = { rev: 5, colours: [] }
+    client.brand_profile = { rev: 5, colours: [] }
+    start(false)
     const { status, json } = await patch({ profile: { rev: 3, colours: [] } })
     expect(status).toBe(409)
     expect(String(json.error)).toContain('Someone else')
-    expect((tables.clients[0].brand_profile as { rev: number }).rev).toBe(5)
+    expect(savedProfile()).toMatchObject({ rev: 5 })
   })
 })

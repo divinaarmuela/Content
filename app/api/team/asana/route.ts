@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'node:crypto'
+import { table, withRequestCache } from '@/lib/db'
+import type { AsanaProjectMap, AsanaWebhook, TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import * as asana from '@/app/lib/asana'
 import { reconcileAll, linkUsersByEmail, connectAsana, syncTasksForAssignees } from '@/app/lib/asana-sync'
@@ -51,22 +53,27 @@ async function resolveTarget(base: string, projectGid: string): Promise<string> 
 
 /** Connection state for the setup panel. */
 export async function GET() {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
 
     const configured = asana.asanaConfigured()
     const workspaceGid = process.env.ASANA_WORKSPACE_GID ?? null
 
-    const [{ data: mapped }, { data: hooks }, { data: team }] = await Promise.all([
-      supabase.from('asana_project_map').select('*').order('project_name'),
-      supabase.from('asana_webhooks').select('*'),
-      supabase
-        .from('team_users')
-        .select('id,name,email,asana_user_gid')
-        .eq('active_status', true)
-        .neq('role', 'client')
-        .order('name'),
+    const [mapped, hooks, teamRows] = await Promise.all([
+      table<AsanaProjectMap>('asana_project_map').list({ orderBy: [['project_name', 'asc']] }),
+      table<AsanaWebhook>('asana_webhooks').list(),
+      table<TeamUser>('team_users').list({
+        by: { active_status: true },
+        where: r => r.role !== 'client',
+        orderBy: [['name', 'asc']],
+      }),
     ])
+    // the projection the old select named — the panel needs four fields, not
+    // everything the team row carries
+    const team = teamRows.map(r => ({
+      id: r.id, name: r.name, email: r.email, asana_user_gid: r.asana_user_gid,
+    }))
 
     // Only reach out to Asana when we actually can — an unconfigured install
     // should render a setup screen, not an error.
@@ -88,17 +95,19 @@ export async function GET() {
       reachable,
       reachError,
       projects,
-      mapped: mapped ?? [],
-      webhooks: hooks ?? [],
-      team: team ?? [],
+      mapped,
+      webhooks: hooks,
+      team,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const body = await req.json().catch(() => ({})) as {
@@ -115,7 +124,7 @@ export async function POST(req: Request) {
       // ── Track / untrack a project ──
       case 'track': {
         if (!body.projectGid) return NextResponse.json({ error: 'projectGid required' }, { status: 400 })
-        const { error } = await supabase.from('asana_project_map').upsert(
+        await table<AsanaProjectMap>('asana_project_map').upsert(
           {
             project_gid: body.projectGid,
             project_name: body.projectName ?? '',
@@ -124,7 +133,6 @@ export async function POST(req: Request) {
           },
           { onConflict: 'project_gid' }
         )
-        if (error) throw new Error(error.message)
         return NextResponse.json({ ok: true })
       }
 
@@ -143,9 +151,12 @@ export async function POST(req: Request) {
         const target = await resolveTarget(base, body.projectGid)
         try {
           const hook = await asana.createWebhook(body.projectGid, target)
-          await supabase
-            .from('asana_webhooks')
-            .upsert({ project_gid: body.projectGid, webhook_gid: hook.gid }, { onConflict: 'project_gid' })
+          // one row per project: the table's key is its own uuid, so the
+          // "one row per project_gid" rule is applied here
+          const webhooks = table<AsanaWebhook>('asana_webhooks')
+          const existing = (await webhooks.list({ where: h => h.project_gid === body.projectGid, limit: 1 }))[0]
+          if (existing) await webhooks.update(existing.id, { webhook_gid: hook.gid })
+          else await table('asana_webhooks').insert({ id: randomUUID(), project_gid: body.projectGid, webhook_gid: hook.gid })
           return NextResponse.json({ ok: true, webhookGid: hook.gid })
         } catch (e) {
           return NextResponse.json(
@@ -198,4 +209,5 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

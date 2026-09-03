@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { ClientCredential } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { explainDbError } from '@/app/lib/db-errors'
 import { encryptSecret, decryptSecret, credentialsKeyConfigured } from '@/app/lib/secret-box'
@@ -20,7 +21,12 @@ import { encryptSecret, decryptSecret, credentialsKeyConfigured } from '@/app/li
  *   touched this" is the minimum useful audit trail.
  */
 
-const listSelect = 'id,client_id,platform,label,username,url,notes,updated_at,updated_by_name,secret_cipher'
+/** The columns the list has always returned — nothing else leaves this route. */
+const listShape = (r: ClientCredential) => ({
+  id: r.id, client_id: r.client_id, platform: r.platform, label: r.label,
+  username: r.username, url: r.url, notes: r.notes, updated_at: r.updated_at,
+  updated_by_name: r.updated_by_name, secret_cipher: r.secret_cipher,
+})
 
 /** Strip the ciphertext, keep a flag so the UI can show whether one exists. */
 const redact = (row: Record<string, unknown>) => {
@@ -29,23 +35,28 @@ const redact = (row: Record<string, unknown>) => {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
     const { id } = await params
-    const { data, error } = await supabase
-      .from('client_credentials')
-      .select(listSelect)
-      .eq('client_id', id)
-      .order('platform', { ascending: true })
-    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
-    return NextResponse.json((data ?? []).map(redact))
+    let rows: ClientCredential[]
+    try {
+      rows = await table<ClientCredential>('client_credentials').list({
+        by: { client_id: id }, orderBy: [['platform', 'asc']],
+      })
+    } catch (e) {
+      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+    }
+    return NextResponse.json(rows.map(r => redact(listShape(r))))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const me = await requireRole('account_manager')
     const { id } = await params
@@ -59,12 +70,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!body.credentialId) {
         return NextResponse.json({ error: 'credentialId is required' }, { status: 400 })
       }
-      const { data, error } = await supabase
-        .from('client_credentials')
-        .select('secret_cipher')
-        .eq('id', body.credentialId)
-        .single()
-      if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
+      let data: ClientCredential | null
+      try {
+        data = await table<ClientCredential>('client_credentials').get(String(body.credentialId))
+      } catch (e) {
+        throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+      }
       if (!data?.secret_cipher) return NextResponse.json({ secret: '' })
 
       try {
@@ -91,9 +102,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       )
     }
 
-    const { data, error } = await supabase
-      .from('client_credentials')
-      .insert({
+    let created: ClientCredential
+    try {
+      created = await table('client_credentials').insert({
         client_id: id,
         platform: body.platform,
         label: body.label ?? '',
@@ -103,19 +114,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         notes: body.notes ?? '',
         updated_by: me.id,
         updated_by_name: me.name || me.email,
-      })
-      .select(listSelect)
-      .single()
-
-    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
-    return NextResponse.json(redact(data), { status: 201 })
+      }) as unknown as ClientCredential
+    } catch (e) {
+      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+    }
+    return NextResponse.json(redact(listShape(created)), { status: 201 })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function PATCH(req: Request) {
+  return withRequestCache(async () => {
   try {
     const me = await requireRole('super_admin')
     const body = await req.json()
@@ -140,27 +152,37 @@ export async function PATCH(req: Request) {
       patch.secret_cipher = encryptSecret(body.secret)
     }
 
-    const { data, error } = await supabase
-      .from('client_credentials').update(patch).eq('id', body.id).select(listSelect).single()
-    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
-    return NextResponse.json(redact(data))
+    let updated: ClientCredential | null
+    try {
+      updated = await table('client_credentials').update(String(body.id), patch) as unknown as ClientCredential | null
+    } catch (e) {
+      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+    }
+    if (!updated) return NextResponse.json({ error: 'Credential not found' }, { status: 404 })
+    return NextResponse.json(redact(listShape(updated)))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function DELETE(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const credentialId = new URL(req.url).searchParams.get('credentialId')
     if (!credentialId) return NextResponse.json({ error: 'credentialId is required' }, { status: 400 })
 
-    const { error } = await supabase.from('client_credentials').delete().eq('id', credentialId)
-    if (error) throw new Error(explainDbError(error.message, 'client_records.sql'))
+    try {
+      await table<ClientCredential>('client_credentials').remove(credentialId)
+    } catch (e) {
+      throw new Error(explainDbError((e as Error).message, 'client_records.sql'))
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Lead, EmailIngestLog } from '@/lib/db-types'
 import { guard } from '../../../lib/authz'
 
 /**
@@ -8,6 +9,7 @@ import { guard } from '../../../lib/authz'
  * Feeds the "new leads today" banner on the leads page.
  */
 export async function GET() {
+  return withRequestCache(async () => {
   const denied = await guard('editor')
   if (denied) return denied
 
@@ -18,19 +20,23 @@ export async function GET() {
   const melbMidnight = new Date(melbNow); melbMidnight.setHours(0, 0, 0, 0)
   const sinceUtc = new Date(melbMidnight.getTime() + offsetMs).toISOString()
 
-  const { data: leads, error } = await supabase.from('leads')
-    .select('id, created_at, fname, lname, email, biz, need, source')
-    .gte('created_at', sinceUtc).order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  let leads: Lead[]
+  try {
+    leads = await table<Lead>('leads').list({
+      where: l => l.created_at >= sinceUtc, orderBy: [['created_at', 'desc']],
+    })
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
 
   // the classifier's reasoning lives in the ingest log, keyed by lead
-  const ids = (leads ?? []).map(l => l.id)
+  const ids = leads.map(l => l.id)
   const reasons = new Map<string, { reasoning: string | null; subject: string | null; mailbox: string | null }>()
   if (ids.length > 0) {
-    const { data: log } = await supabase.from('email_ingest_log')
-      .select('lead_id, reasoning, subject, mailbox')
-      .in('lead_id', ids)
-    for (const row of log ?? []) {
+    const log = await table<EmailIngestLog>('email_ingest_log').list({
+      where: r => !!r.lead_id && ids.includes(r.lead_id),
+    })
+    for (const row of log) {
       if (row.lead_id && !reasons.has(row.lead_id)) {
         reasons.set(row.lead_id, { reasoning: row.reasoning, subject: row.subject, mailbox: row.mailbox })
       }
@@ -39,7 +45,7 @@ export async function GET() {
 
   return NextResponse.json({
     since: sinceUtc,
-    leads: (leads ?? []).map(l => {
+    leads: leads.map(l => {
       const scan = reasons.get(l.id)
       return {
         id: l.id,
@@ -54,5 +60,6 @@ export async function GET() {
             : 'Picked up by the inbox scanner',
       }
     }),
+  })
   })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
 
@@ -25,6 +26,7 @@ function sinceConnection(raw: unknown, connectedAt: Map<string, number>): unknow
 
 /** DM inbox: conversations across connected accounts (IG, Telegram…). */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
     const params = new URL(req.url).searchParams
@@ -37,24 +39,26 @@ export async function GET(req: Request) {
       }
       return NextResponse.json({ messages: await publisher.conversationMessages(conversationId, accountId) })
     }
-    const [conversations, { data: accounts }] = await Promise.all([
+    const [conversations, accounts] = await Promise.all([
       publisher.listConversations(),
-      supabase.from('social_accounts').select('provider_account_id, connected_at'),
+      table<SocialAccount>('social_accounts').list(),
     ])
     const connectedAt = new Map(
-      (accounts ?? [])
+      accounts
         .filter(a => a.connected_at)
-        .map(a => [a.provider_account_id as string, new Date(a.connected_at as string).getTime()]),
+        .map(a => [a.provider_account_id, new Date(a.connected_at).getTime()]),
     )
     return NextResponse.json({ conversations: sinceConnection(conversations, connectedAt) })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Send a reply into a conversation, or mark it read. */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
     const body = await req.json()
@@ -75,4 +79,5 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

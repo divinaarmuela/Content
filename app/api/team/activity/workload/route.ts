@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { ContentItem, Batch, TeamUser, ItemComment, WorkflowActivity } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from '@/app/lib/workflow-core'
@@ -58,6 +60,7 @@ type PersonRow = {
 }
 
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const me = await requireRole('account_manager')
     const isAdmin = me.role === 'super_admin'
@@ -74,34 +77,31 @@ export async function GET(req: Request) {
     // through five years of live posts to show this week is a bug waiting for
     // the account to get busy. Everything still open reaches the shaping,
     // which decides per overlay what "finished" means.
-    let itemsQ = supabase
-      .from('content_items')
-      .select('id, title, status, owner_id, scheduler_ids, due_date, client_id, updated_at, clients(name, timezone), work_kinds(slug, uses_media)')
-      .neq('status', 'published')
-      .order('due_date', { ascending: true, nullsFirst: false })
-      .limit(1000)
-    if (clientIds !== null) {
-      itemsQ = clientIds.length === 0
-        ? itemsQ.eq('client_id', '00000000-0000-0000-0000-000000000000')
-        : itemsQ.in('client_id', clientIds)
+    const inScope = (clientId: string) => clientIds === null || clientIds.includes(clientId)
+    let allItems: ItemRow[] = []
+    try {
+      const itemRows = await table<ContentItem>('content_items').list({
+        where: r => r.status !== 'published' && inScope(r.client_id),
+        orderBy: [['due_date', 'asc']],
+        limit: 1000,
+      })
+      const withClient = await attachOne(itemRows, 'client_id', 'clients', ['name', 'timezone'])
+      const withKind = await attachOne(withClient, 'work_kind_id', 'work_kinds', ['slug', 'uses_media'])
+      allItems = withKind as unknown as ItemRow[]
+    } catch {
+      // a fresh environment has no production tables yet — the page should say
+      // "nothing here", not fail
+      allItems = []
     }
-    const { data: itemRows, error: itemsErr } = await itemsQ
-    // a fresh environment has no production tables yet — the page should say
-    // "nothing here", not fail
-    const allItems: ItemRow[] = itemsErr ? [] : ((itemRows ?? []) as unknown as ItemRow[])
     const items = clientFilter ? allItems.filter(i => i.client_id === clientFilter) : allItems
 
     // ─── The shoots ─────────────────────────────────────────────────────
     // A wrapped shoot is history; the other three states are somebody's job.
-    let batchQ = supabase
-      .from('batches')
-      .select('id, title, owner_id, client_id, shoot_date, status')
-      .neq('status', 'wrapped')
-      .limit(500)
-    if (clientIds !== null && clientIds.length > 0) batchQ = batchQ.in('client_id', clientIds)
-    if (clientIds !== null && clientIds.length === 0) batchQ = batchQ.eq('client_id', '00000000-0000-0000-0000-000000000000')
-    const { data: batchRows } = await batchQ
-    const batches = ((batchRows ?? []) as { id: string; owner_id: string | null; client_id: string }[])
+    const batchRows = await table<Batch>('batches').list({
+      where: r => r.status !== 'wrapped' && inScope(r.client_id),
+      limit: 500,
+    })
+    const batches = (batchRows as unknown as { id: string; owner_id: string | null; client_id: string }[])
       .filter(b => !clientFilter || b.client_id === clientFilter)
 
     // ─── Who this viewer may see ────────────────────────────────────────
@@ -115,17 +115,18 @@ export async function GET(req: Request) {
     }
     for (const b of batches) if (b.owner_id) heldBy.add(b.owner_id)
 
-    let peopleQ = supabase
-      .from('team_users')
-      .select('id, name, email, role, timezone')
-      .eq('active_status', true)
-      .neq('role', 'client')
-      .order('name')
-    if (!isAdmin) peopleQ = peopleQ.in('id', [...heldBy])
-    if (roleFilter) peopleQ = peopleQ.eq('role', roleFilter)
-    const { data: peopleRows, error: peopleErr } = await peopleQ
-    if (peopleErr) throw new Error(peopleErr.message)
-    const people = ((peopleRows ?? []) as PersonRow[])
+    const peopleRows = await table<TeamUser>('team_users').list({
+      by: { active_status: true },
+      where: r => r.role !== 'client'
+        && (isAdmin || heldBy.has(r.id))
+        && (roleFilter ? r.role === roleFilter : true),
+      orderBy: [['name', 'asc']],
+    })
+    // the projection the old select named — these five fields are what the
+    // response carries per person
+    const people = peopleRows.map(r => ({
+      id: r.id, name: r.name, email: r.email, role: r.role, timezone: r.timezone,
+    })) as unknown as PersonRow[]
     const peopleIds = people.map(p => p.id)
 
     // ─── Open tagged comments ───────────────────────────────────────────
@@ -133,16 +134,14 @@ export async function GET(req: Request) {
     // so it is invisible on every board — and it is the thing people most
     // often forget they are holding.
     const visibleItemIds = new Set(items.map(i => i.id))
-    const { data: commentRows } = peopleIds.length
-      ? await supabase
-          .from('item_comments')
-          .select('id, item_id, assigned_to')
-          .eq('resolved', false)
-          .in('assigned_to', peopleIds)
-          .limit(1000)
-      : { data: [] as { id: string; item_id: string; assigned_to: string | null }[] }
+    const commentRows = peopleIds.length
+      ? await table<ItemComment>('item_comments').list({
+          where: c => c.resolved === false && !!c.assigned_to && peopleIds.includes(c.assigned_to),
+          limit: 1000,
+        })
+      : []
     const openComments = new Map<string, number>()
-    for (const c of (commentRows ?? []) as { item_id: string; assigned_to: string | null }[]) {
+    for (const c of commentRows) {
       if (!c.assigned_to || !visibleItemIds.has(c.item_id)) continue
       openComments.set(c.assigned_to, (openComments.get(c.assigned_to) ?? 0) + 1)
     }
@@ -154,17 +153,15 @@ export async function GET(req: Request) {
     const week = weekRangeInZone(now, AGENCY_TZ)
     const sparkFrom = new Date(now.getTime() - 14 * 86_400_000).toISOString()
     const windowFrom = sparkFrom < week.startIso ? sparkFrom : week.startIso
-    const { data: actRows } = peopleIds.length
-      ? await supabase
-          .from('workflow_activity')
-          .select('actor_id, created_at, action, new_value')
-          .in('actor_id', peopleIds)
-          .gte('created_at', windowFrom)
-          .order('created_at', { ascending: false })
-          .limit(5000)
-      : { data: [] as { actor_id: string | null; created_at: string; action: string; new_value: string | null }[] }
+    const actRows = peopleIds.length
+      ? await table<WorkflowActivity>('workflow_activity').list({
+          where: r => !!r.actor_id && peopleIds.includes(r.actor_id) && r.created_at >= windowFrom,
+          orderBy: [['created_at', 'desc']],
+          limit: 5000,
+        })
+      : []
     const byActor = new Map<string, ActivityRow[]>()
-    for (const r of (actRows ?? []) as { actor_id: string | null; created_at: string; action: string; new_value: string | null }[]) {
+    for (const r of actRows) {
       if (!r.actor_id) continue
       const list = byActor.get(r.actor_id) ?? []
       list.push({ created_at: r.created_at, action: r.action, new_value: r.new_value })
@@ -177,14 +174,12 @@ export async function GET(req: Request) {
     const quiet = peopleIds.filter(id => !byActor.has(id))
     const lastSeen = new Map<string, string>()
     if (quiet.length > 0) {
-      const { data: olderRows } = await supabase
-        .from('workflow_activity')
-        .select('actor_id, created_at')
-        .in('actor_id', quiet)
-        .lt('created_at', windowFrom)
-        .order('created_at', { ascending: false })
-        .limit(1000)
-      for (const r of (olderRows ?? []) as { actor_id: string | null; created_at: string }[]) {
+      const olderRows = await table<WorkflowActivity>('workflow_activity').list({
+        where: r => !!r.actor_id && quiet.includes(r.actor_id) && r.created_at < windowFrom,
+        orderBy: [['created_at', 'desc']],
+        limit: 1000,
+      })
+      for (const r of olderRows) {
         if (r.actor_id && !lastSeen.has(r.actor_id)) lastSeen.set(r.actor_id, r.created_at)
       }
     }
@@ -291,4 +286,5 @@ export async function GET(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

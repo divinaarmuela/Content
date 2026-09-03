@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client, ClientBrand } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import { signUpload } from '@/app/lib/storage'
 import { inngest } from '../../../../inngest/client'
@@ -25,16 +26,15 @@ import { normaliseProfile, toScanShape } from '../../../../lib/brand-profile-cor
 const MAX_PDF_BYTES = 2 * 1024 * 1024 * 1024
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     // scheduler+: everyone producing or captioning for a client needs the
     // brand guide — schedulers write captions in the brand voice
     const user = await requireRole('scheduler')
     const { id } = await params
-    const [{ data }, { data: client }] = await Promise.all([
-      supabase.from('client_brand')
-        .select('profile, docs, updated_at, updated_by, scan_status, scan_done, scan_total, scan_message')
-        .eq('client_id', id).maybeSingle(),
-      supabase.from('clients').select('brand_profile').eq('id', id).maybeSingle(),
+    const [data, client] = await Promise.all([
+      table<ClientBrand>('client_brand').get(id),
+      table<Client>('clients').get(id),
     ])
     return NextResponse.json({
       // the team's edited profile is the truth once it exists; the raw scan
@@ -70,9 +70,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('account_manager')
     const { id } = await params
@@ -100,7 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       // mark it before dispatching, so the panel shows a scan in flight even
       // if the person navigates away a second later
-      await supabase.from('client_brand').upsert({
+      await table<ClientBrand>('client_brand').upsert({
         client_id: id, scan_status: 'queued', scan_done: 0, scan_total: 1,
         scan_message: null,
       })
@@ -125,22 +127,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Start over: drop the profile and its document history. */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
-    const { error } = await supabase.from('client_brand').delete().eq('client_id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await table<ClientBrand>('client_brand').removeWhere(r => r.client_id === id)
     // the edited profile goes with it — "start over" means the whole thing
-    await supabase.from('clients')
-      .update({ brand_profile: null, brand_profile_updated_at: new Date().toISOString() })
-      .eq('id', id)
+    await table('clients').update(id, {
+      brand_profile: null, brand_profile_updated_at: new Date().toISOString(),
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

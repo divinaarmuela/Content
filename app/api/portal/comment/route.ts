@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client, ContentItem, Batch } from '@/lib/db-types'
 import { logActivity } from '../../../lib/workflow'
 import { announceItemChange, announceBatchChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
@@ -10,6 +11,7 @@ import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
  * team reads, and the client's managers are notified (never the editor).
  */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const body = await req.json()
     const rawToken = String(body.token ?? '')
@@ -17,8 +19,9 @@ export async function POST(req: Request) {
     if (!/^[0-9a-f-]{36}$/i.test(token)) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     }
-    const { data: client } = await supabase
-      .from('clients').select('id, name').eq('share_token', token).maybeSingle()
+    const client = (await table<Client>('clients').list({
+      where: c => c.share_token === token, limit: 1,
+    }))[0]
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
 
     const kind = String(body.kind ?? '')
@@ -31,13 +34,13 @@ export async function POST(req: Request) {
     const signed = authorName ? `${text}\n— ${authorName}` : text
 
     if (kind === 'item') {
-      const { data: item } = await supabase
-        .from('content_items').select('id, title, status').eq('id', id).eq('client_id', client.id).maybeSingle()
+      const foundItem = await table<ContentItem>('content_items').get(id)
+      const item = foundItem && foundItem.client_id === client.id ? foundItem : null
       if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-      const { error } = await supabase.from('item_comments').insert({
+      await table('item_comments').insert({
         item_id: item.id, author_id: actor.id, visibility: 'client', body: signed,
+        resolved: false,
       })
-      if (error) throw new Error(error.message)
       await logActivity({
         actor, clientId: client.id,
         entityType: 'content_item', entityId: item.id,
@@ -52,16 +55,18 @@ export async function POST(req: Request) {
     }
 
     if (kind === 'shoot') {
-      const { data: batch } = await supabase
-        .from('batches').select('id, title, shared_with_client').eq('id', id).eq('client_id', client.id).maybeSingle()
+      const foundBatch = await table<Batch>('batches').get(id)
+      const batch = foundBatch && foundBatch.client_id === client.id ? foundBatch : null
       if (!batch || !batch.shared_with_client) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
-      const { error } = await supabase.from('batch_comments').insert({
-        batch_id: batch.id, author_id: actor.id, body: signed,
-      })
-      if (error) {
-        // most likely the migration hasn't run — say so honestly
+      try {
+        await table('batch_comments').insert({
+          batch_id: batch.id, author_id: actor.id, body: signed, resolved: false,
+        })
+      } catch {
+        // the thread could not be written — say so rather than pretending the
+        // comment landed
         return NextResponse.json({ error: 'Comments are not switched on yet — run supabase/portal_comments.sql' }, { status: 503 })
       }
       await logActivity({
@@ -82,4 +87,5 @@ export async function POST(req: Request) {
     console.error('portal comment error:', e)
     return NextResponse.json({ error: 'Something went wrong — try again' }, { status: 500 })
   }
+  })
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { NewsletterSubscriber, RoomInviteRequest } from '@/lib/db-types'
 
 /**
  * Gated (middleware) — the audience lists for the dashboard: newsletter
@@ -8,23 +9,18 @@ import { supabase } from '@/lib/supabase'
  */
 
 export async function GET() {
-  const [newsletter, invites] = await Promise.all([
-    supabase
-      .from('newsletter_subscribers')
-      .select('id, email, source, created_at')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('room_invite_requests')
-      .select('id, name, email, about, created_at')
-      .order('created_at', { ascending: false }),
-  ])
-
-  if (newsletter.error || invites.error) {
-    console.error('audience fetch error:', newsletter.error ?? invites.error)
+  return withRequestCache(async () => {
+  try {
+    const [newsletter, invites] = await Promise.all([
+      table<NewsletterSubscriber>('newsletter_subscribers').list({ orderBy: [['created_at', 'desc']] }),
+      table<RoomInviteRequest>('room_invite_requests').list({ orderBy: [['created_at', 'desc']] }),
+    ])
+    return NextResponse.json({ newsletter, invites })
+  } catch (e) {
+    console.error('audience fetch error:', e)
     return NextResponse.json({ error: 'Could not load audience' }, { status: 502 })
   }
-
-  return NextResponse.json({ newsletter: newsletter.data, invites: invites.data })
+  })
 }
 
 const TABLES = {
@@ -33,6 +29,7 @@ const TABLES = {
 } as const
 
 export async function DELETE(req: NextRequest) {
+  return withRequestCache(async () => {
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') as keyof typeof TABLES | null
   const id = searchParams.get('id')
@@ -41,10 +38,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Missing type or id' }, { status: 400 })
   }
 
-  const { error } = await supabase.from(TABLES[type]).delete().eq('id', id)
-  if (error) {
-    console.error('audience delete error:', error)
+  try {
+    await table(TABLES[type]).remove(id)
+  } catch (e) {
+    console.error('audience delete error:', e)
     return NextResponse.json({ error: 'Delete failed' }, { status: 502 })
   }
   return NextResponse.json({ success: true })
+  })
 }

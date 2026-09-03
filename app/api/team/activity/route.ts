@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { AsanaTask, AsanaEvent, AsanaProjectMap, AsanaWebhook, Client, TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { asanaConfigured } from '@/app/lib/asana'
 import { rollupByPerson, rangeFromDays, dayKeyInTz, type RollupPerson } from '@/app/lib/asana-core'
@@ -18,6 +19,7 @@ import { rollupByPerson, rangeFromDays, dayKeyInTz, type RollupPerson } from '@/
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   try {
     const me = await requireRole('scheduler')
     const isAdmin = me.role === 'super_admin'
@@ -33,25 +35,24 @@ export async function GET(req: Request) {
     const { from, to } = rangeFromDays(days, now)
 
     // Who this viewer is allowed to see.
-    let peopleQuery = supabase
-      .from('team_users')
-      .select('id,name,email,employment_type,timezone,asana_user_gid,role')
-      .eq('active_status', true)
-      .neq('role', 'client')
-      .order('name')
+    const peopleRows = await table<TeamUser>('team_users').list({
+      by: { active_status: true },
+      where: r => r.role !== 'client'
+        && (isAdmin || r.id === me.id)
+        && (type === 'employee' || type === 'contractor' ? r.employment_type === type : true),
+      orderBy: [['name', 'asc']],
+    })
 
-    if (!isAdmin) peopleQuery = peopleQuery.eq('id', me.id)
-    if (type === 'employee' || type === 'contractor') {
-      peopleQuery = peopleQuery.eq('employment_type', type)
-    }
-
-    const { data: peopleRows, error: peopleError } = await peopleQuery
-    if (peopleError) throw new Error(peopleError.message)
-
-    const people = (peopleRows ?? []) as (RollupPerson & { role: string })[]
+    // the projection the old select named: the rollup is spread into the
+    // response, so anything extra here would ship to the browser
+    const people = peopleRows.map(r => ({
+      id: r.id, name: r.name, email: r.email,
+      employment_type: r.employment_type, timezone: r.timezone,
+      asana_user_gid: r.asana_user_gid, role: r.role,
+    })) as unknown as (RollupPerson & { role: string })[]
     const gids = people.map(p => p.asana_user_gid).filter((g): g is string => !!g)
 
-    // No linked Asana identities yet → nothing to aggregate, but the page
+    // No linked Asana identities yet — nothing to aggregate, but the page
     // still needs the people list so it can say so honestly.
     type TaskRow = {
       gid: string; name: string; assignee_gid: string | null; completed: boolean
@@ -62,37 +63,27 @@ export async function GET(req: Request) {
     let events: { user_gid: string | null; created_at: string }[] = []
 
     if (gids.length > 0) {
-      const [taskRes, eventRes] = await Promise.all([
-        supabase
-          .from('asana_tasks')
-          .select('gid,name,assignee_gid,completed,completed_at,due_on,permalink_url,project_gid')
-          .in('assignee_gid', gids),
-        supabase
-          .from('asana_events')
-          .select('user_gid,created_at')
-          .in('user_gid', gids)
-          .gte('created_at', from)
-          .lte('created_at', to),
+      const [taskRows, eventRows] = await Promise.all([
+        table<AsanaTask>('asana_tasks').list({ where: t => !!t.assignee_gid && gids.includes(t.assignee_gid) }),
+        table<AsanaEvent>('asana_events').list({
+          where: e => !!e.user_gid && gids.includes(e.user_gid) && e.created_at >= from && e.created_at <= to,
+        }),
       ])
-      if (taskRes.error) throw new Error(taskRes.error.message)
-      if (eventRes.error) throw new Error(eventRes.error.message)
-      tasks = taskRes.data ?? []
-      events = eventRes.data ?? []
+      tasks = taskRows
+      events = eventRows
     }
 
     // Project names so a task reads as "Website build — ALIA Fragrances"
     // rather than a bare gid, plus the client each project belongs to.
-    const { data: projectRows } = await supabase
-      .from('asana_project_map')
-      .select('project_gid,project_name,client_id')
-    const projectName = new Map((projectRows ?? []).map(p => [p.project_gid, p.project_name]))
+    const projectRows = await table<AsanaProjectMap>('asana_project_map').list()
+    const projectName = new Map(projectRows.map(p => [p.project_gid, p.project_name]))
 
     // The client cut. Filtering the tasks *before* the rollup means the counts
     // recompute for that client rather than showing whole-workload figures
     // beside a filtered task list.
     if (clientId) {
       const inClient = new Set(
-        (projectRows ?? []).filter(p => p.client_id === clientId).map(p => p.project_gid)
+        projectRows.filter(p => p.client_id === clientId).map(p => p.project_gid)
       )
       tasks = tasks.filter(t => t.project_gid && inClient.has(t.project_gid))
     }
@@ -101,10 +92,12 @@ export async function GET(req: Request) {
 
     // Clients that actually have tracked work — offering an empty filter is
     // worse than not offering it.
-    const clientIds = [...new Set((projectRows ?? []).map(p => p.client_id).filter(Boolean))]
-    const { data: clientRows } = clientIds.length
-      ? await supabase.from('clients').select('id,name').in('id', clientIds).order('name')
-      : { data: [] as { id: string; name: string }[] }
+    const clientIds = [...new Set(projectRows.map(p => p.client_id).filter(Boolean))]
+    const clientRows = clientIds.length
+      ? (await table<Client>('clients').list({
+          where: c => clientIds.includes(c.id), orderBy: [['name', 'asc']],
+        })).map(c => ({ id: c.id, name: c.name }))
+      : [] as { id: string; name: string }[]
 
     // The counts alone answer "how much"; the list answers "what". Open tasks
     // sort by due date with undated last, so what is late reads first.
@@ -145,11 +138,11 @@ export async function GET(req: Request) {
     } | null = null
 
     if (isAdmin) {
-      const [{ count: tracked }, { data: hooks }] = await Promise.all([
-        supabase.from('asana_project_map').select('project_gid', { count: 'exact', head: true }).eq('tracked', true),
-        supabase.from('asana_webhooks').select('last_heartbeat_at,last_event_at'),
+      const [tracked, hooks] = await Promise.all([
+        table<AsanaProjectMap>('asana_project_map').count({ by: { tracked: true } }),
+        table<AsanaWebhook>('asana_webhooks').list(),
       ])
-      const lastEventAt = (hooks ?? [])
+      const lastEventAt = hooks
         .map(h => h.last_event_at)
         .filter(Boolean)
         .sort()
@@ -157,7 +150,7 @@ export async function GET(req: Request) {
       connection = {
         configured: asanaConfigured(),
         trackedProjects: tracked ?? 0,
-        liveWebhooks: (hooks ?? []).filter(h => h.last_heartbeat_at).length,
+        liveWebhooks: hooks.filter(h => h.last_heartbeat_at).length,
         lastEventAt,
       }
     }
@@ -166,11 +159,12 @@ export async function GET(req: Request) {
       rows,
       range: { from, to, days },
       viewer: { id: me.id, isAdmin, timezone: me.timezone },
-      clients: clientRows ?? [],
+      clients: clientRows,
       connection,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { SocialAccount, Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { getPublisher } from '../../../../lib/publisher'
 
@@ -15,27 +16,29 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
     const { id } = await params
 
     // our row first — it carries the client link, which is what makes this
     // account "belong" to someone
-    const { data: account } = await supabase
-      .from('social_accounts')
-      .select('id, client_id, platform, provider_account_id, name, username, avatar_url, active, connected_at')
-      .eq('id', id)
-      .maybeSingle()
+    const row = await table<SocialAccount>('social_accounts').get(id)
+    if (!row) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    // the columns the old select named, and no others
+    const account = {
+      id: row.id, client_id: row.client_id, platform: row.platform,
+      provider_account_id: row.provider_account_id, name: row.name,
+      username: row.username, avatar_url: row.avatar_url, active: row.active,
+      connected_at: row.connected_at,
+    }
 
-    if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-
-    const { data: client } = account.client_id
-      ? await supabase.from('clients').select('id, name').eq('id', account.client_id).maybeSingle()
-      : { data: null }
+    const clientRow = account.client_id ? await table<Client>('clients').get(account.client_id) : null
+    const client = clientRow ? { id: clientRow.id, name: clientRow.name } : null
 
     const publisher = getPublisher()
-    const providerId = account.provider_account_id as string
-    const platform = account.platform as string
+    const providerId = account.provider_account_id
+    const platform = account.platform
 
     const [health, insights, daily, followers, posts, analytics, comments] = await Promise.all([
       publisher.accountHealth(providerId),
@@ -54,4 +57,5 @@ export async function GET(
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

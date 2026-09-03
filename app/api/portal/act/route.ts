@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Client, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow } from '@/lib/db-types'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceItemChange } from '../../../lib/production-live'
@@ -22,35 +24,31 @@ const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  *  it), satisfying every actor/author foreign key with an honest name. */
 async function portalActor(clientId: string, clientName: string): Promise<TeamUser> {
   const email = `portal+${clientId}@mdmmarketing.com.au`
-  const { data: existing } = await supabase
-    .from('team_users').select('*').eq('email', email).maybeSingle()
-  if (existing) return existing as TeamUser
-  const { data: created, error } = await supabase
-    .from('team_users')
-    .upsert({
-      email,
-      name: `${clientName} (client portal)`,
-      role: 'client',
-      client_id: clientId,
-      employment_type: 'contractor',
-      timezone: 'Australia/Melbourne',
-      active_status: false,
-    }, { onConflict: 'email' })
-    .select()
-    .single()
-  if (error || !created) throw new Error(error?.message ?? 'Could not create the portal identity')
-  return created as TeamUser
+  const users = table<TeamUserRow>('team_users')
+  const existing = (await users.list({ where: u => u.email === email, limit: 1 }))[0]
+  if (existing) return existing as unknown as TeamUser
+  const created = await users.upsert({
+    email,
+    name: `${clientName} (client portal)`,
+    role: 'client',
+    client_id: clientId,
+    employment_type: 'contractor',
+    timezone: 'Australia/Melbourne',
+    active_status: false,
+  }, { onConflict: 'email' })
+  if (!created) throw new Error('Could not create the portal identity')
+  return created as unknown as TeamUser
 }
 
 /** Client comments route to the client's managers — never the editor. */
 async function notifyManagers(clientId: string, itemId: string, itemTitle: string, clientName: string, body: string) {
-  const { data } = await supabase
-    .from('team_user_clients')
-    .select('team_users!team_user_clients_team_user_id_fkey(id, email, name, role, active_status)')
-    .eq('client_id', clientId)
-  const managers = (data ?? [])
-    .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean })
-    .filter(u => (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
+  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+  const data = await attachOne(links, 'team_user_id', 'team_users',
+    ['id', 'email', 'name', 'role', 'active_status'])
+  const managers = data
+    .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null)
+    .filter((u): u is { id: string; email: string; role: string; active_status: boolean } =>
+      !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
   for (const m of managers) {
     await notify({
       actorName: clientName,
@@ -72,6 +70,7 @@ async function notifyManagers(clientId: string, itemId: string, itemTitle: strin
 }
 
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     const body = await req.json()
     const rawToken = String(body.token ?? '')
@@ -79,13 +78,14 @@ export async function POST(req: Request) {
     if (!/^[0-9a-f-]{36}$/i.test(token)) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     }
-    const { data: client } = await supabase
-      .from('clients').select('id, name').eq('share_token', token).maybeSingle()
+    const client = (await table<Client>('clients').list({
+      where: c => c.share_token === token, limit: 1,
+    }))[0]
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
 
     const itemId = String(body.item_id ?? '')
-    const { data: item } = await supabase
-      .from('content_items').select('*').eq('id', itemId).eq('client_id', client.id).maybeSingle()
+    const found = await table<ContentItemRow>('content_items').get(itemId)
+    const item = found && found.client_id === client.id ? found : null
     if (!item) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
 
     const action = String(body.action ?? '')
@@ -128,11 +128,12 @@ export async function POST(req: Request) {
       // whatever they wrote also reaches the thread, client-visible, and the
       // client's managers — the same promise every portal note gets
       if (comment) {
-        await supabase.from('item_comments').insert({
+        await table('item_comments').insert({
           item_id: item.id,
           author_id: actor.id,
           visibility: 'client',
           body: authorName ? `${comment}\n— ${authorName}` : comment,
+          resolved: false,
         })
         await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
           console.error('portal manager notify error:', e))
@@ -153,14 +154,14 @@ export async function POST(req: Request) {
 
     // any note the client wrote lands in the thread, client-visible
     if (comment) {
-      const { error } = await supabase.from('item_comments').insert({
+      await table('item_comments').insert({
         item_id: item.id,
         author_id: actor.id,
         visibility: 'client',
         // sign with who at the client actually spoke
         body: authorName ? `${comment}\n— ${authorName}` : comment,
+        resolved: false,
       })
-      if (error) throw new Error(error.message)
       await logActivity({
         actor, clientId: client.id,
         entityType: 'content_item', entityId: item.id,
@@ -181,10 +182,10 @@ export async function POST(req: Request) {
         // actually set the date must hear it too (they never see comments)
         if (action === 'approve') {
           await (async () => {
-            const { data: schedulers } = await supabase
-              .from('team_users').select('id, email')
-              .eq('role', 'scheduler').eq('active_status', true)
-            for (const s of schedulers ?? []) {
+            const schedulers = await table<TeamUserRow>('team_users').list({
+              by: { active_status: true }, where: u => u.role === 'scheduler',
+            })
+            for (const s of schedulers) {
               await notify({
                 actorName: speaker,
                 actorEmail: 'portal+client@mdmmarketing.com.au',
@@ -224,4 +225,5 @@ export async function POST(req: Request) {
       { status: conflict ? 409 : 500 },
     )
   }
+  })
 }

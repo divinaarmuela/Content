@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { randomUUID } from 'node:crypto'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { Client, TeamUserClient } from '@/lib/db-types'
 import { guard, requireRole, roleSatisfies, authzErrorResponse } from '@/app/lib/authz'
 import { normaliseWebsite } from '@/app/lib/website-url'
 import { visibleClientIds } from '@/app/lib/production-access'
@@ -13,6 +16,7 @@ import { visibleClientIds } from '@/app/lib/production-access'
  *  create call 403s or (before `visibleClientIds`) omitted the very client
  *  someone was handed a job on. */
 export async function GET(req: Request) {
+  return withRequestCache(async () => {
   let mayShare = false
   let scoped: string[] | null = null
   try {
@@ -26,26 +30,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ error }, { status })
   }
 
-  let q = supabase
-    .from('clients')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (scoped !== null) {
-    if (scoped.length === 0) return NextResponse.json([])
-    q = q.in('id', scoped)
-  }
-  const { data, error } = await q
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (scoped !== null && scoped.length === 0) return NextResponse.json([])
+  const data = await table<Client>('clients').list({
+    where: scoped === null ? undefined : c => scoped.includes(c.id),
+    orderBy: [['created_at', 'desc']],
+  })
 
   // Who runs each client, attached here rather than fetched per row: the list
   // is the page where "who owns this?" is actually asked, and N requests for
   // N clients would be the slowest possible way to answer it.
-  const { data: assignments } = await supabase
-    .from('team_user_clients')
-    .select('client_id, team_users!team_user_clients_team_user_id_fkey(id, name, email, role, active_status)')
+  const links = await table<TeamUserClient>('team_user_clients').list()
+  const assignments = await attachOne(links, 'team_user_id', 'team_users',
+    ['id', 'name', 'email', 'role', 'active_status'])
 
   const byClient = new Map<string, { id: string; name: string; email: string }[]>()
-  for (const row of assignments ?? []) {
+  for (const row of assignments) {
     const u = row.team_users as unknown as
       { id: string; name: string; email: string; role: string; active_status: boolean } | null
     if (!u || !u.active_status) continue
@@ -56,7 +55,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json(
-    (data ?? []).map(c => ({
+    data.map(c => ({
       ...c,
       // the portal link is the client's front door — only their managers may
       // hand it out, so lower roles never even receive the token
@@ -64,18 +63,19 @@ export async function GET(req: Request) {
       managers: byClient.get(c.id) ?? [],
     })),
   )
+  })
 }
 
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   const denied = await guard('account_manager')
   if (denied) return denied
 
   const body = await req.json()
   if (!body.name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
   const slug = (body.slug || body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-  const { data, error } = await supabase
-    .from('clients')
-    .insert({
+  try {
+    const data = await table('clients').insert({
       name: body.name,
       slug,
       industry: body.industry ?? null,
@@ -85,9 +85,13 @@ export async function POST(req: Request) {
       website: normaliseWebsite(body.website),
       status: body.status ?? 'active',
       notes: body.notes ?? null,
+      // the portal link IS this token; a client opened without one has a
+      // front door that 404s
+      share_token: randomUUID(),
     })
-    .select()
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(data, { status: 201 })
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
+  })
 }

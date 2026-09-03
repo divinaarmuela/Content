@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import type { Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { syncSocialAccounts } from '../../../lib/publish'
 import { isPlatform } from '../../../lib/publish-core'
@@ -16,6 +17,7 @@ import { connectLinkFor } from '../../../lib/social-connect'
  * it is account_manager and above — not every editor.
  */
 export async function POST(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
     const { clientId, platform } = await req.json()
@@ -37,10 +39,12 @@ export async function POST(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /** Re-read the provider's account list for a client after they finish OAuth. */
 export async function PUT(req: Request) {
+  return withRequestCache(async () => {
   try {
     await requireRole('account_manager')
     const { clientId } = await req.json()
@@ -48,8 +52,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
     }
 
-    const { data: client } = await supabase
-      .from('clients').select('social_profile_id').eq('id', clientId).maybeSingle()
+    const client = await table<Client>('clients').get(clientId)
     if (!client?.social_profile_id) {
       return NextResponse.json({ error: 'This client has no connected profile yet' }, { status: 400 })
     }
@@ -60,4 +63,5 @@ export async function PUT(req: Request) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

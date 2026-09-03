@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { IntakeForm } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 import {
   createIntakeForm, listIntakeFormsForClient, getIntakeFormForClient,
@@ -28,6 +30,7 @@ import { inngest } from '../../../../inngest/client'
  */
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -35,14 +38,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // ?copy_sources=1 — every form across every client, light fields only,
     // for the "start from an existing form" picker when creating a new one.
     if (new URL(req.url).searchParams.get('copy_sources')) {
-      const { data, error } = await supabase
-        .from('intake_forms')
-        .select('id, title, template_key, definition, clients(name)')
-        .order('created_at', { ascending: false })
-        .limit(100)
-      if (error) throw new Error(error.message)
+      const rows = await table<IntakeForm>('intake_forms').list({
+        orderBy: [['created_at', 'desc']], limit: 100,
+      })
+      const data = await attachOne(rows, 'client_id', 'clients', ['name'])
       return NextResponse.json({
-        sources: (data ?? []).map(f => ({
+        sources: data.map(f => ({
           id: f.id,
           title: f.title || 'Intake form',
           client: (f.clients as { name?: string } | null)?.name ?? '—',
@@ -84,9 +85,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const admin = await requireRole('super_admin')
     const { id } = await params
@@ -102,10 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let title = String(body?.title ?? '').trim()
     const sourceId = String(body?.copy_from_form_id ?? '')
     if (sourceId) {
-      const { data: src } = await supabase
-        .from('intake_forms')
-        .select('definition, template_key, client_id, notify_emails, title')
-        .eq('id', sourceId).maybeSingle()
+      const src = await table<IntakeForm>('intake_forms').get(sourceId)
       if (src?.definition) {
         copyFrom = normaliseDefinition(src.definition, (src.template_key ?? key) as TemplateKey)
         // recipients follow the questions only within the same client — another
@@ -126,9 +126,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
@@ -216,6 +218,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 /**
@@ -224,6 +227,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
  * case cannot happen on a stray click while the harmless one stays one button.
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
@@ -246,4 +250,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }

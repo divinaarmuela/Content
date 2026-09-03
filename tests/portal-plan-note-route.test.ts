@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedDb } from './helpers/fake-db'
+import type { Row } from '@/lib/db-types'
 
 /**
  * "Approve with a note" on a shoot plan, at the seam it actually crosses.
@@ -11,48 +13,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * second time.
  */
 
-type Row = Record<string, unknown>
-
 const TOKEN = '3ae353c7-c879-4db7-bf71-dec9657d40e3'
-
-const tables: Record<string, Row[]> = {}
-const inserted: Record<string, Row[]> = {}
-
-const supabase = {
-  from(table: string) {
-    const filters: [string, unknown][] = []
-    let single = false
-    const rows = () => (tables[table] ?? [])
-      .filter(r => filters.every(([c, v]) => r[c] === v))
-      .map(r => ({ ...r }))
-    const chain = {
-      select: () => chain,
-      eq: (c: string, v: unknown) => { filters.push([c, v]); return chain },
-      in: () => chain,
-      order: () => chain,
-      limit: () => chain,
-      maybeSingle: () => { single = true; return chain },
-      single: () => { single = true; return chain },
-      insert: (row: Row) => {
-        ;(inserted[table] ??= []).push(row)
-        return Promise.resolve({ data: { id: 'new', ...row }, error: null })
-      },
-      upsert: (row: Row) => { (inserted[table] ??= []).push(row); return chain },
-      then: (ok: (r: unknown) => unknown, no?: (e: unknown) => unknown) => {
-        const out = rows()
-        return Promise.resolve({ data: single ? out[0] ?? null : out, error: null }).then(ok, no)
-      },
-    }
-    return chain
-  },
-}
 
 const performTransition = vi.fn(async (
   _actor: unknown, item: { status: string }, to: string, _opts?: { note?: string },
 ) => ({ ...item, status: to }))
 const logActivity = vi.fn()
 
-vi.mock('@/lib/supabase', () => ({ supabase }))
 vi.mock('../app/lib/workflow', () => ({ performTransition, logActivity }))
 vi.mock('../app/lib/production-live', () => ({ announceItemChange: vi.fn() }))
 const notify = vi.fn()
@@ -71,20 +38,24 @@ const post = async (body: unknown) => {
   return { status: res.status, json: await res.json() as Record<string, unknown> }
 }
 
+let fake: ReturnType<typeof seedDb>
+
 beforeEach(() => {
-  for (const k of Object.keys(inserted)) delete inserted[k]
   performTransition.mockClear()
   notify.mockClear()
-  tables.clients = [{ id: 'client-1', name: 'ZZ TEST', share_token: TOKEN }]
-  tables.content_items = [{
-    id: 'item-1', client_id: 'client-1', title: 'Winter shoot', status: 'client_review',
-  }]
-  tables.team_users = [{
-    id: 'portal-1', email: 'portal+client-1@mdmmarketing.com.au',
-    name: 'ZZ TEST (client portal)', role: 'client', active_status: false,
-  }]
-  tables.team_user_clients = []
+  fake = seedDb({
+    clients: [{ id: 'client-1', name: 'ZZ TEST', share_token: TOKEN }] as unknown as Row[],
+    content_items: [{
+      id: 'item-1', client_id: 'client-1', title: 'Winter shoot', status: 'client_review',
+    }] as unknown as Row[],
+    team_users: [{
+      id: 'portal-1', email: 'portal+client-1@mdmmarketing.com.au',
+      name: 'ZZ TEST (client portal)', role: 'client', active_status: false,
+    }] as unknown as Row[],
+    team_user_clients: [],
+  })
 })
+afterEach(() => fake.restore())
 
 describe('POST /api/portal/act — approving a plan with a note', () => {
   it('carries the note into the approval, so the manager’s email says it', async () => {
@@ -105,7 +76,7 @@ describe('POST /api/portal/act — approving a plan with a note', () => {
       token: TOKEN, item_id: 'item-1', action: 'approve',
       author_name: 'Dana', note: 'Please start after 9.',
     })
-    expect(inserted.item_comments ?? []).toEqual([])
+    expect(fake.rows('item_comments')).toEqual([])
   })
 
   it('approves exactly as the plain button does when there is no note', async () => {
@@ -113,7 +84,7 @@ describe('POST /api/portal/act — approving a plan with a note', () => {
     expect(status).toBe(200)
     expect(performTransition.mock.calls[0][2]).toBe('approved_for_scheduling')
     expect(performTransition.mock.calls[0][3]).toEqual({ note: undefined })
-    expect(inserted.item_comments ?? []).toEqual([])
+    expect(fake.rows('item_comments')).toEqual([])
   })
 
   it('still files a note sent as a comment — the change-request path is untouched', async () => {
@@ -121,9 +92,22 @@ describe('POST /api/portal/act — approving a plan with a note', () => {
       token: TOKEN, item_id: 'item-1', action: 'request_changes',
       comment: 'Can we move the garden set to the morning?', author_name: 'Dana',
     })
-    expect(inserted.item_comments).toHaveLength(1)
-    expect(String(inserted.item_comments[0].body)).toContain('garden set')
-    expect(inserted.item_comments[0].visibility).toBe('client')
+    const comments = fake.rows('item_comments') as Record<string, unknown>[]
+    expect(comments).toHaveLength(1)
+    expect(String(comments[0].body)).toContain('garden set')
+    expect(comments[0].visibility).toBe('client')
+    // every comment this app files starts life unresolved
+    expect(comments[0].resolved).toBe(false)
+  })
+
+  it('reuses the client’s standing portal identity rather than minting a second', async () => {
+    await post({
+      token: TOKEN, item_id: 'item-1', action: 'request_changes',
+      comment: 'One more thing.', author_name: 'Dana',
+    })
+    expect(fake.rows('team_users')).toHaveLength(1)
+    const comments = fake.rows('item_comments') as Record<string, unknown>[]
+    expect(comments[0].author_id).toBe('portal-1')
   })
 
   it('a note is never an approval on its own — a bad link still fails', async () => {
@@ -131,6 +115,14 @@ describe('POST /api/portal/act — approving a plan with a note', () => {
       token: 'not-a-token', item_id: 'item-1', action: 'approve', note: 'hi',
     })
     expect(status).toBe(401)
+    expect(performTransition).not.toHaveBeenCalled()
+  })
+
+  it('an item belonging to another client is not reachable with this token', async () => {
+    const { status } = await post({
+      token: TOKEN, item_id: 'no-such-item', action: 'approve',
+    })
+    expect(status).toBe(404)
     expect(performTransition).not.toHaveBeenCalled()
   })
 })

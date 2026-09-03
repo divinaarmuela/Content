@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { table, withRequestCache } from '@/lib/db'
+import { attachOne } from '@/lib/db-join'
+import type { TeamUser, TeamUserClient } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/authz'
 
 /**
@@ -14,16 +16,19 @@ import { requireRole, authzErrorResponse, roleSatisfies } from '../../../../lib/
 const MANAGING_ROLES = ['account_manager', 'super_admin']
 
 async function loadState(clientId: string) {
-  const [assignments, eligible] = await Promise.all([
-    supabase.from('team_user_clients')
-      .select('team_user_id, assigned_at, team_users!team_user_clients_team_user_id_fkey(id, name, email, role, active_status)')
-      .eq('client_id', clientId),
-    supabase.from('team_users')
-      .select('id, name, email, role')
-      .in('role', MANAGING_ROLES).eq('active_status', true).order('name'),
+  const [links, eligible, counts] = await Promise.all([
+    table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } }),
+    table<TeamUser>('team_users').list({
+      by: { active_status: true },
+      where: r => MANAGING_ROLES.includes(r.role),
+      orderBy: [['name', 'asc']],
+    }),
+    table<TeamUserClient>('team_user_clients').list(),
   ])
+  const assignments = await attachOne(links, 'team_user_id', 'team_users',
+    ['id', 'name', 'email', 'role', 'active_status'])
 
-  const managers = (assignments.data ?? [])
+  const managers = assignments
     .map(a => {
       const u = a.team_users as unknown as
         { id: string; name: string; email: string; role: string; active_status: boolean } | null
@@ -34,13 +39,12 @@ async function loadState(clientId: string) {
     .filter(Boolean)
 
   // how loaded each eligible manager already is, so assigning can balance
-  const { data: counts } = await supabase.from('team_user_clients').select('team_user_id')
   const load = new Map<string, number>()
-  for (const c of counts ?? []) load.set(c.team_user_id, (load.get(c.team_user_id) ?? 0) + 1)
+  for (const c of counts) load.set(c.team_user_id, (load.get(c.team_user_id) ?? 0) + 1)
 
   return {
     managers,
-    eligible: (eligible.data ?? []).map(u => ({
+    eligible: eligible.map(u => ({
       id: u.id, name: u.name, email: u.email, role: u.role,
       client_count: load.get(u.id) ?? 0,
     })),
@@ -48,6 +52,7 @@ async function loadState(clientId: string) {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const user = await requireRole('editor')
     const { id } = await params
@@ -57,45 +62,53 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     const admin = await requireRole('super_admin')
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const teamUserId = String(body?.team_user_id ?? '')
 
-    const { data: target } = await supabase.from('team_users')
-      .select('id, role, active_status').eq('id', teamUserId).maybeSingle()
+    const target = await table<TeamUser>('team_users').get(teamUserId)
     if (!target || !target.active_status || !MANAGING_ROLES.includes(target.role)) {
       return NextResponse.json({ error: 'That person cannot manage clients' }, { status: 400 })
     }
 
-    // composite PK absorbs the double-click: second insert is a no-op conflict
-    const { error } = await supabase.from('team_user_clients')
-      .upsert({ team_user_id: teamUserId, client_id: id, assigned_by: admin.id },
-        { onConflict: 'team_user_id,client_id', ignoreDuplicates: true })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // the row's key IS (team_user_id, client_id), so a double-click finds the
+    // row already there and leaves the original assignment date alone
+    const links = table<TeamUserClient>('team_user_clients')
+    const already = (await links.list({ by: { client_id: id }, where: r => r.team_user_id === teamUserId }))[0]
+    if (!already) {
+      await table('team_user_clients').insert({
+        team_user_id: teamUserId, client_id: id, assigned_by: admin.id,
+        assigned_at: new Date().toISOString(),
+      })
+    }
 
     return NextResponse.json(await loadState(id))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
   try {
     await requireRole('super_admin')
     const { id } = await params
     const teamUserId = new URL(req.url).searchParams.get('team_user_id') ?? ''
-    const { error } = await supabase.from('team_user_clients')
-      .delete().eq('client_id', id).eq('team_user_id', teamUserId)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await table<TeamUserClient>('team_user_clients')
+      .removeWhere(r => r.client_id === id && r.team_user_id === teamUserId)
     return NextResponse.json(await loadState(id))
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
 }
