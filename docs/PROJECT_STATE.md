@@ -695,6 +695,8 @@ mode pill covering a control — screenshots land in `.mobile-check/`.
 
 ## Google Drive is now a mirror, not an index — 27 Aug
 
+> **Superseded on 4 Sep 2026 — see the top of this file.** Nothing in this app writes to Google Drive any more; the mirror described below is switched off (`DRIVE_AUTO_FILING`).
+
 The folder tree below created folders and links. This fills them: **every file
 that lands in our storage is copied into Drive**, so someone with nothing but
 Drive has the whole archive. No SQL step: `drive_files` is created on first write.

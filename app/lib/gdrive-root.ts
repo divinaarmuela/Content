@@ -3,8 +3,8 @@ import { table } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
 import { NO_FOLDER_IN_DRIVE, matchClientFolders, normaliseFolderName, safeSegment } from './gdrive-core'
 import {
-  createSubfolder, driveConfigured, listSubfolders, pickedRoot,
-  readFolder, saveClientsFolder, savePickedRoot, shareWithDomain,
+  driveConfigured, listSubfolders, pickedRoot,
+  readFolder, saveClientsFolder, savePickedRoot,
 } from './gdrive'
 
 /**
