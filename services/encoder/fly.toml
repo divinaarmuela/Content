@@ -1,0 +1,44 @@
+# The encoder machine.
+#
+# Scale to zero is the whole cost story: the machine boots when a job arrives,
+# encodes, reports, and stops again. A few posts a day is a few minutes of
+# CPU, which is why this costs about the price of a coffee a month rather
+# than the price of a server.
+#
+# `app` is set by `fly launch`; change it there, not here, if the name is taken.
+
+app = "mdm-encoder"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # the point of the machine: nothing running between jobs
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  # one at a time, matching the in-memory queue in src/queue.ts — Fly must not
+  # pile ten requests onto a machine that can only encode one
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 1
+    hard_limit = 3
+
+  # Fly's own check. It is deliberately a GET with no auth: a health check
+  # that needs a secret is a health check that fails for the wrong reason.
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
