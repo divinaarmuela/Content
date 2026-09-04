@@ -33,6 +33,25 @@ describe('normaliseSlides', () => {
       { url: u('b.mp4'), name: 'b.mp4', type: 'video' },
     ])
   })
+  /**
+   * A slide made in the composer's Drive tab carries where it came from all
+   * the way to the stored version — and that is the mark the mirror reads to
+   * know not to copy the file back into the folder it was picked out of.
+   */
+  it('keeps where a file came from, and the Drive file it was', () => {
+    expect(normaliseSlides([
+      { url: u('a.jpg'), source: 'drive', drive_file_id: 'gd-1' },
+      { url: u('b.jpg'), source: 'upload' },
+      { url: u('c.jpg'), source: 'somewhere else', drive_file_id: '  ' },
+    ])).toEqual([
+      { url: u('a.jpg'), name: 'a.jpg', type: 'image', source: 'drive', drive_file_id: 'gd-1' },
+      { url: u('b.jpg'), name: 'b.jpg', type: 'image', source: 'upload' },
+      // an origin nobody recognises is dropped rather than carried, so
+      // "source" can only ever be one of the two things it means
+      { url: u('c.jpg'), name: 'c.jpg', type: 'image' },
+    ])
+  })
+
   it('allows a mixed image + video carousel', () => {
     const slides = normaliseSlides([{ url: u('a.jpg') }, { url: u('b.mp4') }])
     expect(slides.map(s => s.type)).toEqual(['image', 'video'])

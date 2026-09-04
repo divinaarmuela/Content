@@ -772,6 +772,19 @@ export async function addVersion(
   // something real to anything that has not been taught about `files` yet.
   const slides = links.files ?? []
   const firstUrl = links.file_url ?? slides[0]?.url ?? ''
+  /**
+   * WHERE THE FILES CAME FROM, recorded on the version itself.
+   *
+   * Read off the slides rather than passed in, so there is one answer and no
+   * caller can disagree with the files it just handed over. `'drive'` the
+   * moment ANY slide was picked out of the agency's Drive: the point of the
+   * column is "this version contains files that are already in Drive", and
+   * one of them is enough to make copying the set back wrong. The Drive file
+   * id is the first picked slide's — the rest travel on `files`, one per
+   * slide.
+   */
+  const picked = slides.filter(s => s.source === 'drive')
+  const source = picked.length > 0 ? 'drive' : null
   for (let attempt = 0; attempt < 5; attempt++) {
     const existing = await table<AssetVersion>('asset_versions')
       .list({ by: { item_id: itemId }, orderBy: [['version_number', 'desc']] })
@@ -792,6 +805,8 @@ export async function addVersion(
         drive_url: links.drive_url ?? '',
         notes: links.notes ?? null,
         uploaded_by: actor.id,
+        source,
+        source_drive_file_id: picked[0]?.drive_file_id ?? null,
       }) as unknown as AssetVersion
     } catch (e) {
       if (e instanceof DbError && e.code === 'unique') continue

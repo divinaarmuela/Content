@@ -1,9 +1,17 @@
 import 'server-only'
 import {
-  ALL_DRIVES, FILES, UPLOAD_FILES, accessToken, driveFetch,
-  type DriveResult,
+  ALL_DRIVES, ALL_DRIVES_LIST, FILES, UPLOAD_FILES, accessToken, createSubfolder,
+  driveFetch, findSubfolder,
+  type DriveFailure, type DriveResult,
 } from './gdrive'
+import { safeSegment } from './gdrive-core'
 import { CHUNK_SIZE, contentRange, receivedBytes } from './gdrive-mirror-core'
+import {
+  FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, SEARCH_FOLDER_CAP, SEARCH_MATCH_CAP,
+  SEARCH_MS, SEARCH_PARENT_BATCH, driveOrderBy, driveQuery, isDriveId,
+  isGoogleContentUrl, isGoogleUploadUri, searchBatchQuery,
+  type DriveEntry, type QueryOptions, type Sort,
+} from './files-core'
 
 /**
  * Files in Drive — uploading, copying, moving, and who may see them.
@@ -370,4 +378,507 @@ export async function revokePermission(
     return asError(`Google Drive ${res.status} revoking access`, await res.text())
   }
   return { ok: true, revoked: true }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// The Files page's half of Drive
+//
+// Everything below serves `/dashboard/files`: browsing, searching, previews,
+// downloads, and the uploads a person starts by dropping something on a
+// folder. The rule the whole section is written around is the owner's:
+//
+//   THE APP NEVER RENAMES, MOVES OR DELETES ANYTHING IN THE OWNER'S DRIVE ON
+//   ITS OWN.
+//
+// So there is no delete here at all — not a helper, not a route, nothing that
+// could grow into one. Rename and move exist, they take one item at a time,
+// and the routes above them refuse to run without an explicit confirmation
+// from a person. Creating a folder finds an existing one by name FIRST and
+// hands it back rather than making a second one, because Drive has no
+// unique-name constraint and a duplicated client folder is the exact failure
+// the owner asked us to make impossible. A failure at any point is reported
+// and left alone: nothing here retries under a different name.
+// ═════════════════════════════════════════════════════════════════════════
+
+/** The fields every listing asks for, and no more.
+ *
+ *  Drive charges the same for a big `fields` list as a small one in quota, but
+ *  not in bytes: a 100-file page fetched with `*` is a few hundred KB of JSON
+ *  crossing the wire on every folder click. This list is what the page draws. */
+const ENTRY_FIELDS =
+  'id,name,mimeType,size,modifiedTime,webViewLink,hasThumbnail,owners(displayName,emailAddress)'
+
+type RawEntry = {
+  id?: string
+  name?: string
+  mimeType?: string
+  size?: string
+  modifiedTime?: string
+  webViewLink?: string
+  hasThumbnail?: boolean
+  owners?: { displayName?: string; emailAddress?: string }[]
+}
+
+function toEntry(raw: RawEntry): DriveEntry | null {
+  if (!raw.id || !raw.name) return null
+  const owner = raw.owners?.[0]
+  return {
+    id: raw.id,
+    name: raw.name,
+    mimeType: raw.mimeType ?? '',
+    size: raw.size != null && /^\d+$/.test(raw.size) ? Number(raw.size) : null,
+    modified: raw.modifiedTime ?? null,
+    ownerName: owner?.displayName ?? null,
+    ownerEmail: owner?.emailAddress ?? null,
+    hasThumbnail: Boolean(raw.hasThumbnail),
+    webViewLink: raw.webViewLink ?? null,
+  }
+}
+
+export type Listing = { entries: DriveEntry[]; nextPageToken: string | null }
+
+/**
+ * One page of a folder's contents — or of a search, when no parent is given.
+ *
+ * Paged rather than drained. `listSubfolders` in gdrive.ts loops until Drive
+ * runs out because it is answering "what names are taken", a question with one
+ * answer; this answers "what is on the screen", and a client folder holding
+ * four thousand raw clips must not become four thousand rows and a
+ * forty-second wait.
+ */
+export async function listEntries(
+  opts: QueryOptions & {
+    sort?: Sort; pageToken?: string | null; pageSize?: number
+    /** a `q` built elsewhere — the subtree search's batched parents clause */
+    rawQuery?: string
+  },
+): Promise<DriveResult<Listing>> {
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const sort: Sort = opts.sort ?? { by: 'name', dir: 'asc' }
+  const url = `${FILES}?` + new URLSearchParams({
+    q: opts.rawQuery ?? driveQuery(opts),
+    fields: `nextPageToken, files(${ENTRY_FIELDS})`,
+    pageSize: String(Math.min(Math.max(opts.pageSize ?? PAGE_SIZE, 1), PAGE_SIZE)),
+    orderBy: driveOrderBy(sort),
+    ...ALL_DRIVES_LIST,
+    ...(opts.pageToken ? { pageToken: opts.pageToken } : {}),
+  })
+  const res = await driveFetch<{ files?: RawEntry[]; nextPageToken?: string }>(auth.token, url)
+  if (!res.ok) return res
+  const entries = (res.data.files ?? []).map(toEntry).filter((e): e is DriveEntry => e !== null)
+  return { ok: true, entries, nextPageToken: res.data.nextPageToken ?? null }
+}
+
+export type EntryDetail = DriveEntry & { parents: string[] }
+
+/** One file or folder, with its parents — the info panel and the breadcrumb. */
+export async function entryDetail(id: string): Promise<DriveResult<{ entry: EntryDetail }>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({
+    fields: `${ENTRY_FIELDS},parents,trashed`, ...ALL_DRIVES,
+  })
+  const res = await driveFetch<RawEntry & { parents?: string[]; trashed?: boolean }>(auth.token, url)
+  if (!res.ok) return res
+  if (res.data.trashed) return asError('That file is in the Google Drive bin')
+  const entry = toEntry(res.data)
+  if (!entry) return asError('That file could not be found')
+  return { ok: true, entry: { ...entry, parents: res.data.parents ?? [] } }
+}
+
+/**
+ * The folders from the picked root down to this one.
+ *
+ * Walked upwards by `parents`, one request per level, stopping at the root or
+ * after MAX_DEPTH levels — a cycle is impossible in Drive but a partial grant
+ * is not, and a walk that never reaches the root has to end rather than loop.
+ * A trail that could not reach the root comes back as far as it got, which is
+ * what the breadcrumb should show: where you are, honestly.
+ */
+const MAX_DEPTH = 20
+
+export async function trailTo(
+  id: string, rootId: string,
+): Promise<DriveResult<{ trail: { id: string; name: string }[] }>> {
+  if (!isDriveId(id) || !isDriveId(rootId)) return asError('That folder could not be found')
+  const trail: { id: string; name: string }[] = []
+  let at = id
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    const detail = await entryDetail(at)
+    if (!detail.ok) return detail
+    trail.unshift({ id: detail.entry.id, name: detail.entry.name })
+    if (at === rootId) break
+    const up = detail.entry.parents[0]
+    if (!up || !isDriveId(up)) break
+    at = up
+  }
+  return { ok: true, trail }
+}
+
+/**
+ * Is `candidate` inside `ancestor`, at any depth?
+ *
+ * THREE answers, not two. This is the guard that stops a folder being dropped
+ * into one of its own folders — which Drive accepts, and which takes the whole
+ * branch out of the tree with nothing to undo it. It used to answer `false`
+ * when the walk hit a Drive error, ran past `MAX_DEPTH`, or reached a parent
+ * the `drive.file` grant does not cover; the route read `false` as "safe", so
+ * a transient 500 was enough to permit the one move on this page that cannot
+ * be taken back.
+ *
+ * A read error is an error. "I could not check" is its own answer, and the
+ * caller refuses on it.
+ */
+export type Ancestry = 'inside' | 'outside' | 'unknown'
+
+export async function isInside(candidate: string, ancestor: string): Promise<Ancestry> {
+  let at = candidate
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    if (at === ancestor) return 'inside'
+    const detail = await entryDetail(at)
+    if (!detail.ok) return 'unknown'
+    const up = detail.entry.parents[0]
+    // no parent at all is a real answer: this is the top of what we can see,
+    // and the ancestor was not on the way up
+    if (!up) return 'outside'
+    if (!isDriveId(up)) return 'unknown'
+    at = up
+  }
+  // ran out of depth without an answer — which is not "no"
+  return 'unknown'
+}
+
+/**
+ * Everything below a folder, as far as we are allowed to walk.
+ *
+ * Drive's `q` has no subtree operator: `'x' in parents` is x's DIRECT children
+ * and nothing else. So a search that says "in here or below it" has to walk,
+ * and a walk of somebody's whole archive needs a stop on it — breadth first,
+ * capped at `SEARCH_FOLDER_CAP` folders and `SEARCH_MS`. Breadth first because
+ * the near folders are the ones a person means; depth first would spend the
+ * whole budget down one branch of raw clips.
+ *
+ * `capped` is returned rather than hidden. A truncated search that says
+ * nothing is how a person concludes their file is gone and uploads it again,
+ * into the owner's real archive.
+ */
+export async function foldersUnder(
+  parentId: string,
+): Promise<DriveResult<{ ids: string[]; capped: boolean }>> {
+  if (!isDriveId(parentId)) return asError('That folder could not be found')
+  const started = Date.now()
+  const ids = [parentId]
+  const queue = [parentId]
+  let capped = false
+
+  while (queue.length) {
+    if (ids.length >= SEARCH_FOLDER_CAP || Date.now() - started > SEARCH_MS) {
+      capped = true
+      break
+    }
+    const at = queue.shift() as string
+    const page = await listEntries({ parentId: at, foldersOnly: true, pageSize: PAGE_SIZE })
+    // one unreadable branch does not sink the search; it is simply not walked,
+    // and `capped` already tells the person the answer may be short
+    if (!page.ok) { capped = true; continue }
+    if (page.nextPageToken) capped = true
+    for (const folder of page.entries) {
+      if (ids.length >= SEARCH_FOLDER_CAP) { capped = true; break }
+      ids.push(folder.id)
+      queue.push(folder.id)
+    }
+  }
+  return { ok: true, ids, capped: capped || queue.length > 0 }
+}
+
+export type SearchResult = {
+  entries: DriveEntry[]
+  foldersSearched: number
+  capped: boolean
+}
+
+/**
+ * The walk, then the search — batched, so a hundred folders is three requests
+ * rather than a hundred.
+ *
+ * Each batch is PAGED to the end. Drive answers at most 100 files per request,
+ * and 40 folders can easily hold more than that between them: a version of
+ * this that read the first page and moved on discarded the rest silently and
+ * still reported a clean "37 things called 'reel'. Searched 84 folders." That
+ * is the exact sentence `searchWords` exists to make honest, and a short
+ * answer dressed as a complete one is how somebody concludes their file is
+ * gone and uploads it again into the owner's archive.
+ *
+ * So: follow `nextPageToken` while there is budget, and when the budget runs
+ * out — on the clock, on the match cap, or on a page we could not read — say
+ * `capped` instead of pretending. An unreadable batch does not sink the
+ * search either; it is skipped and flagged, the same way `foldersUnder`
+ * tolerates an unreadable branch, because one folder somebody revoked our
+ * access to should not turn a search into an error page.
+ */
+export async function searchBelow(
+  opts: QueryOptions & { parentId: string; sort?: Sort },
+): Promise<DriveResult<SearchResult>> {
+  const under = await foldersUnder(opts.parentId)
+  if (!under.ok) return under
+
+  const started = Date.now()
+  const found = new Map<string, DriveEntry>()
+  let capped = under.capped
+
+  for (let at = 0; at < under.ids.length; at += SEARCH_PARENT_BATCH) {
+    if (Date.now() - started > SEARCH_MS || found.size >= SEARCH_MATCH_CAP) {
+      capped = true
+      break
+    }
+    const batch = under.ids.slice(at, at + SEARCH_PARENT_BATCH)
+    let pageToken: string | null = null
+    do {
+      const page: DriveResult<Listing> = await listEntries({
+        ...opts,
+        parentId: null,
+        rawQuery: searchBatchQuery(opts, batch),
+        pageSize: PAGE_SIZE,
+        pageToken,
+      })
+      if (!page.ok) { capped = true; break }
+      // the same file can sit in two of the folders we walked; a person wants
+      // one row for it, not one per parent
+      for (const entry of page.entries) found.set(entry.id, entry)
+      pageToken = page.nextPageToken
+      if (pageToken && (Date.now() - started > SEARCH_MS || found.size >= SEARCH_MATCH_CAP)) {
+        // there IS more and we are not going to fetch it — which the person
+        // has to be told, because it is the difference between "not here" and
+        // "we stopped looking"
+        capped = true
+        break
+      }
+    } while (pageToken)
+  }
+
+  return {
+    ok: true,
+    entries: [...found.values()],
+    foldersSearched: under.ids.length,
+    capped,
+  }
+}
+
+/**
+ * A folder called `name` inside `parentId` — the existing one if there is one.
+ *
+ * ADOPT, never duplicate. Drive has no unique-name constraint, so pressing
+ * "New folder" twice, or two people pressing it at once, would otherwise leave
+ * two folders with the same name and no way for anybody to tell which one the
+ * work went into. `created` says which of the two happened, so the page can
+ * say "That folder is already there" rather than pretending it made something.
+ */
+export async function findOrCreateFolder(
+  parentId: string, name: string,
+): Promise<DriveResult<{ id: string; created: boolean }>> {
+  if (!isDriveId(parentId)) return asError('That folder could not be found')
+  // `safeSegment` answers "Untitled" for a blank name, which is fine when a
+  // job is naming a folder and wrong when a person is: they typed nothing, and
+  // a folder called Untitled in the owner's Drive is a mess somebody has to
+  // clean up by hand. Ask again instead.
+  if (!String(name ?? '').trim()) return asError('Give the folder a name first')
+  const clean = safeSegment(name)
+  const existing = await findSubfolder(parentId, clean)
+  if (!existing.ok) return existing
+  if (existing.id) return { ok: true, id: existing.id, created: false }
+  const made = await createSubfolder(parentId, clean)
+  if (!made.ok) return made
+  return { ok: true, id: made.id, created: true }
+}
+
+/**
+ * Rename one file or folder.
+ *
+ * One item, by explicit request, and that is the whole design: there is no
+ * bulk rename in this file and there is not meant to be one. A failure is
+ * returned as it happened — nothing here tries again under a different name,
+ * because "the rename failed so we invented a name" is exactly how somebody's
+ * folder ends up called "Sui Kitchen (2)" with nobody having asked for it.
+ */
+export async function renameDriveItem(
+  id: string, name: string,
+): Promise<DriveResult<{ name: string }>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  if (!String(name ?? '').trim()) return asError('Give it a name first')
+  const clean = safeSegment(name)
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(id)}?` +
+    new URLSearchParams({ fields: 'id,name', ...ALL_DRIVES })
+  const res = await driveFetch<{ name?: string }>(auth.token, url, {
+    method: 'PATCH', body: JSON.stringify({ name: clean }),
+  })
+  if (!res.ok) return res
+  return { ok: true, name: res.data.name ?? clean }
+}
+
+/**
+ * A link anybody holding it can open, for sending a client one file.
+ *
+ * Reader, not writer, and `allowFileDiscovery` off so the file never turns up
+ * in a stranger's search. Drive answers 400 when the permission is already
+ * there; that is the same outcome as success from here, so the link is read
+ * back either way rather than the second press failing.
+ */
+export async function shareableLink(id: string): Promise<DriveResult<{ url: string }>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const permUrl = `${FILES}/${encodeURIComponent(id)}/permissions?` + new URLSearchParams({
+    fields: 'id', sendNotificationEmail: 'false', ...ALL_DRIVES,
+  })
+  const granted = await driveFetch<{ id?: string }>(auth.token, permUrl, {
+    method: 'POST',
+    body: JSON.stringify({ type: 'anyone', role: 'reader', allowFileDiscovery: false }),
+  })
+  const detail = await entryDetail(id)
+  if (!detail.ok) return granted.ok ? detail : granted
+  const url = detail.entry.webViewLink
+    ?? (detail.entry.mimeType === FILES_FOLDER_MIME
+      ? `https://drive.google.com/drive/folders/${id}`
+      : driveFileUrl(id))
+  return { ok: true, url }
+}
+
+/**
+ * The bytes of a file, or of its Drive-made thumbnail, as a live stream.
+ *
+ * Both go through the server for one reason: the access token. A
+ * `thumbnailLink` is not a public URL — it is signed for the account that
+ * asked for it — so putting one in an `<img src>` either fails, or works by
+ * handing the browser something it should never hold. The page asks this app
+ * for a picture; this app asks Google with its own credentials and passes the
+ * pixels back.
+ */
+export async function openThumbnail(
+  id: string, size = 400,
+): Promise<DriveResult<{ body: ReadableStream<Uint8Array>; contentType: string }>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(id)}?` +
+    new URLSearchParams({ fields: 'thumbnailLink,hasThumbnail', ...ALL_DRIVES })
+  const meta = await driveFetch<{ thumbnailLink?: string; hasThumbnail?: boolean }>(auth.token, url)
+  if (!meta.ok) return meta
+  const link = meta.data.thumbnailLink
+  if (!link) return asError('There is no preview for that file')
+  // Drive's link ends in `=s220`; asking for a bigger one is a swap, not a
+  // second request — and a 220px tile on a retina screen looks broken
+  const sized = link.replace(/=s\d+$/, `=s${Math.min(Math.max(size, 64), 1600)}`)
+  // the token goes in an Authorization header on the next line, so the host it
+  // goes to is checked first — the same cheap rule the upload session gets
+  if (!isGoogleContentUrl(sized)) return asError('That preview could not be loaded')
+  const res = await fetch(sized, { headers: { Authorization: `Bearer ${auth.token}` } })
+  if (!res.ok || !res.body) return asError('That preview could not be loaded')
+  return {
+    ok: true,
+    body: res.body as ReadableStream<Uint8Array>,
+    contentType: res.headers.get('content-type') ?? 'image/jpeg',
+  }
+}
+
+export async function openDownload(id: string): Promise<DriveResult<{
+  body: ReadableStream<Uint8Array>; contentType: string; name: string; size: string | null
+}>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  const detail = await entryDetail(id)
+  if (!detail.ok) return detail
+  if (detail.entry.mimeType === FILES_FOLDER_MIME) {
+    return asError('A folder cannot be downloaded — open it in Google Drive instead')
+  }
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(id)}?` +
+    new URLSearchParams({ alt: 'media', ...ALL_DRIVES })
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}` } })
+  if (!res.ok || !res.body) {
+    return asError('That file could not be downloaded', String(res.status))
+  }
+  return {
+    ok: true,
+    body: res.body as ReadableStream<Uint8Array>,
+    contentType: res.headers.get('content-type')
+      ?? detail.entry.mimeType
+      ?? 'application/octet-stream',
+    name: detail.entry.name,
+    size: res.headers.get('content-length'),
+  }
+}
+
+// ── uploads a person starts ───────────────────────────────────────────────
+
+/**
+ * Open a resumable session for a file coming off somebody's desktop.
+ *
+ * The same mechanism `uploadStreamToFolder` uses, split in two so the browser
+ * can drive it: the bytes are not on our server, they are on a laptop, and a
+ * 900 MB clip has to arrive a slice at a time with a progress bar somebody can
+ * watch. The session URI is kept on the server (in `drive_uploads`) and never
+ * handed out — the browser holds an opaque id of ours instead.
+ */
+export async function openUploadSession(
+  parentId: string, name: string, size: number | null, mimeType?: string,
+): Promise<DriveResult<{ uri: string; name: string }>> {
+  if (!isDriveId(parentId)) return asError('That folder could not be found')
+  if (!String(name ?? '').trim()) return asError('That file has no name')
+  const clean = safeSegment(name)
+  if (size != null && size > MAX_UPLOAD_BYTES) {
+    return asError('That file is larger than Google Drive accepts')
+  }
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const begun = await beginResumable(
+    auth.token, { name: clean, parents: [parentId], mimeType }, size,
+  )
+  if (!begun.ok) return begun
+  return { ok: true, uri: begun.uri, name: clean }
+}
+
+export type ChunkOutcome =
+  | { ok: true; done: false; received: number }
+  | { ok: true; done: true; id: string; bytes: number }
+  | DriveFailure
+
+/**
+ * Push one slice at an open session.
+ *
+ * Drive's answer is the authority on how much it holds — the 308's `Range`
+ * header, never our own count. When the two disagree the caller resends from
+ * where Drive says it is, which is the whole reason resumable upload exists
+ * and the difference between a dropped connection costing one chunk and
+ * costing the file.
+ */
+export async function pushUploadChunk(
+  uri: string, chunk: Uint8Array, start: number, total: number | null,
+): Promise<ChunkOutcome> {
+  // belt and braces: `liveUploadRow` checks the stored URI too, and this is
+  // the line that actually attaches the token
+  if (!isGoogleUploadUri(uri)) return asError('That upload is no longer going')
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const end = start + chunk.length
+  const range = chunk.length === 0
+    ? `bytes */${total ?? 0}`
+    : total != null
+      ? contentRange(start, end, total)
+      : `bytes ${start}-${end - 1}/*`
+  const res = await putChunk(auth.token, uri, chunk, range)
+  if (res.status === 308) {
+    const have = receivedBytes(res.range)
+    return { ok: true, done: false, received: have > 0 ? have : end }
+  }
+  if (res.status === 200 || res.status === 201) {
+    if (!res.file?.id) {
+      return asError('Google Drive finished the upload without returning a file id')
+    }
+    return { ok: true, done: true, id: res.file.id, bytes: Number(res.file.size ?? end) || end }
+  }
+  return asError(`Google Drive ${res.status} during the upload`, res.text)
 }

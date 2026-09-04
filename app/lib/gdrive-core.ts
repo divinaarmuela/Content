@@ -24,9 +24,14 @@
  *
  * A note on the difference from a filesystem: **Drive has no paths.** A folder
  * is an id, and two sibling folders may share a name without Drive minding at
- * all. So this module builds *chains of names* — the walk from the root down —
- * and gdrive.ts resolves each chain to ids, creating what is missing. Nothing
- * here ever pretends a slash-joined string identifies a folder.
+ * all. Nothing here ever pretends a slash-joined string identifies a folder.
+ *
+ * Since the app was taught to file into the agency's own HQ folder, every walk
+ * starts at an ID — the client's folder, recorded on the client — and goes down
+ * by name from there. The client's folder may be called anything; it was named
+ * by a person years ago. So this module supplies the NAMES of the folders
+ * below it (`_Brand`, `_Scheduled`, `01 Raw`) and the rules for making one
+ * safe, and gdrive.ts resolves them against a parent id.
  */
 
 /** Drive stores a name as a plain string; only `/` genuinely misleads a
@@ -41,6 +46,17 @@ export const MAX_SEGMENT = 100
 
 /** The mimeType that makes a Drive file a folder. */
 export const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+/**
+ * What a person is told about a client with no folder in Drive.
+ *
+ * An instruction, not an apology: they can fix it in thirty seconds, in the
+ * place where they can also see the folders that DO exist and might be the one
+ * they meant. Lives here because both the server (the Apply result) and the
+ * Settings card say it, and one sentence in two places drifts.
+ */
+export const NO_FOLDER_IN_DRIVE =
+  'No folder found in Drive — create one in Drive, then match it here'
 
 /** The three fixed folders that group together, apart from the dated shoots. */
 export const BRAND_FOLDER = '_Brand'
@@ -188,119 +204,16 @@ export function chain(...parts: (string | null | undefined)[]): string[] {
     .map(safeSegment)
 }
 
-/** `{root}/{Client}` — everything for one client hangs off this. */
-export function clientChain(client: string): string[] {
-  return chain(client)
-}
 
-/** `{root}/{Client}/_Brand` — long-lived reference, not tied to any shoot. */
-export function brandChain(client: string): string[] {
-  return chain(client, BRAND_FOLDER)
-}
 
-/** `{root}/{Client}/_Tasks/{Task}` — internal work with nothing to shoot. */
-export function taskChain(client: string, taskFolder: string): string[] {
-  return chain(client, TASKS_FOLDER, taskFolder)
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}` — a real deliverable with no shoot.
- *
- * Not the same thing as `_Tasks`: this is footage that exists (the client sent
- * it, an old shoot supplied it) being cut into a deliverable, so it belongs
- * beside the shoots rather than among the research jobs.
- */
-export function noShootChain(client: string, itemFolder: string): string[] {
-  return chain(client, NO_SHOOT_FOLDER, itemFolder)
-}
 
-export type ShootChains = {
-  /** `{root}/{Client}/{Shoot}` */
-  shoot: string[]
-  /** `{root}/{Client}/{Shoot}/01 Raw` */
-  raw: string[]
-  /** `{root}/{Client}/{Shoot}/02 Edits` */
-  edits: string[]
-  /** `{root}/{Client}/{Shoot}/03 Final` */
-  final: string[]
-}
 
-/** Every folder a shoot needs, parents before children. */
-export function shootChains(client: string, shootFolder: string): ShootChains {
-  const shoot = chain(client, shootFolder)
-  const [raw, edits, final] = SHOOT_SUBFOLDERS
-  return {
-    shoot,
-    raw: [...shoot, raw],
-    edits: [...shoot, edits],
-    final: [...shoot, final],
-  }
-}
 
-/** `{root}/{Client}/{Shoot}/02 Edits/{Item}` — where one deliverable is cut. */
-export function itemChain(
-  client: string, shootFolder: string, itemFolder: string,
-): string[] {
-  return [...shootChains(client, shootFolder).edits, safeSegment(itemFolder)]
-}
 
-/**
- * `{root}/{Client}/{Shoot}/03 Final` — where the approved cut is archived.
- *
- * The same folder the shoot already has, reached by name rather than by id,
- * so an item approved long after its shoot still lands in the shoot's own
- * finals rather than in a second one.
- */
-export function shootFinalChain(client: string, shootFolder: string): string[] {
-  return shootChains(client, shootFolder).final
-}
 
-/**
- * `{root}/{Client}/{Shoot}/01 Raw` — the footage a shoot produced.
- *
- * Everything shot on the day lands in ONE folder per shoot, not one per
- * deliverable: the same clip is cut into three Reels, and filing it under the
- * first item that happened to claim it hides it from the other two. Reached by
- * name from the root, like the finals, so a raw file attached to an item long
- * after the shoot still lands in that shoot's own raw folder.
- */
-export function shootRawChain(client: string, shootFolder: string): string[] {
-  return shootChains(client, shootFolder).raw
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}/Raw` — given footage for a shoot-less item.
- *
- * It hangs off the ITEM's folder for the same reason its finals do: with no
- * shoot to group them, the deliverable is the only grouping there is. What it
- * must NOT be is the item folder itself, which is the editing bench.
- */
-export function noShootRawChain(client: string, itemFolder: string): string[] {
-  return [...noShootChain(client, itemFolder), NO_SHOOT_RAW_FOLDER]
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}/Final` — finals for a shoot-less item.
- *
- * It hangs off the ITEM's own folder, not off a client-wide finals bin: with
- * no shoot to group them, the deliverable is the only grouping there is.
- */
-export function noShootFinalChain(client: string, itemFolder: string): string[] {
-  return [...noShootChain(client, itemFolder), NO_SHOOT_FINAL_FOLDER]
-}
-
-/**
- * `{root}/{Client}/_Scheduled/{YYYY-MM}` — what goes out, by the month it
- * goes out in.
- *
- * Deliberately per CLIENT and not per shoot: "what are we posting for them in
- * September" is a question about a client and a month, and answering it from
- * the shoot tree means opening every shoot. A month with nothing scheduled
- * never gets a folder, because nothing is ever copied into it.
- */
-export function scheduledChain(client: string, month: string): string[] {
-  return chain(client, SCHEDULED_FOLDER, month)
-}
 
 /** `YYYY-MM-DD` from an ISO date or timestamp, or null if it is not a date. */
 export function dayStamp(iso: string | null | undefined): string | null {
@@ -316,24 +229,6 @@ export function dayStamp(iso: string | null | undefined): string | null {
   ].join('-')
 }
 
-/**
- * `{root}/{Client}/_From client/{YYYY-MM-DD}` — what the client sent, by the
- * day it arrived.
- *
- * By DAY rather than by month, and by day rather than by form: a client sends
- * things in bursts — an intake form, then a folder of product photos a week
- * later — and "the stuff they sent on the 14th" is how anyone refers to a
- * burst afterwards. A form id would be accurate and unusable; a month would
- * put three unrelated deliveries in one pile.
- *
- * Brand material is the deliberate exception and goes to `_Brand` instead
- * (see `intakeFileTarget`): a logo is not a delivery, it is a long-lived
- * reference, and hunting for it under the date it happened to arrive is
- * exactly the filing this tree exists to avoid.
- */
-export function fromClientChain(client: string, day: string): string[] {
-  return chain(client, FROM_CLIENT_FOLDER, day)
-}
 
 /**
  * Which folder a client-submitted file belongs in.
@@ -454,4 +349,183 @@ export function uniqueName(base: string, taken: Iterable<string>): string {
     if (!used.has(candidate.toLowerCase())) return candidate
   }
   return `${safe.slice(0, MAX_SEGMENT - 14)} (${Date.now() % 100000})`
+}
+
+// ── matching client folders that are already in Drive ─────────────────────
+
+/**
+ * Words at the END of a business name that say what KIND of company it is,
+ * not which one.
+ *
+ * "Alia Fragrance Pty Ltd" and "Alia Fragrance" are the same client typed by
+ * two different people, and the folder in Drive was named by whoever made it
+ * first. Only trailing suffixes are dropped, and only whole words: "Ltd" in
+ * the middle of a name is part of the name, and "Incline" is not "Inc".
+ */
+const COMPANY_SUFFIXES = new Set([
+  'pty', 'ltd', 'limited', 'inc', 'incorporated', 'llc', 'plc', 'corp',
+  'corporation', 'co', 'company',
+])
+
+/** Apostrophes CLOSE up: "Cecconi's" is one word, "cecconis", not two. */
+const APOSTROPHES = /['’`´]/g
+
+/**
+ * The comparable form of a folder or client name.
+ *
+ * Everything a person varies without meaning to is removed: capitals,
+ * punctuation, an ampersand written as "and", a doubled space, and the
+ * trailing company suffix. What is LEFT is the part that identifies the
+ * client, and two names with the same normalised form are the same client.
+ *
+ * Deliberately not fuzzy: this is the exact half of the match, and being sure
+ * matters more here than matching more. The near-misses are handled by
+ * `matchClientFolders`, which flags them instead of assuming.
+ */
+export function normaliseFolderName(raw: string | null | undefined): string {
+  let s = String(raw ?? '').toLowerCase()
+  s = s.replace(APOSTROPHES, '')
+  s = s.replace(/&/g, ' and ')
+  s = s.replace(/[^a-z0-9]+/g, ' ').trim()
+  let words = s.split(' ').filter(Boolean)
+  // a trailing "pty ltd" is two suffixes, so strip until the last word carries
+  // meaning — but never strip a name away to nothing ("Co" on its own is the
+  // whole client)
+  while (words.length > 1 && COMPANY_SUFFIXES.has(words[words.length - 1])) {
+    words = words.slice(0, -1)
+  }
+  return words.join(' ')
+}
+
+/** The tokens two names are compared on. */
+function tokens(raw: string): Set<string> {
+  return new Set(normaliseFolderName(raw).split(' ').filter(Boolean))
+}
+
+/**
+ * How much two names share, 0…1 — shared words over the LONGER name.
+ *
+ * Over the longer one on purpose: "Alia" against "Alia Fragrance Skincare"
+ * shares every word of the shorter name and would score 1 on a one-sided
+ * measure, which is exactly the wrong answer.
+ */
+export function nameOverlap(a: string, b: string): number {
+  const left = tokens(a)
+  const right = tokens(b)
+  if (left.size === 0 || right.size === 0) return 0
+  let shared = 0
+  for (const t of left) if (right.has(t)) shared++
+  return shared / Math.max(left.size, right.size)
+}
+
+/** Anything below this is left for a person to decide. */
+export const LIKELY_OVERLAP = 0.8
+
+export type NamedFolder = { id: string; name: string }
+export type NamedClient = { id: string; name: string }
+
+export type FolderMatch<C extends NamedClient = NamedClient, F extends NamedFolder = NamedFolder> = {
+  client: C
+  folder: F
+  /** 'exact' — the names agree once tidied. 'likely' — close, worth a look. */
+  confidence: 'exact' | 'likely'
+}
+
+export type FolderMatchPlan<C extends NamedClient = NamedClient, F extends NamedFolder = NamedFolder> = {
+  matched: FolderMatch<C, F>[]
+  /** clients with no folder — these are the ones that would be created */
+  unmatched: C[]
+  /** folders in Drive that belong to no client on the list */
+  extra: F[]
+}
+
+/**
+ * Line the clients up against the folders that are already in Drive.
+ *
+ * Two passes, and the order is the whole design:
+ *
+ * 1. **Exact** on the normalised name. One folder can only be claimed once,
+ *    so a duplicate ("Acme" twice, which Drive allows) leaves the second copy
+ *    in `extra` rather than quietly attaching two clients to one folder.
+ * 2. **Likely** — 80% of the words shared, and only when ONE folder is that
+ *    close. Two folders equally close is an ambiguity, and an ambiguity
+ *    resolved by a coin toss is worse than one handed back to a person: the
+ *    client stays unmatched and the review screen asks.
+ *
+ * Pure: it never touches Drive and never creates anything. The caller applies
+ * the plan after a person has looked at it.
+ */
+export function matchClientFolders<C extends NamedClient, F extends NamedFolder>(
+  clients: C[], subfolders: F[],
+): FolderMatchPlan<C, F> {
+  const matched: FolderMatch<C, F>[] = []
+  const takenFolders = new Set<string>()
+  const remainingClients: C[] = []
+
+  // pass 1 — exact. Built as a queue per normalised name so a second folder
+  // with the same name is left over rather than shared.
+  const byName = new Map<string, F[]>()
+  for (const f of subfolders) {
+    const key = normaliseFolderName(f.name)
+    if (!key) continue
+    const list = byName.get(key)
+    if (list) list.push(f)
+    else byName.set(key, [f])
+  }
+  for (const client of clients) {
+    const key = normaliseFolderName(client.name)
+    const folder = key ? byName.get(key)?.find(f => !takenFolders.has(f.id)) : undefined
+    if (folder) {
+      takenFolders.add(folder.id)
+      matched.push({ client, folder, confidence: 'exact' })
+    } else {
+      remainingClients.push(client)
+    }
+  }
+
+  // pass 2 — likely, best pair first across the WHOLE board rather than in
+  // client order. Taking them in list order lets the first client to clear the
+  // bar walk off with a folder that fits a later client better, and which
+  // client that is depends on nothing more meaningful than alphabetical order.
+  const pairs = remainingClients
+    .flatMap(client => subfolders
+      .filter(f => !takenFolders.has(f.id))
+      .map(folder => ({ client, folder, score: nameOverlap(client.name, folder.name) })))
+    .filter(p => p.score >= LIKELY_OVERLAP)
+    .sort((a, b) =>
+      b.score - a.score
+      || a.client.name.localeCompare(b.client.name)
+      || a.folder.name.localeCompare(b.folder.name))
+
+  const matchedClients = new Set<string>()
+  // a client (or a folder) wanted equally by two candidates is not a match, it
+  // is a question — and a question answered by a coin toss is worse than one
+  // put to a person on the review screen
+  const undecided = new Set<string>()
+
+  for (const pair of pairs) {
+    if (matchedClients.has(pair.client.id) || undecided.has(pair.client.id)) continue
+    if (takenFolders.has(pair.folder.id)) continue
+    const contested = pairs.some(other =>
+      other !== pair
+      && other.score === pair.score
+      && !takenFolders.has(other.folder.id)
+      && !matchedClients.has(other.client.id)
+      && (other.client.id === pair.client.id || other.folder.id === pair.folder.id))
+    if (contested) {
+      undecided.add(pair.client.id)
+      continue
+    }
+    takenFolders.add(pair.folder.id)
+    matchedClients.add(pair.client.id)
+    matched.push({ client: pair.client, folder: pair.folder, confidence: 'likely' })
+  }
+
+  const unmatched = remainingClients.filter(c => !matchedClients.has(c.id))
+
+  return {
+    matched,
+    unmatched,
+    extra: subfolders.filter(f => !takenFolders.has(f.id)),
+  }
 }

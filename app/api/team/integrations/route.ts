@@ -5,6 +5,7 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { storageBackend } from '@/app/lib/storage'
 import { driveStatus } from '@/app/lib/gdrive'
 import { driveMemberNote } from '@/app/lib/gdrive-members'
+import { AUTO_FILING_NOTE, autoFilingEnabled } from '@/app/lib/gdrive-policy'
 import { zernioWebhookUrl } from '@/app/lib/zernio-webhook'
 import { webhookDeliveryStats } from '@/app/lib/zernio-events'
 import { previewStats, streamConfigured, streamWebhookUrl } from '@/app/lib/stream'
@@ -96,7 +97,11 @@ export async function GET() {
       {
         key: 'gdrive',
         name: 'Google Drive',
-        detail: 'Every file, mirrored — raw, edits, finals and what goes out.',
+        // What it ACTUALLY does now. It used to say "every file, mirrored",
+        // which described a version of this integration the owner has since
+        // switched off — and a card that describes filing nobody asked for is
+        // how somebody goes looking in Drive for a file that was never sent.
+        detail: AUTO_FILING_NOTE,
         connected: drive.connected,
         configured: drive.configured,
         status: !drive.configured
@@ -104,12 +109,23 @@ export async function GET() {
           : !drive.connected
             ? 'Configured, but no account connected yet'
             : [
-                `Connected as ${drive.account_email ?? 'an account'} · files under "${drive.root_name}"`,
+                // the folder the OWNER chose, not the app-root name. `root_name`
+                // defaults to "Clients" and is the name of a folder this app
+                // would have made; on a picked root it names the wrong thing,
+                // and a card that names the wrong folder is how somebody goes
+                // looking in the wrong place.
+                `Connected as ${drive.account_email ?? 'an account'} · reading "${
+                  drive.root_folder_name || drive.root_name}"`,
+                // a reconnect with a different Google account leaves the picked
+                // folder unreadable, and nothing else would ever say why
+                drive.root_account_changed
+                  ? 'This folder was chosen with a different Google account — choose it again'
+                  : null,
                 // how a folder becomes reachable by the rest of the team is
                 // the question an editor actually has when a link 404s. The
                 // member line is the answer for everyone the domain grant
                 // does not cover — the freelancer on a Gmail address.
-                members?.note ?? drive.sharing_note,
+                autoFilingEnabled() ? (members?.note ?? drive.sharing_note) : null,
               ].filter(Boolean).join(' · '),
         href: null,
         // full navigation, not fetch: /api/gdrive/connect answers with a
@@ -118,7 +134,11 @@ export async function GET() {
           ? '/api/gdrive/connect' : null,
         disconnect_href: drive.connected && canConnect
           ? '/api/gdrive/disconnect' : null,
-        action_href: drive.connected && canConnect ? '/api/gdrive/share' : null,
+        // sharing the folder with the team is a write to the agency's Drive,
+        // so it is off with everything else — and a button that can only
+        // answer "that is switched off" is worse than no button
+        action_href: drive.connected && canConnect && autoFilingEnabled()
+          ? '/api/gdrive/share' : null,
         action_label: 'Re-share with team',
       },
       {

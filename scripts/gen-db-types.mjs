@@ -121,13 +121,36 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // drive_uploads — one in-flight upload started by a person on the Files
+  //   page. The bytes are on somebody's laptop, so they arrive a slice at a
+  //   time and each slice is a separate request; something has to remember the
+  //   Google resumable session URI between them. It is kept HERE, on the
+  //   server, and never handed to the browser: the browser holds `id` and
+  //   nothing else, so a session cannot be replayed by anyone who is not
+  //   signed in. The row is finished (or abandoned) the moment Drive returns a
+  //   file id, and carries no bytes of its own.
+  drive_uploads: [
+    ['id', col('string', false)],
+    ['upload_uri', col('string', false)],
+    ['name', col('string', false)],
+    ['parent_id', col('string', false)],
+    ['mime_type', col('string', true)],
+    ['size', col('number', true)],
+    ['received', col('number', false)],
+    ['client_id', col('string', true)],
+    ['status', col('string', false)],       // open | done | failed
+    ['drive_file_id', col('string', true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
@@ -158,11 +181,79 @@ for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 //     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
-  clients: [['instagram_locations', col('unknown', false, true, true)]],
+  clients: [
+    ['instagram_locations', col('unknown', false, true, true)],
+    ['drive_folder_id', col('string', true)],
+    //   clients.drive_folder_origin — 'app' if this app made the folder,
+    //     'adopted' if it was already in the owner's Drive and was matched to
+    //     the client in Settings. It decides one thing: whether the app may
+    //     change PERMISSIONS on the folder. An adopted folder is the owner's,
+    //     shared however they chose to share it years ago, and a domain grant
+    //     the app added "helpfully" is a change to someone else's filing that
+    //     nobody asked for and nothing undoes.
+    ['drive_folder_origin', col('string', true)],
+  ],
+  //   drive_connection.root_* — WHERE the filing cabinet is.
+  //     The app can only see folders it made itself (the drive.file scope), so
+  //     the owner's existing "MD Media HQ" folder is unreachable until a person
+  //     hands it over through the Google Picker. That hand-over is what these
+  //     columns record: root_folder_id/root_folder_name/root_owner_email are the
+  //     PICKED folder, root_picked says a person chose it (so nothing ever
+  //     creates a stray "Clients" folder in My Drive again), and
+  //     clients_folder_id is the "Clients" subfolder inside it that every client
+  //     folder hangs off.
+  drive_connection: [
+    ['root_folder_name', col('string', true)],
+    ['root_owner_email', col('string', true)],
+    //   root_origin — 'app' (the app made its own Clients folder, the original
+    //     behaviour) or 'picked' (a person handed the app the agency's real HQ
+    //     folder through the Google Picker). Everything that could CHANGE
+    //     somebody else's Drive reads this first: on a picked root the app adds
+    //     files and folders and does nothing else — no domain sharing, no
+    //     member sync, and above all no permission removals. The owner manages
+    //     who can see HQ, and the app is a guest there.
+    ['root_origin', col('string', true)],
+    ['root_picked_at', col('string', true)],
+    ['root_picked_by', col('string', true)],
+    ['clients_folder_id', col('string', true)],
+    // set when a reconnect brought a DIFFERENT Google account than the one the
+    // folder was chosen with. `drive.file` grants are per app AND per account,
+    // so the picked folder is unreadable until somebody picks it again — and
+    // nothing else would say so.
+    ['root_account_changed', col('boolean', true)],
+  ],
+  //   asset_versions.source / source_drive_file_id — WHERE the files on this
+  //     version came from. 'drive' means somebody picked them in the
+  //     composer's Google Drive tab, so the originals are already in the
+  //     agency's Drive and must never be copied back into it (the owner's
+  //     ruling: no automatic filing, and a picker is not a round trip).
+  //     `source_drive_file_id` is the Drive file the version was built from,
+  //     so the piece can point back at the original rather than only at our
+  //     copy of it; the per-slide ids live on `files`. Both nullable: an
+  //     ordinary upload has neither, and so does every version written before
+  //     the picker existed.
   asset_versions: [
     ['cover_url', col('string', true)],
     ['trim_start', col('number', true)],
     ['trim_end', col('number', true)],
+    ['source', col('string', true)],
+    ['source_drive_file_id', col('string', true)],
+  ],
+  //   drive_files.parent_id / name / uploaded_by / moved_at — what the Files
+  //     page needs the mirror to remember. The table was written for "this
+  //     source URL has been copied to this target", which never had to know
+  //     WHERE in Drive the copy ended up: the target implied the folder. The
+  //     Files page can move a file to any folder a person chooses, so the
+  //     folder became a fact of its own — without it the page and the mirror
+  //     would disagree about where a file is the moment somebody dragged one.
+  //     `name` is kept for the same reason (a renamed file is still the same
+  //     row), and `uploaded_by` answers "who put this here", which is the
+  //     first thing anybody asks about a file they did not expect.
+  drive_files: [
+    ['parent_id', col('string', true)],
+    ['name', col('string', true)],
+    ['uploaded_by', col('string', true)],
+    ['moved_at', col('string', true)],
   ],
 }
 for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {

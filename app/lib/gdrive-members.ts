@@ -3,7 +3,8 @@ import { after } from 'next/server'
 import { table } from '@/lib/db'
 import type { TeamUser } from '@/lib/db-types'
 import { driveStatus, rootFolderId } from './gdrive'
-import { grantUserPermission, listPermissions, revokePermission } from './gdrive-files'
+import { grantUserPermission, listPermissions } from './gdrive-files'
+import { AUTO_FILING_NOTE, skipAutoFiling } from './gdrive-policy'
 import {
   membersNeedingPermission, memberPermissionDiff, sharingSummary,
   type MemberLike,
@@ -38,11 +39,35 @@ import {
  * work; the portal exists precisely so they never need to. And `.invalid`
  * addresses are refused outright — the test suite is addressed there, and a
  * permission is not something to discover a test created.
+ *
+ * ── It never takes access away, and on a picked root it does nothing ──
+ *
+ * This function used to revoke every user permission that was not a current
+ * team member. That was defensible while the root was a folder the app made
+ * and nobody else had ever touched. It is indefensible now: the root can be
+ * the agency's real HQ → Clients folder, shared over years with clients, a
+ * bookkeeper, two freelance editors and the owner's second address. Adding an
+ * editor in Settings → Team would have quietly revoked all of them, with a log
+ * line as the only trace.
+ *
+ * Two rules replace it:
+ *
+ * 1. **On a picked root this function returns immediately.** The owner manages
+ *    who can see HQ, in Drive, where they can see what they are doing.
+ * 2. **Even on the app's own root, nothing is ever revoked.** The app does not
+ *    record which grants it made, so it cannot tell its own from anybody
+ *    else's — and "remove what I do not recognise" is not a thing to guess at.
+ *    Access for someone who has left is removed in Drive, by a person.
+ *
+ * `memberPermissionDiff` still computes a `remove` list, which is still tested
+ * and still true; this function simply does not act on it.
  */
 
 export type MemberSyncResult = {
   ok: boolean
   reason?: string
+  /** a sentence for the card, where the counts would not say enough */
+  message?: string
   added: string[]
   removed: string[]
   /** how many people hold a permission of their own once this is done */
@@ -73,10 +98,37 @@ async function teamMembers(): Promise<MemberLike[]> {
  * reconcile fixes it.
  */
 export async function syncDriveMembers(): Promise<MemberSyncResult> {
+  // sharing somebody's folder with somebody else is a write to the agency's
+  // Drive, and the ruling covers every one of those. The "Re-share with team"
+  // button reports this sentence rather than pretending it did something.
+  if (skipAutoFiling('share the Drive folder with the team')) {
+    return {
+      ok: true,
+      reason: 'auto_filing_off',
+      message: AUTO_FILING_NOTE,
+      added: [],
+      removed: [],
+      personal: 0,
+      domain: null,
+    }
+  }
   try {
     const status = await driveStatus()
     if (!status.configured) return skipped('not_configured')
     if (!status.connected) return skipped('not_connected')
+
+    // the guard, before anything is read and long before anything is written
+    if (status.root_origin === 'picked') {
+      return {
+        ok: true,
+        reason: 'owner_manages_sharing',
+        message: 'This folder belongs to the agency, so sharing is managed in Google Drive, not here.',
+        added: [],
+        removed: [],
+        personal: 0,
+        domain: status.sharing_domain,
+      }
+    }
 
     const root = await rootFolderId()
     if (!root) return skipped('no_root_folder')
@@ -102,17 +154,20 @@ export async function syncDriveMembers(): Promise<MemberSyncResult> {
       if (res.ok) added.push(email)
       else console.error('[gdrive] could not share with', email, res.message, res.detail)
     }
-    const removed: string[] = []
-    for (const p of diff.remove) {
-      const res = await revokePermission(root, p.id)
-      if (res.ok) removed.push(p.email)
-      else console.error('[gdrive] could not revoke', p.email, res.message)
+    // nothing is revoked, on any root — see the note at the top of this file.
+    // The diff still says who looks surplus, and saying it in a log is as far
+    // as this goes.
+    if (diff.remove.length) {
+      console.log(
+        `[gdrive] ${diff.remove.length} permission(s) on the folder are not current team members;`
+        + ' left alone — remove them in Drive if that is wrong',
+      )
     }
 
     return {
       ok: true,
       added,
-      removed,
+      removed: [],
       personal: desired.length,
       domain: status.sharing_domain,
     }
@@ -132,6 +187,7 @@ export async function syncDriveMembers(): Promise<MemberSyncResult> {
  * frozen, and this needs to outlive the response.
  */
 export function onTeamChanged(label: string): void {
+  if (skipAutoFiling('share the Drive folder with the team')) return
   const job = async () => {
     const res = await syncDriveMembers()
     if (res.ok && (res.added.length || res.removed.length)) {

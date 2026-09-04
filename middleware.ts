@@ -97,6 +97,10 @@ export const config = {
     '/api/booking/admin/:path*',
     '/api/clients/:path*',
     '/api/db-tables/:path*',
+    // the Files page's own routes. Like /api/gdrive they are not in the
+    // force-protected list above — every handler calls requireFilesAccess
+    // itself — but auth() throws unless the middleware has run.
+    '/api/drive/:path*',
     // like /api/gcal: not force-protected above, because every handler calls
     // requireRole itself — but auth() needs the middleware to have run, and
     // the OAuth callback must be able to identify who came back

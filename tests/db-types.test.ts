@@ -28,6 +28,22 @@ describe('db-types (generated)', () => {
     expect(TABLE_COLUMNS.team_users).toContain('email')
     expect(TABLE_COLUMNS.clients).toContain('name')
   })
+  // Where the filing cabinet is, and whose it is. `root_origin` is the flag
+  // every Drive write consults before it changes anything: on 'picked' — a
+  // folder of the agency's own, handed over through the Google Picker — the
+  // app adds files and folders and does nothing else. `drive_folder_origin`
+  // is the same question one level down, per client: a folder the app made is
+  // its own to share, a folder it adopted is the owner's.
+  it('records where the Drive folders came from', () => {
+    for (const c of ['root_origin', 'root_folder_name', 'root_owner_email', 'clients_folder_id']) {
+      expect(TABLE_COLUMNS.drive_connection).toContain(c)
+      expect(NULLABLE_COLUMNS.drive_connection).toContain(c)
+    }
+    for (const c of ['drive_folder_id', 'drive_folder_origin']) {
+      expect(TABLE_COLUMNS.clients).toContain(c)
+      expect(NULLABLE_COLUMNS.clients).toContain(c)
+    }
+  })
   it('marks nullable columns', () => {
     expect(NULLABLE_COLUMNS.content_items).toContain('due_date')
     expect(NULLABLE_COLUMNS.content_items).not.toContain('id')
@@ -38,6 +54,18 @@ describe('db-types (generated)', () => {
   // pictures, or clips nobody has picked a cover for.
   it('knows what a video version can carry', () => {
     for (const c of ['cover_url', 'trim_start', 'trim_end']) {
+      expect(TABLE_COLUMNS.asset_versions).toContain(c)
+      expect(NULLABLE_COLUMNS.asset_versions).toContain(c)
+    }
+  })
+  // Where the files on a version came from. 'drive' means somebody picked
+  // them in the composer's Google Drive tab, so the originals are already in
+  // the agency's Drive and are never copied back into it — the owner's ruling
+  // that automatic filing is off, written down as a column. Nullable: an
+  // ordinary upload has neither, and so does every version made before the
+  // picker existed.
+  it('remembers a version picked out of Drive', () => {
+    for (const c of ['source', 'source_drive_file_id']) {
       expect(TABLE_COLUMNS.asset_versions).toContain(c)
       expect(NULLABLE_COLUMNS.asset_versions).toContain(c)
     }

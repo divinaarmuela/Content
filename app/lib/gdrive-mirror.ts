@@ -6,14 +6,16 @@ import type {
 } from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import {
-  FINAL_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
-  brandChain, dayStamp, fromClientChain, intakeFileTarget, scheduledChain,
+  BRAND_FOLDER, FINAL_FOLDER, FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER,
+  NO_SHOOT_RAW_FOLDER, RAW_FOLDER, SCHEDULED_FOLDER,
+  dayStamp, intakeFileTarget,
 } from './gdrive-core'
 import {
-  driveConfigured, ensureChain, ensureChainWithLink, rootFolderId,
+  driveConfigured, ensureChain, ensureClientChainWithLink, rootFolderId,
 } from './gdrive'
 import { copyDriveFile, driveFileUrl, moveDriveFile, uploadStreamToFolder } from './gdrive-files'
 import { ensureItemFoldersNow, ensureShootFoldersNow, type BatchLike, type ItemLike } from './gdrive-hooks'
+import { skipAutoFiling } from './gdrive-policy'
 import {
   RAW_ASSET_TARGET, earliestScheduledMonth, fileNameFromUrl, isClientTarget,
   isMirrorableUrl, mirrorKey, mirrorProgress, misfiledRawMirrors,
@@ -84,6 +86,7 @@ export type MirrorRequest = {
 let loggedNotConnected = false
 
 export async function requestMirror(files: MirrorRequest[]): Promise<number> {
+  if (skipAutoFiling('queue a file for Drive')) return 0
   const wanted = files.filter(f =>
     (f.item_id || f.client_id) && isMirrorableUrl(f.source_url))
   if (wanted.length === 0) return 0
@@ -126,6 +129,7 @@ export async function requestMirror(files: MirrorRequest[]): Promise<number> {
  * throws, and the detached call is the fallback.
  */
 export function mirrorFiles(files: MirrorRequest[]): void {
+  if (skipAutoFiling('queue a file for Drive')) return
   const job = () => requestMirror(files).catch(e => console.error('[gdrive] mirror request:', e))
   try {
     after(job)
@@ -171,6 +175,7 @@ export function newRawAssets(before: RawAsset[] | null, after: RawAsset[] | null
  * `(source_url, target)` claim already means the second one copies nothing.
  */
 export function mirrorRawAssets(itemId: string, assets: RawAsset[]): void {
+  if (skipAutoFiling('mirror job-pack files')) return
   mirrorFiles(assets.map(a => ({
     item_id: itemId,
     source_url: a.url,
@@ -183,6 +188,7 @@ export function mirrorRawAssets(itemId: string, assets: RawAsset[]): void {
 export function mirrorVersion(
   itemId: string, versionNumber: number, fileUrl: string | null | undefined,
 ): void {
+  if (skipAutoFiling('mirror a version')) return
   if (!isMirrorableUrl(fileUrl)) return
   mirrorFiles([{
     item_id: itemId,
@@ -204,7 +210,12 @@ export function mirrorVersion(
 export function mirrorVersionSlides(
   itemId: string, versionNumber: number, slides: readonly Slide[],
 ): void {
-  const wanted = slides.filter(s => isMirrorableUrl(s.url))
+  if (skipAutoFiling('mirror a version')) return
+  // a slide the composer picked out of Drive is ALREADY in Drive. Copying it
+  // back would put a second copy of the same file beside the first under a
+  // version-numbered name — see `Slide.source`. This holds even with the
+  // filing switch on: the picker is a picker, never a round trip.
+  const wanted = slides.filter(s => isMirrorableUrl(s.url) && s.source !== 'drive')
   if (wanted.length === 0) return
   mirrorFiles(wanted.map((s, i) => ({
     item_id: itemId,
@@ -225,6 +236,7 @@ export function mirrorVersionSlides(
 export async function mirrorLatestVersion(
   itemId: string, target: 'final' | 'scheduled',
 ): Promise<number> {
+  if (skipAutoFiling('mirror the approved version')) return 0
   if (!driveConfigured()) return 0
   const data = (await table<AssetVersion>('asset_versions').list({
     by: { item_id: itemId },
@@ -233,7 +245,7 @@ export async function mirrorLatestVersion(
   }))[0]
   if (!data) return 0
   // the whole carousel, not its cover: what was approved is the set of slides
-  const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url))
+  const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url) && s.source !== 'drive')
   if (slides.length === 0) return 0
   const n = data.version_number as number
   return requestMirror(slides.map((s, i) => ({
@@ -246,6 +258,7 @@ export async function mirrorLatestVersion(
 
 /** Fire-and-forget version of the above, for transition and schedule paths. */
 export function mirrorLatestVersionSoon(itemId: string, target: 'final' | 'scheduled'): void {
+  if (skipAutoFiling('mirror the approved version')) return
   void mirrorLatestVersion(itemId, target)
     .catch(e => console.error('[gdrive] mirror latest version:', e))
 }
@@ -264,6 +277,7 @@ export function mirrorIntakeFiles(
   files: { block_id?: string | null; label?: string | null; filename?: string | null; url?: string | null }[],
   receivedAt?: string | null,
 ): void {
+  if (skipAutoFiling('file intake uploads')) return
   if (!clientId) return
   mirrorFiles(files
     .filter(f => isMirrorableUrl(f.url))
@@ -286,6 +300,7 @@ export function mirrorIntakeFiles(
 export function mirrorBrandDoc(
   clientId: string, url: string, filename: string,
 ): void {
+  if (skipAutoFiling('file a brand document')) return
   if (!clientId || !isMirrorableUrl(url)) return
   mirrorFiles([{
     client_id: clientId,
@@ -339,11 +354,11 @@ async function clientTargetFolder(
   const name = await clientName(clientId)
   if (!name) return { skip: 'no client name' }
   if (target === 'brand') {
-    const made = await ensureChainWithLink(brandChain(name))
+    const made = await ensureClientChainWithLink(clientId, name, [BRAND_FOLDER])
     return made ? { id: made.id } : { skip: 'could not make the brand folder' }
   }
   const day = dayStamp(receivedAt) ?? dayStamp(new Date().toISOString())!
-  const made = await ensureChainWithLink(fromClientChain(name, day))
+  const made = await ensureClientChainWithLink(clientId, name, [FROM_CLIENT_FOLDER, day])
   return made ? { id: made.id } : { skip: 'could not make the delivery folder' }
 }
 
@@ -393,7 +408,7 @@ async function targetFolder(
   if (!month) return { skip: 'nothing scheduled yet' }
   const name = await clientName(item.client_id)
   if (!name) return { skip: 'no client name' }
-  const made = await ensureChainWithLink(scheduledChain(name, month))
+  const made = await ensureClientChainWithLink(item.client_id, name, [SCHEDULED_FOLDER, month])
   return made ? { id: made.id } : { skip: 'could not make the month folder' }
 }
 
@@ -422,6 +437,11 @@ export type MirrorOutcome =
  * back rather than skip it as already done.
  */
 export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> {
+  // the Inngest job's body: an event queued before the switch was turned off,
+  // or replayed from the dashboard, must not file anything either
+  if (skipAutoFiling('copy a file into Drive')) {
+    return { status: 'skipped', detail: 'automatic filing is off' }
+  }
   const clientScoped = isClientTarget(req.target)
   if (!isMirrorableUrl(req.source_url)) {
     return { status: 'skipped', detail: 'not a file of ours' }
@@ -430,7 +450,14 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
     return { status: 'skipped', detail: 'nothing to file it under' }
   }
   if (!driveConfigured()) return { status: 'skipped', detail: 'Drive not configured' }
-  if (!(await rootFolderId())) return { status: 'skipped', detail: 'Drive not connected' }
+  // a picked HQ folder whose Clients folder nobody has confirmed yet throws
+  // rather than answering — the file waits, and nothing is created in somebody
+  // else's folder while it does
+  try {
+    if (!(await rootFolderId())) return { status: 'skipped', detail: 'Drive not connected' }
+  } catch (e) {
+    return { status: 'skipped', detail: e instanceof Error ? e.message : 'Drive folder not confirmed yet' }
+  }
 
   // (source_url, target) was a composite unique key; it is checked here
   const files = table<DriveFile>('drive_files')
@@ -442,9 +469,16 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
   const item = clientScoped ? null : await loadItem(String(req.item_id))
   if (!clientScoped && !item) return { status: 'skipped', detail: 'item is gone' }
 
-  const folder = item
-    ? await targetFolder(item, req.target)
-    : await clientTargetFolder(String(req.client_id), req.target, req.received_at ?? null)
+  // the same guard one level down: resolving a target walks the client's
+  // folder, which is where the "not confirmed yet" answer actually comes from
+  let folder: { id: string } | { skip: string }
+  try {
+    folder = item
+      ? await targetFolder(item, req.target)
+      : await clientTargetFolder(String(req.client_id), req.target, req.received_at ?? null)
+  } catch (e) {
+    return { status: 'skipped', detail: e instanceof Error ? e.message : 'no folder' }
+  }
   if ('skip' in folder) return { status: 'skipped', detail: folder.skip }
 
   // an already-mirrored scheduled file whose month has changed is re-parented,
@@ -636,6 +670,7 @@ export async function sweepMissingMirrors(opts?: {
   cap?: number
 }): Promise<MirrorSweepResult> {
   const empty: MirrorSweepResult = { items: 0, missing: 0, queued: 0, moved: 0 }
+  if (skipAutoFiling('the half-hourly Drive sweep')) return empty
   if (!driveConfigured()) return empty
 
   const one = (opts?.itemIds ?? []).filter(Boolean).slice(0, 50)
@@ -752,7 +787,10 @@ export async function itemMirrorProgress(
   // "mirrored", and the line on the item page must not say it is
   for (const v of versions) {
     for (const s of slidesOf(v)) {
-      if (isMirrorableUrl(s.url)) wanted.add(mirrorKey('item', s.url))
+      // a picked Drive file is not a file we owe Drive a copy of, so it is not
+      // in the denominator — counting it would leave the item page saying
+      // "still copying" for ever
+      if (isMirrorableUrl(s.url) && s.source !== 'drive') wanted.add(mirrorKey('item', s.url))
     }
   }
   const have = mirrored

@@ -1,5 +1,129 @@
 # Project state — as at 4 September 2026
 
+## THE DASHBOARD ONLY READS GOOGLE DRIVE — 4 Sep 2026
+
+**The ruling, in the owner's words:** "didn't I tell you there should be no
+writes"; "this feature is supposed to just pick a file that they wanna post."
+The HQ folder is the agency's real archive — years of client folders, shared
+with clients, a bookkeeper and two freelance editors. The dashboard is a
+window onto it, not a drawer in it.
+
+**Nothing in this app writes to Google Drive.** No uploads, no new folders, no
+moves, no renames, no shares, and — as has always been true — no deletes of
+any kind. Read `app/lib/gdrive-policy.ts` first: it holds both switches and
+the reasoning.
+
+| | |
+|---|---|
+| **Files page** (`/dashboard/files`) | Browse, tree, breadcrumb, search, filters, previews, info panel, Open in Drive, Download. No Upload, no New folder, no Move, no Rename, no Share — not disabled, not drawn. There is no drop zone: a file dragged onto the page does nothing. |
+| **Schedule composer's Drive tab** | A PICKER. A picked file is copied into R2 (a publisher cannot fetch bytes out of Drive) and becomes a version the client approves. It is never copied back. |
+| **Root picker** (Settings → Integrations) | Adopts existing folders by name and records which belongs to which client. It creates nothing — not a client folder, not the "Clients" folder. A client with no folder in Drive stays unmatched, with "No folder found in Drive — create one in Drive, then match it here". |
+| **Everything automatic** | Off (below). |
+
+**Two switches, both off, both env-only, no UI:**
+
+- `DRIVE_AUTO_FILING=1` — may the app file things nobody asked it to?
+- `DRIVE_PAGE_WRITES=1` — may a person file something on purpose from the
+  Files page? The write half (new folder, move, rename, share, resumable
+  upload) is still there, still confirm-gated, still contained inside the
+  picked HQ folder and still tested; the routes refuse with 403 "Drive is
+  read-only from the dashboard" before they read anything, and no page
+  references them. Kept rather than deleted because a reviewed switched-off
+  feature is worth more than one reinvented in a hurry.
+
+Turning the second on does not turn the first on.
+
+**What the automatic switch turns off:** version mirroring, shoot and deliverable folder creation, the
+shoot-folder rename when a date is set, `_Brand` and intake/monthly-form
+filing, the team member sync and every domain share that hung off those, the
+half-hourly mirror sweep, and the `drive/mirror.file` Inngest job's own body —
+so an event queued before the switch went off, or replayed from the dashboard,
+files nothing either. Each returns a logged skip
+(`[gdrive] automatic filing is off — skipped: …`), makes no Drive call and
+writes no `drive_files` row.
+
+**The Schedule composer's Google Drive tab is a picker.** A picked file is
+copied into R2 (a publisher cannot fetch bytes out of Drive) and becomes a
+version the client approves. It is NEVER copied back: the slide carries
+`source: 'drive'` and the Drive file id, the version records them in
+`asset_versions.source` / `source_drive_file_id`, and `mirrorVersionSlides`
+skips a drive-sourced slide even with the switch on. The picker is a picker,
+not a round trip.
+
+**Turning it back on.** One environment variable, read in exactly one place
+(`app/lib/gdrive-policy.ts`): set `DRIVE_AUTO_FILING=1` in Vercel and redeploy.
+There is deliberately no UI for it. Anything other than the literal `1` — unset,
+empty, `0`, `true` — means off. Before turning it on, read the never-touch
+rule: the app may ADD to the owner's tree; it may not share, re-share,
+un-share, rename, replace or duplicate anything already in it.
+
+### Where the files go — the HQ folder picker (Settings → Integrations)
+
+The app holds Google's `drive.file` scope: it can see folders it created and
+folders a person handed it through Google's own chooser, and nothing else. The
+owner's "MD Media HQ" tree was therefore invisible until somebody gave it over.
+
+**Settings → Integrations → "Where the files go"** does that, in five steps:
+*Choose folder* (the Google Picker) → the server reads the folder back with its
+own token, which is the proof the grant reached the server and not just the
+browser → it finds "Clients" inside it and lists what is in there → a person
+reviews the client-to-folder matches and overrides any row → *Save these
+folders* records them on `clients.drive_folder_id`.
+
+- Matching is on the **tidied** name (`normaliseFolderName`): apostrophes
+  closed up, `&` → "and", trailing company suffixes stripped. A fuzzy pass at
+  0.8 shared tokens refuses ties, so a near-miss comes back unmatched rather
+  than silently wrong.
+- **Nothing is created.** Not a client folder, not the "Clients" folder. An
+  unmatched client says so and waits.
+- Routes (`app/api/gdrive/root/**`, all super_admin): `GET root`,
+  `GET root/token` (a short-lived ACCESS token for the Picker — never the
+  refresh token), `POST root/pick`, `GET|POST root/plan` (both read),
+  `POST root/apply`.
+- Env, both `NEXT_PUBLIC_` and both on the existing Google Cloud project:
+  `NEXT_PUBLIC_GOOGLE_PICKER_API_KEY` (required — the Picker will not load
+  without it) and `NEXT_PUBLIC_GOOGLE_PICKER_APP_ID` (the project NUMBER).
+  `NEXT_PUBLIC_*` is inlined at build time, so a redeploy is needed, not a save.
+- **Reconnecting with a different Google account** sets
+  `drive_connection.root_account_changed`, and the card says "This folder was
+  chosen with a different Google account — choose it again". Grants are per app
+  AND per account, so the picked folder is unreadable until somebody re-picks.
+
+### The Files page (`/dashboard/files`)
+
+Google Drive's view in MD Media's clothes: a lazy folder tree, breadcrumb,
+search, Type/People/Modified/Client filters, list/grid, folder and file grids
+with previews, and an info panel. **Read only** — see the table above.
+
+- **Twelve routes under `app/api/drive/**`**, all team-only
+  (`requireFilesAccess`, which refuses a client outright). Read:
+  `root`, `list`, `trail`, `info`, `thumbnail`, `download`. Write, all 403
+  while `DRIVE_PAGE_WRITES` is unset: `folder`, `move`, `rename`, `share`,
+  `upload/start`, `upload/chunk`. There is no delete route and no delete
+  helper.
+- **No token reaches the browser.** Thumbnails and downloads are same-origin
+  proxies over a validated file id; the resumable upload session URI stays on
+  the server.
+- **Search really walks below the current folder.** Drive's `q` has no subtree
+  operator, so `searchBelow` does a bounded breadth-first walk (200 folders /
+  5 s), batches 40 parents per query, follows `nextPageToken`, and says how far
+  it looked — "Searched 84 folders" — flagging when it ran out rather than
+  showing a short answer as a complete one.
+- **`drive_uploads`** (ghost table) holds one in-flight upload: the Google
+  session URI, the parent, the size and how much Drive has confirmed. The
+  browser holds only an opaque row id. Only used with `DRIVE_PAGE_WRITES=1`.
+- **`drive_files`** gained `parent_id` / `name` / `uploaded_by` / `moved_at`
+  and the `files` target, so the page and the mirror agree about where a file
+  is. The Client filter reads that join, returned with each listing.
+- The page says what it cannot see, on screen, in plain words: under
+  `drive.file` a folder made in the browser this morning is genuinely
+  invisible.
+
+**Tests.** `tests/drive-auto-filing.test.ts` calls every entry point with
+Google and Inngest replaced by counters and asserts zero of everything; the
+same harness with the switch on proves the code still works; and a read of the
+source itself fails if a new exported writer appears without the guard.
+
 ## Social Schedule — 4 Sep 2026
 
 **What it is.** `/dashboard/social/schedule` — one client's week, the approved
@@ -570,6 +694,8 @@ overflow, tap targets under 40px tall or off-screen, text under 12px, and the
 mode pill covering a control — screenshots land in `.mobile-check/`.
 
 ## Google Drive is now a mirror, not an index — 27 Aug
+
+> **Superseded on 4 Sep 2026 — see the top of this file.** Nothing in this app writes to Google Drive any more; the mirror described below is switched off (`DRIVE_AUTO_FILING`).
 
 The folder tree below created folders and links. This fills them: **every file
 that lands in our storage is copied into Drive**, so someone with nothing but

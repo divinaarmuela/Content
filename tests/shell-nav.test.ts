@@ -77,11 +77,31 @@ describe('resolveNav by role', () => {
     expect(seen('editor').sort()).toEqual([
       '/dashboard',
       '/dashboard/editor',
+      // the agency's filing cabinet: an editor hunting last month's raws is
+      // doing the job they were hired for
+      '/dashboard/files',
       '/dashboard/notifications',
       '/dashboard/production',
       '/dashboard/scheduler',
       '/dashboard/settings',
     ].sort())
+  })
+
+  it('puts Files on every team ladder and on no client', () => {
+    for (const role of ['editor', 'scheduler', 'account_manager', 'super_admin'] as const) {
+      expect(seen(role), role).toContain('/dashboard/files')
+    }
+    expect(seen('client')).not.toContain('/dashboard/files')
+    // and a grant cannot hand it to one either — `client` is refused outright
+    expect(seen('client', ['/dashboard/files'])).toEqual([])
+  })
+
+  it('draws Files under General, between Clients and Audience', () => {
+    const general = GROUPS.find(g => g.label === 'General')!.hrefs
+    expect(general).toContain('/dashboard/files')
+    expect(general.indexOf('/dashboard/files'))
+      .toBe(general.indexOf('/dashboard/clients') + 1)
+    expect(pageTitle('/dashboard/files')).toBe('Files')
   })
 
   it('gives a scheduler the queue, social and the board their posts came from', () => {
