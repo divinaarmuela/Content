@@ -31,7 +31,7 @@ import type {
   SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import {
-  eligibility, postTileFacts,
+  coverForSlide, eligibility, postTileFacts,
   type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
@@ -89,6 +89,16 @@ export type RailMedia = {
    * client, and every reorder after that made another version.
    */
   knownUrls: string[]
+  /**
+   * The cover picture somebody chose in the image editor, if they did.
+   *
+   * Not the same thing as `cover` above, which is the tile's thumbnail — this
+   * is the frame that goes OUT with a video, saved on the version and sent as
+   * the post's `thumbnailUrl`. It is here so the composer can say the cover is
+   * already set rather than showing an empty box next to a decision somebody
+   * already made.
+   */
+  coverUrl: string | null
   updatedAt: string
 }
 
@@ -195,13 +205,24 @@ export function useSchedulePosts(
     () => clients.rows.find(c => c.id === clientId) ?? null, [clients.rows, clientId])
   const tz = safeZone(client?.timezone ?? null)
 
-  /** this client's channels, active ones only. Also filtered by client_id in
-   *  memory: a listener re-keys one render AFTER the client changes, and a
-   *  frame of the previous client's rows under the new client's name is a
-   *  small lie this page can do without. */
-  const liveAccounts = useMemo(
-    () => accounts.rows.filter(a => a.active && a.client_id === clientId),
+  /**
+   * This client's channels. Filtered by client_id in memory as well as by the
+   * listener's key: a listener re-keys one render AFTER the client changes,
+   * and a frame of the previous client's rows under the new client's name is
+   * a small lie this page can do without.
+   *
+   * TWO lists, on purpose. The profiles bar and the composer offer only
+   * channels that WORK (`liveAccounts`), because offering a revoked one is
+   * offering something that cannot happen. The tiles are drawn from all of
+   * them, because a post already booked onto a channel that has since been
+   * revoked has to be able to SAY so — and a tile drawn from the live-only
+   * list would simply lose the logo and show nothing wrong.
+   */
+  const clientAccounts = useMemo(
+    () => accounts.rows.filter(a => a.client_id === clientId),
     [accounts.rows, clientId])
+  const liveAccounts = useMemo(
+    () => clientAccounts.filter(a => a.active), [clientAccounts])
 
   /** the tiles — each carrying the status the CORE gives it, never the stored
    *  one on its own: an approval or a job may have moved since it was written */
@@ -217,7 +238,7 @@ export function useSchedulePosts(
       .filter(row => itemById.has(row.item_id))
       .map(row => {
         const item = itemById.get(row.item_id)!
-        const facts = postTileFacts(row, item, jobsById, liveAccounts)
+        const facts = postTileFacts(row, item, jobsById, clientAccounts)
         return {
           ...row,
           slides: asArray<Slide>(row.slides),
@@ -253,6 +274,7 @@ export function useSchedulePosts(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           used: usedItems.has(item.id),
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
+          coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),
         }
       })

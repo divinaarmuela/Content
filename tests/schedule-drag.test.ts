@@ -3,7 +3,7 @@ import {
   beginMove, dragBlockReason, dropLabel, dropLabelAt, finishMove, isMoveKey, keyboardMove,
   KEY_STEP_MINUTES, LONG_PRESS_MS, mayDragTile, moveToDay, movedAnnouncement,
   dropIntent, movingAnnouncement, NO_MOVES, previewOrder, settledIds, shouldCommit,
-  snapToStep, SNAP_MINUTES,
+  snapToStep, SNAP_MINUTES, recentlyMoved, AFTER_MOVE_QUIET_MS,
 } from '@/app/lib/schedule-drag-core'
 import { groupForList, nearbyDayLabel, scheduleWeekGrid } from '@/app/lib/social-schedule-core'
 import { formatInZone, wallTimeIn } from '@/app/lib/timezone-core'
@@ -389,5 +389,29 @@ describe('the long press', () => {
   it('is long enough to scroll past a tile, short enough to feel deliberate', () => {
     expect(LONG_PRESS_MS).toBeGreaterThanOrEqual(300)
     expect(LONG_PRESS_MS).toBeLessThanOrEqual(600)
+  })
+})
+
+describe('the click a finger leaves behind when it lets go', () => {
+  const T = 1_756_000_000_000
+
+  it('ignores a tap in the moment after a finger drag', () => {
+    expect(recentlyMoved(T, T)).toBe(true)
+    expect(recentlyMoved(T, T + AFTER_MOVE_QUIET_MS - 1)).toBe(true)
+  })
+
+  it('lets a real tap through once that moment has passed', () => {
+    expect(recentlyMoved(T, T + AFTER_MOVE_QUIET_MS)).toBe(false)
+    expect(recentlyMoved(T, T + 5000)).toBe(false)
+  })
+
+  it('never swallows a tap on a tile nobody has dragged', () => {
+    expect(recentlyMoved(0, T)).toBe(false)
+    expect(recentlyMoved(Number.NaN, T)).toBe(false)
+  })
+
+  it('is short enough not to feel broken and long enough to catch the echo', () => {
+    expect(AFTER_MOVE_QUIET_MS).toBeGreaterThanOrEqual(300)
+    expect(AFTER_MOVE_QUIET_MS).toBeLessThanOrEqual(800)
   })
 })

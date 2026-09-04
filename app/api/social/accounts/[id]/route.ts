@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { SocialAccount, Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { getPublisher } from '../../../../lib/publisher'
+import { assertClientAccess } from '../../../../lib/social-schedule'
 
 /**
  * Everything the account page needs, in one request.
@@ -73,6 +74,13 @@ export async function GET(
  * CLIENT's zone (`clients.timezone`), because a posting time is a fact about
  * the audience rather than about one channel. A per-account zone would be a
  * second answer to the same question.
+ *
+ * SCOPED BY CLIENT, not by job title. `requireRole('scheduler')` says what a
+ * person may DO; it says nothing about WHOSE account this is, so on its own it
+ * let anybody with the role rename any account in the system by id — including
+ * another agency client's. The account's own `client_id` is what the row is
+ * about, and `assertClientAccess` is the same answer the access page's own
+ * route gives.
  */
 export async function PATCH(
   req: Request,
@@ -80,13 +88,22 @@ export async function PATCH(
 ) {
   return withRequestCache(async () => {
     try {
-      await requireRole('scheduler')
+      const user = await requireRole('scheduler')
       const { id } = await params
       const body = await req.json().catch(() => ({})) as { name?: unknown }
       if (typeof body.name !== 'string') {
         return NextResponse.json({ error: 'Give the account a name' }, { status: 400 })
       }
       const name = body.name.trim().slice(0, 80)
+
+      // whose account is this? The row first, then the scope check — a name
+      // is not worth leaking which ids exist, so a row nobody may touch and a
+      // row that is not there answer the same way
+      const row = await table<SocialAccount>('social_accounts').get(id)
+      if (!row) {
+        return NextResponse.json({ error: 'That account is no longer connected' }, { status: 404 })
+      }
+      if (row.client_id) await assertClientAccess(user, row.client_id)
 
       // claim, not check-then-write: two people renaming at once resolve to
       // one answer rather than one silently overwriting the other

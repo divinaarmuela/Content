@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  approveWithoutClientQuestion, matchesChannel, nowLineTop, onOneOfDays,
-  scheduleWeekGrid, type SuggestedTime,
+  approveWithoutClientQuestion, matchesChannel, mayEditNote, nowLineTop,
+  onOneOfDays, scheduleWeekGrid, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
@@ -23,6 +23,7 @@ import MediaRail from './MediaRail'
 import NoteEditor from './NoteEditor'
 import { useDragSchedule } from './useDragSchedule'
 import EditMediaLauncher from './EditMediaLauncher'
+import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
 import PiecePicker from './PiecePicker'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
@@ -200,16 +201,15 @@ export default function SchedulePage() {
   }
 
   /**
-   * Who may change or remove a note: the person who wrote it, or an account
-   * manager — the same rule the server enforces in `editNote`/`removeNote`.
-   * A NEW note is always the writer's own, so it is always editable.
+   * Who may change or remove a note: `mayEditNote`, which is the SAME function
+   * the server enforces in `editNote`/`removeNote` — not a copy of its rule.
+   * A copy is how a Delete button that answers 403 gets drawn.
+   *
+   * A NEW note is always the writer's own, so it is always editable; there is
+   * no row to ask about yet.
    */
-  const mayChangeNote = (note: ScheduleNote | null): boolean => {
-    if (!note) return true
-    if (!me) return false
-    return note.created_by === me.id
-      || me.role === 'account_manager' || me.role === 'super_admin'
-  }
+  const mayChangeNote = (note: ScheduleNote | null): boolean =>
+    (note ? mayEditNote(me, note) : true)
   const mayRemoveNote = (note: ScheduleNote | null): boolean =>
     Boolean(note) && mayChangeNote(note)
 
@@ -274,6 +274,24 @@ export default function SchedulePage() {
     return () => document.removeEventListener('keydown', onKey)
   }, [approving])
 
+  /**
+   * ONE IMAGE EDITOR, TWO WAYS IN.
+   *
+   * The week's "Edit media" chooser and the composer's own "Edit image" button
+   * both hand a picture to this, rather than each keeping an editor of its
+   * own: two copies would drift, and one opened over the other is a window
+   * nobody can get out of.
+   */
+  const [editing, setEditing] = useState<ImageEditorTarget | null>(null)
+  const [editSaved, setEditSaved] = useState<string | null>(null)
+
+  // a note about a save clears itself: it is a receipt, not a state
+  useEffect(() => {
+    if (!editSaved) return
+    const id = window.setTimeout(() => setEditSaved(null), 8000)
+    return () => window.clearTimeout(id)
+  }, [editSaved])
+
   const target: ComposerTarget | null = useMemo(() => {
     if (!composing) return null
     const media = data.media.find(m => m.itemId === composing.itemId)
@@ -287,6 +305,7 @@ export default function SchedulePage() {
       contentType: media?.contentType ?? String(post?.item_type ?? ''),
       approved: media?.slides ?? [],
       knownUrls: media?.knownUrls ?? [],
+      coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
       post,
       at: composing.at,
@@ -521,6 +540,7 @@ export default function SchedulePage() {
               <EditMediaLauncher
                 media={data.media}
                 posts={data.posts}
+                onEdit={setEditing}
                 className="hidden md:flex"
               />
               <Link
@@ -552,7 +572,7 @@ export default function SchedulePage() {
                       than not existing on a phone at all, which is where they
                       were. */}
                   <div className="flex flex-wrap gap-1.5 pb-3">
-                    <EditMediaLauncher media={data.media} posts={data.posts} />
+                    <EditMediaLauncher media={data.media} posts={data.posts} onEdit={setEditing} />
                     <Link
                       href="/dashboard/social/schedule/access"
                       className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
@@ -736,6 +756,27 @@ export default function SchedulePage() {
           locations={locations}
           onClose={() => setComposing(null)}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
+          onEditMedia={setEditing}
+        />
+      )}
+
+      {editSaved && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 max-w-[440px] -translate-x-1/2 rounded-card border border-border bg-popover px-4 py-3 text-[13px] font-medium shadow-xl"
+        >
+          {editSaved}
+        </div>
+      )}
+
+      {editing && (
+        <ImageEditor
+          target={editing}
+          onClose={() => setEditing(null)}
+          onSaved={message => {
+            setEditSaved(message)
+            setEditing(null)
+          }}
         />
       )}
     </div>

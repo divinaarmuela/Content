@@ -86,7 +86,17 @@ const knownUrl = (v: unknown): string | null => {
 async function ourPicture(
   value: unknown, what: string,
 ): Promise<string> {
-  const url = ourStorageUrl(value, publicBase(), 'image')
+  const base = publicBase()
+  // With no storage configured there IS no "one of our own files", so the
+  // refusal below would blame the person for a file that is fine. Say what is
+  // actually wrong instead — the same sentence the Drive import uses.
+  if (!base) {
+    throw new AuthzError(
+      'File storage is not set up, so this edit cannot be saved. Nothing you did caused this — tell us and we will switch it on.',
+      503,
+    )
+  }
+  const url = ourStorageUrl(value, base, 'image')
   if (!url) {
     throw new AuthzError(
       `${what} is not one of our own files. Save it again, and if it keeps happening tell us.`,
@@ -107,26 +117,41 @@ const num = (v: unknown): number | null =>
  * uploaded FOR does not happen.
  *
  * The crop path cannot upload after the write — the write needs a URL — so a
- * refusal (somebody else changed the piece; the file is not what it claimed to
- * be) would otherwise leave bytes in the bucket nothing points at. Best effort:
- * a failed tidy-up must never turn into a failed edit.
+ * refusal (somebody else changed the piece while the claim was in flight)
+ * would otherwise leave bytes in the bucket nothing points at.
+ *
+ * -- WHY THIS IS A BOX AND NOT JUST `input.to_url` --
+ *
+ * Deleting whatever the caller NAMED, on whatever went wrong, is a delete
+ * button on our whole bucket: `to_url` is attacker-supplied, every real slide
+ * we have ever written is on our own base with an `objectKey`-shaped name, and
+ * the very first thing this save does is an access check. So a request refused
+ * for naming somebody else's piece would have deleted the file it named —
+ * another client's approved, published media, silently, until it 404s on a
+ * live post.
+ *
+ * The box is filled in ONLY once every question about the REQUEST has been
+ * answered yes: this person may edit this piece, the piece really holds the
+ * file being edited, and the incoming file passed `ourPicture`. From that
+ * point on the only failures left are the claim losing its race and the
+ * tidying after it — which is exactly the window where a file really has been
+ * uploaded for a save that did not happen.
+ *
+ * Best effort throughout: a failed tidy-up must never turn into a failed edit.
  */
-async function dropOrphan(url: unknown): Promise<void> {
-  const ours = ourStorageUrl(url, publicBase(), 'image')
-  if (ours) await deleteStoredObject(ours).catch(() => {})
-}
+type Orphan = { url: string | null }
 
 export async function saveDerived(user: TeamUser, input: DeriveInput): Promise<DeriveResult> {
+  const orphan: Orphan = { url: null }
   try {
-    return await write(user, input)
+    return await write(user, input, orphan)
   } catch (e) {
-    // whichever file this save was going to use is now rubbish
-    await dropOrphan(input.kind === 'video' ? input.cover_url : input.to_url)
+    if (orphan.url) await deleteStoredObject(orphan.url).catch(() => {})
     throw e
   }
 }
 
-async function write(user: TeamUser, input: DeriveInput): Promise<DeriveResult> {
+async function write(user: TeamUser, input: DeriveInput, orphan: Orphan): Promise<DeriveResult> {
   const item = await loadItemForUser(user, String(input.item_id ?? '')) as ContentItem
   if (!mayCompose(user, item)) {
     throw new AuthzError('Only the people scheduling this client can change this media', 403)
@@ -150,12 +175,12 @@ async function write(user: TeamUser, input: DeriveInput): Promise<DeriveResult> 
     throw new AuthzError('That picture is not part of this piece any more — reopen it and try again', 409)
   }
   const number = Number(version.version_number ?? 0)
-  const before = slidesOf(version)
 
   if (input.kind === 'crop') {
     const to = await ourPicture(input.to_url, 'The cropped picture')
-
-    const after = before.map(s => (s.url === from ? { ...s, url: to } : s))
+    // every question about the request is answered: from here on a failure
+    // means a file was uploaded for a save that did not happen
+    orphan.url = to
 
     // claim, never check-then-write: two people cropping two slides of the
     // same carousel at once must both survive, and the loser of a race must
@@ -192,6 +217,7 @@ async function write(user: TeamUser, input: DeriveInput): Promise<DeriveResult> 
   const cover = input.cover_url === undefined || input.cover_url === null
     ? undefined
     : await ourPicture(input.cover_url, 'The cover picture')
+  if (cover) orphan.url = cover
   const start = num(input.trim_start)
   const end = num(input.trim_end)
 

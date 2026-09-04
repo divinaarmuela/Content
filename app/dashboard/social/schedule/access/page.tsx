@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Check, ChevronDown, Loader2, Pencil, Plus, RefreshCw, Trash2, Users,
@@ -147,11 +147,35 @@ export default function AccessPage() {
   const [checking, setChecking] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
+  /**
+   * ASK THE PROVIDER — never blocking the page, never answering for the
+   * client somebody has since moved off.
+   *
+   * The rows on screen come from the listeners and are drawn immediately; the
+   * badges say "Not checked" until this lands, which is honest and is what
+   * they say for a failed check anyway. Two rules make that safe:
+   *
+   *  • the request for the client we have LEFT is aborted, so switching
+   *    quickly does not stack requests against a slow provider;
+   *  • a reply is dropped unless it is still about the client on screen — the
+   *    same stale-frame discipline the accounts list uses, because an old
+   *    reply landing late would badge this client's channels with another
+   *    client's answers.
+   */
+  const asking = useRef<AbortController | null>(null)
+
   const askProvider = useCallback(async (id: string) => {
+    asking.current?.abort()
+    const mine = new AbortController()
+    asking.current = mine
     setChecking(true)
     try {
-      const res = await fetch(`/api/social/schedule/access?clientId=${encodeURIComponent(id)}`)
+      const res = await fetch(
+        `/api/social/schedule/access?clientId=${encodeURIComponent(id)}`,
+        { signal: mine.signal },
+      )
       const json = await res.json().catch(() => ({}))
+      if (mine.signal.aborted) return
       if (!res.ok) {
         setProblem(friendlyError(String(json?.error ?? ''), 'Schedule'))
         setView(null)
@@ -159,17 +183,20 @@ export default function AccessPage() {
       }
       setView(json as ProviderView)
       setNow(Date.now())
-    } catch {
+    } catch (e) {
+      // an abort is this page moving on, not a failure to report
+      if ((e as { name?: string })?.name === 'AbortError') return
       setProblem(loadFailedMessage('the state of these accounts'))
       setView(null)
     } finally {
-      setChecking(false)
+      if (asking.current === mine) setChecking(false)
     }
   }, [])
 
   useEffect(() => {
     setView(null)
     if (clientId) void askProvider(clientId)
+    return () => { asking.current?.abort() }
   }, [clientId, askProvider])
 
   // the badges age honestly while the page is left open

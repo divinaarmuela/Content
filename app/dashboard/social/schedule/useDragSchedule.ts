@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   beginMove, dragBlockReason, finishMove, GRID_HOURS, keyboardMove, LONG_PRESS_MS,
-  movingAnnouncement, NO_MOVES, settledIds, shouldCommit,
+  movingAnnouncement, NO_MOVES, recentlyMoved as isRecentlyMoved, settledIds, shouldCommit,
   type HourWindow, type MoveState, type SettlablePost,
 } from '@/app/lib/schedule-drag-core'
 import type { SchedulePostRow } from './useSchedulePosts'
@@ -355,7 +355,10 @@ export function useDragSchedule({ tz, onMove, hours = GRID_HOURS }: {
 
   const saving = useMemo(() => new Set(state.saving), [state.saving])
 
-  const recentlyMoved = useCallback(() => Date.now() - finishedAt.current < 500, [])
+  // the rule itself is pure and tested next door — this only supplies the
+  // clock and the moment the last finger drag ended
+  const recentlyMoved = useCallback(
+    () => isRecentlyMoved(finishedAt.current, Date.now()), [])
 
   return {
     moving,

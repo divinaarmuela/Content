@@ -880,3 +880,86 @@ describe('the lists behind the per-network options', () => {
     expect((await options('?accountId=acc-1')).status).toBe(403)
   })
 })
+
+/* ── the cover the editor saved ─────────────────────────────────────────── */
+
+describe('the cover picture reaches the provider', () => {
+  const COVER = 'https://media.mdmmarketing.com.au/one_cover.jpg'
+
+  /** book a post in and hand back the targets that were queued */
+  const bookAndRead = async (body: Record<string, unknown> = {}) => {
+    const made = await create(body)
+    const id = made.body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+    const booked = await bookIn(id)
+    expect(booked.status).toBe(200)
+    return (jobs()[0] as any).targets as any[]
+  }
+
+  it('sends the version’s cover as the post’s cover picture', async () => {
+    // the editor writes it on the version, not on the post
+    await (await import('@/lib/db')).table('asset_versions').update('v1', { cover_url: COVER })
+    const targets = await bookAndRead()
+    expect(targets).toHaveLength(1)
+    expect(targets[0].options?.thumbnailUrl).toBe(COVER)
+  })
+
+  it('leaves the post alone when no cover was ever chosen', async () => {
+    const targets = await bookAndRead()
+    expect(targets[0]?.options?.thumbnailUrl).toBeUndefined()
+  })
+
+  it('never overrides a cover somebody typed in for that channel', async () => {
+    await (await import('@/lib/db')).table('asset_versions').update('v1', { cover_url: COVER })
+    const mine = 'https://media.mdmmarketing.com.au/typed_in.jpg'
+    const targets = await bookAndRead({
+      per_channel: { 'acc-1': { thumbnailUrl: mine } },
+    })
+    expect(targets[0].options.thumbnailUrl).toBe(mine)
+  })
+})
+
+/* ── the note rule, on both sides of the wire ───────────────────────────── */
+
+describe('the calendar draws the note buttons the server would honour', () => {
+  /**
+   * THE PARITY THAT MATTERS: `mayEditNote` is what the page asks before it
+   * draws Change and Delete, and what the server asks before it does either.
+   * If they were two copies of one rule, the drift would show up as a Delete
+   * button that answers 403 — so this walks every role through BOTH and
+   * insists they agree, note by note.
+   */
+  it('agrees with the route for every role, on their own note and somebody else’s', async () => {
+    const { mayEditNote } = await import('@/app/lib/social-schedule-core')
+    const cast = [AM, SCHEDULER, OWNER]
+
+    // one note written by the account manager
+    as(AM)
+    const hers = (await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Client away' }),
+    })))).body.note
+
+    for (const who of cast) {
+      as(who)
+      const allowedOnScreen = mayEditNote(who, hers)
+      const answered = await json(notesRoute.PATCH(new Request('https://x.test/notes', {
+        method: 'PATCH', body: JSON.stringify({ id: hers.id, text: `${who.name} was here` }),
+      })))
+      expect(answered.status === 200, `${who.role} on somebody else’s note`)
+        .toBe(allowedOnScreen)
+
+      // …and on a note of their own, which they always may
+      const mine = (await json(notesRoute.POST(new Request('https://x.test/notes', {
+        method: 'POST',
+        body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Mine' }),
+      })))).body.note
+      expect(mayEditNote(who, mine), `${who.role} on their own note`).toBe(true)
+      expect((await json(notesRoute.DELETE(
+        new Request(`https://x.test/notes?id=${mine.id}`, { method: 'DELETE' })))).status).toBe(200)
+    }
+  })
+})

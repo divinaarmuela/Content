@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
-  ChevronDown, Clock, MapPin, Plus, Trash2, X, Zap,
+  ChevronDown, Clock, MapPin, Plus, Trash2, Wand2, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
@@ -24,6 +24,7 @@ import { friendlyError } from '@/app/lib/support-core'
 import { formatInZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
 import PlatformIcon from '../PlatformIcon'
+import type { ImageEditorTarget } from './ImageEditor'
 import MediaPicker from './MediaPicker'
 import TimePicker from './TimePicker'
 import { DOT_CLASS, STATUS_WORDS, Thumb } from './tiles'
@@ -70,6 +71,8 @@ export type ComposerTarget = {
    *  reorder, and so whether saving media makes a version */
   knownUrls: string[]
   versionNumber: number | null
+  /** the cover picture already chosen in the editor for this piece's media */
+  coverUrl: string | null
   /** an existing post to edit, or null for a new one */
   post: SchedulePostRow | null
   /** the time a click on the calendar meant, for a new post */
@@ -92,7 +95,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 }
 
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, locations, onClose, onOpenPost,
+  target, tz, accounts, suggested, role, locations, onClose, onOpenPost, onEditMedia,
 }: {
   target: ComposerTarget
   tz: string
@@ -105,6 +108,8 @@ export default function NewPostDialog({
   /** the draft became real — the page keeps its id so the live row can be
    *  handed back in */
   onOpenPost: (postId: string) => void
+  /** open the page's one image editor on a picture of this post */
+  onEditMedia: (target: ImageEditorTarget) => void
 }) {
   const post = target.post
   const [state, dispatch] = useReducer(
@@ -112,6 +117,16 @@ export default function NewPostDialog({
   const [busy, setBusy] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
   const [picking, setPicking] = useState(false)
+  /**
+   * WHICH PICTURE THE BUTTONS ARE ABOUT.
+   *
+   * The window shows the first slide big and the rest as a strip. "Edit image"
+   * has to mean one of them, and a button that always meant the first one
+   * would be useless on a carousel — so the strip is clickable and this is
+   * what it clicks. Clamped on read rather than reset on change: the slides
+   * can shrink under it when somebody removes one in the picker.
+   */
+  const [chosenSlide, setChosenSlide] = useState(0)
   const [note, setNote] = useState<string | null>(null)
   /** a question that has to be answered before something is thrown away */
   const [confirm, setConfirm] = useState<'close' | 'delete' | null>(null)
@@ -235,6 +250,23 @@ export default function NewPostDialog({
   const groups = groupOptions(options)
   const strip = state.slides.slice(0, 3)
   const extra = Math.max(0, state.slides.length - strip.length)
+  /** the strip only shows three, so the big preview follows a pick within it
+   *  and falls back to the first whenever the set changed under it */
+  const picked = chosenSlide < state.slides.length ? chosenSlide : 0
+  const shownSlide = state.slides[picked] ?? null
+
+  /** hand one of this post's pictures to the page's editor */
+  const editSlide = (index: number) => {
+    if (!state.slides[index]) return
+    onEditMedia({
+      itemId: target.itemId,
+      title: target.title,
+      versionNumber: target.versionNumber,
+      slides: state.slides,
+      index,
+      postId: state.postId,
+    })
+  }
 
   /**
    * The lists only the network knows: YouTube playlists, LinkedIn company
@@ -585,10 +617,10 @@ export default function NewPostDialog({
         <div className="flex flex-col gap-5 p-3.5 sm:flex-row sm:gap-5">
           <div className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px]">
             <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06]">
-              <Thumb slide={state.slides[0] ?? null} label={target.title} className="h-full w-full" />
+              <Thumb slide={shownSlide} label={target.title} className="h-full w-full" />
               {state.slides.length > 0 && (
                 <span className="absolute right-2 top-2 rounded-full bg-ink/60 px-2 py-0.5 text-[11px] font-bold text-cream">
-                  1/{state.slides.length}
+                  {picked + 1}/{state.slides.length}
                 </span>
               )}
               <span className={cn(
@@ -603,15 +635,19 @@ export default function NewPostDialog({
             {state.slides.length > 1 && (
               <div className="flex gap-1.5">
                 {strip.map((s, i) => (
-                  <div
+                  <button
+                    type="button"
                     key={`${s.url}-${i}`}
+                    onClick={() => setChosenSlide(i)}
+                    aria-label={`Show ${s.name}`}
+                    aria-pressed={i === picked}
                     className={cn(
                       'h-[70px] w-[56px] shrink-0 overflow-hidden rounded-tile bg-foreground/[0.06]',
-                      i === 0 && 'outline outline-2 outline-offset-2 outline-accent-blue',
+                      i === picked && 'outline outline-2 outline-offset-2 outline-accent-blue',
                     )}
                   >
                     <Thumb slide={s} label={s.name} className="h-full w-full" />
-                  </div>
+                  </button>
                 ))}
                 {extra > 0 && (
                   <div className="flex h-[70px] w-[56px] shrink-0 items-center justify-center rounded-tile bg-foreground/[0.06] text-[12px] font-bold text-muted-foreground">
@@ -629,6 +665,29 @@ export default function NewPostDialog({
               <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
               Change media
             </button>
+
+            {/* The editor, from where the picture is. Somebody fixing a crop
+                mid-caption should not have to close the post, find the week's
+                toolbar and search a grid for the picture that is already in
+                front of them. */}
+            <button
+              type="button"
+              disabled={!shownSlide}
+              onClick={() => editSlide(picked)}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
+            >
+              <Wand2 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+              {shownSlide?.type === 'video' ? 'Edit video' : 'Edit image'}
+            </button>
+
+            {/* The cover is a decision somebody already made in the editor;
+                saying so beats an empty box next to it. */}
+            {target.coverUrl && (
+              <p className="text-[12px] text-muted-foreground">
+                Cover: from the editor. That is the picture people see before
+                they press play.
+              </p>
+            )}
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3.5">
@@ -804,6 +863,7 @@ export default function NewPostDialog({
         slides={state.slides}
         platforms={platforms}
         onSave={saveMedia}
+        onEditSlide={index => { setPicking(false); editSlide(index) }}
         saving={busy}
       />
     </div>

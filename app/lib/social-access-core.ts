@@ -172,6 +172,33 @@ export type AccountHealthWords = {
 }
 
 /**
+ * Does this payload actually SAY anything about the account?
+ *
+ * "Not checked" used to mean only "the request failed". A reply that arrived
+ * but made no sense — `{}`, `{ valid: 'expired' }`, `{ expiresAt: 'soon' }` —
+ * fell straight through to the bottom of `accountHealthWords` and came out as
+ * a green "Connected · Working normally", which is the same lie the failed
+ * check used to tell, arrived at by a different road. A field we cannot read
+ * is a field we did not read: it says nothing, and neither do we.
+ *
+ * `expiresIn` is free text from the provider by definition, so any string
+ * counts; every other field has one shape and must wear it.
+ */
+function readsAsHealth(status: Record<string, unknown>): boolean {
+  const has = (k: string) => status[k] !== undefined && status[k] !== null
+  if (has('valid') && typeof status.valid !== 'boolean') return false
+  if (has('needsRefresh') && typeof status.needsRefresh !== 'boolean') return false
+  if (has('expiresAt')) {
+    const at = status.expiresAt
+    if (typeof at !== 'string' || Number.isNaN(new Date(at).getTime())) return false
+  }
+  if (has('expiresIn') && typeof status.expiresIn !== 'string') return false
+  // an empty object is a reply with no news in it, which is not the same as
+  // good news
+  return has('valid') || has('needsRefresh') || has('expiresAt') || has('expiresIn')
+}
+
+/**
  * The badge on an account row.
  *
  * Deliberately few states. The provider reports half a dozen shades of "fine";
@@ -189,7 +216,7 @@ export type AccountHealthWords = {
 export function accountHealthWords(
   status: TokenStatus | null | undefined, now: number,
 ): AccountHealthWords {
-  if (!status) {
+  if (!status || !readsAsHealth(status as Record<string, unknown>)) {
     return {
       state: 'unknown',
       label: 'Not checked',

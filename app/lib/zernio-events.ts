@@ -6,6 +6,7 @@ import type {
   TeamUser, TeamUserClient, WebhookDelivery,
 } from '@/lib/db-types'
 import { notify } from './mailer'
+import { NETWORK_LABEL } from './publish-core'
 import type { ZernioAction } from './zernio-webhook-core'
 
 /**
@@ -451,6 +452,107 @@ export async function accountManagersFor(providerAccountId: string | null): Prom
   })
   return {
     ...none, clientId, clientName,
+    people: admins.map(u => ({ id: u.id, email: u.email, name: u.name })),
+  }
+}
+
+/* ── an account stopped working ─────────────────────────────────────────── */
+
+/** Where somebody goes to fix it. Same base every other notification uses. */
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+/**
+ * A CHANNEL WENT DEAD AND SOMEBODY HAS TO BE TOLD.
+ *
+ * Marking the row `active: false` is what the app needs; it is not what a
+ * PERSON needs. Nothing about the calendar changes on its own — the posts
+ * booked onto that channel still sit there looking approved — and until this
+ * existed the way you found out was a week later, when nothing had gone out.
+ *
+ * So: the client's account manager (super admins when the client has nobody,
+ * the same fallback every other notification here uses), by bell AND email,
+ * because this one has a deadline attached to it — every post booked onto that
+ * channel between now and the reconnect is a post that will not happen.
+ *
+ * ONCE PER DROP, and not once per delivery:
+ *
+ *  • the webhook's own claim (`claimDelivery`) already drops a redelivery of
+ *    the same provider event;
+ *  • `markAccountInactive` writes with a CLAIM that only fires on a row that
+ *    is still active, so an event arriving twice under two different ids
+ *    still notifies once — the second one has nothing to change;
+ *  • the notification's entity id carries the moment of the drop, so a channel
+ *    reconnected in March and dropped again in June is told about again
+ *    rather than being deduped against the March one for ever.
+ */
+export async function accountNeedsReconnecting(
+  account: { id: string; client_id: string | null; platform: string; name: string | null; username: string | null },
+  droppedAt: string,
+): Promise<boolean> {
+  const { clientName, people } = account.client_id
+    ? await managersForClient(account.client_id)
+    : await accountManagersFor(null)
+  if (people.length === 0) return false
+
+  const channel = (account.name ?? '').trim()
+    || (account.username ? `@${account.username}` : '')
+    || platformLabelOf(account.platform)
+  const where = `${APP_URL}/dashboard/social/schedule/access?clientId=${encodeURIComponent(account.client_id ?? '')}`
+  const line = `${clientName}’s ${platformLabelOf(account.platform)} (${channel}) needs reconnecting`
+    + ' — posts for it are on hold until someone reconnects it.'
+
+  for (const person of people) {
+    await notify({
+      eventType: 'social.account.disconnected',
+      entityType: 'social_account',
+      // the moment of THIS drop, so the next one is a different notification
+      entityId: `${account.id}__${droppedAt}`,
+      recipientId: person.id,
+      recipientEmail: person.email,
+      subject: `${clientName}: ${platformLabelOf(account.platform)} needs reconnecting`,
+      bodyHtml: `<p>${escapeHtml(line)}</p>`
+        + `<p>Nothing was lost — anything booked onto it stays where it is and goes out once the`
+        + ` account is reconnected.</p>`
+        + `<p><a href="${escapeHtml(where)}">Reconnect it</a></p>`,
+    })
+  }
+  return true
+}
+
+/** The network's name in the words people use for it. */
+function platformLabelOf(platform: string): string {
+  return NETWORK_LABEL[String(platform).toLowerCase()] ?? String(platform)
+}
+
+/** The same people `accountManagersFor` finds, asked for by client rather than
+ *  by provider account id — the account row is already in hand here. */
+async function managersForClient(clientId: string): Promise<{
+  clientId: string | null
+  clientName: string
+  people: { id: string; email: string; name: string }[]
+}> {
+  const client = await table<Client>('clients').get(clientId).catch(() => null)
+  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+  const joined = await attachOne(links, 'team_user_id', 'team_users',
+    ['id', 'email', 'name', 'role', 'active_status'])
+  const ams = joined
+    .map(r => r.team_users as unknown as
+      { id: string; email: string; name: string; role: string; active_status: boolean } | null)
+    .filter((u): u is { id: string; email: string; name: string; role: string; active_status: boolean } =>
+      !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
+  if (ams.length > 0) {
+    return {
+      clientId,
+      clientName: client?.name || 'a client',
+      people: ams.map(u => ({ id: u.id, email: u.email, name: u.name })),
+    }
+  }
+  const admins = await table<TeamUser>('team_users').list({
+    by: { role: 'super_admin', active_status: true },
+  })
+  return {
+    clientId,
+    clientName: client?.name || 'a client',
     people: admins.map(u => ({ id: u.id, email: u.email, name: u.name })),
   }
 }

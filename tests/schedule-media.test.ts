@@ -28,6 +28,8 @@ const h = vi.hoisted(() => ({
   encoded: [] as unknown[],
   emails: [] as Record<string, unknown>[],
   drive: { list: null as unknown, imported: [] as unknown[] },
+  /** files thrown away because the save they were uploaded for did not happen */
+  deleted: [] as string[],
 }))
 
 vi.mock('../app/lib/authz', () => {
@@ -83,6 +85,14 @@ vi.mock('../app/lib/schedule-drive', () => ({
 }))
 vi.mock('../app/lib/production-live', () => ({
   announceItemChange: vi.fn(), announceBatchChange: vi.fn(),
+}))
+/** the bucket, with the network taken out — the GUARD (`storage-core.ts`)
+ *  stays real, because what may be deleted is the point of these cases */
+vi.mock('../app/lib/storage', () => ({
+  MAX_DERIVED_BYTES: 64 * 1024 * 1024,
+  publicBase: () => 'https://media.mdmmarketing.com.au',
+  headStoredObject: async () => ({ contentType: 'image/jpeg', bytes: 1000 }),
+  deleteStoredObject: async (url: string) => { h.deleted.push(url) },
 }))
 vi.mock('../lib/live', () => ({ announce: vi.fn(), announceAfter: vi.fn() }))
 vi.mock('../app/inngest/client', () => ({ inngest: { send: vi.fn(async () => ({})) } }))
@@ -185,7 +195,7 @@ const versions = () => (fake.rows('asset_versions') as any[]).filter(v => v.item
 const posts = () => fake.rows('social_posts') as any[]
 
 beforeEach(() => {
-  h.mirrored = []; h.encoded = []; h.emails = []
+  h.mirrored = []; h.encoded = []; h.emails = []; h.deleted = []
   h.drive = { list: { ok: true, files: [], folderId: 'folder-1' }, imported: [] }
   as(SCHEDULER)
   fake = seed()
@@ -392,6 +402,57 @@ describe('addMediaVersion, called directly', () => {
       item_id: ITEM, files: [NEW_FILE],
     })).rejects.toThrow()
     expect(versions()).toHaveLength(1)
+  })
+
+  /**
+   * The picker uploads the moment a file is chosen and only THEN asks for a
+   * version of it, so a refusal here leaves bytes in the bucket nothing points
+   * at. The same tidy-up the crop endpoint does — and with the same care about
+   * what it is allowed to delete, because the URLs are written by the caller.
+   */
+  describe('the upload that was refused', () => {
+    const KEY = (n: string) => `https://media.mdmmarketing.com.au/1756000000000-a1b2c3-${n}`
+    const uploaded = (n: string, type: 'image' | 'video' = 'image') =>
+      ({ url: KEY(n), name: n, type })
+
+    it('is thrown away when the save it was for does not happen', async () => {
+      // a carousel of one is refused, and the file it named is nobody's
+      await expect(lib.addMediaVersion(SCHEDULER as never, {
+        item_id: ITEM, files: [uploaded('three.jpg')],
+      })).rejects.toThrow()
+      expect(h.deleted).toEqual([KEY('three.jpg')])
+      expect(versions()).toHaveLength(1)
+    })
+
+    it('is left alone when the piece already holds it', async () => {
+      // one card is not a carousel, so this is refused — with a file the
+      // client already approved named in it. The tidy-up must not touch it.
+      await expect(lib.addMediaVersion(SCHEDULER as never, {
+        item_id: ITEM, files: [APPROVED[0]],
+      })).rejects.toThrow()
+      expect(h.deleted).toEqual([])
+      expect(versions()).toHaveLength(1)
+    })
+
+    it('deletes nothing at all when the REQUEST is what was refused', async () => {
+      as(STRANGER)
+      await expect(lib.addMediaVersion(STRANGER as never, {
+        item_id: ITEM, files: [uploaded('three.jpg'), uploaded('four.jpg')],
+      })).rejects.toThrow()
+      as(CLIENT_USER)
+      await expect(lib.addMediaVersion(CLIENT_USER as never, {
+        item_id: ITEM, files: [uploaded('three.jpg')],
+      })).rejects.toThrow()
+      expect(h.deleted).toEqual([])
+    })
+
+    it('never deletes a file that is not on our own storage', async () => {
+      await expect(lib.addMediaVersion(SCHEDULER as never, {
+        item_id: ITEM,
+        files: [{ url: 'https://somebody-else.example/photo.jpg', name: 'p.jpg', type: 'image' }],
+      })).rejects.toThrow()
+      expect(h.deleted).toEqual([])
+    })
   })
 
   it('leaves a piece that is not approved-and-scheduled where it is', async () => {

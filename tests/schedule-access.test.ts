@@ -185,6 +185,39 @@ describe('how an account is doing, in three states and no more', () => {
       .toBe('connected')
   })
 
+  /**
+   * The neighbouring hole to the one above: a reply that ARRIVED but says
+   * nothing we can read. `{}`, a `valid` that is a word rather than a yes or
+   * no, an `expiresAt` that is not a date — every one of them used to fall
+   * through to the bottom of the function and come out green, which is the
+   * same lie by a different road.
+   */
+  it('a reply we cannot read is not an answer, and is never green', () => {
+    const unreadable: unknown[] = [
+      {},                                  // arrived, said nothing
+      { valid: 'expired' },                // a word where a yes/no belongs
+      { valid: 1 },
+      { needsRefresh: 'yes' },
+      { expiresAt: 'soon' },               // not a date
+      { expiresAt: 42 },
+      { expiresIn: { days: 3 } },
+    ]
+    for (const status of unreadable) {
+      const w = accountHealthWords(status as never, now)
+      expect(w.state, JSON.stringify(status)).toBe('unknown')
+      expect(w.label).toBe('Not checked')
+      expect(w.needsReconnect).toBe(false)
+    }
+  })
+
+  it('still reads the answers that ARE readable', () => {
+    expect(accountHealthWords({ valid: false }, now).state).toBe('expired')
+    expect(accountHealthWords({ needsRefresh: true }, now).state).toBe('reconnect')
+    expect(accountHealthWords(
+      { valid: true, expiresAt: new Date(now + 400 * 86_400_000).toISOString() }, now,
+    ).state).toBe('connected')
+  })
+
   it('says when we last asked, not when the account was connected', () => {
     expect(lastCheckedWords(new Date(now).toISOString(), now)).toBe('Checked just now')
     expect(lastCheckedWords(new Date(now - 4 * 60000).toISOString(), now))

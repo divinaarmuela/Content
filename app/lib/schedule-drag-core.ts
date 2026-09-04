@@ -36,6 +36,24 @@ export const KEY_STEP_MINUTES = 30
  *  feels broken. */
 export const LONG_PRESS_MS = 400
 
+/**
+ * How long after a FINGER drag a tap on the same tile is ignored.
+ *
+ * Lifting a finger at the end of a touch drag fires a click on whatever is
+ * under it — the tile that was just moved — so without this every drag on a
+ * phone ended by opening the post it had just moved. Long enough to cover the
+ * synthesised click, short enough that somebody who genuinely wants to open
+ * the tile they just moved is not left tapping at a dead thing.
+ */
+export const AFTER_MOVE_QUIET_MS = 500
+
+/** Was a touch drag finished so recently that this click is its echo? A tile
+ *  never dragged (`finishedAt` 0) is never quiet. */
+export function recentlyMoved(finishedAt: number, now: number): boolean {
+  if (!Number.isFinite(finishedAt) || finishedAt <= 0) return false
+  return now - finishedAt < AFTER_MOVE_QUIET_MS
+}
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** Round minutes-past-midnight to the nearest step. */

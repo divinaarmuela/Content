@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, Check, FolderOpen, Upload, X,
+  ArrowLeft, ArrowRight, Check, FolderOpen, Upload, Wand2, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Thumb } from './tiles'
@@ -48,7 +48,8 @@ type DriveRow = { id: string; name: string; type: 'image' | 'video'; bytes: numb
 const DRAG_TYPE = 'application/x-md-slide'
 
 export default function MediaPicker({
-  open, onClose, itemId, approved, versionLabel, slides, platforms, onSave, saving,
+  open, onClose, itemId, approved, versionLabel, slides, platforms, onSave,
+  onEditSlide, saving,
 }: {
   open: boolean
   onClose: () => void
@@ -62,6 +63,8 @@ export default function MediaPicker({
   /** hands back the arrangement; the parent decides whether that is an edit
    *  or a whole new version */
   onSave: (next: Slide[]) => void | Promise<void>
+  /** open the page's image editor on the file in this slot of the post */
+  onEditSlide: (index: number) => void
   saving: boolean
 }) {
   const [tray, setTray] = useState<Slide[]>(slides)
@@ -205,6 +208,19 @@ export default function MediaPicker({
     if (trayMoved) { setConfirm(true); return }
     onClose()
   }, [trayMoved, onClose])
+
+  /**
+   * Off to the editor with one of these files — but not over the top of an
+   * arrangement nobody saved.
+   *
+   * The editor is a whole window of its own and its save writes the VERSION,
+   * so leaving here silently would throw away a reorder somebody had just
+   * made. Same question the close button asks, for the same reason.
+   */
+  const requestEdit = useCallback((index: number) => {
+    if (trayMoved) { setConfirm(true); return }
+    onEditSlide(index)
+  }, [trayMoved, onEditSlide])
 
   // Escape closes it. The COMPOSER's own Escape stands down while this window
   // is open, so without this one Escape did nothing at all here — on the
@@ -450,6 +466,18 @@ export default function MediaPicker({
                     className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink/70 text-cream"
                   >
                     <X className="h-3 w-3" strokeWidth={2.4} aria-hidden />
+                  </button>
+                  {/* Fix the picture from where it IS. The tray is the one
+                      place in the app that shows the post's files next to each
+                      other, so it is where somebody notices that slide three
+                      is crooked. */}
+                  <button
+                    type="button"
+                    aria-label={`Edit ${slide.name}`}
+                    onClick={() => requestEdit(i)}
+                    className="absolute right-1 top-8 flex h-6 w-6 items-center justify-center rounded-full bg-ink/70 text-cream"
+                  >
+                    <Wand2 className="h-3 w-3" strokeWidth={2.4} aria-hidden />
                   </button>
                   {/* the keyboard's version of dragging */}
                   <span className="absolute inset-x-1 bottom-1 flex justify-between">

@@ -24,7 +24,30 @@ import {
  * out a badge, not blank the page that would tell somebody an account is
  * disconnected — and a health check that did not answer is reported as "not
  * checked", never as "connected".
+ *
+ * -- AND IT IS ALLOWED TO BE SLOW ON ITS OWN, ONCE --
+ *
+ * The three provider questions used to run one after another, none of them
+ * bounded: the health checks, then the list of groups, then who is in this
+ * client's group. A provider having a bad afternoon therefore held the whole
+ * request for the SUM of them, and switching client on the access page sat
+ * there for half a minute before anything appeared. They are one `Promise.all`
+ * now, each with its own deadline, so the worst case is one deadline rather
+ * than three unbounded waits — and whatever missed it degrades to exactly what
+ * a failure already degraded to.
  */
+
+/** How long any one provider question may take before we answer without it. */
+const PROVIDER_DEADLINE_MS = 6000
+
+/** `work`, or `fallback` if it has not answered in time. A slow answer is
+ *  dropped rather than awaited: the page asks again on "Check them". */
+function within<T>(work: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([
+    work.catch(() => fallback),
+    new Promise<T>(resolve => setTimeout(() => resolve(fallback), PROVIDER_DEADLINE_MS)),
+  ])
+}
 
 export async function GET(req: Request) {
   return withRequestCache(async () => {
@@ -44,34 +67,37 @@ export async function GET(req: Request) {
       const accounts = accountRows.filter(a => a.active !== false)
 
       const publisher = getPublisher()
-      // health per account, each failure collapsing to null — a revoked scope
-      // on one channel must not take the other three off the page
-      const health = Object.fromEntries(
-        (await Promise.all(accounts.map(async a => {
-          const h = await publisher
-            .accountHealth(a.provider_account_id)
-            .catch(() => null) as { tokenStatus?: Record<string, unknown> } | null
-          return [a.id, h?.tokenStatus ?? null] as const
-        }))).filter(([, v]) => v !== null),
-      )
-
       // the groups of accounts at the posting service, and which one this
       // client is in. `social_profile_id` is that mapping and has been since
       // the connect flow was written — there is no second column for it.
       const mappedId = client.social_profile_id ?? null
-      const profiles = providerConfigured()
-        ? await listProfiles().catch(() => [])
-        : []
+
+      // ALL THREE AT ONCE, each with its own deadline
+      const [healthPairs, profiles, inGroup] = await Promise.all([
+        // health per account, each failure collapsing to null — a revoked
+        // scope on one channel must not take the other three off the page
+        Promise.all(accounts.map(async a => {
+          const h = await within(
+            publisher.accountHealth(a.provider_account_id) as Promise<{ tokenStatus?: Record<string, unknown> } | null>,
+            null,
+          )
+          return [a.id, h?.tokenStatus ?? null] as const
+        })),
+        providerConfigured() ? within(listProfiles(), []) : Promise.resolve([]),
+        mappedId
+          ? within(publisher.listAccounts(mappedId), [])
+          : Promise.resolve([] as { providerAccountId: string }[]),
+      ])
+
+      const health = Object.fromEntries(healthPairs.filter(([, v]) => v !== null))
+
       // which of this client's accounts the provider says are NOT in the
       // mapped group. Unknown (an empty answer) is treated as "no strays"
       // rather than as an alarm nobody can act on.
       let stray: string[] = []
-      if (mappedId) {
-        const inGroup = await publisher.listAccounts(mappedId).catch(() => [])
-        const ids = new Set(inGroup.map(a => a.providerAccountId))
-        if (ids.size > 0) {
-          stray = accounts.filter(a => !ids.has(a.provider_account_id)).map(a => a.id)
-        }
+      const ids = new Set(inGroup.map(a => a.providerAccountId))
+      if (mappedId && ids.size > 0) {
+        stray = accounts.filter(a => !ids.has(a.provider_account_id)).map(a => a.id)
       }
 
       return NextResponse.json({

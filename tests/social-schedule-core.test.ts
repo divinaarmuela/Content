@@ -3,7 +3,8 @@ import {
   eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
-  type SocialPostStatus,
+  channelBlockReason, coverForSlide, mayEditNote, postTileFacts,
+  type SocialPostStatus, type TileJob,
 } from '@/app/lib/social-schedule-core'
 import { fromZonedInput, toZonedInput, dayKeyInZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -722,5 +723,134 @@ describe('the composer refuses what the publisher would refuse', () => {
     expect(validateComposition({
       ...base, channels: [{ id: 'a', platform: 'instagram' }],
     }).ok).toBe(true)
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+describe('the cover picture the editor saved', () => {
+  const A = 'https://cdn.example.com/a/1.jpg'
+  const B = 'https://cdn.example.com/a/2.mp4'
+  const COVER = 'https://cdn.example.com/a/2_cover.jpg'
+
+  const version = (over: Record<string, unknown>) => ({
+    version_number: 1, files: [], file_url: null, ...over,
+  })
+
+  it('finds the cover on the version that holds the file', () => {
+    const versions = [
+      version({ version_number: 1, files: [{ url: A, name: '1.jpg', type: 'image' }] }),
+      version({
+        version_number: 2, cover_url: COVER,
+        files: [{ url: B, name: '2.mp4', type: 'video' }],
+      }),
+    ]
+    expect(coverForSlide(B, versions)).toBe(COVER)
+  })
+
+  it('says nothing for a file whose version has no cover', () => {
+    const versions = [version({ files: [{ url: A, name: '1.jpg', type: 'image' }] })]
+    expect(coverForSlide(A, versions)).toBeNull()
+  })
+
+  it('never hands one version’s cover to another version’s file', () => {
+    // the cover belongs to the clip; the still is a different file entirely
+    const versions = [version({
+      version_number: 2, cover_url: COVER,
+      files: [{ url: B, name: '2.mp4', type: 'video' }],
+    })]
+    expect(coverForSlide(A, versions)).toBeNull()
+  })
+
+  it('matches the legacy single-file column as well as the slide list', () => {
+    expect(coverForSlide(B, [version({ cover_url: COVER, file_url: B })])).toBe(COVER)
+  })
+
+  it('answers nothing rather than throwing on nonsense', () => {
+    expect(coverForSlide(null, null)).toBeNull()
+    expect(coverForSlide('', [])).toBeNull()
+    expect(coverForSlide(A, [version({ cover_url: '   ', file_url: A })])).toBeNull()
+  })
+})
+
+describe('a channel that stopped working blocks its post', () => {
+  const acc = (over: Record<string, unknown>) =>
+    ({ id: 'a1', platform: 'instagram', name: null, active: true, ...over })
+
+  it('says nothing while every channel is connected', () => {
+    expect(channelBlockReason(['a1'], [acc({})])).toBeNull()
+  })
+
+  it('names the channel that needs reconnecting', () => {
+    const out = channelBlockReason(['a1'], [acc({ active: false, name: 'Acme main' })])
+    expect(out).toMatch(/^Acme main needs reconnecting/)
+    expect(out).toMatch(/on hold/)
+  })
+
+  it('falls back to the network’s name when the channel has none', () => {
+    expect(channelBlockReason(['a1'], [acc({ active: false, platform: 'tiktok' })]))
+      .toMatch(/^TikTok needs reconnecting/)
+  })
+
+  it('counts them when more than one has gone', () => {
+    const out = channelBlockReason(['a1', 'a2'], [
+      acc({ active: false }), acc({ id: 'a2', platform: 'tiktok', active: false }),
+    ])
+    expect(out).toMatch(/^2 of this post’s channels need reconnecting/)
+  })
+
+  it('ignores a dropped account this post does not go to', () => {
+    expect(channelBlockReason(['a1'], [
+      acc({}), acc({ id: 'a2', active: false }),
+    ])).toBeNull()
+  })
+
+  it('is not what a tile says when the APPROVAL is what is standing in the way', () => {
+    const item = { status: 'approved_for_scheduling', posting_approval_state: 'pending' }
+    const facts = postTileFacts(
+      { item_id: 'i1', channels: ['a1'], publish_job_ids: [], status: 'pending' },
+      item,
+      new Map<string, TileJob>(),
+      [acc({ active: false })],
+    )
+    // an unapproved post is not going out whatever its channels are doing
+    expect(facts.block_reason).toMatch(/final approval/)
+  })
+
+  it('is what a tile says once the approval is in', () => {
+    const item = { status: 'scheduled', posting_approval_state: 'approved' }
+    const facts = postTileFacts(
+      { item_id: 'i1', channels: ['a1'], publish_job_ids: [], status: 'scheduled' },
+      item,
+      new Map<string, TileJob>(),
+      [acc({ active: false, name: 'Acme main' })],
+    )
+    expect(facts.block_reason).toMatch(/^Acme main needs reconnecting/)
+  })
+})
+
+describe('who may change a note', () => {
+  const NOTE = { created_by: 'u-writer' }
+
+  it('lets the person who wrote it', () => {
+    expect(mayEditNote({ id: 'u-writer', role: 'editor' }, NOTE)).toBe(true)
+  })
+
+  it('lets an account manager and a super admin', () => {
+    expect(mayEditNote({ id: 'u-other', role: 'account_manager' }, NOTE)).toBe(true)
+    expect(mayEditNote({ id: 'u-other', role: 'super_admin' }, NOTE)).toBe(true)
+  })
+
+  it('refuses everybody else', () => {
+    for (const role of ['editor', 'scheduler', 'client', 'made_up']) {
+      expect(mayEditNote({ id: 'u-other', role }, NOTE), role).toBe(false)
+    }
+  })
+
+  it('refuses when there is nobody, or nothing, to ask about', () => {
+    expect(mayEditNote(null, NOTE)).toBe(false)
+    expect(mayEditNote({ id: 'u-writer', role: 'editor' }, null)).toBe(false)
+    // a note with no author is nobody's but a manager's
+    expect(mayEditNote({ id: '', role: 'editor' }, { created_by: null })).toBe(false)
   })
 })

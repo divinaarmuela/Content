@@ -24,8 +24,12 @@ const h = vi.hoisted(() => ({
   /** what the storage host says about the file being written in */
   head: { contentType: 'image/jpeg', bytes: 240_000 } as
     { contentType: string | null; bytes: number | null } | null,
+  /** the public storage base, or null for "storage is not set up" */
+  base: 'https://media.mdmmarketing.com.au' as string | null,
   /** files thrown away because the save they were uploaded for did not happen */
   deleted: [] as string[],
+  /** make the Drive mirror blow up, to force a failure AFTER the claim */
+  mirrorThrows: false,
 }))
 
 vi.mock('../app/lib/authz', () => {
@@ -60,7 +64,10 @@ vi.mock('../app/lib/mailer', () => ({
   escapeHtml: (s: string) => s,
 }))
 vi.mock('../app/lib/gdrive-mirror', () => ({
-  mirrorVersionSlides: vi.fn((...a: unknown[]) => { h.mirrored.push(a) }),
+  mirrorVersionSlides: vi.fn((...a: unknown[]) => {
+    if (h.mirrorThrows) throw new Error('Drive fell over')
+    h.mirrored.push(a)
+  }),
   mirrorLatestVersionSoon: vi.fn(),
   mirrorRawAssets: vi.fn(),
   newRawAssets: () => [],
@@ -76,7 +83,7 @@ vi.mock('../app/lib/stream', () => ({ previewVideos: vi.fn() }))
  */
 vi.mock('../app/lib/storage', () => ({
   MAX_DERIVED_BYTES: 64 * 1024 * 1024,
-  publicBase: () => 'https://media.mdmmarketing.com.au',
+  publicBase: () => h.base,
   headStoredObject: async () => h.head,
   deleteStoredObject: async (url: string) => { h.deleted.push(url) },
 }))
@@ -168,6 +175,8 @@ const posts = () => fake.rows('social_posts') as any[]
 beforeEach(() => {
   h.mirrored = []
   h.deleted = []
+  h.mirrorThrows = false
+  h.base = 'https://media.mdmmarketing.com.au'
   h.head = { contentType: 'image/jpeg', bytes: 240_000 }
   as(SCHEDULER)
   fake = seed()
@@ -332,12 +341,32 @@ describe('a crop', () => {
     expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
   })
 
-  it('throws away the upload when the save it was for does not happen', async () => {
+  it('throws away the upload when the save it had already begun falls over', async () => {
+    // the browser has to upload before it can save, so a failure once the
+    // save is under way would otherwise leave bytes nothing points at
+    h.mirrorThrows = true
+    const { status } = await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+    expect(status).toBeGreaterThanOrEqual(400)
+    expect(h.deleted).toEqual([CROPPED])
+  })
+
+  it('deletes NOTHING when the request itself is refused', async () => {
+    // Every one of these is refused before the save begins, and each names a
+    // real file as `to_url`. Deleting on any of them is a delete button on
+    // our whole bucket: `to_url` is written by whoever is calling, and every
+    // slide we have ever stored is on our own base with a key of this shape.
+    as(STRANGER)                                   // not on this client
+    await derive({ item_id: ITEM, from_url: ONE, to_url: TWO, kind: 'crop' })
+    as(SCHEDULER)
+    await derive({ item_id: 'no-such-item', from_url: ONE, to_url: TWO, kind: 'crop' })
+    // a file that is not on this piece at all
+    await derive({ item_id: ITEM, from_url: CLIP, to_url: TWO, kind: 'crop' })
+    // and one refused by the storage host's own answer
     h.head = { contentType: 'text/html', bytes: 900 }
     await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
-    // the browser has to upload before it can save, so a refusal afterwards
-    // would otherwise leave bytes nothing points at
-    expect(h.deleted).toEqual([CROPPED])
+
+    expect(h.deleted).toEqual([])
+    expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
   })
 
   it('is refused to somebody who is not on this client', async () => {
@@ -347,6 +376,19 @@ describe('a crop', () => {
     })
     expect(status).toBeGreaterThanOrEqual(400)
     expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
+    // a refusal must not be a way to delete the file it names
+    expect(h.deleted).toEqual([])
+  })
+
+  it('says storage is not set up rather than blaming the file', async () => {
+    h.base = null
+    const { status, body } = await derive({
+      item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop',
+    })
+    expect(status).toBe(503)
+    expect(body.error).toMatch(/storage is not set up/)
+    expect(body.error).not.toMatch(/R2_PUBLIC_BASE_URL/)
+    expect(h.deleted).toEqual([])
   })
 
   it('writes into the version that HOLDS the file, not simply the newest', async () => {

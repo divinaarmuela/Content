@@ -26,13 +26,15 @@ import {
   optionsFromExtras, readChannelExtras, type ChannelExtras,
 } from './schedule-compose-core'
 import {
-  applySlideLimit, canReschedule, eligibility, mirrorStatus, validateComposition,
-  type SocialPostStatus,
+  applySlideLimit, canReschedule, channelBlockReason, coverForSlide, eligibility,
+  mayEditNote, mirrorStatus, validateComposition,
+  type CoverSource, type SocialPostStatus,
 } from './social-schedule-core'
 import { normaliseSlides, slidesOf, slidesSatisfyType, type Slide } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { previewVideos } from './stream'
+import { ourStorageUrl } from './storage-core'
 import { safeZone } from './timezone-core'
 import { inngest } from '../inngest/client'
 
@@ -603,14 +605,72 @@ export async function addMediaVersion(
 
   const slides = normaliseSlides(input.files)
   if (slides.length === 0) throw new ComposeError(['Pick at least one photo or video'])
-  const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
-  if (shapeProblem) throw new ComposeError([shapeProblem])
 
   // every file this item has EVER held, across every version -- the honest
   // test of "has the client ever been shown this picture"
   const versions = await versionsOf(item.id)
   const known = new Set(versions.flatMap(v => slidesOf(v).map(s => s.url)))
   const fresh = slides.filter(s => !known.has(s.url))
+
+  /**
+   * THE UPLOAD IS ALREADY IN THE BUCKET BY THE TIME THIS RUNS.
+   *
+   * The picker uploads a file the moment it is chosen and only then asks the
+   * server to make a version of it, so a refusal here — a video dropped into
+   * a piece that is a photo, a version write that failed — leaves bytes
+   * nothing will ever point at. The same tidy-up the crop endpoint does, with
+   * the same discipline about WHAT may be deleted (see `image-derive.ts`):
+   *
+   *  • the item and this person's right to change it are settled ABOVE this
+   *    line, so a refusal that has nothing to do with the files cannot reach
+   *    it;
+   *  • only a file that is genuinely NEW to this item is a candidate — a
+   *    caller naming a file the client already approved gets it left exactly
+   *    where it is;
+   *  • and only a file on our own storage, checked by the same guard, so a
+   *    URL pointing anywhere else is not something we would delete.
+   *
+   * Best effort throughout: a failed tidy-up must never turn into a failed
+   * save.
+   */
+  const tidyUp = async () => {
+    // imported here rather than at the top: `./storage` pulls in the whole S3
+    // client, and this module is on the path of every schedule route
+    const { deleteStoredObject, publicBase } = await import('./storage')
+    const base = publicBase()
+    if (!base) return
+    // "held by ANY version of ANY piece" — the versions table is read whole
+    // anyway (lib/db.ts lists the node and filters here), so this costs
+    // nothing beyond the read that already happened, and it is what makes a
+    // pasted URL belonging to somebody else's piece safe from this.
+    const everywhere = new Set(
+      (await table<AssetVersion>('asset_versions').list().catch(() => []))
+        .flatMap(v => slidesOf(v).map(sl => sl.url)))
+    for (const slide of fresh) {
+      if (everywhere.has(slide.url)) continue
+      const ours = ourStorageUrl(slide.url, base, slide.type === 'video' ? 'video' : 'image')
+      if (ours) await deleteStoredObject(ours).catch(() => {})
+    }
+  }
+
+  try {
+    return await writeMediaVersion(user, item, input, slides, versions, fresh)
+  } catch (e) {
+    await tidyUp().catch(() => {})
+    throw e
+  }
+}
+
+async function writeMediaVersion(
+  user: TeamUser,
+  item: ContentItem,
+  input: { item_id: string; post_id?: string | null; files: unknown },
+  slides: Slide[],
+  versions: AssetVersion[],
+  fresh: Slide[],
+): Promise<AddMediaResult> {
+  const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
+  if (shapeProblem) throw new ComposeError([shapeProblem])
 
   const postId = input.post_id ? String(input.post_id) : null
   const stamp = nowIso()
@@ -875,7 +935,14 @@ export async function syncFromItem(itemId: string): Promise<void> {
 
 /** The provider payload for one post: one target per channel, each carrying
  *  its own caption, kind and slides where the composer set them. */
-export function targetsFor(post: PlannedPost, accounts: SocialAccount[]): Target[] {
+export function targetsFor(
+  post: PlannedPost,
+  accounts: SocialAccount[],
+  /** the item's versions, so a video whose cover somebody chose in the editor
+   *  posts with that cover. Empty is not an error: a post with no cover
+   *  anywhere behaves exactly as it did before covers existed. */
+  versions: readonly CoverSource[] = [],
+): Target[] {
   const out: Target[] = []
   for (const account of accounts) {
     if (!isPlatform(account.platform)) continue
@@ -892,6 +959,14 @@ export function targetsFor(post: PlannedPost, accounts: SocialAccount[]): Target
     const options: Target['options'] = optionsFromExtras(own)
     // a channel whose set differs from the shared one carries its own media
     if (JSON.stringify(trimmed) !== JSON.stringify(post.slides)) options.media = mediaOf(trimmed)
+    // THE COVER THE EDITOR SAVED, under whatever this channel was given by
+    // hand. Somebody who typed a thumbnail into the composer for YouTube meant
+    // that one; the version's cover is the answer for everybody who did not,
+    // and without this it was stored and never sent.
+    if (!options.thumbnailUrl) {
+      const cover = coverForSlide(trimmed[0]?.url, versions)
+      if (cover) options.thumbnailUrl = cover
+    }
     out.push({
       platform: account.platform,
       accountId: account.provider_account_id || account.id,
@@ -929,7 +1004,8 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
 
   const accounts = await channelsFor(item.client_id, post.channels)
   if (accounts.length === 0) throw new ComposeError(['Choose at least one channel'])
-  const elig = eligibility(item, await versionsOf(item.id))
+  const versions = await versionsOf(item.id)
+  const elig = eligibility(item, versions)
   if (!elig.ok) throw new ComposeError([elig.reason])
   const problems = problemsWith({
     item, version: (elig.version as AssetVersion) ?? null,
@@ -953,7 +1029,7 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
     contentItemId: item.id,
     caption: String(post.caption ?? ''),
     media: mediaOf(post.slides),
-    targets: targetsFor(post, accounts),
+    targets: targetsFor(post, accounts, versions),
     scheduledFor: post.scheduled_for,
     timezone: post.timezone,
     createdBy: user.email,
@@ -1071,13 +1147,16 @@ export async function reschedule(user: TeamUser, id: string, iso: string): Promi
     if (!pulled.ok) return { ok: false, error: pulled.error }
   }
 
-  const accounts = await channelsFor(item.client_id, post.channels)
+  const [accounts, versions] = await Promise.all([
+    channelsFor(item.client_id, post.channels),
+    versionsOf(item.id),
+  ])
   const queued = await queuePublishJob({
     clientId: item.client_id,
     contentItemId: item.id,
     caption: String(post.caption ?? ''),
     media: mediaOf(post.slides),
-    targets: targetsFor(post, accounts),
+    targets: targetsFor(post, accounts, versions),
     scheduledFor: at,
     timezone: post.timezone,
     createdBy: user.email,
@@ -1184,9 +1263,13 @@ export async function listPosts(input: {
   if (inRange.length === 0) return []
 
   const itemIds = [...new Set(inRange.map(p => p.item_id))]
-  const [items, allJobs] = await Promise.all([
+  const [items, allJobs, accounts] = await Promise.all([
     table<ContentItem>('content_items').list({ where: i => itemIds.includes(i.id) }),
     jobs().list({ where: j => j.content_item_id != null && itemIds.includes(String(j.content_item_id)) }),
+    // the channels, because a post whose account has been revoked is blocked
+    // by a fact about the ACCOUNT, not about the item — and the calendar and
+    // this list have to give the same reason
+    table<SocialAccount>('social_accounts').list({ where: a => a.client_id === input.clientId }),
   ])
   const itemById = new Map(items.map(i => [i.id, i]))
 
@@ -1199,7 +1282,8 @@ export async function listPosts(input: {
       ...post,
       live_status: statusOf(item, post, mine),
       item_title: (item?.title as string | null) ?? null,
-      block_reason: publishBlockReason(item?.posting_approval_state),
+      block_reason: publishBlockReason(item?.posting_approval_state)
+        ?? channelBlockReason(post.channels, accounts),
     }
   })
 }
@@ -1243,9 +1327,7 @@ export async function addNote(
 export async function removeNote(user: TeamUser, id: string): Promise<void> {
   const row = await notes().get(id)
   if (!row) throw new AuthzError('That note is already gone', 404)
-  const mine = row.created_by === user.id
-  const senior = user.role === 'account_manager' || user.role === 'super_admin'
-  if (!mine && !senior) {
+  if (!mayEditNote(user, row)) {
     throw new AuthzError(
       'Only the person who wrote this note, or an account manager, can remove it', 403,
     )
@@ -1269,9 +1351,7 @@ export async function editNote(
 ): Promise<ScheduleNote> {
   const row = await notes().get(id)
   if (!row) throw new AuthzError('That note is already gone', 404)
-  const mine = row.created_by === user.id
-  const senior = user.role === 'account_manager' || user.role === 'super_admin'
-  if (!mine && !senior) {
+  if (!mayEditNote(user, row)) {
     throw new AuthzError(
       'Only the person who wrote this note, or an account manager, can change it', 403,
     )

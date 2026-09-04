@@ -789,11 +789,17 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
    *  before `seeked` paints whatever was on screen before. */
   const seekAndWait = (el: HTMLVideoElement, at: number) => new Promise<void>(resolve => {
     if (Math.abs(el.currentTime - at) < 0.02) { resolve(); return }
-    const done = () => { el.removeEventListener('seeked', done); resolve() }
+    // a video that will not seek must not hang the button for ever — and a
+    // seek that DOES land must not leave a timer running behind it
+    let escape = 0
+    const done = () => {
+      window.clearTimeout(escape)
+      el.removeEventListener('seeked', done)
+      resolve()
+    }
     el.addEventListener('seeked', done)
     el.currentTime = at
-    // a video that will not seek must not hang the button for ever
-    window.setTimeout(done, 2000)
+    escape = window.setTimeout(done, 2000)
   })
 
   const grabCover = async () => {

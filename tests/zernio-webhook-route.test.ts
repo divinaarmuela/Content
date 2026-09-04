@@ -338,6 +338,62 @@ describe('POST /api/zernio/webhook — accounts', () => {
     expect(json).toMatchObject({ ok: true, marked: 'acc_1' })
     expect(rows('social_accounts')[0].active).toBe(false)
   })
+
+  /**
+   * Marking the row told the APP. Nobody was told — and every post already
+   * booked onto that channel sat on the calendar looking approved and would
+   * not have gone out. The way this used to be discovered was a week later.
+   */
+  it('tells the client’s account manager, in words and with a way to fix it', async () => {
+    seed.team_users = [
+      { id: 'u-am', email: 'am@mdmedia-test.invalid', name: 'Ada', role: 'account_manager', active_status: true },
+      { id: 'u-sa', email: 'admin@mdmedia-test.invalid', name: 'Sid', role: 'super_admin', active_status: true },
+    ]
+    seed.team_user_clients = [{ id: 'u-am__client-1', team_user_id: 'u-am', client_id: 'client-1' }]
+
+    await deliver({ id: 'evt_off1', event: 'account.disconnected', data: { accountId: 'acc_1' } })
+
+    expect(notify).toHaveBeenCalledTimes(1)
+    const sent = notify.mock.calls[0][0] as Record<string, string>
+    expect(sent.recipientEmail).toBe('am@mdmedia-test.invalid')
+    expect(sent.recipientEmail.endsWith('.invalid')).toBe(true)
+    expect(sent.eventType).toBe('social.account.disconnected')
+    // plain words, the channel named, and no jargon
+    expect(sent.subject).toMatch(/Releeph/)
+    expect(sent.subject).toMatch(/needs reconnecting/)
+    expect(sent.bodyHtml).toMatch(/posts for it are on hold/i)
+    expect(sent.bodyHtml).toMatch(/\/dashboard\/social\/schedule\/access\?clientId=client-1/)
+    // it is not bell-only: this one has a deadline attached to it
+    expect(sent.bellOnly).toBeUndefined()
+  })
+
+  it('tells them ONCE, however many times the provider says it', async () => {
+    seed.team_users = [
+      { id: 'u-am', email: 'am@mdmedia-test.invalid', name: 'Ada', role: 'account_manager', active_status: true },
+    ]
+    seed.team_user_clients = [{ id: 'u-am__client-1', team_user_id: 'u-am', client_id: 'client-1' }]
+
+    // the same delivery twice — caught by the delivery claim
+    await deliver({ id: 'evt_off2', event: 'account.disconnected', data: { accountId: 'acc_1' } })
+    await deliver({ id: 'evt_off2', event: 'account.disconnected', data: { accountId: 'acc_1' } })
+    // …and a DIFFERENT event id for the same drop, which the delivery claim
+    // cannot see. The row is already inactive, so there is nothing to tell.
+    await deliver({ id: 'evt_off3', event: 'account.revoked', data: { accountId: 'acc_1' } })
+
+    expect(notify).toHaveBeenCalledTimes(1)
+    expect(rows('social_accounts')[0].active).toBe(false)
+  })
+
+  it('falls back to the super admins when the client has nobody on it', async () => {
+    seed.team_users = [
+      { id: 'u-sa', email: 'admin@mdmedia-test.invalid', name: 'Sid', role: 'super_admin', active_status: true },
+    ]
+    seed.team_user_clients = []
+    await deliver({ id: 'evt_off4', event: 'account.disconnected', data: { accountId: 'acc_1' } })
+    expect(notify).toHaveBeenCalledTimes(1)
+    expect((notify.mock.calls[0][0] as Record<string, string>).recipientEmail)
+      .toBe('admin@mdmedia-test.invalid')
+  })
 })
 
 describe('POST /api/zernio/webhook — inbox, reviews and leads', () => {

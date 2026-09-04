@@ -192,6 +192,71 @@ function latestVersion(
   }, list[list.length - 1])
 }
 
+/* ── notes on the calendar ──────────────────────────────────────────────── */
+
+/**
+ * MAY THIS PERSON REWRITE OR REMOVE SOMEBODY ELSE'S NOTE?
+ *
+ * The person who wrote it, or an account manager (super admins included, who
+ * can do everything an account manager can). A note is often the reason
+ * something is NOT being posted — "client is away until the 19th, hold
+ * everything" — so anybody being able to overwrite anybody's is one mis-click
+ * away from losing the only record of a decision.
+ *
+ * ONE definition, and it lives here because it is asked in two places: the
+ * server, in `editNote`/`removeNote`, where it is enforced; and the calendar,
+ * where it decides whether the buttons are drawn. Two copies of a rule is two
+ * rules, and the visible half drifting from the enforced one shows people a
+ * Delete button that answers 403.
+ */
+export function mayEditNote(
+  user: { id?: string | null; role?: string | null } | null | undefined,
+  note: { created_by?: string | null } | null | undefined,
+): boolean {
+  if (!user || !note) return false
+  const role = String(user.role ?? '')
+  if (role === 'account_manager' || role === 'super_admin') return true
+  const me = String(user.id ?? '')
+  return me !== '' && note.created_by === me
+}
+
+/* ── the cover picture the editor saved ─────────────────────────────────── */
+
+/** A version, as the cover lookup needs it. */
+export type CoverSource = VersionLike & { cover_url?: string | null; file_url?: string | null }
+
+/**
+ * THE COVER PICTURE A PERSON CHOSE, FOUND AGAIN AT POSTING TIME.
+ *
+ * The image editor lets somebody pick the frame of a video that people see
+ * before they press play, and stores it on the VERSION (`asset_versions
+ * .cover_url`) — the version is where a fact about the file belongs, and it
+ * survives the post being cancelled and rebuilt.
+ *
+ * A cover that is only stored is a control that silently does nothing, so this
+ * is the other half: given the file a channel is actually posting, which
+ * version holds it, and did that version get a cover. The answer becomes the
+ * post's `thumbnailUrl`, which the publisher already knows how to send
+ * (YouTube takes it on the media item, Instagram as `instagramThumbnail`).
+ *
+ * Keyed off the FILE rather than off "the newest version", for the same reason
+ * the crop endpoint is: a piece that has moved on would otherwise hand this
+ * post a cover belonging to a video nobody is posting.
+ */
+export function coverForSlide(
+  url: string | null | undefined,
+  versions: readonly CoverSource[] | null | undefined,
+): string | null {
+  const want = String(url ?? '').trim()
+  if (!want) return null
+  for (const v of versions ?? []) {
+    const cover = String(v?.cover_url ?? '').trim()
+    if (!cover) continue
+    if (v.file_url === want || slidesOf(v).some(sl => sl.url === want)) return cover
+  }
+  return null
+}
+
 /* ── the status a tile wears ────────────────────────────────────────────── */
 
 /**
@@ -771,7 +836,14 @@ export type TilePost = {
 /** A `publish_jobs` row, as the join needs it: its id and its status. */
 export type TileJob = ScheduleJob & { id?: string | null }
 /** A `social_accounts` row, as the join needs it. */
-export type TileAccount = { id?: string | null; platform?: string | null }
+export type TileAccount = {
+  id?: string | null
+  platform?: string | null
+  /** what we call this channel on screen; the network's name when unset */
+  name?: string | null
+  /** `false` once the provider tells us the connection is gone */
+  active?: boolean | null
+}
 
 /** What a tile is drawn from, once the post, its item and its jobs are read
  *  together. Everything here is DERIVED — none of it is stored on the post. */
@@ -835,6 +907,39 @@ export function postPlatforms(
 }
 
 /**
+ * A CHANNEL THIS POST GOES TO HAS STOPPED WORKING.
+ *
+ * The account's token was revoked or expired, Zernio told us, and the row is
+ * `active: false`. Nothing about the POST changed — it is still approved, still
+ * booked, still sitting on the calendar looking fine — and it will not go out.
+ * That is the failure mode worth showing before it happens rather than after,
+ * so the tile carries the reason the same way it carries the approval gate's.
+ *
+ * Derived, never stored: reconnect the account and the sentence is gone on the
+ * next frame, without anything having to remember to clear it.
+ *
+ * Named after the channel, because "an account" is no use to somebody with
+ * four of them.
+ */
+export function channelBlockReason(
+  channels: unknown,
+  accounts: readonly TileAccount[] | null | undefined,
+): string | null {
+  const list = asStrings(channels)
+  if (list.length === 0) return null
+  const dropped = (accounts ?? []).filter(a =>
+    a?.active === false && list.includes(String(a?.id ?? '')))
+  if (dropped.length === 0) return null
+  const nameOf = (a: TileAccount) =>
+    (a.name ?? '').trim()
+    || NETWORK_LABEL[String(a.platform ?? '').toLowerCase()]
+    || String(a.platform ?? 'That account')
+  return dropped.length === 1
+    ? `${nameOf(dropped[0])} needs reconnecting — this post is on hold until somebody reconnects it`
+    : `${dropped.length} of this post’s channels need reconnecting — it is on hold until somebody reconnects them`
+}
+
+/**
  * One tile's facts: what this post IS right now, in what colour, on which
  * networks, and what is standing in its way.
  *
@@ -853,8 +958,10 @@ export function postTileFacts(
     tone: tileTone(live),
     platforms: postPlatforms(post?.channels, accounts),
     // the SERVER's reason, read the server's way — `publishBlockReason` on the
-    // item's approval state, not a second opinion assembled here
-    block_reason: blockReason(item),
+    // item's approval state, not a second opinion assembled here. The
+    // approval gate comes first when both apply: an unapproved post is not
+    // going out whatever its channels are doing.
+    block_reason: blockReason(item) ?? channelBlockReason(post?.channels, accounts),
   }
 }
 

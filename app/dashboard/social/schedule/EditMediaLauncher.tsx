@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, Wand2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Thumb } from './tiles'
-import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
+import type { ImageEditorTarget } from './ImageEditor'
 import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 
 /**
@@ -21,15 +21,20 @@ import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
  * button, next to the slot it belongs to, is a different (and better) way in
  * for somebody already writing a post; this is the one for somebody looking
  * at the week who wants to fix a picture before anything is planned.
+ *
+ * It does not OWN the editor. There is exactly one editor on the page, opened
+ * by whoever asks for it — this chooser, or the composer's own button — so a
+ * picture edited from one place and a picture edited from the other cannot
+ * behave differently, and two of them can never be open at once.
  */
-export default function EditMediaLauncher({ media, posts, className }: {
+export default function EditMediaLauncher({ media, posts, className, onEdit }: {
   media: RailMedia[]
   posts: SchedulePostRow[]
   className?: string
+  /** hand a picture to the page's editor */
+  onEdit: (target: ImageEditorTarget) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [target, setTarget] = useState<ImageEditorTarget | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
   const [q, setQ] = useState('')
 
   useEffect(() => {
@@ -38,13 +43,6 @@ export default function EditMediaLauncher({ media, posts, className }: {
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
   }, [open])
-
-  // a note about a save clears itself: it is a receipt, not a state
-  useEffect(() => {
-    if (!saved) return
-    const id = window.setTimeout(() => setSaved(null), 8000)
-    return () => window.clearTimeout(id)
-  }, [saved])
 
   /** every file of every piece whose media the client has approved */
   const tiles = useMemo(() => {
@@ -77,16 +75,7 @@ export default function EditMediaLauncher({ media, posts, className }: {
         Edit media
       </button>
 
-      {saved && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-50 max-w-[440px] -translate-x-1/2 rounded-card border border-border bg-popover px-4 py-3 text-[13px] font-medium shadow-xl"
-        >
-          {saved}
-        </div>
-      )}
-
-      {open && !target && (
+      {open && (
         <div
           role="dialog"
           aria-modal="true"
@@ -140,14 +129,17 @@ export default function EditMediaLauncher({ media, posts, className }: {
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setTarget({
-                        itemId: t.media.itemId,
-                        title: t.media.title,
-                        versionNumber: t.media.versionNumber,
-                        slides: t.media.slides,
-                        index: t.index,
-                        postId: t.postId,
-                      })}
+                      onClick={() => {
+                        setOpen(false)
+                        onEdit({
+                          itemId: t.media.itemId,
+                          title: t.media.title,
+                          versionNumber: t.media.versionNumber,
+                          slides: t.media.slides,
+                          index: t.index,
+                          postId: t.postId,
+                        })
+                      }}
                       className="group relative flex aspect-[4/5] flex-col overflow-hidden rounded-tile border border-border bg-foreground/[0.06] text-left hover:shadow-md"
                     >
                       <Thumb
@@ -176,18 +168,6 @@ export default function EditMediaLauncher({ media, posts, className }: {
             </p>
           </div>
         </div>
-      )}
-
-      {target && (
-        <ImageEditor
-          target={target}
-          onClose={() => setTarget(null)}
-          onSaved={message => {
-            setSaved(message)
-            setTarget(null)
-            setOpen(false)
-          }}
-        />
       )}
     </>
   )
