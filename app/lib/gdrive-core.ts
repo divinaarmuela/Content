@@ -455,3 +455,160 @@ export function uniqueName(base: string, taken: Iterable<string>): string {
   }
   return `${safe.slice(0, MAX_SEGMENT - 14)} (${Date.now() % 100000})`
 }
+
+// ── matching client folders that are already in Drive ─────────────────────
+
+/**
+ * Words at the END of a business name that say what KIND of company it is,
+ * not which one.
+ *
+ * "Alia Fragrance Pty Ltd" and "Alia Fragrance" are the same client typed by
+ * two different people, and the folder in Drive was named by whoever made it
+ * first. Only trailing suffixes are dropped, and only whole words: "Ltd" in
+ * the middle of a name is part of the name, and "Incline" is not "Inc".
+ */
+const COMPANY_SUFFIXES = new Set([
+  'pty', 'ltd', 'limited', 'inc', 'incorporated', 'llc', 'plc', 'corp',
+  'corporation', 'co', 'company',
+])
+
+/** Apostrophes CLOSE up: "Cecconi's" is one word, "cecconis", not two. */
+const APOSTROPHES = /['’`´]/g
+
+/**
+ * The comparable form of a folder or client name.
+ *
+ * Everything a person varies without meaning to is removed: capitals,
+ * punctuation, an ampersand written as "and", a doubled space, and the
+ * trailing company suffix. What is LEFT is the part that identifies the
+ * client, and two names with the same normalised form are the same client.
+ *
+ * Deliberately not fuzzy: this is the exact half of the match, and being sure
+ * matters more here than matching more. The near-misses are handled by
+ * `matchClientFolders`, which flags them instead of assuming.
+ */
+export function normaliseFolderName(raw: string | null | undefined): string {
+  let s = String(raw ?? '').toLowerCase()
+  s = s.replace(APOSTROPHES, '')
+  s = s.replace(/&/g, ' and ')
+  s = s.replace(/[^a-z0-9]+/g, ' ').trim()
+  let words = s.split(' ').filter(Boolean)
+  // a trailing "pty ltd" is two suffixes, so strip until the last word carries
+  // meaning — but never strip a name away to nothing ("Co" on its own is the
+  // whole client)
+  while (words.length > 1 && COMPANY_SUFFIXES.has(words[words.length - 1])) {
+    words = words.slice(0, -1)
+  }
+  return words.join(' ')
+}
+
+/** The tokens two names are compared on. */
+function tokens(raw: string): Set<string> {
+  return new Set(normaliseFolderName(raw).split(' ').filter(Boolean))
+}
+
+/**
+ * How much two names share, 0…1 — shared words over the LONGER name.
+ *
+ * Over the longer one on purpose: "Alia" against "Alia Fragrance Skincare"
+ * shares every word of the shorter name and would score 1 on a one-sided
+ * measure, which is exactly the wrong answer.
+ */
+export function nameOverlap(a: string, b: string): number {
+  const left = tokens(a)
+  const right = tokens(b)
+  if (left.size === 0 || right.size === 0) return 0
+  let shared = 0
+  for (const t of left) if (right.has(t)) shared++
+  return shared / Math.max(left.size, right.size)
+}
+
+/** Anything below this is left for a person to decide. */
+export const LIKELY_OVERLAP = 0.8
+
+export type NamedFolder = { id: string; name: string }
+export type NamedClient = { id: string; name: string }
+
+export type FolderMatch<C extends NamedClient = NamedClient, F extends NamedFolder = NamedFolder> = {
+  client: C
+  folder: F
+  /** 'exact' — the names agree once tidied. 'likely' — close, worth a look. */
+  confidence: 'exact' | 'likely'
+}
+
+export type FolderMatchPlan<C extends NamedClient = NamedClient, F extends NamedFolder = NamedFolder> = {
+  matched: FolderMatch<C, F>[]
+  /** clients with no folder — these are the ones that would be created */
+  unmatched: C[]
+  /** folders in Drive that belong to no client on the list */
+  extra: F[]
+}
+
+/**
+ * Line the clients up against the folders that are already in Drive.
+ *
+ * Two passes, and the order is the whole design:
+ *
+ * 1. **Exact** on the normalised name. One folder can only be claimed once,
+ *    so a duplicate ("Acme" twice, which Drive allows) leaves the second copy
+ *    in `extra` rather than quietly attaching two clients to one folder.
+ * 2. **Likely** — 80% of the words shared, and only when ONE folder is that
+ *    close. Two folders equally close is an ambiguity, and an ambiguity
+ *    resolved by a coin toss is worse than one handed back to a person: the
+ *    client stays unmatched and the review screen asks.
+ *
+ * Pure: it never touches Drive and never creates anything. The caller applies
+ * the plan after a person has looked at it.
+ */
+export function matchClientFolders<C extends NamedClient, F extends NamedFolder>(
+  clients: C[], subfolders: F[],
+): FolderMatchPlan<C, F> {
+  const matched: FolderMatch<C, F>[] = []
+  const takenFolders = new Set<string>()
+  const remainingClients: C[] = []
+
+  // pass 1 — exact. Built as a queue per normalised name so a second folder
+  // with the same name is left over rather than shared.
+  const byName = new Map<string, F[]>()
+  for (const f of subfolders) {
+    const key = normaliseFolderName(f.name)
+    if (!key) continue
+    const list = byName.get(key)
+    if (list) list.push(f)
+    else byName.set(key, [f])
+  }
+  for (const client of clients) {
+    const key = normaliseFolderName(client.name)
+    const folder = key ? byName.get(key)?.find(f => !takenFolders.has(f.id)) : undefined
+    if (folder) {
+      takenFolders.add(folder.id)
+      matched.push({ client, folder, confidence: 'exact' })
+    } else {
+      remainingClients.push(client)
+    }
+  }
+
+  // pass 2 — likely, over what is left on both sides
+  const unmatched: C[] = []
+  for (const client of remainingClients) {
+    const near = subfolders
+      .filter(f => !takenFolders.has(f.id))
+      .map(f => ({ folder: f, score: nameOverlap(client.name, f.name) }))
+      .filter(x => x.score >= LIKELY_OVERLAP)
+      .sort((a, b) => b.score - a.score)
+    const best = near[0]
+    const ambiguous = near.length > 1 && near[1].score === best?.score
+    if (best && !ambiguous) {
+      takenFolders.add(best.folder.id)
+      matched.push({ client, folder: best.folder, confidence: 'likely' })
+    } else {
+      unmatched.push(client)
+    }
+  }
+
+  return {
+    matched,
+    unmatched,
+    extra: subfolders.filter(f => !takenFolders.has(f.id)),
+  }
+}

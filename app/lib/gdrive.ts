@@ -1,12 +1,12 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { DriveConnection } from '@/lib/db-types'
+import type { Client, DriveConnection } from '@/lib/db-types'
 import { decryptSecret, encryptSecret, credentialsKeyConfigured } from './secret-box'
 import {
   forgetGoogleToken, googleAccessToken, inboxClientId, inboxClientSecret,
 } from './inbox-connect'
 import {
-  FOLDER_MIME, folderQuery, folderUrl, normaliseRoot, safeSegment,
+  FOLDER_MIME, escapeQueryValue, folderQuery, folderUrl, normaliseRoot, safeSegment,
 } from './gdrive-core'
 
 /**
@@ -147,6 +147,12 @@ export type DriveStatus = {
   sharing_domain: string | null
   /** Plain English for the Integrations card, including the last refusal. */
   sharing_note: string | null
+  /** The folder a person PICKED with the Google Picker, if they have. */
+  root_picked: boolean
+  root_folder_name: string | null
+  root_owner_email: string | null
+  /** The "Clients" folder inside it — what every client folder hangs off. */
+  clients_folder_id: string | null
 }
 
 /** The last thing Drive said when a domain share was refused. Per-process and
@@ -169,6 +175,10 @@ export async function driveStatus(): Promise<DriveStatus> {
     connected_by: row?.connected_by ?? null,
     sharing: domain ? 'domain' : 'none',
     sharing_domain: domain,
+    root_picked: Boolean(row?.root_picked),
+    root_folder_name: row?.root_folder_name ?? null,
+    root_owner_email: row?.root_owner_email ?? null,
+    clients_folder_id: row?.clients_folder_id ?? null,
     sharing_note: !row?.refresh_token_encrypted
       ? null
       : lastSharingError
@@ -268,11 +278,15 @@ export async function completeDriveConnect(
 
   // the root folder is created with the ACCESS token we already hold, before
   // anything is stored: a connection whose root could not be made is not a
-  // connection, and finding that out now beats finding out on the first shoot
+  // connection, and finding that out now beats finding out on the first shoot.
+  //
+  // A PICKED root is the exception: a person has already said where the filing
+  // cabinet is, and making a second one in My Drive would be the app overruling
+  // them. Reconnecting keeps the folder they chose.
   const existing = await connection()
   const wantedRoot = normaliseRoot(existing?.root_name)
   let rootId = existing?.root_folder_id ?? null
-  if (token.access_token) {
+  if (token.access_token && !existing?.root_picked) {
     const made = await ensureRootFolder(token.access_token, wantedRoot, rootId)
     if (!made.ok) return made
     rootId = made.id
@@ -529,6 +543,14 @@ export async function rootFolderId(): Promise<string | null> {
   const row = await connection()
   if (!row?.refresh_token_encrypted) return null
 
+  // a picked HQ folder wins outright, and nothing is created from a name:
+  // the whole point of picking was that the folder already exists and the app
+  // must file INTO it rather than beside it
+  if (row.root_picked && row.clients_folder_id) {
+    cachedRootId = row.clients_folder_id
+    return cachedRootId
+  }
+
   const auth = await accessToken()
   if (!auth.ok) return null
 
@@ -540,6 +562,191 @@ export async function rootFolderId(): Promise<string | null> {
   }
   cachedRootId = made.id
   return made.id
+}
+
+// ── the folder a person picked ─────────────────────────────
+
+/**
+ * What the Picker gave us, and what the review screen needs.
+ *
+ * `owner_email` is whatever Drive says the folder belongs to; the Picker does
+ * not always return it, and a folder inside a Shared Drive has no single
+ * owner at all, so it is shown when known and never depended on.
+ */
+export type PickedRoot = {
+  id: string
+  name: string
+  owner_email: string | null
+  picked_at: string | null
+  picked_by: string | null
+  clients_folder_id: string | null
+}
+
+export async function pickedRoot(): Promise<PickedRoot | null> {
+  const row = await connection()
+  if (!row?.root_picked || !row.root_folder_id) return null
+  return {
+    id: row.root_folder_id,
+    name: row.root_folder_name ?? '',
+    owner_email: row.root_owner_email ?? null,
+    picked_at: row.root_picked_at ?? null,
+    picked_by: row.root_picked_by ?? null,
+    clients_folder_id: row.clients_folder_id ?? null,
+  }
+}
+
+/** What Drive says about one folder, asked with our own token — which is also
+ *  the check that the Picker's grant actually landed on this app. */
+export async function readFolder(
+  folderId: string,
+): Promise<DriveResult<{ name: string; ownerEmail: string | null }>> {
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(folderId)}?` + new URLSearchParams({
+    fields: 'id,name,mimeType,trashed,owners(emailAddress)', ...ALL_DRIVES,
+  })
+  const res = await driveFetch<{
+    name?: string; mimeType?: string; trashed?: boolean
+    owners?: { emailAddress?: string }[]
+  }>(auth.token, url)
+  if (!res.ok) return res
+  if (res.data.mimeType !== FOLDER_MIME) {
+    return { ok: false, reason: 'api_error', message: 'That is a file, not a folder' }
+  }
+  if (res.data.trashed) {
+    return { ok: false, reason: 'api_error', message: 'That folder is in the bin' }
+  }
+  return {
+    ok: true,
+    name: res.data.name ?? '',
+    ownerEmail: res.data.owners?.[0]?.emailAddress ?? null,
+  }
+}
+
+/**
+ * Record the folder a person chose in the Picker.
+ *
+ * The `Clients` subfolder is deliberately NOT resolved here: finding it is a
+ * read, creating it is a decision, and the review screen is where that
+ * decision is put to a person. Choosing a different folder clears whatever was
+ * resolved for the old one, because it belonged to the old one.
+ */
+export async function savePickedRoot(args: {
+  id: string; name: string; ownerEmail: string | null; by: string
+}): Promise<void> {
+  await writeConnection({
+    root_folder_id: args.id,
+    root_folder_name: args.name,
+    root_owner_email: args.ownerEmail,
+    root_picked: true,
+    root_picked_at: new Date().toISOString(),
+    root_picked_by: args.by,
+    clients_folder_id: null,
+  })
+  cachedRootId = null
+}
+
+/** Remember which folder inside the picked root the clients live in. */
+export async function saveClientsFolder(id: string): Promise<void> {
+  await writeConnection({ clients_folder_id: id })
+  cachedRootId = null
+}
+
+/** The folders directly inside a folder, with their ids. `listFolderNames`
+ *  answers "what names are taken"; this answers "what is actually in there". */
+export async function listSubfolders(
+  parentId: string,
+): Promise<DriveResult<{ folders: { id: string; name: string }[] }>> {
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const folders: { id: string; name: string }[] = []
+  let pageToken: string | undefined
+  do {
+    const url = `${FILES}?` + new URLSearchParams({
+      q: `'${escapeQueryValue(parentId)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: 'nextPageToken, files(id,name)',
+      pageSize: '1000',
+      orderBy: 'name',
+      ...ALL_DRIVES_LIST,
+      ...(pageToken ? { pageToken } : {}),
+    })
+    const res = await driveFetch<{ files?: DriveFile[]; nextPageToken?: string }>(auth.token, url)
+    if (!res.ok) return res
+    for (const f of res.data.files ?? []) if (f.id && f.name) folders.push({ id: f.id, name: f.name })
+    pageToken = res.data.nextPageToken
+  } while (pageToken)
+  return { ok: true, folders }
+}
+
+/** The first folder with this name inside a folder, or null — no creating. */
+export async function findSubfolder(
+  parentId: string, name: string,
+): Promise<DriveResult<{ id: string | null }>> {
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  return findFolder(auth.token, parentId, safeSegment(name))
+}
+
+/** Make a folder, no questions asked. Used only where a person has already
+ *  confirmed they want it. */
+export async function createSubfolder(
+  parentId: string, name: string,
+): Promise<DriveResult<{ id: string }>> {
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  return createFolder(auth.token, parentId, safeSegment(name))
+}
+
+// ── one client's folder ───────────────────────────────────
+
+/**
+ * The folder this client's work lives in — recorded on the client, not
+ * guessed from their name.
+ *
+ * `clients.drive_folder_id` is the truth and is consulted FIRST. That is what
+ * makes a folder somebody else made usable at all: it was named by a person
+ * years ago and does not have to match the client record for the app to file
+ * into it, as long as somebody once said "that is the one".
+ *
+ * Only when the column is blank does the app fall back to find-or-create by
+ * name under the Clients folder, and it writes the id back onto a BLANK column
+ * only, so two requests racing cannot end up with two folders recorded.
+ */
+export async function clientFolderId(
+  clientId: string, name: string,
+): Promise<string | null> {
+  const clients = table<Client>('clients')
+  const row = await clients.get(clientId)
+  const recorded = String(row?.drive_folder_id ?? '').trim()
+  if (recorded) return recorded
+
+  const root = await rootFolderId()
+  if (!root) return null
+  const made = await ensureFolder(root, name)
+  if (!made.ok) return null
+
+  await clients.claim(clientId, cur =>
+    cur && !cur.drive_folder_id ? { ...cur, drive_folder_id: made.id } : null)
+  return made.id
+}
+
+/** A chain of folders BELOW the client's own folder, created as needed. */
+export async function ensureClientChain(
+  clientId: string, name: string, tail: string[],
+): Promise<DriveResult<{ id: string }>> {
+  const clientDir = await clientFolderId(clientId, name)
+  if (!clientDir) return notConnected()
+  if (tail.length === 0) return { ok: true, id: clientDir }
+  return ensureChain(clientDir, tail)
+}
+
+/** The same, plus the link and the team share — what the mirror wants. */
+export async function ensureClientChainWithLink(
+  clientId: string, name: string, tail: string[],
+): Promise<{ id: string; url: string } | null> {
+  const made = await ensureClientChain(clientId, name, tail)
+  if (!made.ok) return null
+  return { id: made.id, url: await shareWithDomain(made.id) }
 }
 
 // ── sharing ───────────────────────────────────────────────────────────────

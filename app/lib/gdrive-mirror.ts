@@ -6,11 +6,12 @@ import type {
 } from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import {
-  FINAL_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
-  brandChain, dayStamp, fromClientChain, intakeFileTarget, scheduledChain,
+  BRAND_FOLDER, FINAL_FOLDER, FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER,
+  NO_SHOOT_RAW_FOLDER, RAW_FOLDER, SCHEDULED_FOLDER,
+  dayStamp, intakeFileTarget,
 } from './gdrive-core'
 import {
-  driveConfigured, ensureChain, ensureChainWithLink, rootFolderId,
+  driveConfigured, ensureChain, ensureClientChainWithLink, rootFolderId,
 } from './gdrive'
 import { copyDriveFile, driveFileUrl, moveDriveFile, uploadStreamToFolder } from './gdrive-files'
 import { ensureItemFoldersNow, ensureShootFoldersNow, type BatchLike, type ItemLike } from './gdrive-hooks'
@@ -339,11 +340,11 @@ async function clientTargetFolder(
   const name = await clientName(clientId)
   if (!name) return { skip: 'no client name' }
   if (target === 'brand') {
-    const made = await ensureChainWithLink(brandChain(name))
+    const made = await ensureClientChainWithLink(clientId, name, [BRAND_FOLDER])
     return made ? { id: made.id } : { skip: 'could not make the brand folder' }
   }
   const day = dayStamp(receivedAt) ?? dayStamp(new Date().toISOString())!
-  const made = await ensureChainWithLink(fromClientChain(name, day))
+  const made = await ensureClientChainWithLink(clientId, name, [FROM_CLIENT_FOLDER, day])
   return made ? { id: made.id } : { skip: 'could not make the delivery folder' }
 }
 
@@ -393,7 +394,7 @@ async function targetFolder(
   if (!month) return { skip: 'nothing scheduled yet' }
   const name = await clientName(item.client_id)
   if (!name) return { skip: 'no client name' }
-  const made = await ensureChainWithLink(scheduledChain(name, month))
+  const made = await ensureClientChainWithLink(item.client_id, name, [SCHEDULED_FOLDER, month])
   return made ? { id: made.id } : { skip: 'could not make the month folder' }
 }
 

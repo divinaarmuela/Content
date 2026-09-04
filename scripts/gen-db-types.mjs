@@ -158,7 +158,27 @@ for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 //     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
-  clients: [['instagram_locations', col('unknown', false, true, true)]],
+  clients: [
+    ['instagram_locations', col('unknown', false, true, true)],
+    ['drive_folder_id', col('string', true)],
+  ],
+  //   drive_connection.root_* — WHERE the filing cabinet is.
+  //     The app can only see folders it made itself (the drive.file scope), so
+  //     the owner's existing "MD Media HQ" folder is unreachable until a person
+  //     hands it over through the Google Picker. That hand-over is what these
+  //     columns record: root_folder_id/root_folder_name/root_owner_email are the
+  //     PICKED folder, root_picked says a person chose it (so nothing ever
+  //     creates a stray "Clients" folder in My Drive again), and
+  //     clients_folder_id is the "Clients" subfolder inside it that every client
+  //     folder hangs off.
+  drive_connection: [
+    ['root_folder_name', col('string', true)],
+    ['root_owner_email', col('string', true)],
+    ['root_picked', col('boolean', true)],
+    ['root_picked_at', col('string', true)],
+    ['root_picked_by', col('string', true)],
+    ['clients_folder_id', col('string', true)],
+  ],
   asset_versions: [
     ['cover_url', col('string', true)],
     ['trim_start', col('number', true)],
