@@ -71,7 +71,63 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //                    claim(). Never migrated: it holds no history.
 //   booking_seats  — one row per (space, seat) holding the time ranges that
 //                    seat is spoken for, so no-overlap is one atomic write.
-for (const ghost of ['website', 'claim_locks', 'booking_seats']) if (!tables.has(ghost)) tables.set(ghost, new Map([['id', { type: 'string', nullable: false }]]))
+//   social_posts   — a PLANNED post: the composition (chosen slides, caption,
+//                    channels, time) that has to exist BEFORE anything is
+//                    queued, because it sits in final-post approval first.
+//                    One post <-> one item; its approval IS the item's
+//                    posting_approval_state, never a second state machine.
+//   schedule_notes — a short note pinned to a day and time on the Schedule
+//                    calendar. Team-only; it never reaches a client or a
+//                    provider.
+const col = (type, nullable, json = false, jsonArray = false) => ({ type, nullable, json, jsonArray })
+const GHOST_TABLES = {
+  website: [['id', col('string', false)]],
+  claim_locks: [['id', col('string', false)]],
+  booking_seats: [['id', col('string', false)]],
+  social_posts: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['item_id', col('string', false)],
+    // a draft dragged onto the calendar before graphics are chosen has no
+    // version yet; eligibility() is what refuses to SEND such a post
+    ['version_id', col('string', true)],
+    ['version_number', col('number', true)],
+    ['slides', col('unknown', false, true, true)],
+    ['caption', col('string', true)],
+    ['per_channel', col('unknown', false, true, false)],
+    ['channels', col('unknown', false, true, true)],
+    ['scheduled_for', col('string', true)],
+    ['timezone', col('string', false)],
+    ['status', col('string', false)],
+    ['publish_job_ids', col('unknown', false, true, true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['sent_at', col('string', true)],
+    ['approved_at', col('string', true)],
+    ['approved_by', col('string', true)],
+    // 'client' = it went through the final-post approval; 'self' = an account
+    // manager (or super admin) cleared it themselves at send time, which the
+    // owner asked for on 3 Sep. Null on a post that has not been sent.
+    ['approval_mode', col('string', true)],
+    ['note', col('string', true)],
+  ],
+  schedule_notes: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['at', col('string', false)],
+    ['text', col('string', false)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+}
+for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
+  if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
+}
+// Ghost tables have no `create trigger` line to be read from, so the ones that
+// carry updated_at say so here — lib/db.ts stamps the column from this set.
+for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
@@ -79,7 +135,36 @@ for (const ghost of ['website', 'claim_locks', 'booking_seats']) if (!tables.has
 //     answer that once a row has been reclaimed: the winner's write does not
 //     move it, so the next retrier would judge the row stale again and send
 //     the same email twice. Staleness is judged on claimed_at ?? created_at.
-const GHOST_COLUMNS = { notification_log: [['claimed_at', { type: 'string', nullable: true }]] }
+//   clients.instagram_locations — the places this client tags posts at, as
+//     [{ name, pageId }]. Instagram's location is a NUMERIC FACEBOOK PAGE ID
+//     and neither the Graph API nor Zernio has a place search, so the ids
+//     have to be looked up once by a person and kept; without this list every
+//     scheduler would be retyping a 15-digit number from a Facebook page.
+//   NOTE on the client's provider group: the Schedule access page maps a
+//     client to ONE group of accounts at the posting service (Zernio calls a
+//     group a "profile" — not an Instagram profile but a folder several
+//     connected accounts sit in; the owner keeps four). That mapping is
+//     `clients.social_profile_id`, which ALREADY exists and is what the
+//     connect flow, the automations route and the webhook matcher all read. A
+//     second column meaning the same thing would be two answers to "which
+//     group does this client post from", and posts would start coming out of
+//     whichever one the reader happened to consult. So the access page writes
+//     that column and no new one was added.
+//   asset_versions.cover_url / trim_start / trim_end — what the image editor
+//     saves for a VIDEO. Neither touches the file: a video is never
+//     re-encoded in the browser (we would be handing the client a worse copy
+//     of their own footage), so the cover is a still taken out of the already
+//     approved clip and the trim marks are an instruction that travels with
+//     the post. Because the file is unchanged, the client's approval stands.
+const GHOST_COLUMNS = {
+  notification_log: [['claimed_at', { type: 'string', nullable: true }]],
+  clients: [['instagram_locations', col('unknown', false, true, true)]],
+  asset_versions: [
+    ['cover_url', col('string', true)],
+    ['trim_start', col('number', true)],
+    ['trim_end', col('number', true)],
+  ],
+}
 for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {
   const existing = tables.get(t)
   if (existing) for (const [c, def] of cols) if (!existing.has(c)) existing.set(c, def)

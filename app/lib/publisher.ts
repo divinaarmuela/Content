@@ -1,7 +1,9 @@
 import 'server-only'
 import {
-  buildPostBody, classifyResponse, mediaTypeFor,
-  type MediaItem, type Platform, type PublishOutcome, type Target,
+  asOrganizationUrn, buildPostBody, classifyResponse, mediaTypeFor,
+  COMMERCIAL_CONTENT_LABELS, TIKTOK_PRIVACY_LABELS,
+  type CommercialContentType, type MediaItem, type Platform, type PublishOutcome,
+  type Target, type TikTokPrivacy,
 } from './publish-core'
 
 /**
@@ -85,6 +87,244 @@ export interface Publisher {
   }): Promise<MediaItem>
   /** Create (or schedule) a post. Idempotent on requestId. */
   createPost(input: CreatePostInput): Promise<PublishOutcome>
+  /** The lists only this account can give us: its playlists, its company
+   *  pages, its Facebook Pages, the privacy levels TikTok allows it.
+   *
+   *  `mediaType` is TikTok's: a creator's limits differ between a video and a
+   *  set of pictures, and asking for the wrong one is a different answer. */
+  channelOptions(
+    providerAccountId: string, platform: string, mediaType?: 'video' | 'photo',
+  ): Promise<ChannelOptions>
+}
+
+/**
+ * What one account may be set to post as.
+ *
+ * Four lists, one shape, because the composer draws them the same way: a
+ * select with names in it. Every one of them is per ACCOUNT and cannot be
+ * guessed — a playlist id invented locally is a post YouTube refuses — so an
+ * empty list means "we could not ask", and the window says so rather than
+ * offering a choice that does not exist.
+ */
+export type ChannelChoice = { value: string; label: string }
+
+export type ChannelOptions = {
+  /** YouTube: the channel's playlists */
+  playlists: ChannelChoice[]
+  /** LinkedIn: the company pages this person may post as */
+  organizations: ChannelChoice[]
+  /** Facebook: the Pages behind this account */
+  pages: ChannelChoice[]
+  /** TikTok: the privacy levels TikTok allows THIS creator */
+  privacy: ChannelChoice[]
+  /** TikTok: the disclosures this creator may make */
+  commercial: ChannelChoice[]
+  /**
+   * TikTok: what this creator's account DOES when nobody touches it.
+   *
+   * An account whose own answer is "no comments" is not a post that asks for
+   * comments — TikTok refuses the whole thing. The window seeds its tick
+   * boxes from this rather than from our own "an agency means public with
+   * everything on", which is only true of an unrestricted account.
+   */
+  interactions: TikTokInteractions | null
+  /** …and whether each of those three may be changed at all, in TikTok's own
+   *  words. A setting the account has switched off is shown, and disabled. */
+  interactionRules: TikTokInteractionRules | null
+  /** TikTok: the longest video THIS account may post, in seconds */
+  maxVideoDurationSec: number | null
+  /** TikTok: who the account is, for a screen that wants to show it */
+  creator: { name: string | null; avatarUrl: string | null } | null
+}
+
+export type TikTokInteractions = {
+  allowComment: boolean
+  allowDuet: boolean
+  allowStitch: boolean
+}
+
+export type TikTokInteractionRule = {
+  /** may a person change this at all */
+  enabled: boolean
+  /** TikTok insists the post carries this field either way */
+  required: boolean
+  /** TikTok's own name for it */
+  label: string
+}
+
+export type TikTokInteractionRules = {
+  allowComment: TikTokInteractionRule
+  allowDuet: TikTokInteractionRule
+  allowStitch: TikTokInteractionRule
+}
+
+export const NO_CHANNEL_OPTIONS: ChannelOptions = {
+  playlists: [], organizations: [], pages: [], privacy: [],
+  commercial: [], interactions: null, interactionRules: null,
+  maxVideoDurationSec: null, creator: null,
+}
+
+/**
+ * Read TikTok's creator info into what the window needs.
+ *
+ * `GET /accounts/{id}/tiktok/creator-info?mediaType=video|photo` answers
+ * `{ creator, privacyLevels, postingLimits, commercialContentTypes }`.
+ *
+ * ── THE SHAPE THAT WAS GOT WRONG TWICE ──
+ *
+ * The three interaction settings are NOT flags on `postingLimits`. They are
+ * one level deeper, under `postingLimits.interactionSettings`, and each is an
+ * object rather than a boolean:
+ *
+ *   allow_comment: { enabled: true, required: true, default: false,
+ *                    label: "Allow Comment" }
+ *
+ * `default` is what the ACCOUNT does when nobody touches it — and on the live
+ * account this was captured from, all three are FALSE. Reading flat keys found
+ * none of them and fell back to "nothing is turned off", so the window offered
+ * comments, duets and stitches as on for a creator whose own account has them
+ * off: the exact failure the endpoint fix was made to end, one field deeper.
+ *
+ * `enabled: false` means a person may not change it at all, so the window
+ * shows it disabled under TikTok's own label rather than hiding it.
+ * `required` needs nothing here: `tiktokSettingsFor` puts all three in every
+ * TikTok body already, so a required field is always sent.
+ *
+ * The old flat reading is kept underneath, as a fallback for an older or
+ * different response — but it is no longer what the parser looks at first.
+ *
+ * `commercialContentTypes[].requires` (`is_brand_organic_post`,
+ * `brand_partner_promote`) is deliberately dropped: Zernio's docs say
+ * `commercial_content_type` is sufficient on its own — `brand_organic` implies
+ * `is_brand_organic_post` and `brand_content` implies `brand_partner_promote`
+ * — so sending them again would be us restating what the provider infers.
+ */
+export function readCreatorInfo(raw: unknown): {
+  privacy: ChannelChoice[]
+  commercial: ChannelChoice[]
+  interactions: TikTokInteractions | null
+  interactionRules: TikTokInteractionRules | null
+  maxVideoDurationSec: number | null
+  creator: { name: string | null; avatarUrl: string | null } | null
+} {
+  const j = (raw ?? {}) as Record<string, unknown>
+  const info = (j.creatorInfo ?? j.creator_info ?? j) as Record<string, unknown>
+  const pick = (...names: string[]): unknown => {
+    for (const n of names) {
+      if (info[n] !== undefined) return info[n]
+      if (j[n] !== undefined) return j[n]
+    }
+    return undefined
+  }
+
+  const privacy = readChoices(pick('privacyLevels', 'privacy_levels'), {
+    id: ['value', 'level', 'id'], label: ['label', 'name'],
+  }).map(c => ({ value: c.value, label: TIKTOK_PRIVACY_LABELS[c.value as TikTokPrivacy] ?? c.label }))
+
+  const commercial = readChoices(pick('commercialContentTypes', 'commercial_content_types'), {
+    id: ['value', 'type', 'id'], label: ['label', 'name'],
+  }).map(c => ({
+    value: c.value,
+    label: COMMERCIAL_CONTENT_LABELS[c.value as CommercialContentType] ?? c.label,
+  }))
+
+  const limits = (pick('postingLimits', 'posting_limits') ?? {}) as Record<string, unknown>
+  const nested = limits.interactionSettings ?? limits.interaction_settings ?? {}
+  const settings = nested as Record<string, unknown>
+
+  /** one setting, as TikTok sends it: `{ enabled, required, default, label }` */
+  const read = (
+    key: 'allow_comment' | 'allow_duet' | 'allow_stitch',
+    fallbackLabel: string,
+  ): { value: boolean; rule: TikTokInteractionRule } | null => {
+    const entry = settings[key] as Record<string, unknown> | undefined
+    if (entry && typeof entry === 'object') {
+      const enabled = entry.enabled !== false
+      return {
+        // `default` is the account's own answer; a setting that cannot be
+        // changed is whatever `enabled` leaves it as
+        value: typeof entry.default === 'boolean' ? entry.default : enabled,
+        rule: {
+          enabled,
+          required: entry.required === true,
+          label: typeof entry.label === 'string' && entry.label ? entry.label : fallbackLabel,
+        },
+      }
+    }
+    // ── the older, flat shape ──
+    const camel = key.replace(/_(.)/g, (_, c: string) => c.toUpperCase())
+    const flat = limits[key] ?? limits[camel]
+    if (typeof flat === 'boolean') {
+      return { value: flat, rule: { enabled: true, required: false, label: fallbackLabel } }
+    }
+    const offKey = key.replace('allow_', '') + '_disabled'
+    const offCamel = offKey.replace(/_(.)/g, (_, c: string) => c.toUpperCase())
+    const disabled = limits[offKey] ?? limits[offCamel]
+    if (typeof disabled === 'boolean') {
+      return { value: !disabled, rule: { enabled: true, required: false, label: fallbackLabel } }
+    }
+    return null
+  }
+
+  const comment = read('allow_comment', 'Allow Comment')
+  const duet = read('allow_duet', 'Allow Duet')
+  const stitch = read('allow_stitch', 'Allow Stitch')
+
+  // no answer at all is NO ANSWER — never "everything is allowed"
+  const interactions: TikTokInteractions | null = (comment || duet || stitch)
+    ? {
+      allowComment: comment?.value ?? true,
+      allowDuet: duet?.value ?? true,
+      allowStitch: stitch?.value ?? true,
+    }
+    : null
+  const anyRule: TikTokInteractionRule = { enabled: true, required: false, label: '' }
+  const interactionRules: TikTokInteractionRules | null = interactions
+    ? {
+      allowComment: comment?.rule ?? { ...anyRule, label: 'Allow Comment' },
+      allowDuet: duet?.rule ?? { ...anyRule, label: 'Allow Duet' },
+      allowStitch: stitch?.rule ?? { ...anyRule, label: 'Allow Stitch' },
+    }
+    : null
+
+  const seconds = limits.maxVideoDurationSec ?? limits.max_video_duration_sec
+    ?? limits.maxVideoPostDurationSec ?? limits.max_video_post_duration_sec
+  const maxVideoDurationSec = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? Math.trunc(seconds)
+    : null
+
+  const who = (pick('creator') ?? {}) as Record<string, unknown>
+  const name = typeof who.nickname === 'string' ? who.nickname
+    : typeof who.name === 'string' ? who.name : null
+  const avatarUrl = typeof who.avatarUrl === 'string' ? who.avatarUrl
+    : typeof who.avatar_url === 'string' ? who.avatar_url : null
+  const creator = name || avatarUrl ? { name, avatarUrl } : null
+
+  return { privacy, commercial, interactions, interactionRules, maxVideoDurationSec, creator }
+}
+
+/** Rows come back from the provider under whichever names that endpoint uses;
+ *  this reads them all rather than pinning one spelling that a later version
+ *  of their API quietly renames. */
+export function readChoices(
+  raw: unknown,
+  keys: { id: string[]; label: string[] },
+): ChannelChoice[] {
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as Record<string, unknown> | null)?.data)
+      ? (raw as { data: unknown[] }).data
+      : []
+  const out: ChannelChoice[] = []
+  for (const row of list) {
+    if (typeof row === 'string') { out.push({ value: row, label: row }); continue }
+    const r = (row ?? {}) as Record<string, unknown>
+    const value = keys.id.map(k => r[k]).find(v => typeof v === 'string' && v)
+    if (typeof value !== 'string') continue
+    const label = keys.label.map(k => r[k]).find(v => typeof v === 'string' && v)
+    out.push({ value, label: typeof label === 'string' ? label : value })
+  }
+  return out.slice(0, 100)
 }
 
 export type ReplyButton = { type?: string; title: string; url?: string; payload?: string }
@@ -434,6 +674,60 @@ class ZernioPublisher implements Publisher {
     return { url: publicUrl, type }
   }
 
+  /**
+   * The four per-account lists, from the four endpoints Zernio documents.
+   *
+   * One network per call — asking YouTube for Facebook Pages is a 404 and a
+   * wasted second. Every one of them goes through `getJson`, so a missing or
+   * unavailable endpoint is an EMPTY list rather than a window that will not
+   * open: the composer can always fall back to typing, and a post with no
+   * playlist is still a post.
+   */
+  async channelOptions(
+    id: string, platform: string, mediaType: 'video' | 'photo' = 'video',
+  ): Promise<ChannelOptions> {
+    const out: ChannelOptions = { ...NO_CHANNEL_OPTIONS }
+    const account = encodeURIComponent(id)
+    if (platform === 'youtube') {
+      const json = await this.getJson(`/accounts/${account}/youtube-playlists`) as Record<string, unknown> | null
+      out.playlists = readChoices(json?.playlists ?? json, {
+        id: ['id', '_id', 'playlistId'], label: ['title', 'name'],
+      })
+    }
+    if (platform === 'linkedin') {
+      const json = await this.getJson(`/accounts/${account}/linkedin-organizations`) as Record<string, unknown> | null
+      out.organizations = readChoices(json?.organizations ?? json, {
+        id: ['urn', 'organizationUrn', 'id', '_id'], label: ['name', 'localizedName', 'title'],
+      })
+        // LinkedIn's lists hand back a bare id as often as a URN, and a bare
+        // id posts as the person rather than as the company
+        .map(c => ({ ...c, value: asOrganizationUrn(c.value) ?? '' }))
+        .filter(c => c.value)
+    }
+    if (platform === 'facebook') {
+      const json = await this.getJson(`/accounts/${account}/facebook-page`) as Record<string, unknown> | null
+      out.pages = readChoices(json?.pages ?? json?.page ?? json, {
+        id: ['pageId', 'id', '_id'], label: ['name', 'pageName', 'title'],
+      })
+    }
+    if (platform === 'tiktok') {
+      // the creator's OWN allowed values. TikTok decides per account which
+      // privacy levels a creator may use — a new or restricted account may
+      // not post publicly at all — and sending one they may not is a refusal
+      // hours later, on the one network that also demands a consent tick.
+      const json = await this.getJson(
+        `/accounts/${account}/tiktok/creator-info?mediaType=${mediaType}`)
+      const info = readCreatorInfo(json)
+      out.privacy = info.privacy
+      out.commercial = info.commercial
+      out.interactions = info.interactions
+      out.interactionRules = info.interactionRules
+      out.maxVideoDurationSec = info.maxVideoDurationSec
+      out.creator = info.creator
+    }
+    return out
+  }
+
   async createPost(input: CreatePostInput): Promise<PublishOutcome> {
     const body = buildPostBody({
       caption: input.caption,
@@ -508,9 +802,99 @@ class UnconfiguredPublisher implements Publisher {
   async createPost(): Promise<PublishOutcome> {
     return { kind: 'permanent', message: 'No publishing provider is configured' }
   }
+
+  async channelOptions(): Promise<ChannelOptions> {
+    return { ...NO_CHANNEL_OPTIONS }
+  }
+}
+
+/**
+ * The provider with the network taken out — the test harness's publisher.
+ *
+ * Publishing is the one action this system cannot undo, so "the test suite
+ * must not post to a real account" is enforced HERE rather than by every test
+ * remembering to mock the module. With PUBLISH_DRY_RUN=1 the provider itself
+ * answers: a fake post id derived from the job's own request id (so a retry
+ * of the same job gets the same id, exactly as the real idempotency does),
+ * and not a single fetch.
+ *
+ * It inherits the unconfigured publisher, so anything the flow does NOT touch
+ * still refuses loudly instead of pretending to work.
+ */
+function dryRunPublisher(): Publisher {
+  // everything the flow does NOT touch still refuses loudly, so a dry run
+  // cannot quietly pretend a whole feature works
+  const base = new UnconfiguredPublisher()
+  return Object.assign(Object.create(base) as Publisher, {
+    name: 'dry-run',
+    configured: () => true,
+    createPost: async (input: CreatePostInput): Promise<PublishOutcome> =>
+      ({ kind: 'published' as const, postId: `dry-run-${input.requestId}`, replayed: false }),
+    accountHealth: async (providerAccountId: string) =>
+      ({ ok: true, accountId: providerAccountId, dryRun: true }),
+    deletePost: async () => ({ ok: true, dryRun: true }),
+    uploadMedia: async (input: { filename: string; contentType: string }): Promise<MediaItem> =>
+      ({ url: `https://dry-run.invalid/${input.filename}`, type: mediaTypeFor(input.contentType) ?? 'image' }),
+    // the four per-account lists, answered without a socket: enough for the
+    // composer to draw a real select in a test, and obviously fake in it
+    channelOptions: async (id: string, platform: string): Promise<ChannelOptions> => {
+      // TikTok's answer is shaped like the real endpoint's, read through the
+      // same parser: an ordinary creator with duets turned off, so a dry run
+      // exercises the part that matters — the window seeding a tick box from
+      // what the ACCOUNT allows rather than from what we assume.
+      const tiktok = platform === 'tiktok'
+        ? readCreatorInfo({
+          // the REAL response's shape, read through the same parser: an
+          // account whose own answer to all three interactions is "no", which
+          // is what the live capture this was verified against says
+          creator: { nickname: 'Dry run creator', avatarUrl: 'https://dry-run.invalid/a.jpg' },
+          privacyLevels: [
+            { value: 'PUBLIC_TO_EVERYONE', label: 'Public To Everyone' },
+            { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Mutual Follow Friends' },
+            { value: 'SELF_ONLY', label: 'Self Only' },
+          ],
+          postingLimits: {
+            maxVideoDurationSec: 3600,
+            interactionSettings: {
+              allow_comment: { enabled: true, required: true, default: false, label: 'Allow Comment' },
+              allow_duet: { enabled: true, required: true, default: false, label: 'Allow Duet' },
+              allow_stitch: { enabled: true, required: true, default: false, label: 'Allow Stitch' },
+            },
+          },
+          commercialContentTypes: [
+            { value: 'none', label: 'No Commercial Content' },
+            { value: 'brand_organic', label: 'Your Brand', requires: ['is_brand_organic_post'] },
+            { value: 'brand_content', label: 'Branded Content', requires: ['brand_partner_promote'] },
+          ],
+        })
+        : {
+          privacy: [], commercial: [], interactions: null, interactionRules: null,
+          maxVideoDurationSec: null, creator: null,
+        }
+      return {
+        playlists: platform === 'youtube' ? [{ value: 'dry-run-playlist', label: 'Dry run playlist' }] : [],
+        organizations: platform === 'linkedin'
+          ? [{ value: 'urn:li:organization:1', label: 'Dry run company' }] : [],
+        pages: platform === 'facebook' ? [{ value: `dry-run-page-${id}`, label: 'Dry run Page' }] : [],
+        ...tiktok,
+      }
+    },
+  })
+}
+
+/**
+ * Is the dry run on? Exactly the string '1', nothing else.
+ *
+ * Loose truthiness here would be a foot-gun pointed at the client's account:
+ * a stray PUBLISH_DRY_RUN=0 or =false read as "on" would stop every real post
+ * going out while every screen reported success.
+ */
+export function isPublishDryRun(): boolean {
+  return process.env.PUBLISH_DRY_RUN === '1'
 }
 
 export function getPublisher(): Publisher {
+  if (isPublishDryRun()) return dryRunPublisher()
   const zernio = new ZernioPublisher()
   return zernio.configured() ? zernio : new UnconfiguredPublisher()
 }

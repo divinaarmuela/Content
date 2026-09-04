@@ -31,8 +31,8 @@ import type {
 import { CLIENT_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { slidesOf } from '../lib/version-files-core'
 import {
-  visibleBatches, visibleClientIdsOf, visibleGroups, visibleItems,
-  type ScopeContext, type ScopeViewer,
+  scopeContextOf, taggedIdsOf, visibleBatches, visibleClientIdsOf, visibleGroups,
+  visibleItems, type ScopeContext, type ScopeViewer,
 } from '../lib/scope-client'
 
 /** A board row: the item, its joins and the items API's three annotations. */
@@ -148,12 +148,14 @@ export function useWorkRows(
   }, [viewer, t.itemComments.rows, t.batchComments.rows])
 
   /** every item/shoot tag, resolved or not — assignment, which outlives being
-   *  answered (`taggedItemIds` / `taggedBatchIds` on the server) */
+   *  answered (`taggedItemIds` / `taggedBatchIds` on the server). Read through
+   *  the shared helper so the boards, the items route and the Schedule page
+   *  cannot drift on what counts as a tag. */
   const tagAssignments = useMemo(() => {
     if (!viewer || viewer.role === 'client') return { items: [] as string[], batches: [] as string[] }
     return {
-      items: [...new Set(t.itemComments.rows.filter(c => c.assigned_to === viewer.id).map(c => c.item_id).filter(Boolean))],
-      batches: [...new Set(t.batchComments.rows.filter(c => c.assigned_to === viewer.id).map(c => c.batch_id).filter(Boolean))],
+      items: taggedIdsOf(t.itemComments.rows, viewer.id, 'item_id'),
+      batches: taggedIdsOf(t.batchComments.rows, viewer.id, 'batch_id'),
     }
   }, [viewer, t.itemComments.rows, t.batchComments.rows])
 
@@ -199,13 +201,14 @@ export function useWorkRows(
       viewer,
       t.items.rows as unknown as (ContentItem & { work_kinds?: null })[],
       t.assignments.rows,
-      {
+      scopeContextOf({
+        viewer,
         batches: t.batches.rows,
         taggedItemIds: tagAssignments.items,
         taggedBatchIds: tagAssignments.batches,
         workKinds: t.workKinds.rows,
         schedulerPostFilter,
-      },
+      }),
     )
     const openTasks = new Set(tagged.items)
     return scoped.map(r => {

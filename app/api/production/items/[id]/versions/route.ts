@@ -109,13 +109,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Never fatal. The version is saved and mirrored either way; a failure
     // here (a race with the manager's own click, most likely) leaves the item
     // where it was rather than losing the upload.
+    //
+    // ── …and a new cut on a piece the client has ALREADY APPROVED ──
+    //
+    // Same failure, one stage later and worse: the schedule's media rail and
+    // the composer's Approved tab read the LATEST version of an approved
+    // item, so v4 uploaded here would appear on the calendar wearing a
+    // "Client approved" badge and go out without the client ever seeing it.
+    // The piece goes back to them, exactly as it does from the composer's
+    // media picker, and they are emailed the same plain sentence.
     let status = item.status as string
-    if (item.status === 'client_review') {
+    const backTo = item.status === 'client_review' ? 'internal_review'
+      : item.status === 'approved_for_scheduling' ? 'client_review'
+      : null
+    if (backTo) {
       try {
-        const moved = await performTransition(user, item as ContentItem, 'internal_review')
+        // `auto: true`: these edges are the app's own move, and nothing may
+        // reach them by pressing something
+        const moved = await performTransition(user, item as ContentItem, backTo, { auto: true })
         status = moved.status
       } catch (e) {
-        console.error('new version while with the client — could not send it back:', e)
+        console.error('new version — could not move the piece back:', e)
       }
     }
     announceItemChange({ item_id: id, client_id: item.client_id, status, kind: 'version' })

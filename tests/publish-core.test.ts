@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
   availableKinds, autoKindFor, describeRemoteOutcome, isStillProcessing, SUPPORTED_PLATFORMS,
+  cleanTags, optionProblems, tagsLength, tiktokSettingsFor, youtubeDefaults,
+  asOrganizationUrn, isOrganizationUrn,
+  TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -484,7 +487,21 @@ describe('a channel with its own media and words', () => {
       ],
     })
     expect(body.mediaItems).toEqual(vid(1))
-    expect(body.platforms[0]).toEqual({ platform: 'youtube', accountId: 'y' })
+    // YouTube alone is never bare: it will not take a video without a title,
+    // a category and an answer about children, so a post nobody opened the
+    // options for still carries all three
+    expect(body.platforms[0]).toEqual({
+      platform: 'youtube',
+      accountId: 'y',
+      platformSpecificData: {
+        title: 'long caption for everyone',
+        categoryId: '22',
+        madeForKids: false,
+        // WHO CAN WATCH is not in here: a channel that publishes privately by
+        // default must not start publishing to the world because of a default
+        // we invented
+      },
+    })
     expect(body.platforms[1].customMedia).toEqual([{ url: 'https://x/short.mp4', type: 'video' }])
     expect(body.platforms[1].customContent).toBeUndefined()
     expect(body.platforms[2].customContent).toBe('short one')
@@ -551,5 +568,365 @@ describe('a TikTok upload the platform is still processing is a wait, not a fail
     expect(o.pendingPlatforms).toEqual(['tiktok'])
     expect(o.error).toMatch(/^Did not go out — linkedin: Publishing timed out/)
     expect(o.error).toMatch(/Still going out on tiktok/)
+  })
+})
+
+
+/**
+ * THE PER-NETWORK POSTING OPTIONS.
+ *
+ * Two failures are being guarded against, and they fail in opposite ways.
+ * A field sent to a network that does not have it is a 400 from Meta naming
+ * it — a post that never happens, hours after anybody was watching. A field
+ * NOT sent is a control in the window that silently does nothing. So each one
+ * is asserted both ways: it lands where it belongs, and nowhere else.
+ */
+describe('per-network options land where the network takes them', () => {
+  it('sends Instagram its own settings and nobody else theirs', () => {
+    const out = toPlatformData({
+      kind: 'reel', trialGraduation: 'SS_PERFORMANCE', audioName: 'Our sound',
+      collaborators: ['acme'], title: 'nope', organizationUrn: 'urn:li:organization:1',
+    }, 'instagram')
+    expect(out).toEqual({
+      trialParams: { graduationStrategy: 'SS_PERFORMANCE' },
+      audioName: 'Our sound',
+      collaborators: ['acme'],
+    })
+  })
+
+  it('keeps a trial Reel off anything that is not a Reel', () => {
+    for (const kind of ['story', 'carousel', 'feed'] as const) {
+      const out = toPlatformData({ kind, trialGraduation: 'MANUAL', audioName: 'x' }, 'instagram')
+      expect(out?.trialParams).toBeUndefined()
+      expect(out?.audioName).toBeUndefined()
+    }
+  })
+
+  it('sends YouTube its title, visibility, tags, category and playlist', () => {
+    expect(toPlatformData({
+      title: 'A morning in the roastery', visibility: 'unlisted', madeForKids: false,
+      tags: ['#coffee', 'coffee', ' melbourne '], categoryId: '27', playlistId: 'PL1',
+      containsSyntheticMedia: true, firstComment: 'first!',
+    }, 'youtube')).toEqual({
+      title: 'A morning in the roastery',
+      visibility: 'unlisted',
+      madeForKids: false,
+      // no duplicates, no leading hash, no stray spaces
+      tags: ['coffee', 'melbourne'],
+      categoryId: '27',
+      playlistId: 'PL1',
+      containsSyntheticMedia: true,
+      firstComment: 'first!',
+    })
+  })
+
+  it('never sends a YouTube setting to Instagram or a LinkedIn one to YouTube', () => {
+    expect(toPlatformData({ visibility: 'private', tags: ['a'] }, 'instagram')).toBeNull()
+    expect(toPlatformData({ organizationUrn: 'urn:li:organization:1' }, 'youtube')).toBeNull()
+    expect(toPlatformData({ collaborators: ['acme'] }, 'linkedin')).toBeNull()
+  })
+
+  it('gives LinkedIn its company page, link preview and document name', () => {
+    expect(toPlatformData({
+      organizationUrn: 'urn:li:organization:9', disableLinkPreview: true, documentTitle: 'Deck',
+    }, 'linkedin')).toEqual({
+      organizationUrn: 'urn:li:organization:9',
+      disableLinkPreview: true,
+      documentTitle: 'Deck',
+    })
+  })
+
+  it("nests Facebook's draft flag where Zernio wants it, and titles Reels only", () => {
+    expect(toPlatformData({ kind: 'reel', pageId: '123', title: 'Reel one', facebookDraft: true }, 'facebook'))
+      .toEqual({
+        contentType: 'reel', pageId: '123', title: 'Reel one', facebookSettings: { draft: true },
+      })
+    // a feed post has no title on Facebook — sending one is a field Facebook
+    // does not know on that surface
+    expect(toPlatformData({ kind: 'feed', title: 'Reel one' }, 'facebook')).toBeNull()
+  })
+
+  it('keeps collaborators off a Story, which cannot have any', () => {
+    // Meta answers the field with a 400 and the post never goes out — the
+    // same class of failure as a location on a Story
+    expect(toPlatformData({ kind: 'story', collaborators: ['acme'] }, 'instagram'))
+      .toEqual({ contentType: 'story' })
+    expect(toPlatformData({ kind: 'feed', collaborators: ['acme'] }, 'instagram'))
+      .toEqual({ collaborators: ['acme'] })
+  })
+
+  it('refuses a company page that is not one, and takes a bare id as one', () => {
+    expect(isOrganizationUrn('urn:li:organization:99')).toBe(true)
+    expect(isOrganizationUrn('99')).toBe(false)
+    expect(isOrganizationUrn('urn:li:person:99')).toBe(false)
+    expect(asOrganizationUrn('99')).toBe('urn:li:organization:99')
+    expect(asOrganizationUrn('Acme Pty Ltd')).toBeNull()
+    // …and a bare id that reached the options anyway is not sent: posting as
+    // "99" posts as the person, quietly
+    expect(toPlatformData({ organizationUrn: '99' }, 'linkedin')).toBeNull()
+    expect(toPlatformData({ organizationUrn: 'urn:li:organization:99' }, 'linkedin'))
+      .toEqual({ organizationUrn: 'urn:li:organization:99' })
+  })
+
+  it('keeps a first comment off a Story, which has no comments to put it under', () => {
+    expect(toPlatformData({ kind: 'story', firstComment: '#tags' }, 'instagram'))
+      .toEqual({ contentType: 'story' })
+    expect(toPlatformData({ kind: 'story', firstComment: '#tags' }, 'facebook'))
+      .toEqual({ contentType: 'story' })
+  })
+
+  it('trims a title to what YouTube takes rather than sending one it refuses', () => {
+    const long = 'x'.repeat(140)
+    expect((toPlatformData({ title: long }, 'youtube') ?? {}).title)
+      .toHaveLength(YOUTUBE_TITLE_MAX)
+  })
+
+  it('counts tags the way YouTube does — all of them together', () => {
+    expect(cleanTags(['#one', 'one', ' two '])).toEqual(['one', 'two'])
+    expect(tagsLength(['one', 'two'])).toBe('one,two'.length)
+    expect(tagsLength([])).toBe(0)
+  })
+})
+
+describe('one channel per network in one post', () => {
+  // everything per-channel in the body is keyed by network — the options, the
+  // media override, the words, and TikTok's settings block, which is top
+  // level and singular. Two accounts on one network share one set of answers,
+  // so the second one's choices would be neither checked nor sent.
+  it('refuses a second channel on the same network, in a sentence', () => {
+    const issues = validatePost({
+      caption: 'hello', media: img(1), platforms: ['instagram', 'instagram'],
+    })
+    expect(issues.map(i => i.problem).join(' '))
+      .toMatch(/Two Instagram channels in one post is not something this can send yet/)
+  })
+
+  it('says it once, however many there are, and leaves one channel alone', () => {
+    const many = validatePost({
+      caption: 'hello', media: img(1), platforms: ['tiktok', 'tiktok', 'tiktok'],
+    }).filter(i => i.problem.startsWith('Two '))
+    expect(many).toHaveLength(1)
+    expect(validatePost({ caption: 'hello', media: img(1), platforms: ['instagram'] }))
+      .toEqual([])
+  })
+})
+
+describe('TikTok settings — top level, and never half sent', () => {
+  it('posts publicly, with comments, duets and stitches, when nobody touches anything', () => {
+    expect(tiktokSettingsFor(undefined)).toEqual(TIKTOK_DEFAULTS)
+    expect(tiktokSettingsFor({}).express_consent_given).toBe(true)
+    expect(tiktokSettingsFor({}).content_preview_confirmed).toBe(true)
+  })
+
+  it('carries every choice somebody made', () => {
+    expect(tiktokSettingsFor({
+      privacyLevel: 'SELF_ONLY', allowComment: false, allowDuet: false, allowStitch: false,
+      commercialContentType: 'brand_content', videoMadeWithAi: true, tiktokDraft: true,
+      autoAddMusic: false, photoCoverIndex: 2, tiktokDescription: '  words  ',
+    })).toEqual({
+      privacy_level: 'SELF_ONLY',
+      allow_comment: false,
+      allow_duet: false,
+      allow_stitch: false,
+      content_preview_confirmed: true,
+      express_consent_given: true,
+      commercial_content_type: 'brand_content',
+      video_made_with_ai: true,
+      draft: true,
+      auto_add_music: false,
+      photo_cover_index: 2,
+      description: 'words',
+    })
+  })
+
+  it('takes a cover PICTURE over a cover MOMENT, never both', () => {
+    const both = tiktokSettingsFor({
+      videoCoverImageUrl: 'https://x/c.jpg', videoCoverTimestampMs: 2000,
+    })
+    expect(both.video_cover_image_url).toBe('https://x/c.jpg')
+    expect(both.video_cover_timestamp_ms).toBeUndefined()
+    expect(tiktokSettingsFor({ videoCoverTimestampMs: 2000 }).video_cover_timestamp_ms).toBe(2000)
+    // a negative or unreadable moment is no moment at all
+    expect(tiktokSettingsFor({ videoCoverTimestampMs: -5 }).video_cover_timestamp_ms).toBeUndefined()
+  })
+
+  it('puts the block at the TOP LEVEL of the body, from the TikTok target', () => {
+    const body = buildPostBody({
+      caption: 'hi', media: vid(1), scheduledFor: null,
+      targets: [
+        { platform: 'instagram', accountId: 'i' },
+        { platform: 'tiktok', accountId: 't', options: { privacyLevel: 'SELF_ONLY', tiktokConsent: true } },
+      ],
+    })
+    expect(body.tiktokSettings?.privacy_level).toBe('SELF_ONLY')
+    // the tick is ours, not TikTok's field name: it never travels as itself
+    expect(JSON.stringify(body)).not.toContain('tiktokConsent')
+    expect(body.platforms[1].platformSpecificData).toBeUndefined()
+  })
+
+  it('sends no TikTok block at all when no TikTok account is in the post', () => {
+    const body = buildPostBody({
+      caption: 'hi', media: img(1), scheduledFor: null,
+      targets: [{ platform: 'instagram', accountId: 'i' }],
+    })
+    expect(body.tiktokSettings).toBeUndefined()
+  })
+})
+
+describe('a YouTube cover picture rides on the media', () => {
+  it('gives YouTube its own copy of the media with the thumbnail on it', () => {
+    const body = buildPostBody({
+      caption: 'hello', media: vid(1), scheduledFor: null,
+      targets: [
+        { platform: 'youtube', accountId: 'y', options: { thumbnailUrl: 'https://x/cover.jpg' } },
+        { platform: 'instagram', accountId: 'i' },
+      ],
+    })
+    expect(body.platforms[0].customMedia)
+      .toEqual([{ ...vid(1)[0], thumbnail: 'https://x/cover.jpg' }])
+    // everybody else keeps the shared set, untouched
+    expect(body.mediaItems).toEqual(vid(1))
+    expect(body.platforms[1].customMedia).toBeUndefined()
+    // and it is never a setting: Zernio takes it on the media item
+    expect(body.platforms[0].platformSpecificData?.thumbnailUrl).toBeUndefined()
+    expect(body.platforms[0].platformSpecificData?.instagramThumbnail).toBeUndefined()
+  })
+
+  it('does not put one on a Short, which has none', () => {
+    const body = buildPostBody({
+      caption: 'hello', media: vid(1), scheduledFor: null,
+      targets: [{
+        platform: 'youtube', accountId: 'y',
+        options: { kind: 'reel', thumbnailUrl: 'https://x/cover.jpg' },
+      }],
+    })
+    expect(body.platforms[0].customMedia).toBeUndefined()
+  })
+})
+
+describe('YouTube never goes out half-addressed', () => {
+  it('titles the video with the first line of the caption', () => {
+    expect(youtubeDefaults('A morning in the roastery\nsecond line')).toEqual({
+      title: 'A morning in the roastery',
+      categoryId: '22',
+      madeForKids: false,
+    })
+  })
+
+  it('lets a chosen title, category or visibility win over the default', () => {
+    const body = buildPostBody({
+      caption: 'the caption', media: vid(1), scheduledFor: null,
+      targets: [{
+        platform: 'youtube', accountId: 'y',
+        options: { title: 'Chosen', visibility: 'private', categoryId: '10' },
+      }],
+    })
+    expect(body.platforms[0].platformSpecificData).toEqual({
+      title: 'Chosen', visibility: 'private', categoryId: '10', madeForKids: false,
+    })
+    // and nothing decides "who can watch" on a post where nobody did
+    expect(youtubeDefaults('the caption').visibility).toBeUndefined()
+  })
+
+  it('leaves the title out rather than inventing one when there are no words', () => {
+    expect(youtubeDefaults('   ').title).toBeUndefined()
+  })
+})
+
+describe('what the options themselves get wrong, in plain words', () => {
+  const problems = (platform: Parameters<typeof optionProblems>[0], o: Parameters<typeof optionProblems>[1],
+    media?: Parameters<typeof optionProblems>[2], caption?: string) =>
+    optionProblems(platform, o, media, caption ?? 'some words')
+
+  it('refuses a Story carrying a place — Instagram refuses the post, not the field', () => {
+    expect(problems('instagram', { kind: 'story', locationId: '12345678' }).join(' '))
+      .toMatch(/Story with a place/)
+    expect(problems('instagram', { kind: 'feed', locationId: '12345678' })).toEqual([])
+  })
+
+  it('says a Story cannot have a first comment', () => {
+    expect(problems('instagram', { kind: 'story', firstComment: '#tags' }).join(' '))
+      .toMatch(/no comments/)
+  })
+
+  it('names both numbers when a YouTube title is too long', () => {
+    const out = problems('youtube', { title: 'x'.repeat(120) })
+    expect(out.join(' ')).toContain('120')
+    expect(out.join(' ')).toContain('100')
+  })
+
+  it('counts YouTube tags together, the way YouTube does', () => {
+    const many = Array.from({ length: 60 }, (_, i) => `tag-number-${i}`)
+    expect(problems('youtube', { title: 'ok', tags: many }).join(' '))
+      .toMatch(/500 for the lot/)
+    expect(problems('youtube', { title: 'ok', tags: ['coffee'] })).toEqual([])
+  })
+
+  it('asks for a YouTube title when there are no words to take one from', () => {
+    expect(optionProblems('youtube', {}, [], '').join(' ')).toMatch(/needs a title/)
+    expect(optionProblems('youtube', {}, [], 'some words')).toEqual([])
+  })
+
+  it('will not let a paid partnership be posted where only the account can see it', () => {
+    expect(problems('tiktok', {
+      tiktokConsent: true, commercialContentType: 'brand_content', privacyLevel: 'SELF_ONLY',
+    }).join(' ')).toMatch(/paid partnership/)
+    // …and is happy the moment either half changes
+    expect(problems('tiktok', {
+      tiktokConsent: true, commercialContentType: 'brand_content', privacyLevel: 'PUBLIC_TO_EVERYONE',
+    })).toEqual([])
+    expect(problems('tiktok', {
+      tiktokConsent: true, commercialContentType: 'none', privacyLevel: 'SELF_ONLY',
+    })).toEqual([])
+  })
+
+  it('holds a TikTok post until somebody has ticked the box', () => {
+    expect(problems('tiktok', {}).join(' ')).toMatch(/Tick the TikTok box/)
+    expect(problems('tiktok', { tiktokConsent: true })).toEqual([])
+  })
+
+  it('says when the TikTok cover is a picture the post does not have', () => {
+    const three = img(3)
+    expect(problems('tiktok', { tiktokConsent: true, photoCoverIndex: 4 }, three).join(' '))
+      .toMatch(/cover is picture 5, and this post has 3/)
+    expect(problems('tiktok', { tiktokConsent: true, photoCoverIndex: 2 }, three)).toEqual([])
+  })
+
+  it('says a Story cannot have collaborators, rather than sending them', () => {
+    expect(problems('instagram', { kind: 'story', collaborators: ['acme'] }).join(' '))
+      .toMatch(/Story cannot have collaborators/)
+    expect(problems('instagram', { kind: 'reel', collaborators: ['acme'] })).toEqual([])
+  })
+
+  it('says when a company page is not one', () => {
+    expect(problems('linkedin', { organizationUrn: '99' }).join(' '))
+      .toMatch(/does not look like a company page/)
+    expect(problems('linkedin', { organizationUrn: 'urn:li:organization:99' })).toEqual([])
+  })
+
+  it('mentions a LinkedIn document name only when there is no document', () => {
+    expect(problems('linkedin', { documentTitle: 'Deck' }, img(1)).join(' '))
+      .toMatch(/no PDF/)
+    expect(problems('linkedin', { documentTitle: 'Deck' },
+      [{ url: 'https://x/a.pdf', type: 'document' }])).toEqual([])
+  })
+
+  it('judges an options-blind caller on the media and the words alone', () => {
+    // the ad-hoc publish endpoint knows nothing about per-network options; it
+    // must not start refusing every TikTok post for a tick it never collects
+    expect(validatePost({ caption: 'a', media: vid(1), platforms: ['tiktok'] })).toEqual([])
+    // …while the composer's path, which DOES collect them, answers for the tick
+    expect(validatePost({
+      caption: 'a', media: vid(1), platforms: ['tiktok'], optionsByPlatform: {},
+    }).map(i => i.problem).join(' ')).toMatch(/Tick the TikTok box/)
+  })
+
+  it('reports them through validatePost, named by channel', () => {
+    const issues = validatePost({
+      caption: 'hello', media: vid(1), platforms: ['tiktok'],
+      optionsByPlatform: { tiktok: {} },
+    })
+    expect(issues.some(i => i.platform === 'tiktok' && /Tick the TikTok box/.test(i.problem)))
+      .toBe(true)
   })
 })

@@ -37,6 +37,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params
   const body = await req.json()
+  // `instagram_locations` is deliberately NOT here: it is a LIST, and a PATCH
+  // that carries the whole list is a read-modify-write — two managers editing
+  // a client's places at once and one edit silently disappearing. It has its
+  // own route (`/api/clients/[id]/instagram-locations`) that takes one place
+  // at a time and applies it under a claim.
   const allowed = ['name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'website', 'status', 'notes', 'clerk_user_id', 'timezone'] as const
   const patch: Record<string, unknown> = {}
   for (const key of allowed) if (key in body) patch[key] = body[key]

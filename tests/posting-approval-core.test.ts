@@ -54,6 +54,13 @@ describe('the state machine: draft → pending → approved / → changes → pe
       expect(nextApprovalState(from, 'approve').ok).toBe(false)
     }
   })
+  it('reset: the answer goes wherever the post went, from any state', () => {
+    // the yes belonged to a POST; cancel that post and there is nothing left
+    // for the item's gate to be about
+    for (const from of [null, undefined, 'draft', 'pending', 'approved', 'changes', 'nonsense']) {
+      expect(nextApprovalState(from, 'reset')).toEqual({ ok: true, state: 'draft' })
+    }
+  })
   it('request_changes: only from pending, and it lands on changes', () => {
     expect(nextApprovalState('pending', 'request_changes')).toEqual({ ok: true, state: 'changes' })
     for (const from of [null, 'draft', 'approved', 'changes']) {

@@ -9,7 +9,7 @@
  * never what column changed.
  */
 
-import type { ItemStatus } from './workflow-core'
+import { TRANSITIONS, type ItemStatus } from './workflow-core'
 
 /** The overlay an item wears. The same three the detail page branches on. */
 export type ActivityKind = 'asset' | 'brief' | 'task'
@@ -81,6 +81,18 @@ export function describeActivity(row: ActivityRow, kind: ActivityKind): string |
         return kind === 'task' ? `Client approved — marked done by ${who}`
           : kind === 'brief' ? `The client's plan approval logged by ${who}`
           : `The client's approval logged by ${who}`
+      }
+      // An `auto` edge is the APP's own move and its label IS the reason —
+      // "Sent to the client by Ana" is indistinguishable from a manager
+      // pressing the button, and leaves nobody able to see WHY a piece the
+      // client had already approved is back in front of them. The detail
+      // carries the rule's words; every other line keeps the arrival words,
+      // because there `detail` is only the name of the button that was
+      // pressed and would say the same thing twice.
+      const rule = TRANSITIONS[row.old_value as ItemStatus]?.[row.new_value as ItemStatus]
+      if (rule?.auto) {
+        const why = String(row.detail ?? '').trim() || rule.label
+        return `${why} — ${who}`
       }
       const word = ARRIVED[kind][row.new_value as ItemStatus]
       return word ? `${word} by ${who}` : null

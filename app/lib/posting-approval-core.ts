@@ -52,7 +52,7 @@ export function publishBlockReason(state: unknown): string | null {
       : 'Send the post for approval first'
 }
 
-export type ApprovalAction = 'send' | 'approve' | 'request_changes'
+export type ApprovalAction = 'send' | 'approve' | 'request_changes' | 'reset'
 
 /**
  * The machine's edges. `from` is what the row holds now (null = never used).
@@ -63,6 +63,8 @@ export type ApprovalAction = 'send' | 'approve' | 'request_changes'
  *                    a double-click must not scold anyone)
  *   approve:         'pending' → 'approved'
  *   request_changes: 'pending' → 'changes'
+ *   reset:           anything → 'draft'
+ *                    (the post the answer belonged to is gone — see below)
  *
  * Approving something that was never sent is refused: an approval must be an
  * answer to a question somebody asked.
@@ -92,6 +94,17 @@ export function nextApprovalState(
         return { ok: false, reason: 'Nothing is waiting for approval on this post' }
       }
       return { ok: true, state: 'changes' }
+    case 'reset':
+      // The answer belonged to a POST, not to the item: cancel that post and
+      // the yes (or the ask, or the changes asked for) has nothing left to be
+      // about. Leaving it standing would let the next post on the same item
+      // inherit an approval nobody gave for its words and pictures — and let
+      // the ad-hoc composer publish through a gate that only looks open.
+      //
+      // Always succeeds. Resetting something already at 'draft' or never
+      // used is not an error, it is a no-op, and a cancel must never fail
+      // because of tidying up after itself.
+      return { ok: true, state: 'draft' }
   }
 }
 

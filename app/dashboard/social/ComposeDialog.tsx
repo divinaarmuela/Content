@@ -31,6 +31,7 @@ import {
 import PlatformIcon, { brandFor } from './PlatformIcon'
 import {
   validatePost, postWarnings, PLATFORM_RULES, isPlatform, availableKinds, autoKindFor,
+  TIKTOK_CONSENT_LINE, TIKTOK_CONSENT_TICK,
   // the per-format requirements are no longer restated here: the check panel
   // lists them per channel, from the same table the checks use
   type MediaItem, type Platform, type PostKind,
@@ -90,6 +91,16 @@ export default function ComposeDialog({
   const [firstComment, setFirstComment] = useState('')
   const [collaborators, setCollaborators] = useState('')
   const [thumbSeconds, setThumbSeconds] = useState('')
+  /**
+   * TikTok's one tick.
+   *
+   * Not a setting with a sensible default — a statement somebody makes. Every
+   * TikTok post carries `content_preview_confirmed` and
+   * `express_consent_given`, and this window used to send both as true with
+   * nobody having been shown the sentence. The post is refused until it is
+   * ticked, by `optionProblems` on the way out and by the disabled button here.
+   */
+  const [tiktokConsent, setTiktokConsent] = useState(false)
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -165,8 +176,13 @@ export default function ComposeDialog({
       : validatePost({
           caption, media, platforms, kinds,
           mediaByPlatform: perMedia, captionByPlatform: perCaption,
+          // the same options the targets below carry, so the sentence on the
+          // button is the sentence the server would answer with
+          optionsByPlatform: Object.fromEntries(
+            platforms.map(p => [p, p === 'tiktok' ? { tiktokConsent } : {}]),
+          ),
         })),
-    [caption, media, platforms, kinds, perMedia, perCaption]
+    [caption, media, platforms, kinds, perMedia, perCaption, tiktokConsent]
   )
   const warnings = useMemo(
     () => (platforms.length === 0 ? [] : postWarnings({ caption, media, kinds })),
@@ -388,6 +404,8 @@ export default function ComposeDialog({
               ...(thumbSeconds && Number(thumbSeconds) >= 0
                 ? { thumbOffset: Math.round(Number(thumbSeconds) * 1000) }
                 : {}),
+              // never asserted unless it was actually ticked
+              ...(p === 'tiktok' && tiktokConsent ? { tiktokConsent: true } : {}),
             },
             }
           }),
@@ -877,6 +895,22 @@ export default function ComposeDialog({
                   profile too.
                 </p>
               </div>
+
+              {/* TikTok will not take a post until whoever is sending it says
+                  they have seen how it will look. It is the one thing on this
+                  screen that is a statement rather than a setting. */}
+              {platforms.includes('tiktok') && (
+                <div className={`grid gap-2 rounded-inner border p-3 ${
+                  tiktokConsent ? 'border-border' : 'border-accent-amber/50 bg-tint-amber'
+                }`}>
+                  <p className="text-secondary-13 font-medium">TikTok</p>
+                  <p className="text-secondary-13">{TIKTOK_CONSENT_LINE}</p>
+                  <div className="flex items-start gap-3">
+                    <Switch id="tt-consent" checked={tiktokConsent} onCheckedChange={setTiktokConsent} />
+                    <Label htmlFor="tt-consent">{TIKTOK_CONSENT_TICK}</Label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -7,7 +7,7 @@ import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
 import {
   claimDelivery, finishDelivery, releaseDelivery,
   platformPublished, platformFailed, postCancelled, postScheduledConfirmed,
-  accountConnected, reviewReceived, leadReceived,
+  accountConnected, accountNeedsReconnecting, reviewReceived, leadReceived,
 } from './zernio-events'
 
 /**
@@ -370,17 +370,40 @@ async function failed(postId: string, message: string): Promise<Response> {
 /**
  * An account was revoked or expired at the platform.
  *
- * Shipped 20 Aug and unchanged: without it a dead account is only discovered
- * when a post fails, which is after somebody has noticed nothing went out.
+ * Marking the row was shipped 20 Aug: without it a dead account is only
+ * discovered when a post fails, which is after somebody has noticed nothing
+ * went out. Marking it, though, only told the APP. Nobody was told — and the
+ * posts already booked onto that channel sat on the calendar looking approved
+ * and would not have gone out. So the client's account manager is told, once,
+ * with the link to the page that fixes it.
+ *
+ * CLAIMED, not written: `active: false` is set only on a row that is still
+ * active, so the notification hangs off the TRANSITION rather than off the
+ * delivery. A duplicate webhook (or a second event id for the same drop, which
+ * `claimDelivery` cannot dedupe) finds nothing to change and tells nobody a
+ * second time. A failed notification never fails the delivery — the row is
+ * already correct, and a 500 here would only earn a redelivery that does
+ * nothing.
  */
 async function accountInactive(accountId: string): Promise<Response> {
+  const dropped: SocialAccount[] = []
   try {
     const accounts = table<SocialAccount>('social_accounts')
     const rows = await accounts.list({ where: a => a.provider_account_id === accountId })
-    await Promise.all(rows.map(a => accounts.update(a.id, { active: false })))
+    for (const a of rows) {
+      const taken = await accounts.claim(a.id, cur =>
+        (cur && cur.active !== false ? { ...cur, active: false } : null))
+      if (taken.claimed) dropped.push(taken.row)
+    }
   } catch (e) {
     console.error('zernio webhook account update failed:', e)
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, marked: accountId })
+
+  const droppedAt = new Date().toISOString()
+  for (const a of dropped) {
+    await accountNeedsReconnecting(a, droppedAt)
+      .catch(e => console.error('could not say that an account needs reconnecting:', a.id, e))
+  }
+  return NextResponse.json({ ok: true, marked: accountId, told: dropped.length })
 }

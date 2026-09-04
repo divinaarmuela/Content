@@ -15,6 +15,7 @@ import { shouldAutoWrap } from './shoot-lifecycle-core'
 import {
   actingRoles,
   checkTransitionAs,
+  clientArrivalLine,
   versionSatisfiesSubmission,
   TRANSITIONS,
   TRANSITION_NOTIFICATIONS,
@@ -416,6 +417,10 @@ export async function performTransition(
      *  "this is scheduled"; the transition it performs would then say the same
      *  thing again, to the same inboxes, in different words. */
     skipAudiences?: Audience[]
+    /** this transition is the APP's own move, not a person pressing a button
+     *  — the only way past an `auto` edge. Two callers: the versions route,
+     *  and the schedule composer's new-media path. */
+    auto?: boolean
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -466,11 +471,34 @@ export async function performTransition(
       if (!rule) throw new AuthzError(`No transition from ${from} to ${to}`, 400)
       return { ok: true as const, rule }
     })()
+    // `auto` goes to ALL THREE forms, not just the asset one. A shoot brief
+    // and an internal task ride the same machine and reach the same `auto`
+    // edges; forwarding it to only one of them is how the new-version
+    // pull-back silently stopped working for two of the three item kinds.
     : isBriefTask
-      ? checkBriefTaskTransitionAs(hats, from, to)
-      : isInternal ? checkTaskTransitionAs(hats, from, to)
-      : checkTransitionAs(hats, from, to)
+      ? checkBriefTaskTransitionAs(hats, from, to, { auto: opts?.auto })
+      : isInternal ? checkTaskTransitionAs(hats, from, to, { auto: opts?.auto })
+      : checkTransitionAs(hats, from, to, { auto: opts?.auto })
   if (!check.ok) throw new AuthzError(check.reason, 403)
+
+  /**
+   * THE CLIENT'S OWN POLICY, ENFORCED RATHER THAN DISPLAYED.
+   *
+   * `presentTransitions` hides the `→ approved_for_scheduling` edge on every
+   * status except `client_review` when the item requires the client's
+   * sign-off — but only on the item page, and only by not drawing a button.
+   * Any other surface reaching this function (the Schedule rail's "Approve
+   * without client") got a different answer to the same question, which is a
+   * client policy that holds on one screen and not on another.
+   *
+   * The system's own moves are exempt: those are the provider reporting what
+   * has already happened, not somebody deciding to skip the client.
+   */
+  if (!system && to === 'approved_for_scheduling' && from !== 'client_review'
+    && (item as { client_approval_required?: boolean }).client_approval_required !== false) {
+    throw new AuthzError(
+      'This client signs their work off themselves — send it to them first', 403)
+  }
 
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
@@ -692,7 +720,9 @@ export async function performTransition(
                 // the portal shows each in its own place
                 ? `<p>Your shoot plan for <strong>${item.title}</strong> is ready for you to look over.</p>` +
                   `<p>Open your portal to approve it or tell us what to change — it&rsquo;s under Shoot plans.</p>`
-                : `<p><strong>${item.title}</strong> is ready for your review.</p>`
+                // a piece coming BACK from approved carries a different
+                // sentence: they already said yes to the old version once
+                : `<p><strong>${item.title}</strong> — ${clientArrivalLine(from)}</p>`
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")

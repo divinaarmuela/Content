@@ -43,6 +43,11 @@ describe('GROUPS covers the nav', () => {
   it('leaves the Social children to Social — they are drawn nested, not grouped', () => {
     for (const child of hrefs(NAV_SOCIAL_CHILDREN)) expect(grouped.has(child)).toBe(false)
   })
+
+  it('puts Schedule first under Social — it is where the week is planned', () => {
+    expect(NAV_SOCIAL_CHILDREN[0].href).toBe('/dashboard/social/schedule')
+    expect(NAV_SOCIAL_CHILDREN[0].label).toBe('Schedule')
+  })
 })
 
 /* ── what each role sees ────────────────────────────────────────────────── */
@@ -113,7 +118,7 @@ describe('resolveNav by role', () => {
   })
 
   it('opens the Social children only when Social itself is visible', () => {
-    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(4)
+    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(5)
     expect(resolveNav('editor', [], [], '/dashboard').children).toEqual([])
     expect(resolveNav('super_admin', [], ['/dashboard/social'], '/dashboard').children).toEqual([])
   })
@@ -139,6 +144,7 @@ describe('activeNavHref', () => {
 
   it('never lets bare /dashboard swallow the pages under it', () => {
     expect(activeNavHref('/dashboard/social/inbox', all)).toBe('/dashboard/social/inbox')
+    expect(activeNavHref('/dashboard/social/schedule', all)).toBe('/dashboard/social/schedule')
     expect(activeNavHref('/dashboard', all)).toBe('/dashboard')
   })
 

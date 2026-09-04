@@ -100,11 +100,16 @@ export type BriefTransitionCheck = TransitionCheck & { requires?: 'batch_locked'
 
 export function checkBriefTaskTransitionAs(
   roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  /** the app's own move — see `checkTransitionAs`. A shoot brief reaches the
+   *  same `auto` edges an asset does (a new version saved while the client is
+   *  looking pulls the brief back for the manager's check), so this has to be
+   *  forwarded or those edges are dead for a brief. */
+  opts?: { auto?: boolean },
 ): BriefTransitionCheck {
   const exists = TRANSITIONS[from]?.[to]
   if (!exists) return { ok: false, reason: `No transition from ${from} to ${to}` }
   const override = BRIEF_TRANSITION_OVERRIDES[`${from}>${to}`]
-  if (!override) return checkTransitionAs(roles, from, to)
+  if (!override) return checkTransitionAs(roles, from, to, opts)
   if ('blocked' in override) {
     return { ok: false, reason: 'A booked shoot is the end of the brief — the content items publish, not the brief' }
   }

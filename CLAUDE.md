@@ -92,6 +92,15 @@ and `npm run build` must pass. Do not report completion on tests alone.
     table from one network call; pass `{ fresh: true }` to bypass it when a
     guard must see the network, not its own earlier answer.
 
+12. **Some tables exist only in `scripts/gen-db-types.mjs`.** There is no SQL
+    for them — they were designed after the Postgres history stopped being
+    written — so the generator carries them as GHOST TABLES and
+    `lib/db-types.ts` is regenerated from it. Today: `website`, `claim_locks`,
+    `booking_seats`, `social_posts`, `schedule_notes`. Looking for their
+    `CREATE TABLE` in `docs/schema-history/` and concluding they do not exist
+    has already cost an afternoon. Add a column to one by editing the ghost
+    definition and re-running `node scripts/gen-db-types.mjs`.
+
 ## Layout
 
 ```
@@ -100,6 +109,10 @@ app/
   services/ about/ journal/ events/ work/        content pages (CMS-driven)
   dashboard/                                     internal app  (Clerk-gated)
     ui/            the shared look: Shell, PageTitle, cards, chips, tone map
+    social/schedule/  the posting calendar: week/month/list/preview, the
+                      composer, the media picker, the image editor, notes,
+                      and access/ (channels, the Zernio group, who is on the
+                      client).  docs/PROJECT_STATE.md "Social Schedule" first.
   client/                                        client portal, logged in
   portal/[token]/                                client portal, no login
   (auth)/                                        sign-in / sign-up
@@ -118,6 +131,8 @@ app/
   inngest/functions.ts scheduled jobs
 docs/schema-history/*.sql   Postgres schema history — read by scripts/gen-db-types.mjs
                             to generate lib/db-types.ts; not run against anything live
+docs/ZERNIO_POSTING_OPTIONS.md  network → option → Zernio field, so nobody
+                            re-derives it from the composer
 docs/BUILD_PLAN.md     the governing plan
 docs/PROJECT_STATE.md  current status — read this
 ```

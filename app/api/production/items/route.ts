@@ -15,7 +15,7 @@ import {
   accessibleClientIds, canOpenBatch, openTaggedIds,
   taggedBatchIds, taggedItemIds,
 } from '../../../lib/production-access'
-import { visibleItems, type ScopeViewer } from '../../../lib/scope-client'
+import { scopeContextOf, visibleItems, type ScopeViewer } from '../../../lib/scope-client'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
@@ -80,12 +80,15 @@ export async function GET(req: Request) {
       viewer,
       rows0 as unknown as (ContentItem & { work_kinds?: null })[],
       assignments,
-      {
+      // the same assembly the boards and the Schedule page use — four grants
+      // that have to travel together or the three surfaces scope differently
+      scopeContextOf({
+        viewer,
         batches,
         taggedItemIds: itemTags,
         taggedBatchIds: batchTags,
         workKinds: workKinds as unknown as { id: string; slug: string }[],
-      },
+      }),
     ).slice(0, 500)
 
     // clients.timezone rides along: every row that prints a posting time has

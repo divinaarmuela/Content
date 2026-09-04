@@ -90,6 +90,18 @@ export type PostingApprovalInput = {
   note?: string
   /** send only: also route it to the client's portal for their sign-off */
   client_too?: boolean
+  /**
+   * send only: this person is CLEARING the post themselves — the owner's
+   * "schedule without approval".
+   *
+   * Two effects, both about the same fact: the ask and the answer are the
+   * same person in the same breath. Nobody is emailed to answer a question
+   * being answered already; and an APPROVER counts as a sender for this one
+   * step, because being allowed to say yes must imply being allowed to ask.
+   * Only the client's account manager or a super admin qualifies — never a
+   * client, and never a scheduler or editor, who must still ask.
+   */
+  self_approved?: boolean
 }
 
 /** The preview facts the approver's email carries — worked out once here so
@@ -171,8 +183,20 @@ export async function actOnPostingApproval(
   const hats = actingRoles({ id: actor.id, role: actor.role }, item)
   const note = String(input.note ?? '').trim().slice(0, 2000)
 
-  if (input.action === 'send') {
-    if (!maySendPostApproval(hats)) {
+  // an account manager (or super admin) clearing the post themselves is
+  // allowed to make the ask that their own yes answers
+  const clearing = input.action === 'send' && input.self_approved === true
+    && (hats.includes('account_manager') || hats.includes('super_admin'))
+
+  if (input.action === 'reset') {
+    // whoever could have ASKED for this approval, or given it, may put the
+    // gate back when the post it belonged to is taken off the calendar
+    if (!maySendPostApproval(hats)
+      && !hats.includes('account_manager') && !hats.includes('super_admin')) {
+      throw new AuthzError('Only the people scheduling this post can take it back', 403)
+    }
+  } else if (input.action === 'send') {
+    if (!maySendPostApproval(hats) && !clearing) {
       throw new AuthzError('Only the person scheduling this may send it for approval', 403)
     }
     // the gate guards the queue, so it only makes sense on a signed-off asset
@@ -209,6 +233,13 @@ export async function actOnPostingApproval(
     patch.posting_approved_by = null
     patch.posting_approved_at = null
   }
+  if (input.action === 'reset') {
+    // nothing is being asked and nothing has been answered
+    patch.posting_approved_by = null
+    patch.posting_approved_at = null
+    patch.posting_approval_note = null
+    patch.posting_client_required = false
+  }
 
   // the state is re-read immediately before the write, and only a row still
   // sitting where this actor saw it is answered: two people answering at once
@@ -235,6 +266,7 @@ export async function actOnPostingApproval(
     entityType: 'content_item', entityId: item.id,
     action: input.action === 'send' ? 'posting_approval_sent'
       : input.action === 'approve' ? 'posting_approved'
+      : input.action === 'reset' ? 'posting_approval_reset'
       : 'posting_changes_requested',
     detail: note || undefined,
   })
@@ -244,6 +276,11 @@ export async function actOnPostingApproval(
 
   // notifications — fire-and-forget, the outbox dedupe makes retries safe
   const title = item.title ?? 'A post'
+  // a reset is housekeeping after a cancel — nobody is asked anything and
+  // nobody is told an answer, so there is nothing to email about
+  if (clearing || input.action === 'reset') {
+    return updated as unknown as Record<string, unknown>
+  }
   void (async () => {
     const facts = await previewFacts(item)
     const stamp = new Date().toISOString()

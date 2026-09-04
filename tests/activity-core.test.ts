@@ -33,6 +33,31 @@ describe('describeActivity', () => {
     expect(describeActivity(r, 'asset')).toBe("The client's approval logged by Divina")
   })
 
+  // A move the APP made says why it made it. "Sent to the client by Ana" is
+  // indistinguishable from a manager pressing the button, and leaves nobody
+  // able to see why a piece the client had already approved is back in front
+  // of them.
+  it('an automatic move explains itself, in the rule’s own words', () => {
+    const r = row({
+      old_value: 'approved_for_scheduling',
+      new_value: 'client_review',
+      detail: 'New media — back to the client',
+    })
+    expect(describeActivity(r, 'asset')).toBe('New media — back to the client — Divina')
+  })
+
+  it('falls back to the rule’s label when the row carries no detail', () => {
+    const r = row({ old_value: 'client_review', new_value: 'internal_review' })
+    expect(describeActivity(r, 'asset')).toBe("New version — back for the manager's check — Divina")
+  })
+
+  it('leaves an ordinary move alone — its detail is only the button’s name', () => {
+    const r = row({
+      old_value: 'internal_review', new_value: 'client_review', detail: 'Send to client',
+    })
+    expect(describeActivity(r, 'asset')).toBe('Sent to the client by Divina')
+  })
+
   it('calls a booked shoot booked, never published', () => {
     expect(describeActivity(row({ new_value: 'scheduled' }), 'brief')).toBe('Shoot booked by Divina')
     expect(describeActivity(row({ new_value: 'published' }), 'brief')).toBe('Shoot booked by Divina')

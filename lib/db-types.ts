@@ -58,8 +58,10 @@ export type TableName =
   | 'scan_runs'
   | 'scan_settings'
   | 'schedule_entries'
+  | 'schedule_notes'
   | 'shoot_proposals'
   | 'social_accounts'
+  | 'social_posts'
   | 'team_invites'
   | 'team_user_clients'
   | 'team_users'
@@ -165,6 +167,9 @@ export interface AssetVersion {
   notes: string | null
   uploaded_by: string | null
   files: unknown | null
+  cover_url: string | null
+  trim_start: number | null
+  trim_end: number | null
 }
 
 export interface Asset {
@@ -410,6 +415,7 @@ export interface Client {
   clerk_user_id: string | null
   status: string
   notes: string | null
+  instagram_locations: unknown
 }
 
 export interface ContentApplication {
@@ -831,6 +837,16 @@ export interface ScheduleEntry {
   published_at: string | null
 }
 
+export interface ScheduleNote {
+  id: string
+  client_id: string
+  at: string
+  text: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ShootProposal {
   batch_id: string | null
   id: string
@@ -861,6 +877,30 @@ export interface SocialAccount {
   active: boolean
   connected_at: string
   last_synced_at: string
+}
+
+export interface SocialPost {
+  id: string
+  client_id: string
+  item_id: string
+  version_id: string | null
+  version_number: number | null
+  slides: unknown
+  caption: string | null
+  per_channel: unknown
+  channels: unknown
+  scheduled_for: string | null
+  timezone: string
+  status: string
+  publish_job_ids: unknown
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  sent_at: string | null
+  approved_at: string | null
+  approved_by: string | null
+  approval_mode: string | null
+  note: string | null
 }
 
 export interface TeamInvite {
@@ -976,7 +1016,7 @@ export const TABLE_COLUMNS = {
   asana_tasks: ['gid', 'name', 'assignee_gid', 'project_gid', 'completed', 'completed_at', 'due_on', 'modified_at', 'synced_at', 'permalink_url', 'id'],
   asana_webhooks: ['id', 'created_at', 'project_gid', 'webhook_gid', 'hook_secret', 'sync_token', 'last_heartbeat_at', 'last_event_at', 'last_error'],
   asset_clicks: ['id', 'asset_id', 'click_id', 'referrer', 'user_agent', 'clicked_at'],
-  asset_versions: ['id', 'created_at', 'item_id', 'version_number', 'file_url', 'dropbox_url', 'drive_url', 'notes', 'uploaded_by', 'files'],
+  asset_versions: ['id', 'created_at', 'item_id', 'version_number', 'file_url', 'dropbox_url', 'drive_url', 'notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end'],
   assets: ['id', 'created_at', 'client_id', 'project_id', 'kind', 'orientation', 'purpose', 'url', 'alt'],
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
@@ -995,7 +1035,7 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id'],
@@ -1024,8 +1064,10 @@ export const TABLE_COLUMNS = {
   scan_runs: ['id', 'mailbox', 'trigger', 'status', 'started_at', 'finished_at', 'scanned', 'claimed', 'leads_created', 'skipped', 'errors', 'error'],
   scan_settings: ['allow_self_connect', 'id', 'lookback_days', 'max_messages', 'min_confidence', 'duplicate_window_days', 'rules_only', 'schedule_enabled', 'blocked_domains', 'blocked_senders', 'updated_at', 'updated_by'],
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
+  schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at'],
+  social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status'],
@@ -1045,7 +1087,7 @@ export const NULLABLE_COLUMNS = {
   asana_tasks: ['assignee_gid', 'project_gid', 'completed_at', 'due_on', 'modified_at', 'permalink_url'],
   asana_webhooks: ['webhook_gid', 'hook_secret', 'sync_token', 'last_heartbeat_at', 'last_event_at', 'last_error'],
   asset_clicks: ['referrer', 'user_agent'],
-  asset_versions: ['notes', 'uploaded_by', 'files'],
+  asset_versions: ['notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end'],
   assets: ['client_id', 'project_id', 'orientation', 'purpose', 'alt'],
   assistant_chats: [],
   assistant_prefs: [],
@@ -1093,8 +1135,10 @@ export const NULLABLE_COLUMNS = {
   scan_runs: ['finished_at', 'error'],
   scan_settings: ['allow_self_connect', 'updated_by'],
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],
+  schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['client_id', 'name', 'username', 'avatar_url'],
+  social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid'],
@@ -1140,7 +1184,7 @@ export const JSON_COLUMNS = {
   client_contacts: [],
   client_credentials: [],
   client_notes: [],
-  clients: ['brand_profile'],
+  clients: ['brand_profile', 'instagram_locations'],
   content_applications: [],
   content_assets: [],
   content_items: ['raw_assets', 'scheduler_ids'],
@@ -1169,8 +1213,10 @@ export const JSON_COLUMNS = {
   scan_runs: [],
   scan_settings: [],
   schedule_entries: [],
+  schedule_notes: [],
   shoot_proposals: [],
   social_accounts: [],
+  social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids'],
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages', 'notification_prefs'],
@@ -1215,7 +1261,7 @@ export const JSON_ARRAY_COLUMNS = {
   client_contacts: [],
   client_credentials: [],
   client_notes: [],
-  clients: [],
+  clients: ['instagram_locations'],
   content_applications: [],
   content_assets: [],
   content_items: ['raw_assets', 'scheduler_ids'],
@@ -1244,8 +1290,10 @@ export const JSON_ARRAY_COLUMNS = {
   scan_runs: [],
   scan_settings: [],
   schedule_entries: [],
+  schedule_notes: [],
   shoot_proposals: [],
   social_accounts: [],
+  social_posts: ['slides', 'channels', 'publish_job_ids'],
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages'],
@@ -1257,7 +1305,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'journal_posts', 'projects', 'report_settings', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { SocialAccount, Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { getPublisher } from '../../../../lib/publisher'
+import { assertClientAccess } from '../../../../lib/social-schedule'
 
 /**
  * Everything the account page needs, in one request.
@@ -11,6 +12,16 @@ import { getPublisher } from '../../../../lib/publisher'
  * revoked insights scope should grey out the metrics, not blank the page. So
  * the response always has the same shape, with nulls where a source could not
  * be read, and the UI decides what to show.
+ *
+ * SCOPED BY CLIENT, like the PATCH below it. `requireRole('scheduler')` says
+ * what a person may DO and nothing about whose account this is — and this
+ * response is the widest one in the feature: the handle, the connection date,
+ * the token's health, the follower history, the last twenty posts, per-post
+ * analytics and the inbox comments. Anybody with the role could read all of
+ * that for any client in the agency by pasting a uuid.
+ *
+ * An account with no client on it 404s rather than falling through, or it is
+ * the same hole by another door.
  */
 export async function GET(
   _req: Request,
@@ -18,13 +29,17 @@ export async function GET(
 ) {
   return withRequestCache(async () => {
   try {
-    await requireRole('scheduler')
+    const user = await requireRole('scheduler')
     const { id } = await params
 
     // our row first — it carries the client link, which is what makes this
     // account "belong" to someone
     const row = await table<SocialAccount>('social_accounts').get(id)
     if (!row) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    if (!row.client_id) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    }
+    await assertClientAccess(user, row.client_id)
     // the columns the old select named, and no others
     const account = {
       id: row.id, client_id: row.client_id, platform: row.platform,
@@ -57,5 +72,64 @@ export async function GET(
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
   }
+  })
+}
+
+/**
+ * Rename an account for OUR screens.
+ *
+ * Only the display name, and only ours: the platform's handle belongs to the
+ * platform and is re-read from it on every sync, so writing it here would be
+ * overwritten within the hour and would misname the account in the meantime.
+ * The name is what a scheduler reads on a tile at 11px, and "Acme — main" is
+ * a great deal more use there than a duplicate of the handle underneath it.
+ *
+ * The posting time zone is NOT here on purpose: every time on Schedule is the
+ * CLIENT's zone (`clients.timezone`), because a posting time is a fact about
+ * the audience rather than about one channel. A per-account zone would be a
+ * second answer to the same question.
+ *
+ * SCOPED BY CLIENT, not by job title. `requireRole('scheduler')` says what a
+ * person may DO; it says nothing about WHOSE account this is, so on its own it
+ * let anybody with the role rename any account in the system by id — including
+ * another agency client's. The account's own `client_id` is what the row is
+ * about, and `assertClientAccess` is the same answer the access page's own
+ * route gives.
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withRequestCache(async () => {
+    try {
+      const user = await requireRole('scheduler')
+      const { id } = await params
+      const body = await req.json().catch(() => ({})) as { name?: unknown }
+      if (typeof body.name !== 'string') {
+        return NextResponse.json({ error: 'Give the account a name' }, { status: 400 })
+      }
+      const name = body.name.trim().slice(0, 80)
+
+      // whose account is this? The row first, then the scope check — a name
+      // is not worth leaking which ids exist, so a row nobody may touch and a
+      // row that is not there answer the same way
+      const row = await table<SocialAccount>('social_accounts').get(id)
+      if (!row) {
+        return NextResponse.json({ error: 'That account is no longer connected' }, { status: 404 })
+      }
+      if (row.client_id) await assertClientAccess(user, row.client_id)
+
+      // claim, not check-then-write: two people renaming at once resolve to
+      // one answer rather than one silently overwriting the other
+      const saved = await table<SocialAccount>('social_accounts').claim(id, cur =>
+        cur ? { ...cur, name: name || null } : null)
+      if (!saved.claimed) {
+        return NextResponse.json({ error: 'That account is no longer connected' }, { status: 404 })
+      }
+      return NextResponse.json({ ok: true, name: saved.row.name })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
+    }
   })
 }
