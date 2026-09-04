@@ -535,9 +535,13 @@ export default function MediaPicker({
           )}
 
           <div className="flex items-center justify-end gap-2.5">
+            {/* "Discard changes" IS the answer to "are you sure?" — asking it
+                again is the same question twice, and the second one reads as
+                though the first press did not land. Escape, the backdrop and
+                the X still ask, because none of those SAYS discard. */}
             <button
               type="button"
-              onClick={requestClose}
+              onClick={onClose}
               className="flex min-h-11 items-center rounded-full border border-border px-4 text-[14px] font-semibold hover:bg-muted"
             >
               Discard changes

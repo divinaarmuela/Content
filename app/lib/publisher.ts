@@ -1,6 +1,7 @@
 import 'server-only'
 import {
   buildPostBody, classifyResponse, mediaTypeFor,
+  TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS,
   type MediaItem, type Platform, type PublishOutcome, type Target,
 } from './publish-core'
 
@@ -85,6 +86,59 @@ export interface Publisher {
   }): Promise<MediaItem>
   /** Create (or schedule) a post. Idempotent on requestId. */
   createPost(input: CreatePostInput): Promise<PublishOutcome>
+  /** The lists only this account can give us: its playlists, its company
+   *  pages, its Facebook Pages, the privacy levels TikTok allows it. */
+  channelOptions(providerAccountId: string, platform: string): Promise<ChannelOptions>
+}
+
+/**
+ * What one account may be set to post as.
+ *
+ * Four lists, one shape, because the composer draws them the same way: a
+ * select with names in it. Every one of them is per ACCOUNT and cannot be
+ * guessed — a playlist id invented locally is a post YouTube refuses — so an
+ * empty list means "we could not ask", and the window says so rather than
+ * offering a choice that does not exist.
+ */
+export type ChannelChoice = { value: string; label: string }
+
+export type ChannelOptions = {
+  /** YouTube: the channel's playlists */
+  playlists: ChannelChoice[]
+  /** LinkedIn: the company pages this person may post as */
+  organizations: ChannelChoice[]
+  /** Facebook: the Pages behind this account */
+  pages: ChannelChoice[]
+  /** TikTok: the privacy levels TikTok allows THIS creator */
+  privacy: ChannelChoice[]
+}
+
+export const NO_CHANNEL_OPTIONS: ChannelOptions = {
+  playlists: [], organizations: [], pages: [], privacy: [],
+}
+
+/** Rows come back from the provider under whichever names that endpoint uses;
+ *  this reads them all rather than pinning one spelling that a later version
+ *  of their API quietly renames. */
+export function readChoices(
+  raw: unknown,
+  keys: { id: string[]; label: string[] },
+): ChannelChoice[] {
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as Record<string, unknown> | null)?.data)
+      ? (raw as { data: unknown[] }).data
+      : []
+  const out: ChannelChoice[] = []
+  for (const row of list) {
+    if (typeof row === 'string') { out.push({ value: row, label: row }); continue }
+    const r = (row ?? {}) as Record<string, unknown>
+    const value = keys.id.map(k => r[k]).find(v => typeof v === 'string' && v)
+    if (typeof value !== 'string') continue
+    const label = keys.label.map(k => r[k]).find(v => typeof v === 'string' && v)
+    out.push({ value, label: typeof label === 'string' ? label : value })
+  }
+  return out.slice(0, 100)
 }
 
 export type ReplyButton = { type?: string; title: string; url?: string; payload?: string }
@@ -434,6 +488,51 @@ class ZernioPublisher implements Publisher {
     return { url: publicUrl, type }
   }
 
+  /**
+   * The four per-account lists, from the four endpoints Zernio documents.
+   *
+   * One network per call — asking YouTube for Facebook Pages is a 404 and a
+   * wasted second. Every one of them goes through `getJson`, so a missing or
+   * unavailable endpoint is an EMPTY list rather than a window that will not
+   * open: the composer can always fall back to typing, and a post with no
+   * playlist is still a post.
+   */
+  async channelOptions(id: string, platform: string): Promise<ChannelOptions> {
+    const out: ChannelOptions = { playlists: [], organizations: [], pages: [], privacy: [] }
+    const account = encodeURIComponent(id)
+    if (platform === 'youtube') {
+      const json = await this.getJson(`/accounts/${account}/youtube-playlists`) as Record<string, unknown> | null
+      out.playlists = readChoices(json?.playlists ?? json, {
+        id: ['id', '_id', 'playlistId'], label: ['title', 'name'],
+      })
+    }
+    if (platform === 'linkedin') {
+      const json = await this.getJson(`/accounts/${account}/linkedin-organizations`) as Record<string, unknown> | null
+      out.organizations = readChoices(json?.organizations ?? json, {
+        id: ['urn', 'organizationUrn', 'id', '_id'], label: ['name', 'localizedName', 'title'],
+      })
+    }
+    if (platform === 'facebook') {
+      const json = await this.getJson(`/accounts/${account}/facebook-page`) as Record<string, unknown> | null
+      out.pages = readChoices(json?.pages ?? json?.page ?? json, {
+        id: ['pageId', 'id', '_id'], label: ['name', 'pageName', 'title'],
+      })
+    }
+    if (platform === 'tiktok') {
+      // the creator's OWN allowed values: TikTok decides per account which
+      // privacy levels a creator may use, and sending one they may not is a
+      // refusal hours later
+      const json = await this.getJson(`/accounts/${account}`) as Record<string, unknown> | null
+      const info = (json?.creatorInfo ?? json?.creator_info
+        ?? (json?.account as Record<string, unknown> | undefined)?.creatorInfo
+        ?? json) as Record<string, unknown> | null
+      const levels = info?.privacyLevelOptions ?? info?.privacy_level_options
+        ?? info?.privacyOptions
+      out.privacy = readChoices(levels, { id: ['value', 'id'], label: ['label', 'name'] })
+    }
+    return out
+  }
+
   async createPost(input: CreatePostInput): Promise<PublishOutcome> {
     const body = buildPostBody({
       caption: input.caption,
@@ -508,6 +607,10 @@ class UnconfiguredPublisher implements Publisher {
   async createPost(): Promise<PublishOutcome> {
     return { kind: 'permanent', message: 'No publishing provider is configured' }
   }
+
+  async channelOptions(): Promise<ChannelOptions> {
+    return { ...NO_CHANNEL_OPTIONS }
+  }
 }
 
 /**
@@ -537,6 +640,16 @@ function dryRunPublisher(): Publisher {
     deletePost: async () => ({ ok: true, dryRun: true }),
     uploadMedia: async (input: { filename: string; contentType: string }): Promise<MediaItem> =>
       ({ url: `https://dry-run.invalid/${input.filename}`, type: mediaTypeFor(input.contentType) ?? 'image' }),
+    // the four per-account lists, answered without a socket: enough for the
+    // composer to draw a real select in a test, and obviously fake in it
+    channelOptions: async (id: string, platform: string): Promise<ChannelOptions> => ({
+      playlists: platform === 'youtube' ? [{ value: 'dry-run-playlist', label: 'Dry run playlist' }] : [],
+      organizations: platform === 'linkedin' ? [{ value: 'urn:li:organization:0', label: 'Dry run company' }] : [],
+      pages: platform === 'facebook' ? [{ value: `dry-run-page-${id}`, label: 'Dry run Page' }] : [],
+      privacy: platform === 'tiktok'
+        ? TIKTOK_PRIVACY_LEVELS.map(value => ({ value, label: TIKTOK_PRIVACY_LABELS[value] }))
+        : [],
+    }),
   })
 }
 

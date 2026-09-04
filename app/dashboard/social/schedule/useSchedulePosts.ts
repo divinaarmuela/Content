@@ -69,6 +69,12 @@ export type RailMedia = {
   ok: boolean
   /** why not, in the words a person would use */
   reason: string | null
+  /** where the piece is in the funnel — what says whether a manager may sign
+   *  it off without the client from here */
+  status: string
+  /** the version the client would be approving, for the question they are
+   *  asked before one is skipped */
+  versionNumber: number | null
   /** a post already uses this item — one post, one item */
   used: boolean
   /**
@@ -238,6 +244,9 @@ export function useSchedulePosts(
           cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
           reason: elig.ok ? null : elig.reason,
+          status: String(item.status ?? ''),
+          versionNumber: itemVersions.reduce(
+            (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           used: usedItems.has(item.id),
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           updatedAt: String(item.updated_at ?? ''),

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { mayApproveWithoutClient } from '@/app/lib/social-schedule-core'
 import { formatInZone } from '@/app/lib/timezone-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
@@ -21,12 +22,17 @@ import type { RailMedia } from './useSchedulePosts'
  * A piece that cannot start a post is still listed, greyed, with the reason
  * on it — hiding it only makes somebody ask where their video went.
  */
-export default function PiecePicker({ media, at, tz, onPick, onClose }: {
+export default function PiecePicker({ media, at, tz, role, onPick, onApprove, onClose }: {
   media: RailMedia[]
   /** the time the click meant, carried through to the composer */
   at: string | null
   tz: string
+  /** the viewer's role — an account manager or a super admin may sign a piece
+   *  off without the client from here */
+  role: string | null
   onPick: (media: RailMedia) => void
+  /** sign this piece off without waiting for the client */
+  onApprove: (media: RailMedia) => void
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
@@ -110,19 +116,34 @@ export default function PiecePicker({ media, at, tz, onPick, onClose }: {
           ) : (
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               {shown.map(m => (
-                <button
+                <div
                   key={m.itemId}
-                  type="button"
-                  disabled={!m.ok}
-                  onClick={() => onPick(m)}
-                  title={m.ok ? m.title : `${m.title} — ${m.reason}`}
                   className={cn(
                     'group relative flex aspect-[4/5] flex-col overflow-hidden rounded-tile border border-border bg-foreground/[0.06] text-left',
-                    m.ok ? 'hover:shadow-md' : 'cursor-not-allowed opacity-45',
+                    m.ok ? 'hover:shadow-md' : 'opacity-45',
                   )}
                 >
-                  <Thumb slide={m.cover} label={m.title} className="h-full w-full" />
-                  <span className="absolute inset-x-0 bottom-0 bg-ink/70 px-1.5 py-1 text-[11px] font-semibold text-cream">
+                  <button
+                    type="button"
+                    disabled={!m.ok}
+                    onClick={() => onPick(m)}
+                    title={m.ok ? m.title : `${m.title} — ${m.reason}`}
+                    aria-label={m.ok ? `Choose ${m.title}` : `${m.title} — ${m.reason}`}
+                    className="absolute inset-0 z-0 disabled:cursor-not-allowed"
+                  />
+                  <Thumb slide={m.cover} label={m.title} className="pointer-events-none h-full w-full" />
+                  {/* waiting on somebody, and this person could be that
+                      somebody: one press signs it off, after one question */}
+                  {!m.ok && mayApproveWithoutClient(role, m.status) && (
+                    <button
+                      type="button"
+                      onClick={() => onApprove(m)}
+                      className="absolute inset-x-1.5 bottom-[38px] z-10 truncate rounded-full bg-cream px-2 py-1.5 text-[11px] font-semibold text-ink hover:opacity-90"
+                    >
+                      Approve without client
+                    </button>
+                  )}
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/70 px-1.5 py-1 text-[11px] font-semibold text-cream">
                     <span className="block truncate">{m.title}</span>
                     {!m.ok && m.reason && (
                       <span className="block truncate font-normal text-cream/80">{m.reason}</span>
@@ -133,7 +154,7 @@ export default function PiecePicker({ media, at, tz, onPick, onClose }: {
                       </span>
                     )}
                   </span>
-                </button>
+                </div>
               ))}
             </div>
           )}

@@ -22,7 +22,12 @@
  */
 
 import {
-  isPageId, kindTakesLocation, PLATFORM_RULES, type Platform, type PostKind,
+  COMMERCIAL_CONTENT_LABELS, DEFAULT_YOUTUBE_CATEGORY, isPageId, kindTakesLocation,
+  networkName, PLATFORM_RULES, TIKTOK_CONSENT_LINE, TIKTOK_CONSENT_TICK,
+  TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS, YOUTUBE_CATEGORIES,
+  YOUTUBE_VISIBILITY_LABELS,
+  type CommercialContentType, type Platform, type PostKind, type PostOptions,
+  type TikTokPrivacy, type TrialGraduation, type YoutubeVisibility,
 } from './publish-core'
 import { NETWORK_LABEL, type SocialPostStatus } from './social-schedule-core'
 import { reorder, type Slide } from './version-files-core'
@@ -30,18 +35,116 @@ import { fromZonedInput, wallTimeIn } from './timezone-core'
 
 /* ── the composition being edited ───────────────────────────────────────── */
 
-/** Per-channel extras. Only the ones the provider takes — see `moreOptionsFor`. */
+/**
+ * Per-channel extras — everything one channel may be set to do differently.
+ *
+ * EVERY NAME HERE IS THE `PostOptions` NAME. That is not a style choice: the
+ * last round of this feature lost four settings between the window and the
+ * provider because the composer, the stored blob and the publisher each spelled
+ * them their own way and one hand-written copy step forgot a line. There is now
+ * one spelling and one copy step (`optionsFromExtras`), and the compile-time
+ * check below refuses a field that is not a real posting option.
+ *
+ * `slides` is the single exception, and it is handled explicitly everywhere.
+ */
 export type ChannelExtras = {
   caption?: string
+  /** stored as a plain string; it IS a `PostKind` */
   kind?: string
   firstComment?: string
   collaborators?: string[]
   shareToFeed?: boolean
   /** the numeric Facebook Page id of the place — Instagram only */
   locationId?: string
+  /* Instagram */
+  trialGraduation?: TrialGraduation
+  audioName?: string
+  /* YouTube, and a Facebook Reel's title */
+  title?: string
+  visibility?: YoutubeVisibility
+  madeForKids?: boolean
+  tags?: string[]
+  categoryId?: string
+  playlistId?: string
+  containsSyntheticMedia?: boolean
+  /* LinkedIn */
+  organizationUrn?: string
+  disableLinkPreview?: boolean
+  documentTitle?: string
+  /* Facebook */
+  pageId?: string
+  facebookDraft?: boolean
+  /* TikTok */
+  privacyLevel?: TikTokPrivacy
+  allowComment?: boolean
+  allowDuet?: boolean
+  allowStitch?: boolean
+  commercialContentType?: CommercialContentType
+  videoMadeWithAi?: boolean
+  tiktokDraft?: boolean
+  autoAddMusic?: boolean
+  videoCoverTimestampMs?: number
+  videoCoverImageUrl?: string
+  photoCoverIndex?: number
+  tiktokDescription?: string
+  tiktokConsent?: boolean
   /** this channel's OWN media, replacing the shared set for it alone. The
    *  window does not edit this; it carries it so a save cannot lose it. */
   slides?: Slide[]
+}
+
+/**
+ * Every key `ChannelExtras` has, listed once so nothing can be forwarded by
+ * hand and forgotten.
+ *
+ * The map is typed `Record<keyof ChannelExtras, true>`, so adding a field to
+ * the type above and not to this list is a TYPE ERROR, not a setting that
+ * silently never reaches the provider — which is exactly how `locationId`,
+ * `firstComment`, `collaborators` and `shareToFeed` were lost last round.
+ */
+const EXTRA_KEY_MAP: Record<keyof ChannelExtras, true> = {
+  caption: true, kind: true, slides: true,
+  firstComment: true, collaborators: true, shareToFeed: true, locationId: true,
+  trialGraduation: true, audioName: true,
+  title: true, visibility: true, madeForKids: true, tags: true,
+  categoryId: true, playlistId: true, containsSyntheticMedia: true,
+  organizationUrn: true, disableLinkPreview: true, documentTitle: true,
+  pageId: true, facebookDraft: true,
+  privacyLevel: true, allowComment: true, allowDuet: true, allowStitch: true,
+  commercialContentType: true, videoMadeWithAi: true, tiktokDraft: true,
+  autoAddMusic: true, videoCoverTimestampMs: true, videoCoverImageUrl: true,
+  photoCoverIndex: true, tiktokDescription: true, tiktokConsent: true,
+}
+
+export const CHANNEL_EXTRA_KEYS =
+  Object.keys(EXTRA_KEY_MAP) as (keyof ChannelExtras)[]
+
+/** Compile-time: every extra the window edits (bar the two with a shape of
+ *  their own) IS a posting option the publisher knows how to send. */
+export const EXTRAS_ARE_POSTING_OPTIONS: (
+  Omit<ChannelExtras, 'slides' | 'kind'> extends Partial<PostOptions> ? true : never
+) = true
+
+/**
+ * One channel's extras as the options the publisher takes.
+ *
+ * Driven by `CHANNEL_EXTRA_KEYS` rather than written out field by field, so a
+ * new setting reaches the provider the moment it exists. `slides` is left
+ * behind on purpose: the media a channel posts is applied with that
+ * platform's own limits, by the caller that knows them.
+ */
+export function optionsFromExtras(extras: ChannelExtras | null | undefined): PostOptions {
+  const from = (extras ?? {}) as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const key of CHANNEL_EXTRA_KEYS) {
+    if (key === 'slides') continue
+    const value = from[key]
+    if (value === undefined || value === null) continue
+    if (typeof value === 'string' && !value.trim()) continue
+    if (Array.isArray(value) && value.length === 0) continue
+    out[key] = value
+  }
+  return out as PostOptions
 }
 
 /** Everything the window is holding about one post. */
@@ -114,24 +217,89 @@ export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
   const out: Record<string, ChannelExtras> = {}
   for (const [id, raw] of Object.entries(v as Record<string, unknown>)) {
-    if (!raw || typeof raw !== 'object') continue
-    const r = raw as Record<string, unknown>
-    const extras: ChannelExtras = {}
-    if (typeof r.caption === 'string') extras.caption = r.caption
-    if (typeof r.kind === 'string') extras.kind = r.kind
-    if (typeof r.firstComment === 'string') extras.firstComment = r.firstComment
-    if (typeof r.shareToFeed === 'boolean') extras.shareToFeed = r.shareToFeed
-    if (typeof r.locationId === 'string') extras.locationId = r.locationId
-    if (Array.isArray(r.collaborators)) {
-      extras.collaborators = r.collaborators.map(String).filter(Boolean).slice(0, 3)
-    }
-    // carried, not edited: this channel's OWN media set. Nothing writes it
-    // yet; dropping it here would silently delete it the first time something
-    // does, and take the approval with it.
-    if (Array.isArray(r.slides)) extras.slides = r.slides as Slide[]
-    out[id] = extras
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    out[id] = readChannelExtras(raw)
   }
   return out
+}
+
+/** What SHAPE each extra is stored as. Exhaustive on purpose: a new setting
+ *  cannot be added to `ChannelExtras` without saying how it is read back. */
+const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'list' | 'slides'> = {
+  caption: 'text', kind: 'text', slides: 'slides',
+  firstComment: 'text', collaborators: 'list', shareToFeed: 'flag', locationId: 'text',
+  trialGraduation: 'text', audioName: 'text',
+  title: 'text', visibility: 'text', madeForKids: 'flag', tags: 'list',
+  categoryId: 'text', playlistId: 'text', containsSyntheticMedia: 'flag',
+  organizationUrn: 'text', disableLinkPreview: 'flag', documentTitle: 'text',
+  pageId: 'text', facebookDraft: 'flag',
+  privacyLevel: 'text', allowComment: 'flag', allowDuet: 'flag', allowStitch: 'flag',
+  commercialContentType: 'text', videoMadeWithAi: 'flag', tiktokDraft: 'flag',
+  autoAddMusic: 'flag', videoCoverTimestampMs: 'number', videoCoverImageUrl: 'text',
+  photoCoverIndex: 'number', tiktokDescription: 'text', tiktokConsent: 'flag',
+}
+
+/** The values each of the four choices may hold. Anything else stored — by an
+ *  older version of the window, or by hand — is dropped rather than sent, so
+ *  the provider never sees a word it does not know. */
+const ALLOWED: Partial<Record<keyof ChannelExtras, readonly string[]>> = {
+  kind: ['feed', 'reel', 'story', 'carousel'],
+  trialGraduation: ['MANUAL', 'SS_PERFORMANCE'],
+  visibility: ['public', 'private', 'unlisted'],
+  privacyLevel: TIKTOK_PRIVACY_LEVELS,
+  commercialContentType: ['none', 'brand_organic', 'brand_content'],
+}
+
+/**
+ * One channel's stored blob, read into the shape the window edits.
+ *
+ * ONE reader for the window AND the server. What a reader drops, the window
+ * sends back as absent — the server then reads that as a content change and
+ * takes the client's approval down with it — so two readers that disagree is
+ * a bug with a client's approval in it. There is now one.
+ */
+export function readChannelExtras(raw: unknown): ChannelExtras {
+  const r = (raw && typeof raw === 'object' && !Array.isArray(raw))
+    ? raw as Record<string, unknown> : {}
+  const out: Record<string, unknown> = {}
+  for (const key of CHANNEL_EXTRA_KEYS) {
+    const value = r[key]
+    if (value === undefined || value === null) continue
+    switch (EXTRA_SHAPE[key]) {
+      case 'text': {
+        if (typeof value !== 'string') break
+        const allowed = ALLOWED[key]
+        if (allowed && !allowed.includes(value)) break
+        // a place NAME typed into the id box is the mistake people make, and
+        // Instagram answers it by refusing the post hours later
+        if (key === 'locationId' && !isPageId(value)) break
+        out[key] = key === 'locationId' ? value.trim() : value
+        break
+      }
+      case 'flag':
+        if (typeof value === 'boolean') out[key] = value
+        break
+      case 'number':
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) out[key] = value
+        break
+      case 'list': {
+        if (!Array.isArray(value)) break
+        const list = value.map(String).map(x => x.trim().replace(/^@/, '')).filter(Boolean)
+        // three collaborators is Instagram's own ceiling; tags have no count
+        // limit, only a combined length, which the checks report on
+        const capped = key === 'collaborators' ? list.slice(0, 3) : list.slice(0, 50)
+        if (capped.length > 0) out[key] = capped
+        break
+      }
+      case 'slides':
+        // carried, not edited: this channel's OWN media set. Dropping it here
+        // would silently delete it the first time something writes one, and
+        // take the client's approval with it.
+        if (Array.isArray(value)) out[key] = value as Slide[]
+        break
+    }
+  }
+  return out as ChannelExtras
 }
 
 /**
@@ -248,54 +416,278 @@ export function limitsLine(
 
 /* ── the extras the provider actually supports ──────────────────────────── */
 
-export type MoreOptionKey = 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
+export type MoreOptionKey =
+  | 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
+  | 'trialReel' | 'audioName'
+  | 'ytTitle' | 'ytVisibility' | 'ytCategory' | 'ytPlaylist' | 'ytTags'
+  | 'ytKids' | 'ytSynthetic'
+  | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle'
+  | 'fbPage' | 'fbTitle' | 'fbDraft'
+  | 'ttPrivacy' | 'ttComments' | 'ttDuet' | 'ttStitch' | 'ttCommercial'
+  | 'ttAi' | 'ttDraft' | 'ttMusic' | 'ttCover' | 'ttDescription' | 'ttConsent'
+
+/** How a row is drawn. The window has one renderer per kind, so adding a
+ *  setting is a row in the table below and nothing else. */
+export type OptionControl =
+  'text' | 'longText' | 'toggle' | 'select' | 'tags' | 'seconds'
+  | 'location' | 'collaborators' | 'consent'
+
+export type OptionChoice = { value: string; label: string }
+
+/** A list only the network can give us — fetched per account, never guessed. */
+export type OptionSource = 'playlists' | 'organizations' | 'pages' | 'privacy'
 
 export type MoreOption = {
   key: MoreOptionKey
   label: string
   /** the channels on screen it applies to — the row says which */
   platforms: string[]
+  control: OptionControl
+  /** the one field on `ChannelExtras` this row writes */
+  field: keyof ChannelExtras
+  choices?: OptionChoice[]
+  source?: OptionSource
+  help?: string
+  placeholder?: string
+  /** what the network does when nobody touches this — so an untouched tick
+   *  box shows the truth rather than an empty box that posts as "on" */
+  defaultOn?: boolean
 }
+
+type OptionSpec = Omit<MoreOption, 'platforms'> & {
+  /** the networks that HAVE this setting */
+  on: Platform[]
+  /** …and, where it matters, the post types that have it */
+  kinds?: PostKind[]
+  /** …and whether it is a setting about video or about pictures */
+  lead?: 'video' | 'image'
+}
+
+const labelChoices = (labels: Record<string, string>): OptionChoice[] =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }))
+
+/**
+ * Every posting option the provider actually takes, in one table.
+ *
+ * Read straight off what `publish-core` sends. A row for something Zernio
+ * does not accept is a control that silently does nothing, which is worse
+ * than not having it — and the reverse (a field Zernio takes with no row) is
+ * how the first cut of this window offered a fraction of what the networks do.
+ *
+ * ORDER IS THE ORDER ON SCREEN: the ones people reach for first, then each
+ * network's own settings, then the declarations.
+ */
+const OPTION_SPECS: OptionSpec[] = [
+  {
+    key: 'firstComment', field: 'firstComment', control: 'text',
+    label: 'Add first comment',
+    on: ['instagram', 'facebook', 'threads', 'linkedin', 'youtube'],
+    placeholder: 'Posted as the first comment — the usual place for hashtags',
+  },
+  {
+    key: 'collaborators', field: 'collaborators', control: 'collaborators',
+    label: 'Invite collaborator', on: ['instagram'],
+    placeholder: 'Up to three usernames, separated by commas',
+  },
+  {
+    key: 'shareToFeed', field: 'shareToFeed', control: 'toggle',
+    label: 'Also show the Reel in the feed', on: ['instagram', 'facebook'],
+  },
+  {
+    key: 'location', field: 'locationId', control: 'location',
+    label: 'Add location', on: ['instagram'],
+  },
+  {
+    key: 'trialReel', field: 'trialGraduation', control: 'select',
+    label: 'Trial Reel', on: ['instagram'], kinds: ['reel'],
+    choices: [
+      { value: '', label: 'Off — post it to everyone' },
+      { value: 'MANUAL', label: 'Show it to non-followers first — we decide later' },
+      { value: 'SS_PERFORMANCE', label: 'Show it to non-followers first — Instagram decides' },
+    ],
+    help: 'A trial Reel goes to people who do not follow the account yet. It reaches '
+      + 'the followers’ feed only once it does well, or once somebody says so.',
+  },
+  {
+    key: 'audioName', field: 'audioName', control: 'text',
+    label: 'Name the sound', on: ['instagram'], kinds: ['reel'],
+    placeholder: 'What the audio is called on the Reel',
+  },
+
+  /* ── YouTube ── */
+  {
+    key: 'ytTitle', field: 'title', control: 'text', label: 'Video title', on: ['youtube'],
+    placeholder: 'Shown above the video',
+    help: 'Up to 100 letters. The first line of the caption is used if you leave this empty.',
+  },
+  {
+    key: 'ytVisibility', field: 'visibility', control: 'select', label: 'Who can watch',
+    on: ['youtube'], choices: labelChoices(YOUTUBE_VISIBILITY_LABELS),
+  },
+  {
+    key: 'ytCategory', field: 'categoryId', control: 'select', label: 'Category',
+    on: ['youtube'],
+    choices: YOUTUBE_CATEGORIES.map(c => ({ value: c.id, label: c.name })),
+    help: `Left alone, videos go under ${
+      YOUTUBE_CATEGORIES.find(c => c.id === DEFAULT_YOUTUBE_CATEGORY)?.name ?? 'People and blogs'}.`,
+  },
+  {
+    key: 'ytPlaylist', field: 'playlistId', control: 'select', label: 'Add to a playlist',
+    on: ['youtube'], source: 'playlists',
+  },
+  {
+    key: 'ytTags', field: 'tags', control: 'tags', label: 'Search tags', on: ['youtube'],
+    placeholder: 'Words people might search for, separated by commas',
+    help: 'YouTube counts them all together: 500 letters for the lot.',
+  },
+  {
+    key: 'ytKids', field: 'madeForKids', control: 'toggle', label: 'Made for children',
+    on: ['youtube'],
+    help: 'YouTube turns comments off on videos made for children.',
+  },
+  {
+    key: 'ytSynthetic', field: 'containsSyntheticMedia', control: 'toggle',
+    label: 'Made with AI, or changed to look real', on: ['youtube'],
+  },
+
+  /* ── LinkedIn ── */
+  {
+    key: 'liOrganization', field: 'organizationUrn', control: 'select',
+    label: 'Post as a company page', on: ['linkedin'], source: 'organizations',
+  },
+  {
+    key: 'liLinkPreview', field: 'disableLinkPreview', control: 'toggle',
+    label: 'Hide the link preview', on: ['linkedin'],
+  },
+  {
+    key: 'liDocumentTitle', field: 'documentTitle', control: 'text',
+    label: 'Name for the PDF', on: ['linkedin'],
+    placeholder: 'Shown on the document card',
+  },
+
+  /* ── Facebook ── */
+  {
+    key: 'fbPage', field: 'pageId', control: 'select', label: 'Which Page',
+    on: ['facebook'], source: 'pages',
+  },
+  {
+    key: 'fbTitle', field: 'title', control: 'text', label: 'Reel title',
+    on: ['facebook'], kinds: ['reel'],
+  },
+  {
+    key: 'fbDraft', field: 'facebookDraft', control: 'toggle',
+    label: 'Save it in Facebook as a draft instead of posting', on: ['facebook'],
+  },
+
+  /* ── TikTok ── */
+  {
+    key: 'ttPrivacy', field: 'privacyLevel', control: 'select', label: 'Who can see it',
+    on: ['tiktok'], source: 'privacy', choices: labelChoices(TIKTOK_PRIVACY_LABELS),
+  },
+  {
+    key: 'ttComments', field: 'allowComment', control: 'toggle',
+    label: 'Allow comments', on: ['tiktok'], defaultOn: true,
+  },
+  {
+    key: 'ttDuet', field: 'allowDuet', control: 'toggle',
+    label: 'Allow duets', on: ['tiktok'], defaultOn: true,
+  },
+  {
+    key: 'ttStitch', field: 'allowStitch', control: 'toggle', label: 'Allow stitches',
+    on: ['tiktok'], defaultOn: true, lead: 'video',
+  },
+  {
+    key: 'ttCommercial', field: 'commercialContentType', control: 'select',
+    label: 'Is this a promotion?', on: ['tiktok'],
+    choices: labelChoices(COMMERCIAL_CONTENT_LABELS),
+    help: 'A paid partnership cannot be posted where only the account itself can see it.',
+  },
+  {
+    key: 'ttAi', field: 'videoMadeWithAi', control: 'toggle',
+    label: 'Made with AI', on: ['tiktok'],
+  },
+  {
+    key: 'ttDraft', field: 'tiktokDraft', control: 'toggle',
+    label: 'Send it to the TikTok inbox as a draft instead of posting', on: ['tiktok'],
+  },
+  {
+    key: 'ttMusic', field: 'autoAddMusic', control: 'toggle',
+    label: 'Let TikTok add music', on: ['tiktok'], lead: 'image',
+  },
+  {
+    key: 'ttCover', field: 'videoCoverTimestampMs', control: 'seconds', label: 'Cover frame',
+    on: ['tiktok'], lead: 'video',
+    help: 'How many seconds into the video the cover picture is taken from.',
+  },
+  {
+    key: 'ttDescription', field: 'tiktokDescription', control: 'longText',
+    label: 'Words for the pictures', on: ['tiktok'], lead: 'image',
+    help: 'TikTok shows this under a set of pictures. Up to 4,000 letters.',
+  },
+  {
+    key: 'ttConsent', field: 'tiktokConsent', control: 'consent',
+    label: TIKTOK_CONSENT_TICK, on: ['tiktok'], help: TIKTOK_CONSENT_LINE,
+  },
+]
 
 /**
  * Which of the composer's "More options" are real for these channels.
  *
- * Read straight off what `toPlatformData` sends. Location and product tags
- * are in Later's window and not in ours, because Zernio takes neither: a row
- * that collects something the provider will never receive is a lie the person
- * only finds out about after the post is live.
- */
-const OPTION_PLATFORMS: Record<MoreOptionKey, Platform[]> = {
-  firstComment: ['instagram', 'facebook', 'threads'],
-  collaborators: ['instagram'],
-  shareToFeed: ['instagram', 'facebook'],
-  location: ['instagram'],
-}
-const OPTION_LABEL: Record<MoreOptionKey, string> = {
-  firstComment: 'Add first comment',
-  collaborators: 'Invite collaborator',
-  shareToFeed: 'Also show the Reel in the feed',
-  location: 'Add location',
-}
-
-/**
- * @param kind the post type currently chosen, when one is — a Story is the
- *   one case where Instagram REFUSES a location rather than ignoring it, so
- *   the row goes away rather than offering a field that breaks the post.
+ * Only the selected networks' settings, and only the ones this post can carry:
+ * "Add location" goes the moment the post is a Story, because Instagram
+ * REFUSES a Story with a place on it rather than ignoring it, and "Allow
+ * stitches" goes on a set of pictures, which nobody can stitch.
+ *
+ * @param kind the post type currently chosen, when one is
+ * @param lead what the post is MADE of — 'video' or 'image' — when that is
+ *   known. Unknown shows everything, rather than hiding a setting somebody is
+ *   looking for.
  */
 export function moreOptionsFor(
   platforms: readonly string[] | null | undefined,
   kind?: PostKind | null,
+  lead?: 'video' | 'image' | null,
 ): MoreOption[] {
   const list = [...new Set((Array.isArray(platforms) ? platforms : []).map(p => String(p)))]
-  return (Object.keys(OPTION_PLATFORMS) as MoreOptionKey[])
-    .filter(key => key !== 'location' || kindTakesLocation(kind ?? undefined))
-    .map(key => ({
-      key,
-      label: OPTION_LABEL[key],
-      platforms: list.filter(p => (OPTION_PLATFORMS[key] as string[]).includes(p)),
-    }))
-    .filter(o => o.platforms.length > 0)
+  const out: MoreOption[] = []
+  for (const spec of OPTION_SPECS) {
+    if (spec.key === 'location' && !kindTakesLocation(kind ?? undefined)) continue
+    if (spec.kinds && kind && !spec.kinds.includes(kind)) continue
+    if (spec.lead && lead && spec.lead !== lead) continue
+    const on = list.filter(p => (spec.on as string[]).includes(p))
+    if (on.length === 0) continue
+    const rest = { ...spec } as Partial<OptionSpec>
+    delete rest.on; delete rest.kinds; delete rest.lead
+    out.push({ ...(rest as Omit<MoreOption, 'platforms'>), platforms: on })
+  }
+  return out
+}
+
+/** One network's block of settings in the window — its own heading, so nobody
+ *  has to work out which "Who can see it" belongs to which channel. */
+export type OptionGroup = { platform: string | null; label: string; options: MoreOption[] }
+
+/**
+ * The rows, grouped the way they are read: the handful that apply to more than
+ * one selected network first, then one block per network.
+ */
+export function groupOptions(options: readonly MoreOption[] | null | undefined): OptionGroup[] {
+  const list = Array.isArray(options) ? options : []
+  const shared = list.filter(o => o.platforms.length > 1)
+  const groups: OptionGroup[] = shared.length > 0
+    ? [{ platform: null, label: 'Every channel that has it', options: shared }]
+    : []
+  for (const option of list) {
+    if (option.platforms.length !== 1) continue
+    const platform = option.platforms[0]
+    let group = groups.find(g => g.platform === platform)
+    if (!group) {
+      group = { platform, label: networkName(platform), options: [] }
+      groups.push(group)
+    }
+    group.options.push(option)
+  }
+  return groups
 }
 
 /* ── the places a client tags posts at ──────────────────────────────────── */

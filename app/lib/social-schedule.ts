@@ -19,9 +19,12 @@ import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { LIVE_JOB_STATUSES, publishLockKey, queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
 import {
-  isPageId, isPlatform, validatePost,
-  type MediaItem, type PostKind, type Platform, type Target,
+  isPlatform, validatePost,
+  type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
 } from './publish-core'
+import {
+  optionsFromExtras, readChannelExtras, type ChannelExtras,
+} from './schedule-compose-core'
 import {
   applySlideLimit, canReschedule, eligibility, mirrorStatus, validateComposition,
   type SocialPostStatus,
@@ -92,41 +95,22 @@ const asObject = (v: unknown): Record<string, unknown> =>
  * composer's "More options" collect and the provider never receives — a
  * control that silently does nothing, which is worse than not having it.
  */
-export type PerChannel = Record<string, {
-  caption?: string
-  kind?: string
-  slides?: Slide[]
-  /** posted the moment the post is live — the usual place for hashtags */
-  firstComment?: string
-  /** up to three usernames (Instagram Business/Creator accounts) */
-  collaborators?: string[]
-  /** a Reel that also shows in the main feed */
-  shareToFeed?: boolean
-  /** the numeric Facebook Page id of the place — Instagram only, never on a
-   *  Story, both of which `toPlatformData` enforces on the way out */
-  locationId?: string
-}>
+export type PerChannel = Record<string, ChannelExtras>
 
-const readPerChannel = (v: unknown): PerChannel => {
+/**
+ * Read the composer's per-channel overrides off the stored json.
+ *
+ * ONE reader, shared with the window itself (`readChannelExtras`). It used to
+ * be two, and they disagreed: what the window kept, the server dropped, so a
+ * setting collected on screen never reached Zernio — a control that silently
+ * does nothing, which is worse than not having it. A second copy of this list
+ * is the bug, so there is no second copy.
+ */
+const readPerChannel = (v: unknown): PerChannel => readChannelExtras_(v)
+
+const readChannelExtras_ = (v: unknown): PerChannel => {
   const out: PerChannel = {}
-  for (const [k, raw] of Object.entries(asObject(v))) {
-    const o = asObject(raw)
-    const collaborators = Array.isArray(o.collaborators)
-      ? o.collaborators.map(String).map(x => x.trim().replace(/^@/, '')).filter(Boolean).slice(0, 3)
-      : []
-    out[k] = {
-      ...(typeof o.caption === 'string' ? { caption: o.caption } : {}),
-      ...(typeof o.kind === 'string' ? { kind: o.kind } : {}),
-      ...(Array.isArray(o.slides) ? { slides: o.slides as Slide[] } : {}),
-      ...(typeof o.firstComment === 'string' && o.firstComment.trim()
-        ? { firstComment: o.firstComment } : {}),
-      ...(collaborators.length > 0 ? { collaborators } : {}),
-      ...(typeof o.shareToFeed === 'boolean' ? { shareToFeed: o.shareToFeed } : {}),
-      // a place NAME typed into the id box is the mistake people make, and
-      // Instagram answers it by refusing the post hours later — dropped here
-      ...(isPageId(o.locationId as string) ? { locationId: String(o.locationId).trim() } : {}),
-    }
-  }
+  for (const [k, raw] of Object.entries(asObject(v))) out[k] = readChannelExtras(raw)
   return out
 }
 
@@ -316,12 +300,16 @@ function problemsWith(input: {
     const kinds: Partial<Record<Platform, PostKind>> = {}
     const mediaByPlatform: Partial<Record<Platform, MediaItem[]>> = {}
     const captionByPlatform: Partial<Record<Platform, string>> = {}
+    const optionsByPlatform: Partial<Record<Platform, PostOptions>> = {}
     for (const account of input.accounts) {
       if (!isPlatform(account.platform)) continue
       const own = input.perChannel[account.id]
       if (own?.kind) kinds[account.platform] = own.kind as PostKind
       if (own?.slides?.length) mediaByPlatform[account.platform] = mediaOf(own.slides)
       if (own?.caption?.trim()) captionByPlatform[account.platform] = own.caption
+      // every channel gets an entry, even an empty one: TikTok's tick is
+      // missing exactly when nobody opened the options
+      optionsByPlatform[account.platform] = optionsFromExtras(own)
     }
     for (const issue of validatePost({
       caption: input.caption,
@@ -330,6 +318,7 @@ function problemsWith(input: {
       kinds,
       mediaByPlatform,
       captionByPlatform,
+      optionsByPlatform,
     })) {
       problems.push(`${issue.platform}: ${issue.problem}`)
     }
@@ -886,23 +875,21 @@ export async function syncFromItem(itemId: string): Promise<void> {
 
 /** The provider payload for one post: one target per channel, each carrying
  *  its own caption, kind and slides where the composer set them. */
-function targetsFor(post: PlannedPost, accounts: SocialAccount[]): Target[] {
+export function targetsFor(post: PlannedPost, accounts: SocialAccount[]): Target[] {
   const out: Target[] = []
   for (const account of accounts) {
     if (!isPlatform(account.platform)) continue
     const own = post.per_channel[account.id] ?? {}
     const slides = own.slides?.length ? own.slides : post.slides
     const trimmed = applySlideLimit(slides, account.platform)
-    const options: Target['options'] = {}
-    if (own.kind) options.kind = own.kind as PostKind
-    if (own.caption?.trim()) options.caption = own.caption
-    // the extras the composer collects. `toPlatformData` decides where each
-    // one is actually allowed — a location goes to Instagram and never to a
-    // Story — so nothing here has to know a platform's rules.
-    if (own.firstComment?.trim()) options.firstComment = own.firstComment
-    if (own.collaborators?.length) options.collaborators = own.collaborators
-    if (own.shareToFeed !== undefined) options.shareToFeed = own.shareToFeed
-    if (own.locationId) options.locationId = own.locationId
+    // EVERY extra the composer collects, forwarded by one shared mapping
+    // rather than field by field. Copying them by hand is exactly how
+    // `locationId`, `firstComment`, `collaborators` and `shareToFeed` were
+    // collected on screen, stored, and then dropped on the way to Zernio.
+    // `toPlatformData` decides where each one is actually allowed — a
+    // location goes to Instagram and never to a Story — so nothing here has
+    // to know a platform's rules.
+    const options: Target['options'] = optionsFromExtras(own)
     // a channel whose set differs from the shared one carries its own media
     if (JSON.stringify(trimmed) !== JSON.stringify(post.slides)) options.media = mediaOf(trimmed)
     out.push({

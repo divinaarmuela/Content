@@ -61,6 +61,7 @@ const book = await import('../app/api/social/schedule/[id]/schedule/route')
 const move = await import('../app/api/social/schedule/[id]/reschedule/route')
 const notesRoute = await import('../app/api/social/schedule/notes/route')
 const suggested = await import('../app/api/social/schedule/suggested/route')
+const channelOptions = await import('../app/api/social/schedule/options/route')
 const approval = await import('../app/api/production/items/[id]/posting-approval/route')
 const adhoc = await import('../app/api/social/publish/route')
 const lib = await import('../app/lib/social-schedule')
@@ -768,5 +769,64 @@ describe('the calendar reads', () => {
     expect(res.status).toBe(200)
     expect(res.body.times.length).toBeGreaterThan(0)
     expect(res.body.times.every((t: { source: string }) => t.source === 'default')).toBe(true)
+  })
+})
+
+
+/**
+ * The per-network option lists.
+ *
+ * They are read-only and decorative next to publishing — but they are read
+ * PER ACCOUNT, and an account belongs to a client. So the same scoping as
+ * everything else on this page: a channel this person's clients do not own is
+ * a channel that does not exist, answered the way the item page answers work
+ * that is not theirs.
+ */
+describe('the lists behind the per-network options', () => {
+  const options = (query: string) => json(channelOptions.GET(
+    new Request(`https://x.test/api/social/schedule/options${query}`)))
+
+  it('hands a scheduler the lists for a connected channel', async () => {
+    as(SCHEDULER)
+    const res = await options('?accountId=acc-1')
+    expect(res.status).toBe(200)
+    // the dry-run provider answers without a socket; the shape is what the
+    // window draws its menus from
+    expect(res.body).toMatchObject({
+      playlists: [], organizations: [], pages: [], privacy: [],
+    })
+  })
+
+  it('always offers TikTok somewhere to post, even when the creator list cannot be read', async () => {
+    const tables = (fake.tree() as any).mdm.tables
+    tables.social_accounts['acc-tt'] = {
+      id: 'acc-tt', client_id: CLIENT, platform: 'tiktok', provider_account_id: 'prov-tt',
+      name: 'Acme on TikTok', username: 'acme', avatar_url: null, active: true,
+    }
+    as(SCHEDULER)
+    const res = await options('?accountId=acc-tt')
+    expect(res.status).toBe(200)
+    expect(res.body.privacy.map((p: { value: string }) => p.value))
+      .toContain('PUBLIC_TO_EVERYONE')
+  })
+
+  it('asks which channel rather than guessing', async () => {
+    as(SCHEDULER)
+    expect((await options('')).status).toBe(400)
+  })
+
+  it('is a 404 for a channel that is gone, and for one that is not this person’s', async () => {
+    as(SCHEDULER)
+    expect((await options('?accountId=nope')).status).toBe(404)
+
+    // an editor with no client of their own: the channel exists, and it is
+    // not theirs to look at
+    as({ id: 'u-ed3', role: 'editor', email: 'ed3@x.invalid', name: 'Ash', clerk_user_id: null })
+    expect((await options('?accountId=acc-1')).status).toBe(404)
+  })
+
+  it('is closed to a client account', async () => {
+    as({ id: 'u-cl', role: 'client', email: 'cl@x.invalid', name: 'Cass', clerk_user_id: null })
+    expect((await options('?accountId=acc-1')).status).toBe(403)
   })
 })

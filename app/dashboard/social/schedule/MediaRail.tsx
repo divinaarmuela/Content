@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { mayApproveWithoutClient } from '@/app/lib/social-schedule-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
 
@@ -69,15 +70,20 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, loading, onNew, onPick,
+  media, waiting, loading, role, onNew, onPick, onApprove,
 }: {
   media: RailMedia[]
   waiting: number
   loading: boolean
+  /** the viewer's role — an account manager or a super admin may sign a piece
+   *  off without the client from here */
+  role: string | null
   /** start a post with nothing chosen yet */
   onNew: () => void
   /** start a post from this piece */
   onPick: (media: RailMedia) => void
+  /** sign this piece off without waiting for the client */
+  onApprove: (media: RailMedia) => void
 }) {
   // "Unused" starts on, as the design has it: the rail is for finding the
   // next thing to post, and media already in a post is not that
@@ -197,6 +203,18 @@ export default function MediaRail({
                   <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
                     {m.reason}
                   </span>
+                )}
+                {/* waiting on somebody, and this person could be that
+                    somebody: one press signs it off, after one question */}
+                {!m.ok && mayApproveWithoutClient(role, m.status) && (
+                  <button
+                    type="button"
+                    onClick={() => onApprove(m)}
+                    title={`Approve ${m.title} without the client`}
+                    className="absolute inset-x-1 bottom-[22px] z-10 truncate rounded-full bg-cream px-2 py-1 text-[10px] font-semibold text-ink hover:opacity-90 [@media(pointer:coarse)]:py-2"
+                  >
+                    Approve without client
+                  </button>
                 )}
               </div>
             ))}

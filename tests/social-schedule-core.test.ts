@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
-  blockReason,
+  blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
   type SocialPostStatus,
 } from '@/app/lib/social-schedule-core'
 import { fromZonedInput, toZonedInput, dayKeyInZone } from '@/app/lib/timezone-core'
@@ -639,5 +639,77 @@ describe('validateComposition', () => {
     const r = validateComposition({ ...good, item: { status: 'client_changes_requested' } })
     expect(r.ok).toBe(false)
     expect(r.problems).toContain('Changes in progress')
+  })
+})
+
+
+/* ── approving without the client, from Schedule ─────────────────────────── */
+
+describe('Approve without client', () => {
+  it('is offered to the account manager and the super admin, and nobody else', () => {
+    for (const role of ['account_manager', 'super_admin']) {
+      expect(mayApproveWithoutClient(role, 'client_review')).toBe(true)
+      expect(mayApproveWithoutClient(role, 'internal_review')).toBe(true)
+    }
+    // booking a post in is not the same as deciding the client need not see it
+    for (const role of ['scheduler', 'editor', 'client', null]) {
+      expect(mayApproveWithoutClient(role, 'client_review')).toBe(false)
+    }
+  })
+
+  it('is only offered where somebody is WAITING, never on work still being made', () => {
+    for (const status of [
+      'draft_uploaded', 'revision_required', 'revision_complete',
+      'client_changes_requested', 'approved_for_scheduling', 'scheduled', 'published',
+    ]) {
+      expect(mayApproveWithoutClient('account_manager', status), status).toBe(false)
+    }
+  })
+
+  it('asks about the version the client would have seen', () => {
+    expect(approveWithoutClientQuestion(3)).toBe('Approve v3 without the client seeing it?')
+    // …and says something true when there is no version number to hand
+    expect(approveWithoutClientQuestion(null)).toBe('Approve this without the client seeing it?')
+  })
+})
+
+describe('the composer refuses what the publisher would refuse', () => {
+  const base = {
+    item: { status: 'approved_for_scheduling', content_type: 'static' },
+    version: null,
+    slides: [img(1)],
+    caption: 'Some words',
+    scheduledFor: null,
+    now: '2026-09-04T00:00:00.000Z',
+  }
+
+  it('holds a TikTok post until the tick is given', () => {
+    const before = validateComposition({
+      ...base, channels: [{ id: 'a', platform: 'tiktok', options: {} }],
+    })
+    expect(before.ok).toBe(false)
+    expect(before.problems.join(' ')).toMatch(/Tick the TikTok box/)
+
+    const after = validateComposition({
+      ...base, channels: [{ id: 'a', platform: 'tiktok', options: { tiktokConsent: true } }],
+    })
+    expect(after.ok).toBe(true)
+  })
+
+  it('names the channel when the sentence does not name it itself', () => {
+    const out = validateComposition({
+      ...base,
+      channels: [{
+        id: 'a', platform: 'instagram', kind: 'story',
+        options: { locationId: '12345678', kind: 'story' },
+      }],
+    })
+    expect(out.problems.join(' ')).toMatch(/Instagram/)
+  })
+
+  it('says nothing about a channel nobody opened the options for', () => {
+    expect(validateComposition({
+      ...base, channels: [{ id: 'a', platform: 'instagram' }],
+    }).ok).toBe(true)
   })
 })

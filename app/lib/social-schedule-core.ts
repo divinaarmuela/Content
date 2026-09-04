@@ -28,7 +28,10 @@
  */
 
 import { publishBlockReason, parseApprovalState } from './posting-approval-core'
-import { LIVE_JOB_STATUSES, PLATFORM_RULES, type Platform } from './publish-core'
+import {
+  LIVE_JOB_STATUSES, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
+  type Platform, type PostKind, type PostOptions,
+} from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
@@ -74,6 +77,40 @@ const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
   client_review: 'Still with the client',
   client_changes_requested: 'Changes in progress',
   published: 'Already posted',
+}
+
+/**
+ * The statuses "Approve without client" can rescue a piece from.
+ *
+ * Both are waits on a person, not on work: `internal_review` is waiting for
+ * the manager's own check and `client_review` is waiting for the client to
+ * answer. Neither is a piece that is still being made, and neither is one the
+ * client has already changed their mind about — those need the work doing,
+ * not a signature.
+ */
+export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review', 'client_review']
+
+/**
+ * May THIS person sign a piece off without the client, from the Schedule page?
+ *
+ * The account manager who owns the relationship, and a super admin. A
+ * scheduler may not: booking a post in is not the same as deciding the client
+ * does not need to see it. Hiding the button is presentation — the refusal
+ * itself is `workflow-core`'s edge, checked again on the server.
+ */
+export function mayApproveWithoutClient(
+  role: string | null | undefined,
+  status: string | null | undefined,
+): boolean {
+  if (role !== 'account_manager' && role !== 'super_admin') return false
+  return (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(String(status ?? ''))
+}
+
+/** The one line somebody is asked before a client is skipped. */
+export function approveWithoutClientQuestion(versionNumber: number | null | undefined): string {
+  const which = Number.isFinite(Number(versionNumber)) && Number(versionNumber) > 0
+    ? `v${Number(versionNumber)}` : 'this'
+  return `Approve ${which} without the client seeing it?`
 }
 
 export type Eligibility =
@@ -460,12 +497,10 @@ export function canReschedule(post: SchedulePost | null | undefined): Reschedule
 
 /* ── suggested times ────────────────────────────────────────────────────── */
 
-/** What a network is CALLED, once, so no two screens spell X differently. */
-export const NETWORK_LABEL: Record<string, string> = {
-  instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn',
-  facebook: 'Facebook', twitter: 'X', x: 'X', youtube: 'YouTube',
-  threads: 'Threads', pinterest: 'Pinterest', bluesky: 'Bluesky', reddit: 'Reddit',
-}
+/** What a network is CALLED, once, so no two screens spell X differently.
+ *  It moved down to `publish-core` — where the posting-option refusals that
+ *  name a network live — and is re-exported here so every caller is unmoved. */
+export { NETWORK_LABEL }
 
 /**
  * Where to start before a client has numbers of their own — the owner's list.
@@ -901,7 +936,14 @@ export function groupForList<T extends ListablePost>(
 
 /* ── is this post ready to send ─────────────────────────────────────────── */
 
-export type ComposerChannel = { id?: string; platform: string }
+export type ComposerChannel = {
+  id?: string
+  platform: string
+  /** what this channel is set to post as, when anything has been chosen */
+  kind?: PostKind | null
+  /** this channel's own posting options, as the composer holds them */
+  options?: PostOptions | null
+}
 
 export type CompositionInput = {
   item: ScheduleItem | null | undefined
@@ -978,6 +1020,26 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
           )
         }
       }
+    }
+  }
+
+  // …and everything wrong with a channel's own posting options. The rule is
+  // `optionProblems`, the SAME function the server runs on the way out, so
+  // the window never approves of a post the publisher would refuse.
+  const media = slides.map(s => ({
+    url: s.url, type: s.type === 'video' ? 'video' as const : 'image' as const,
+  }))
+  for (const channel of channels) {
+    const platform = String(channel.platform) as Platform
+    if (!PLATFORM_RULES[platform]) continue
+    const own: PostOptions = channel.options ?? {}
+    const name = NETWORK_LABEL[platform] ?? platform
+    for (const problem of optionProblems(
+      platform, { ...own, kind: own.kind ?? channel.kind ?? undefined }, media, caption,
+    )) {
+      // the sentence names its own network wherever the network matters; the
+      // ones that do not are prefixed so nobody has to guess which channel
+      problems.push(problem.includes(name) ? problem : `${name}: ${problem}`)
     }
   }
 

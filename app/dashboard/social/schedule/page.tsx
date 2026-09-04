@@ -5,10 +5,11 @@ import { ChevronLeft, ChevronRight, Images } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  matchesChannel, nowLineTop, onOneOfDays, scheduleWeekGrid, type SuggestedTime,
+  approveWithoutClientQuestion, matchesChannel, nowLineTop, onOneOfDays,
+  scheduleWeekGrid, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import { dayKeyInZone, zoneLabel } from '@/app/lib/timezone-core'
-import { loadFailedMessage } from '@/app/lib/support-core'
+import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { readLocations } from '@/app/lib/schedule-compose-core'
 import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
@@ -108,6 +109,41 @@ export default function SchedulePage() {
   /** an empty slot, a suggested slot, or the rail's button: ask what goes in
    *  it, holding on to the time that was clicked */
   const openAt = (at: string | null) => setChoosing({ at })
+
+  /**
+   * "Approve without client" — the manager's own sign-off, from here.
+   *
+   * One question first, because it skips the client. The move itself is the
+   * EXISTING transition to `approved_for_scheduling`: the same edge, the same
+   * refusals and the same activity trail as the item page, so nobody gains a
+   * right by being on this screen. The rail updates itself — the item is
+   * live — so nothing here refetches.
+   */
+  const [approving, setApproving] = useState<RailMedia | null>(null)
+  const [approveNote, setApproveNote] = useState<string | null>(null)
+  const [approveBusy, setApproveBusy] = useState(false)
+
+  const approveWithoutClient = async (m: RailMedia) => {
+    setApproveBusy(true)
+    setApproveNote(null)
+    try {
+      const res = await fetch(`/api/production/items/${m.itemId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'approved_for_scheduling' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setApproveNote(friendlyError(String(json?.error ?? ''), 'Schedule'))
+        return
+      }
+      setApproving(null)
+    } catch {
+      setApproveNote(loadFailedMessage('that approval'))
+    } finally {
+      setApproveBusy(false)
+    }
+  }
 
   const target: ComposerTarget | null = useMemo(() => {
     if (!composing) return null
@@ -230,8 +266,10 @@ export default function SchedulePage() {
       media={data.media}
       waiting={data.waiting}
       loading={data.loading}
+      role={me?.role ?? null}
       onNew={() => openAt(weekSlots[0]?.iso ?? null)}
       onPick={m => openNew(m, null)}
+      onApprove={m => { setApproveNote(null); setApproving(m) }}
     />
   )
 
@@ -376,12 +414,56 @@ export default function SchedulePage() {
         </main>
       </div>
 
+      {approving && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Approve without the client"
+          onMouseDown={e => { if (e.target === e.currentTarget) setApproving(null) }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
+        >
+          <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-card bg-surface p-4 shadow-xl">
+            <h2 className="text-section-title">
+              {approveWithoutClientQuestion(approving.versionNumber)}
+            </h2>
+            <p className="text-[13px] text-muted-foreground">
+              {`“${approving.title}” is signed off in your name and can be posted. `}
+              The client is not asked.
+            </p>
+            {approveNote && (
+              <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
+                {approveNote}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setApproving(null)}
+                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+              >
+                Not yet
+              </button>
+              <button
+                type="button"
+                disabled={approveBusy}
+                onClick={() => void approveWithoutClient(approving)}
+                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
+              >
+                {approveBusy ? 'Approving…' : 'Approve without client'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {choosing && (
         <PiecePicker
           media={data.media}
           at={choosing.at}
           tz={tz}
+          role={me?.role ?? null}
           onPick={m => openNew(m, choosing.at)}
+          onApprove={m => { setApproveNote(null); setApproving(m) }}
           onClose={() => setChoosing(null)}
         />
       )}

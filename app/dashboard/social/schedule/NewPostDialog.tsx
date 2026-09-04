@@ -7,16 +7,19 @@ import {
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
-  APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, initialComposer,
-  moreOptionsFor, readPerChannel, PAGE_ID_HELP,
-  type ComposerState, type FooterActionKey, type MoreOptionKey, type SavedLocation,
+  APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions,
+  initialComposer, moreOptionsFor, optionsFromExtras, readPerChannel, PAGE_ID_HELP,
+  type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
+  type OptionChoice, type SavedLocation,
 } from '@/app/lib/schedule-compose-core'
 import {
   tileTone, validateComposition, type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import {
-  autoKindFor, availableKinds, isPageId, isPlatform, type PostKind,
+  autoKindFor, availableKinds, isPageId, isPlatform, networkName,
+  TIKTOK_CONSENT_LINE, type PostKind,
 } from '@/app/lib/publish-core'
+import type { ChannelOptions } from '@/app/lib/publisher'
 import { mayPublish as roleMayPublish, type Role } from '@/app/lib/identity-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { formatInZone } from '@/app/lib/timezone-core'
@@ -193,10 +196,20 @@ export default function NewPostDialog({
     version: null,
     slides: state.slides,
     caption: state.caption,
-    channels: chosen.map(a => ({ id: a.id, platform: String(a.platform) })),
+    // the per-network options travel with the channel, so the window refuses
+    // exactly what the publisher would refuse — the missing TikTok tick, a
+    // paid partnership nobody can see, a YouTube title too long for YouTube
+    channels: chosen.map(a => ({
+      id: a.id,
+      platform: String(a.platform),
+      options: optionsFromExtras(state.perChannel[a.id]),
+    })),
     scheduledFor: state.scheduledFor,
     now: Date.now(),
-  }), [state.slides, state.caption, state.scheduledFor, chosen, target.contentType])
+  }), [
+    state.slides, state.caption, state.scheduledFor, state.perChannel,
+    chosen, target.contentType,
+  ])
 
   const approvedUrls = useMemo(
     () => new Set(target.approved.map(s => s.url)), [target.approved])
@@ -214,9 +227,44 @@ export default function NewPostDialog({
    *  to be checked against */
   const effectiveKind = pickedKind || autoKind || undefined
 
-  const options = moreOptionsFor(platforms, effectiveKind)
+  /** video or pictures — a stitch setting on a set of photos is a control
+   *  for something nobody can do */
+  const mediaLead: 'video' | 'image' | null = state.slides[0]
+    ? (state.slides[0].type === 'video' ? 'video' : 'image')
+    : null
+  const options = moreOptionsFor(platforms, effectiveKind, mediaLead)
+  const groups = groupOptions(options)
   const strip = state.slides.slice(0, 3)
   const extra = Math.max(0, state.slides.length - strip.length)
+
+  /**
+   * The lists only the network knows: YouTube playlists, LinkedIn company
+   * pages, Facebook Pages, the privacy levels TikTok allows this creator.
+   *
+   * One request per channel, once per channel, and a failure is an empty list
+   * — the row then offers a box to type in rather than a menu with nothing in
+   * it. Nothing here can block the window from opening.
+   */
+  const [lists, setLists] = useState<Record<string, ChannelOptions>>({})
+  const asked = useRef<Set<string>>(new Set())
+  const needsList = useMemo(
+    () => new Set(options.filter(o => o.source).flatMap(o => o.platforms)), [options])
+  useEffect(() => {
+    let live = true
+    for (const account of chosen) {
+      if (!needsList.has(String(account.platform))) continue
+      if (asked.current.has(account.id)) continue
+      asked.current.add(account.id)
+      fetch(`/api/social/schedule/options?accountId=${encodeURIComponent(account.id)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(json => {
+          if (!live || !json || json.error) return
+          setLists(prev => ({ ...prev, [account.id]: json as ChannelOptions }))
+        })
+        .catch(() => { /* an unreadable list is a box to type in, not a failure */ })
+    }
+    return () => { live = false }
+  }, [chosen, needsList])
 
   /* ── talking to the server ────────────────────────────────────────────── */
 
@@ -557,24 +605,34 @@ export default function NewPostDialog({
               />
             </label>
 
-            {options.length > 0 && (
+            {groups.length > 0 && (
               <>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   More options
                 </span>
-                <div className="flex flex-col gap-2.5">
-                  {options.map(o => (
-                    <ExtraRow
-                      key={o.key}
-                      option={o.key}
-                      label={o.label}
-                      channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
-                      state={state}
-                      dispatch={dispatch}
-                      locations={locations}
-                    />
-                  ))}
-                </div>
+                {groups.map(group => (
+                  <div key={group.platform ?? 'shared'} className="flex flex-col gap-2.5">
+                    {/* one heading per network, so nobody has to work out
+                        which "Who can see it" belongs to which channel */}
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
+                      {group.platform && (
+                        <PlatformIcon platform={group.platform} size={14} className="rounded-full" />
+                      )}
+                      {group.label}
+                    </span>
+                    {group.options.map(o => (
+                      <ExtraRow
+                        key={o.key}
+                        option={o}
+                        channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
+                        state={state}
+                        dispatch={dispatch}
+                        locations={locations}
+                        lists={lists}
+                      />
+                    ))}
+                  </div>
+                ))}
               </>
             )}
 
@@ -860,43 +918,133 @@ function SplitButton({ label, disabled, onPrimary, items, onPick }: {
 /**
  * One row of "More options", for the channels it actually applies to.
  *
- * Location is the interesting one. Instagram takes a NUMERIC FACEBOOK PAGE ID
- * and there is no place search anywhere in the chain, so the row offers the
- * client's saved places first and a box for the number second — and it is not
- * rendered at all on a Story, because Instagram refuses those outright.
+ * ONE renderer for every setting, driven by the table in
+ * `schedule-compose-core`: a row is a control kind, a label and the one field
+ * it writes. Adding a posting option is a line in that table, not another
+ * branch here — which is what keeps the window and the provider in step.
+ *
+ * Two rows are their own shape. LOCATION, because Instagram takes a numeric
+ * Facebook Page id and there is no place search anywhere in the chain, so the
+ * row offers the client's saved places first and a box for the number second.
+ * And CONSENT, because it is not a setting with a default — it is a statement
+ * somebody makes, once per post, and TikTok will not take the post without it.
  */
-function ExtraRow({ option, label, channels, state, dispatch, locations }: {
-  option: MoreOptionKey
-  label: string
+function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
+  option: MoreOption
   channels: SocialAccount[]
   state: ComposerState
-  dispatch: (a: { type: 'extra'; channel: string; patch: Record<string, unknown> }) => void
+  dispatch: (a: { type: 'extra'; channel: string; patch: ChannelExtras }) => void
   locations: SavedLocation[]
+  /** the per-account lists fetched from the network, by account id */
+  lists: Record<string, ChannelOptions>
 }) {
   const first = channels[0]
   const value = first ? state.perChannel[first.id] ?? {} : {}
-  const [open, setOpen] = useState(Boolean(value.locationId || value.firstComment))
+  const held = (value as Record<string, unknown>)[option.field]
+  const [open, setOpen] = useState(held !== undefined && held !== '')
   if (!first) return null
 
-  const applyAll = (patch: Record<string, unknown>) => {
+  /** every channel this row covers gets the same answer: one Instagram
+   *  account per client is the case that exists, and two would want two rows
+   *  — the same per-channel question the one-caption-for-all decision parked */
+  const applyAll = (patch: ChannelExtras) => {
     for (const c of channels) dispatch({ type: 'extra', channel: c.id, patch })
   }
+  const set = (v: unknown) => applyAll({ [option.field]: v } as ChannelExtras)
 
-  if (option === 'shareToFeed') {
+  const help = option.help
+    ? <p className="text-[11px] text-muted-foreground">{option.help}</p>
+    : null
+  const field = 'min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]'
+
+  /* ── a tick box: on, off, and what the network does untouched ── */
+  if (option.control === 'toggle') {
     return (
-      <label className="flex min-h-11 items-center gap-2.5 text-[14px] font-medium">
-        <input
-          type="checkbox"
-          checked={Boolean(value.shareToFeed)}
-          onChange={e => applyAll({ shareToFeed: e.target.checked })}
-          className="h-4 w-4"
-        />
-        {label}
-      </label>
+      <div className="flex flex-col gap-1">
+        <label className="flex min-h-11 items-center gap-2.5 text-[14px] font-medium">
+          <input
+            type="checkbox"
+            checked={held === undefined ? Boolean(option.defaultOn) : Boolean(held)}
+            onChange={e => set(e.target.checked)}
+            className="h-4 w-4"
+          />
+          {option.label}
+        </label>
+        {help}
+      </div>
     )
   }
 
-  if (option === 'location') {
+  /* ── TikTok's one tick, which a post cannot go out without ── */
+  if (option.control === 'consent') {
+    const given = Boolean(held)
+    return (
+      <div className={cn(
+        'flex flex-col gap-1.5 rounded-inner border p-3',
+        given ? 'border-border' : 'border-accent-amber/50 bg-tint-amber',
+      )}>
+        <p className="text-[12px] leading-[1.45]">{TIKTOK_CONSENT_LINE}</p>
+        <label className="flex min-h-11 items-center gap-2.5 text-[14px] font-medium">
+          <input
+            type="checkbox"
+            checked={given}
+            onChange={e => set(e.target.checked || undefined)}
+            className="h-4 w-4"
+          />
+          {option.label}
+        </label>
+      </div>
+    )
+  }
+
+  /* ── a menu: the network's own list where there is one ── */
+  if (option.control === 'select') {
+    const fetched: OptionChoice[] = option.source
+      ? (lists[first.id]?.[option.source] ?? [])
+      : []
+    const choices = fetched.length > 0 ? fetched : option.choices ?? []
+    const current = held === undefined ? '' : String(held)
+    // a list we could not read is a box to type in, not a menu with nothing
+    // in it: a LinkedIn company page nobody can pick is a post that cannot go
+    // out as the company
+    if (choices.length === 0) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12px] font-semibold text-muted-foreground">{option.label}</span>
+          <input
+            value={current}
+            onChange={e => set(e.target.value.trim() || undefined)}
+            placeholder={option.placeholder ?? 'Paste the id'}
+            className={field}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {`We could not read this list from ${networkName(String(first.platform))} just now. `}
+            Leave it empty and the network decides.
+          </p>
+        </div>
+      )
+    }
+    const hasBlank = choices.some(c => c.value === '')
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[12px] font-semibold text-muted-foreground">{option.label}</span>
+          <select
+            value={choices.some(c => c.value === current) ? current : ''}
+            onChange={e => set(e.target.value || undefined)}
+            className={field}
+          >
+            {!hasBlank && <option value="">Leave it to the network</option>}
+            {choices.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </label>
+        {help}
+      </div>
+    )
+  }
+
+  /* ── the place a post is tagged to ── */
+  if (option.control === 'location') {
     const id = String(value.locationId ?? '')
     const bad = id !== '' && !isPageId(id)
     return (
@@ -907,7 +1055,7 @@ function ExtraRow({ option, label, channels, state, dispatch, locations }: {
           className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
         >
           <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
-          {label}
+          {option.label}
           {id && !bad && (
             <span className="text-[12px] font-normal text-muted-foreground">
               — {locations.find(l => l.pageId === id)?.name ?? id}
@@ -919,8 +1067,8 @@ function ExtraRow({ option, label, channels, state, dispatch, locations }: {
             {locations.length > 0 && (
               <select
                 value={locations.some(l => l.pageId === id) ? id : ''}
-                onChange={e => applyAll({ locationId: e.target.value || undefined })}
-                className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
+                onChange={e => set(e.target.value || undefined)}
+                className={field}
               >
                 <option value="">No place</option>
                 {locations.map(l => (
@@ -931,9 +1079,9 @@ function ExtraRow({ option, label, channels, state, dispatch, locations }: {
             <input
               value={id}
               inputMode="numeric"
-              onChange={e => applyAll({ locationId: e.target.value.trim() || undefined })}
+              onChange={e => set(e.target.value.trim() || undefined)}
               placeholder="…or paste a Facebook Page ID"
-              className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
+              className={field}
             />
             <p className={cn('text-[11px]', bad ? 'font-medium text-accent-red' : 'text-muted-foreground')}>
               {bad
@@ -948,6 +1096,29 @@ function ExtraRow({ option, label, channels, state, dispatch, locations }: {
     )
   }
 
+  /* ── everything typed: one line, several lines, a list, or a moment ── */
+  const shown = option.control === 'tags' || option.control === 'collaborators'
+    ? (Array.isArray(held) ? (held as string[]).join(', ') : '')
+    : option.control === 'seconds'
+      ? (typeof held === 'number' ? String(Math.round(held / 100) / 10) : '')
+      : String(held ?? '')
+
+  const write = (raw: string) => {
+    if (option.control === 'tags' || option.control === 'collaborators') {
+      const list = raw.split(',').map(x => x.trim().replace(/^@/, '')).filter(Boolean)
+      const capped = option.control === 'collaborators' ? list.slice(0, 3) : list
+      set(capped.length > 0 ? capped : undefined)
+      return
+    }
+    if (option.control === 'seconds') {
+      const seconds = Number(raw)
+      set(raw.trim() && Number.isFinite(seconds) && seconds >= 0
+        ? Math.round(seconds * 1000) : undefined)
+      return
+    }
+    set(raw || undefined)
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <button
@@ -956,24 +1127,32 @@ function ExtraRow({ option, label, channels, state, dispatch, locations }: {
         className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
       >
         <Plus className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
-        {label}
+        {option.label}
+        {!open && shown && (
+          <span className="truncate text-[12px] font-normal text-muted-foreground">— {shown}</span>
+        )}
       </button>
       {open && (
-        <input
-          value={option === 'firstComment'
-            ? String(value.firstComment ?? '')
-            : (value.collaborators ?? []).join(', ')}
-          onChange={e => applyAll(option === 'firstComment'
-            ? { firstComment: e.target.value }
-            : {
-              collaborators: e.target.value.split(',').map(s => s.trim().replace(/^@/, ''))
-                .filter(Boolean).slice(0, 3),
-            })}
-          placeholder={option === 'firstComment'
-            ? 'Posted as the first comment — the usual place for hashtags'
-            : 'Up to three usernames, separated by commas'}
-          className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
-        />
+        <>
+          {option.control === 'longText' ? (
+            <textarea
+              value={shown}
+              rows={3}
+              onChange={e => write(e.target.value)}
+              placeholder={option.placeholder}
+              className="w-full resize-y rounded-inner border border-border bg-surface px-3 py-2 text-[13px]"
+            />
+          ) : (
+            <input
+              value={shown}
+              inputMode={option.control === 'seconds' ? 'decimal' : undefined}
+              onChange={e => write(e.target.value)}
+              placeholder={option.control === 'seconds' ? 'Seconds in — for example 2.5' : option.placeholder}
+              className={field}
+            />
+          )}
+          {help}
+        </>
       )}
     </div>
   )

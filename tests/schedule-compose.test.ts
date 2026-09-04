@@ -4,6 +4,7 @@ import {
   inPost, initialComposer, joinClock, limitsLine, moreOptionsFor, moveInPost,
   readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
   to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
+  CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
 } from '@/app/lib/schedule-compose-core'
 import { isPageId, kindTakesLocation, toPlatformData } from '@/app/lib/publish-core'
 import { SOCIAL_POST_STATUSES } from '@/app/lib/social-schedule-core'
@@ -162,16 +163,38 @@ describe('what each channel will take, said in words', () => {
 describe('More options never offers what the provider cannot do', () => {
   it('offers a first comment where Zernio takes one', () => {
     expect(moreOptionsFor(['instagram']).map(o => o.key))
-      .toEqual(['firstComment', 'collaborators', 'shareToFeed', 'location'])
+      .toEqual([
+        'firstComment', 'collaborators', 'shareToFeed', 'location',
+        // the two Reel settings: with no post type chosen yet, a setting is
+        // shown rather than hidden from somebody looking for it
+        'trialReel', 'audioName',
+      ])
   })
 
   it('does not offer collaborators on a network that has none', () => {
-    expect(moreOptionsFor(['linkedin'])).toEqual([])
+    expect(moreOptionsFor(['linkedin']).map(o => o.key)).not.toContain('collaborators')
+  })
+
+  it('offers each network only its OWN settings', () => {
+    // LinkedIn takes a first comment, a company page, a link preview and a
+    // document name — and none of Instagram's
+    expect(moreOptionsFor(['linkedin']).map(o => o.key))
+      .toEqual(['firstComment', 'liOrganization', 'liLinkPreview', 'liDocumentTitle'])
+    expect(moreOptionsFor(['youtube']).map(o => o.key)).toEqual([
+      'firstComment', 'ytTitle', 'ytVisibility', 'ytCategory', 'ytPlaylist',
+      'ytTags', 'ytKids', 'ytSynthetic',
+    ])
+    // TikTok's consent tick is always there, because a TikTok post cannot go
+    // out without it
+    expect(moreOptionsFor(['tiktok']).map(o => o.key)).toContain('ttConsent')
+    expect(moreOptionsFor(['tiktok']).map(o => o.key)).not.toContain('firstComment')
   })
 
   it('names the channels a row applies to, so no row is a mystery', () => {
     const rows = moreOptionsFor(['instagram', 'linkedin'])
-    expect(rows.find(r => r.key === 'firstComment')?.platforms).toEqual(['instagram'])
+    expect(rows.find(r => r.key === 'firstComment')?.platforms)
+      .toEqual(['instagram', 'linkedin'])
+    expect(rows.find(r => r.key === 'collaborators')?.platforms).toEqual(['instagram'])
   })
 
   it('takes the location row away on a Story', () => {
@@ -381,5 +404,107 @@ describe('the button at the bottom offers only what this person may do', () => {
       expect(APPROVAL_LINE[status], status).toBeTruthy()
       expect(APPROVAL_LINE[status].toLowerCase()).not.toContain('graphic')
     }
+  })
+})
+
+
+/**
+ * THE PER-NETWORK OPTIONS, AS THE WINDOW OFFERS THEM.
+ *
+ * Two promises. Only the SELECTED network's settings are on screen — a
+ * TikTok privacy menu beside an Instagram-only post is a question about
+ * nothing. And only settings this POST can carry: a stitch on a set of
+ * photographs is a control for something nobody can do.
+ */
+describe('only the selected network, and only what this post can carry', () => {
+  it('shows nothing at all when no channel is chosen', () => {
+    expect(moreOptionsFor([])).toEqual([])
+    expect(moreOptionsFor(null)).toEqual([])
+  })
+
+  it('drops the Reel-only settings the moment the post is something else', () => {
+    expect(moreOptionsFor(['instagram'], 'carousel').map(o => o.key))
+      .not.toContain('trialReel')
+    expect(moreOptionsFor(['instagram'], 'reel').map(o => o.key)).toContain('trialReel')
+  })
+
+  it('takes stitches off a set of pictures and music off a video', () => {
+    const photos = moreOptionsFor(['tiktok'], 'carousel', 'image').map(o => o.key)
+    expect(photos).not.toContain('ttStitch')
+    expect(photos).toContain('ttMusic')
+    const video = moreOptionsFor(['tiktok'], 'reel', 'video').map(o => o.key)
+    expect(video).toContain('ttStitch')
+    expect(video).not.toContain('ttMusic')
+  })
+
+  it('always keeps the TikTok tick, whatever the post is made of', () => {
+    for (const lead of ['video', 'image'] as const) {
+      expect(moreOptionsFor(['tiktok'], null, lead).map(o => o.key)).toContain('ttConsent')
+    }
+  })
+
+  it('every row says which field it writes, and it is a real one', () => {
+    for (const row of moreOptionsFor(['instagram', 'facebook', 'tiktok', 'youtube', 'linkedin'])) {
+      expect(CHANNEL_EXTRA_KEYS, `${row.key} writes a field nothing reads`)
+        .toContain(row.field)
+    }
+  })
+
+  it('groups the rows under the network they belong to', () => {
+    const groups = groupOptions(moreOptionsFor(['instagram', 'youtube']))
+    // the first comment is on both, so it is not filed under either
+    expect(groups[0].platform).toBeNull()
+    expect(groups[0].options.map(o => o.key)).toEqual(['firstComment'])
+    expect(groups.map(g => g.label)).toEqual(['Every channel that has it', 'Instagram', 'YouTube'])
+    expect(groups[1].options.every(o => o.platforms).valueOf()).toBe(true)
+  })
+
+  it('does not invent a shared block when one network is on screen', () => {
+    const groups = groupOptions(moreOptionsFor(['youtube']))
+    expect(groups).toHaveLength(1)
+    expect(groups[0].label).toBe('YouTube')
+  })
+})
+
+describe('what comes back out of the stored blob', () => {
+  it('keeps a real choice and drops a word the network has never heard of', () => {
+    expect(readChannelExtras({ visibility: 'unlisted' }).visibility).toBe('unlisted')
+    expect(readChannelExtras({ visibility: 'secret' }).visibility).toBeUndefined()
+    expect(readChannelExtras({ privacyLevel: 'SELF_ONLY' }).privacyLevel).toBe('SELF_ONLY')
+    expect(readChannelExtras({ privacyLevel: 'EVERYONE' }).privacyLevel).toBeUndefined()
+  })
+
+  it('refuses a place NAME in the box that wants a number', () => {
+    expect(readChannelExtras({ locationId: '@thecoffeeplace' }).locationId).toBeUndefined()
+    // a pasted id arrives with spaces around it; that is a number, tidied
+    expect(readChannelExtras({ locationId: ' 1234567 ' }).locationId).toBe('1234567')
+    expect(readChannelExtras({ locationId: '1234567' }).locationId).toBe('1234567')
+  })
+
+  it('reads a cover moment as a number and refuses nonsense', () => {
+    expect(readChannelExtras({ videoCoverTimestampMs: 2500 }).videoCoverTimestampMs).toBe(2500)
+    expect(readChannelExtras({ videoCoverTimestampMs: -1 }).videoCoverTimestampMs).toBeUndefined()
+    expect(readChannelExtras({ videoCoverTimestampMs: '2500' }).videoCoverTimestampMs).toBeUndefined()
+  })
+
+  it('caps collaborators at three and keeps every tag', () => {
+    expect(readChannelExtras({ collaborators: ['@a', 'b', 'c', 'd'] }).collaborators)
+      .toEqual(['a', 'b', 'c'])
+    expect(readChannelExtras({ tags: ['one', 'two', 'three'] }).tags)
+      .toEqual(['one', 'two', 'three'])
+  })
+
+  it('sends nothing for a setting somebody emptied again', () => {
+    const options = optionsFromExtras({ title: '   ', tags: [], firstComment: 'keep me' })
+    expect(options.title).toBeUndefined()
+    expect(options.tags).toBeUndefined()
+    expect(options.firstComment).toBe('keep me')
+  })
+
+  it('keeps a tick box that was deliberately turned OFF', () => {
+    // `allowComment: false` is a decision, and an "if (value)" copy would
+    // drop it and post with comments on
+    expect(optionsFromExtras({ allowComment: false }).allowComment).toBe(false)
+    expect(readChannelExtras({ allowComment: false }).allowComment).toBe(false)
   })
 })
