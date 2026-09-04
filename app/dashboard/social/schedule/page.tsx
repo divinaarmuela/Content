@@ -9,7 +9,7 @@ import {
   approveWithoutClientQuestion, matchesChannel, nowLineTop, onOneOfDays,
   scheduleWeekGrid, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
-import { dayKeyInZone, zoneLabel } from '@/app/lib/timezone-core'
+import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { readLocations } from '@/app/lib/schedule-compose-core'
 import { useRole } from '../../useRole'
@@ -197,13 +197,19 @@ export default function SchedulePage() {
     }
   }
 
-  /** who may remove a note: the person who wrote it, or an account manager —
-   *  the same rule the server enforces in `removeNote` */
-  const mayRemoveNote = (note: ScheduleNote | null): boolean => {
-    if (!note || !me) return false
+  /**
+   * Who may change or remove a note: the person who wrote it, or an account
+   * manager — the same rule the server enforces in `editNote`/`removeNote`.
+   * A NEW note is always the writer's own, so it is always editable.
+   */
+  const mayChangeNote = (note: ScheduleNote | null): boolean => {
+    if (!note) return true
+    if (!me) return false
     return note.created_by === me.id
       || me.role === 'account_manager' || me.role === 'super_admin'
   }
+  const mayRemoveNote = (note: ScheduleNote | null): boolean =>
+    Boolean(note) && mayChangeNote(note)
 
   const openNew = (media: RailMedia, at: string | null) => {
     if (!media.ok) return
@@ -326,10 +332,11 @@ export default function SchedulePage() {
    * dropped.
    *
    * A tile that hangs where it was until the database answers reads as "that
-   * did not work" and gets dragged again. The optimistic time is dropped the
-   * moment the live row agrees with it — and dropped by the hook, not kept
-   * forever, so a move somebody ELSE makes later is not overwritten by this
-   * browser's memory of what it did.
+   * did not work" and gets dragged again. The drawn time is dropped the moment
+   * the SERVER answers — the listener is authoritative from that instant —
+   * and `settle` clears anything left over once the live row agrees or the
+   * post leaves the page, so this browser's memory of what it did can never
+   * outlive it and paint over somebody else's move.
    */
   const livePosts = useMemo(() => data.posts.map(p => {
     const at = drag.optimistic[p.id]
@@ -337,11 +344,8 @@ export default function SchedulePage() {
   }), [data.posts, drag.optimistic])
 
   useEffect(() => {
-    const done = Object.entries(drag.optimistic)
-      .filter(([id, at]) => data.posts.find(p => p.id === id)?.scheduled_for === at)
-      .map(([id]) => id)
-    if (done.length > 0) drag.settled(done)
-  }, [data.posts, drag.optimistic, drag.settled])
+    drag.settle(data.posts)
+  }, [data.posts, drag.settle])
 
   /** every post for this client on the selected channel */
   const channelPosts = useMemo(
@@ -395,6 +399,20 @@ export default function SchedulePage() {
       return !taken.some(t => Math.abs(t - at) < 45 * 60_000)
     })
   }, [suggested, inWeek, weekKeys])
+
+  /**
+   * The time a drop on a DAY means.
+   *
+   * A month cell has no hour in it, so a piece dropped there has to start
+   * somewhere: this client's own best time where their numbers give one, and
+   * the network's sensible default before that — the same list the week grid
+   * draws its faint slots from, rather than a second opinion invented here.
+   */
+  const defaultPostTime = useMemo(() => {
+    const first = suggested[0]?.iso
+    const hhmm = first ? toZonedInput(first, tz).slice(11, 16) : ''
+    return /^\d{2}:\d{2}$/.test(hhmm) ? hhmm : '11:00'
+  }, [suggested, tz])
 
   /** where "now" sits on the grid, in the client's zone */
   const nowTop = useMemo(() => nowLineTop(grid, now), [grid, now])
@@ -548,9 +566,13 @@ export default function SchedulePage() {
                   onNoteOpen={openNote}
                   noteEditor={noteDraft && (
                     <NoteEditor
+                      // keyed on the note: opening a second note in the same
+                      // column must not keep the first one's words
+                      key={noteDraft.note?.id ?? noteDraft.at}
                       at={noteDraft.at}
                       tz={tz}
                       text={noteDraft.note?.text ?? ''}
+                      canEdit={mayChangeNote(noteDraft.note)}
                       canDelete={mayRemoveNote(noteDraft.note)}
                       busy={noteBusy}
                       error={noteError}
@@ -573,6 +595,11 @@ export default function SchedulePage() {
               todayKey={todayKey}
               onOpen={openPost}
               drag={drag}
+              defaultTime={defaultPostTime}
+              onDropItem={(itemId, iso) => {
+                const media = data.media.find(m => m.itemId === itemId)
+                if (media) openNew(media, iso)
+              }}
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">

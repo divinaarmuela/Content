@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dragBlockReason, dropLabel, dropLabelAt, isMoveKey, keyboardMove, KEY_STEP_MINUTES,
-  LONG_PRESS_MS, mayDragTile, moveToDay, movedAnnouncement, movingAnnouncement,
-  previewOrder, snapToStep, SNAP_MINUTES,
+  beginMove, dragBlockReason, dropLabel, dropLabelAt, finishMove, isMoveKey, keyboardMove,
+  KEY_STEP_MINUTES, LONG_PRESS_MS, mayDragTile, moveToDay, movedAnnouncement,
+  dropIntent, movingAnnouncement, NO_MOVES, previewOrder, settledIds, shouldCommit,
+  snapToStep, SNAP_MINUTES,
 } from '@/app/lib/schedule-drag-core'
 import { groupForList, nearbyDayLabel, scheduleWeekGrid } from '@/app/lib/social-schedule-core'
 import { formatInZone, wallTimeIn } from '@/app/lib/timezone-core'
@@ -95,10 +96,18 @@ describe('moving with the keyboard', () => {
 
   it('carries midnight over to the next day rather than wrapping in place', () => {
     const late = '2026-09-09T13:45:00.000Z'            // 11:45 pm Melbourne
+    // the day really does turn over — and the post is then pulled into the
+    // hours the grid draws, rather than left at 12:15 am where no column
+    // could show it
     const later = keyboardMove(late, 'ArrowDown', TZ)!
     expect(at(later).day).toBe(at(late).day + 1)
-    expect(at(later).hour).toBe(0)
-    expect(at(later).minute).toBe(15)
+    expect(at(later).hour).toBe(6)
+    expect(at(later).minute).toBe(0)
+    // with a window that HAS a midnight in it, the minute is kept
+    const open = keyboardMove(late, 'ArrowDown', TZ, { fromHour: 0, toHour: 23 })!
+    expect(at(open).day).toBe(at(late).day + 1)
+    expect(at(open).hour).toBe(0)
+    expect(at(open).minute).toBe(15)
   })
 
   it('ignores every key that is not an arrow, and a post with no time', () => {
@@ -113,6 +122,29 @@ describe('moving with the keyboard', () => {
     const odd = '2026-09-09T04:07:00.000Z'             // 2:07 pm
     const moved = keyboardMove(odd, 'ArrowDown', TZ)!
     expect(at(moved).minute % 15).toBe(0)
+  })
+
+  it('stops at the edges of the hours the grid draws', () => {
+    // 6:00 am — the top of the grid. Up again must not walk the post off it
+    const dawn = '2026-09-08T20:00:00.000Z'
+    expect(at(dawn).hour).toBe(6)
+    const higher = keyboardMove(dawn, 'ArrowUp', TZ)!
+    expect(at(higher).hour).toBe(6)
+    expect(at(higher).minute).toBe(0)
+
+    // 8:00 pm — the bottom
+    const dusk = '2026-09-09T10:00:00.000Z'
+    expect(at(dusk).hour).toBe(20)
+    const lower = keyboardMove(dusk, 'ArrowDown', TZ)!
+    expect(at(lower).hour).toBe(20)
+    expect(at(lower).minute).toBe(0)
+  })
+
+  it('takes a wider window when the grid draws one', () => {
+    const dawn = '2026-09-08T20:00:00.000Z'            // 6 am
+    const higher = keyboardMove(dawn, 'ArrowUp', TZ, { fromHour: 0, toHour: 23 })!
+    expect(at(higher).hour).toBe(5)
+    expect(at(higher).minute).toBe(30)
   })
 })
 
@@ -181,28 +213,143 @@ describe('what a screen reader is told', () => {
 
 describe('the feed preview', () => {
   const post = (id: string, scheduled_for: string | null) => ({ id, scheduled_for })
-  const NOW = Date.parse('2026-09-09T00:00:00.000Z')
 
-  it('puts what is still to come first, soonest first', () => {
+  it('reads like the profile will: the last post scheduled, top left', () => {
     const ordered = previewOrder([
-      post('c', '2026-09-20T00:00:00.000Z'),
       post('a', '2026-09-10T00:00:00.000Z'),
+      post('c', '2026-09-20T00:00:00.000Z'),
       post('b', '2026-09-12T00:00:00.000Z'),
-    ], NOW)
-    expect(ordered.map(p => p.id)).toEqual(['a', 'b', 'c'])
+    ])
+    expect(ordered.map(p => p.id)).toEqual(['c', 'b', 'a'])
   })
 
-  it('follows with what is already up, newest first', () => {
+  it('runs what is planned straight into what is already up', () => {
     const ordered = previewOrder([
       post('old', '2026-08-01T00:00:00.000Z'),
       post('next', '2026-09-10T00:00:00.000Z'),
       post('recent', '2026-09-08T00:00:00.000Z'),
-    ], NOW)
+    ])
     expect(ordered.map(p => p.id)).toEqual(['next', 'recent', 'old'])
   })
 
   it('leaves out a post that has no time at all', () => {
-    expect(previewOrder([post('a', null), post('b', 'soon')], NOW)).toEqual([])
+    expect(previewOrder([post('a', null), post('b', 'soon')])).toEqual([])
+  })
+})
+
+/* —— the sequence a move goes through —————————————————————————————————————————— */
+
+describe('a move, from the drop to the server\u2019s answer', () => {
+  const MOVE = { postId: 'p1', title: 'Spring launch', iso: '2026-09-09T04:00:00.000Z', tz: TZ }
+
+  it('draws the tile at the new time straight away, and marks it unsettled', () => {
+    const after = beginMove(NO_MOVES, MOVE)
+    expect(after.optimistic).toEqual({ p1: MOVE.iso })
+    expect(after.saving).toEqual(['p1'])
+    expect(after.announcement).toContain('moved to')
+  })
+
+  it('hands the tile back to the listener the moment the server says yes', () => {
+    const after = finishMove(beginMove(NO_MOVES, MOVE), { postId: 'p1', ok: true })
+    // no drawn time left over: a snapshot that never repeats this exact value
+    // — because somebody else moved the post again — cannot strand the tile
+    expect(after.optimistic).toEqual({})
+    expect(after.saving).toEqual([])
+    expect(after.message).toBeNull()
+  })
+
+  it('snaps the tile back and shows the SERVER\u2019s sentence on a refusal', () => {
+    const refused = finishMove(beginMove(NO_MOVES, MOVE), {
+      postId: 'p1',
+      title: 'Spring launch',
+      ok: false,
+      error: 'This post has already gone out, so it cannot be moved',
+    })
+    expect(refused.optimistic).toEqual({})
+    expect(refused.saving).toEqual([])
+    expect(refused.message).toBe('This post has already gone out, so it cannot be moved')
+    expect(refused.announcement).toContain('stayed where it was')
+  })
+
+  it('still says something plain when a refusal came with no words', () => {
+    const refused = finishMove(beginMove(NO_MOVES, MOVE), { postId: 'p1', ok: false })
+    expect(refused.message).toBe('That move did not save. Try again.')
+  })
+
+  it('leaves another post\u2019s move alone while one is answered', () => {
+    const two = beginMove(beginMove(NO_MOVES, MOVE), { ...MOVE, postId: 'p2' })
+    const one = finishMove(two, { postId: 'p1', ok: true })
+    expect(one.optimistic).toEqual({ p2: MOVE.iso })
+    expect(one.saving).toEqual(['p2'])
+  })
+
+  it('writes nothing when a tile is dropped back where it already was', () => {
+    expect(shouldCommit(MOVE.iso, MOVE.iso)).toBe(false)
+    expect(shouldCommit(MOVE.iso, null)).toBe(false)
+    expect(shouldCommit(null, MOVE.iso)).toBe(true)
+    expect(shouldCommit(MOVE.iso, '2026-09-09T05:00:00.000Z')).toBe(true)
+  })
+})
+
+describe('what a column has been handed', () => {
+  const KINDS = { post: 'application/x-md-post', media: 'application/x-md-item' }
+
+  it('tells a post being moved from a piece of media starting one', () => {
+    expect(dropIntent([KINDS.post], KINDS)).toBe('post')
+    expect(dropIntent([KINDS.media], KINDS)).toBe('media')
+    expect(dropIntent(['text/plain'], KINDS)).toBeNull()
+    expect(dropIntent([], KINDS)).toBeNull()
+  })
+
+  it('still knows a post is in the air when the browser hides the payload', () => {
+    // Safari does not expose the types over some elements; the page knows it
+    // lifted a tile, and that is the more reliable fact
+    expect(dropIntent([], KINDS, true)).toBe('post')
+  })
+
+  it('gives a rail card dropped on the week the minute it was dropped on', () => {
+    const grid = scheduleWeekGrid({ start: '2026-09-09', tz: TZ })
+    // Wednesday, half way down the 2 PM row
+    const slot = grid.slotAt(2, grid.headerPx + 8 * grid.rowPx + grid.rowPx / 2)
+    expect(slot?.dayKey).toBe('2026-09-09')
+    expect(slot?.hour).toBe(14)
+    expect(slot?.minute).toBe(30)
+    // which is the ISO the composer is opened with, alongside the item id
+    expect(formatInZone(slot!.iso, TZ, 'full')).toBe('Wed 9 Sept, 2:30 pm')
+  })
+
+  it('gives a rail card dropped on a month DAY the client’s usual time', () => {
+    // a month cell has no hour in it; the drop means "that day, as usual"
+    const at = moveToDay(null, '2026-09-25', TZ, '18:30')!
+    expect(formatInZone(at, TZ, 'full')).toBe('Fri 25 Sept, 6:30 pm')
+  })
+})
+
+describe('when this browser stops overriding the listener', () => {
+  const OPT = { p1: '2026-09-09T04:00:00.000Z', p2: '2026-09-10T04:00:00.000Z' }
+
+  it('lets go once the live row says the same thing', () => {
+    expect(settledIds([
+      { id: 'p1', scheduled_for: OPT.p1 },
+      { id: 'p2', scheduled_for: '2026-09-01T04:00:00.000Z' },
+    ], OPT)).toEqual(['p1'])
+  })
+
+  it('lets go of a post that is not on the page any more', () => {
+    // another client picked, or a channel filter took it away: the entry has
+    // nobody left to own it
+    expect(settledIds([{ id: 'p2', scheduled_for: OPT.p2 }], OPT)).toEqual(['p1', 'p2'])
+  })
+
+  it('holds on while the row still says something else', () => {
+    expect(settledIds([
+      { id: 'p1', scheduled_for: '2026-09-09T02:00:00.000Z' },
+      { id: 'p2', scheduled_for: '2026-09-09T02:00:00.000Z' },
+    ], OPT)).toEqual([])
+  })
+
+  it('has nothing to do when nothing was moved', () => {
+    expect(settledIds([{ id: 'p1', scheduled_for: OPT.p1 }], {})).toEqual([])
   })
 })
 

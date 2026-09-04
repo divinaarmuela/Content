@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Clock, StickyNote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ScheduleWeekGrid, SuggestedTime } from '@/app/lib/social-schedule-core'
-import { dropLabelAt, LONG_PRESS_MS } from '@/app/lib/schedule-drag-core'
+import { dropIntent, dropLabelAt, LONG_PRESS_MS } from '@/app/lib/schedule-drag-core'
 import type { ScheduleNote } from '@/lib/db-types'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
 import { RAIL_DRAG_TYPE } from './MediaRail'
-import { TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
+import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
 import { layoutLanes } from './week-nav'
 import type { SchedulePostRow } from './useSchedulePosts'
 
@@ -27,6 +27,9 @@ import type { SchedulePostRow } from './useSchedulePosts'
  */
 
 const TILE_PX = 80
+
+/** The two things that can be dropped on a column, named once for both grids. */
+export const DROP_KINDS = { post: TILE_DRAG_TYPE, media: RAIL_DRAG_TYPE }
 
 /** "6 AM", "12 PM" — the hour rail down the left. */
 function hourLabel(hour: number): string {
@@ -111,7 +114,9 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: 
       onPointerUp={() => drag.endTouchIntent()}
       onPointerCancel={() => drag.endTouchIntent()}
       onKeyDown={e => drag.onTileKeyDown(post, e)}
-      aria-grabbed={lifted || undefined}
+      // right-clicking a POST is not a request for a note at that post's time
+      onContextMenu={e => e.stopPropagation()}
+      {...{ [POST_ID_ATTR]: post.id }}
       style={{
         top,
         height: TILE_PX,
@@ -123,7 +128,10 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: 
         'absolute overflow-hidden rounded-tile border border-border bg-foreground/[0.06] transition-shadow hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
         TONE_DIM[post.tone],
         offGrid && 'border-dashed',
-        !stuck && !saving && 'cursor-grab touch-none',
+        // NO `touch-action` here: the week is scrolled with a finger, and
+        // most of a busy column is tiles. A press that turns into a drag stops
+        // the page moving from the window instead (see `useDragSchedule`).
+        !stuck && !saving && 'cursor-grab',
         // lifted: it follows the pointer, so it leans out of the grid
         lifted && 'z-20 rotate-2 scale-[1.02] cursor-grabbing shadow-xl ring-2 ring-accent-blue',
         // the move is with the server; it is not settled until it answers
@@ -163,7 +171,7 @@ export function NoteTile({ note, top, onOpen }: {
       // the calendar, not an empty patch of it, so clicking one must not
       // start a post at the note's time
       onClick={e => { e.stopPropagation(); onOpen?.(note) }}
-      className="absolute inset-x-1.5 flex h-10 items-center gap-1.5 rounded-tile border border-border bg-paper px-2 text-left text-[11px] font-semibold hover:border-foreground/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
+      className="absolute inset-x-1.5 flex min-h-11 items-center gap-1.5 rounded-tile border border-border bg-paper px-2 text-left text-[11px] font-semibold hover:border-foreground/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
     >
       <StickyNote className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />
       <span className="truncate">{note.text}</span>
@@ -173,14 +181,24 @@ export function NoteTile({ note, top, onOpen }: {
 
 /** Where a lifted tile would land: the dashed slot under the pointer, saying
  *  the time it would take. */
-export function DropSlot({ top, iso, tz }: { top: number; iso: string; tz: string }) {
+export function DropSlot({ top, iso, tz, offGrid }: {
+  top: number
+  iso: string
+  tz: string
+  /** the time is outside the hours drawn; the slot sits at the edge and the
+   *  label still says the real time, rather than vanishing */
+  offGrid?: boolean
+}) {
   return (
     <div
       aria-hidden
       style={{ top }}
-      className="pointer-events-none absolute inset-x-1.5 flex h-[80px] items-start justify-center rounded-tile border-2 border-dashed border-accent-blue bg-tint-blue"
+      className={cn(
+        'pointer-events-none absolute inset-x-1.5 flex h-[80px] items-center justify-center rounded-tile border-2 border-dashed border-accent-blue bg-tint-blue',
+        offGrid && 'h-10',
+      )}
     >
-      <span className="mt-1 rounded-full bg-accent-blue px-2 py-0.5 text-[10px] font-bold text-cream">
+      <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[10px] font-bold text-cream">
         {dropLabelAt(iso, tz)}
       </span>
     </div>
@@ -244,6 +262,10 @@ export default function WeekGrid({
 }) {
   const tz = grid.tz
   const [dropDay, setDropDay] = useState<number | null>(null)
+  /** where a card dragged out of the RAIL would land — the same dashed slot a
+   *  post tile gets, because this is the drag where nobody can guess the
+   *  minute from the thing in their hand */
+  const [railAt, setRailAt] = useState<string | null>(null)
   const columns = useRef<(HTMLDivElement | null)[]>([])
 
   /** the time a pointer at `clientY` is over, in the client's zone */
@@ -275,6 +297,7 @@ export default function WeekGrid({
   const moveTo = drag.moving?.to ?? null
   const movePos = moveTo ? grid.tileTop(moveTo) : null
   const notePos = noteDraft ? grid.tileTop(noteDraft.at) : null
+  const railPos = railAt ? grid.tileTop(railAt) : null
 
   /* A finger held on an empty patch of the week writes a note there — the
      touch equivalent of the right-click, and the same 400ms a tile takes to
@@ -349,21 +372,29 @@ export default function WeekGrid({
               onPointerMove={clearHold}
               onPointerCancel={clearHold}
               onDragOver={e => {
-                const types = e.dataTransfer.types
-                const post = types.includes(TILE_DRAG_TYPE) || drag.moving?.mode === 'mouse'
-                if (!types.includes(RAIL_DRAG_TYPE) && !post) return
+                const kind = dropIntent(
+                  e.dataTransfer.types, DROP_KINDS, drag.moving?.mode === 'mouse')
+                if (!kind) return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 setDropDay(day.index)
-                if (post) drag.hoverAt(timeAt(e.currentTarget, day.index, e.clientY))
+                const at = timeAt(e.currentTarget, day.index, e.clientY)
+                if (kind === 'post') drag.hoverAt(at)
+                else setRailAt(at)
               }}
-              onDragLeave={() => setDropDay(d => (d === day.index ? null : d))}
+              onDragLeave={() => {
+                setDropDay(d => (d === day.index ? null : d))
+                setRailAt(null)
+              }}
               onDrop={e => {
                 e.preventDefault()
                 setDropDay(null)
+                setRailAt(null)
                 const iso = timeAt(e.currentTarget, day.index, e.clientY)
-                const postId = e.dataTransfer.getData(TILE_DRAG_TYPE)
-                if (postId || drag.moving?.mode === 'mouse') { drag.dropAt(iso); return }
+                const kind = dropIntent(
+                  [e.dataTransfer.getData(TILE_DRAG_TYPE) ? TILE_DRAG_TYPE : RAIL_DRAG_TYPE],
+                  DROP_KINDS, drag.moving?.mode === 'mouse')
+                if (kind === 'post') { drag.dropAt(iso); return }
                 const itemId = e.dataTransfer.getData(RAIL_DRAG_TYPE)
                 if (itemId && iso) onDropItem(itemId, iso)
               }}
@@ -445,8 +476,12 @@ export default function WeekGrid({
                 </span>
               ))}
 
-              {movePos && movePos.dayIndex === day.index && !movePos.offGrid && moveTo && (
-                <DropSlot top={movePos.top} iso={moveTo} tz={tz} />
+              {movePos && movePos.dayIndex === day.index && moveTo && (
+                <DropSlot top={movePos.top} iso={moveTo} tz={tz} offGrid={movePos.offGrid} />
+              )}
+
+              {railPos && railPos.dayIndex === day.index && railAt && (
+                <DropSlot top={railPos.top} iso={railAt} tz={tz} offGrid={railPos.offGrid} />
               )}
 
               {isToday && nowTop !== null && (

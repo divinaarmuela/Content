@@ -83,10 +83,18 @@ export function isMoveKey(key: string): key is MoveKey {
  * time is re-attached to it, so a day is a day and half an hour is half an
  * hour, whatever the offset did in between.
  */
+export type HourWindow = { fromHour: number; toHour: number }
+
+/** The hours the week grid draws. A move outside them would put a post where
+ *  nobody can see it — and where the drop slot cannot be drawn either. */
+export const GRID_HOURS: HourWindow = { fromHour: 6, toHour: 20 }
+
 export function keyboardMove(
   iso: string | null | undefined,
   key: string,
   tz: string,
+  /** the hours a post may be moved into; the default is the grid's own */
+  hours: HourWindow = GRID_HOURS,
 ): string | null {
   if (!isMoveKey(key)) return null
   const zone = safeZone(tz)
@@ -104,7 +112,12 @@ export function keyboardMove(
   // no offsets on it, which is exactly why it can be stepped safely
   const date = new Date(Date.UTC(wall.year, wall.month - 1, wall.day) + dayShift * 86_400_000)
   const dayKey = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
-  const snapped = snapToStep(minutes)
+  // a post moved off the top of the grid is a post nobody can see: the move
+  // stops at 6 am and at 8 pm rather than walking out of the picture
+  const lo = Math.max(0, Math.round(hours.fromHour)) * 60
+  const hi = Math.min(23, Math.round(hours.toHour)) * 60
+  const bounded = Math.min(hi, Math.max(lo, minutes))
+  const snapped = snapToStep(bounded)
   const hour = Math.floor(snapped / 60) % 24
   const minute = snapped % 60
   return fromZonedInput(`${dayKey}T${pad(hour)}:${pad(minute)}`, zone)
@@ -180,21 +193,144 @@ export function movingAnnouncement(
 export type PreviewablePost = { scheduled_for?: string | null }
 
 /**
- * The order the Preview grid reads in.
+ * The order the Preview grid reads in: THE FEED'S OWN ORDER.
  *
- * The point of the grid is "what is the feed about to look like", so what has
- * not gone out yet comes first, soonest at the top left, exactly the order it
- * will appear in. What has already gone out follows, newest first, so the new
- * work can be seen against the last few posts rather than floating on its own.
- * A post with no time at all is not in a feed yet and is left out.
+ * Instagram puts the newest post top left and works backwards, so a grid
+ * built any other way is not a preview of anything — the whole point is the
+ * checkerboard: what will sit next to what, which colours run together, where
+ * the video tiles fall. The last post scheduled takes the top left corner and
+ * everything older follows, exactly as the profile will look once they have
+ * all gone out. A post with no time at all is not in a feed yet and is left
+ * out.
  */
-export function previewOrder<T extends PreviewablePost>(
-  posts: readonly T[],
-  now: number = Date.now(),
-): T[] {
-  const timed = posts.filter(p => Number.isFinite(Date.parse(String(p.scheduled_for ?? ''))))
-  const at = (p: T) => Date.parse(String(p.scheduled_for))
-  const upcoming = timed.filter(p => at(p) >= now).sort((a, b) => at(a) - at(b))
-  const past = timed.filter(p => at(p) < now).sort((a, b) => at(b) - at(a))
-  return [...upcoming, ...past]
+export function previewOrder<T extends PreviewablePost>(posts: readonly T[]): T[] {
+  const at = (p: T) => Date.parse(String(p.scheduled_for ?? ''))
+  return posts
+    .filter(p => Number.isFinite(at(p)))
+    .sort((a, b) => at(b) - at(a))
+}
+
+/* —— a move, from the drop to the server's answer ————————————————————————————————————— */
+
+/**
+ * What the calendar is showing about moves in flight.
+ *
+ * The hook holds this and nothing else: where a just-dropped post is being
+ * DRAWN before the database has echoed it (`optimistic`), which posts are
+ * still with the server (`saving`), the refusal to show, and the sentence a
+ * screen reader hears. Kept out of the hook so the sequence that actually
+ * matters — it appears, the server answers, it either stays or snaps back —
+ * can be tested without a browser.
+ */
+export type MoveState = {
+  /** post id —> the time it is being drawn at, until the listener catches up */
+  optimistic: Record<string, string>
+  /** the posts whose move is with the server right now */
+  saving: string[]
+  /** the server's own sentence, when it refused */
+  message: string | null
+  /** what `aria-live` is saying */
+  announcement: string
+}
+
+export const NO_MOVES: MoveState = {
+  optimistic: {}, saving: [], message: null, announcement: '',
+}
+
+/** Is this drop worth a write? Dropping a post back where it already was is
+ *  not a move, and must not cost a request or a "moved" announcement. */
+export function shouldCommit(
+  from: string | null | undefined,
+  to: string | null | undefined,
+): boolean {
+  return Boolean(to) && to !== from
+}
+
+/** The drop: the tile is drawn at the new time straight away, and the post
+ *  joins the list the server still has to answer for. */
+export function beginMove(
+  state: MoveState,
+  move: { postId: string; title?: string | null; iso: string; tz: string },
+): MoveState {
+  return {
+    optimistic: { ...state.optimistic, [move.postId]: move.iso },
+    saving: state.saving.includes(move.postId) ? state.saving : [...state.saving, move.postId],
+    message: null,
+    announcement: movedAnnouncement(move.title, move.iso, move.tz),
+  }
+}
+
+/**
+ * The server's answer.
+ *
+ * On OK the optimistic time is dropped immediately: the row the server saved
+ * is the truth from that instant, and the listener is carrying it. Holding on
+ * to the drawn time until a snapshot happens to match it is how a tile gets
+ * stuck showing 2 pm forever when somebody else moved the same post to 4.
+ *
+ * On a refusal the drawn time goes too — the tile snaps back to where it
+ * started — and the server's sentence is shown, never one written here.
+ */
+export function finishMove(
+  state: MoveState,
+  answer: { postId: string; title?: string | null; ok: boolean; error?: string | null },
+): MoveState {
+  const optimistic = { ...state.optimistic }
+  delete optimistic[answer.postId]
+  const saving = state.saving.filter(id => id !== answer.postId)
+  if (answer.ok) return { ...state, optimistic, saving }
+  const why = String(answer.error ?? '').trim() || 'That move did not save. Try again.'
+  const name = String(answer.title ?? '').trim() || 'Post'
+  return {
+    optimistic,
+    saving,
+    message: why,
+    announcement: `${name} stayed where it was. ${why}`,
+  }
+}
+
+/* ── what is being dropped ──────────────────────────────────────── */
+
+export type DropKind = 'post' | 'media' | null
+
+/**
+ * A post being moved, or a piece of media starting a new one?
+ *
+ * The two drags land on the same columns and mean completely different
+ * things, so the answer cannot be guessed from the pixel. `carryingPost` is
+ * the fallback for Safari, which hides the payload types during a drag over
+ * some elements but is still carrying the tile this page lifted.
+ */
+export function dropIntent(
+  types: readonly string[] | DOMStringList,
+  kinds: { post: string; media: string },
+  carryingPost = false,
+): DropKind {
+  const list = Array.from(types as readonly string[])
+  if (list.includes(kinds.post) || carryingPost) return 'post'
+  if (list.includes(kinds.media)) return 'media'
+  return null
+}
+
+export type SettlablePost = { id: string; scheduled_for?: string | null }
+
+/**
+ * Which drawn times this browser should stop overriding the listener with.
+ *
+ * Two ways an entry is finished with: the live row now says exactly what we
+ * drew (the write came back round), or the post is not on the page any more
+ * at all — another client was picked, or a channel filter took it away — in
+ * which case the entry is state with nobody left to own it.
+ */
+export function settledIds(
+  posts: readonly SettlablePost[],
+  optimistic: Readonly<Record<string, string>>,
+): string[] {
+  const byId = new Map(posts.map(p => [p.id, p]))
+  return Object.entries(optimistic)
+    .filter(([id, at]) => {
+      const post = byId.get(id)
+      return !post || post.scheduled_for === at
+    })
+    .map(([id]) => id)
 }
