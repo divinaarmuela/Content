@@ -308,7 +308,10 @@ describe('settling copies nobody is going to finish', () => {
    * this walks a REAL row through real sweeps and asserts the clock.
    */
   it('walks a lost copy to a plain sentence inside four and a half hours', async () => {
-    const START = Date.parse('2026-09-04T09:00:00.000Z')
+    // anchored to the real clock: `seedDb` stamps `updated_at` when it writes,
+    // and the sweep refuses a row that is still warm — so a fixed date in the
+    // past made this test pass before that wall-clock hour and fail after it
+    const START = Date.now()
     const at = (minutes: number) => START + minutes * 60_000
     fake.restore()
     fake = seedDb({
