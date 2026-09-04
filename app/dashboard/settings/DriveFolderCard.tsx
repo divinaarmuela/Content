@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FolderOpen } from 'lucide-react'
+import { NO_FOLDER_IN_DRIVE } from '@/app/lib/gdrive-core'
 
 /**
  * "Where do our files go?" — answered once, by pointing at the folder the
@@ -105,6 +106,8 @@ type RootState = {
   connected: boolean
   account_email: string | null
   picked: Picked | null
+  /** the picked folder belongs to a different Google account now */
+  root_account_changed?: boolean
 }
 
 type PlanRow = {
@@ -113,7 +116,7 @@ type PlanRow = {
   folder_id: string | null
   folder_name: string | null
   confidence: 'exact' | 'likely' | 'recorded' | null
-  action: 'linked' | 'link' | 'create'
+  action: 'linked' | 'link' | 'none'
 }
 
 type Plan = {
@@ -126,14 +129,15 @@ type Plan = {
   same_name: { normalised: string; clients: string[] }[]
   matched: number
   total: number
-  to_create: number
+  unmatched: number
 }
 
-/** What each row is set to right now: a folder id, 'create', or '' for a row
- *  nobody has decided yet. */
+/** What each row is set to right now: a folder id, or '' for a row nobody has
+ *  decided yet. There is no "make one" — the app creates nothing in the
+ *  owner's Drive, so a client with no folder there stays unmatched until
+ *  somebody makes the folder in Drive. */
 type Choice = Record<string, string>
 
-const CREATE = 'create'
 const UNDECIDED = ''
 
 /**
@@ -148,7 +152,7 @@ const UNDECIDED = ''
  */
 function startingChoice(row: PlanRow): string {
   if (row.confidence === 'likely') return UNDECIDED
-  return row.folder_id ?? CREATE
+  return row.folder_id ?? UNDECIDED
 }
 
 async function ask<T>(url: string, init?: RequestInit): Promise<T> {
@@ -174,14 +178,13 @@ export default function DriveFolderCard() {
   // stale count is worse than none
   const counts = useMemo(() => {
     const rows = plan?.rows ?? []
-    let linked = 0, creating = 0, undecided = 0
+    let linked = 0, undecided = 0
     for (const r of rows) {
       const pick = choice[r.client_id] ?? UNDECIDED
-      if (pick === CREATE) creating++
-      else if (pick === UNDECIDED) undecided++
+      if (pick === UNDECIDED) undecided++
       else linked++
     }
-    return { linked, creating, undecided, total: rows.length }
+    return { linked, undecided, total: rows.length }
   }, [plan, choice])
 
   const load = useCallback(() => {
@@ -192,16 +195,10 @@ export default function DriveFolderCard() {
 
   useEffect(() => { load() }, [load])
 
-  const loadPlan = useCallback(async (createClientsFolder?: boolean) => {
+  const loadPlan = useCallback(async () => {
     setBusy('plan')
     try {
-      const next = createClientsFolder
-        ? await ask<Plan>('/api/gdrive/root/plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ create_clients_folder: true }),
-        })
-        : await ask<Plan>('/api/gdrive/root/plan')
+      const next = await ask<Plan>('/api/gdrive/root/plan')
       setPlan(next)
       setChoice(Object.fromEntries(next.rows.map(r => [r.client_id, startingChoice(r)])))
     } catch (e) {
@@ -288,12 +285,9 @@ export default function DriveFolderCard() {
       .filter(r => (choice[r.client_id] ?? UNDECIDED) !== UNDECIDED)
       // and one that is already saved to the folder it shows needs no write
       .filter(r => r.action !== 'linked' || choice[r.client_id] !== r.folder_id)
-      .map(r => {
-        const pick = choice[r.client_id]
-        return pick === CREATE
-          ? { client_id: r.client_id, create: true }
-          : { client_id: r.client_id, folder_id: pick }
-      })
+      // every row is a folder that already exists in Drive; there is no
+      // "make one" to send
+      .map(r => ({ client_id: r.client_id, folder_id: choice[r.client_id] }))
     if (rows.length === 0) {
       toast.success('Nothing to save — pick a folder for a client first')
       return
@@ -386,21 +380,28 @@ export default function DriveFolderCard() {
           </div>
         )}
 
+        {state?.root_account_changed && (
+          <div className="rounded-lg border border-accent-amber/40 bg-accent-amber/10 p-4">
+            <p className="text-body-15 text-foreground">
+              This folder was chosen with a different Google account — choose it again.
+            </p>
+            <p className="mt-1 text-body-15 text-muted-foreground">
+              Google gives this app access per account, so the folder somebody
+              picked cannot be read by the account that is connected now.
+            </p>
+          </div>
+        )}
+
         {plan?.needs_clients_folder && (
           <div className="rounded-lg border border-border bg-background p-4">
             <p className="text-body-15 text-foreground">
               There is no folder called “Clients” inside “{plan.root.name}”.
             </p>
             <p className="mt-1 text-body-15 text-muted-foreground">
-              Every client folder goes in there. Nothing is made until you say so.
+              Make one in Google Drive, with a folder inside it for each client,
+              then press “Check the client folders” again. This app never makes
+              folders in your Drive.
             </p>
-            <Button
-              className="mt-3" size="sm"
-              disabled={busy === 'plan'}
-              onClick={() => void loadPlan(true)}
-            >
-              {busy === 'plan' ? 'Making it…' : 'Make the Clients folder'}
-            </Button>
           </div>
         )}
 
@@ -408,12 +409,10 @@ export default function DriveFolderCard() {
           <div className="flex flex-col gap-3">
             <p className="text-body-15 text-foreground">
               Matched {counts.linked} of {counts.total} clients
-              {counts.creating > 0
-                ? ` — ${counts.creating} folder${counts.creating === 1 ? '' : 's'} will be made`
-                : ' — nothing new to make'}
               {counts.undecided > 0
-                ? `, ${counts.undecided} still to decide`
-                : ''}.
+                ? ` — ${counts.undecided} still to decide`
+                : ''}. Nothing is created in Drive; this only records which
+              folder belongs to which client.
             </p>
 
             {plan.same_name.length > 0 && (
@@ -428,7 +427,9 @@ export default function DriveFolderCard() {
 
             <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {plan.rows.map(row => {
-                const pick = choice[row.client_id] ?? CREATE
+                // UNDECIDED, like the two other reads of `choice` — a row
+                // nobody has answered is not a row asking for a new folder
+                const pick = choice[row.client_id] ?? UNDECIDED
                 return (
                   <li
                     key={row.client_id}
@@ -446,6 +447,11 @@ export default function DriveFolderCard() {
                           already set
                         </span>
                       )}
+                      {row.action === 'none' && (
+                        <span className="ml-2 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-secondary-13 text-muted-foreground">
+                          {NO_FOLDER_IN_DRIVE}
+                        </span>
+                      )}
                     </span>
                     <label className="sr-only" htmlFor={`folder-${row.client_id}`}>
                       Folder for {row.client_name}
@@ -458,7 +464,6 @@ export default function DriveFolderCard() {
                         setChoice(c => ({ ...c, [row.client_id]: e.target.value }))}
                     >
                       <option value={UNDECIDED}>Leave this one for now</option>
-                      <option value={CREATE}>Make a new folder</option>
                       {plan.folders.map(f => (
                         <option key={f.id} value={f.id}>{f.name}</option>
                       ))}

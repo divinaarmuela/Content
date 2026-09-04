@@ -20,6 +20,17 @@ import type { Row } from '@/lib/db-types'
  *
  * There is no delete route to test, on purpose: nothing this page can do
  * removes a file from the owner's Drive.
+ *
+ * ── And the write routes are switched off ──
+ *
+ * The dashboard makes no writes to Google Drive at all. The write half still
+ * exists — new folder, move, rename, share, upload — still confirm-gated,
+ * still contained inside HQ, and still tested here, because a reviewed
+ * switched-off feature is worth more than one that has to be reinvented in a
+ * hurry. `DRIVE_PAGE_WRITES=1` is what puts it back, and the cases below that
+ * exercise it set that variable deliberately, one describe block at a time.
+ * The first block asserts the default: every one of them answers 403 and
+ * Google is not called.
  */
 
 /* ── who is asking ──────────────────────────────────────────────────────── */
@@ -66,6 +77,8 @@ const drive = {
   connected: true,
   /** what `isInside` should answer — 'unknown' is the read-error case */
   ancestry: 'outside' as 'inside' | 'outside' | 'unknown',
+  /** what `isInside(x, HQ1)` answers — the containment check */
+  containment: 'inside' as 'inside' | 'outside' | 'unknown',
   /** the URI the upload session hands back */
   uploadUri: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=1',
 }
@@ -115,6 +128,9 @@ vi.mock('../app/lib/gdrive-files', () => ({
   },
   isInside: async (candidate: string, ancestor: string) => {
     note('isInside', candidate, ancestor)
+    // containment: everything in these tests lives under HQ1 unless a case
+    // says otherwise by naming the folder 'OUTSIDE'
+    if (ancestor === 'HQ1') return candidate === 'OUTSIDE' ? 'outside' : drive.containment
     if (drive.ancestry !== 'outside') return drive.ancestry
     return candidate === 'deep' && ancestor === 'top' ? 'inside' : 'outside'
   },
@@ -178,6 +194,12 @@ const client = (id: string, folder: string): Row =>
 
 let fake: ReturnType<typeof seedDb>
 
+/** Turn the write half on for one describe block, and off again after. */
+function withWrites() {
+  beforeEach(() => { process.env.DRIVE_PAGE_WRITES = '1' })
+  afterEach(() => { delete process.env.DRIVE_PAGE_WRITES })
+}
+
 beforeEach(() => {
   me = { email: 'jess@md.invalid', role: 'account_manager' }
   drive.calls = []
@@ -187,14 +209,59 @@ beforeEach(() => {
   drive.picked = true
   drive.connected = true
   drive.ancestry = 'outside'
+  drive.containment = 'inside'
   drive.uploadUri = 'https://www.googleapis.com/upload/drive/v3/files?upload_id=1'
   fake = seedDb({ clients: [client('c1', 'PA1')], drive_files: [], drive_uploads: [] })
 })
 afterEach(() => fake.restore())
 
+/* ── the default: the dashboard does not write to Drive ─────────────────── */
+
+describe('every write route is off', () => {
+  const WRITES: [string, () => Promise<Response>][] = [
+    ['folder', () => folderRoute.POST(post('/api/drive/folder', { parent: 'HQ1', name: 'New' }))],
+    ['rename', () => renameRoute.POST(post('/api/drive/rename', { id: 'F1', name: 'x', confirm: true }))],
+    ['move', () => moveRoute.POST(post('/api/drive/move', { ids: ['F1'], to: 'CL1', confirm: true }))],
+    ['share', () => shareRoute.POST(post('/api/drive/share', { id: 'F1', confirm: true }))],
+    ['upload start', () => startRoute.POST(post('/api/drive/upload/start', { parent: 'CL1', name: 'a.mp4', size: 10 }))],
+    ['upload chunk', () => chunkRoute.POST(new Request(
+      'https://app.test.invalid/api/drive/upload/chunk?upload=x&offset=0',
+      { method: 'POST', body: new Uint8Array(1) },
+    ))],
+  ]
+
+  it('answers 403 and never touches Google', async () => {
+    for (const [name, call] of WRITES) {
+      const res = await call()
+      expect(res.status, name).toBe(403)
+      expect((await res.json()).error, name).toBe('Drive is read-only from the dashboard')
+    }
+    expect(drive.calls).toEqual([])
+  })
+
+  it('refuses BEFORE the role check — the cheapest possible no', async () => {
+    // a super admin gets the same answer as everybody else: this is not a
+    // permission, it is a decision about what the app does
+    me = { email: 'owner@md.invalid', role: 'super_admin' }
+    const res = await moveRoute.POST(post('/api/drive/move', {
+      ids: ['F1'], to: 'CL1', confirm: true,
+    }))
+    expect(res.status).toBe(403)
+    expect(drive.calls).toEqual([])
+  })
+
+  it('leaves every READ route working', async () => {
+    expect((await rootRoute.GET()).status).toBe(200)
+    expect((await listRoute.GET(get('/api/drive/list?parent=CL1'))).status).toBe(200)
+    expect((await trailRoute.GET(get('/api/drive/trail?id=CL1'))).status).toBe(200)
+    expect((await infoRoute.GET(get('/api/drive/info?id=FILE1'))).status).toBe(200)
+  })
+})
+
 /* ── the role gate ──────────────────────────────────────────────────────── */
 
 describe('team only, clients never', () => {
+  withWrites()
   const everyRoute: [string, () => Promise<Response>][] = [
     ['root', () => rootRoute.GET()],
     ['list', () => listRoute.GET(get('/api/drive/list?parent=HQ1'))],
@@ -311,6 +378,7 @@ describe('reading Drive', () => {
 /* ── the confirmation gate ──────────────────────────────────────────────── */
 
 describe('nothing is renamed, moved or shared without a person saying so', () => {
+  withWrites()
   it('refuses a rename with no confirm — and never calls Google', async () => {
     for (const body of [
       { id: 'F1', name: 'New name' },
@@ -354,6 +422,7 @@ describe('nothing is renamed, moved or shared without a person saying so', () =>
 /* ── moving ─────────────────────────────────────────────────────────────── */
 
 describe('moving, once it has been confirmed', () => {
+  withWrites()
   it('refuses a folder into itself', async () => {
     const res = await moveRoute.POST(post('/api/drive/move', {
       ids: ['CL1'], to: 'CL1', confirm: true,
@@ -411,6 +480,7 @@ describe('moving, once it has been confirmed', () => {
 /* ── new folders ────────────────────────────────────────────────────────── */
 
 describe('a new folder', () => {
+  withWrites()
   it('refuses a nameless one', async () => {
     const res = await folderRoute.POST(post('/api/drive/folder', { parent: 'HQ1', name: '  ' }))
     expect(res.status).toBe(400)
@@ -427,6 +497,7 @@ describe('a new folder', () => {
 /* ── uploading ──────────────────────────────────────────────────────────── */
 
 describe('an upload a person started', () => {
+  withWrites()
   const start = () => startRoute.POST(post('/api/drive/upload/start', {
     parent: 'PA1', name: 'clip.mp4', size: 10, mime_type: 'video/mp4',
   }))
@@ -552,6 +623,73 @@ describe('an upload a person started', () => {
       { method: 'POST', body: new Uint8Array(1) },
     ))
     expect(res.status).toBe(404)
+  })
+})
+
+/* ── containment: a write can only land inside HQ ───────────────────────── */
+
+describe('with the write half switched on, everything lands inside HQ', () => {
+  withWrites()
+
+  // The dialogs' folder picker was rooted at HQ, so this was never reachable
+  // by misclick — but the picker is presentation and the route is the gate.
+  // Any team member down to scheduler can post a folder id of their own, and
+  // `drive.file` reaches further than HQ: everything the app ever created,
+  // anywhere, plus anything else a person handed it.
+
+  it('refuses a move to a folder outside the picked root', async () => {
+    const res = await moveRoute.POST(post('/api/drive/move', {
+      ids: ['F1'], to: 'OUTSIDE', confirm: true,
+    }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/outside MD Media HQ/)
+    expect(count('move')).toBe(0)
+  })
+
+  it('refuses a move when it could not check containment', async () => {
+    drive.containment = 'unknown'
+    const res = await moveRoute.POST(post('/api/drive/move', {
+      ids: ['F1'], to: 'CL1', confirm: true,
+    }))
+    expect(res.status).toBe(503)
+    expect(count('move')).toBe(0)
+  })
+
+  it('refuses an upload into a folder outside HQ', async () => {
+    const res = await startRoute.POST(post('/api/drive/upload/start', {
+      parent: 'OUTSIDE', name: 'a.mp4', size: 10,
+    }))
+    expect(res.status).toBe(400)
+    expect(count('uploadStart')).toBe(0)
+    expect(fake.rows('drive_uploads')).toEqual([])
+  })
+
+  it('refuses a new folder outside HQ', async () => {
+    const res = await folderRoute.POST(post('/api/drive/folder', {
+      parent: 'OUTSIDE', name: 'Somewhere else',
+    }))
+    expect(res.status).toBe(400)
+    expect(count('findOrCreateFolder')).toBe(0)
+  })
+
+  it('allows the root itself without a lookup', async () => {
+    const res = await folderRoute.POST(post('/api/drive/folder', {
+      parent: 'HQ1', name: 'Right here',
+    }))
+    expect(res.status).toBe(200)
+    expect(count('findOrCreateFolder')).toBe(1)
+  })
+
+  it('refuses everything when nobody has picked HQ', async () => {
+    drive.picked = false
+    for (const [name, res] of [
+      ['move', await moveRoute.POST(post('/api/drive/move', { ids: ['F1'], to: 'CL1', confirm: true }))],
+      ['folder', await folderRoute.POST(post('/api/drive/folder', { parent: 'CL1', name: 'x' }))],
+      ['upload', await startRoute.POST(post('/api/drive/upload/start', { parent: 'CL1', name: 'a', size: 1 }))],
+    ] as [string, Response][]) {
+      expect(res.status, name).toBe(409)
+    }
+    expect(count('move') + count('findOrCreateFolder') + count('uploadStart')).toBe(0)
   })
 })
 

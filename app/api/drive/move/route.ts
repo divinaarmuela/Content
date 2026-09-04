@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { authzErrorResponse } from '../../../lib/authz'
 import { entryDetail, isInside, moveDriveFile } from '../../../lib/gdrive-files'
-import { recordMove, requireFilesAccess } from '../../../lib/drive-page'
+import { outsideHqRefusal, recordMove, requireFilesAccess } from '../../../lib/drive-page'
 import { confirmRefusal, isDriveId } from '../../../lib/files-core'
+import { readOnlyRefusal } from '../../../lib/gdrive-policy'
 
 /**
  * Move things into a folder, because a person dragged them there and then
@@ -14,10 +15,12 @@ import { confirmRefusal, isDriveId } from '../../../lib/files-core'
  * owner's rule made mechanical: a file in their Drive never moves as a side
  * effect of a gesture, a sync or a retry.
  *
- * Two guards beyond the confirmation. A folder cannot go inside itself, and a
- * folder cannot go inside one of its own folders — Drive would accept the
- * second one and the whole branch would vanish out of the tree with no way to
- * find it again.
+ * Three guards beyond the confirmation. The target must be inside the folder
+ * the owner chose, so nothing on this page can file one of their archive files
+ * out of MD Media HQ; a folder cannot go inside itself; and a folder cannot go
+ * inside one of its own folders — Drive would accept that one and the whole
+ * branch would vanish out of the tree with no way to find it again. All three
+ * refuse on "could not check" rather than assuming the answer is no.
  *
  * Every move is reported individually. A batch that half worked has to say
  * which half, or the person is left to work it out by looking.
@@ -28,6 +31,13 @@ const MAX_AT_ONCE = 50
 
 export async function POST(req: Request) {
   try {
+    // FIRST, before the role check and before the body is read: the dashboard
+    // does not write to Google Drive. The code below still works and is still
+    // tested — DRIVE_PAGE_WRITES=1 puts it back — but nothing on any page can
+    // reach it, and a request that arrives anyway is refused here.
+    const readOnly = readOnlyRefusal()
+    if (readOnly) return NextResponse.json({ error: readOnly }, { status: 403 })
+
     await requireFilesAccess()
     const body = await req.json().catch(() => ({})) as
       { ids?: unknown; to?: string; confirm?: unknown }
@@ -51,6 +61,13 @@ export async function POST(req: Request) {
     if (ids.includes(body.to)) {
       return NextResponse.json({ error: 'A folder cannot go inside itself.' }, { status: 400 })
     }
+
+    // the target has to be inside the folder the owner chose. The dialog's
+    // picker is rooted there, but the picker is presentation and this is the
+    // gate: any team member can post a `to` of their own, and `drive.file`
+    // reaches further than HQ.
+    const outside = await outsideHqRefusal(body.to)
+    if (outside) return NextResponse.json({ error: outside.error }, { status: outside.status })
     // "I could not check" is not "no". A transient Drive 500, a folder deeper
     // than the walk allows, or an ancestor the `drive.file` grant does not
     // cover all used to read as safe — and permitting a folder into its own

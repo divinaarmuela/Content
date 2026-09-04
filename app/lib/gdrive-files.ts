@@ -7,9 +7,9 @@ import {
 import { safeSegment } from './gdrive-core'
 import { CHUNK_SIZE, contentRange, receivedBytes } from './gdrive-mirror-core'
 import {
-  FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, SEARCH_FOLDER_CAP, SEARCH_MS,
-  SEARCH_PARENT_BATCH, driveOrderBy, driveQuery, isDriveId, isGoogleContentUrl,
-  isGoogleUploadUri, searchBatchQuery,
+  FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, SEARCH_FOLDER_CAP, SEARCH_MATCH_CAP,
+  SEARCH_MS, SEARCH_PARENT_BATCH, driveOrderBy, driveQuery, isDriveId,
+  isGoogleContentUrl, isGoogleUploadUri, searchBatchQuery,
   type DriveEntry, type QueryOptions, type Sort,
 } from './files-core'
 
@@ -599,33 +599,70 @@ export type SearchResult = {
   capped: boolean
 }
 
-/** The walk, then the search — batched, so a hundred folders is three
- *  requests rather than a hundred. */
+/**
+ * The walk, then the search — batched, so a hundred folders is three requests
+ * rather than a hundred.
+ *
+ * Each batch is PAGED to the end. Drive answers at most 100 files per request,
+ * and 40 folders can easily hold more than that between them: a version of
+ * this that read the first page and moved on discarded the rest silently and
+ * still reported a clean "37 things called 'reel'. Searched 84 folders." That
+ * is the exact sentence `searchWords` exists to make honest, and a short
+ * answer dressed as a complete one is how somebody concludes their file is
+ * gone and uploads it again into the owner's archive.
+ *
+ * So: follow `nextPageToken` while there is budget, and when the budget runs
+ * out — on the clock, on the match cap, or on a page we could not read — say
+ * `capped` instead of pretending. An unreadable batch does not sink the
+ * search either; it is skipped and flagged, the same way `foldersUnder`
+ * tolerates an unreadable branch, because one folder somebody revoked our
+ * access to should not turn a search into an error page.
+ */
 export async function searchBelow(
   opts: QueryOptions & { parentId: string; sort?: Sort },
 ): Promise<DriveResult<SearchResult>> {
   const under = await foldersUnder(opts.parentId)
   if (!under.ok) return under
 
+  const started = Date.now()
   const found = new Map<string, DriveEntry>()
+  let capped = under.capped
+
   for (let at = 0; at < under.ids.length; at += SEARCH_PARENT_BATCH) {
+    if (Date.now() - started > SEARCH_MS || found.size >= SEARCH_MATCH_CAP) {
+      capped = true
+      break
+    }
     const batch = under.ids.slice(at, at + SEARCH_PARENT_BATCH)
-    const page = await listEntries({
-      ...opts,
-      parentId: null,
-      rawQuery: searchBatchQuery(opts, batch),
-      pageSize: PAGE_SIZE,
-    })
-    if (!page.ok) return page
-    // the same file can sit in two of the folders we walked; a person wants
-    // one row for it, not one per parent
-    for (const entry of page.entries) found.set(entry.id, entry)
+    let pageToken: string | null = null
+    do {
+      const page: DriveResult<Listing> = await listEntries({
+        ...opts,
+        parentId: null,
+        rawQuery: searchBatchQuery(opts, batch),
+        pageSize: PAGE_SIZE,
+        pageToken,
+      })
+      if (!page.ok) { capped = true; break }
+      // the same file can sit in two of the folders we walked; a person wants
+      // one row for it, not one per parent
+      for (const entry of page.entries) found.set(entry.id, entry)
+      pageToken = page.nextPageToken
+      if (pageToken && (Date.now() - started > SEARCH_MS || found.size >= SEARCH_MATCH_CAP)) {
+        // there IS more and we are not going to fetch it — which the person
+        // has to be told, because it is the difference between "not here" and
+        // "we stopped looking"
+        capped = true
+        break
+      }
+    } while (pageToken)
   }
+
   return {
     ok: true,
     entries: [...found.values()],
     foldersSearched: under.ids.length,
-    capped: under.capped,
+    capped,
   }
 }
 

@@ -109,7 +109,18 @@ export async function GET() {
           : !drive.connected
             ? 'Configured, but no account connected yet'
             : [
-                `Connected as ${drive.account_email ?? 'an account'} · files under "${drive.root_name}"`,
+                // the folder the OWNER chose, not the app-root name. `root_name`
+                // defaults to "Clients" and is the name of a folder this app
+                // would have made; on a picked root it names the wrong thing,
+                // and a card that names the wrong folder is how somebody goes
+                // looking in the wrong place.
+                `Connected as ${drive.account_email ?? 'an account'} · reading "${
+                  drive.root_folder_name || drive.root_name}"`,
+                // a reconnect with a different Google account leaves the picked
+                // folder unreadable, and nothing else would ever say why
+                drive.root_account_changed
+                  ? 'This folder was chosen with a different Google account — choose it again'
+                  : null,
                 // how a folder becomes reachable by the rest of the team is
                 // the question an editor actually has when a link 404s. The
                 // member line is the answer for everyone the domain grant

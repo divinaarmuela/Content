@@ -20,6 +20,9 @@ export async function GET() {
       connected: status.connected,
       account_email: status.account_email,
       picked: await pickedRoot(),
+      // a reconnect with a different Google account leaves the picked folder
+      // unreadable; the card is where somebody can actually fix that
+      root_account_changed: status.root_account_changed,
     }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

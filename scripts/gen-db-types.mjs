@@ -216,6 +216,11 @@ const GHOST_COLUMNS = {
     ['root_picked_at', col('string', true)],
     ['root_picked_by', col('string', true)],
     ['clients_folder_id', col('string', true)],
+    // set when a reconnect brought a DIFFERENT Google account than the one the
+    // folder was chosen with. `drive.file` grants are per app AND per account,
+    // so the picked folder is unreadable until somebody picks it again — and
+    // nothing else would say so.
+    ['root_account_changed', col('boolean', true)],
   ],
   //   asset_versions.source / source_drive_file_id — WHERE the files on this
   //     version came from. 'drive' means somebody picked them in the

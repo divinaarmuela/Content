@@ -101,16 +101,19 @@ and `npm run build` must pass. Do not report completion on tests alone.
     has already cost an afternoon. Add a column to one by editing the ghost
     definition and re-running `node scripts/gen-db-types.mjs`.
 
-13. **Automatic filing to Google Drive is OFF** (`app/lib/gdrive-policy.ts`).
-    Every automatic write path — version mirroring, folder creation and
-    rename, brand/intake filing, member sync, the mirror sweep and the Inngest
-    job — calls `skipAutoFiling()` first and does nothing. Only the Files page
-    writes to Drive, because a person pressed a button there. Turn it back on
-    with `DRIVE_AUTO_FILING=1` in the environment (no UI, by design), and only
-    with the never-touch rule in mind: the owner's HQ folder is the agency's
-    real archive — the app may ADD to it, never share, rename, replace or
-    duplicate what is already there. Adding a new Drive writer means guarding
-    it and listing it in `tests/drive-auto-filing.test.ts`.
+13. **THE DASHBOARD ONLY READS GOOGLE DRIVE** (`app/lib/gdrive-policy.ts`).
+    No uploads, no folders, no moves, no renames, no shares, no deletes —
+    from any page, hook or job. Two switches, both env-only and both off:
+    `DRIVE_AUTO_FILING=1` (may the app file things nobody asked it to — every
+    automatic path calls `skipAutoFiling()` first) and `DRIVE_PAGE_WRITES=1`
+    (may a person file something on purpose from the Files page — those six
+    routes call `readOnlyRefusal()` as their first statement and 403). The
+    write code is kept behind the second switch, not deleted, so it does not
+    get reinvented badly. The owner's HQ folder is the agency's real archive
+    and the app is a guest in it. Adding ANY new Drive writer means guarding
+    it and listing it in `tests/drive-auto-filing.test.ts`; the Files page's
+    side is pinned by `tests/drive-page-writes.test.ts`, which reads the
+    source so a new Upload button fails a test rather than a review.
 
 ## Layout
 
@@ -120,6 +123,8 @@ app/
   services/ about/ journal/ events/ work/        content pages (CMS-driven)
   dashboard/                                     internal app  (Clerk-gated)
     ui/            the shared look: Shell, PageTitle, cards, chips, tone map
+    files/         Google Drive's view, READ ONLY — tree, search, previews,
+                   info panel, Open in Drive, Download. No writes: see trap 13
     social/schedule/  the posting calendar: week/month/list/preview, the
                       composer, the media picker, the image editor, notes,
                       and access/ (channels, the Zernio group, who is on the
@@ -131,6 +136,8 @@ app/
     submit/          PUBLIC — contact form
     leads/           gated — lead list, edit, delete
     website/ team/ production/ ingest/ reports/  gated
+    drive/           gated — the Files page's reads; its six write routes 403
+    gdrive/          gated (super_admin) — connect, and the HQ folder picker
   lib/
     workflow-core.ts   pure state machine, no I/O — test this
     workflow.ts        performTransition, optimistic concurrency
@@ -139,6 +146,11 @@ app/
     lead-enrichment.ts autoIngestLead — verified company becomes a client
     report-pdf.ts      monthly leads PDF
     clerk-gmail.ts     per-user mailbox access via Clerk
+    gdrive-policy.ts   BOTH Drive switches and the reasoning — read first
+    files-core.ts      the Files page's pure half: kinds, sort, filters, the
+                       Drive `q`, breadcrumbs, the upload state machine
+    drive-page.ts      the Files page's server half: role gate, the picked
+                       root (read only), the `drive_files` join
   inngest/functions.ts scheduled jobs
 docs/schema-history/*.sql   Postgres schema history — read by scripts/gen-db-types.mjs
                             to generate lib/db-types.ts; not run against anything live

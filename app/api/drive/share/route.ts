@@ -3,6 +3,7 @@ import { authzErrorResponse } from '../../../lib/authz'
 import { shareableLink } from '../../../lib/gdrive-files'
 import { requireFilesAccess } from '../../../lib/drive-page'
 import { confirmRefusal, isDriveId } from '../../../lib/files-core'
+import { readOnlyRefusal } from '../../../lib/gdrive-policy'
 
 /**
  * A link anybody holding it can open.
@@ -19,6 +20,13 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
+    // FIRST, before the role check and before the body is read: the dashboard
+    // does not write to Google Drive. The code below still works and is still
+    // tested — DRIVE_PAGE_WRITES=1 puts it back — but nothing on any page can
+    // reach it, and a request that arrives anyway is refused here.
+    const readOnly = readOnlyRefusal()
+    if (readOnly) return NextResponse.json({ error: readOnly }, { status: 403 })
+
     await requireFilesAccess()
     const body = await req.json().catch(() => ({})) as { id?: string; confirm?: unknown }
 

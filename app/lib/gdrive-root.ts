@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
-import { matchClientFolders, normaliseFolderName, safeSegment } from './gdrive-core'
+import { NO_FOLDER_IN_DRIVE, matchClientFolders, normaliseFolderName, safeSegment } from './gdrive-core'
 import {
   createSubfolder, driveConfigured, listSubfolders, pickedRoot,
   readFolder, saveClientsFolder, savePickedRoot, shareWithDomain,
@@ -49,8 +49,10 @@ export type RootPlanRow = {
   folder_name: string | null
   /** 'exact' and 'likely' come from the match; 'recorded' means it is settled */
   confidence: 'exact' | 'likely' | 'recorded' | null
-  /** what Apply would do: nothing, link this folder, or make a new one */
-  action: 'linked' | 'link' | 'create'
+  /** what Apply would do: nothing (already recorded), link this folder, or
+   *  nothing at all because no folder for this client exists in Drive yet.
+   *  There is no "make one" — the app creates nothing in the owner's Drive. */
+  action: 'linked' | 'link' | 'none'
 }
 
 export type RootPlan = {
@@ -71,13 +73,17 @@ export type RootPlan = {
   same_name: { normalised: string; clients: string[] }[]
   matched: number
   total: number
-  to_create: number
+  /** clients with no folder in Drive. A person makes those in Drive, where
+   *  they can see what is already in there, and matches them here next time. */
+  unmatched: number
 }
 
 export type RootFailure = { ok: false; message: string }
 export type RootOk<T> = { ok: true } & T
 
 const fail = (message: string): RootFailure => ({ ok: false, message })
+
+
 
 /** Clients the folder tree is for. Archived ones are left out: a folder for a
  *  client nobody works with any more is filing for its own sake. */
@@ -119,8 +125,14 @@ export async function choosePickedRoot(args: {
 /**
  * What Apply would do, without doing any of it.
  *
- * `createClientsFolder` is the one thing here that writes, and only when a
- * person has said yes to the question the previous call asked them.
+ * Nothing in this file writes to Drive any more. It reads the folders that are
+ * there and lines them up against the client list; Apply then records the
+ * matches on the client rows. The `createClientsFolder` argument is kept so
+ * the route's shape does not change under a deployed browser tab, and is
+ * ignored — the owner's ruling is that the app makes no folders in their
+ * Drive, and "the Clients folder was missing so we made one" is precisely the
+ * kind of helpfulness that ends up beside a folder that already existed under
+ * a name we did not recognise.
  */
 export async function buildRootPlan(opts?: {
   createClientsFolder?: boolean
@@ -129,21 +141,14 @@ export async function buildRootPlan(opts?: {
   const root = await pickedRoot()
   if (!root) return fail('Choose the folder first')
 
-  // the Clients folder: recorded, or found by name, or (only on request) made
+  // the Clients folder: recorded, or found by name. Never made — see above.
   let clientsFolderId = root.clients_folder_id
   if (!clientsFolderId) {
     const inRoot = await listSubfolders(root.id)
     if (!inRoot.ok) return fail(`Google Drive would not list that folder — ${inRoot.message}`)
-    // normalised, so a folder called "clients" or "Clients " is found rather
-    // than joined by a second one
+    // normalised, so a folder called "clients" or "Clients " is found
     const wanted = normaliseFolderName(CLIENTS_FOLDER)
     clientsFolderId = inRoot.folders.find(f => normaliseFolderName(f.name) === wanted)?.id ?? null
-    if (!clientsFolderId && opts?.createClientsFolder) {
-      const made = await createSubfolder(root.id, CLIENTS_FOLDER)
-      if (!made.ok) return fail(`The Clients folder could not be made — ${made.message}`)
-      clientsFolderId = made.id
-      await shareWithDomain(made.id)
-    }
     if (clientsFolderId) await saveClientsFolder(clientsFolderId)
   }
 
@@ -162,10 +167,10 @@ export async function buildRootPlan(opts?: {
         ...base,
         rows: clients.map(c => ({
           client_id: c.id, client_name: c.name, folder_id: null, folder_name: null,
-          confidence: null, action: 'create' as const,
+          confidence: null, action: 'none' as const,
         })),
         folders: [], extra: [], same_name: sameName(clients),
-        matched: 0, to_create: clients.length,
+        matched: 0, unmatched: clients.length,
       },
     }
   }
@@ -210,7 +215,7 @@ export async function buildRootPlan(opts?: {
       folder_id: null,
       folder_name: null,
       confidence: null,
-      action: 'create' as const,
+      action: 'none' as const,
     })),
   ].sort((a, b) => a.client_name.localeCompare(b.client_name))
 
@@ -222,8 +227,8 @@ export async function buildRootPlan(opts?: {
       folders,
       extra: plan.extra,
       same_name: sameName(clients),
-      matched: rows.filter(r => r.action !== 'create').length,
-      to_create: rows.filter(r => r.action === 'create').length,
+      matched: rows.filter(r => r.action !== 'none').length,
+      unmatched: rows.filter(r => r.action === 'none').length,
     },
   }
 }
@@ -301,7 +306,16 @@ export async function applyRootPlan(
   }
 
   const clients = table<Client>('clients')
-  // who already holds which folder — a folder cannot be given to two clients
+  // Who already holds which folder — a folder cannot be given to two clients.
+  //
+  // Read ONCE, per request, and deliberately not re-read as the loop writes.
+  // It is advisory: the thing that actually decides a client's folder is the
+  // per-client `claim` below, onto a blank column only, so two super admins
+  // applying at the same moment still cannot give one client two folders. What
+  // this map can miss is the rarer, milder case — both of them pointing two
+  // DIFFERENT clients at the same folder in the same second. Re-reading every
+  // iteration would be a read per client to narrow a window two people would
+  // have to hit on purpose, and it would still not close it.
   const held = new Map<string, string>()
   for (const c of await clients.list()) {
     const id = String(c.drive_folder_id ?? '').trim()
@@ -318,7 +332,9 @@ export async function applyRootPlan(
     }
 
     let folderId = String(row.folder_id ?? '').trim()
-    let origin: 'app' | 'adopted' = 'adopted'
+    // every folder recorded here already existed in Drive — this file creates
+    // none, so there is no other origin to record
+    const origin = 'adopted' as const
 
     if (folderId) {
       if (!DRIVE_ID.test(folderId)) {
@@ -343,25 +359,17 @@ export async function applyRootPlan(
         result.skipped.push({ client_id: row.client_id, why: 'that client already has a folder' })
         continue
       }
-      // somebody made it by hand between loading the plan and pressing Save,
-      // or the first press of this very button did
+      // Somebody made it in Drive between loading the plan and pressing Save,
+      // and its tidied name matches — adopt it. That is the ONLY way a row
+      // with no folder chosen can end up with one: this file creates nothing
+      // in the owner's Drive, so a client whose folder does not exist yet
+      // stays unmatched and is told what to do about it.
       const adopted = byTidyName.get(normaliseFolderName(client.name))
-      if (adopted) {
-        folderId = adopted
-      } else {
-        const create = await createSubfolder(clientsFolderId, client.name)
-        if (!create.ok) {
-          result.skipped.push({ client_id: row.client_id, why: create.message })
-          continue
-        }
-        folderId = create.id
-        origin = 'app'
-        inside.set(folderId, client.name)
-        const key = normaliseFolderName(client.name)
-        if (key) byTidyName.set(key, folderId)
-        // a no-op on a picked root: the owner shares their own HQ tree
-        await shareWithDomain(folderId)
+      if (!adopted) {
+        result.skipped.push({ client_id: row.client_id, why: NO_FOLDER_IN_DRIVE })
+        continue
       }
+      folderId = adopted
     }
 
     const owner = held.get(folderId)
@@ -379,8 +387,7 @@ export async function applyRootPlan(
     const previous = String(client.drive_folder_id ?? '').trim()
     if (previous && previous !== folderId) held.delete(previous)
     held.set(folderId, row.client_id)
-    if (origin === 'app') result.created++
-    else result.linked++
+    result.linked++
   }
 
   return { ok: true, result }

@@ -5,9 +5,10 @@ import { buildRootPlan } from '../../../../lib/gdrive-root'
 /**
  * What is already in the Clients folder, lined up against the client list.
  *
- * GET reads and never creates. POST does exactly one thing more: makes the
- * "Clients" folder, and only because a person answered the question GET asked
- * them ("there is no Clients folder in there — make one?").
+ * Both verbs read, and neither creates anything. POST used to make the
+ * "Clients" folder when a person said yes; the owner's ruling is that the app
+ * makes no folders in their Drive at all, so the question is not asked and the
+ * answer is not acted on. The card tells them to make it in Drive instead.
  */
 export const dynamic = 'force-dynamic'
 
@@ -26,8 +27,11 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await requireRole('super_admin')
-    const body = await req.json().catch(() => ({})) as { create_clients_folder?: boolean }
-    const result = await buildRootPlan({ createClientsFolder: Boolean(body.create_clients_folder) })
+    // kept as a POST so a browser tab deployed against the older build does
+    // not 405, and deliberately identical to the GET: there is nothing left
+    // for it to create. The app makes no folders in the owner's Drive.
+    await req.json().catch(() => ({}))
+    const result = await buildRootPlan()
     if (!result.ok) return NextResponse.json({ error: result.message }, { status: 400 })
     return NextResponse.json(result.plan)
   } catch (e) {

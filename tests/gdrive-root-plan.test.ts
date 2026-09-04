@@ -92,10 +92,10 @@ describe('the plan', () => {
 
     expect(plan.total).toBe(3) // the archived client is left out
     expect(plan.matched).toBe(2)
-    expect(plan.to_create).toBe(1)
+    expect(plan.unmatched).toBe(1)
     expect(rowFor(plan, 'c1')).toMatchObject({ folder_id: 'f1', confidence: 'exact', action: 'link' })
     expect(rowFor(plan, 'c2')).toMatchObject({ folder_id: 'f2', confidence: 'exact', action: 'link' })
-    expect(rowFor(plan, 'c3')).toMatchObject({ folder_id: null, action: 'create' })
+    expect(rowFor(plan, 'c3')).toMatchObject({ folder_id: null, action: 'none' })
     expect(plan.extra.map(f => f.id)).toEqual(['f3'])
   })
 
@@ -138,37 +138,50 @@ describe('the Clients folder', () => {
     expect(res.plan.needs_clients_folder).toBe(true)
     expect(drive.created).toEqual([])
     // every client would need a folder, and the screen says so
-    expect(res.plan.to_create).toBe(3)
+    expect(res.plan.unmatched).toBe(3)
   })
 
-  it('makes it once, and only when asked', async () => {
+  it('does not make it even when asked — the app makes no folders', async () => {
+    // The argument survives so an older browser tab's POST does not 405. It is
+    // ignored: the owner's ruling is that the app creates nothing in their
+    // Drive, and "the Clients folder was missing so we made one" is exactly
+    // the helpfulness that ends up beside a folder that already existed under
+    // a name we did not recognise.
     const res = await buildRootPlan({ createClientsFolder: true })
     if (!res.ok) throw new Error(res.message)
-    expect(drive.created).toEqual([{ parent: 'hq', name: 'Clients' }])
-    expect(res.plan.needs_clients_folder).toBe(false)
+    expect(drive.created).toEqual([])
+    expect(res.plan.needs_clients_folder).toBe(true)
   })
 })
 
 describe('applying it', () => {
-  it('records the matched folders and makes only the confirmed ones', async () => {
+  it('records the matched folders and creates NOTHING', async () => {
     const res = await applyRootPlan([
       { client_id: 'c1', folder_id: 'f1' },
       { client_id: 'c2', folder_id: 'f2' },
+      // a client with no folder in Drive: Apply used to make one. It does not.
       { client_id: 'c3', create: true },
     ])
     if (!res.ok) throw new Error(res.message)
 
-    expect(res.result).toMatchObject({ linked: 2, created: 1, skipped: [] })
-    expect(drive.created).toEqual([
-      { parent: 'clients-folder', name: '100 Hundred Million Group' },
-    ])
+    expect(res.result).toMatchObject({
+      linked: 2,
+      created: 0,
+      skipped: [{
+        client_id: 'c3',
+        why: 'No folder found in Drive — create one in Drive, then match it here',
+      }],
+    })
+    expect(drive.created).toEqual([])
 
     const clients = Object.fromEntries(
       fake.rows('clients').map(r => [r.id, (r as unknown as Client).drive_folder_id]),
     )
     expect(clients.c1).toBe('f1')
     expect(clients.c2).toBe('f2')
-    expect(clients.c3).toBe('made-1')
+    // c3 had no folder in Drive, so it has none here either — the app did
+    // not invent one for it
+    expect(clients.c3).toBeFalsy()
     expect(clients.c4).toBeFalsy()
   })
 
@@ -244,18 +257,15 @@ describe('two clients cannot share one folder', () => {
 })
 
 describe('applying twice', () => {
-  it('creates nothing the second time', async () => {
+  it('creates nothing, either time', async () => {
     const first = await applyRootPlan([{ client_id: 'c3', create: true }])
     if (!first.ok) throw new Error(first.message)
-    expect(first.result.created).toBe(1)
+    expect(first.result.created).toBe(0)
 
     const second = await applyRootPlan([{ client_id: 'c3', create: true }])
     if (!second.ok) throw new Error(second.message)
     expect(second.result.created).toBe(0)
-    expect(second.result.skipped).toEqual([
-      { client_id: 'c3', why: 'that client already has a folder' },
-    ])
-    expect(drive.created).toHaveLength(1)
+    expect(drive.created).toEqual([])
   })
 
   it('adopts a folder somebody made by hand while the plan was open', async () => {

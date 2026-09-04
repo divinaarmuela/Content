@@ -198,6 +198,10 @@ export type DriveStatus = {
   /** 'picked' once a person has handed the app a folder of the agency's own. */
   root_origin: RootOrigin
   root_folder_name: string | null
+  /** the picked folder was chosen by a DIFFERENT Google account than the one
+   *  connected now, so nothing under it can be read until somebody picks
+   *  again */
+  root_account_changed: boolean
   root_owner_email: string | null
   /** The "Clients" folder inside it — what every client folder hangs off. */
   clients_folder_id: string | null
@@ -225,6 +229,7 @@ export async function driveStatus(): Promise<DriveStatus> {
     sharing_domain: domain,
     root_origin: rootOriginOf(row),
     root_folder_name: row?.root_folder_name ?? null,
+    root_account_changed: Boolean(row?.root_account_changed),
     root_owner_email: row?.root_owner_email ?? null,
     clients_folder_id: row?.clients_folder_id ?? null,
     sharing_note: !row?.refresh_token_encrypted
@@ -324,21 +329,33 @@ export async function completeDriveConnect(
 
   const account = token.access_token ? await userInfo(token.access_token) : null
 
-  // the root folder is created with the ACCESS token we already hold, before
-  // anything is stored: a connection whose root could not be made is not a
-  // connection, and finding that out now beats finding out on the first shoot.
+  // Connecting records the account and NOTHING ELSE.
   //
-  // A PICKED root is the exception: a person has already said where the filing
-  // cabinet is, and making a second one in My Drive would be the app overruling
-  // them. Reconnecting keeps the folder they chose.
+  // It used to make a "Clients" folder in the connected account's My Drive
+  // here, so that there was somewhere to file into. The dashboard makes no
+  // folders in anybody's Drive any more — the folder is chosen by a person in
+  // Settings, out of what already exists — so connecting is now purely an
+  // exchange of tokens. A reconnect keeps whatever was picked before.
   const existing = await connection()
   const wantedRoot = normaliseRoot(existing?.root_name)
-  let rootId = existing?.root_folder_id ?? null
-  if (token.access_token && !isPicked(existing)) {
-    const made = await ensureRootFolder(token.access_token, wantedRoot, rootId)
-    if (!made.ok) return made
-    rootId = made.id
-  }
+  const rootId = existing?.root_folder_id ?? null
+
+  /**
+   * Did the account change under a folder somebody already chose?
+   *
+   * `drive.file` grants are per APP and per ACCOUNT. Reconnecting as a
+   * different Google account leaves `root_folder_id` pointing at a folder the
+   * new account was never handed — every read 404s, the Files page says "could
+   * not reach Google Drive", and nothing anywhere says why. It is not an error
+   * to fix automatically (clearing the pick would be the app overruling the
+   * person who made it), so it is recorded and the card asks them to pick
+   * again.
+   */
+  const previousEmail = String(existing?.account_email ?? '').trim().toLowerCase()
+  const nextEmail = String(account?.email ?? '').trim().toLowerCase()
+  const accountChanged = Boolean(
+    isPicked(existing) && previousEmail && nextEmail && previousEmail !== nextEmail,
+  )
 
   try {
     await writeConnection({
@@ -347,6 +364,7 @@ export async function completeDriveConnect(
       refresh_token_encrypted: encryptSecret(token.refresh_token),
       root_name: wantedRoot,
       root_folder_id: rootId,
+      root_account_changed: accountChanged,
       connected_at: new Date().toISOString(),
       connected_by: by,
     })
@@ -553,38 +571,10 @@ export async function listFolderNames(parentId: string): Promise<string[]> {
 
 // ── the root folder ───────────────────────────────────────────────────────
 
-/**
- * The app's own root folder, created if it is not there.
- *
- * `'root' in parents` searches My Drive's top level — but under `drive.file`
- * that search can only ever return folders THIS APP made, which is exactly the
- * find-or-create we want: a "Clients" folder the owner made by hand is
- * invisible to us and will not be adopted (or clobbered). If a previously
- * recorded id still resolves, it wins outright — the folder may have been
- * moved or renamed since, and the id is what is true.
- *
- * A read that FAILS is not the same as a folder that is gone. Only a 404 (and
- * a folder that really is in the bin) means "make another one"; a 429, a 500 or
- * a dropped connection is passed straight back to the caller, because
- * replacing a live folder on the strength of one bad minute is how a tree gets
- * forked in two.
- */
-async function ensureRootFolder(
-  token: string, name: string, knownId: string | null,
-): Promise<DriveResult<{ id: string }>> {
-  if (knownId) {
-    const url = `${FILES}/${encodeURIComponent(knownId)}?` +
-      new URLSearchParams({ fields: 'id,trashed', ...ALL_DRIVES })
-    const res = await driveFetch<{ id?: string; trashed?: boolean }>(token, url)
-    if (res.ok && res.data.id && !res.data.trashed) return { ok: true, id: res.data.id }
-    if (!res.ok && res.status !== 404) return res
-    // gone or trashed: fall through and make a new one
-  }
-  const found = await findFolder(token, 'root', name)
-  if (!found.ok) return found
-  if (found.id) return { ok: true, id: found.id }
-  return createFolder(token, 'root', name)
-}
+// `ensureRootFolder` lived here: it made the app's own "Clients" folder in
+// the connected account's My Drive, and remade it if somebody binned it. It
+// is gone with the rest of the writes. The folder everything hangs off is
+// chosen by a person in Settings, out of what already exists in Drive.
 
 /**
  * The id everything hangs off. Null when Drive is not connected — which is a
@@ -607,16 +597,11 @@ export async function rootFolderId(): Promise<string | null> {
     return row.clients_folder_id
   }
 
-  const auth = await accessToken()
-  if (!auth.ok) return null
-
-  const made = await ensureRootFolder(auth.token, normaliseRoot(row.root_name), row.root_folder_id)
-  if (!made.ok) return null
-
-  if (made.id !== row.root_folder_id) {
-    await writeConnection({ root_folder_id: made.id })
-  }
-  return made.id
+  // An install that predates the picker may still carry an app-made root id.
+  // It is used as it is; it is never re-made, and a missing one is not
+  // conjured. The only way to have somewhere to file is for a person to pick
+  // it, which is what the Settings card is for.
+  return String(row.root_folder_id ?? '').trim() || null
 }
 
 // ── the folder a person picked ─────────────────────────────
@@ -697,6 +682,8 @@ export async function savePickedRoot(args: {
     root_picked_at: new Date().toISOString(),
     root_picked_by: args.by,
     clients_folder_id: null,
+    // whatever the mismatch was, it has just been answered
+    root_account_changed: false,
   })
 }
 
@@ -792,23 +779,31 @@ export async function clientFolderId(
 }
 
 /**
- * The client's folder inside the Clients folder: the one that is already
- * there, or a new one.
+ * The client's folder inside the Clients folder — the one that is ALREADY
+ * THERE, or nothing.
  *
- * Matching is on the NORMALISED name, the same rule the review screen used —
+ * Matching is on the NORMALISED name, the same rule the review screen uses —
  * because that is the whole point. Drive says "Alia Fragrance" and the client
  * record says "Alia Fragrance Pty Ltd"; an exact string comparison would call
- * that a miss and create a second folder beside the real one, which is the
- * duplication this feature exists to stop. A client added after the review, or
- * reactivated, or simply skipped, comes through here.
+ * that a miss. A client added after the review, or reactivated, or simply
+ * skipped, comes through here.
+ *
+ * ── It does not create ──
+ *
+ * It used to, when the name did not match. The owner's ruling ended that: the
+ * app makes no folders in their Drive, ever, not even a helpful one for a
+ * client whose folder does not exist yet. The honest answer is null and a
+ * logged line — a person makes the folder in Drive, where they can see what is
+ * already in there, and the next lookup adopts it. A folder this app invented
+ * beside one that was already there under a slightly different name is exactly
+ * the mess nobody could untangle afterwards.
  */
 async function adoptClientFolder(
   parentId: string, name: string,
 ): Promise<{ id: string; origin: 'app' | 'adopted' } | null> {
   const listed = await listSubfolders(parentId)
   if (!listed.ok) {
-    // a listing that failed is NOT "there is nothing there" — creating on the
-    // strength of a 429 is how a duplicate appears
+    // a listing that failed is NOT "there is nothing there"
     console.error('[gdrive] could not list the Clients folder:', listed.message)
     return null
   }
@@ -818,10 +813,11 @@ async function adoptClientFolder(
     : undefined
   if (existing) return { id: existing.id, origin: 'adopted' }
 
-  const made = await createSubfolder(parentId, name)
-  if (!made.ok) return null
-  await shareWithDomain(made.id)
-  return { id: made.id, origin: 'app' }
+  console.log(
+    `[gdrive] no folder in Drive for "${name}" — not creating one. `
+    + 'Make it in Google Drive and match it in Settings.',
+  )
+  return null
 }
 
 /** A chain of folders BELOW the client's own folder, created as needed. */

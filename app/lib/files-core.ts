@@ -592,6 +592,18 @@ export function formatModified(iso: string | null | undefined, now: Date): strin
  * here, and saying so plainly is the only honest thing to do — an empty
  * folder that is not empty is worse than a sentence.
  */
+/**
+ * The first thing the Files page says about itself.
+ *
+ * A page shaped exactly like Google Drive invites the assumption that it works
+ * like Google Drive. It does not: the dashboard reads Drive and never writes
+ * to it. Saying so once, plainly, at the top, costs a line and saves somebody
+ * hunting for an Upload button that is not there and never was.
+ */
+export const READ_ONLY_PAGE_NOTE =
+  'This is a view of Google Drive. Nothing here changes it — to add, rename, '
+  + 'move or delete anything, open it in Google Drive.'
+
 export const PARTIAL_VIEW_NOTE =
   'This shows the folders MD Media set up or was given. Anything made straight in ' +
   'Google Drive since then will not be here until someone hands it over in Settings.'
@@ -696,6 +708,10 @@ export function moveConfirmWords(names: readonly string[], folder: string): stri
  */
 export const SEARCH_FOLDER_CAP = 200
 export const SEARCH_MS = 5_000
+/** And how many matches come back. A search is a way of finding one file, not
+ *  a way of listing ten thousand; past this the page could not draw them and
+ *  the person needs a narrower folder, which `searchWords` tells them. */
+export const SEARCH_MATCH_CAP = 500
 /** How many parents fit in one `q` before it gets silly. Drive has no
  *  documented limit on the clause count; the URL length is the real one. */
 export const SEARCH_PARENT_BATCH = 40

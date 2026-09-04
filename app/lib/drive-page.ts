@@ -6,6 +6,7 @@ import type {
 import { requireRole, type TeamUser } from './authz'
 import { isGoogleUploadUri, isRowId } from './files-core'
 import { pickedRoot } from './gdrive'
+import { isInside } from './gdrive-files'
 
 /**
  * What the Files page needs from OUR side of the world: who may look, where
@@ -43,8 +44,6 @@ export async function requireFilesAccess(): Promise<TeamUser> {
 export type FilesRoot = {
   id: string
   name: string
-  /** the "Clients" folder inside it, when a person has confirmed one */
-  clientsFolderId: string | null
 }
 
 /**
@@ -66,10 +65,43 @@ export type FilesRoot = {
 export async function filesRoot(): Promise<FilesRoot | null> {
   const picked = await pickedRoot()
   if (!picked) return null
+  return { id: picked.id, name: picked.name || 'MD Media HQ' }
+}
+
+/**
+ * Refuse anything this page would write OUTSIDE the folder the owner chose.
+ *
+ * The dialog's folder picker is rooted at HQ, so a person cannot click their
+ * way out of it — but the picker is presentation and this is the gate. Any
+ * team member down to `scheduler` can post a `to` or a `parent` of their own,
+ * and the `drive.file` scope covers more than HQ: everything the app has ever
+ * created, anywhere, plus anything else a person has handed it. Without this,
+ * one of the owner's real archive files could be moved out of MD Media HQ
+ * entirely, leaving a `drive_files` row pointing somewhere the page cannot
+ * show.
+ *
+ * Containment is on the PICKED ROOT, not on the Clients folder inside it. HQ
+ * has folders beside Clients — Templates, Internal, Archive — that are just as
+ * much the agency's, and a rule that forbade filing into them would be a rule
+ * people worked around rather than a rule that protected anything.
+ *
+ * "Could not check" refuses, exactly as the descendant guard does: a
+ * containment check that fails open is not a containment check.
+ */
+export type Refusal = { error: string; status: number }
+
+export async function outsideHqRefusal(folderId: string): Promise<Refusal | null> {
+  const root = await filesRoot()
+  if (!root) return { error: FILES_BLOCK_WORDS.not_picked, status: 409 }
+  if (folderId === root.id) return null
+  const where = await isInside(folderId, root.id)
+  if (where === 'inside') return null
+  if (where === 'unknown') {
+    return { error: 'Could not check that folder just now — try again.', status: 503 }
+  }
   return {
-    id: picked.id,
-    name: picked.name || 'MD Media HQ',
-    clientsFolderId: picked.clients_folder_id ?? null,
+    error: `That folder is outside ${root.name}. This page only files things inside it.`,
+    status: 400,
   }
 }
 

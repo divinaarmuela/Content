@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { authzErrorResponse } from '../../../../lib/authz'
 import { openUploadSession } from '../../../../lib/gdrive-files'
 import {
-  clientForFolder, openUploadRow, requireFilesAccess,
+  clientForFolder, openUploadRow, outsideHqRefusal, requireFilesAccess,
 } from '../../../../lib/drive-page'
 import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK, isDriveId } from '../../../../lib/files-core'
+import { readOnlyRefusal } from '../../../../lib/gdrive-policy'
 
 /**
  * Open a resumable upload for a file somebody dropped on a folder.
@@ -22,6 +23,13 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
+    // FIRST, before the role check and before the body is read: the dashboard
+    // does not write to Google Drive. The code below still works and is still
+    // tested — DRIVE_PAGE_WRITES=1 puts it back — but nothing on any page can
+    // reach it, and a request that arrives anyway is refused here.
+    const readOnly = readOnlyRefusal()
+    if (readOnly) return NextResponse.json({ error: readOnly }, { status: 403 })
+
     const me = await requireFilesAccess()
     const body = await req.json().catch(() => ({})) as
       { parent?: string; name?: string; size?: unknown; mime_type?: string }
@@ -41,6 +49,11 @@ export async function POST(req: Request) {
         { error: 'That file is larger than Google Drive accepts' }, { status: 400 },
       )
     }
+
+    // same containment as a move: nothing this page writes lands outside the
+    // folder the owner chose, whatever parent id arrives in the body
+    const outside = await outsideHqRefusal(body.parent)
+    if (outside) return NextResponse.json({ error: outside.error }, { status: outside.status })
 
     const mimeType = String(body.mime_type ?? '').trim() || null
     const session = await openUploadSession(body.parent, name, size, mimeType ?? undefined)

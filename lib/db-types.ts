@@ -511,6 +511,7 @@ export interface DriveConnection {
   root_picked_at: string | null
   root_picked_by: string | null
   clients_folder_id: string | null
+  root_account_changed: boolean | null
 }
 
 export interface DriveFile {
@@ -1071,7 +1072,7 @@ export const TABLE_COLUMNS = {
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
-  drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id'],
+  drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
@@ -1143,7 +1144,7 @@ export const NULLABLE_COLUMNS = {
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'batch_id', 'owner_id', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
-  drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id'],
+  drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],

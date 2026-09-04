@@ -1,53 +1,57 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ChevronDown, ChevronRight, Grid2X2, Info, List, Plus, RefreshCw, Search, Upload,
-} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Grid2X2, Info, List, RefreshCw, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTable } from '@/lib/db-client'
 import type { Client, DriveFile } from '@/lib/db-types'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import {
-  MODIFIED_FILTERS, NO_FILTERS, PARTIAL_VIEW_NOTE, SORT_LABEL, TYPE_FILTERS,
-  crumbTrail, filterEntries, isFolder, nextSelection, openForPath, pathInto, pathUpTo,
-  searchWords, toggleOpen, uploadPercent, uploadSummary, uploadWords,
+  MODIFIED_FILTERS, NO_FILTERS, PARTIAL_VIEW_NOTE, READ_ONLY_PAGE_NOTE, SORT_LABEL,
+  TYPE_FILTERS, crumbTrail, filterEntries, isFolder, openForPath, pathInto, pathUpTo,
+  searchWords, toggleOpen,
   type Crumb, type DriveEntry, type Filters, type Sort, type SortBy,
 } from '@/app/lib/files-core'
 import PageTitle from '../ui/PageTitle'
 import FilesTree from './FilesTree'
 import FilesGrid from './FilesGrid'
 import FilesPanel from './FilesPanel'
-import {
-  MoveDialog, NewFolderDialog, RenameDialog, ShareDialog, type MoveRequest,
-} from './FilesDialogs'
-import { forgetFolder, readTrail, useDriveBrowse, useFolderChildren } from './useDriveBrowse'
-import { useUploads } from './useUploads'
+import { readTrail, useDriveBrowse, useFolderChildren } from './useDriveBrowse'
 
 /**
- * FILES — Google Drive, in MD Media's clothes.
+ * FILES — Google Drive, in MD Media's clothes. A WINDOW, not a drawer.
  *
  * The tree on the left, the folder in the middle, the file on the right. It
  * looks like Drive on purpose: the team has used Drive for years and this page
  * has to be the same shape, or it becomes a second place to look rather than a
  * better one.
  *
- * Three things it refuses to get wrong.
+ * ── The one rule that shapes everything here ──
+ *
+ * The dashboard makes no writes to Google Drive. The owner's words: "didn't I
+ * tell you there should be no writes… this feature is supposed to just pick a
+ * file that they wanna post." So there is no Upload on this page, no New
+ * folder, no Move, no Rename, no Share — not greyed out, not hidden behind a
+ * permission: they are not drawn, there is no drop zone, and a file dragged
+ * onto the window does nothing at all. What is left is what a person actually
+ * came for: find the file, look at it, open it in Drive, download it.
+ *
+ * HQ is the agency's real archive — years of client folders, shared with
+ * clients, a bookkeeper and two freelance editors. An app that rearranges it
+ * is an app quietly rearranging somebody else's filing cabinet, and no amount
+ * of confirmation dialogs makes that a thing worth risking for a convenience.
+ *
+ * Two things it still refuses to get wrong:
  *
  *  1. IT SAYS WHAT IT CANNOT SEE. The app holds Google's `drive.file` scope —
- *     it sees folders it made and folders a person handed it through the
- *     chooser, and nothing else. A page that quietly showed part of somebody's
- *     Drive as if it were all of it would be worse than one that says which
- *     part. The line is on the screen, not in a tooltip.
- *  2. NOTHING MOVES OR IS RENAMED BY ACCIDENT. Dropping a file on a folder
- *     ASKS. The question names what is moving and where it is going, and the
- *     button in it is the only thing that sends the confirmation the server
- *     insists on. There is no delete anywhere on this page.
- *  3. DRIVE IS FETCHED, OURS IS LIVE. A folder listing is a request with a
+ *     it sees folders it was handed through the chooser, and nothing else. A
+ *     page that quietly showed part of somebody's Drive as if it were all of
+ *     it would be worse than one that says which part. The line is on the
+ *     screen, not in a tooltip.
+ *  2. DRIVE IS FETCHED, OURS IS LIVE. A folder listing is a request with a
  *     30-second soft cache and a Refresh button; `drive_files` — which is how
  *     the page knows a file belongs to Pure Allure — is a database listener,
- *     so a mirror landing in another tab repaints the Client filter without a
- *     reload.
+ *     used while the Client filter is on.
  */
 
 /** `useTable` memoises on the identity of this, so it lives outside the
@@ -57,7 +61,7 @@ const CLIENTS_BY_NAME: ['name', 'asc'][] = [['name', 'asc']]
 const OPEN_KEY = 'md-files-open'
 const VIEW_KEY = 'md-files-view'
 
-type RootInfo = { id: string; name: string; clientsFolderId: string | null }
+type RootInfo = { id: string; name: string }
 
 export default function FilesPage() {
   const [root, setRoot] = useState<RootInfo | null>(null)
@@ -69,18 +73,9 @@ export default function FilesPage() {
   const [sort, setSort] = useState<Sort>({ by: 'name', dir: 'asc' })
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
-  const [selected, setSelected] = useState<string[]>([])
-  const [dragging, setDragging] = useState<string[]>([])
-  const [dropHere, setDropHere] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(true)
   const [now] = useState(() => new Date())
-
-  const [newFolder, setNewFolder] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [renaming, setRenaming] = useState<DriveEntry | null>(null)
-  const [sharing, setSharing] = useState<DriveEntry | null>(null)
-  const [moving, setMoving] = useState<MoveRequest | null>(null)
-  const filePicker = useRef<HTMLInputElement>(null)
 
   /* ── where the cabinet is ─────────────────────────────────────────────── */
 
@@ -145,7 +140,7 @@ export default function FilesPage() {
   }, [search])
 
   const here = path[path.length - 1] ?? null
-  const { branches, forget } = useFolderChildren(open, !!root)
+  const { branches } = useFolderChildren(open, !!root)
   const browse = useDriveBrowse({
     parentId: here?.id ?? null,
     text: debounced || null,
@@ -192,7 +187,7 @@ export default function FilesPage() {
   /* ── navigating ───────────────────────────────────────────────────────── */
 
   const openFolder = useCallback((crumb: Crumb) => {
-    setSelected([])
+    setSelected(null)
     setSearch('')
     setDebounced('')
     setPath(prev => pathInto(prev, crumb))
@@ -200,14 +195,14 @@ export default function FilesPage() {
   }, [])
 
   const goToCrumb = useCallback((id: string) => {
-    setSelected([])
+    setSelected(null)
     setPath(prev => pathUpTo(prev, id))
   }, [])
 
   // a search result lives somewhere else; opening its folder has to rebuild
   // the trail, or the breadcrumb would claim you are where you started
   const openSearchResult = useCallback(async (entry: DriveEntry) => {
-    if (!isFolder(entry)) { setSelected([entry.id]); return }
+    if (!isFolder(entry)) { setSelected(entry.id); return }
     try {
       const trail = await readTrail(entry.id)
       setPath(trail.length ? trail : [{ id: entry.id, name: entry.name }])
@@ -217,34 +212,6 @@ export default function FilesPage() {
       openFolder({ id: entry.id, name: entry.name })
     }
   }, [openFolder])
-
-  /* ── uploading ────────────────────────────────────────────────────────── */
-
-  const afterWrite = useCallback((folderId: string) => {
-    forgetFolder(folderId)
-    forget(folderId)
-    browse.refresh()
-  }, [browse, forget])
-
-  const uploads = useUploads(afterWrite)
-  const inFlight = uploads.uploads.filter(u => u.status !== 'done')
-
-  /* ── moving ───────────────────────────────────────────────────────────── */
-
-  const idsForDrag = useCallback((id: string) => (
-    selected.includes(id) ? selected : [id]
-  ), [selected])
-
-  const namesOf = useCallback((ids: string[]) => (
-    ids.map(id => browse.entries.find(e => e.id === id)?.name ?? 'a file')
-  ), [browse.entries])
-
-  const askToMove = useCallback((folderId: string, folderName: string) => {
-    const ids = dragging.length ? dragging : selected
-    setDragging([])
-    if (!ids.length) return
-    setMoving({ ids, names: namesOf(ids), target: { id: folderId, name: folderName } })
-  }, [dragging, selected, namesOf])
 
   /* ── the page ─────────────────────────────────────────────────────────── */
 
@@ -260,64 +227,20 @@ export default function FilesPage() {
   const trail = crumbTrail(path)
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col gap-4"
-      onDragOver={e => {
-        if (!e.dataTransfer.types.includes('Files')) return
-        e.preventDefault()
-        setDropHere(true)
-      }}
-      onDragLeave={() => setDropHere(false)}
-      onDrop={e => {
-        if (!e.dataTransfer.files.length || !here) return
-        e.preventDefault()
-        setDropHere(false)
-        uploads.add(e.dataTransfer.files, here.id)
-      }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageTitle
         title="Files"
         summary="The agency's Google Drive, in one place."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setNewFolder(true)} className={GHOST}>
-              <Plus className="h-4 w-4" strokeWidth={2} />New folder
-            </button>
-            <button type="button" onClick={() => filePicker.current?.click()} className={INK}>
-              <Upload className="h-4 w-4" strokeWidth={2} />Upload
-            </button>
-            <button type="button" onClick={browse.refresh} className={GHOST} aria-label="Refresh">
-              <RefreshCw className={cn('h-4 w-4', browse.loading && 'animate-spin')} strokeWidth={2} />
-              Refresh
-            </button>
-          </div>
+          <button type="button" onClick={browse.refresh} className={GHOST}>
+            <RefreshCw className={cn('h-4 w-4', browse.loading && 'animate-spin')} strokeWidth={2} />
+            Refresh
+          </button>
         }
       />
 
-      <input
-        ref={filePicker}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={e => {
-          if (e.target.files?.length && here) uploads.add(e.target.files, here.id)
-          e.target.value = ''
-        }}
-      />
-
+      <p className="text-secondary-13 text-muted-foreground">{READ_ONLY_PAGE_NOTE}</p>
       <p className="text-secondary-13 text-muted-foreground">{PARTIAL_VIEW_NOTE}</p>
-
-      {notice && (
-        <p
-          role="status"
-          className="flex items-center justify-between gap-3 rounded-inner border border-border bg-tint-blue px-4 py-3 text-secondary-13"
-        >
-          {notice}
-          <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
-            Close
-          </button>
-        </p>
-      )}
 
       <div className="flex min-h-0 flex-1 gap-4">
         {/* ── the tree ─────────────────────────────────────────────────── */}
@@ -330,10 +253,8 @@ export default function FilesPage() {
             branches={branches}
             open={open}
             path={path}
-            draggingIds={dragging}
             onToggle={id => setOpen(prev => toggleOpen(prev, id))}
             onOpenFolder={openFolder}
-            onDropOnto={askToMove}
           />
         </nav>
 
@@ -444,47 +365,9 @@ export default function FilesPage() {
             />
           </div>
 
-          {/* ── uploads in flight ──────────────────────────────────────── */}
-          {uploads.uploads.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-3">
-              <div className="flex items-center justify-between text-secondary-13 font-semibold">
-                <span>{uploadSummary(uploads.uploads)}</span>
-                {inFlight.length === 0 && (
-                  <button type="button" onClick={uploads.clearFinished} className="underline">
-                    Clear
-                  </button>
-                )}
-              </div>
-              {uploads.uploads.map(upload => (
-                <div key={upload.id} className="flex items-center gap-3 text-secondary-13">
-                  <span className="min-w-0 flex-1 truncate">{upload.name}</span>
-                  <span
-                    className="h-1.5 w-32 overflow-hidden rounded-full bg-foreground/10"
-                    role="progressbar"
-                    aria-valuenow={uploadPercent(upload)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${upload.name} going up`}
-                  >
-                    <span
-                      className={cn('block h-full', upload.status === 'failed' ? 'bg-accent-red' : 'bg-accent-blue')}
-                      style={{ width: `${uploadPercent(upload)}%` }}
-                    />
-                  </span>
-                  <span className={cn('w-40 shrink-0 text-right', upload.status === 'failed' && 'text-accent-red')}>
-                    {uploadWords(upload)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* ── the files ──────────────────────────────────────────────── */}
           <div className="flex min-h-0 flex-1 gap-[18px]">
-            <div className={cn(
-              'flex min-h-0 min-w-0 flex-1 flex-col rounded-card transition-colors',
-              dropHere && 'ring-2 ring-accent-blue ring-offset-4 ring-offset-background',
-            )}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-card">
               {browse.error && <p className="text-body-15">{browse.error}</p>}
               {!browse.error && browse.loading && (
                 <p className="text-secondary-13 text-muted-foreground">Looking…</p>
@@ -501,9 +384,7 @@ export default function FilesPage() {
                     view={view}
                     selected={selected}
                     now={now}
-                    draggingIds={dragging}
-                    onPick={(id, mods) => setSelected(prev =>
-                      nextSelection(prev, entries.map(e => e.id), id, mods))}
+                    onPick={setSelected}
                     onOpenFolder={crumb => {
                       if (debounced) {
                         void openSearchResult(
@@ -511,15 +392,6 @@ export default function FilesPage() {
                         )
                       } else openFolder(crumb)
                     }}
-                    onNewFolder={() => setNewFolder(true)}
-                    onDropOnto={askToMove}
-                    onDragStart={id => setDragging(idsForDrag(id))}
-                    onDragEnd={() => setDragging([])}
-                    onRename={setRenaming}
-                    onShare={setSharing}
-                    onMoveOne={entry => setMoving({
-                      ids: [entry.id], names: [entry.name], target: null,
-                    })}
                   />
                   {browse.nextPage && (
                     <button
@@ -539,63 +411,15 @@ export default function FilesPage() {
                 `hidden` wins whatever the order in the string — the panel could
                 never be revealed on a phone. Pick ONE of the two per breakpoint. */}
             <div className={cn(panelOpen ? 'block' : 'hidden', 'lg:block')}>
-              <FilesPanel
-                selectedId={selected.length === 1 ? selected[0] : null}
-                selectedCount={selected.length}
-                now={now}
-                onRename={setRenaming}
-                onShare={setSharing}
-                onMove={() => setMoving({ ids: selected, names: namesOf(selected), target: null })}
-              />
+              <FilesPanel selectedId={selected} now={now} />
             </div>
           </div>
         </main>
       </div>
-
-      <NewFolderDialog
-        open={newFolder}
-        parent={here}
-        onClose={() => setNewFolder(false)}
-        onMade={(folderId, created) => {
-          setNewFolder(false)
-          // adopt-not-duplicate, said out loud — otherwise "it did nothing"
-          // is indistinguishable from "it worked"
-          setNotice(created ? null : 'That folder is already there — nothing new was made.')
-          afterWrite(folderId)
-        }}
-      />
-      <RenameDialog
-        entry={renaming}
-        onClose={() => setRenaming(null)}
-        onDone={() => { const at = here?.id; setRenaming(null); if (at) afterWrite(at) }}
-      />
-      <MoveDialog
-        request={moving}
-        root={root ? { id: root.id, name: root.name } : null}
-        onClose={() => setMoving(null)}
-        onDone={targetId => {
-          setMoving(null)
-          setSelected([])
-          afterWrite(targetId)
-          if (here) afterWrite(here.id)
-        }}
-        // some of it moved and some did not: the dialog stays open naming what
-        // Google refused, but the folders still have to catch up
-        onMoved={targetId => {
-          setSelected([])
-          afterWrite(targetId)
-          if (here) afterWrite(here.id)
-        }}
-      />
-      <ShareDialog entry={sharing} onClose={() => setSharing(null)} />
     </div>
   )
 }
 
-const INK = cn(
-  'inline-flex min-h-[44px] items-center gap-2 rounded-full bg-foreground px-4',
-  'text-secondary-13 font-semibold text-background',
-)
 const GHOST = cn(
   'inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4',
   'text-secondary-13 font-semibold text-foreground hover:bg-foreground/[0.04]',

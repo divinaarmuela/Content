@@ -47,6 +47,17 @@ export const MAX_SEGMENT = 100
 /** The mimeType that makes a Drive file a folder. */
 export const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
+/**
+ * What a person is told about a client with no folder in Drive.
+ *
+ * An instruction, not an apology: they can fix it in thirty seconds, in the
+ * place where they can also see the folders that DO exist and might be the one
+ * they meant. Lives here because both the server (the Apply result) and the
+ * Settings card say it, and one sentence in two places drifts.
+ */
+export const NO_FOLDER_IN_DRIVE =
+  'No folder found in Drive — create one in Drive, then match it here'
+
 /** The three fixed folders that group together, apart from the dated shoots. */
 export const BRAND_FOLDER = '_Brand'
 export const TASKS_FOLDER = '_Tasks'

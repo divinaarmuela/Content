@@ -208,25 +208,29 @@ describe('a confirmed picked root', () => {
     expect(permissionCalls()).toEqual([])
   })
 
-  it('creates a folder for a client that has none — and still shares nothing', async () => {
+  it('makes NO folder for a client that has none — it says so and stops', async () => {
+    // It used to create one. The owner's ruling ended that: the app makes no
+    // folders in their Drive, not even a helpful one. A person makes it in
+    // Drive — where they can see what is already in there under a name we
+    // might not have recognised — and the next lookup adopts it.
     const id = await clientFolderId('c2', 'Brand New Client')
-    expect(id).toBe('new-1')
-    expect(folders['new-1']).toEqual({ name: 'Brand New Client', parent: 'clients-folder' })
-    // sharing on the owner's own tree is the owner's business, even for a
-    // folder we just made inside it
+    expect(id).toBeNull()
+    expect(calls.filter(c => c.method === 'POST')).toEqual([])
     expect(permissionCalls()).toEqual([])
 
     const row = fake.rows('clients').find(r => r.id === 'c2') as unknown as Client
-    expect(row.drive_folder_origin).toBe('app')
+    expect(row.drive_folder_id).toBeFalsy()
   })
 
-  it('is idempotent — asking twice adopts, it does not duplicate', async () => {
-    await clientFolderId('c2', 'Brand New Client')
+  it('adopts a folder somebody made in Drive, by its tidied name', async () => {
+    // the half that still works: the folder exists, so it is used as it is
+    folders['made-by-hand'] = { name: 'Brand New Client', parent: 'clients-folder' }
     calls = []
-    // a second client record with the same name finds the folder rather than
-    // making another
-    expect(await clientFolderId('c1', 'Brand New Client')).toBe('new-1')
+    expect(await clientFolderId('c2', 'Brand New Client Pty Ltd')).toBe('made-by-hand')
     expect(calls.filter(c => c.method === 'POST')).toEqual([])
+
+    const row = fake.rows('clients').find(r => r.id === 'c2') as unknown as Client
+    expect(row.drive_folder_origin).toBe('adopted')
   })
 
   it('shares nothing, ever', async () => {
@@ -267,11 +271,13 @@ describe('the app’s own root, unchanged', () => {
     expect(await rootFolderId()).toBe('app-root')
   })
 
-  it('does not replace the recorded folder because Drive was busy for a second', async () => {
-    // a 429 is "ask again later", not "your folder is gone" — replacing it
-    // forks the tree in two and nothing says so
+  it('never re-makes it, whatever Drive is doing', async () => {
+    // It used to read the folder back and make a replacement on a 404. The
+    // dashboard makes no folders at all now, so the recorded id is returned
+    // as it is and Drive is not asked about it — a 429 cannot fork the tree
+    // because nothing here can create a second one.
     readFails = 429
-    expect(await rootFolderId()).toBe(null)
+    expect(await rootFolderId()).toBe('app-root')
     const row = fake.rows('drive_connection')[0] as unknown as { root_folder_id: string }
     expect(row.root_folder_id).toBe('app-root')
     expect(calls.filter(c => c.method === 'POST')).toEqual([])

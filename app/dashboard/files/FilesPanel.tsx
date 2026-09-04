@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Download, ExternalLink, FolderInput, Link2, Pencil } from 'lucide-react'
+import { Download, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { friendlyError } from '@/app/lib/support-core'
 import {
@@ -15,10 +15,15 @@ import {
  *
  * Two halves, and the difference matters. Drive knows the name, the size, the
  * owner and when it changed. Only WE know it is version 2 of Pure Allure's
- * spring reel, and only for files this app put there — most of what is in the
- * owner's Drive was filed by a person long before any of this existed. So the
- * second half simply is not drawn when there is nothing to draw, rather than
- * showing "Client: unknown" and making a stranger's PDF look like a mistake.
+ * spring reel, and only for files this app mirrored before automatic filing
+ * was switched off — most of what is in the owner's Drive was filed by a
+ * person long before any of this existed. So the second half simply is not
+ * drawn when there is nothing to draw, rather than showing "Client: unknown"
+ * and making a stranger's PDF look like a mistake.
+ *
+ * The two buttons are the two things the dashboard can honestly offer: open it
+ * where it lives, or take a copy. Renaming, moving and sharing are Drive's
+ * job, and Drive is one click away.
  */
 
 export type PanelInfo = {
@@ -35,15 +40,9 @@ export type PanelInfo = {
   poster: string | null
 }
 
-export default function FilesPanel({
-  selectedId, selectedCount, now, onRename, onMove, onShare,
-}: {
+export default function FilesPanel({ selectedId, now }: {
   selectedId: string | null
-  selectedCount: number
   now: Date
-  onRename: (entry: DriveEntry) => void
-  onMove: () => void
-  onShare: (entry: DriveEntry) => void
 }) {
   const [info, setInfo] = useState<PanelInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -67,22 +66,6 @@ export default function FilesPanel({
       .catch(() => { if (alive) setError(friendlyError('', 'Files')) })
     return () => { alive = false }
   }, [selectedId])
-
-  if (selectedCount > 1) {
-    return (
-      <Shell>
-        <p className="text-body-15 font-semibold">{selectedCount} things picked</p>
-        <p className="text-secondary-13 text-muted-foreground">
-          Drag them onto a folder, or use Move… — you will be asked to confirm before
-          anything moves.
-        </p>
-        <div className="flex-1" />
-        <button type="button" onClick={onMove} className={PRIMARY}>
-          <FolderInput className="h-4 w-4" strokeWidth={2} />Move…
-        </button>
-      </Shell>
-    )
-  }
 
   if (!selectedId) {
     return (
@@ -159,16 +142,10 @@ export default function FilesPanel({
             <Download className="h-4 w-4" strokeWidth={2} />Download
           </a>
         )}
-        <button type="button" onClick={() => onRename(entry)} className={SECONDARY}>
-          <Pencil className="h-4 w-4" strokeWidth={2} />Rename…
-        </button>
-        <button type="button" onClick={onMove} className={SECONDARY}>
-          <FolderInput className="h-4 w-4" strokeWidth={2} />Move…
-        </button>
-        <button type="button" onClick={() => onShare(entry)} className={SECONDARY}>
-          <Link2 className="h-4 w-4" strokeWidth={2} />Get a link…
-        </button>
       </div>
+      <p className="text-secondary-13 text-muted-foreground">
+        To rename, move or share it, open it in Google Drive.
+      </p>
     </Shell>
   )
 }

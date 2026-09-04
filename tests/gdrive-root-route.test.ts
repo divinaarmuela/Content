@@ -146,12 +146,13 @@ describe('the plan', () => {
     expect(planCalls).toEqual([{}])
   })
 
-  it('makes the Clients folder only when a person said so', async () => {
+  it('makes no folder whatever the body says — POST reads, like GET', async () => {
+    // the verb survives so a browser tab deployed against the older build does
+    // not 405; there is nothing left for it to create
     await postPlan(post('https://x.test/', {}))
-    expect(planCalls).toEqual([{ createClientsFolder: false }])
-    planCalls = []
     await postPlan(post('https://x.test/', { create_clients_folder: true }))
-    expect(planCalls).toEqual([{ createClientsFolder: true }])
+    // buildRootPlan is called with no instruction at all, twice
+    expect(planCalls).toEqual([{}, {}])
   })
 })
 

@@ -266,7 +266,7 @@ describe('with automatic filing off (the default)', () => {
     const res = await members.syncDriveMembers()
     expect(res.ok).toBe(true)
     expect(res.reason).toBe('auto_filing_off')
-    expect(res.message).toMatch(/Automatic filing to Drive is off/)
+    expect(res.message).toMatch(/only reads Google Drive/)
     expect(res.added).toEqual([])
     expect(calls).toEqual([])
   })
@@ -363,15 +363,28 @@ const READ_ONLY = new Set([
   'driveMemberNote',
 ])
 
-/** `export function foo` / `export async function foo`, and the text that
- *  follows it up to the next top-level export — near enough to a body for
- *  "does this mention the guard", and it needs no parser. */
+/**
+ * Every exported function, and the text that follows it up to the next
+ * top-level export — near enough to a body for "does this mention the guard",
+ * and it needs no parser.
+ *
+ * BOTH shapes. `export function foo` was the only one this recognised, so an
+ * exported arrow — `export const foo = async () => {…}` — walked straight past
+ * the guard test. There are none in these three files today, which is exactly
+ * when to widen it: the next writer somebody adds will be written in whichever
+ * style they happen to prefer.
+ */
 function exportedFunctions(source: string): Map<string, string> {
   const out = new Map<string, string>()
-  const re = /^export (?:async )?function (\w+)/gm
+  // `export function f` / `export async function f`, and the arrow form
+  // `export const f = (…) =>` / `= async (…) =>` / `= function`. A plain
+  // exported CONSTANT is not a function and is deliberately not matched —
+  // catching those would make every string in the file something somebody has
+  // to classify, and the test would be turned off within a week.
+  const re = /^export (?:async )?function (\w+)|^export (?:const|let) (\w+)(?::[^=\n]*)? = (?:async )?(?:\(|function\b)/gm
   const found: { name: string; at: number }[] = []
   for (let m = re.exec(source); m; m = re.exec(source)) {
-    found.push({ name: m[1], at: m.index })
+    found.push({ name: m[1] ?? m[2], at: m.index })
   }
   found.forEach((f, i) => {
     out.set(f.name, source.slice(f.at, found[i + 1]?.at ?? source.length))

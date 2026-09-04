@@ -5,6 +5,7 @@ import {
   closeUploadRow, liveUploadRow, noteUploadProgress, recordPageUpload, requireFilesAccess,
 } from '../../../../lib/drive-page'
 import { UPLOAD_CHUNK } from '../../../../lib/files-core'
+import { readOnlyRefusal } from '../../../../lib/gdrive-policy'
 
 /**
  * One slice of a file on its way into Drive.
@@ -32,6 +33,13 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
+    // FIRST, before the role check and before the body is read: the dashboard
+    // does not write to Google Drive. The code below still works and is still
+    // tested — DRIVE_PAGE_WRITES=1 puts it back — but nothing on any page can
+    // reach it, and a request that arrives anyway is refused here.
+    const readOnly = readOnlyRefusal()
+    if (readOnly) return NextResponse.json({ error: readOnly }, { status: 403 })
+
     const me = await requireFilesAccess()
     const url = new URL(req.url)
     const uploadId = url.searchParams.get('upload') ?? ''

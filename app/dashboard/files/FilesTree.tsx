@@ -20,9 +20,10 @@ import type { TreeNode } from './useDriveBrowse'
  * of folders under it, and asking for the shape up front would be a minute of
  * waiting for a rail nobody has clicked.
  *
- * Every row is also a drop target. Dropping does not move anything: it asks,
- * and the page's confirmation is what actually moves a file. That is the
- * owner's rule — nothing in their Drive moves as a side effect of a gesture.
+ * Nothing here is a drop target and nothing is draggable. The dashboard makes
+ * no writes to Google Drive, so there is no move to start and no upload to
+ * land — a file dragged onto the rail does nothing at all, which is the
+ * honest behaviour rather than a gesture that half works.
  */
 
 export type TreeProps = {
@@ -32,9 +33,6 @@ export type TreeProps = {
   path: Crumb[]
   onToggle: (id: string) => void
   onOpenFolder: (crumb: Crumb) => void
-  /** something was dragged onto this folder — the page asks before moving */
-  onDropOnto: (folderId: string, folderName: string) => void
-  draggingIds: string[]
 }
 
 /**
@@ -99,8 +97,7 @@ export default function FilesTree(props: TreeProps) {
 }
 
 function Branch({
-  node, depth, branches, open, path, onToggle, onOpenFolder, onDropOnto, draggingIds, root,
-  roving, onMove,
+  node, depth, branches, open, path, onToggle, onOpenFolder, root, roving, onMove,
 }: TreeProps & {
   node: TreeNode; depth: number
   roving: string | null
@@ -110,7 +107,6 @@ function Branch({
   const isCurrent = path.length > 0 && path[path.length - 1]?.id === node.id
   const onPath = path.some(c => c.id === node.id)
   const kids = branches[node.id]
-  const canDrop = draggingIds.length > 0 && !draggingIds.includes(node.id)
 
   return (
     <div role="none">
@@ -135,13 +131,6 @@ function Branch({
             onMove(node.id, e.key)
           }
         }}
-        onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
-        onDrop={e => {
-          if (!canDrop) return
-          e.preventDefault()
-          e.stopPropagation()
-          onDropOnto(node.id, node.name)
-        }}
         style={{ paddingLeft: `${8 + depth * 14}px` }}
         className={cn(
           'flex min-h-[44px] cursor-pointer items-center gap-2 rounded-tile pr-2 text-body-15 outline-none transition-colors',
@@ -151,7 +140,6 @@ function Branch({
             : onPath
               ? 'font-semibold text-foreground hover:bg-foreground/[0.04]'
               : 'text-foreground/75 hover:bg-foreground/[0.04]',
-          canDrop && 'ring-1 ring-accent-blue/40',
         )}
       >
         <button
@@ -197,8 +185,6 @@ function Branch({
               path={path}
               onToggle={onToggle}
               onOpenFolder={onOpenFolder}
-              onDropOnto={onDropOnto}
-              draggingIds={draggingIds}
               roving={roving}
               onMove={onMove}
             />
