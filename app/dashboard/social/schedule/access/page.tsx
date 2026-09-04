@@ -13,9 +13,8 @@ import { accessibleClientIdsOf, type ScopeViewer } from '@/app/lib/scope-client'
 import { isValidZone, zoneLabel } from '@/app/lib/timezone-core'
 import {
   accountHealthWords, lastCheckedWords, peopleWithAccess, profileMappingWords,
-  type ProfileChoice,
+  type AccountHealth, type ProfileChoice,
 } from '@/app/lib/social-access-core'
-import type { TokenStatus } from '@/app/lib/token-health-core'
 import { useRole } from '../../../useRole'
 import PlatformIcon, { brandFor } from '../../PlatformIcon'
 import PageTitle from '../../../ui/PageTitle'
@@ -59,7 +58,7 @@ const OFFERED = [
 
 /** What only the server can answer: the provider's side of the story. */
 type ProviderView = {
-  health: Record<string, TokenStatus>
+  health: Record<string, AccountHealth>
   checkedAt: string
   profiles: ProfileChoice[]
   profileId: string | null

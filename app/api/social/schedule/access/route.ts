@@ -4,7 +4,9 @@ import type { Client, SocialAccount } from '@/lib/db-types'
 import { AuthzError, requireRole } from '@/app/lib/authz'
 import { assertClientAccess, scheduleErrorResponse } from '@/app/lib/social-schedule'
 import { getPublisher } from '@/app/lib/publisher'
-import { mayChangeAccess, mayChangeProfile } from '@/app/lib/social-access-core'
+import {
+  mayChangeAccess, mayChangeProfile, type AccountHealth,
+} from '@/app/lib/social-access-core'
 import {
   createProfile, listProfiles, moveAccountsToProfile, providerConfigured,
 } from '@/app/lib/zernio-profiles'
@@ -77,11 +79,16 @@ export async function GET(req: Request) {
         // health per account, each failure collapsing to null — a revoked
         // scope on one channel must not take the other three off the page
         Promise.all(accounts.map(async a => {
+          // THE WHOLE payload, not just its token. The status word, what the
+          // account may still DO and the provider's own issue list are what
+          // separate "renewing its login" from "broken", and sending only the
+          // token is how two working accounts came to be badged as needing
+          // reconnecting (`healthBlocksPosting` in social-access-core.ts).
           const h = await within(
-            publisher.accountHealth(a.provider_account_id) as Promise<{ tokenStatus?: Record<string, unknown> } | null>,
+            publisher.accountHealth(a.provider_account_id) as Promise<AccountHealth | null>,
             null,
           )
-          return [a.id, h?.tokenStatus ?? null] as const
+          return [a.id, h ?? null] as const
         })),
         providerConfigured() ? within(listProfiles(), []) : Promise.resolve([]),
         mappedId

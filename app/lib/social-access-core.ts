@@ -14,7 +14,9 @@
 import { ROLE_LABEL, TEAM_ROLES, mayPublish, type Role } from './identity-core'
 import { mayApprovePost, maySendPostApproval } from './posting-approval-core'
 import { actingRoles } from './workflow-core'
-import { tokenNotice, timeLeftWords, type TokenStatus } from './token-health-core'
+import {
+  saysAutoRenews, timeLeftWords, tokenNotice, type TokenStatus,
+} from './token-health-core'
 
 /* ── what a person may do ──────────────────────────────────────────────── */
 
@@ -172,6 +174,170 @@ export type AccountHealthWords = {
 }
 
 /**
+ * The whole health payload, as the posting service answers it.
+ *
+ * `GET /accounts/{id}/health` — a status word, the token, what the account may
+ * still DO, and a list of issues in the provider's own words. The page used to
+ * be handed the token alone, which is how a healthy account came to be badged
+ * broken: see `healthBlocksPosting` below.
+ */
+export type AccountHealth = {
+  status?: string | null
+  tokenStatus?: TokenStatus | null
+  permissions?: {
+    canPost?: boolean | null
+    canFetchAnalytics?: boolean | null
+    missingRequired?: unknown
+  } | null
+  issues?: unknown
+}
+
+/** The caller may hand over the whole payload or, as several already do, the
+ *  token on its own. A `tokenStatus` key is what tells them apart. */
+type HealthLike = AccountHealth | TokenStatus
+
+const isFullHealth = (v: HealthLike): v is AccountHealth =>
+  typeof v === 'object' && v !== null && 'tokenStatus' in v
+
+const tokenOf = (v: HealthLike | null | undefined): TokenStatus | null => {
+  if (!v) return null
+  return isFullHealth(v) ? (v.tokenStatus ?? null) : (v as TokenStatus)
+}
+
+const statusWordOf = (v: HealthLike | null | undefined): string =>
+  (v && isFullHealth(v) ? String(v.status ?? '') : '').toLowerCase()
+
+const permissionsOf = (v: HealthLike | null | undefined) =>
+  (v && isFullHealth(v) ? (v.permissions ?? null) : null)
+
+const missingOf = (v: HealthLike | null | undefined): string[] => {
+  const raw = permissionsOf(v)?.missingRequired
+  return (Array.isArray(raw) ? raw : []).map(x => String(x ?? '')).filter(Boolean)
+}
+
+/**
+ * A permission, in words somebody can act on.
+ *
+ * The provider names them the way the platform's API does
+ * (`pages_manage_posts`), which tells a person nothing about what to press. An
+ * unknown one is shown as it came rather than dropped — a missing permission
+ * nobody can name is still a missing permission.
+ */
+const PERMISSION_WORDS: Record<string, string> = {
+  pages_manage_posts: 'posting to the Page',
+  pages_read_engagement: 'reading the Page’s comments',
+  pages_show_list: 'seeing which Pages this account manages',
+  instagram_basic: 'seeing the Instagram account',
+  instagram_content_publish: 'posting to Instagram',
+  instagram_manage_comments: 'reading Instagram comments',
+  instagram_manage_insights: 'reading Instagram’s numbers',
+  business_management: 'managing the business account',
+  'video.publish': 'posting videos',
+  'video.upload': 'uploading videos',
+  'user.info.basic': 'seeing who the account is',
+  w_member_social: 'posting on LinkedIn',
+  r_organization_social: 'reading the company page',
+}
+
+const permissionWords = (names: readonly string[]): string =>
+  names.map(n => PERMISSION_WORDS[n] ?? `“${n}”`).join(', ')
+
+/* ── is this account actually stopped? ──────────────────────────────────── */
+
+export type HealthBlock =
+  | { blocked: false }
+  | { blocked: true; kind: 'expired' | 'permission'; why: string }
+
+/**
+ * THE ONE RULE FOR "THIS ACCOUNT CANNOT POST UNTIL SOMEBODY FIXES IT".
+ *
+ * -- WHY THIS EXISTS, AND WHAT IT COST NOT TO HAVE IT --
+ *
+ * The provider's `status` word has three values and only one of them means
+ * broken. `warning` is what it says while it is RENEWING ITS OWN LOGIN:
+ *
+ *   { status: 'warning',
+ *     tokenStatus: { valid: true, expiresIn: 'Auto-refreshes', needsRefresh: true },
+ *     permissions: { canPost: true, missingRequired: [] },
+ *     issues: ['Token expired or expiring soon (auto-refresh pending)'] }
+ *
+ * Every field there says the account is fine and the provider is handling it.
+ * We were reading `needsRefresh: true` on its own, and told the owner that two
+ * working accounts — a client's TikTok and a YouTube channel — "need
+ * reconnecting" because "the provider can no longer renew this on its own",
+ * which is the exact opposite of what it had just said. A badge that cries
+ * wolf is worse than no badge: the next one, the real one, is the one nobody
+ * believes.
+ *
+ * So an account is stopped ONLY when something says it is stopped:
+ *
+ *   • the token is not valid;
+ *   • a required permission is missing (named here, in words);
+ *   • the provider says it cannot post;
+ *   • the provider's own status word is `error`.
+ *
+ * `warning` is NOT on that list, and neither is `needsRefresh` on its own.
+ *
+ * This is the ONE place that decides it. The badge on the access page reads
+ * it, and nothing else reaches a verdict of its own: the calendar tile's
+ * "needs reconnecting" and the account-drop email both hang off
+ * `social_accounts.active === false`, which only the provider's
+ * disconnected / revoked / expired WEBHOOK sets. A warning reaches neither.
+ */
+export function healthBlocksPosting(
+  health: HealthLike | null | undefined,
+): HealthBlock {
+  const token = tokenOf(health)
+  const permissions = permissionsOf(health)
+  const missing = missingOf(health)
+  const word = statusWordOf(health)
+
+  if (token?.valid === false) {
+    return {
+      blocked: true,
+      kind: 'expired',
+      why: 'Posts for this account will not go out until it is reconnected.',
+    }
+  }
+  if (missing.length > 0) {
+    return {
+      blocked: true,
+      kind: 'permission',
+      why: `Reconnect it and say yes to everything it asks for — it is still missing ${permissionWords(missing)}.`,
+    }
+  }
+  if (permissions?.canPost === false) {
+    return {
+      blocked: true,
+      kind: 'permission',
+      why: 'The posting service can reach this account but is not allowed to post to it. Reconnect it and say yes to everything it asks for.',
+    }
+  }
+  if (word === 'error') {
+    return {
+      blocked: true,
+      kind: 'expired',
+      why: 'The posting service cannot use this account. Reconnect it — until you do, posts scheduled for it will not go out.',
+    }
+  }
+  return { blocked: false }
+}
+
+/**
+ * Is the provider renewing this login for us right now?
+ *
+ * Either it says so in the expiry text ("Auto-refreshes"), or it is wearing
+ * `warning` + `needsRefresh` — which is the same sentence in field form, and
+ * is exactly the payload that used to come out as "needs reconnecting".
+ */
+function renewingItself(health: HealthLike | null | undefined): boolean {
+  const token = tokenOf(health)
+  if (!token) return false
+  if (saysAutoRenews(token.expiresIn)) return true
+  return statusWordOf(health) === 'warning' && token.needsRefresh === true
+}
+
+/**
  * Does this payload actually SAY anything about the account?
  *
  * "Not checked" used to mean only "the request failed". A reply that arrived
@@ -184,7 +350,16 @@ export type AccountHealthWords = {
  * `expiresIn` is free text from the provider by definition, so any string
  * counts; every other field has one shape and must wear it.
  */
-function readsAsHealth(status: Record<string, unknown>): boolean {
+function readsAsHealth(health: HealthLike): boolean {
+  // the full shape says something the moment it carries a status word we know
+  // or a permissions block we can read, even with no token at all
+  if (isFullHealth(health)) {
+    if (['healthy', 'warning', 'error'].includes(statusWordOf(health))) return true
+    if (typeof permissionsOf(health)?.canPost === 'boolean') return true
+  }
+  const token = tokenOf(health)
+  if (!token) return false
+  const status = token as unknown as Record<string, unknown>
   const has = (k: string) => status[k] !== undefined && status[k] !== null
   if (has('valid') && typeof status.valid !== 'boolean') return false
   if (has('needsRefresh') && typeof status.needsRefresh !== 'boolean') return false
@@ -206,17 +381,31 @@ function readsAsHealth(status: Record<string, unknown>): boolean {
  * about to stop working — and every extra word in that answer is a word
  * between them and it.
  *
- * "Not checked" is the fourth, and it is the one that matters most. An account
- * we could not reach used to be badged a green "Connected" with a grey line of
- * small print underneath, so a provider outage over an expired token read as
- * everything being fine — and a week of posts got queued against a channel
- * that would refuse every one of them. We do not know, so it says we do not
- * know, in a colour that is neither good news nor bad.
+ * The order below is the whole design:
+ *
+ *   1. we could not read the answer       → "Not checked"
+ *   2. `healthBlocksPosting` says stopped → "Expired" / "Needs reconnecting"
+ *   3. the provider is renewing it        → "Connected", and it says so
+ *   4. it says healthy                    → "Connected"
+ *   5. otherwise the expiry date decides  → "Needs reconnecting soon", or
+ *                                            "Connected" with how long is left
+ *
+ * Step 3 sits ABOVE the date arithmetic on purpose. A login being refreshed by
+ * the provider IS expiring — that is what refreshing means — so reading the
+ * date without reading the sentence next to it is precisely how two working
+ * accounts got badged broken.
+ *
+ * "Not checked" is the state that matters most. An account we could not reach
+ * used to be badged a green "Connected" with a grey line of small print
+ * underneath, so a provider outage over an expired token read as everything
+ * being fine — and a week of posts got queued against a channel that would
+ * refuse every one of them. We do not know, so it says we do not know, in a
+ * colour that is neither good news nor bad.
  */
 export function accountHealthWords(
-  status: TokenStatus | null | undefined, now: number,
+  health: HealthLike | null | undefined, now: number,
 ): AccountHealthWords {
-  if (!status || !readsAsHealth(status as Record<string, unknown>)) {
+  if (!health || !readsAsHealth(health)) {
     return {
       state: 'unknown',
       label: 'Not checked',
@@ -224,15 +413,36 @@ export function accountHealthWords(
       needsReconnect: false,
     }
   }
-  const notice = tokenNotice(status, now)
-  if (status.valid === false) {
+
+  const stopped = healthBlocksPosting(health)
+  if (stopped.blocked) {
     return {
-      state: 'expired',
-      label: 'Expired',
-      detail: 'Posts for this account will not go out until it is reconnected.',
+      state: stopped.kind === 'expired' ? 'expired' : 'reconnect',
+      label: stopped.kind === 'expired' ? 'Expired' : 'Needs reconnecting',
+      detail: stopped.why,
       needsReconnect: true,
     }
   }
+
+  if (renewingItself(health)) {
+    return {
+      state: 'connected',
+      label: 'Connected',
+      detail: 'Renewing its login on its own — nothing to do.',
+      needsReconnect: false,
+    }
+  }
+
+  if (statusWordOf(health) === 'healthy') {
+    return {
+      state: 'connected',
+      label: 'Connected',
+      detail: 'Working normally.',
+      needsReconnect: false,
+    }
+  }
+
+  const notice = tokenNotice(tokenOf(health), now)
   if (notice && notice.level === 'act') {
     return {
       state: 'reconnect',

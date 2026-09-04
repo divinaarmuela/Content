@@ -918,6 +918,14 @@ export function postPlatforms(
  * Derived, never stored: reconnect the account and the sentence is gone on the
  * next frame, without anything having to remember to clear it.
  *
+ * ONE RULE, and it is `active === false` — which ONLY the provider's
+ * disconnected / revoked / expired webhook writes. It is deliberately NOT the
+ * health check's `status` word: that says `warning` while the provider is
+ * quietly renewing a login, and a tile shouting "needs reconnecting" over a
+ * perfectly good account is how a badge stops being believed. The access
+ * page's badge asks `healthBlocksPosting` (`social-access-core.ts`), which
+ * refuses `warning` for the same reason, and a test walks both together.
+ *
  * Named after the channel, because "an account" is no use to somebody with
  * four of them.
  */

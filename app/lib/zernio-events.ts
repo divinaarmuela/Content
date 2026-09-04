@@ -474,6 +474,14 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  * because this one has a deadline attached to it — every post booked onto that
  * channel between now and the reconnect is a post that will not happen.
  *
+ * ONLY on a real drop. This is reached from the provider's
+ * disconnected / revoked / expired webhook and from nowhere else — never from
+ * the health check's `warning`, which is what it says while it is renewing a
+ * login by itself. The same rule draws the calendar tile
+ * (`channelBlockReason`) and the access page's badge
+ * (`healthBlocksPosting`); emailing somebody about an account that is fine is
+ * how they learn to ignore the one that is not.
+ *
  * ONCE PER DROP, and not once per delivery:
  *
  *  • the webhook's own claim (`claimDelivery`) already drops a redelivery of

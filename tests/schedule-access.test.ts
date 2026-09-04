@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  RIGHT_LABEL, accessSummary, accountHealthWords, lastCheckedWords,
-  mayChangeAccess, mayChangeProfile, peopleWithAccess, profileMappingWords,
-  readProfiles, rightsForRole, rightsWords,
+  RIGHT_LABEL, accessSummary, accountHealthWords, healthBlocksPosting,
+  lastCheckedWords, mayChangeAccess, mayChangeProfile, peopleWithAccess,
+  profileMappingWords, readProfiles, rightsForRole, rightsWords,
 } from '@/app/lib/social-access-core'
+import { channelBlockReason } from '@/app/lib/social-schedule-core'
 import { TEAM_ROLES, mayPublish, type Role } from '@/app/lib/identity-core'
 import { mayApprovePost, maySendPostApproval } from '@/app/lib/posting-approval-core'
 import { actingRoles } from '@/app/lib/workflow-core'
@@ -139,7 +140,9 @@ describe('how an account is doing, in three states and no more', () => {
     expect(w.detail).toMatch(/will not go out/i)
   })
 
-  it('a token that cannot renew itself needs reconnecting', () => {
+  it('a token that cannot renew itself, and does not claim to, needs reconnecting', () => {
+    // no status word and no "Auto-refreshes": nothing here says anybody is
+    // renewing it, so the flat `needsRefresh` is taken at its word
     const w = accountHealthWords({ valid: true, needsRefresh: true }, now)
     expect(w.state).toBe('reconnect')
     expect(w.needsReconnect).toBe(true)
@@ -150,7 +153,7 @@ describe('how an account is doing, in three states and no more', () => {
       { valid: true, expiresIn: 'Auto-refreshes', expiresAt: '2026-09-05T00:00:00.000Z' }, now)
     expect(w.state).toBe('connected')
     expect(w.needsReconnect).toBe(false)
-    expect(w.detail).toMatch(/renews itself/i)
+    expect(w.detail).toMatch(/Renewing its login on its own/i)
   })
 
   it('one expiring inside the fortnight is flagged before it bites', () => {
@@ -430,5 +433,229 @@ describe('the provider requests, pinned by shape', () => {
     process.env.PUBLISH_DRY_RUN = '1'
     const { createProfile } = await import('@/app/lib/zernio-profiles')
     await expect(createProfile('   ')).rejects.toThrow(/name/i)
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A RENEWING LOGIN IS CONNECTED, NOT BROKEN.
+ *
+ * These four payloads are the shape the posting service really answers with.
+ * The first two are VERBATIM from a live check of the owner's own accounts
+ * (`.superpowers/sdd/2026-09-03-social-schedule/zernio-health-samples.json`,
+ * 4 Sep 2026) — a client's TikTok and a YouTube channel, both working, both of
+ * which the page badged "Needs reconnecting — the provider can no longer renew
+ * this on its own". Every field in them says the opposite: the token is valid,
+ * it can post, nothing is missing, and the provider says in writing that it is
+ * refreshing the login itself.
+ *
+ * They are pasted rather than paraphrased on purpose. A paraphrase of a
+ * payload is a guess about a payload, and the guess is what got this wrong.
+ */
+describe('the posting service’s own health payload', () => {
+  const now = Date.parse('2026-09-04T02:00:00.000Z')
+
+  const YOUTUBE_WARNING = {
+    accountId: '6a94d2ba77555aae0127560e',
+    platform: 'youtube',
+    username: 'akmalashwin',
+    displayName: 'lxuuryy',
+    status: 'warning',
+    tokenStatus: {
+      valid: true,
+      expiresAt: '2026-09-04T03:50:03.155Z',
+      expiresIn: 'Auto-refreshes',
+      needsRefresh: true,
+    },
+    permissions: {
+      canPost: true, canFetchAnalytics: true, analyticsSupported: true,
+      missingRequired: [],
+    },
+    issues: ['Token expired or expiring soon (auto-refresh pending)'],
+    recommendations: ['Token is being auto-refreshed. API calls may briefly fail until refresh completes.'],
+  }
+
+  const TIKTOK_WARNING = {
+    accountId: '6a94d22f77555aae01271b2c',
+    platform: 'tiktok',
+    username: 'yusufuryurr',
+    displayName: 'Yusuf',
+    status: 'warning',
+    tokenStatus: {
+      valid: true,
+      expiresAt: '2026-09-04T06:29:19.791Z',
+      expiresIn: 'Auto-refreshes',
+      needsRefresh: true,
+    },
+    permissions: {
+      canPost: true, canFetchAnalytics: true, analyticsSupported: true,
+      missingRequired: [],
+    },
+    issues: ['Token expired or expiring soon (auto-refresh pending)'],
+    recommendations: ['Token is being auto-refreshed. API calls may briefly fail until refresh completes.'],
+  }
+
+  /** the same shape, but genuinely broken */
+  const ERROR_PAYLOAD = {
+    accountId: '6a94d22f77555aae01271b2d',
+    platform: 'instagram',
+    username: 'acme',
+    status: 'error',
+    tokenStatus: {
+      valid: false,
+      expiresAt: '2026-08-20T00:00:00.000Z',
+      expiresIn: 'expired',
+      needsRefresh: true,
+    },
+    permissions: {
+      canPost: false, canFetchAnalytics: false, analyticsSupported: true,
+      missingRequired: [],
+    },
+    issues: ['Token is invalid or has been revoked'],
+  }
+
+  /** valid, live, and still unable to do the job */
+  const MISSING_PERMISSION = {
+    accountId: '6a94d22f77555aae01271b2e',
+    platform: 'facebook',
+    username: 'acme',
+    status: 'error',
+    tokenStatus: {
+      valid: true,
+      expiresAt: '2026-12-01T00:00:00.000Z',
+      expiresIn: 'in 88 days',
+      needsRefresh: false,
+    },
+    permissions: {
+      canPost: true, canFetchAnalytics: true, analyticsSupported: true,
+      missingRequired: ['pages_manage_posts', 'made_up_scope'],
+    },
+    issues: ['Missing required permissions'],
+  }
+
+  const HEALTHY = {
+    accountId: '6a94d22f77555aae01271b2f',
+    platform: 'linkedin',
+    status: 'healthy',
+    tokenStatus: {
+      valid: true,
+      expiresAt: '2027-01-01T00:00:00.000Z',
+      expiresIn: 'in 119 days',
+      needsRefresh: false,
+    },
+    permissions: {
+      canPost: true, canFetchAnalytics: true, analyticsSupported: true,
+      missingRequired: [],
+    },
+    issues: [],
+  }
+
+  it('reads the two real "warning" accounts as CONNECTED, and says why', () => {
+    for (const sample of [YOUTUBE_WARNING, TIKTOK_WARNING]) {
+      const w = accountHealthWords(sample, now)
+      expect(w.state, sample.platform).toBe('connected')
+      expect(w.label).toBe('Connected')
+      expect(w.needsReconnect).toBe(false)
+      expect(w.detail).toBe('Renewing its login on its own — nothing to do.')
+      // the words a person must NOT be shown about a working account
+      expect(w.detail).not.toMatch(/can no longer renew/i)
+      expect(w.label).not.toMatch(/reconnect/i)
+    }
+  })
+
+  it('a warning is not a block, on either side of the app', () => {
+    for (const sample of [YOUTUBE_WARNING, TIKTOK_WARNING]) {
+      expect(healthBlocksPosting(sample).blocked, sample.platform).toBe(false)
+    }
+  })
+
+  it('an error with a dead token is Expired', () => {
+    const w = accountHealthWords(ERROR_PAYLOAD, now)
+    expect(w.state).toBe('expired')
+    expect(w.label).toBe('Expired')
+    expect(w.needsReconnect).toBe(true)
+    expect(w.detail).toMatch(/will not go out/i)
+    expect(healthBlocksPosting(ERROR_PAYLOAD).blocked).toBe(true)
+  })
+
+  it('an error with no token trouble at all is still an error', () => {
+    const onlyTheWord = { ...HEALTHY, status: 'error', issues: ['Something went wrong'] }
+    const w = accountHealthWords(onlyTheWord, now)
+    expect(w.needsReconnect).toBe(true)
+    expect(w.detail).toMatch(/cannot use this account/i)
+  })
+
+  it('a missing permission names it in words somebody can act on', () => {
+    const w = accountHealthWords(MISSING_PERMISSION, now)
+    expect(w.state).toBe('reconnect')
+    expect(w.label).toBe('Needs reconnecting')
+    expect(w.needsReconnect).toBe(true)
+    // the plain name, not the API's
+    expect(w.detail).toMatch(/posting to the Page/)
+    expect(w.detail).not.toMatch(/pages_manage_posts/)
+    // one we have no plain name for is still shown, not swallowed
+    expect(w.detail).toMatch(/made_up_scope/)
+    expect(w.detail).toMatch(/say yes to everything it asks for/)
+  })
+
+  it('an account the service may not post to is stopped, valid token or not', () => {
+    const cannotPost = {
+      ...HEALTHY,
+      status: 'warning',
+      permissions: { ...HEALTHY.permissions, canPost: false },
+    }
+    expect(healthBlocksPosting(cannotPost).blocked).toBe(true)
+    expect(accountHealthWords(cannotPost, now).needsReconnect).toBe(true)
+  })
+
+  it('healthy is connected, plainly', () => {
+    const w = accountHealthWords(HEALTHY, now)
+    expect(w.state).toBe('connected')
+    expect(w.needsReconnect).toBe(false)
+    expect(healthBlocksPosting(HEALTHY).blocked).toBe(false)
+  })
+
+  it('an unreadable full payload is Not checked, never green', () => {
+    for (const sample of [
+      { status: 'who knows', tokenStatus: null, permissions: null },
+      { tokenStatus: {} },
+      { tokenStatus: { valid: 'expired' } },
+      null,
+    ]) {
+      const w = accountHealthWords(sample as never, now)
+      expect(w.state, JSON.stringify(sample)).toBe('unknown')
+      expect(w.label).toBe('Not checked')
+    }
+  })
+
+  /**
+   * THE PARITY THAT MATTERS. The badge, the calendar tile and the "your
+   * account dropped" email must never disagree about whether an account is
+   * working. The tile and the email both key off `social_accounts.active`,
+   * which ONLY the provider's disconnected/revoked/expired webhook sets — so a
+   * `warning` cannot reach either of them, and this proves it rather than
+   * asserting it in a comment.
+   */
+  it('a warning never puts "needs reconnecting" on a post’s tile', () => {
+    const account = { id: 'acc-1', platform: 'tiktok', name: 'Yusuf', active: true }
+    expect(accountHealthWords(TIKTOK_WARNING, now).needsReconnect).toBe(false)
+    expect(channelBlockReason(['acc-1'], [account])).toBeNull()
+
+    // …and when the WEBHOOK really does drop it, both sides say so
+    const dropped = { ...account, active: false }
+    expect(channelBlockReason(['acc-1'], [dropped])).toMatch(/needs reconnecting/)
+    expect(accountHealthWords(ERROR_PAYLOAD, now).needsReconnect).toBe(true)
+  })
+
+  it('the badge and the block rule cannot disagree', () => {
+    const every = [
+      YOUTUBE_WARNING, TIKTOK_WARNING, ERROR_PAYLOAD, MISSING_PERMISSION, HEALTHY,
+    ]
+    for (const sample of every) {
+      const words = accountHealthWords(sample, now)
+      expect(words.needsReconnect, sample.accountId)
+        .toBe(healthBlocksPosting(sample).blocked)
+    }
   })
 })
