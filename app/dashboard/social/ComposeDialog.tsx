@@ -216,15 +216,15 @@ export default function ComposeDialog({
   const failedUploads = uploads.filter(u => u.status === 'failed').length
 
   /**
-   * The smaller copy, made for us.
+   * The clean copy, made for us.
    *
    * A 2 GB master is right for YouTube and TikTok and wrong for Instagram, and
    * the provider's promise to shrink it did not hold — Instagram was handed
-   * the raw file and gave up. So the copy is ours: Cloudflare Stream, which
-   * already encodes every upload for the portal preview, hands back a 1080p
-   * MP4, and every channel the master is too big for gets THAT as its own
-   * file. One encode per file, ever; the download is built once and served
-   * from a fixed URL, so the next post of the same clip pays nothing.
+   * the raw file and gave up. So the copy is ours, and it is made properly:
+   * `services/encoder` re-encodes the clip at 1080p H.264, 8-12 Mbps for the
+   * channel it is for, and every channel the master is too big for gets THAT
+   * as its own file. It takes minutes rather than seconds — the row says so
+   * in words — and one encode per file and channel, ever.
    */
   const needingCopy = useMemo(
     () => channelsNeedingCopy({ probes, platforms, kinds, own: perMedia }),
@@ -241,9 +241,18 @@ export default function ComposeDialog({
     const ask = async () => {
       if (stopped) return
       try {
+        // the channel matters: the copy's bitrate is derived from THAT
+        // channel's size and length limits, so the tightest of the channels
+        // waiting for it is the one the copy is made for
+        const forPlatform = needingCopy[0]
         const res = await fetch('/api/social/shrink', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: sharedVideoUrl }),
+          body: JSON.stringify({
+            url: sharedVideoUrl,
+            platform: forPlatform,
+            kind: forPlatform ? kinds[forPlatform] : undefined,
+            seconds: probes[0]?.seconds,
+          }),
         })
         const state = (await res.json()) as CopyState
         if (stopped) return

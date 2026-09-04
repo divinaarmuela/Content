@@ -144,13 +144,42 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // encode_jobs — one request to the encoder (services/encoder) for a
+  //   publish-grade copy of one video, for one channel. It exists so that
+  //   "is a clean copy of this file being made?" has ONE answer that survives
+  //   a deploy, a retry and a second person opening the composer: the row is
+  //   claimed on `source_url + platform`, so two asks for the same copy are
+  //   one encode, and a publish job waiting on a copy waits on this row
+  //   rather than on a poll. `output_key` is the R2 key the finished copy was
+  //   PUT to — the public URL is that key under the bucket's public base, so
+  //   the URL is never stored twice and can never disagree with itself.
+  encode_jobs: [
+    ['id', col('string', false)],
+    ['source_url', col('string', false)],
+    ['platform', col('string', false)],
+    // where the video came from, when it came from a piece of work. All three
+    // are null for a copy asked for straight off a URL in the composer.
+    ['asset_id', col('string', true)],
+    ['version_id', col('string', true)],
+    ['slide_index', col('number', true)],
+    ['status', col('string', false)],       // queued | running | done | failed
+    ['output_key', col('string', true)],
+    ['bytes', col('number', true)],
+    ['width', col('number', true)],
+    ['height', col('number', true)],
+    ['duration_sec', col('number', true)],
+    ['video_kbps', col('number', true)],
+    ['error', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

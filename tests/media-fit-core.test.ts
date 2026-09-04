@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, formatOf,
   effectiveKind, kindLabel, postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
+  PLATFORM_ENCODE, encodeTargetFor, encodeWorstCaseMB,
   type AssetProbe,
 } from '../app/lib/media-fit-core'
 import { SUPPORTED_PLATFORMS } from '../app/lib/publish-core'
@@ -466,5 +467,92 @@ describe('a "feed" video on Instagram is a Reel, and is judged as one', () => {
     expect(effectiveKind('instagram', 'video', 'feed')).toBe('reel')
     expect(effectiveKind('instagram', 'image', 'feed')).toBe('feed')
     expect(effectiveKind('tiktok', 'video', 'feed')).toBe('feed')
+  })
+})
+
+/**
+ * The encode ladder.
+ *
+ * One property carries this whole file: a copy made to fit a channel must
+ * actually fit it. If it does not, the channel compresses it — which is the
+ * exact failure the encoder was built to stop, arrived at by a longer route.
+ */
+describe('the encode ladder', () => {
+  const PLATFORMS = [
+    'instagram', 'facebook', 'tiktok', 'linkedin', 'twitter',
+    'youtube', 'threads', 'pinterest', 'bluesky', 'reddit',
+  ] as const
+  const KINDS = [undefined, 'feed', 'reel', 'story', 'carousel'] as const
+
+  it('never hands a channel a copy bigger than the channel takes', () => {
+    for (const platform of PLATFORMS) {
+      for (const kind of KINDS) {
+        for (const seconds of [undefined, 5, 20, 90, 600, 100_000]) {
+          const target = encodeTargetFor(platform, kind, seconds)
+          if (!target) continue
+          const worst = encodeWorstCaseMB(target)
+          expect(
+            worst,
+            `${platform}/${kind ?? 'default'} at ${seconds ?? 'unknown'}s would allow ${worst.toFixed(0)} MB against a ${target.maxMB} MB limit`,
+          ).toBeLessThan(target.maxMB)
+        }
+      }
+    }
+  })
+
+  it('never budgets for less time than the clip actually runs', () => {
+    // 20 seconds of budget for a 90-second clip would come back three times
+    // over the limit, having passed every check on the way
+    expect(encodeTargetFor('instagram', 'reel', 90)!.maxSeconds).toBe(90)
+    expect(encodeTargetFor('instagram', 'story', 500)!.maxSeconds).toBe(60)   // capped at the channel's own
+    expect(encodeTargetFor('instagram', 'reel')!.maxSeconds).toBe(15 * 60)    // unmeasured: the channel's ceiling
+  })
+
+  it('spends the channel ceiling on a clip short enough to afford it', () => {
+    // a 20-second reel: 10 Mbps for 20s is 25 MB, nowhere near Instagram's 300
+    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(10_000)
+    expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(12_000)
+    expect(encodeTargetFor('twitter', undefined, 20)!.maxrateKbps).toBe(8_000)
+  })
+
+  it('spends less when the channel’s size limit will not stretch', () => {
+    // Instagram takes 300 MB and fifteen minutes; a fifteen-minute Reel
+    // cannot have 10 Mbps and still fit, so it does not get it
+    const long = encodeTargetFor('instagram', 'reel', 15 * 60)!
+    expect(long.maxrateKbps).toBeLessThan(10_000)
+    expect(long.maxrateKbps).toBeGreaterThan(1_500)
+  })
+
+  it('gives up rather than offering a copy no better than the player file', () => {
+    // there is no bitrate at which 300 MB covers a hundred thousand seconds
+    expect(encodeTargetFor('instagram', 'reel', 100_000)).not.toBeNull()  // capped at 15 min first
+    expect(encodeTargetFor('bluesky', undefined, 10 * 60)).not.toBeNull()
+  })
+
+  it('sets the buffer to twice the ceiling, and the sound to 160k', () => {
+    for (const platform of PLATFORMS) {
+      const t = encodeTargetFor(platform, undefined, 20)
+      if (!t) continue
+      expect(t.bufsizeKbps).toBe(t.maxrateKbps * 2)
+      expect(t.audioKbps).toBe(160)
+    }
+  })
+
+  it('is 1080p on the short side and 1920 on the long one', () => {
+    for (const platform of PLATFORMS) {
+      expect(PLATFORM_ENCODE[platform].shortSide).toBe(1080)
+      expect(PLATFORM_ENCODE[platform].longSide).toBe(1920)
+    }
+  })
+
+  it('keeps 60 fps only where the channel serves it', () => {
+    expect(PLATFORM_ENCODE.youtube.maxFps).toBe(60)
+    for (const platform of PLATFORMS.filter(p => p !== 'youtube')) {
+      expect(PLATFORM_ENCODE[platform].maxFps).toBe(30)
+    }
+  })
+
+  it('has a ladder for every channel there is', () => {
+    for (const platform of PLATFORMS) expect(PLATFORM_ENCODE[platform]).toBeTruthy()
   })
 })

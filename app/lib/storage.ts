@@ -94,6 +94,7 @@ export async function putObject(
 export async function signUpload(
   filename: string,
   contentType: string,
+  opts?: { expiresIn?: number },
 ): Promise<SignedUpload> {
   if (!r2Configured()) throw new Error('File storage is not configured')
   const key = objectKey(filename)
@@ -105,7 +106,11 @@ export async function signUpload(
       Key: key,
       ContentType: contentType || 'application/octet-stream',
     }),
-    { expiresIn: 60 * 60 }, // an hour — a 200MB master on a slow line is not quick
+    // an hour — a 200MB master on a slow line is not quick. The encoder asks
+    // for longer: it downloads a 2 GB master, encodes for up to 45 minutes and
+    // only then PUTs, and a URL that expired mid-job would lose the whole
+    // encode with nothing to show for the CPU.
+    { expiresIn: opts?.expiresIn ?? 60 * 60 },
   )
   return {
     signedUrl,

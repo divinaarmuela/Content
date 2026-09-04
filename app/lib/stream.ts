@@ -2,7 +2,12 @@ import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { after } from 'next/server'
 import { DbError, table } from '@/lib/db'
-import type { AssetVersion, ContentItem, VideoPreview } from '@/lib/db-types'
+import type { AssetVersion, ContentItem, EncodeJob, VideoPreview } from '@/lib/db-types'
+import { encoderConfigured } from './encoder'
+import { getEncodeJob, progressOf } from './encode-jobs'
+import { encodeTargetFor, PLATFORM_MEDIA } from './media-fit-core'
+import { cleanCopyWords, type CopyState } from './shrink-core'
+import type { Platform, PostKind } from './publish-core'
 import {
   POLL_AFTER_MS, isVideoUrl, missingPreviewSources, pollablePreviews,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
@@ -573,20 +578,92 @@ export async function retryFailedPreviews(days = 7): Promise<{ retried: number }
 // ── a smaller copy for a channel that cannot take the master ──────────────
 
 /**
- * A 1080p MP4 of a video we already hold, or where that stands.
+ * A publish-grade MP4 of a video we already hold, or where that stands.
+ *
+ * ── What changed, and why ──
+ *
+ * This used to hand back Cloudflare Stream's web-player MP4. That file is
+ * built for a browser to stream, not for a platform to re-encode: about
+ * 0.85 Mbps on a long clip. Instagram then compressed THAT again, and the
+ * client saw the loss on footage they had paid to have shot. Two re-encodes,
+ * and ours was the one that did the damage.
+ *
+ * So the copy is made properly now, by `services/encoder`: 1080p H.264 at
+ * 8-12 Mbps depending on the channel. It takes minutes rather than seconds,
+ * which is the trade — and the words say so instead of pretending otherwise.
+ *
+ * ── The Stream fallback is still here, and only for one case ──
+ *
+ * With `ENCODER_URL` unset there is no encoder to ask, and a workspace that
+ * has not deployed one must not simply lose the feature. So the old path
+ * stays, behind that single condition, and the composer says which copy it
+ * got. Once the encoder is configured, Stream is never asked for a download
+ * again.
+ *
+ * Never throws: a failure is a state, and the composer says it in words
+ * rather than losing the post over a copy.
+ */
+export async function smallerCopyOf(
+  sourceUrl: string, platform: Platform = 'instagram', kind?: PostKind, seconds?: number,
+): Promise<CopyState> {
+  if (encoderConfigured()) return encoderCopyOf(sourceUrl, platform, kind, seconds)
+  return streamCopyOf(sourceUrl)
+}
+
+/** The real copy: ask the encoder, and read the job row while it works. */
+async function encoderCopyOf(
+  sourceUrl: string, platform: Platform, kind: PostKind | undefined, seconds: number | undefined,
+): Promise<CopyState> {
+  const label = PLATFORM_MEDIA[platform]?.label ?? platform
+  const waiting = { status: 'encoding', percent: null, note: cleanCopyWords(label) } as const
+
+  let row: EncodeJob | null
+  try {
+    row = await getEncodeJob(sourceUrl, platform)
+  } catch {
+    return { status: 'failed', reason: 'could not read the copy job' }
+  }
+
+  const progress = progressOf(row)
+  if (progress.status === 'ready' || progress.status === 'failed') return progress
+  if (progress.status === 'encoding') return waiting
+
+  // No row yet. There is no point asking for a copy this channel could not
+  // fit anyway — encodeTargetFor says so by answering null.
+  if (!encodeTargetFor(platform, kind, seconds)) {
+    return { status: 'failed', reason: `${label} has no size limit a copy could be made to fit` }
+  }
+
+  // The ask is an EVENT, not a call: making the copy means presigning an
+  // upload, talking to a machine that may be asleep, and waiting minutes for
+  // an answer — none of which belongs in the request a person is waiting on.
+  // The claim happens inside that job, so two people asking at once is one
+  // encode. (CLAUDE.md trap 5b: this event needs an Inngest re-sync to run.)
+  try {
+    const { inngest } = await import('../inngest/client')
+    await inngest.send({
+      name: 'media/encode',
+      data: { sourceUrl, platform, kind: kind ?? null, seconds: seconds ?? null },
+    })
+  } catch {
+    return { status: 'failed', reason: 'could not ask for a copy' }
+  }
+  return waiting
+}
+
+/**
+ * The old path, for a workspace with no encoder deployed.
  *
  * The encode is the same one the portal preview uses, so most of the time it
  * already exists; when it does not, this claims it (idempotently — the claim
  * is a unique key) and reports `encoding` until the webhook or a refresh
  * marks it ready. Then Stream is asked for a download, which it builds once
- * and serves from a fixed URL. Never throws: a failure is a state, and the
- * composer says it in words rather than losing the post over a preview.
+ * and serves from a fixed URL.
+ *
+ * It is a WORSE copy than the encoder makes — that is the whole reason the
+ * encoder exists — so nothing reaches here while `ENCODER_URL` is set.
  */
-export async function smallerCopyOf(sourceUrl: string): Promise<
-  | { status: 'encoding'; percent: number | null }
-  | { status: 'ready'; url: string; bytes: number | null; width?: number; height?: number; seconds?: number }
-  | { status: 'failed'; reason: string }
-> {
+async function streamCopyOf(sourceUrl: string): Promise<CopyState> {
   if (!streamConfigured()) return { status: 'failed', reason: 'video encoding is not set up on this workspace' }
 
   let row = await previewFor(sourceUrl)

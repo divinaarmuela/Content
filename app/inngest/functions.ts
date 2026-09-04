@@ -514,6 +514,97 @@ export const driveMirrorFile = inngest.createFunction(
   })
 )
 
+/**
+ * Make one publish-grade copy of one video, for one channel.
+ *
+ * A background job because everything about it is slow or unreliable in a
+ * request: presigning an upload, waking a Fly machine that may be asleep, and
+ * then a wait of minutes while ffmpeg runs. The request that wants the copy
+ * (`smallerCopyOf`) only sends this event and says "a few minutes".
+ *
+ * Retries are safe by construction. The row is CLAIMED on
+ * `<hash of the source url>__<platform>` before the encoder is asked
+ * anything, so a duplicate event, a retry, or two schedulers opening the same
+ * post are one encode between them — the same discipline as `video_previews`
+ * and `drive_files`, and for the same reason: an encode is minutes of a
+ * machine's time, so a duplicate is a real cost.
+ *
+ * (CLAUDE.md trap 5b: a NEW Inngest function does nothing until the app is
+ * re-synced. `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`.)
+ */
+export const mediaEncode = inngest.createFunction(
+  {
+    id: 'media-encode',
+    name: 'Make a publish-grade copy',
+    triggers: [{ event: 'media/encode' }],
+    // a transient refusal (the machine is busy) is retried with backoff; a
+    // real refusal settles the row and never comes back here
+    retries: 3,
+    // one at a time per file: two channels wanting a copy of the same master
+    // is two different encodes, but two events for the SAME copy must not race
+    concurrency: { limit: 3 },
+  },
+  async ({ event, step }) => withRequestCache(async () => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const sourceUrl = String(data.sourceUrl ?? '')
+    const platform = String(data.platform ?? '')
+    if (!sourceUrl || !platform) return { skipped: 'missing sourceUrl or platform' }
+
+    return step.run('encode', async () => {
+      const { runEncodeRequest } = await import('../lib/encode-run')
+      return runEncodeRequest({
+        sourceUrl,
+        platform,
+        kind: data.kind ? String(data.kind) : null,
+        seconds: typeof data.seconds === 'number' ? data.seconds : null,
+        assetId: data.assetId ? String(data.assetId) : null,
+        versionId: data.versionId ? String(data.versionId) : null,
+        slideIndex: typeof data.slideIndex === 'number' ? data.slideIndex : null,
+      })
+    })
+  })
+)
+
+/**
+ * A copy has landed — hand back every post that was waiting on it.
+ *
+ * This is the wake-up, and the reason nothing polls. The callback route has
+ * already written the row (it must: the composer is watching it, and an
+ * unverified body must never become an event); what is left is the follow-on
+ * work, which is to dispatch the publish jobs that stopped short because the
+ * copy was not ready. `runPublishJob` claims each one, so dispatching a job
+ * that was already picked up is harmless.
+ *
+ * The ten-minute publish dispatcher remains the backstop: if this event is
+ * ever missed, the post is late, not lost.
+ */
+export const mediaEncodeFinished = inngest.createFunction(
+  {
+    id: 'media-encode-finished',
+    name: 'Release posts waiting on a copy',
+    triggers: [{ event: 'media/encode.finished' }],
+    retries: 2,
+    concurrency: { limit: 5 },
+  },
+  async ({ event, step }) => withRequestCache(async () => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const sourceUrl = String(data.sourceUrl ?? '')
+    if (!sourceUrl) return { skipped: 'no sourceUrl on the event' }
+
+    const ids = await step.run('find-waiting-jobs', async () => {
+      const { jobsWaitingOnCopy } = await import('../lib/publish')
+      return jobsWaitingOnCopy(sourceUrl)
+    })
+    if (ids.length === 0) return { released: 0 }
+
+    await step.sendEvent(
+      'release-waiting-jobs',
+      ids.map(id => ({ name: 'app/post.publish.requested', data: { jobId: id } }))
+    )
+    return { released: ids.length }
+  })
+)
+
 export const functions = [
   dueReminders,
   driveMirrorFile,
@@ -528,4 +619,6 @@ export const functions = [
   asanaReconcile,
   brandScan,
   intakeEnrich,
+  mediaEncode,
+  mediaEncodeFinished,
 ]

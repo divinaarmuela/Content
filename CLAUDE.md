@@ -96,7 +96,8 @@ and `npm run build` must pass. Do not report completion on tests alone.
     for them — they were designed after the Postgres history stopped being
     written — so the generator carries them as GHOST TABLES and
     `lib/db-types.ts` is regenerated from it. Today: `website`, `claim_locks`,
-    `booking_seats`, `social_posts`, `schedule_notes`. Looking for their
+    `booking_seats`, `social_posts`, `schedule_notes`, `drive_uploads`,
+    `encode_jobs`. Looking for their
     `CREATE TABLE` in `docs/schema-history/` and concluding they do not exist
     has already cost an afternoon. Add a column to one by editing the ghost
     definition and re-running `node scripts/gen-db-types.mjs`.

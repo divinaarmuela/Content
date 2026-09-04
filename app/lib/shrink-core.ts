@@ -75,7 +75,7 @@ export function copyDimensions(
 }
 
 export type CopyState =
-  | { status: 'encoding'; percent: number | null }
+  | { status: 'encoding'; percent: number | null; note?: string }
   | { status: 'ready'; url: string; bytes: number | null; width?: number; height?: number; seconds?: number }
   | { status: 'failed'; reason: string }
 
@@ -94,10 +94,24 @@ export function probeForCopy(
   }
 }
 
+/**
+ * What a person is told while the encoder is working.
+ *
+ * Plain, and honest about the wait: a 2 GB master takes minutes, and "…"
+ * with no number behind it reads as "stuck" to somebody who has been looking
+ * at it for ninety seconds.
+ */
+export function cleanCopyWords(platformLabel: string): string {
+  return `Making a clean copy for ${platformLabel} — usually a few minutes`
+}
+
 /** The one line on the channel's row while this is happening. */
 export function copyWords(platformLabel: string, state: CopyState | undefined): string {
   if (!state) return `Making a smaller copy for ${platformLabel}…`
   if (state.status === 'encoding') {
+    // the encoder says how long it usually takes; Cloudflare says how far
+    // through it is. Whichever we were given is what the row shows.
+    if (state.note) return state.note
     return state.percent !== null
       ? `Making a smaller copy for ${platformLabel} — ${Math.round(state.percent)}%`
       : `Making a smaller copy for ${platformLabel}…`
