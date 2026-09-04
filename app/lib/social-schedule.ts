@@ -1255,6 +1255,47 @@ export async function removeNote(user: TeamUser, id: string): Promise<void> {
 }
 
 /**
+ * Change a note's words, or the time it is pinned to.
+ *
+ * The same people who may remove one may rewrite it — the person who wrote it
+ * and the account manager for the client. A note is a message between the
+ * team, so anybody being able to put words in somebody else's note is the
+ * thing to prevent, not the thing to allow because it is only a calendar.
+ */
+export async function editNote(
+  user: TeamUser,
+  id: string,
+  patch: { text?: string; at?: string },
+): Promise<ScheduleNote> {
+  const row = await notes().get(id)
+  if (!row) throw new AuthzError('That note is already gone', 404)
+  const mine = row.created_by === user.id
+  const senior = user.role === 'account_manager' || user.role === 'super_admin'
+  if (!mine && !senior) {
+    throw new AuthzError(
+      'Only the person who wrote this note, or an account manager, can change it', 403,
+    )
+  }
+  const text = patch.text === undefined ? row.text : String(patch.text).trim().slice(0, 500)
+  if (!text) throw new AuthzError('Write the note first', 400)
+  let at = row.at
+  if (patch.at !== undefined) {
+    const when = new Date(String(patch.at)).getTime()
+    if (!Number.isFinite(when)) {
+      throw new AuthzError('That is not a time we can read — pick one from the calendar', 400)
+    }
+    at = new Date(when).toISOString()
+  }
+  // one winner, like every other write on this page: a note two people opened
+  // at once must not be half of each of them
+  const saved = await notes().claim(id, cur =>
+    cur ? { ...cur, text, at, updated_at: nowIso() } as ScheduleNote : null)
+  if (!saved.claimed) throw new AuthzError('That note is already gone', 404)
+  announceAfter('schedule', { client_id: row.client_id, note_id: id, kind: 'note' })
+  return saved.row
+}
+
+/**
  * The client's own numbers, for the suggested-time rules.
  *
  * `post_analytics` carries no client id, so the rows are found the way they

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Images } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Images, StickyNote, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -15,8 +16,11 @@ import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
+import type { ScheduleNote } from '@/lib/db-types'
 import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
+import NoteEditor from './NoteEditor'
+import { useDragSchedule } from './useDragSchedule'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
 import PiecePicker from './PiecePicker'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
@@ -92,6 +96,114 @@ export default function SchedulePage() {
    * meant is carried into the chooser and on into the composer.
    */
   const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
+
+  /**
+   * MOVING A POST BY HAND.
+   *
+   * The hook does the mouse, the finger and the arrow keys; the only thing
+   * the page owns is the save. The message on a refusal is the SERVER's own
+   * sentence — it is the one that knows a scheduled post could not be pulled
+   * back off the provider, and rewriting it here would only make the screen
+   * and the API disagree about why.
+   */
+  const drag = useDragSchedule({
+    tz: data.tz,
+    onMove: async (postId, at) => {
+      const res = await fetch(`/api/social/schedule/${postId}/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ at }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return { ok: false, error: friendlyError(String(json?.error ?? ''), 'Schedule') }
+      }
+      return { ok: true }
+    },
+  })
+
+  /**
+   * A note being written, and whether the next click on the week makes one.
+   *
+   * Two ways in, because neither on its own covers everybody: the visible
+   * "Add note" button (armed, then click the time), and a right-click or a
+   * long press straight onto the slot.
+   */
+  const [noteDraft, setNoteDraft] = useState<{ at: string; note: ScheduleNote | null } | null>(null)
+  const [noteMode, setNoteMode] = useState(false)
+  const [noteBusy, setNoteBusy] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+
+  const openNoteAt = (at: string) => {
+    setNoteError(null)
+    setNoteMode(false)
+    setNoteDraft({ at, note: null })
+  }
+  const openNote = (note: ScheduleNote) => {
+    setNoteError(null)
+    setNoteMode(false)
+    setNoteDraft({ at: note.at, note })
+  }
+
+  const saveNote = async (text: string) => {
+    if (!noteDraft || !clientId) return
+    setNoteBusy(true)
+    setNoteError(null)
+    try {
+      const res = noteDraft.note
+        ? await fetch('/api/social/schedule/notes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: noteDraft.note.id, text }),
+        })
+        : await fetch('/api/social/schedule/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId, at: noteDraft.at, text }),
+        })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setNoteError(friendlyError(String(json?.error ?? ''), 'Schedule'))
+        return
+      }
+      // the note itself arrives on the listener — nothing here refetches
+      setNoteDraft(null)
+    } catch {
+      setNoteError(loadFailedMessage('that note'))
+    } finally {
+      setNoteBusy(false)
+    }
+  }
+
+  const deleteNote = async () => {
+    const note = noteDraft?.note
+    if (!note) return
+    setNoteBusy(true)
+    setNoteError(null)
+    try {
+      const res = await fetch(`/api/social/schedule/notes?id=${encodeURIComponent(note.id)}`, {
+        method: 'DELETE',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setNoteError(friendlyError(String(json?.error ?? ''), 'Schedule'))
+        return
+      }
+      setNoteDraft(null)
+    } catch {
+      setNoteError(loadFailedMessage('that note'))
+    } finally {
+      setNoteBusy(false)
+    }
+  }
+
+  /** who may remove a note: the person who wrote it, or an account manager —
+   *  the same rule the server enforces in `removeNote` */
+  const mayRemoveNote = (note: ScheduleNote | null): boolean => {
+    if (!note || !me) return false
+    return note.created_by === me.id
+      || me.role === 'account_manager' || me.role === 'super_admin'
+  }
 
   const openNew = (media: RailMedia, at: string | null) => {
     if (!media.ok) return
@@ -200,10 +312,32 @@ export default function SchedulePage() {
   const selected = useMemo(
     () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
 
+  /**
+   * The posts, with a move that has just been made shown where it was
+   * dropped.
+   *
+   * A tile that hangs where it was until the database answers reads as "that
+   * did not work" and gets dragged again. The optimistic time is dropped the
+   * moment the live row agrees with it — and dropped by the hook, not kept
+   * forever, so a move somebody ELSE makes later is not overwritten by this
+   * browser's memory of what it did.
+   */
+  const livePosts = useMemo(() => data.posts.map(p => {
+    const at = drag.optimistic[p.id]
+    return at && at !== p.scheduled_for ? { ...p, scheduled_for: at } : p
+  }), [data.posts, drag.optimistic])
+
+  useEffect(() => {
+    const done = Object.entries(drag.optimistic)
+      .filter(([id, at]) => data.posts.find(p => p.id === id)?.scheduled_for === at)
+      .map(([id]) => id)
+    if (done.length > 0) drag.settled(done)
+  }, [data.posts, drag.optimistic, drag.settled])
+
   /** every post for this client on the selected channel */
   const channelPosts = useMemo(
-    () => data.posts.filter(p => matchesChannel(p.channels, selected)),
-    [data.posts, selected])
+    () => livePosts.filter(p => matchesChannel(p.channels, selected)),
+    [livePosts, selected])
 
   const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
 
@@ -338,6 +472,20 @@ export default function SchedulePage() {
             </span>
 
             <div className="ml-auto flex items-center gap-2">
+              {view === 'Week' && (
+                <button
+                  type="button"
+                  aria-pressed={noteMode}
+                  onClick={() => { setNoteDraft(null); setNoteMode(v => !v) }}
+                  className={cn(
+                    'hidden min-h-11 items-center gap-2 rounded-full border border-border px-4 text-[13px] font-semibold md:flex',
+                    noteMode ? 'bg-foreground text-background' : 'bg-surface hover:bg-muted',
+                  )}
+                >
+                  <StickyNote className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                  {noteMode ? 'Click the time for your note' : 'Add note'}
+                </button>
+              )}
               <span className="hidden text-[12px] font-semibold text-muted-foreground sm:inline">
                 {zoneLabel(tz)}
               </span>
@@ -384,10 +532,28 @@ export default function SchedulePage() {
                     const media = data.media.find(m => m.itemId === itemId)
                     if (media) openNew(media, iso)
                   }}
+                  drag={drag}
+                  noteMode={noteMode}
+                  noteDraft={noteDraft}
+                  onNoteAt={openNoteAt}
+                  onNoteOpen={openNote}
+                  noteEditor={noteDraft && (
+                    <NoteEditor
+                      at={noteDraft.at}
+                      tz={tz}
+                      text={noteDraft.note?.text ?? ''}
+                      canDelete={mayRemoveNote(noteDraft.note)}
+                      busy={noteBusy}
+                      error={noteError}
+                      onSave={text => void saveNote(text)}
+                      onDelete={noteDraft.note ? () => void deleteNote() : undefined}
+                      onClose={() => { setNoteDraft(null); setNoteError(null) }}
+                    />
+                  )}
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeek} tz={tz} onOpen={openPost} />
+                <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={openPost} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -397,10 +563,11 @@ export default function SchedulePage() {
               tz={tz}
               todayKey={todayKey}
               onOpen={openPost}
+              drag={drag}
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeek} tz={tz} onOpen={openPost} />
+              <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={openPost} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -413,6 +580,28 @@ export default function SchedulePage() {
           )}
         </main>
       </div>
+
+      {/* Every move says itself out loud: somebody moving a tile with the
+          arrow keys cannot see which column it flew to. */}
+      <p aria-live="polite" className="sr-only">{drag.announcement}</p>
+
+      {/* A refusal is the server's own sentence, where the eye already is */}
+      {drag.message && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 flex max-w-[440px] -translate-x-1/2 items-start gap-3 rounded-card border border-accent-red/40 bg-popover px-4 py-3 shadow-xl"
+        >
+          <span className="text-[13px] font-medium">{drag.message}</span>
+          <button
+            type="button"
+            onClick={drag.dismiss}
+            aria-label="Close"
+            className="-my-1.5 -mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+          >
+            <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      )}
 
       {approving && (
         <div

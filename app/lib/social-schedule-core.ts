@@ -915,6 +915,10 @@ export type ListGroup<T extends ListablePost> = {
 export function groupForList<T extends ListablePost>(
   posts: readonly T[] | null | undefined,
   tz: string,
+  /** the client's today, if the caller has it — days near it are named
+   *  ("Today", "Tomorrow", "Yesterday") rather than dated, because that is
+   *  how anybody reading a list of what is going out thinks about them */
+  todayKey?: string | null,
 ): ListGroup<T>[] {
   const zone = safeZone(tz)
   const groups = new Map<string, T[]>()
@@ -928,10 +932,28 @@ export function groupForList<T extends ListablePost>(
     dayKey,
     label: dayKey === ''
       ? 'No time yet'
-      : formatInZone(`${dayKey}T12:00:00Z`, 'UTC', 'date') ?? dayKey,
+      : nearbyDayLabel(dayKey, todayKey)
+        ?? formatInZone(`${dayKey}T12:00:00Z`, 'UTC', 'date') ?? dayKey,
     posts: groups.get(dayKey)!.sort((a, b) =>
       String(a?.scheduled_for ?? '').localeCompare(String(b?.scheduled_for ?? ''))),
   }))
+}
+
+/**
+ * "Today", "Tomorrow", "Yesterday" — or null when the day is far enough away
+ * that its date is the more useful thing to read.
+ */
+export function nearbyDayLabel(
+  dayKey: string,
+  todayKey: string | null | undefined,
+): string | null {
+  const today = String(todayKey ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return null
+  const days = Math.round((keyToUtc(dayKey) - keyToUtc(today)) / DAY_MS)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  if (days === -1) return 'Yesterday'
+  return null
 }
 
 /* ── is this post ready to send ─────────────────────────────────────────── */

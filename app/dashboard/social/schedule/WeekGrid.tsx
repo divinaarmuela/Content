@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Clock, StickyNote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ScheduleWeekGrid, SuggestedTime } from '@/app/lib/social-schedule-core'
+import { dropLabelAt, LONG_PRESS_MS } from '@/app/lib/schedule-drag-core'
 import type { ScheduleNote } from '@/lib/db-types'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
 import { RAIL_DRAG_TYPE } from './MediaRail'
+import { TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
 import { layoutLanes } from './week-nav'
 import type { SchedulePostRow } from './useSchedulePosts'
 
@@ -58,7 +60,7 @@ export function StoriesStrip({ stories, tz }: { stories: SchedulePostRow[]; tz: 
 
 /** One post on the grid: its media, when it goes out, where to, and the dot
  *  that says where it stands. */
-export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
+export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: {
   post: SchedulePostRow
   tz: string
   top: number
@@ -68,8 +70,13 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
   lanes: number
   /** open the post in the composer */
   onOpen: (post: SchedulePostRow) => void
+  /** moving this post to another time, by mouse, finger or keyboard */
+  drag: DragSchedule
 }) {
   const when = clockLabel(post.scheduled_for, tz)
+  const stuck = drag.blockedReason(post)
+  const lifted = drag.moving?.postId === post.id
+  const saving = drag.saving.has(post.id)
   const title = [
     post.item_title ?? 'Post',
     STATUS_WORDS[post.live_status],
@@ -77,13 +84,34 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
     // never explain the same block two different ways
     post.block_reason,
     offGrid ? 'Outside the hours shown' : null,
+    stuck ?? 'Drag to move it, or press Space and use the arrow keys',
   ].filter(Boolean).join(' · ')
 
   return (
     <button
       type="button"
-      onClick={e => { e.stopPropagation(); onOpen(post) }}
+      onClick={e => {
+        e.stopPropagation()
+        // the click the browser sends after a finger finishes a drag is not
+        // a request to open the post it just put down
+        if (drag.recentlyMoved()) return
+        onOpen(post)
+      }}
       title={title}
+      draggable={!stuck && !saving}
+      onDragStart={e => {
+        if (!drag.startMouse(post, e.dataTransfer)) e.preventDefault()
+      }}
+      // a finger resting on a tile lifts it; a tap still opens it
+      onPointerDown={e => {
+        if (e.pointerType === 'touch' && !stuck && !saving) {
+          drag.startTouch(post, { x: e.clientX, y: e.clientY })
+        }
+      }}
+      onPointerUp={() => drag.endTouchIntent()}
+      onPointerCancel={() => drag.endTouchIntent()}
+      onKeyDown={e => drag.onTileKeyDown(post, e)}
+      aria-grabbed={lifted || undefined}
       style={{
         top,
         height: TILE_PX,
@@ -95,6 +123,11 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
         'absolute overflow-hidden rounded-tile border border-border bg-foreground/[0.06] transition-shadow hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
         TONE_DIM[post.tone],
         offGrid && 'border-dashed',
+        !stuck && !saving && 'cursor-grab touch-none',
+        // lifted: it follows the pointer, so it leans out of the grid
+        lifted && 'z-20 rotate-2 scale-[1.02] cursor-grabbing shadow-xl ring-2 ring-accent-blue',
+        // the move is with the server; it is not settled until it answers
+        saving && 'animate-pulse opacity-60',
       )}
     >
       <Thumb slide={post.slides[0] ?? null} label={post.item_title ?? 'Post'} className="h-full w-full" />
@@ -115,19 +148,41 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen }: {
 }
 
 /** A note the team pinned to a day — never seen by a client, never posted. */
-export function NoteTile({ note, top }: { note: ScheduleNote; top: number }) {
+export function NoteTile({ note, top, onOpen }: {
+  note: ScheduleNote
+  top: number
+  /** open it for rewriting, in place */
+  onOpen?: (note: ScheduleNote) => void
+}) {
   return (
-    <div
+    <button
+      type="button"
       style={{ top }}
-      title={note.text}
+      title={`${note.text} — only your team sees this`}
       // the day column opens the composer on a click; a note is a thing on
       // the calendar, not an empty patch of it, so clicking one must not
       // start a post at the note's time
-      onClick={e => e.stopPropagation()}
-      className="absolute inset-x-1.5 flex h-10 items-center gap-1.5 rounded-tile border border-border bg-paper px-2 text-[11px] font-semibold"
+      onClick={e => { e.stopPropagation(); onOpen?.(note) }}
+      className="absolute inset-x-1.5 flex h-10 items-center gap-1.5 rounded-tile border border-border bg-paper px-2 text-left text-[11px] font-semibold hover:border-foreground/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
     >
       <StickyNote className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />
       <span className="truncate">{note.text}</span>
+    </button>
+  )
+}
+
+/** Where a lifted tile would land: the dashed slot under the pointer, saying
+ *  the time it would take. */
+export function DropSlot({ top, iso, tz }: { top: number; iso: string; tz: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{ top }}
+      className="pointer-events-none absolute inset-x-1.5 flex h-[80px] items-start justify-center rounded-tile border-2 border-dashed border-accent-blue bg-tint-blue"
+    >
+      <span className="mt-1 rounded-full bg-accent-blue px-2 py-0.5 text-[10px] font-bold text-cream">
+        {dropLabelAt(iso, tz)}
+      </span>
     </div>
   )
 }
@@ -159,6 +214,7 @@ export function SlotHint({ slot, top, tz, onPick }: {
 
 export default function WeekGrid({
   grid, posts, notes, suggested, todayKey, nowTop, onSlot, onOpen, onDropItem,
+  drag, noteDraft, noteEditor, onNoteAt, onNoteOpen, noteMode,
 }: {
   grid: ScheduleWeekGrid
   posts: SchedulePostRow[]
@@ -175,15 +231,59 @@ export default function WeekGrid({
   onOpen: (post: SchedulePostRow) => void
   /** a card was dragged out of the rail and dropped here */
   onDropItem: (itemId: string, iso: string) => void
+  /** moving a post that is already on the calendar */
+  drag: DragSchedule
+  /** a note being written, and where */
+  noteDraft: { at: string; note: ScheduleNote | null } | null
+  noteEditor: React.ReactNode
+  /** somebody asked for a note at this time (right-click, or "Add note") */
+  onNoteAt: (iso: string) => void
+  onNoteOpen: (note: ScheduleNote) => void
+  /** "Add note" is armed: the next click on the week writes one */
+  noteMode: boolean
 }) {
   const tz = grid.tz
   const [dropDay, setDropDay] = useState<number | null>(null)
+  const columns = useRef<(HTMLDivElement | null)[]>([])
 
   /** the time a pointer at `clientY` is over, in the client's zone */
   const timeAt = (el: HTMLElement, dayIndex: number, clientY: number): string | null => {
     const box = el.getBoundingClientRect()
     return grid.slotAt(dayIndex, clientY - box.top)?.iso ?? null
   }
+
+  /**
+   * Where a finger is, in calendar terms.
+   *
+   * A dragged tile follows the pointer across the whole window, so the
+   * ELEMENT under it is nobody's business — the hook asks the grid where a
+   * screen point is instead, and the grid is the only thing that knows.
+   */
+  useEffect(() => drag.registerResolver((x, y) => {
+    for (let i = 0; i < columns.current.length; i++) {
+      const el = columns.current[i]
+      if (!el) continue
+      const box = el.getBoundingClientRect()
+      if (x < box.left || x > box.right || y < box.top || y > box.bottom) continue
+      return grid.slotAt(i, y - box.top)?.iso ?? null
+    }
+    return null
+    // `registerResolver` is stable; the hook's object is not, and re-running
+    // this every render would churn the registration for nothing
+  }), [grid, drag.registerResolver])
+
+  const moveTo = drag.moving?.to ?? null
+  const movePos = moveTo ? grid.tileTop(moveTo) : null
+  const notePos = noteDraft ? grid.tileTop(noteDraft.at) : null
+
+  /* A finger held on an empty patch of the week writes a note there — the
+     touch equivalent of the right-click, and the same 400ms a tile takes to
+     lift, so the two gestures cannot be told apart by accident. */
+  const holding = useRef<number | null>(null)
+  const clearHold = () => {
+    if (holding.current !== null) { window.clearTimeout(holding.current); holding.current = null }
+  }
+  useEffect(() => clearHold, [])
 
   return (
     <div className="flex min-h-0 flex-1 overflow-auto">
@@ -217,27 +317,61 @@ export default function WeekGrid({
           return (
             <div
               key={day.iso}
+              ref={el => { columns.current[day.index] = el }}
               onClick={e => {
+                if (drag.recentlyMoved()) return
                 const iso = timeAt(e.currentTarget, day.index, e.clientY)
-                if (iso) onSlot(iso)
+                if (!iso) return
+                // "Add note" armed turns the next click into a note rather
+                // than a post — one mode, said out loud in the date bar
+                if (noteMode) onNoteAt(iso)
+                else onSlot(iso)
               }}
-              onDragOver={e => {
-                if (!e.dataTransfer.types.includes(RAIL_DRAG_TYPE)) return
+              // right-click is the calendar shorthand for "put a note here";
+              // the visible way in is the "Add note" button
+              onContextMenu={e => {
+                const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                if (!iso) return
                 e.preventDefault()
+                onNoteAt(iso)
+              }}
+              onPointerDown={e => {
+                if (e.pointerType !== 'touch' || e.target !== e.currentTarget) return
+                const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                if (!iso) return
+                clearHold()
+                holding.current = window.setTimeout(() => {
+                  holding.current = null
+                  onNoteAt(iso)
+                }, LONG_PRESS_MS)
+              }}
+              onPointerUp={clearHold}
+              onPointerMove={clearHold}
+              onPointerCancel={clearHold}
+              onDragOver={e => {
+                const types = e.dataTransfer.types
+                const post = types.includes(TILE_DRAG_TYPE) || drag.moving?.mode === 'mouse'
+                if (!types.includes(RAIL_DRAG_TYPE) && !post) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
                 setDropDay(day.index)
+                if (post) drag.hoverAt(timeAt(e.currentTarget, day.index, e.clientY))
               }}
               onDragLeave={() => setDropDay(d => (d === day.index ? null : d))}
               onDrop={e => {
                 e.preventDefault()
                 setDropDay(null)
-                const itemId = e.dataTransfer.getData(RAIL_DRAG_TYPE)
                 const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                const postId = e.dataTransfer.getData(TILE_DRAG_TYPE)
+                if (postId || drag.moving?.mode === 'mouse') { drag.dropAt(iso); return }
+                const itemId = e.dataTransfer.getData(RAIL_DRAG_TYPE)
                 if (itemId && iso) onDropItem(itemId, iso)
               }}
               className={cn(
                 'relative min-w-0 flex-1 border-l border-border first:border-l-0',
                 isToday && 'bg-foreground/[0.035]',
                 dropDay === day.index && 'bg-tint-blue ring-2 ring-inset ring-accent-blue',
+                noteMode && 'cursor-copy',
               )}
               style={{ minHeight: grid.height }}
             >
@@ -271,8 +405,16 @@ export default function WeekGrid({
 
               {dayNotes.map(note => {
                 const pos = grid.tileTop(note.at)
-                return pos ? <NoteTile key={note.id} note={note} top={pos.top} /> : null
+                if (!pos || noteDraft?.note?.id === note.id) return null
+                return <NoteTile key={note.id} note={note} top={pos.top} onOpen={onNoteOpen} />
               })}
+
+              {/* the note being written, where it will live */}
+              {noteDraft && notePos && notePos.dayIndex === day.index && (
+                <div className="absolute inset-x-1.5 z-30" style={{ top: notePos.top }}>
+                  {noteEditor}
+                </div>
+              )}
 
               {dayPosts.map(post => {
                 const pos = tops.get(post.id)!
@@ -288,6 +430,7 @@ export default function WeekGrid({
                     lane={lane.lane}
                     lanes={lane.lanes}
                     onOpen={onOpen}
+                    drag={drag}
                   />
                 )
               })}
@@ -301,6 +444,10 @@ export default function WeekGrid({
                   +{o.count}
                 </span>
               ))}
+
+              {movePos && movePos.dayIndex === day.index && !movePos.offGrid && moveTo && (
+                <DropSlot top={movePos.top} iso={moveTo} tz={tz} />
+              )}
 
               {isToday && nowTop !== null && (
                 <div

@@ -756,6 +756,56 @@ describe('the calendar reads', () => {
     expect(fake.rows('schedule_notes')).toHaveLength(0)
   })
 
+  it('lets the writer rewrite a note, and moves it with its words', async () => {
+    const made = await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST', body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Studio booked' }),
+    })))
+    const moved = IN_TWO_DAYS()
+    const saved = await json(notesRoute.PATCH(new Request('https://x.test/notes', {
+      method: 'PATCH',
+      body: JSON.stringify({ id: made.body.note.id, text: 'Studio booked from 9', at: moved }),
+    })))
+    expect(saved.status).toBe(200)
+    expect(saved.body.note.text).toBe('Studio booked from 9')
+    expect(saved.body.note.at).toBe(new Date(moved).toISOString())
+    // one row, rewritten — not a second note left beside the first
+    expect(fake.rows('schedule_notes')).toHaveLength(1)
+  })
+
+  it('lets only the writer or an account manager rewrite a note', async () => {
+    as(AM)
+    const hers = await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Client away' }),
+    })))
+
+    as(OWNER)
+    const refused = await json(notesRoute.PATCH(new Request('https://x.test/notes', {
+      method: 'PATCH', body: JSON.stringify({ id: hers.body.note.id, text: 'Client is around' }),
+    })))
+    expect(refused.status).toBe(403)
+    expect(refused.body.error)
+      .toBe('Only the person who wrote this note, or an account manager, can change it')
+    expect((fake.rows('schedule_notes')[0] as Record<string, unknown>).text).toBe('Client away')
+  })
+
+  it('will not empty a note, or move one to a time it cannot read', async () => {
+    const made = await json(notesRoute.POST(new Request('https://x.test/notes', {
+      method: 'POST', body: JSON.stringify({ client_id: CLIENT, at: IN_TWO_DAYS(), text: 'Studio booked' }),
+    })))
+    const blank = await json(notesRoute.PATCH(new Request('https://x.test/notes', {
+      method: 'PATCH', body: JSON.stringify({ id: made.body.note.id, text: '   ' }),
+    })))
+    expect(blank.status).toBe(400)
+    expect(blank.body.error).toBe('Write the note first')
+
+    const nonsense = await json(notesRoute.PATCH(new Request('https://x.test/notes', {
+      method: 'PATCH', body: JSON.stringify({ id: made.body.note.id, at: 'sometime' }),
+    })))
+    expect(nonsense.status).toBe(400)
+    expect((fake.rows('schedule_notes')[0] as Record<string, unknown>).text).toBe('Studio booked')
+  })
+
   it('answers a time it cannot read with a bad request, not a conflict', async () => {
     const id = (await create()).body.post.id as string
     const moved = await moveTo(id, 'next tuesday-ish')

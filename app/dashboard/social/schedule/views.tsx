@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
+import { dropLabelAt, moveToDay, previewOrder } from '@/app/lib/schedule-drag-core'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
+import { TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
 import type { SchedulePostRow } from './useSchedulePosts'
 
 /**
@@ -55,12 +58,14 @@ function PostRow({ post, tz, onOpen }: {
   )
 }
 
-export function ListView({ posts, tz, onOpen }: {
+export function ListView({ posts, tz, todayKey, onOpen }: {
   posts: SchedulePostRow[]
   tz: string
+  /** the client's today, so the first headings read "Today" and "Tomorrow" */
+  todayKey?: string | null
   onOpen: (post: SchedulePostRow) => void
 }) {
-  const groups = groupForList(posts, tz)
+  const groups = groupForList(posts, tz, todayKey)
   if (groups.length === 0) return <Empty>Nothing planned in this week yet.</Empty>
   return (
     <div className="flex flex-col gap-5 pb-4">
@@ -76,15 +81,18 @@ export function ListView({ posts, tz, onOpen }: {
   )
 }
 
-export function MonthGrid({ month, posts, tz, todayKey, onOpen }: {
+export function MonthGrid({ month, posts, tz, todayKey, onOpen, drag }: {
   /** 'YYYY-MM' — the month on screen */
   month: string
   posts: SchedulePostRow[]
   tz: string
   todayKey: string | null
   onOpen: (post: SchedulePostRow) => void
+  /** dragging a tile onto another day — same time, different date */
+  drag: DragSchedule
 }) {
   const cells = monthCells(month, tz)
+  const [over, setOver] = useState<string | null>(null)
   const byDay = new Map<string, SchedulePostRow[]>()
   for (const p of posts) {
     const key = dayKeyInZone(p.scheduled_for ?? null, tz)
@@ -104,24 +112,61 @@ export function MonthGrid({ month, posts, tz, todayKey, onOpen }: {
       <div className="grid flex-1 grid-cols-7">
         {cells.map(cell => {
           const list = byDay.get(cell.key) ?? []
+          const landing = over === cell.key ? drag.moving?.to ?? null : null
           return (
             <div
               key={cell.key}
+              onDragOver={e => {
+                if (!e.dataTransfer.types.includes(TILE_DRAG_TYPE) && drag.moving?.mode !== 'mouse') return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setOver(cell.key)
+                // a month cell has no hours in it, so the post keeps the time
+                // of day it already had — dropping a 6 pm post on Friday must
+                // not quietly make it a midnight post
+                drag.hoverAt(moveToDay(drag.moving?.from ?? null, cell.key, tz))
+              }}
+              onDragLeave={() => setOver(k => (k === cell.key ? null : k))}
+              onDrop={e => {
+                e.preventDefault()
+                setOver(null)
+                if (!e.dataTransfer.getData(TILE_DRAG_TYPE) && drag.moving?.mode !== 'mouse') return
+                drag.dropAt(moveToDay(drag.moving?.from ?? null, cell.key, tz))
+              }}
               className={cn(
                 'flex min-h-[92px] flex-col gap-1 border-b border-l border-border p-1.5 [&:nth-child(7n+1)]:border-l-0',
                 !cell.inMonth && 'bg-foreground/[0.02] text-muted-foreground',
                 todayKey === cell.key && 'bg-foreground/[0.035]',
+                over === cell.key && 'bg-tint-blue ring-2 ring-inset ring-accent-blue',
               )}
             >
-              <span className="px-0.5 text-[12px] font-semibold">{cell.day}</span>
+              <span className="flex items-baseline gap-1.5 px-0.5 text-[12px] font-semibold">
+                {cell.day}
+                {landing && (
+                  <span className="rounded-full bg-accent-blue px-1.5 py-0.5 text-[10px] font-bold text-cream">
+                    {dropLabelAt(landing, tz)}
+                  </span>
+                )}
+              </span>
               <div className="flex flex-wrap gap-1">
                 {list.slice(0, 4).map(p => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => onOpen(p)}
-                    title={[p.item_title ?? 'Post', STATUS_WORDS[p.live_status], p.block_reason].filter(Boolean).join(' · ')}
-                    className={cn('relative h-9 w-9 overflow-hidden rounded-tile border border-border', TONE_DIM[p.tone])}
+                    draggable={drag.blockedReason(p) === null && !drag.saving.has(p.id)}
+                    onDragStart={e => { if (!drag.startMouse(p, e.dataTransfer)) e.preventDefault() }}
+                    onKeyDown={e => drag.onTileKeyDown(p, e)}
+                    title={[
+                      p.item_title ?? 'Post', STATUS_WORDS[p.live_status], p.block_reason,
+                      drag.blockedReason(p) ?? 'Drag it to another day to move it',
+                    ].filter(Boolean).join(' · ')}
+                    className={cn(
+                      'relative h-9 w-9 overflow-hidden rounded-tile border border-border',
+                      TONE_DIM[p.tone],
+                      drag.moving?.postId === p.id && 'rotate-2 ring-2 ring-accent-blue',
+                      drag.saving.has(p.id) && 'animate-pulse opacity-60',
+                    )}
                   >
                     <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
                     <StatusDot tone={p.tone} className="absolute left-0.5 top-0.5 h-2 w-2 border" />
@@ -129,7 +174,7 @@ export function MonthGrid({ month, posts, tz, todayKey, onOpen }: {
                 ))}
                 {list.length > 4 && (
                   <span className="self-center text-[11px] font-semibold text-muted-foreground">
-                    +{list.length - 4}
+                    +{list.length - 4} more
                   </span>
                 )}
               </div>
@@ -147,9 +192,9 @@ export function PreviewGrid({ posts, tz, onOpen }: {
   tz: string
   onOpen: (post: SchedulePostRow) => void
 }) {
-  const ordered = posts
-    .filter(p => p.scheduled_for)
-    .sort((a, b) => String(b.scheduled_for).localeCompare(String(a.scheduled_for)))
+  // what has not gone out yet first, soonest at the top left — the order it
+  // will actually appear in — then what is already up, newest first
+  const ordered = previewOrder(posts)
   if (ordered.length === 0) return <Empty>Nothing planned yet, so there is nothing to preview.</Empty>
   return (
     <div className="grid max-w-xl grid-cols-3 gap-1 pb-4">

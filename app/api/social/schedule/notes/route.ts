@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { ScheduleNote } from '@/lib/db-types'
 import { requireRole } from '@/app/lib/authz'
 import {
-  addNote, assertClientAccess, listNotes, removeNote, scheduleErrorResponse,
+  addNote, assertClientAccess, editNote, listNotes, removeNote, scheduleErrorResponse,
 } from '@/app/lib/social-schedule'
 
 /** Notes pinned to a day and time on the calendar. Team-only: a note never
@@ -40,6 +40,29 @@ export async function POST(req: Request) {
         text: String(body.text ?? ''),
       })
       return NextResponse.json({ note })
+    } catch (e) {
+      return scheduleErrorResponse(e)
+    }
+  })
+}
+
+/** PATCH { id, text?, at? } — rewrite a note, or move it to another time. */
+export async function PATCH(req: Request) {
+  return withRequestCache(async () => {
+    try {
+      const user = await requireRole('scheduler')
+      const body = await req.json().catch(() => ({}))
+      const id = String(body.id ?? '')
+      if (!id) return NextResponse.json({ error: 'That note is already gone' }, { status: 404 })
+      const note = await table<ScheduleNote>('schedule_notes').get(id)
+      if (!note) return NextResponse.json({ error: 'That note is already gone' }, { status: 404 })
+      await assertClientAccess(user, note.client_id)
+      return NextResponse.json({
+        note: await editNote(user, id, {
+          text: body.text === undefined ? undefined : String(body.text),
+          at: body.at === undefined ? undefined : String(body.at),
+        }),
+      })
     } catch (e) {
       return scheduleErrorResponse(e)
     }
