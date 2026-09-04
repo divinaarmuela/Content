@@ -65,19 +65,72 @@ export const MAX_ENCODE_ATTEMPTS = 3
  *
  * Ninety minutes is longer than the encoder's own ceilings put together
  * (10 minutes to download, 45 to encode, 20 to upload) plus a queue behind it,
- * so a row this old is not slow — it is lost. Each attempt waits longer than
- * the last, which is the backoff: 90 minutes, then 180, then 270.
+ * so a row this old is not slow — it is lost.
+ *
+ * ── The clock runs from `created_at`, not from the last touch ──
+ *
+ * The windows are a LADDER against the moment the copy was first asked for:
+ * 90 minutes for the first ask, 180 for the second, 270 for the third. So the
+ * whole life of a copy that never reports is bounded at 270 minutes — four and
+ * a half hours from ask to the plain sentence a person can act on — rather
+ * than the sum of three growing gaps.
+ *
+ * Measuring from `updated_at` instead compounded them: each re-ask reset the
+ * clock AND lengthened the next window, so a fresh row went untouched for
+ * three hours and the give-up took thirteen and a half. The client's post
+ * would have been a day late before anything said why.
+ *
+ * Each rung still gives an in-flight encode at least 90 minutes of grace,
+ * which is more than the encoder's own ceilings put together.
  */
 export const STALE_AFTER_MINUTES = 90
 
 export function staleBeforeFor(attempts: number, now = Date.now()): string {
-  const minutes = STALE_AFTER_MINUTES * (Math.max(0, attempts) + 1)
-  return new Date(now - minutes * 60_000).toISOString()
+  // attempts counts ASKS made, so a fresh row is 1. A legacy row with none
+  // reads as the first rung, which is what it was promised.
+  const rung = Math.min(Math.max(1, attempts), MAX_ENCODE_ATTEMPTS)
+  return new Date(now - STALE_AFTER_MINUTES * rung * 60_000).toISOString()
 }
 
 /** What a person is told when a copy simply never finished. */
 export const GAVE_UP_MESSAGE =
   'The clean copy did not finish — try again or post a smaller export'
+
+/**
+ * Reasons a second attempt could not possibly go any better.
+ *
+ * Everything else — an R2 PUT that 500s, a download that timed out on a slow
+ * morning, a machine that fell over — is a bad five minutes, not a bad file,
+ * and burning the clip's only attempt on one meant every future post of that
+ * clip to that channel failed permanently until somebody deleted the row by
+ * hand. That is the exact scenario the retry ladder was asked for, and it was
+ * only ever covering the SILENT failures.
+ *
+ * These are matched on the sentence, because the sentence is what travels: the
+ * encoder reports words, not codes, and the words are the same ones a person
+ * reads on the row.
+ */
+const PERMANENT_FAILURES = [
+  'has no video in it',            // the source is not a video at all
+  'this clip is hdr',              // no zscale on the machine; a re-ask cannot help
+  'is not a file we hold',         // the URL is not ours
+  'not on this workspace',         // the source host is refused
+  'is not a channel',              // nonsense platform
+  'no encoder is configured',      // nothing will ever call back
+  'would fit that channel',        // no ladder exists for this clip and channel
+  'is not configured',             // storage is not set up; a retry changes nothing
+  'not a plain id',                // the job description itself is wrong
+  'must be an https URL',
+]
+
+/** Is this failure worth asking about again? */
+export function encodeFailureIsPermanent(reason: string | null | undefined): boolean {
+  const text = String(reason ?? '').toLowerCase()
+  if (!text) return false
+  // the markers are written lowercase; the text is lowered to match, so a
+  // reason that only differs in case is still recognised
+  return PERMANENT_FAILURES.some(marker => text.includes(marker.toLowerCase()))
+}
 
 export type EncodeJobOrigin = {
   /** the piece of work this video belongs to, when it belongs to one */
@@ -104,6 +157,10 @@ export async function claimEncodeJob(input: {
   outputKey: string
   /** 'measured' if the clip's real length shaped the bitrate, else 'fallback' */
   targetSource: 'measured' | 'fallback'
+  /** what the channel is posting this AS, so a retry asks for the same copy */
+  kind?: string | null
+  /** how long the clip runs, when anything measured it — same reason */
+  seconds?: number | null
 } & EncodeJobOrigin): Promise<{ at: 'claimed' | 'existing'; row: EncodeJob }> {
   const id = encodeJobId(input.sourceUrl, input.platform)
   const now = new Date().toISOString()
@@ -112,6 +169,7 @@ export async function claimEncodeJob(input: {
       id,
       source_url: input.sourceUrl,
       platform: input.platform,
+      kind: input.kind ?? null,
       asset_id: input.assetId ?? null,
       version_id: input.versionId ?? null,
       slide_index: input.slideIndex ?? null,
@@ -122,7 +180,8 @@ export async function claimEncodeJob(input: {
       bytes: null,
       width: null,
       height: null,
-      duration_sec: null,
+      // what the bitrate was budgeted FOR, so a retry budgets for it again
+      duration_sec: input.seconds ?? null,
       video_kbps: null,
       error: null,
       created_at: now,
@@ -185,8 +244,16 @@ export async function reclaimEncodeJob(
 export async function staleEncodeJobs(now = Date.now()): Promise<EncodeJob[]> {
   const live: EncodeStatus[] = ['queued', 'running']
   return table<EncodeJob>('encode_jobs').list({
-    where: r => live.includes(r.status as EncodeStatus)
-      && r.updated_at < staleBeforeFor(r.attempts ?? 0, now),
+    where: r => {
+      if (!live.includes(r.status as EncodeStatus)) return false
+      // A queued row that already CARRIES a reason is one the encoder reported
+      // on: nobody is working on it, so there is nothing to wait for. It is
+      // asked again — or given up on — at the very next sweep.
+      if (r.status === 'queued' && r.error) return true
+      // `<=` so a row that is exactly on its rung is taken THIS sweep rather
+      // than fifteen minutes later — the windows are the promise, not a floor
+      return r.created_at <= staleBeforeFor(r.attempts ?? 0, now)
+    },
     limit: 50,
   }).catch(() => [])
 }
@@ -201,12 +268,28 @@ export async function markEncodeRunning(id: string): Promise<boolean> {
 }
 
 /**
- * The job is over, one way or the other.
+ * The job is over — or is going to be asked for again.
  *
  * Only a job that is still queued or running can be settled, so a duplicate
  * callback (the encoder retries its report) lands on a row that is already
  * done and changes nothing — `settled: false` says exactly that, and is not
  * an error.
+ *
+ * ── A REPORTED failure is retried too ──
+ *
+ * A copy that says "the R2 PUT returned 500" or "the source download timed
+ * out" used to be as terminal as one that said "this file has no video in
+ * it": the first `ok: false` moved the row to `failed` for good, and every
+ * future post of that clip to that channel failed permanently until somebody
+ * deleted the row in the database console. That is the exact scenario the
+ * retry ladder exists for, and it was only ever covering failures the encoder
+ * never reported at all.
+ *
+ * So a retryable reason goes back to `queued` with the attempt spent and the
+ * reason recorded, and the next sweep asks again — with the SAME key, so the
+ * row can never name an object the bytes did not go to. Only a reason a
+ * second attempt could not improve on (see `PERMANENT_FAILURES`), or the last
+ * attempt, settles `failed`.
  */
 export async function settleEncodeJob(input: {
   id: string
@@ -218,25 +301,51 @@ export async function settleEncodeJob(input: {
   durationSec?: number | null
   videoKbps?: number | null
   error?: string | null
-}): Promise<{ settled: boolean; row: EncodeJob | null }> {
+  /** override the sentence-based judgement, when the caller knows better */
+  permanent?: boolean
+}): Promise<{ settled: boolean; row: EncodeJob | null; retrying: boolean }> {
   const live: EncodeStatus[] = ['queued', 'running']
+  let retrying = false
   const moved = await table<EncodeJob>('encode_jobs').claim(input.id, cur => {
     if (!cur || !live.includes(cur.status as EncodeStatus)) return null
-    return {
-      ...cur,
-      status: input.ok ? 'done' : 'failed',
-      output_key: input.ok ? (input.outputKey ?? cur.output_key) : cur.output_key,
+
+    const measured = {
       bytes: input.bytes ?? cur.bytes,
       width: input.width ?? cur.width,
       height: input.height ?? cur.height,
       duration_sec: input.durationSec ?? cur.duration_sec,
       video_kbps: input.videoKbps ?? cur.video_kbps,
-      error: input.ok ? null : (input.error ?? 'the encode failed'),
       updated_at: new Date().toISOString(),
     }
+
+    if (input.ok) {
+      retrying = false
+      return {
+        ...cur, ...measured,
+        status: 'done',
+        output_key: input.outputKey ?? cur.output_key,
+        error: null,
+      }
+    }
+
+    const reason = input.error ?? 'the encode failed'
+    const permanent = input.permanent ?? encodeFailureIsPermanent(reason)
+    const attempts = cur.attempts ?? 1
+    const canTryAgain = !permanent && attempts < MAX_ENCODE_ATTEMPTS
+    retrying = canTryAgain
+    return {
+      ...cur, ...measured,
+      // Back to queued with the reason kept, so the row says what went wrong
+      // while it waits for the sweep to ask again. `attempts` is NOT touched
+      // here: it counts asks MADE, and the next ask is what spends one
+      // (`reclaimEncodeJob`). Bumping in both places would burn two tries per
+      // failure and give a clip one real retry instead of two.
+      status: canTryAgain ? 'queued' : 'failed',
+      error: reason,
+    }
   })
-  if (moved.claimed) return { settled: true, row: moved.row }
-  return { settled: false, row: moved.current }
+  if (moved.claimed) return { settled: true, row: moved.row, retrying }
+  return { settled: false, row: moved.current, retrying: false }
 }
 
 /**
@@ -255,6 +364,9 @@ export type CopyProgress =
 export function progressOf(row: EncodeJob | null): CopyProgress {
   if (!row) return { status: 'none' }
   if (row.status === 'failed') return { status: 'failed', reason: row.error ?? 'the encode failed' }
+  // a queued row may be carrying the reason its last attempt went wrong — it
+  // is still being worked on, so the person waiting is told "encoding", not
+  // handed an error about an attempt the system has already moved past
   if (row.status !== 'done') return { status: 'encoding' }
   const url = copyUrlOf(row)
   // done with nowhere to read it from is a configuration problem, not a copy

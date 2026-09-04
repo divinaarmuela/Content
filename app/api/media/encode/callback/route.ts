@@ -56,6 +56,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, changed: false })
   }
 
+  // A failure worth another go put the row back to `queued`, and the sweep
+  // will ask again within fifteen minutes. Nothing is waiting on THAT: the
+  // publish job is already parked and would only re-park itself, so the
+  // wake-up is saved for a copy that has actually finished.
+  if (settled.retrying) {
+    console.warn(`[encode callback] ${report.jobId} failed and will be asked again: ${report.error ?? 'no reason given'}`)
+    return NextResponse.json({ ok: true, changed: true, retrying: true })
+  }
+
   /**
    * Now wake anything that was waiting on this copy.
    *

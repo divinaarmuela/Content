@@ -212,6 +212,23 @@ describe('how long the clip is', () => {
     expect(encodeTargetFor('instagram', 'reel')!.maxrateKbps).toBeLessThan(3_000)
   })
 
+  it('is read without needing Cloudflare Stream at all', async () => {
+    // `video_previews` is OUR table — Cloudflare filled a column in it, but
+    // the number does not stop being true when the Stream keys are removed,
+    // and removing them is the POINT of the encoder. Reading the duration
+    // through the Stream accessor meant that day would silently return every
+    // automated copy to the ~2 Mbps fallback, with only a warning to say so.
+    delete process.env.CLOUDFLARE_ACCOUNT_ID
+    delete process.env.CLOUDFLARE_STREAM_TOKEN
+    fake = seedDb({
+      publish_jobs: [publishJob('j1')],
+      encode_jobs: [],
+      video_previews: [previewRow(20)],
+    })
+    expect(await runPublishJob('j1')).toBe('queued')
+    expect(sent[0].data).toMatchObject({ seconds: 20 })
+  })
+
   it('falls back, and says so, when nothing measured it', async () => {
     fake = seedDb({
       publish_jobs: [publishJob('j1')],

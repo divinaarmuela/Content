@@ -141,9 +141,10 @@ describe('db-types (generated)', () => {
   // — an encode being minutes of a machine's time, not just a row.
   it('knows the copy-job table', () => {
     expect(TABLE_COLUMNS.encode_jobs).toEqual([
-      'id', 'source_url', 'platform', 'asset_id', 'version_id', 'slide_index',
-      'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width',
-      'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at',
+      'id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id',
+      'slide_index', 'status', 'attempts', 'output_key', 'target_source',
+      'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error',
+      'created_at', 'updated_at',
     ])
     // a job always knows what it is copying, for which channel, how many
     // times it has been asked for and where it has got to; everything a
@@ -170,6 +171,14 @@ describe('db-types (generated)', () => {
     void _attempts, _source
     expect(TABLE_COLUMNS.encode_jobs).toContain('attempts')
     expect(TABLE_COLUMNS.encode_jobs).toContain('target_source')
+    // and what the copy was asked FOR, so a retry asks for the same one: a
+    // sweep that forgot the kind and the length rebuilt a measured 10 Mbps
+    // job at the 2 Mbps blind fallback while the row still said 'measured'
+    expect(TABLE_COLUMNS.encode_jobs).toContain('kind')
+    expect(TABLE_COLUMNS.encode_jobs).toContain('duration_sec')
+    for (const c of ['kind', 'duration_sec']) {
+      expect(NULLABLE_COLUMNS.encode_jobs).toContain(c)
+    }
   })
 
   it('derives natural keys for composite tables', () => {

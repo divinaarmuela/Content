@@ -78,21 +78,34 @@ describe('asking the encoder', () => {
   it('reads a 503 as a wait, not a refusal', async () => {
     reply = new Response('{"error":"busy"}', { status: 503 })
     const out = await ask()
-    expect(out).toEqual({ accepted: false, busy: true, reason: expect.stringContaining('busy') })
+    expect(out).toEqual({
+      accepted: false, busy: true, permanent: false,
+      reason: expect.stringContaining('busy'),
+    })
   })
 
   it('reads an unreachable machine as a wait too', async () => {
     throws = new Error('connect ECONNREFUSED')
-    expect(await ask()).toEqual({ accepted: false, busy: true, reason: 'connect ECONNREFUSED' })
+    expect(await ask()).toEqual({
+      accepted: false, busy: true, permanent: false, reason: 'connect ECONNREFUSED',
+    })
   })
 
   it('reads a 400 as a refusal that will not fix itself', async () => {
     reply = new Response('target.maxrateKbps must be a positive number', { status: 400 })
     const out = await ask()
+    // the job description is wrong; the same words next time are refused the
+    // same way, so this one does not go round the retry ladder
     expect(out).toEqual({
-      accepted: false, busy: false,
+      accepted: false, busy: false, permanent: true,
       reason: expect.stringContaining('maxrateKbps'),
     })
+  })
+
+  it('reads a 500 from the encoder as a bad moment, worth another go', async () => {
+    reply = new Response('something went wrong', { status: 500 })
+    const out = await ask()
+    expect(out).toMatchObject({ accepted: false, busy: false, permanent: false })
   })
 
   it('pretends, and says it is pretending, with no encoder configured', async () => {

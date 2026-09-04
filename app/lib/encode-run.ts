@@ -81,7 +81,11 @@ async function askEncoder(
     // the SAME key, every time — see the note at the top of this file
     uploadUrl = (await signUploadForKey(key, 'video/mp4', { expiresIn: UPLOAD_URL_SECONDS })).signedUrl
   } catch (e) {
-    const reason = e instanceof Error ? e.message : 'file storage is not configured'
+    // Signing is arithmetic against a key we already own, so a failure here is
+    // almost always a moment, not a fact — and `settleEncodeJob` judges it on
+    // its own words: "storage is not configured" is permanent, anything else
+    // goes back to the queue for the sweep to ask again.
+    const reason = e instanceof Error ? e.message : 'the upload could not be signed'
     await settleEncodeJob({ id: jobId, ok: false, error: reason })
     return { at: 'refused', reason }
   }
@@ -101,7 +105,7 @@ async function askEncoder(
        */
       throw new Error(asked.reason)
     }
-    await settleEncodeJob({ id: jobId, ok: false, error: asked.reason })
+    await settleEncodeJob({ id: jobId, ok: false, error: asked.reason, permanent: asked.permanent })
     return { at: 'refused', reason: asked.reason }
   }
 
@@ -109,7 +113,8 @@ async function askEncoder(
     // No encoder configured, so nothing will ever call back. Say so on the
     // row rather than leaving it queued for the sweep to discover in an hour.
     await settleEncodeJob({
-      id: jobId, ok: false, error: 'no encoder is configured on this workspace',
+      id: jobId, ok: false, permanent: true,
+      error: 'no encoder is configured on this workspace',
     })
     return { at: 'refused', reason: 'no encoder is configured on this workspace' }
   }
@@ -118,10 +123,22 @@ async function askEncoder(
   return { at: 'asked', jobId, maxrateKbps: target.maxrateKbps, attempt: row.attempts ?? 1 }
 }
 
-/** The target this row's copy should be made at, or null if none would fit. */
-function targetFor(row: EncodeJob, seconds?: number | null): EncodeTarget | null {
+/**
+ * The target this row's copy should be made at.
+ *
+ * Off the ROW, never off the caller. A retry has to make the same copy the
+ * first ask asked for: re-asking with the kind forgotten and the duration
+ * unread silently rebuilt a measured 10 Mbps job at the ~2 Mbps blind
+ * fallback — while `target_source` still said `'measured'`, so the one field
+ * built to make that gap findable reported the opposite of what happened.
+ */
+function targetFor(row: EncodeJob): EncodeTarget | null {
   if (!isPlatform(row.platform)) return null
-  return encodeTargetFor(row.platform, undefined, seconds ?? undefined)
+  return encodeTargetFor(
+    row.platform,
+    (row.kind ?? undefined) as PostKind | undefined,
+    row.duration_sec ?? undefined,
+  )
 }
 
 export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRunResult> {
@@ -134,10 +151,13 @@ export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRun
   const target = encodeTargetFor(platform, (input.kind ?? undefined) as PostKind | undefined, measured)
   if (!target) return { at: 'refused', reason: 'no copy of this clip would fit that channel' }
 
-  // 1 + 2. the key, then the claim that carries it
+  // 1 + 2. the key, then the claim that carries it — along with everything a
+  // retry needs to rebuild the SAME target: the kind and the measured length
   const claimed = await claimEncodeJob({
     sourceUrl,
     platform,
+    kind: input.kind ?? null,
+    seconds: measured ?? null,
     outputKey: objectKey(`copy-${platform}.mp4`),
     targetSource: measured ? 'measured' : 'fallback',
     assetId: input.assetId ?? null,
@@ -149,10 +169,11 @@ export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRun
     const row = claimed.row
     // A `queued` row that has gone cold means an earlier ask was lost. Take
     // it back — atomically, so the step's retry and the sweep cannot both —
-    // and ask again with the SAME key.
+    // and ask again with the SAME key and the SAME target the row records.
     if (row.status === 'queued') {
       const retaken = await reclaimEncodeJob(row.id, { olderThanMs: REASK_GRACE_MS })
-      if (retaken.reclaimed && retaken.row) return askEncoder(retaken.row, target)
+      const again = retaken.row ? targetFor(retaken.row) : null
+      if (retaken.reclaimed && retaken.row && again) return askEncoder(retaken.row, again)
     }
     return { at: 'existing', jobId: row.id, status: String(row.status) }
   }
@@ -193,9 +214,13 @@ export async function sweepStaleEncodes(now = Date.now()): Promise<EncodeSweepRe
         olderThanMs: 0, now, from: ['queued', 'running'],
       })
       if (!retaken.reclaimed || !retaken.row) continue     // somebody else has it
-      const target = targetFor(retaken.row, retaken.row.duration_sec)
+      // the row's own kind and length, so a measured 10 Mbps job is re-asked
+      // at 10 Mbps rather than quietly dropping to the blind fallback
+      const target = targetFor(retaken.row)
       if (!target) {
-        await settleEncodeJob({ id: row.id, ok: false, error: GAVE_UP_MESSAGE })
+        // no ladder fits this row at all — asking again would ask the same
+        // impossible question, so this one does not go round again
+        await settleEncodeJob({ id: row.id, ok: false, error: GAVE_UP_MESSAGE, permanent: true })
         gaveUp++
         continue
       }
@@ -210,7 +235,9 @@ export async function sweepStaleEncodes(now = Date.now()): Promise<EncodeSweepRe
       continue
     }
 
-    const settled = await settleEncodeJob({ id: row.id, ok: false, error: GAVE_UP_MESSAGE })
+    const settled = await settleEncodeJob({
+      id: row.id, ok: false, error: GAVE_UP_MESSAGE, permanent: true,
+    })
     if (settled.settled) {
       gaveUp++
       console.error(`[encode sweep] gave up on ${row.id} after ${attempts} attempts`)

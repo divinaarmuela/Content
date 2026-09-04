@@ -157,6 +157,12 @@ const GHOST_TABLES = {
     ['id', col('string', false)],
     ['source_url', col('string', false)],
     ['platform', col('string', false)],
+    // what the channel is posting this AS — reel, story, feed. Kept on the row
+    // because a retry has to make the same copy the first ask asked for: a
+    // sweep that re-asked with the kind forgotten silently rebuilt a measured
+    // 10 Mbps job at the 2 Mbps blind fallback, while `target_source` still
+    // said 'measured'.
+    ['kind', col('string', true)],
     // where the video came from, when it came from a piece of work. All three
     // are null for a copy asked for straight off a URL in the composer.
     ['asset_id', col('string', true)],
@@ -183,6 +189,9 @@ const GHOST_TABLES = {
     ['bytes', col('number', true)],
     ['width', col('number', true)],
     ['height', col('number', true)],
+    // how long the clip runs. Written at claim time when anything measured it
+    // — it is what the bitrate was budgeted for, and what a retry must budget
+    // for again — and confirmed by the callback with what ffprobe actually saw.
     ['duration_sec', col('number', true)],
     ['video_kbps', col('number', true)],
     ['error', col('string', true)],

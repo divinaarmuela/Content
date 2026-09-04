@@ -8,7 +8,7 @@ import { publishBlockReason } from './posting-approval-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { encoderConfigured } from './encoder'
-import { previewFor, smallerCopyOf } from './stream'
+import { measuredDurationOf, smallerCopyOf } from './stream'
 import { headStoredObject } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, type AssetProbe } from './media-fit-core'
@@ -388,13 +388,16 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
    * unmeasured automated post would quietly give back most of what this
    * service was built to gain.
    *
-   * `MediaItem` carries no duration, but the Cloudflare Stream preview row
-   * for the same file usually does — every upload goes through it for the
-   * portal player. When even that is missing the fallback still applies, and
-   * the job row records `target_source: 'fallback'` so the gap is findable.
+   * `MediaItem` carries no duration, but the `video_previews` row for the same
+   * file usually does — every upload goes through it for the portal player.
+   * That row is OURS: `measuredDurationOf` reads it directly rather than
+   * through the Stream accessor, so the number keeps working on the day this
+   * workspace drops Cloudflare, which is the point of the encoder. When even
+   * that is missing the fallback still applies, and the job row records
+   * `target_source: 'fallback'` so the gap is findable.
    */
-  const preview = await previewFor(url).catch(() => null)
-  const seconds = preview?.duration_sec && preview.duration_sec > 0 ? preview.duration_sec : undefined
+  const measured = await measuredDurationOf(url)
+  const seconds = measured ?? undefined
   if (seconds === undefined) {
     console.warn(`[publish ${job.id}] no measured duration for ${url}; the copy will be budgeted for the channel's whole length ceiling`)
   }

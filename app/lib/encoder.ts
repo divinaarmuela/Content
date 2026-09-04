@@ -72,7 +72,8 @@ export type EncodeAsk = {
 
 export type EncodeAsked =
   | { accepted: true; stub: boolean }
-  | { accepted: false; busy: boolean; reason: string }
+  /** `busy` means try again; `permanent` means a second ask cannot go better */
+  | { accepted: false; busy: boolean; permanent: boolean; reason: string }
 
 /**
  * How long to wait for the encoder to say "yes, I have it".
@@ -114,15 +115,24 @@ export async function requestEncode(ask: EncodeAsk): Promise<EncodeAsked> {
       cache: 'no-store',
     })
     if (res.status === 503) {
-      return { accepted: false, busy: true, reason: 'the encoder is busy; asking again shortly' }
+      return { accepted: false, busy: true, permanent: false, reason: 'the encoder is busy; asking again shortly' }
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
-      return { accepted: false, busy: false, reason: `the encoder refused the job (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}` }
+      // A 4xx is the job description being wrong — the same words next time
+      // would be refused the same way. A 5xx is the machine having a bad
+      // moment, which is worth another go.
+      const permanent = res.status >= 400 && res.status < 500
+      return {
+        accepted: false, busy: false, permanent,
+        reason: `the encoder refused the job (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+      }
     }
     return { accepted: true, stub: false }
   } catch (e) {
-    return { accepted: false, busy: true, reason: e instanceof Error ? e.message : 'could not reach the encoder' }
+    // no answer at all: unreachable, or an answer lost in flight. Never
+    // permanent, and never a reason to change the key the row already holds.
+    return { accepted: false, busy: true, permanent: false, reason: e instanceof Error ? e.message : 'could not reach the encoder' }
   }
 }
 

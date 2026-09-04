@@ -119,6 +119,34 @@ export async function previewFor(url: string): Promise<PreviewRow | null> {
   return (await previewsFor([url])).get(String(url ?? '')) ?? null
 }
 
+/**
+ * How long a video we hold runs, in seconds, or null if nothing measured it.
+ *
+ * Deliberately NOT behind `streamConfigured()`. `video_previews` is OUR table
+ * — Cloudflare filled a column in it, but the row is ours and the number does
+ * not stop being true when the Stream keys are removed. Reading it through
+ * `previewsFor` meant the day this workspace drops Cloudflare (which is the
+ * point of the encoder) every automated copy would silently fall back to
+ * budgeting for the channel's whole length ceiling: ~2 Mbps instead of 10, on
+ * every post, with only a console warning to say so.
+ *
+ * Never throws: an unknown duration is the conservative path, not an error.
+ */
+export async function measuredDurationOf(sourceUrl: string): Promise<number | null> {
+  const url = String(sourceUrl ?? '').trim()
+  if (!url) return null
+  try {
+    const rows = await table<VideoPreview>('video_previews').list({
+      where: r => r.source_url === url,
+      limit: 1,
+    })
+    const seconds = rows[0]?.duration_sec
+    return typeof seconds === 'number' && seconds > 0 ? seconds : null
+  } catch {
+    return null
+  }
+}
+
 // ── asking for one ────────────────────────────────────────────────────────
 
 /**

@@ -28,8 +28,8 @@ vi.mock('../app/lib/encoder', async () => {
     callbackUrl: () => 'https://app.example.com/api/media/encode/callback',
     requestEncode: async (ask: { jobId: string; target: Record<string, number>; uploadUrl: string }) => {
       asked.push({ jobId: ask.jobId, target: ask.target, uploadUrl: ask.uploadUrl })
-      if (answer === 'busy') return { accepted: false, busy: true, reason: 'the encoder is busy' }
-      if (answer === 'refused') return { accepted: false, busy: false, reason: 'the encoder refused the job (400)' }
+      if (answer === 'busy') return { accepted: false, busy: true, permanent: false, reason: 'the encoder is busy' }
+      if (answer === 'refused') return { accepted: false, busy: false, permanent: true, reason: 'the encoder refused the job (400)' }
       return { accepted: true, stub: answer === 'stub' }
     },
   }
@@ -63,7 +63,10 @@ vi.mock('../app/lib/storage', async () => {
 })
 
 const { runEncodeRequest, sweepStaleEncodes, REASK_GRACE_MS } = await import('../app/lib/encode-run')
-const { GAVE_UP_MESSAGE, encodeJobId, staleBeforeFor } = await import('../app/lib/encode-jobs')
+const {
+  GAVE_UP_MESSAGE, encodeFailureIsPermanent, encodeJobId, progressOf,
+  settleEncodeJob, staleBeforeFor,
+} = await import('../app/lib/encode-jobs')
 
 const SOURCE = 'https://media.example.com/master.mp4'
 
@@ -94,6 +97,9 @@ describe('asking for one copy', () => {
     expect(row.output_key).toBe('key-1-copy-instagram.mp4')
     expect(row.attempts).toBe(1)
     expect(row.target_source).toBe('measured')
+    // and everything a retry needs to rebuild the SAME copy
+    expect(row.kind).toBe('reel')
+    expect(row.duration_sec).toBe(20)
 
     expect(asked).toHaveLength(1)
     expect(asked[0].jobId).toBe(row.id)
@@ -190,10 +196,11 @@ describe('the key never moves', () => {
   const cold = (over: Record<string, unknown> = {}): Row => ({
     id: encodeJobId(SOURCE, 'instagram'),
     source_url: SOURCE, platform: 'instagram', status: 'queued', attempts: 1,
+    kind: 'reel',
     output_key: 'key-original-copy-instagram.mp4', target_source: 'measured',
     bytes: null, width: null, height: null, duration_sec: 20, video_kbps: null,
     error: null, asset_id: null, version_id: null, slide_index: null,
-    created_at: '2026-09-04T00:00:00.000Z',
+    created_at: new Date(Date.now() - REASK_GRACE_MS - 5_000).toISOString(),
     updated_at: new Date(Date.now() - REASK_GRACE_MS - 5_000).toISOString(),
     ...over,
   } as unknown as Row)
@@ -207,6 +214,10 @@ describe('the key never moves', () => {
     expect(asked[0].uploadUrl).toContain('key-original-copy-instagram.mp4')
     expect(rows()[0].output_key).toBe('key-original-copy-instagram.mp4')
     expect(rows()[0].attempts).toBe(2)
+    // and at the SAME bitrate: the row's own kind and length, not the blind
+    // fallback a forgotten kind would have produced
+    expect(asked[0].target.maxrateKbps).toBe(10_000)
+    expect(rows()[0].target_source).toBe('measured')
   })
 
   it('leaves a row alone that was created moments ago', async () => {
@@ -237,18 +248,21 @@ describe('settling copies nobody is going to finish', () => {
   const HOUR = 60 * 60 * 1000
   const stuck = (over: Record<string, unknown>): Row => ({
     id: encodeJobId(SOURCE, 'instagram'),
-    source_url: SOURCE, platform: 'instagram', status: 'running', attempts: 1,
+    source_url: SOURCE, platform: 'instagram', kind: 'reel',
+    status: 'running', attempts: 1,
     output_key: 'key-original-copy-instagram.mp4', target_source: 'measured',
     bytes: null, width: null, height: null, duration_sec: 20, video_kbps: null,
     error: null, asset_id: null, version_id: null, slide_index: null,
-    created_at: '2026-09-04T00:00:00.000Z',
+    // the ladder is measured from when the copy was first ASKED for, so this
+    // is the field that decides whether the sweep touches the row
+    created_at: new Date(Date.now() - 4 * HOUR).toISOString(),
     updated_at: new Date(Date.now() - 4 * HOUR).toISOString(),
     ...over,
   } as unknown as Row)
 
   it('leaves a copy that is merely slow alone', async () => {
     fake.restore()
-    fake = seedDb({ encode_jobs: [stuck({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] })
+    fake = seedDb({ encode_jobs: [stuck({ created_at: new Date(Date.now() - 20 * 60_000).toISOString() })] })
     expect(await sweepStaleEncodes()).toEqual({ retried: 0, gaveUp: 0 })
     expect(rows()[0].status).toBe('running')
     expect(asked).toHaveLength(0)
@@ -264,21 +278,78 @@ describe('settling copies nobody is going to finish', () => {
     expect(row.status).toBe('running')
     expect(row.attempts).toBe(2)
     expect(row.output_key).toBe('key-original-copy-instagram.mp4')
+    // the same copy that was asked for the first time — the row carries the
+    // kind and the measured length precisely so a retry cannot downgrade it
+    expect(asked[0].target.maxrateKbps).toBe(10_000)
+    expect(row.target_source).toBe('measured')
   })
 
-  it('waits longer before each retry', () => {
+  it('waits longer before each retry, measured from the first ask', () => {
     const now = Date.now()
-    // 90 minutes, then 180, then 270 — a transient blip is retried soon, a
-    // machine that keeps swallowing jobs is not hammered
+    // A LADDER against created_at: 90 minutes for the first ask, 180 for the
+    // second, 270 for the third — so the whole life of a copy that never
+    // reports is bounded at 4.5 hours, not the sum of three growing gaps.
+    expect(Date.parse(staleBeforeFor(1, now))).toBe(now - 90 * 60_000)
+    expect(Date.parse(staleBeforeFor(2, now))).toBe(now - 180 * 60_000)
+    expect(Date.parse(staleBeforeFor(3, now))).toBe(now - 270 * 60_000)
+    // a legacy row with no attempts gets the first rung, which is what it
+    // was promised, and nothing is ever waited on for longer than the last
     expect(Date.parse(staleBeforeFor(0, now))).toBe(now - 90 * 60_000)
-    expect(Date.parse(staleBeforeFor(1, now))).toBe(now - 180 * 60_000)
-    expect(Date.parse(staleBeforeFor(2, now))).toBe(now - 270 * 60_000)
+    expect(Date.parse(staleBeforeFor(9, now))).toBe(now - 270 * 60_000)
+  })
+
+  /**
+   * The promise, walked end to end: a copy that never reports is failed in
+   * plain words within four and a half hours.
+   *
+   * Asserting the helper alone let a 2x error through — the lived windows
+   * were 180 / 270 / 360 and the give-up took thirteen and a half hours,
+   * while `staleBeforeFor(0)` still read 90 and the test still passed. So
+   * this walks a REAL row through real sweeps and asserts the clock.
+   */
+  it('walks a lost copy to a plain sentence inside four and a half hours', async () => {
+    const START = Date.parse('2026-09-04T09:00:00.000Z')
+    const at = (minutes: number) => START + minutes * 60_000
+    fake.restore()
+    fake = seedDb({
+      encode_jobs: [stuck({
+        status: 'running', attempts: 1,
+        created_at: new Date(START).toISOString(),
+        updated_at: new Date(START).toISOString(),
+      })],
+    })
+
+    // an hour in, nothing has happened yet — the encoder is allowed to be slow
+    expect(await sweepStaleEncodes(at(60))).toEqual({ retried: 0, gaveUp: 0 })
+    expect(rows()[0].status).toBe('running')
+
+    // 90 minutes: the second ask
+    expect(await sweepStaleEncodes(at(90))).toEqual({ retried: 1, gaveUp: 0 })
+    expect(rows()[0].attempts).toBe(2)
+
+    // …and it is left alone until its own rung comes round
+    expect(await sweepStaleEncodes(at(150))).toEqual({ retried: 0, gaveUp: 0 })
+
+    // 180 minutes: the third and last ask
+    expect(await sweepStaleEncodes(at(180))).toEqual({ retried: 1, gaveUp: 0 })
+    expect(rows()[0].attempts).toBe(3)
+    expect(await sweepStaleEncodes(at(240))).toEqual({ retried: 0, gaveUp: 0 })
+
+    // 270 minutes — four and a half hours — the plain sentence
+    expect(await sweepStaleEncodes(at(270))).toEqual({ retried: 0, gaveUp: 1 })
+    const row = rows()[0]
+    expect(row.status).toBe('failed')
+    expect(row.error).toBe(GAVE_UP_MESSAGE)
+
+    // three asks, no more
+    expect(asked).toHaveLength(2)     // the two the sweep made; the first predates this row
+    expect(at(270) - START).toBe(4.5 * 60 * 60_000)
   })
 
   it('gives up after three, in words a person can act on', async () => {
     fake.restore()
     // three attempts, and stale even against the longest window
-    fake = seedDb({ encode_jobs: [stuck({ attempts: 3, updated_at: new Date(Date.now() - 12 * HOUR).toISOString() })] })
+    fake = seedDb({ encode_jobs: [stuck({ attempts: 3, created_at: new Date(Date.now() - 12 * HOUR).toISOString() })] })
     expect(await sweepStaleEncodes()).toEqual({ retried: 0, gaveUp: 1 })
     const row = rows()[0]
     expect(row.status).toBe('failed')
@@ -292,7 +363,7 @@ describe('settling copies nobody is going to finish', () => {
     fake = seedDb({
       encode_jobs: [stuck({
         status: 'done', attempts: 1,
-        updated_at: new Date(Date.now() - 12 * HOUR).toISOString(),
+        created_at: new Date(Date.now() - 12 * HOUR).toISOString(),
       })],
     })
     expect(await sweepStaleEncodes()).toEqual({ retried: 0, gaveUp: 0 })
@@ -318,7 +389,6 @@ describe('the finished row', () => {
   it('reads back as a copy the composer can use', async () => {
     await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20 })
     const id = rows()[0].id
-    const { settleEncodeJob, progressOf } = await import('../app/lib/encode-jobs')
     await settleEncodeJob({ id, ok: true, bytes: 24_917_504, width: 1080, height: 1920, durationSec: 20 })
 
     const after = await table<EncodeJob>('encode_jobs').get(id)
@@ -330,5 +400,111 @@ describe('the finished row', () => {
       height: 1920,
       seconds: 20,
     })
+  })
+})
+
+/**
+ * A copy that REPORTS a failure gets another go, too.
+ *
+ * An R2 PUT that 500s or a download that timed out on a slow morning used to
+ * be as terminal as "this file has no video in it": the first `ok: false`
+ * failed the row for good, and every future post of that clip to that channel
+ * failed permanently until somebody deleted it in the database console. The
+ * attempts ladder was only ever covering failures the encoder never reported
+ * at all — which is the opposite of the scenario it was asked for.
+ */
+describe('a failure the encoder reports', () => {
+  const live = (over: Record<string, unknown> = {}): Row => ({
+    id: encodeJobId(SOURCE, 'instagram'),
+    source_url: SOURCE, platform: 'instagram', kind: 'reel',
+    status: 'running', attempts: 1,
+    output_key: 'key-original-copy-instagram.mp4', target_source: 'measured',
+    bytes: null, width: null, height: null, duration_sec: 20, video_kbps: null,
+    error: null, asset_id: null, version_id: null, slide_index: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    ...over,
+  } as unknown as Row)
+
+  const settle = (reason: string) => settleEncodeJob({
+    id: encodeJobId(SOURCE, 'instagram'), ok: false, error: reason,
+  })
+
+  it('goes back to the queue with the reason kept, and the same key', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [live({ attempts: 1 })] })
+    const out = await settle('the copy would not upload (500)')
+    expect(out.retrying).toBe(true)
+
+    const row = rows()[0]
+    expect(row.status).toBe('queued')
+    expect(row.error).toBe('the copy would not upload (500)')
+    expect(row.output_key).toBe('key-original-copy-instagram.mp4')
+    // the attempt is spent by the next ASK, not by the failure — counting it
+    // in both places would give a clip one real retry instead of two
+    expect(row.attempts).toBe(1)
+    // and the person waiting is not shown an error about an attempt the
+    // system has already moved past
+    expect(progressOf(row)).toEqual({ status: 'encoding' })
+  })
+
+  it('is picked up by the very next sweep, not an hour and a half later', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [live({ attempts: 1 })] })
+    await settle('the source would not download (503)')
+    // created seconds ago, so no time-based window has passed at all
+    expect(await sweepStaleEncodes()).toEqual({ retried: 1, gaveUp: 0 })
+    expect(rows()[0].status).toBe('running')
+    expect(rows()[0].attempts).toBe(2)
+    expect(presigned).toEqual(['key-original-copy-instagram.mp4'])
+  })
+
+  it('gives up on the last attempt, in the same plain words', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [live({ attempts: 3 })] })
+    const out = await settle('the copy would not upload (500)')
+    expect(out.retrying).toBe(false)
+    const row = rows()[0]
+    expect(row.status).toBe('failed')
+    expect(row.error).toBe('the copy would not upload (500)')
+    expect(progressOf(row)).toEqual({
+      status: 'failed', reason: 'the copy would not upload (500)',
+    })
+  })
+
+  it('does not retry a reason a second attempt could not improve on', async () => {
+    for (const reason of [
+      'the source has no video in it',
+      'this clip is HDR and this encoder cannot convert it — export a standard (BT.709) version',
+      'no encoder is configured on this workspace',
+      'sourceUrl is not on this workspace’s file storage',
+    ]) {
+      fake.restore()
+      fake = seedDb({ encode_jobs: [live({ attempts: 1 })] })
+      const out = await settle(reason)
+      expect(out.retrying, reason).toBe(false)
+      expect(rows()[0].status, reason).toBe('failed')
+      expect(encodeFailureIsPermanent(reason)).toBe(true)
+    }
+  })
+
+  it('treats an ordinary bad moment as worth another go', () => {
+    for (const reason of [
+      'the copy would not upload (500)',
+      'the source would not download (502)',
+      'the encode failed: Conversion failed!',
+      'the encoder stopped unexpectedly: out of memory',
+      'timed out after 2700s',
+    ]) {
+      expect(encodeFailureIsPermanent(reason), reason).toBe(false)
+    }
+    expect(encodeFailureIsPermanent(null)).toBe(false)
+  })
+
+  it('a 4xx from the encoder is permanent; a 5xx is not', async () => {
+    answer = 'refused'
+    fake.restore()
+    fake = seedDb({ encode_jobs: [] })
+    await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20 })
+    expect(rows()[0].status).toBe('failed')
   })
 })
