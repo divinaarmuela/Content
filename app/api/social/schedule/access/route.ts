@@ -1,27 +1,29 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, SocialAccount, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
-import { requireRole } from '@/app/lib/authz'
+import type { Client, SocialAccount } from '@/lib/db-types'
+import { AuthzError, requireRole } from '@/app/lib/authz'
 import { assertClientAccess, scheduleErrorResponse } from '@/app/lib/social-schedule'
 import { getPublisher } from '@/app/lib/publisher'
-import { mayChangeProfile, peopleWithAccess } from '@/app/lib/social-access-core'
+import { mayChangeAccess, mayChangeProfile } from '@/app/lib/social-access-core'
 import {
   createProfile, listProfiles, moveAccountsToProfile, providerConfigured,
 } from '@/app/lib/zernio-profiles'
-import { AuthzError } from '@/app/lib/authz'
 
 /**
- * THE SOCIAL SET AND WHO CAN TOUCH IT, for one client.
+ * WHAT ONLY THE SERVER CAN ANSWER about a client's social set.
  *
- * One request, because the page is one answer to one question — "is this
- * client set up, and who is on it". Every part of it is allowed to fail on
- * its own: the provider being slow must grey out a badge, not blank the page
- * that would tell somebody an account is disconnected.
+ * Deliberately not "everything the page needs". The accounts, the client and
+ * who is on it are rows in the database, and the page reads those the way
+ * every other live screen does — a listener, so an account connected in
+ * another tab or a person added to the client repaints this page without
+ * anybody pressing anything. What CANNOT come from a listener is the bit that
+ * lives at the provider: whether each token still works, which groups of
+ * accounts exist, and which of this client's accounts are not in theirs.
  *
- * It invents no permission model. The people come straight from
- * `team_user_clients`, and what they may do is read off their role by
- * `social-access-core` — the same rule the server enforces everywhere else,
- * written out in words instead of hidden in a guard.
+ * Every part of it is allowed to fail on its own. A slow provider must grey
+ * out a badge, not blank the page that would tell somebody an account is
+ * disconnected — and a health check that did not answer is reported as "not
+ * checked", never as "connected".
  */
 
 export async function GET(req: Request) {
@@ -32,12 +34,10 @@ export async function GET(req: Request) {
       if (!clientId) throw new AuthzError('Which client?', 400)
       await assertClientAccess(user, clientId)
 
-      const [client, accountRows, links, people] = await Promise.all([
+      const [client, accountRows] = await Promise.all([
         table<Client>('clients').get(clientId),
         table<SocialAccount>('social_accounts')
           .list({ where: a => a.client_id === clientId, orderBy: [['platform', 'asc']] }),
-        table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } }),
-        table<TeamUserRow>('team_users').list(),
       ])
       if (!client) throw new AuthzError('That client no longer exists', 404)
 
@@ -75,15 +75,8 @@ export async function GET(req: Request) {
       }
 
       return NextResponse.json({
-        client: { id: client.id, name: client.name, timezone: client.timezone ?? null },
-        accounts: accounts.map(a => ({
-          id: a.id, platform: a.platform, provider_account_id: a.provider_account_id,
-          name: a.name, username: a.username, avatar_url: a.avatar_url,
-          connected_at: a.connected_at ?? null,
-        })),
         health,
         checkedAt: new Date().toISOString(),
-        people: peopleWithAccess(links, people),
         profiles,
         profileId: mappedId,
         stray,
@@ -91,7 +84,7 @@ export async function GET(req: Request) {
         can: {
           profile: mayChangeProfile(user.role),
           // assignment stays where it already lives, and so does its rule
-          access: user.role === 'super_admin',
+          access: mayChangeAccess(user.role),
         },
       })
     } catch (e) {
@@ -104,9 +97,11 @@ export async function GET(req: Request) {
  * POST — put this client in a group of accounts at the posting service.
  *
  * `{ clientId, profileId }` maps to an existing group; `{ clientId, name }`
- * makes one first. Either way the client's connected accounts are moved into
- * it, and the answer says which moved and which would not, by name — a
- * half-moved set reported as "done" is the worst outcome available.
+ * makes one first (adopting the one that exists if the name is taken). Either
+ * way the client's connected accounts are moved into it, the group is READ
+ * BACK, and the answer says which really moved and which did not, by name — a
+ * half-moved set reported as "done" is the worst outcome available, and so is
+ * a request the provider accepts and quietly ignores.
  */
 export async function POST(req: Request) {
   return withRequestCache(async () => {
@@ -142,12 +137,15 @@ export async function POST(req: Request) {
         .list({ where: a => a.client_id === clientId }))
         .filter(a => a.active !== false)
 
+      const publisher = getPublisher()
       const outcome = await moveAccountsToProfile(
         accounts.map(a => ({
           providerAccountId: a.provider_account_id,
           name: a.username ? `@${a.username}` : (a.name ?? a.platform),
         })),
         profile.id,
+        // the 200 is not proof: read the group back and believe THAT
+        async id => (await publisher.listAccounts(id)).map(a => a.providerAccountId),
       )
 
       return NextResponse.json({

@@ -21,6 +21,11 @@ import type { Row } from '@/lib/db-types'
 const h = vi.hoisted(() => ({
   user: { id: '', role: '', email: '', name: '', clerk_user_id: null } as Record<string, unknown>,
   mirrored: [] as unknown[],
+  /** what the storage host says about the file being written in */
+  head: { contentType: 'image/jpeg', bytes: 240_000 } as
+    { contentType: string | null; bytes: number | null } | null,
+  /** files thrown away because the save they were uploaded for did not happen */
+  deleted: [] as string[],
 }))
 
 vi.mock('../app/lib/authz', () => {
@@ -61,6 +66,20 @@ vi.mock('../app/lib/gdrive-mirror', () => ({
   newRawAssets: () => [],
 }))
 vi.mock('../app/lib/stream', () => ({ previewVideos: vi.fn() }))
+/**
+ * The bucket, with the network taken out — but NOT the guard.
+ *
+ * `ourStorageUrl` (the thing actually under test) stays real, in
+ * `storage-core.ts`; only the two calls that would open a socket are answered
+ * from memory. Mocking the guard as well would have left exactly the hole this
+ * file exists to close.
+ */
+vi.mock('../app/lib/storage', () => ({
+  MAX_DERIVED_BYTES: 64 * 1024 * 1024,
+  publicBase: () => 'https://media.mdmmarketing.com.au',
+  headStoredObject: async () => h.head,
+  deleteStoredObject: async (url: string) => { h.deleted.push(url) },
+}))
 vi.mock('../app/lib/production-live', () => ({
   announceItemChange: vi.fn(), announceBatchChange: vi.fn(),
 }))
@@ -78,11 +97,11 @@ const STRANGER = { id: 'u-ed2', role: 'editor', email: 'ed2@x.invalid', name: 'K
 
 const as = (who: typeof AM) => { Object.assign(h.user, who) }
 
-const ONE = 'https://media.mdmmarketing.com.au/one.jpg'
-const TWO = 'https://media.mdmmarketing.com.au/two.jpg'
-const CLIP = 'https://media.mdmmarketing.com.au/clip.mp4'
-const CROPPED = 'https://media.mdmmarketing.com.au/one-cropped.jpg'
-const COVER = 'https://media.mdmmarketing.com.au/clip-cover.jpg'
+const ONE = 'https://media.mdmmarketing.com.au/1756000000000-a1b2c3-one.jpg'
+const TWO = 'https://media.mdmmarketing.com.au/1756000000001-a1b2c4-two.jpg'
+const CLIP = 'https://media.mdmmarketing.com.au/1756000000002-a1b2c5-clip.mp4'
+const CROPPED = 'https://media.mdmmarketing.com.au/1756000000003-a1b2c6-one_cropped.jpg'
+const COVER = 'https://media.mdmmarketing.com.au/1756000000004-a1b2c7-clip_cover.jpg'
 
 const APPROVED = [
   { url: ONE, name: 'one.jpg', type: 'image' as const },
@@ -148,6 +167,8 @@ const posts = () => fake.rows('social_posts') as any[]
 
 beforeEach(() => {
   h.mirrored = []
+  h.deleted = []
+  h.head = { contentType: 'image/jpeg', bytes: 240_000 }
   as(SCHEDULER)
   fake = seed()
 })
@@ -180,6 +201,38 @@ describe('a crop', () => {
     expect(h.mirrored).toHaveLength(1)
   })
 
+  it('leaves a post that has already gone out exactly as it was', async () => {
+    fake.restore()
+    fake = seed({
+      posts: [
+        {
+          id: 'post-out', client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
+          version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
+          channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
+          status: 'published', publish_job_ids: [], created_by: SCHEDULER.id,
+          created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+        },
+        {
+          id: 'post-plan', client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
+          version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
+          channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
+          status: 'draft', publish_job_ids: [], created_by: SCHEDULER.id,
+          created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+        },
+      ] as unknown as Row[],
+    })
+    await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+
+    const out = posts().find((p: any) => p.id === 'post-out')
+    const plan = posts().find((p: any) => p.id === 'post-plan')
+    // `social_posts.slides` is the record of what was PUBLISHED; rewriting it
+    // because somebody cropped the same picture for reuse would make the
+    // preview grid show history that did not happen
+    expect(out.slides.map((s: any) => s.url)).toEqual([ONE, TWO])
+    // a post that can still change is still a plan, and follows the crop
+    expect(plan.slides.map((s: any) => s.url)).toEqual([CROPPED, TWO])
+  })
+
   it('is followed by a post already built from the old file', async () => {
     fake.restore()
     fake = seed({
@@ -206,12 +259,85 @@ describe('a crop', () => {
     expect(body.error).toMatch(/not part of this piece/)
   })
 
-  it('refuses anything that is not one of our own https files', async () => {
-    for (const bad of ['blob:https://x/1', 'data:image/png;base64,AAA', 'http://x.invalid/a.jpg', '']) {
-      const { status } = await derive({ item_id: ITEM, from_url: ONE, to_url: bad, kind: 'crop' })
-      expect(status).toBe(400)
+  /**
+   * THE HOLE THIS CLOSES.
+   *
+   * The route swaps the new file into a version that is already approved and
+   * repoints the live post at it, without touching the approval. So anything
+   * it accepts is published under a yes nobody gave for it. Checking the
+   * scheme alone — which is all it used to do — meant any file on the internet
+   * would go in, and the test that claimed otherwise only tried `blob:` and
+   * `data:`.
+   */
+  it('refuses a file that is not on our own storage, however well formed', async () => {
+    const foreign = [
+      'https://evil.example/1756000000000-a1b2c3-one.jpg',
+      'https://media.mdmmarketing.com.au.evil.example/1756000000000-a1b2c3-one.jpg',
+      'blob:https://x/1',
+      'data:image/png;base64,AAA',
+      'http://media.mdmmarketing.com.au/1756000000000-a1b2c3-one.jpg',
+      '',
+    ]
+    for (const bad of foreign) {
+      const { status, body } = await derive({
+        item_id: ITEM, from_url: ONE, to_url: bad, kind: 'crop',
+      })
+      expect(status, bad).toBe(400)
+      expect(body.error).toMatch(/not one of our own files/)
     }
     expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
+  })
+
+  it('refuses a key that is not one we minted, or that climbs out of the bucket', async () => {
+    const bad = [
+      'https://media.mdmmarketing.com.au/../secrets/one.jpg',
+      'https://media.mdmmarketing.com.au/1756000000000-a1b2c3-../one.jpg',
+      'https://media.mdmmarketing.com.au//1756000000000-a1b2c3-one.jpg',
+      'https://media.mdmmarketing.com.au/one.jpg',
+      'https://media.mdmmarketing.com.au/uploads/1756000000000-a1b2c3-one.jpg',
+    ]
+    for (const url of bad) {
+      const { status } = await derive({ item_id: ITEM, from_url: ONE, to_url: url, kind: 'crop' })
+      expect(status, url).toBe(400)
+    }
+    expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
+  })
+
+  it('refuses an extension a picture cannot have', async () => {
+    for (const url of [
+      'https://media.mdmmarketing.com.au/1756000000000-a1b2c3-one.svg',
+      'https://media.mdmmarketing.com.au/1756000000000-a1b2c3-one.html',
+      'https://media.mdmmarketing.com.au/1756000000000-a1b2c3-one.mp4',
+    ]) {
+      const { status } = await derive({ item_id: ITEM, from_url: ONE, to_url: url, kind: 'crop' })
+      expect(status, url).toBe(400)
+    }
+  })
+
+  it('refuses a file the storage host says is not a picture, or is enormous', async () => {
+    h.head = { contentType: 'text/html', bytes: 900 }
+    let res = await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/not a picture/)
+
+    h.head = { contentType: 'image/jpeg', bytes: 700 * 1024 * 1024 }
+    res = await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/too big/)
+
+    h.head = null
+    res = await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+    expect(res.status).toBe(400)
+
+    expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
+  })
+
+  it('throws away the upload when the save it was for does not happen', async () => {
+    h.head = { contentType: 'text/html', bytes: 900 }
+    await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
+    // the browser has to upload before it can save, so a refusal afterwards
+    // would otherwise leave bytes nothing points at
+    expect(h.deleted).toEqual([CROPPED])
   })
 
   it('is refused to somebody who is not on this client', async () => {

@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   CROP_PRESETS, LOOKS, MAX_EXPORT_PX, MIN_CROP_PX, NEUTRAL_FILTERS,
   applyMatrix, clampCover, clampCrop, clampTextSpot, clampTrim, clockOf,
-  cropRectFor, derivedName, exportSize, filterMatrix, filtersAreNeutral,
-  hasText, isWholeImage, matrixIsIdentity, outputType, presetByKey,
-  saveDecision, textLayout, trimChanged, videoSaveDecision, wholeClip,
+  arrowDelta, cropRectFor, derivedName, exportSize, filterMatrix,
+  filtersAreNeutral, hasText, isWholeImage, matrixIsIdentity, nudgeStep,
+  outputType, presetByKey, resizeCrop, saveDecision, textLayout, trimChanged,
+  videoSaveDecision, wholeClip,
   type Rect,
 } from '@/app/lib/image-edit-core'
 
@@ -92,6 +93,64 @@ describe('a dragged crop cannot leave the picture', () => {
     const tiny = { width: 8, height: 6 }
     const r = clampCrop({ x: 0, y: 0, width: 100, height: 100 }, tiny)
     expect(r).toEqual({ x: 0, y: 0, width: 8, height: 6 })
+  })
+})
+
+describe('resizing from a corner holds the opposite one still', () => {
+  const start = { x: 1000, y: 800, width: 1200, height: 1200 }
+
+  it('the anchor does not move, whichever corner is dragged, at a fixed shape', () => {
+    const anchors = {
+      nw: { x: start.x + start.width, y: start.y + start.height },
+      ne: { x: start.x, y: start.y + start.height },
+      sw: { x: start.x + start.width, y: start.y },
+      se: { x: start.x, y: start.y },
+    } as const
+    for (const corner of ['nw', 'ne', 'sw', 'se'] as const) {
+      for (const [dx, dy] of [[120, 40], [-90, -30], [300, -300]]) {
+        const r = resizeCrop(corner, start, dx, dy, IMAGE, 1)
+        const anchor = anchors[corner]
+        const gotX = corner === 'nw' || corner === 'sw' ? r.x + r.width : r.x
+        const gotY = corner === 'nw' || corner === 'ne' ? r.y + r.height : r.y
+        expect(Math.abs(gotX - anchor.x), `${corner} ${dx}`).toBeLessThanOrEqual(1)
+        expect(Math.abs(gotY - anchor.y), `${corner} ${dy}`).toBeLessThanOrEqual(1)
+        // and it is still a square
+        expect(r.width / r.height).toBeCloseTo(1, 1)
+      }
+    }
+  })
+
+  it('stops at the edge instead of pushing the anchor off the picture', () => {
+    const r = resizeCrop('se', start, 99999, 99999, IMAGE, null)
+    expect(r.x).toBe(start.x)
+    expect(r.y).toBe(start.y)
+    expect(r.x + r.width).toBeLessThanOrEqual(IMAGE.width)
+    expect(r.y + r.height).toBeLessThanOrEqual(IMAGE.height)
+  })
+
+  it('never collapses to nothing', () => {
+    const r = resizeCrop('nw', start, 99999, 99999, IMAGE, null)
+    expect(r.width).toBeGreaterThanOrEqual(1)
+    expect(r.height).toBeGreaterThanOrEqual(1)
+    expect(r.x).toBeGreaterThanOrEqual(0)
+    expect(r.y).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('the keyboard can do what the pointer can', () => {
+  it('one pixel a press, ten with Shift', () => {
+    expect(nudgeStep(false)).toBe(1)
+    expect(nudgeStep(true)).toBe(10)
+  })
+
+  it('reads the four arrow keys and lets everything else through', () => {
+    expect(arrowDelta('ArrowLeft', false)).toEqual({ dx: -1, dy: 0 })
+    expect(arrowDelta('ArrowRight', true)).toEqual({ dx: 10, dy: 0 })
+    expect(arrowDelta('ArrowUp', false)).toEqual({ dx: 0, dy: -1 })
+    expect(arrowDelta('ArrowDown', true)).toEqual({ dx: 0, dy: 10 })
+    for (const key of ['Enter', 'Tab', 'a', ' ', 'Escape']) {
+      expect(arrowDelta(key, false), key).toBeNull()
+    }
   })
 })
 

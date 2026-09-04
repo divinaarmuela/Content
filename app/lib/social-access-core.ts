@@ -11,7 +11,9 @@
  * Pure: no database, no fetch. The route hands it rows; it hands back words.
  */
 
-import { ROLE_LABEL, mayPublish, type Role } from './identity-core'
+import { ROLE_LABEL, TEAM_ROLES, mayPublish, type Role } from './identity-core'
+import { mayApprovePost, maySendPostApproval } from './posting-approval-core'
+import { actingRoles } from './workflow-core'
 import { tokenNotice, timeLeftWords, type TokenStatus } from './token-health-core'
 
 /* ── what a person may do ──────────────────────────────────────────────── */
@@ -27,28 +29,37 @@ export const RIGHT_LABEL: Record<Right, string> = {
 }
 
 /**
- * The rights a role carries on Schedule.
+ * The rights a role carries on Schedule — ASKED OF THE RULES, not listed here.
  *
- *  • super admin — everything.
- *  • account manager — plans, signs a post off, and posts it.
- *  • scheduler — plans and posts, but the sign-off is somebody else's.
- *  • editor — drafts the work; never approves, never posts. (An editor sits
- *    ABOVE a scheduler in the role ladder because they do more of the work,
- *    which is exactly why "can post" is a named set here and not a rung.)
- *  • client — not a person with access to this page at all.
+ * This used to be a hand-written table that happened to agree with the server.
+ * That is the worst kind of correct: change `MAY_PUBLISH` or `mayApprovePost`
+ * tomorrow and the page carries on telling the team who can post, wrongly,
+ * with every test still green. So each chip is one call to the function that
+ * actually gates the server:
+ *
+ *   plan    → `maySendPostApproval` — who may put a post together and send it
+ *   approve → `mayApprovePost`      — who may sign it off
+ *   post    → `mayPublish`          — who may put it out
+ *
+ * The first two are asked in terms of HATS, not titles, so they are asked the
+ * way the item page asks them: `actingRoles` for this person on a piece of
+ * this client that nobody has been handed yet — which is what a page about a
+ * CLIENT rather than about one piece is describing.
+ *
+ * A client is not on this list at all: they approve in the portal, wearing the
+ * client hat, and are never a team member on a client's access list.
  */
 export function rightsForRole(role: string): Right[] {
-  switch (role) {
-    case 'super_admin':
-    case 'account_manager':
-      return ['plan', 'approve', 'post']
-    case 'scheduler':
-      return mayPublish(role) ? ['plan', 'post'] : ['plan']
-    case 'editor':
-      return ['plan']
-    default:
-      return []
-  }
+  if (!(TEAM_ROLES as readonly string[]).includes(role)) return []
+  const hats = actingRoles(
+    { id: 'whoever', role: role as Role },
+    { owner_id: null, scheduler_ids: [] },
+  )
+  const out: Right[] = []
+  if (maySendPostApproval(hats)) out.push('plan')
+  if (mayApprovePost(hats)) out.push('approve')
+  if (mayPublish(role)) out.push('post')
+  return out
 }
 
 export function rightsWords(role: string): string[] {
@@ -150,8 +161,9 @@ export function mayChangeProfile(role: string): boolean {
 /* ── how an account is doing ───────────────────────────────────────────── */
 
 export type AccountHealthWords = {
-  /** the badge: three states and no more */
-  state: 'connected' | 'reconnect' | 'expired'
+  /** the badge. Four states: three about the account, and one about US — we
+   *  could not ask. */
+  state: 'connected' | 'reconnect' | 'expired' | 'unknown'
   label: string
   /** the small print under it */
   detail: string
@@ -162,19 +174,26 @@ export type AccountHealthWords = {
 /**
  * The badge on an account row.
  *
- * Deliberately three states. The provider reports half a dozen shades of
- * "fine"; a person looking at a list of accounts is asking one question — is
- * anything about to stop working — and every extra word in that answer is a
- * word between them and it.
+ * Deliberately few states. The provider reports half a dozen shades of "fine";
+ * a person looking at a list of accounts is asking one question — is anything
+ * about to stop working — and every extra word in that answer is a word
+ * between them and it.
+ *
+ * "Not checked" is the fourth, and it is the one that matters most. An account
+ * we could not reach used to be badged a green "Connected" with a grey line of
+ * small print underneath, so a provider outage over an expired token read as
+ * everything being fine — and a week of posts got queued against a channel
+ * that would refuse every one of them. We do not know, so it says we do not
+ * know, in a colour that is neither good news nor bad.
  */
 export function accountHealthWords(
   status: TokenStatus | null | undefined, now: number,
 ): AccountHealthWords {
   if (!status) {
     return {
-      state: 'connected',
-      label: 'Connected',
-      detail: 'We could not check this one just now. Refresh to try again.',
+      state: 'unknown',
+      label: 'Not checked',
+      detail: 'We could not reach the posting service to check this one, so we cannot say whether it is working. Press “Check them” to try again.',
       needsReconnect: false,
     }
   }
@@ -215,8 +234,15 @@ export function accountHealthWords(
   }
 }
 
-/** "Checked just now" / "Checked 4 minutes ago" — when we last asked the
- *  provider, not when the account was connected. */
+/**
+ * "Checked just now" / "Checked 4 minutes ago" — when we last asked the
+ * PROVIDER, not when the account was connected.
+ *
+ * The stamp comes from the request that asked, which on a freshly opened page
+ * really is a moment ago; it ages honestly while the page stays open, which is
+ * the case that matters (a tab left up all afternoon must not keep claiming
+ * its badges are current).
+ */
 export function lastCheckedWords(at: string | null | undefined, now: number): string {
   if (!at) return 'Not checked yet'
   const then = new Date(at).getTime()

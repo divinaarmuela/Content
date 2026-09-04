@@ -7,6 +7,8 @@ import { loadItemForUser } from './production-access'
 import { mayCompose } from './social-schedule'
 import { slidesOf, type Slide } from './version-files-core'
 import { mirrorVersionSlides } from './gdrive-mirror'
+import { ourStorageUrl, storedFileIsUsable } from './storage-core'
+import { MAX_DERIVED_BYTES, deleteStoredObject, headStoredObject, publicBase } from './storage'
 
 /**
  * SAVING AN EDIT THAT KEEPS THE CLIENT'S APPROVAL.
@@ -33,6 +35,10 @@ import { mirrorVersionSlides } from './gdrive-mirror'
 
 export type DeriveKind = 'crop' | 'video'
 
+/** A post whose media can still change — the same split `updatePost` enforces
+ *  (`SETTLED` there), read from the one list of post statuses. */
+const STILL_CHANGEABLE: string[] = ['draft', 'pending', 'approved', 'changes', 'scheduled']
+
 export type DeriveInput = {
   item_id: string
   /** which version to write into. Omitted = whichever one holds `from_url`. */
@@ -54,21 +60,79 @@ export type DeriveResult = {
   message: string
 }
 
-const https = (v: unknown): string | null => {
+/** The file being EDITED. Loose on purpose: it is only ever used to find a
+ *  slide that already exists on the version, so a URL that is not one of ours
+ *  matches nothing and the request is refused a line later. */
+const knownUrl = (v: unknown): string | null => {
   const s = String(v ?? '').trim()
   return /^https:\/\/\S+$/i.test(s) ? s : null
+}
+
+/**
+ * The file being WRITTEN IN, checked properly.
+ *
+ * This is the guard the whole "a crop keeps the client's approval" promise
+ * rests on. The route swaps this file into a version that is already approved
+ * and repoints the live post at it, so anything it accepts is published under
+ * an approval nobody gave for it. Checking the scheme alone (which is all it
+ * used to do) meant any URL on the internet would go in.
+ *
+ * Three questions, all of them cheap:
+ *   1. is it on OUR public storage host, with a key shaped like the ones
+ *      `objectKey()` mints, and no traversal in it (`storage-core.ts`);
+ *   2. does the extension match what it is being used as;
+ *   3. does the host itself say it is a picture, and a sane size (one HEAD).
+ */
+async function ourPicture(
+  value: unknown, what: string,
+): Promise<string> {
+  const url = ourStorageUrl(value, publicBase(), 'image')
+  if (!url) {
+    throw new AuthzError(
+      `${what} is not one of our own files. Save it again, and if it keeps happening tell us.`,
+      400,
+    )
+  }
+  const verdict = storedFileIsUsable(
+    await headStoredObject(url), 'image', MAX_DERIVED_BYTES)
+  if (!verdict.ok) throw new AuthzError(`${what}: ${verdict.why}`, 400)
+  return url
 }
 
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : null
 
+/**
+ * The file the browser uploaded a moment ago, thrown away when the save it was
+ * uploaded FOR does not happen.
+ *
+ * The crop path cannot upload after the write — the write needs a URL — so a
+ * refusal (somebody else changed the piece; the file is not what it claimed to
+ * be) would otherwise leave bytes in the bucket nothing points at. Best effort:
+ * a failed tidy-up must never turn into a failed edit.
+ */
+async function dropOrphan(url: unknown): Promise<void> {
+  const ours = ourStorageUrl(url, publicBase(), 'image')
+  if (ours) await deleteStoredObject(ours).catch(() => {})
+}
+
 export async function saveDerived(user: TeamUser, input: DeriveInput): Promise<DeriveResult> {
+  try {
+    return await write(user, input)
+  } catch (e) {
+    // whichever file this save was going to use is now rubbish
+    await dropOrphan(input.kind === 'video' ? input.cover_url : input.to_url)
+    throw e
+  }
+}
+
+async function write(user: TeamUser, input: DeriveInput): Promise<DeriveResult> {
   const item = await loadItemForUser(user, String(input.item_id ?? '')) as ContentItem
   if (!mayCompose(user, item)) {
     throw new AuthzError('Only the people scheduling this client can change this media', 403)
   }
 
-  const from = https(input.from_url)
+  const from = knownUrl(input.from_url)
   if (!from) throw new AuthzError('Which picture is being edited?', 400)
 
   const versions = await table<AssetVersion>('asset_versions')
@@ -89,8 +153,7 @@ export async function saveDerived(user: TeamUser, input: DeriveInput): Promise<D
   const before = slidesOf(version)
 
   if (input.kind === 'crop') {
-    const to = https(input.to_url)
-    if (!to) throw new AuthzError('The cropped picture did not finish uploading', 400)
+    const to = await ourPicture(input.to_url, 'The cropped picture')
 
     const after = before.map(s => (s.url === from ? { ...s, url: to } : s))
 
@@ -128,10 +191,7 @@ export async function saveDerived(user: TeamUser, input: DeriveInput): Promise<D
 
   const cover = input.cover_url === undefined || input.cover_url === null
     ? undefined
-    : https(input.cover_url)
-  if (input.cover_url && !cover) {
-    throw new AuthzError('The cover picture did not finish uploading', 400)
-  }
+    : await ourPicture(input.cover_url, 'The cover picture')
   const start = num(input.trim_start)
   const end = num(input.trim_end)
 
@@ -169,14 +229,22 @@ export async function saveDerived(user: TeamUser, input: DeriveInput): Promise<D
  * it still points at the uncropped file — and the uncropped one is what would
  * be published. The claim only fires on a post that is still holding the old
  * url, so a post somebody has since re-picked media on is left alone.
+ *
+ * A post that has ALREADY GONE OUT is left alone too, and that is the more
+ * important half. `social_posts.slides` is the record of what was published;
+ * rewriting it because somebody cropped the same picture for reuse next month
+ * makes the Preview grid and the post detail show history that did not
+ * happen. Only a post that can still change is still a plan.
  */
 async function repointPosts(itemId: string, from: string, to: string): Promise<void> {
   const rows = await table<SocialPost>('social_posts').list({ where: p => p.item_id === itemId })
   for (const row of rows) {
+    if (!STILL_CHANGEABLE.includes(String(row.status))) continue
     const slides = Array.isArray(row.slides) ? (row.slides as unknown as Slide[]) : []
     if (!slides.some(s => s?.url === from)) continue
     await table<SocialPost>('social_posts').claim(row.id, cur => {
       if (!cur) return null
+      if (!STILL_CHANGEABLE.includes(String(cur.status))) return null
       const live = Array.isArray(cur.slides) ? (cur.slides as unknown as Slide[]) : []
       if (!live.some(s => s?.url === from)) return null
       return {

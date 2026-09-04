@@ -1,5 +1,5 @@
 import 'server-only'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
@@ -112,5 +112,72 @@ export async function signUpload(
     publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`,
     key,
     backend: 'r2',
+  }
+}
+
+/**
+ * Where the public reads our files from, for anything that has to ask "is
+ * this URL one of ours?" — the crop save, above all, which writes a file into
+ * a version the client has already approved.
+ */
+export function publicBase(): string | null {
+  return R2_PUBLIC_BASE ? R2_PUBLIC_BASE.replace(/\/$/, '') : null
+}
+
+/**
+ * The biggest a file may be to go onto a post.
+ *
+ * Not R2's 5GB single-PUT ceiling: this is the cap on a DERIVED file — a
+ * cropped picture or a cover frame the browser just wrote out. A 4096px JPEG
+ * is a couple of megabytes; anything past this is not one of ours whatever
+ * its URL says.
+ */
+export const MAX_DERIVED_BYTES = 64 * 1024 * 1024
+
+/**
+ * What the storage host says about a file, or null if it will not say.
+ *
+ * A HEAD against the public URL, because the bucket is public-read and this
+ * needs no credentials — and because it asks the same question the browser
+ * would: is there really a picture there.
+ */
+export async function headStoredObject(
+  url: string,
+): Promise<{ contentType: string | null; bytes: number | null } | null> {
+  try {
+    const res = await fetch(url, { method: 'HEAD' })
+    if (!res.ok) return null
+    const length = res.headers.get('content-length')
+    return {
+      contentType: res.headers.get('content-type'),
+      bytes: length === null ? null : Number(length),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Throw away a file we uploaded and then could not use.
+ *
+ * The crop path has to upload before it can save — the save needs a URL — so a
+ * refusal afterwards (somebody else changed the piece, the file is not what it
+ * claimed to be) leaves bytes in the bucket with nothing pointing at them.
+ * Best effort by design: an orphan costs a fraction of a cent, and failing the
+ * person's edit because the tidy-up failed would be the worse trade.
+ *
+ * It only ever deletes something on OUR public base, and only by the key that
+ * base prefixes — it cannot be pointed at anything else.
+ */
+export async function deleteStoredObject(url: string): Promise<void> {
+  const base = publicBase()
+  if (!base || !r2Configured()) return
+  if (!url.startsWith(`${base}/`)) return
+  const key = url.slice(base.length + 1)
+  if (!key || key.includes('..') || key.includes('/')) return
+  try {
+    await r2().send(new DeleteObjectCommand({ Bucket: R2_BUCKET!, Key: key }))
+  } catch (e) {
+    console.error('could not remove an unused upload:', (e as Error).message)
   }
 }

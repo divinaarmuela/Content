@@ -123,6 +123,85 @@ export function clampCrop(rect: Rect, size: Size, ratio: number | null = null): 
   return { x, y, width, height }
 }
 
+export type Corner = 'nw' | 'ne' | 'sw' | 'se'
+
+/**
+ * Resizing from one corner, with the OPPOSITE corner nailed down.
+ *
+ * The obvious version — move x/y from the drag, then let the clamp re-impose
+ * the ratio by changing width/height — slides the corner you are not touching
+ * around the picture, which feels like the frame is fighting you. The corner
+ * you grabbed is the only one that may move, so the anchor is computed first
+ * and the box is rebuilt from it.
+ *
+ * Width leads on a fixed ratio, and the box is fitted into the room actually
+ * available from the anchor, so dragging past an edge stops there instead of
+ * pushing the anchor off the picture.
+ */
+export function resizeCrop(
+  corner: Corner, start: Rect, dx: number, dy: number,
+  size: Size, ratio: number | null,
+): Rect {
+  const box = whole(size)
+  const min = Math.max(1, Math.min(MIN_CROP_PX, box.width, box.height))
+
+  // the corner that must not move, and which way this drag grows
+  const fixedX = corner === 'nw' || corner === 'sw' ? start.x + start.width : start.x
+  const fixedY = corner === 'nw' || corner === 'ne' ? start.y + start.height : start.y
+  const growX = corner === 'ne' || corner === 'se' ? 1 : -1
+  const growY = corner === 'sw' || corner === 'se' ? 1 : -1
+
+  const roomX = Math.max(min, growX > 0 ? box.width - fixedX : fixedX)
+  const roomY = Math.max(min, growY > 0 ? box.height - fixedY : fixedY)
+
+  let width = Math.min(roomX, Math.max(min, start.width + growX * dx))
+  let height = Math.min(roomY, Math.max(min, start.height + growY * dy))
+
+  if (ratio !== null && Number.isFinite(ratio) && ratio > 0) {
+    height = width / ratio
+    if (height > roomY) { height = roomY; width = height * ratio }
+    if (width > roomX) { width = roomX; height = width / ratio }
+    width = Math.max(min, Math.min(roomX, width))
+    height = Math.max(min, Math.min(roomY, height))
+  }
+
+  width = Math.round(width)
+  height = Math.round(height)
+  return clampCrop({
+    x: growX > 0 ? fixedX : fixedX - width,
+    y: growY > 0 ? fixedY : fixedY - height,
+    width,
+    height,
+  }, box, null)
+}
+
+/**
+ * How far one arrow-key press moves something.
+ *
+ * A pointer is not the only way to place a crop or a caption, and until now it
+ * was the only way this window offered — the presets gave a keyboard user a
+ * shape and nothing to do with it. One pixel is precise, Shift makes it ten so
+ * crossing a large picture does not take four hundred presses.
+ */
+export function nudgeStep(shift: boolean): number {
+  return shift ? 10 : 1
+}
+
+/** The arrow keys, as a movement. Null for any other key, so a handler can
+ *  let everything else through untouched. */
+export function arrowDelta(
+  key: string, shift: boolean,
+): { dx: number; dy: number } | null {
+  const step = nudgeStep(shift)
+  switch (key) {
+    case 'ArrowLeft': return { dx: -step, dy: 0 }
+    case 'ArrowRight': return { dx: step, dy: 0 }
+    case 'ArrowUp': return { dx: 0, dy: -step }
+    case 'ArrowDown': return { dx: 0, dy: step }
+    default: return null
+  }
+}
+
 /** Nothing was cropped: the box is still the whole picture. */
 export function isWholeImage(rect: Rect, size: Size): boolean {
   const box = whole(size)

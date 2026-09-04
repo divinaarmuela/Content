@@ -5,11 +5,12 @@ import { Crop as CropIcon, Loader2, Redo2, SlidersHorizontal, Type as TypeIcon, 
 import { cn } from '@/lib/utils'
 import {
   CROP_PRESETS, EMPTY_TEXT, LOOKS, MAX_EXPORT_PX, NEUTRAL_FILTERS, TEXT_FONTS,
-  TEXT_SIZE_MAX, TEXT_SIZE_MIN, applyMatrix, clampCover, clampCrop, clampTrim,
-  clockOf, cropRectFor, derivedName, exportSize, filterMatrix, filtersAreNeutral,
-  hasText, isWholeImage, outputType, presetByKey, saveDecision, textLayout,
-  trimChanged, videoSaveDecision, wholeClip,
-  type Filters, type Rect, type TextLine, type Trim,
+  TEXT_SIZE_MAX, TEXT_SIZE_MIN, applyMatrix, arrowDelta, clampCover, clampCrop,
+  clampTextSpot, clampTrim, clockOf, cropRectFor, derivedName, exportSize,
+  filterMatrix, filtersAreNeutral, hasText, isWholeImage, outputType,
+  presetByKey, resizeCrop, saveDecision, textLayout, trimChanged,
+  videoSaveDecision, wholeClip,
+  type Corner, type Filters, type Rect, type TextLine, type Trim,
 } from '@/app/lib/image-edit-core'
 import { friendlyError } from '@/app/lib/support-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -37,6 +38,15 @@ import { uploadFiles } from '../../uploadQueue'
  */
 
 type Tab = 'crop' | 'filters' | 'text'
+
+/** The four handles, named the way somebody would say them out loud rather
+ *  than by compass point — a screen reader saying "n w corner" helps nobody. */
+const CORNERS: { key: Corner; label: string }[] = [
+  { key: 'nw', label: 'Top left' },
+  { key: 'ne', label: 'Top right' },
+  { key: 'sw', label: 'Bottom left' },
+  { key: 'se', label: 'Bottom right' },
+]
 
 export type ImageEditorTarget = {
   itemId: string
@@ -153,6 +163,37 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
   }, [current])
 
   /**
+   * Undo and redo, with every setter called at the TOP LEVEL.
+   *
+   * They used to be called inside the `setPast` updater, which React is free
+   * to run twice — and does, in development — so one press of Undo could push
+   * two redo entries. An updater has to be a pure function of the state it is
+   * handed; anything else belongs out here.
+   */
+  const apply = useCallback((step: Step) => {
+    setCrop(step.crop)
+    setFilters(step.filters)
+    setText(step.text)
+    setPreset(step.preset)
+  }, [])
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return
+    const last = past[past.length - 1]
+    setPast(p => p.slice(0, -1))
+    setFuture(f => [current, ...f])
+    apply(last)
+  }, [past, current, apply])
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return
+    const next = future[0]
+    setFuture(f => f.slice(1))
+    setPast(p => [...p, current])
+    apply(next)
+  }, [future, current, apply])
+
+  /**
    * The file, fetched so the canvas may read its pixels.
    *
    * `crossOrigin` has to be set BEFORE `src` or the browser caches the image
@@ -218,9 +259,9 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
   /* ── dragging the crop box ───────────────────────────────────────────── */
 
   const drag = useRef<
-    { mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; x: number; y: number; start: Rect } | null>(null)
+    { mode: 'move' | Corner; x: number; y: number; start: Rect } | null>(null)
 
-  const onPointerDown = (mode: 'move' | 'nw' | 'ne' | 'sw' | 'se') =>
+  const onPointerDown = (mode: 'move' | Corner) =>
     (e: React.PointerEvent) => {
       if (!natural) return
       e.preventDefault()
@@ -235,23 +276,47 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
     if (!d || !natural) return
     const dx = (e.clientX - d.x) / scale
     const dy = (e.clientY - d.y) / scale
-    const ratio = presetByKey(preset).ratio
-    const s = d.start
-    let next: Rect
     if (d.mode === 'move') {
-      next = { ...s, x: s.x + dx, y: s.y + dy }
       // moving never resizes, so the ratio must not be re-imposed here
-      setCrop(clampCrop(next, natural, null))
+      setCrop(clampCrop({ ...d.start, x: d.start.x + dx, y: d.start.y + dy }, natural, null))
       return
     }
-    if (d.mode === 'se') next = { x: s.x, y: s.y, width: s.width + dx, height: s.height + dy }
-    else if (d.mode === 'sw') next = { x: s.x + dx, y: s.y, width: s.width - dx, height: s.height + dy }
-    else if (d.mode === 'ne') next = { x: s.x, y: s.y + dy, width: s.width + dx, height: s.height - dy }
-    else next = { x: s.x + dx, y: s.y + dy, width: s.width - dx, height: s.height - dy }
-    setCrop(clampCrop(next, natural, ratio))
+    // the corner being dragged is the only one that moves — `resizeCrop`
+    // nails the opposite one down, so a square does not slide away under a
+    // hand pulling one of its corners
+    setCrop(resizeCrop(d.mode, d.start, dx, dy, natural, presetByKey(preset).ratio))
   }
 
   const endDrag = () => { drag.current = null }
+
+  /**
+   * The same two moves from the keyboard.
+   *
+   * Until now the frame could only be placed with a pointer: the presets gave
+   * somebody on a keyboard a shape and then nothing to do with it. Arrow keys
+   * move the frame (or resize from whichever corner has focus) a pixel at a
+   * time, Shift makes it ten.
+   */
+  const onFrameKey = (e: React.KeyboardEvent) => {
+    if (!natural) return
+    const move = arrowDelta(e.key, e.shiftKey)
+    if (!move) return
+    e.preventDefault()
+    e.stopPropagation()
+    remember()
+    setCrop(clampCrop(
+      { ...crop, x: crop.x + move.dx, y: crop.y + move.dy }, natural, null))
+  }
+
+  const onCornerKey = (corner: Corner) => (e: React.KeyboardEvent) => {
+    if (!natural) return
+    const move = arrowDelta(e.key, e.shiftKey)
+    if (!move) return
+    e.preventDefault()
+    e.stopPropagation()
+    remember()
+    setCrop(resizeCrop(corner, crop, move.dx, move.dy, natural, presetByKey(preset).ratio))
+  }
 
   /* ── dragging the caption ────────────────────────────────────────────── */
 
@@ -269,8 +334,27 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
     if (!rect || rect.width === 0) return
     setText(t => ({
       ...t,
-      x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
-      y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+      ...clampTextSpot({
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      }),
+    }))
+  }
+
+  /** The caption, moved by arrow keys — a pixel of the picture as drawn, so a
+   *  press does the same thing it would with a mouse. */
+  const onTextKey = (e: React.KeyboardEvent) => {
+    const move = arrowDelta(e.key, e.shiftKey)
+    if (!move || box.width === 0 || box.height === 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    remember()
+    setText(t => ({
+      ...t,
+      ...clampTextSpot({
+        x: t.x + move.dx / box.width,
+        y: t.y + move.dy / box.height,
+      }),
     }))
   }
 
@@ -424,16 +508,7 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
             type="button"
             aria-label="Undo"
             disabled={past.length === 0}
-            onClick={() => {
-              setPast(p => {
-                if (p.length === 0) return p
-                const last = p[p.length - 1]
-                setFuture(f => [current, ...f])
-                setCrop(last.crop); setFilters(last.filters)
-                setText(last.text); setPreset(last.preset)
-                return p.slice(0, -1)
-              })
-            }}
+            onClick={undo}
             className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40"
           >
             <Undo2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -442,16 +517,7 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
             type="button"
             aria-label="Redo"
             disabled={future.length === 0}
-            onClick={() => {
-              setFuture(f => {
-                if (f.length === 0) return f
-                const next = f[0]
-                setPast(p => [...p, current])
-                setCrop(next.crop); setFilters(next.filters)
-                setText(next.text); setPreset(next.preset)
-                return f.slice(1)
-              })
-            }}
+            onClick={redo}
             className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40"
           >
             <Redo2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -480,18 +546,23 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
                 }}
               />
               <div
-                role="presentation"
+                role="application"
+                tabIndex={0}
+                aria-label="Crop frame. Arrow keys move it, hold Shift to move further."
                 onPointerDown={onPointerDown('move')}
-                className="absolute cursor-move border-2 border-cream shadow-[0_0_0_1px_rgba(0,0,0,0.4)]"
+                onKeyDown={onFrameKey}
+                className="absolute cursor-move border-2 border-cream shadow-[0_0_0_1px_rgba(0,0,0,0.4)] outline-none focus-visible:ring-2 focus-visible:ring-cream"
                 style={cropDisplay}
               >
-                {(['nw', 'ne', 'sw', 'se'] as const).map(corner => (
-                  <span
+                {CORNERS.map(({ key: corner, label }) => (
+                  <button
                     key={corner}
-                    role="presentation"
+                    type="button"
+                    aria-label={`${label} corner. Arrow keys resize from here, hold Shift to resize further.`}
                     onPointerDown={onPointerDown(corner)}
+                    onKeyDown={onCornerKey(corner)}
                     className={cn(
-                      'absolute h-5 w-5 rounded-full border-2 border-ink bg-cream',
+                      'absolute h-5 w-5 rounded-full border-2 border-ink bg-cream outline-none focus-visible:ring-2 focus-visible:ring-cream',
                       corner === 'nw' && '-left-2.5 -top-2.5 cursor-nwse-resize',
                       corner === 'ne' && '-right-2.5 -top-2.5 cursor-nesw-resize',
                       corner === 'sw' && '-bottom-2.5 -left-2.5 cursor-nesw-resize',
@@ -506,11 +577,14 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
           {/* the one line, where it will actually land */}
           {hasText(text) && (
             <span
-              role="presentation"
+              role="application"
+              tabIndex={0}
+              aria-label={`Caption “${text.text}”. Arrow keys move it, hold Shift to move further.`}
               onPointerDown={onTextDown}
               onPointerMove={onTextMove}
               onPointerUp={() => { textDrag.current = false }}
-              className="absolute cursor-move whitespace-nowrap px-1 [text-shadow:0_1px_3px_rgba(0,0,0,0.55)]"
+              onKeyDown={onTextKey}
+              className="absolute cursor-move whitespace-nowrap px-1 outline-none [text-shadow:0_1px_3px_rgba(0,0,0,0.55)] focus-visible:ring-2 focus-visible:ring-cream"
               style={{
                 left: `${text.x * 100}%`,
                 top: `${text.y * 100}%`,
@@ -568,7 +642,9 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
               </button>
             </div>
             <p className="text-[12px] text-muted-foreground">
-              Drag the frame to move it, or a corner to resize.{' '}
+              Drag the frame to move it, or a corner to resize. With the keyboard,
+              tab to the frame or a corner and use the arrow keys — hold Shift to
+              go ten times as far.{' '}
               {out && `Saved at ${out.width} × ${out.height} pixels.`}
               {out && Math.max(crop.width, crop.height) > MAX_EXPORT_PX
                 && ' The long side is brought down to keep the file sensible.'}
@@ -664,7 +740,8 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
               </div>
             </div>
             <p className="text-[12px] text-muted-foreground">
-              Drag the line on the picture to move it.
+              Drag the line on the picture to move it, or tab to it and use the
+              arrow keys.
             </p>
           </div>
         )}
@@ -688,7 +765,17 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
   const video = useRef<HTMLVideoElement | null>(null)
   const [duration, setDuration] = useState(0)
   const [trim, setTrim] = useState<Trim>({ start: 0, end: 0 })
-  const [cover, setCover] = useState<number | null>(null)
+  /**
+   * The chosen cover, as the PICTURE ITSELF and not a timestamp.
+   *
+   * It used to be a time, with the still taken off the live <video> at save
+   * time — so playing on after choosing (or nudging a trim slider, which
+   * seeks) uploaded a different frame from the one the label promised. The
+   * frame is grabbed the moment the button is pressed, which is also the
+   * moment the person is looking at it.
+   */
+  const [cover, setCover] = useState<{ at: number; blob: Blob } | null>(null)
+  const [grabbing, setGrabbing] = useState(false)
 
   const trimmed = duration > 0 && trimChanged(trim, duration)
   const plan = videoSaveDecision({ coverChanged: cover !== null, trimmed })
@@ -698,25 +785,54 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
     if (el) el.currentTime = at
   }
 
+  /** Move the playhead and WAIT for the frame to actually be there. Drawing
+   *  before `seeked` paints whatever was on screen before. */
+  const seekAndWait = (el: HTMLVideoElement, at: number) => new Promise<void>(resolve => {
+    if (Math.abs(el.currentTime - at) < 0.02) { resolve(); return }
+    const done = () => { el.removeEventListener('seeked', done); resolve() }
+    el.addEventListener('seeked', done)
+    el.currentTime = at
+    // a video that will not seek must not hang the button for ever
+    window.setTimeout(done, 2000)
+  })
+
+  const grabCover = async () => {
+    const el = video.current
+    if (!el) return
+    setGrabbing(true)
+    setProblem(null)
+    try {
+      const at = clampCover(el.currentTime, trim)
+      await seekAndWait(el, at)
+      const width = el.videoWidth || 1080
+      const height = el.videoHeight || 1920
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('This browser could not take a still from the video')
+      ctx.drawImage(el, 0, 0, width, height)
+      const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.92))
+      if (!blob) throw new Error('The cover picture could not be written out')
+      setCover({ at, blob })
+    } catch (e) {
+      setProblem(e instanceof Error && e.message
+        ? securityWords(e.message)
+        : 'That frame could not be used as the cover.')
+    } finally {
+      setGrabbing(false)
+    }
+  }
+
   const save = async () => {
     setBusy(true)
     setProblem(null)
     try {
       let coverUrl: string | null = null
-      if (cover !== null) {
-        const el = video.current
-        if (!el) throw new Error('The video is not ready yet')
-        const width = el.videoWidth || 1080
-        const height = el.videoHeight || 1920
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) throw new Error('This browser could not take a still from the video')
-        ctx.drawImage(el, 0, 0, width, height)
-        const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.92))
-        if (!blob) throw new Error('The cover picture could not be written out')
-        const file = new File([blob], derivedName(slide.name, 'cover'), { type: 'image/jpeg' })
+      if (cover) {
+        // the still grabbed when the button was pressed, not whatever the
+        // playhead happens to be sitting on now
+        const file = new File([cover.blob], derivedName(slide.name, 'cover'), { type: 'image/jpeg' })
         const { done } = uploadFiles([file], {
           group: `image-edit:${target.itemId}`, purpose: 'social',
         })
@@ -768,6 +884,13 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
               setTrim(wholeClip(d))
             }
           }}
+          // `crossOrigin` is what lets us take a still out of the clip, and it
+          // is also what stops it playing at all if the place the file is
+          // stored will not allow it. A blank black box is not an explanation,
+          // so say the same thing the picture editor says.
+          onError={() => setProblem(
+            'This video will not open for editing here — the place it is stored will not let the page read it. Send it to us and we will switch that on.',
+          )}
           className="max-h-[46vh] w-auto rounded-[4px]"
         />
       </div>
@@ -796,18 +919,17 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => {
-            const at = video.current?.currentTime ?? 0
-            setCover(clampCover(at, trim))
-          }}
-          className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
+          disabled={grabbing || duration === 0}
+          onClick={() => void grabCover()}
+          className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
         >
+          {grabbing && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />}
           Use this frame as the cover
         </button>
         <span className="text-[12px] text-muted-foreground">
           {cover === null
             ? 'Play to the frame you want, then press the button.'
-            : `Cover taken at ${clockOf(cover)}.`}
+            : `Cover taken at ${clockOf(cover.at)} — that exact frame is what will be saved.`}
         </span>
       </div>
 
@@ -866,6 +988,12 @@ function Slider({ label, min, max, value, step = 1, onChange, onStart }: {
         step={step}
         value={value}
         onPointerDown={onStart}
+        // a slider moved with the arrow keys has to be undoable as well: the
+        // undo step used to be pushed on pointer-down only, so keyboard
+        // changes silently could not be taken back
+        onKeyDown={e => {
+          if (/^(Arrow|Page)|^(Home|End)$/.test(e.key)) onStart?.()
+        }}
         onChange={e => onChange(Number(e.target.value))}
         className="h-11 w-full cursor-pointer accent-foreground"
       />

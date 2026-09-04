@@ -3,15 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Check, ChevronDown, Loader2, Plus, RefreshCw, Trash2, Users,
+  ArrowLeft, Check, ChevronDown, Loader2, Pencil, Plus, RefreshCw, Trash2, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTable } from '@/lib/db-client'
+import type { Client, SocialAccount, TeamUser, TeamUserClient } from '@/lib/db-types'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
+import { accessibleClientIdsOf, type ScopeViewer } from '@/app/lib/scope-client'
+import { isValidZone, zoneLabel } from '@/app/lib/timezone-core'
 import {
-  accountHealthWords, lastCheckedWords, profileMappingWords,
-  type PersonWithAccess, type ProfileChoice,
+  accountHealthWords, lastCheckedWords, peopleWithAccess, profileMappingWords,
+  type ProfileChoice,
 } from '@/app/lib/social-access-core'
 import type { TokenStatus } from '@/app/lib/token-health-core'
+import { useRole } from '../../../useRole'
 import PlatformIcon, { brandFor } from '../../PlatformIcon'
 import PageTitle from '../../../ui/PageTitle'
 
@@ -35,6 +40,12 @@ import PageTitle from '../../../ui/PageTitle'
  * the posting service the client's accounts sit in. A post is created against
  * a group, so accounts scattered across groups is how a post goes out from
  * the wrong Instagram. It is one line, near the accounts it is about.
+ *
+ * LIVE, and SCOPED, exactly like the calendar it hangs off. The rows come from
+ * listeners, so a colleague reconnecting TikTok in the next tab changes this
+ * page without anybody pressing anything; and the client picker offers the
+ * clients this person is actually on, so nobody is invited to click a name
+ * that will answer them with a refusal.
  */
 
 const CLIENT_KEY = 'md-schedule-client'
@@ -46,24 +57,10 @@ const OFFERED = [
   'instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'threads', 'pinterest',
 ] as const
 
-type ClientRow = { id: string; name: string; status: string }
-
-type AccountRow = {
-  id: string
-  platform: string
-  provider_account_id: string
-  name: string | null
-  username: string | null
-  avatar_url: string | null
-  connected_at: string | null
-}
-
-type AccessData = {
-  client: { id: string; name: string; timezone: string | null }
-  accounts: AccountRow[]
+/** What only the server can answer: the provider's side of the story. */
+type ProviderView = {
   health: Record<string, TokenStatus>
   checkedAt: string
-  people: PersonWithAccess[]
   profiles: ProfileChoice[]
   profileId: string | null
   stray: string[]
@@ -72,66 +69,114 @@ type AccessData = {
 }
 
 export default function AccessPage() {
-  const [clients, setClients] = useState<ClientRow[] | null>(null)
+  const { me, noAccount } = useRole()
+  const viewer: ScopeViewer | null = useMemo(
+    () => (me ? { id: me.id, role: me.role } : null), [me])
+
   const [clientId, setClientId] = useState<string | null>(null)
-  const [data, setData] = useState<AccessData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [problem, setProblem] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [confirm, setConfirm] = useState<AccountRow | null>(null)
+  const [confirm, setConfirm] = useState<SocialAccount | null>(null)
+  const [editing, setEditing] = useState<SocialAccount | null>(null)
+
+  /* ── the live rows ───────────────────────────────────────────────────── */
+
+  const byClient = useMemo(() => ({ client_id: clientId ?? '' }), [clientId])
+  const on = Boolean(clientId)
+  const clients = useTable<Client>('clients')
+  const assignments = useTable<TeamUserClient>('team_user_clients')
+  const team = useTable<TeamUser>('team_users')
+  const accountRows = useTable<SocialAccount>('social_accounts', { by: byClient, enabled: on })
+
+  /** the clients this person may pick between — the same answer the calendar's
+   *  picker gives, from the same helper, so the two cannot disagree */
+  const pickable = useMemo(() => {
+    if (!viewer) return []
+    const base = accessibleClientIdsOf(viewer, assignments.rows)
+    const rows = base === null
+      ? clients.rows
+      : clients.rows.filter(c => base.includes(c.id))
+    return rows
+      .filter(c => c.status !== 'archived')
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [viewer, clients.rows, assignments.rows])
+
+  const client = useMemo(
+    () => clients.rows.find(c => c.id === clientId) ?? null, [clients.rows, clientId])
+
+  /** this client's channels, active only. Filtered in memory as well: a
+   *  listener re-keys one render AFTER the client changes, and a frame of the
+   *  previous client's accounts under this client's name is a lie. */
+  const accounts = useMemo(
+    () => accountRows.rows
+      .filter(a => a.client_id === clientId && a.active !== false)
+      .sort((a, b) => a.platform.localeCompare(b.platform)),
+    [accountRows.rows, clientId])
+
+  const people = useMemo(
+    () => peopleWithAccess(
+      assignments.rows.filter(l => l.client_id === clientId),
+      team.rows,
+    ),
+    [assignments.rows, team.rows, clientId])
+
+  /* ── which client ────────────────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (clientId || pickable.length === 0) return
+    let saved: string | null = null
+    try {
+      saved = new URL(window.location.href).searchParams.get('clientId')
+        ?? localStorage.getItem(CLIENT_KEY)
+    } catch { /* private mode */ }
+    const known = saved && pickable.some(c => c.id === saved) ? saved : pickable[0].id
+    setClientId(known)
+  }, [clientId, pickable])
+
+  const pickClient = (id: string) => {
+    setClientId(id)
+    setProblem(null)
+    setNote(null)
+    try { localStorage.setItem(CLIENT_KEY, id) } catch { /* private mode */ }
+  }
+
+  /* ── the provider's half ─────────────────────────────────────────────── */
+
+  const [view, setView] = useState<ProviderView | null>(null)
+  const [checking, setChecking] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
-  /* which client. The one the calendar was last on, so arriving here from the
-     week does not ask a question that was already answered. */
-  useEffect(() => {
-    let live = true
-    fetch('/api/website/clients')
-      .then(r => (r.ok ? r.json() : []))
-      .then((rows: ClientRow[]) => {
-        if (!live) return
-        const usable = (rows ?? []).filter(c => c.status !== 'archived')
-        setClients(usable)
-        let saved: string | null = null
-        try {
-          saved = new URL(window.location.href).searchParams.get('clientId')
-            ?? localStorage.getItem(CLIENT_KEY)
-        } catch { /* private mode */ }
-        const known = saved && usable.some(c => c.id === saved) ? saved : usable[0]?.id ?? null
-        setClientId(known)
-        if (!known) setLoading(false)
-      })
-      .catch(() => { if (live) { setClients([]); setLoading(false) } })
-    return () => { live = false }
-  }, [])
-
-  const load = useCallback(async (id: string) => {
-    setLoading(true)
-    setProblem(null)
+  const askProvider = useCallback(async (id: string) => {
+    setChecking(true)
     try {
       const res = await fetch(`/api/social/schedule/access?clientId=${encodeURIComponent(id)}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setProblem(friendlyError(String(json?.error ?? ''), 'Schedule'))
-        setData(null)
+        setView(null)
         return
       }
-      setData(json as AccessData)
+      setView(json as ProviderView)
       setNow(Date.now())
     } catch {
-      setProblem(loadFailedMessage('this client’s accounts'))
-      setData(null)
+      setProblem(loadFailedMessage('the state of these accounts'))
+      setView(null)
     } finally {
-      setLoading(false)
+      setChecking(false)
     }
   }, [])
 
-  useEffect(() => { if (clientId) void load(clientId) }, [clientId, load])
+  useEffect(() => {
+    setView(null)
+    if (clientId) void askProvider(clientId)
+  }, [clientId, askProvider])
 
-  const pickClient = (id: string) => {
-    setClientId(id)
-    try { localStorage.setItem(CLIENT_KEY, id) } catch { /* private mode */ }
-  }
+  // the badges age honestly while the page is left open
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   /* ── the connect flow, exactly the one that already exists ───────────── */
 
@@ -156,10 +201,13 @@ export default function AccessPage() {
     }
   }
 
-  const refresh = async () => {
+  /** ask the provider again — the accounts themselves arrive on the listener,
+   *  so this is only about the part a listener cannot know */
+  const recheck = async () => {
     if (!clientId) return
     setBusy('refresh')
     setNote(null)
+    setProblem(null)
     try {
       const res = await fetch('/api/social/connect', {
         method: 'PUT',
@@ -168,11 +216,8 @@ export default function AccessPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? ''))
-      await load(clientId)
-      const count = Number(json?.synced ?? 0)
-      setNote(count > 0
-        ? `${count} account${count === 1 ? '' : 's'} checked and up to date.`
-        : 'Checked. Nothing has changed.')
+      await askProvider(clientId)
+      setNote('Checked with the posting service.')
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
     } finally {
@@ -180,7 +225,7 @@ export default function AccessPage() {
     }
   }
 
-  const remove = async (account: AccountRow) => {
+  const remove = async (account: SocialAccount) => {
     setBusy(`remove:${account.id}`)
     setProblem(null)
     try {
@@ -192,7 +237,7 @@ export default function AccessPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? ''))
       setNote('Account removed. Nothing that has already been posted is affected.')
-      if (clientId) await load(clientId)
+      // the row leaves on the listener — nothing here refetches
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
     } finally {
@@ -217,7 +262,7 @@ export default function AccessPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? ''))
       setNote(String(json?.message ?? 'Saved.'))
-      await load(clientId)
+      await askProvider(clientId)
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
     } finally {
@@ -225,21 +270,24 @@ export default function AccessPage() {
     }
   }
 
+  const clientName = client?.name ?? 'this client'
+  const mappedId = client?.social_profile_id ?? view?.profileId ?? null
   const mapped = useMemo(
-    () => data?.profiles.find(p => p.id === data.profileId) ?? null,
-    [data])
-
-  const clientName = data?.client.name
-    ?? clients?.find(c => c.id === clientId)?.name
-    ?? 'this client'
+    () => view?.profiles.find(p => p.id === mappedId) ?? null,
+    [view, mappedId])
 
   const mapping = profileMappingWords({
     clientName,
-    profile: mapped ?? (data?.profileId ? { id: data.profileId, name: 'A group', accountCount: null } : null),
-    strayCount: data?.stray.length ?? 0,
+    profile: mapped ?? (mappedId ? { id: mappedId, name: 'A group', accountCount: null } : null),
+    strayCount: view?.stray.length ?? 0,
   })
 
-  const connected = new Set((data?.accounts ?? []).map(a => a.platform))
+  const connected = new Set(accounts.map(a => a.platform))
+  const loading = clients.loading || (on && accountRows.loading)
+
+  if (noAccount) {
+    return <p className="py-10 text-[15px] text-muted-foreground">{loadFailedMessage('this page')}</p>
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -257,10 +305,9 @@ export default function AccessPage() {
         }
       />
 
-      {/* which client */}
-      {clients && clients.length > 1 && (
+      {pickable.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
-          {clients.map(c => (
+          {pickable.map(c => (
             <button
               key={c.id}
               type="button"
@@ -286,7 +333,7 @@ export default function AccessPage() {
         <p className="rounded-inner border border-border bg-paper px-3 py-2 text-[13px]">{note}</p>
       )}
 
-      {data && !data.provider.configured && (
+      {view && !view.provider.configured && (
         <p className="rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-[13px]">
           Posting isn’t switched on yet — nobody can connect an account or send a
           post from here until someone on our side turns it on.
@@ -298,18 +345,16 @@ export default function AccessPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-section-title">Accounts we post to</h2>
           <span className="text-[13px] text-muted-foreground">
-            {loading
-              ? 'Loading…'
-              : `${data?.accounts.length ?? 0} connected`}
+            {loading ? 'Loading…' : `${accounts.length} connected`}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => void refresh()}
+              onClick={() => void recheck()}
               disabled={busy === 'refresh' || !clientId}
               className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
             >
-              {busy === 'refresh'
+              {busy === 'refresh' || checking
                 ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
                 : <RefreshCw className="h-4 w-4" strokeWidth={1.8} aria-hidden />}
               Check them
@@ -317,7 +362,7 @@ export default function AccessPage() {
             <AddAccount
               connected={connected}
               busy={busy}
-              disabled={!clientId || !(data?.provider.configured ?? false)}
+              disabled={!clientId || !(view?.provider.configured ?? false)}
               onPick={p => void connect(p)}
             />
           </div>
@@ -325,7 +370,7 @@ export default function AccessPage() {
 
         {loading ? (
           <p className="py-4 text-[13px] text-muted-foreground">Loading…</p>
-        ) : (data?.accounts.length ?? 0) === 0 ? (
+        ) : accounts.length === 0 ? (
           <div className="flex flex-col gap-2 rounded-inner border border-dashed border-border p-4">
             <div className="flex gap-1.5">
               {OFFERED.slice(0, 5).map(p => (
@@ -339,10 +384,10 @@ export default function AccessPage() {
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
-            {(data?.accounts ?? []).map(a => {
-              const words = accountHealthWords(data?.health[a.id], now)
+            {accounts.map(a => {
+              const words = accountHealthWords(view?.health[a.id], now)
               const brand = brandFor(a.platform)
-              const isStray = data?.stray.includes(a.id) ?? false
+              const isStray = view?.stray.includes(a.id) ?? false
               return (
                 <li
                   key={a.id}
@@ -351,9 +396,9 @@ export default function AccessPage() {
                   <PlatformIcon platform={a.platform} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-semibold">{brand.label}</span>
+                      <span className="text-[14px] font-semibold">{a.name || brand.label}</span>
                       <span className="truncate font-mono text-[13px] text-muted-foreground">
-                        {a.username ? `@${a.username}` : a.name ?? '—'}
+                        {a.username ? `@${a.username}` : brand.label}
                       </span>
                       <span
                         className={cn(
@@ -361,6 +406,9 @@ export default function AccessPage() {
                           words.state === 'connected' && 'bg-tint-green text-foreground',
                           words.state === 'reconnect' && 'bg-tint-amber text-foreground',
                           words.state === 'expired' && 'bg-tint-red text-foreground',
+                          // neither good news nor bad: we do not know
+                          words.state === 'unknown'
+                            && 'border border-border bg-foreground/[0.06] text-muted-foreground',
                         )}
                       >
                         {words.label}
@@ -372,10 +420,19 @@ export default function AccessPage() {
                       )}
                     </div>
                     <p className="text-[12px] text-muted-foreground">
-                      {words.detail} {lastCheckedWords(data?.checkedAt, now)}.
+                      {words.detail}{' '}
+                      {view ? `${lastCheckedWords(view.checkedAt, now)}.` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(a)}
+                      aria-label={`Edit ${a.name || brand.label}`}
+                      className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                    </button>
                     <Link
                       href={`/dashboard/social/${a.id}`}
                       className="flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
@@ -408,16 +465,16 @@ export default function AccessPage() {
         )}
 
         {/* which group at the posting service */}
-        {data && (
+        {view && (
           <div className="flex flex-col gap-2 rounded-inner border border-border bg-paper px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[14px] font-semibold">Group: {mapping.title}</span>
-              {data.can.profile && (
+              {view.can.profile && (
                 <div className="ml-auto flex flex-wrap items-center gap-1.5">
                   <label className="sr-only" htmlFor="profile-pick">Group of accounts</label>
                   <select
                     id="profile-pick"
-                    value={data.profileId ?? ''}
+                    value={mappedId ?? ''}
                     disabled={busy === 'profile'}
                     onChange={e => {
                       if (e.target.value) void setProfile({ profileId: e.target.value })
@@ -425,7 +482,7 @@ export default function AccessPage() {
                     className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
                   >
                     <option value="">Choose a group…</option>
-                    {data.profiles.map(p => (
+                    {view.profiles.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
@@ -435,9 +492,7 @@ export default function AccessPage() {
                     onClick={() => void setProfile({ name: clientName })}
                     className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
                   >
-                    {busy === 'profile'
-                      ? 'Working…'
-                      : `Make one called “${clientName}”`}
+                    {busy === 'profile' ? 'Working…' : `Make one called “${clientName}”`}
                   </button>
                 </div>
               )}
@@ -452,7 +507,10 @@ export default function AccessPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.8} aria-hidden />
           <h2 className="text-section-title">People on this client</h2>
-          {clientId && (
+          {/* the button is only offered to somebody the server would let
+              through: a "Change" that always answers "you may not" is a lie
+              told in a button */}
+          {clientId && view?.can.access && (
             <Link
               href={`/dashboard/clients/${clientId}`}
               className="ml-auto flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
@@ -462,15 +520,15 @@ export default function AccessPage() {
           )}
         </div>
 
-        {loading ? (
-          <p className="py-4 text-[13px] text-muted-foreground">Loading…</p>
-        ) : (data?.people.length ?? 0) === 0 ? (
+        {people.length === 0 ? (
           <p className="text-[13px] text-muted-foreground">
-            Nobody is on this client yet. “Change” is where people are put on one.
+            {loading
+              ? 'Loading…'
+              : 'Nobody is on this client yet. A super admin puts people on a client from the client’s own page.'}
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {(data?.people ?? []).map(p => (
+            {people.map(p => (
               <li
                 key={p.id}
                 className="flex flex-wrap items-center gap-3 rounded-inner border border-border bg-paper px-3 py-2.5"
@@ -501,6 +559,15 @@ export default function AccessPage() {
           on the Team page.
         </p>
       </section>
+
+      {editing && client && (
+        <EditAccount
+          account={editing}
+          client={client}
+          onClose={() => setEditing(null)}
+          onSaved={message => { setEditing(null); setNote(message) }}
+        />
+      )}
 
       {confirm && (
         <div
@@ -539,6 +606,143 @@ export default function AccessPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Renaming an account, and the zone its posts go out in.
+ *
+ * Two fields that look like they belong to the same record and do not. The
+ * NAME is ours — what a scheduler reads on a tile, saved on the account. The
+ * ZONE belongs to the CLIENT: every time on Schedule is the client's, because
+ * a posting time is a fact about the audience and not about one channel. The
+ * dialog says so, rather than offering a per-account zone that would quietly
+ * be a second answer to the same question.
+ */
+function EditAccount({ account, client, onClose, onSaved }: {
+  account: SocialAccount
+  client: Client
+  onClose: () => void
+  onSaved: (message: string) => void
+}) {
+  const [name, setName] = useState(account.name ?? '')
+  const [zone, setZone] = useState(client.timezone ?? 'Australia/Melbourne')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onClose, busy])
+
+  const save = async () => {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const zoneChanged = zone !== (client.timezone ?? '')
+      if (zoneChanged && !isValidZone(zone)) {
+        setProblem('That is not a time zone we recognise. Try “Australia/Melbourne”.')
+        return
+      }
+      const calls: Promise<Response>[] = [
+        fetch(`/api/social/accounts/${account.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim() }),
+        }),
+      ]
+      if (zoneChanged) {
+        calls.push(fetch(`/api/website/clients/${client.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timezone: zone }),
+        }))
+      }
+      for (const res of await Promise.all(calls)) {
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}))
+          setProblem(friendlyError(String(json?.error ?? ''), 'Schedule'))
+          return
+        }
+      }
+      onSaved(zoneChanged
+        ? `Saved. Every time on Schedule for ${client.name} is now ${zoneLabel(zone)}.`
+        : 'Saved.')
+    } catch {
+      setProblem(loadFailedMessage('that change'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit this account"
+      onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
+    >
+      <div className="flex w-full max-w-[440px] flex-col gap-3 rounded-card bg-surface p-4 shadow-xl">
+        <h2 className="text-section-title">
+          {`Edit ${brandFor(account.platform).label}${account.username ? ` @${account.username}` : ''}`}
+        </h2>
+        {problem && (
+          <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
+            {problem}
+          </p>
+        )}
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px] font-semibold text-muted-foreground">
+            What we call it
+          </span>
+          <input
+            value={name}
+            maxLength={80}
+            onChange={e => setName(e.target.value)}
+            placeholder={brandFor(account.platform).label}
+            className="min-h-11 w-full rounded-full border border-border bg-paper px-4 text-[14px] outline-none"
+          />
+          <span className="text-[12px] text-muted-foreground">
+            Only on our screens. The handle comes from the platform and is read
+            back from it every time we check.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px] font-semibold text-muted-foreground">
+            Posting time zone
+          </span>
+          <input
+            value={zone}
+            onChange={e => setZone(e.target.value)}
+            placeholder="Australia/Melbourne"
+            className="min-h-11 w-full rounded-full border border-border bg-paper px-4 text-[14px] outline-none"
+          />
+          <span className="text-[12px] text-muted-foreground">
+            {`This is ${client.name}’s zone and every one of their channels posts in it — a posting time is about the audience, not about one account.`}
+          </span>
+        </label>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

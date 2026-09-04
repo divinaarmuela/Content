@@ -4,6 +4,9 @@ import {
   mayChangeAccess, mayChangeProfile, peopleWithAccess, profileMappingWords,
   readProfiles, rightsForRole, rightsWords,
 } from '@/app/lib/social-access-core'
+import { TEAM_ROLES, mayPublish, type Role } from '@/app/lib/identity-core'
+import { mayApprovePost, maySendPostApproval } from '@/app/lib/posting-approval-core'
+import { actingRoles } from '@/app/lib/workflow-core'
 
 /**
  * THE ACCESS PAGE'S WORDS, AND THE PROVIDER REQUESTS BEHIND ITS ONE WRITE.
@@ -50,6 +53,34 @@ describe('what a person may do, in the words on the chips', () => {
       const words = accessSummary(role)
       expect(words.length).toBeGreaterThan(20)
       expect(words).not.toContain('_')
+    }
+  })
+
+  /**
+   * THE DRIFT THIS PREVENTS.
+   *
+   * The chips used to be a hand-written table that happened to agree with the
+   * server. Change `MAY_PUBLISH` or `mayApprovePost` tomorrow and the page
+   * would carry on telling the team who can post, wrongly, with every test
+   * still green. So the page asks the same three functions the server does,
+   * and this walks every role to prove it — including roles added later.
+   */
+  it('says exactly what the rules say, for every role there is', () => {
+    for (const role of [...TEAM_ROLES, 'client', 'made_up'] as string[]) {
+      const rights = rightsForRole(role)
+      if (!(TEAM_ROLES as readonly string[]).includes(role)) {
+        expect(rights, role).toEqual([])
+        continue
+      }
+      // the hats this person wears on a piece of this client that nobody has
+      // been handed — which is what a page about a CLIENT describes
+      const hats = actingRoles(
+        { id: 'whoever', role: role as Role },
+        { owner_id: null, scheduler_ids: [] },
+      )
+      expect(rights.includes('plan'), `${role} plan`).toBe(maySendPostApproval(hats))
+      expect(rights.includes('approve'), `${role} approve`).toBe(mayApprovePost(hats))
+      expect(rights.includes('post'), `${role} post`).toBe(mayPublish(role))
     }
   })
 
@@ -129,11 +160,29 @@ describe('how an account is doing, in three states and no more', () => {
     expect(w.detail).toMatch(/8 days left/)
   })
 
-  it('an account we could not check is not reported as broken', () => {
+  /**
+   * An account we could not reach used to wear the green "Connected" badge
+   * with a line of grey small print underneath. So a provider outage sitting
+   * on top of a token that expired yesterday read as everything being fine,
+   * and a week of posts got queued against a channel that would refuse every
+   * one of them. Not knowing is its own answer.
+   */
+  it('an account we could not check is not reported as fine either', () => {
     const w = accountHealthWords(null, now)
-    expect(w.state).toBe('connected')
+    expect(w.state).toBe('unknown')
+    expect(w.label).toBe('Not checked')
+    expect(w.state).not.toBe('connected')
     expect(w.needsReconnect).toBe(false)
-    expect(w.detail).toMatch(/could not check/i)
+    expect(w.detail).toMatch(/cannot say whether it is working/i)
+    expect(w.detail).toMatch(/Check them/)
+  })
+
+  it('only a real answer from the provider earns the green badge', () => {
+    for (const status of [null, undefined]) {
+      expect(accountHealthWords(status, now).state).not.toBe('connected')
+    }
+    expect(accountHealthWords({ valid: true, expiresIn: 'Auto-refreshes' }, now).state)
+      .toBe('connected')
   })
 
   it('says when we last asked, not when the account was connected', () => {
@@ -262,6 +311,85 @@ describe('the provider requests, pinned by shape', () => {
     ], 'p1')
     expect(out.moved).toEqual(['@acme'])
     expect(out.failed).toEqual([{ name: '@acme_shop', why: 'It is in another user’s account' }])
+  })
+
+  /**
+   * Group names are unique per workspace. Pressing "Make one called
+   * 'Stretchworks'" for a client whose group somebody already made by hand is
+   * the same intention arriving twice, not an error, and the right answer is
+   * the group that exists.
+   */
+  it('adopts the group that already has the name instead of failing', async () => {
+    vi.resetModules()
+    process.env.PUBLISH_DRY_RUN = '0'
+    const seen: { key: string | null; body: unknown }[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init: any = {}) => {
+      seen.push({
+        key: new Headers(init.headers).get('Idempotency-Key'),
+        body: JSON.parse(init.body),
+      })
+      return new Response(JSON.stringify({
+        error: 'A profile with that name already exists',
+        details: { existingProfileId: 'p-existing' },
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    })
+    const { createProfile, idempotencyKey } = await import('@/app/lib/zernio-profiles')
+    const made = await createProfile('Stretchworks')
+    expect(made.id).toBe('p-existing')
+    expect(made.name).toBe('Stretchworks')
+    // and a retry of the same intention carries the same key, so the provider
+    // can replay it rather than race it into that 409 in the first place
+    expect(seen[0].key).toBe(idempotencyKey('profile', 'Stretchworks'))
+    expect(idempotencyKey('profile', 'Stretchworks'))
+      .toBe(idempotencyKey('profile', ' stretchworks '))
+    expect(idempotencyKey('profile', 'Stretchworks'))
+      .not.toBe(idempotencyKey('profile', 'Acme'))
+  })
+
+  it('still surfaces a 409 it cannot make sense of', async () => {
+    vi.resetModules()
+    process.env.PUBLISH_DRY_RUN = '0'
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ error: 'Nope' }), {
+        status: 409, headers: { 'Content-Type': 'application/json' },
+      }))
+    const { createProfile } = await import('@/app/lib/zernio-profiles')
+    await expect(createProfile('Acme')).rejects.toThrow('Nope')
+  })
+
+  /**
+   * The reference page documents the endpoint but not the body key, and a
+   * wrong key would answer 200 and move nothing — a card reporting "all in
+   * this group now" about accounts that never moved is the exact failure this
+   * whole feature exists to prevent. So the 200 is not believed.
+   */
+  it('does not believe a 200: it reads the group back', async () => {
+    vi.resetModules()
+    process.env.PUBLISH_DRY_RUN = '0'
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const { moveAccountsToProfile } = await import('@/app/lib/zernio-profiles')
+
+    const out = await moveAccountsToProfile(
+      [{ providerAccountId: 'a1', name: '@acme' }, { providerAccountId: 'a2', name: '@acme_shop' }],
+      'p1',
+      // the provider says yes to both and only one actually moved
+      async () => ['a1', 'other-account'],
+    )
+    expect(out.moved).toEqual(['@acme'])
+    expect(out.failed).toEqual([
+      { name: '@acme_shop', why: 'the posting service said yes but the account is still in its old group' },
+    ])
+  })
+
+  it('reports what the calls said when there is nothing to check against', async () => {
+    vi.resetModules()
+    process.env.PUBLISH_DRY_RUN = '1'
+    const { moveAccountsToProfile } = await import('@/app/lib/zernio-profiles')
+    const out = await moveAccountsToProfile(
+      [{ providerAccountId: 'a1', name: '@acme' }], 'p1', async () => null)
+    expect(out.moved).toEqual(['@acme'])
+    expect(out.failed).toEqual([])
   })
 
   it('refuses to make a group with no name', async () => {

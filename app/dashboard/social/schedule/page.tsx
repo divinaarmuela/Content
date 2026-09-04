@@ -545,7 +545,23 @@ export default function SchedulePage() {
                 </SheetTrigger>
                 <SheetContent side="bottom" className="max-h-[85vh] bg-popover p-4">
                   <SheetTitle className="pb-2 text-section-title">Media</SheetTitle>
-                  <div className="h-[65vh]">{rail}</div>
+                  {/* The phone's way in to both. On a 390px toolbar there is
+                      room for the date, the arrows and one button, so the two
+                      that do not belong on the calendar itself live in the
+                      sheet that is already open in a thumb's reach — rather
+                      than not existing on a phone at all, which is where they
+                      were. */}
+                  <div className="flex flex-wrap gap-1.5 pb-3">
+                    <EditMediaLauncher media={data.media} posts={data.posts} />
+                    <Link
+                      href="/dashboard/social/schedule/access"
+                      className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
+                    >
+                      <Users className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                      Accounts and access
+                    </Link>
+                  </div>
+                  <div className="h-[58vh]">{rail}</div>
                 </SheetContent>
               </Sheet>
             </div>

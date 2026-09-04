@@ -13,8 +13,11 @@ import { readProfiles, type ProfileChoice } from './social-access-core'
  *
  * Why it matters here: a post is created against a profile. If a client's
  * accounts are scattered across groups, a scheduler picking "Instagram" can
- * be picking somebody else's Instagram. So a client maps to ONE group
- * (`clients.zernio_profile_id`) and the access page is where that is set.
+ * be picking somebody else's Instagram. So a client maps to ONE group and the
+ * access page is where that is set. The column holding it is
+ * `clients.social_profile_id` -- the one the connect flow, the automations
+ * route and the webhook matcher already read. There is deliberately no second
+ * column for the same fact.
  *
  * These three calls live here rather than on the `Publisher` interface on
  * purpose: publishing is the interface's job, and grouping is an
@@ -64,6 +67,15 @@ export function profileCreateRequest(name: string, base: string = BASE): Provide
  * The account id here is the PROVIDER's id, never ours: our row id means
  * nothing upstream, and sending it would 404 in a way that reads like the
  * account is gone.
+ *
+ * `profileId` in camelCase, which is how every documented body in this API
+ * spells it (`POST /v1/automations` takes `profileId`, and so does the connect
+ * flow); the reference page for `PATCH /v1/accounts/{accountId}` -- titled
+ * "Move account to another profile" -- documents the endpoint but not the body
+ * key. Because a wrong key would answer 200 and move nothing, the caller does
+ * NOT trust the 200: `moveAccountsToProfile` reads the group back afterwards
+ * and reports anything still outside it. A silent no-op is the one failure
+ * this whole card exists to prevent.
  */
 export function accountMoveRequest(
   providerAccountId: string, profileId: string, base: string = BASE,
@@ -104,6 +116,21 @@ export async function listProfiles(): Promise<ProfileChoice[]> {
   return readProfiles(json)
 }
 
+/**
+ * A group with this name, made or adopted.
+ *
+ * Group names are unique per workspace, and a duplicate comes back 409 with
+ * `details.existingProfileId`. Pressing "Make one called 'Stretchworks'" for a
+ * client whose group somebody already made by hand is not an error -- it is
+ * the same intention arriving twice, and the right answer is the group that
+ * exists. So a 409 is ADOPTED rather than surfaced as a provider message
+ * nobody can act on.
+ *
+ * The `Idempotency-Key` covers the other half: a retried request (a flaky
+ * line, a double press) replays the first answer instead of racing itself into
+ * that 409 in the first place. It is derived from the NAME, so two presses of
+ * the same button are one request and two different names are not.
+ */
 export async function createProfile(name: string): Promise<ProfileChoice> {
   const clean = String(name ?? '').trim()
   if (!clean) throw new Error('Give the group a name')
@@ -113,15 +140,36 @@ export async function createProfile(name: string): Promise<ProfileChoice> {
   const req = profileCreateRequest(clean)
   const res = await fetch(req.url, {
     method: req.method,
-    headers: headers({ 'Content-Type': 'application/json' }),
+    headers: headers({
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey('profile', clean),
+    }),
     body: JSON.stringify(req.body),
   })
-  const json = await res.json().catch(() => ({}))
+  const json = await res.json().catch(() => ({})) as {
+    profile?: { _id?: string; id?: string }
+    _id?: string
+    details?: { existingProfileId?: string }
+    error?: string
+  }
+
+  if (res.status === 409) {
+    const existing = json?.details?.existingProfileId
+    if (typeof existing === 'string' && existing) {
+      return { id: existing, name: clean, accountCount: null }
+    }
+  }
   if (!res.ok) throw new Error(String(json?.error ?? 'Could not make that group'))
-  const id = (json as { profile?: { _id?: string }; _id?: string })?.profile?._id
-    ?? (json as { _id?: string })?._id
+  const id = json?.profile?._id ?? json?.profile?.id ?? json?._id
   if (typeof id !== 'string' || !id) throw new Error('The posting service gave the group no id')
   return { id, name: clean, accountCount: 0 }
+}
+
+/** Same intention, same key. Stable across retries and different per name, so
+ *  a replay is a replay and a different group is a different request. */
+export function idempotencyKey(kind: string, subject: string): string {
+  const clean = String(subject ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  return `mdm-${kind}-${clean}`.slice(0, 120)
 }
 
 /**
@@ -149,18 +197,46 @@ export async function moveAccountToProfile(
 
 export type MoveOutcome = { moved: string[]; failed: { name: string; why: string }[] }
 
-/** Move a client's whole set across, one at a time, and say what happened to
- *  each — a half-moved set that reports "done" is the worst answer available. */
+/**
+ * Move a client's whole set across, one at a time, and say what happened to
+ * each -- a half-moved set that reports "done" is the worst answer available.
+ *
+ * `verify` is passed in rather than imported so this stays testable without a
+ * provider: it returns the provider account ids the group holds AFTERWARDS. A
+ * 200 is not taken as proof, because the one way this could fail silently is a
+ * request the provider accepts and quietly ignores.
+ */
 export async function moveAccountsToProfile(
-  accounts: { providerAccountId: string; name: string }[], profileId: string,
+  accounts: { providerAccountId: string; name: string }[],
+  profileId: string,
+  verify?: (profileId: string) => Promise<string[] | null>,
 ): Promise<MoveOutcome> {
   const out: MoveOutcome = { moved: [], failed: [] }
+  const attempted: { providerAccountId: string; name: string }[] = []
   for (const a of accounts) {
     try {
       await moveAccountToProfile(a.providerAccountId, profileId)
-      out.moved.push(a.name)
+      attempted.push(a)
     } catch (e) {
       out.failed.push({ name: a.name, why: e instanceof Error ? e.message : 'It would not move' })
+    }
+  }
+
+  const inGroup = verify ? await verify(profileId).catch(() => null) : null
+  if (!inGroup || inGroup.length === 0) {
+    // nothing to check against -- report what the calls themselves said, which
+    // is all we were told
+    out.moved.push(...attempted.map(a => a.name))
+    return out
+  }
+  const holds = new Set(inGroup)
+  for (const a of attempted) {
+    if (holds.has(a.providerAccountId)) out.moved.push(a.name)
+    else {
+      out.failed.push({
+        name: a.name,
+        why: 'the posting service said yes but the account is still in its old group',
+      })
     }
   }
   return out
