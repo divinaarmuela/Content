@@ -484,18 +484,48 @@ describe('the encode ladder', () => {
   ] as const
   const KINDS = [undefined, 'feed', 'reel', 'story', 'carousel'] as const
 
+  /**
+   * The property, stated against the clip that was ASKED about.
+   *
+   * Stating it against `target.maxSeconds` alone would be close to circular:
+   * that field is already `min(clip, channel ceiling)`, so the budget would be
+   * checked against the budget's own clamped duration. The real promise is
+   * about the file somebody is actually posting — encode THIS clip at THIS
+   * ceiling and the result fits the channel — so the requested seconds are
+   * what the sum uses, and a clip the channel would refuse on length is
+   * excluded explicitly rather than quietly clamped away.
+   */
   it('never hands a channel a copy bigger than the channel takes', () => {
+    let checked = 0
     for (const platform of PLATFORMS) {
       for (const kind of KINDS) {
-        for (const seconds of [undefined, 5, 20, 90, 600, 100_000]) {
+        for (const seconds of [1, 5, 20, 90, 600, 100_000]) {
           const target = encodeTargetFor(platform, kind, seconds)
           if (!target) continue
-          const worst = encodeWorstCaseMB(target)
+          // a clip past the channel's own length limit does not post at all —
+          // `assessAssets` blocks it — so there is no copy to promise anything
+          // about. Everything else is judged on its REAL length.
+          if (seconds > target.maxSeconds) continue
+          const worst = ((target.maxrateKbps + target.audioKbps) * seconds) / 8 / 1000
           expect(
             worst,
-            `${platform}/${kind ?? 'default'} at ${seconds ?? 'unknown'}s would allow ${worst.toFixed(0)} MB against a ${target.maxMB} MB limit`,
+            `${platform}/${kind ?? 'default'}: ${seconds}s at ${target.maxrateKbps} kbps is ${worst.toFixed(0)} MB against a ${target.maxMB} MB limit`,
           ).toBeLessThan(target.maxMB)
+          checked++
         }
+      }
+    }
+    // the loop above must actually have done something
+    expect(checked).toBeGreaterThan(30)
+  })
+
+  it('holds for an unmeasured clip too, at the channel’s whole ceiling', () => {
+    for (const platform of PLATFORMS) {
+      for (const kind of KINDS) {
+        const target = encodeTargetFor(platform, kind)
+        if (!target) continue
+        expect(encodeWorstCaseMB(target), `${platform}/${kind ?? 'default'}`)
+          .toBeLessThan(target.maxMB)
       }
     }
   })

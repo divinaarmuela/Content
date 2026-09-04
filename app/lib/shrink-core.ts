@@ -95,6 +95,28 @@ export function probeForCopy(
 }
 
 /**
+ * Of the channels waiting for a copy, the one with the least room.
+ *
+ * ONE copy is made and every waiting channel gets it, so it has to be made
+ * for the tightest of them — a file that fits Instagram fits X, but not the
+ * other way round. Taking the first of the list instead was taking whichever
+ * channel happened to be ticked first, which is not a rule at all.
+ *
+ * Ties break on the list's own order, so the answer is stable.
+ */
+export function tightestChannel(
+  platforms: Platform[], kinds?: Partial<Record<Platform, PostKind>>,
+): Platform | null {
+  let best: Platform | null = null
+  let bestMB = Infinity
+  for (const p of platforms) {
+    const mb = sizeLimitFor(p, 'video', kinds?.[p])?.maxMB ?? Infinity
+    if (mb < bestMB) { best = p; bestMB = mb }
+  }
+  return best ?? platforms[0] ?? null
+}
+
+/**
  * What a person is told while the encoder is working.
  *
  * Plain, and honest about the wait: a 2 GB master takes minutes, and "…"

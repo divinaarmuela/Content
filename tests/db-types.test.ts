@@ -142,12 +142,13 @@ describe('db-types (generated)', () => {
   it('knows the copy-job table', () => {
     expect(TABLE_COLUMNS.encode_jobs).toEqual([
       'id', 'source_url', 'platform', 'asset_id', 'version_id', 'slide_index',
-      'status', 'output_key', 'bytes', 'width', 'height', 'duration_sec',
-      'video_kbps', 'error', 'created_at', 'updated_at',
+      'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width',
+      'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at',
     ])
-    // a job always knows what it is copying, for which channel, and where it
-    // has got to; everything a finished encode measures is null until it is
-    for (const c of ['source_url', 'platform', 'status']) {
+    // a job always knows what it is copying, for which channel, how many
+    // times it has been asked for and where it has got to; everything a
+    // finished encode measures is null until it is
+    for (const c of ['source_url', 'platform', 'status', 'attempts', 'target_source']) {
       expect(NULLABLE_COLUMNS.encode_jobs).not.toContain(c)
     }
     for (const c of ['asset_id', 'version_id', 'slide_index', 'output_key',
@@ -156,6 +157,19 @@ describe('db-types (generated)', () => {
     }
     expect(JSON_COLUMNS.encode_jobs).toEqual([])
     expect(UPDATED_AT_TABLES.has('encode_jobs')).toBe(true)
+  })
+
+  // `attempts` is what stops a transient blip — an R2 500, a download that
+  // timed out on a slow morning — permanently poisoning every future post of
+  // that clip: the stale sweep re-asks three times before giving up. And
+  // `target_source` is how a copy quietly made at 2 Mbps instead of 10 can be
+  // FOUND, rather than guessed at, when somebody says the video looks soft.
+  it('remembers how many tries a copy has had, and what shaped its bitrate', () => {
+    const _attempts: EncodeJob['attempts'] = 1
+    const _source: EncodeJob['target_source'] = 'measured'
+    void _attempts, _source
+    expect(TABLE_COLUMNS.encode_jobs).toContain('attempts')
+    expect(TABLE_COLUMNS.encode_jobs).toContain('target_source')
   })
 
   it('derives natural keys for composite tables', () => {

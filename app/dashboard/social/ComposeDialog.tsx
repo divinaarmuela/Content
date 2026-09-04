@@ -7,7 +7,8 @@ import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile, probeUrl } from './probeMedia'
 import AssetCheck from './AssetCheck'
 import {
-  channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, PRACTICAL_RELAY_MB, type CopyState,
+  channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, tightestChannel,
+  PRACTICAL_RELAY_MB, type CopyState,
 } from '../../lib/shrink-core'
 import {
   assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
@@ -242,15 +243,18 @@ export default function ComposeDialog({
       if (stopped) return
       try {
         // the channel matters: the copy's bitrate is derived from THAT
-        // channel's size and length limits, so the tightest of the channels
-        // waiting for it is the one the copy is made for
-        const forPlatform = needingCopy[0]
+        // channel's size and length limits, and one copy serves every waiting
+        // channel — so it is made for the one with the LEAST room. A file that
+        // fits Instagram fits X; the other way round it does not.
+        const forPlatform = tightestChannel(needingCopy, kinds)
         const res = await fetch('/api/social/shrink', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: sharedVideoUrl,
             platform: forPlatform,
             kind: forPlatform ? kinds[forPlatform] : undefined,
+            // the clip's own length, so the copy is budgeted for the video
+            // being posted rather than for the channel's whole ceiling
             seconds: probes[0]?.seconds,
           }),
         })

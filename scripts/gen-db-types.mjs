@@ -163,7 +163,23 @@ const GHOST_TABLES = {
     ['version_id', col('string', true)],
     ['slide_index', col('number', true)],
     ['status', col('string', false)],       // queued | running | done | failed
+    // how many times the encoder has been ASKED for this copy. The stale
+    // sweep re-asks up to three times before settling the row failed, so a
+    // transient blip — an R2 500, a download that timed out on a slow
+    // morning — does not permanently poison every future post of that clip.
+    ['attempts', col('number', false)],
+    // the R2 key the copy is written to, chosen and stored BEFORE the encoder
+    // is told anything and never changed afterwards. A retry re-signs the
+    // SAME key: a row whose key names an object nothing ever wrote reads back
+    // as `ready` with a URL that 404s, which the publish job then attaches to
+    // a client's post.
     ['output_key', col('string', true)],
+    // 'measured' when the clip's real length shaped the bitrate, 'fallback'
+    // when nobody knew it and the channel's whole length ceiling had to be
+    // budgeted for instead — which costs most of the quality this service
+    // exists to buy. Visible on the row so the gap can be found rather than
+    // guessed at.
+    ['target_source', col('string', false)],
     ['bytes', col('number', true)],
     ['width', col('number', true)],
     ['height', col('number', true)],

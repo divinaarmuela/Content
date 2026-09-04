@@ -91,12 +91,25 @@ beforeEach(() => {
   sent = []
   process.env.ENCODER_URL = 'https://encoder.example.com'
   process.env.ENCODER_TOKEN = 'token'
+  // the preview table is only read when Stream is configured, and it is where
+  // the clip's measured length comes from
+  process.env.CLOUDFLARE_ACCOUNT_ID = 'acct'
+  process.env.CLOUDFLARE_STREAM_TOKEN = 'cf-token'
 })
 afterEach(() => {
   fake?.restore()
   delete process.env.ENCODER_URL
   delete process.env.ENCODER_TOKEN
+  delete process.env.CLOUDFLARE_ACCOUNT_ID
+  delete process.env.CLOUDFLARE_STREAM_TOKEN
 })
+
+/** The Stream preview row, which is where a measured duration comes from. */
+const previewRow = (seconds: number | null): Row => ({
+  id: 'p1', source_url: MASTER, stream_uid: 'deadbeef', state: 'ready',
+  error: null, width: 1080, height: 1920, duration_sec: seconds,
+  created_at: '2026-09-03T00:00:00.000Z', updated_at: '2026-09-03T00:00:00.000Z',
+} as unknown as Row)
 
 const row = (id: string) => table<PublishJobRow>('publish_jobs').get(id)
 
@@ -169,6 +182,44 @@ describe('when no encoder is configured', () => {
     expect(await runPublishJob('j1')).toBe('published')
     expect(published).toHaveLength(1)
     expect(sent).toEqual([])
+  })
+})
+
+/**
+ * A copy is budgeted for the clip, not for the channel's whole ceiling.
+ *
+ * Instagram takes 300 MB over fifteen minutes. Budget for the ceiling and a
+ * twenty-second reel gets about 2 Mbps; budget for the clip and it gets the
+ * 10 Mbps the ladder is built for. And because the copy is claimed on
+ * `source + channel`, whoever asks FIRST fixes that for good — so the
+ * automated path measuring nothing would quietly give back most of what this
+ * service was built to gain.
+ */
+describe('how long the clip is', () => {
+  it('is looked up and carried into the ask', async () => {
+    fake = seedDb({
+      publish_jobs: [publishJob('j1')],
+      encode_jobs: [],
+      video_previews: [previewRow(20)],
+    })
+    expect(await runPublishJob('j1')).toBe('queued')
+    expect(sent[0].data).toMatchObject({ platform: 'instagram', kind: 'reel', seconds: 20 })
+
+    // …and 20 seconds is what buys the full ceiling
+    const { encodeTargetFor } = await import('../app/lib/media-fit-core')
+    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(10_000)
+    // where budgeting for the channel's whole 15 minutes would not
+    expect(encodeTargetFor('instagram', 'reel')!.maxrateKbps).toBeLessThan(3_000)
+  })
+
+  it('falls back, and says so, when nothing measured it', async () => {
+    fake = seedDb({
+      publish_jobs: [publishJob('j1')],
+      encode_jobs: [],
+      video_previews: [previewRow(null)],
+    })
+    expect(await runPublishJob('j1')).toBe('queued')
+    expect(sent[0].data).toMatchObject({ seconds: null })
   })
 })
 

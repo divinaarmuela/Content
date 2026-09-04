@@ -540,8 +540,11 @@ export const mediaEncode = inngest.createFunction(
     // a transient refusal (the machine is busy) is retried with backoff; a
     // real refusal settles the row and never comes back here
     retries: 3,
-    // one at a time per file: two channels wanting a copy of the same master
-    // is two different encodes, but two events for the SAME copy must not race
+    // Three at once, unkeyed. What stops two events for the same copy becoming
+    // two encodes is NOT this number — it is the claim on the row id
+    // (`<hash of source url>__<platform>`), which is atomic and holds however
+    // many runs land together. This is only a cap on how much of the encoder's
+    // (one-job-at-a-time) attention the app asks for at once.
     concurrency: { limit: 3 },
   },
   async ({ event, step }) => withRequestCache(async () => {
@@ -605,6 +608,42 @@ export const mediaEncodeFinished = inngest.createFunction(
   })
 )
 
+/**
+ * Settle every copy nobody is ever going to finish.
+ *
+ * This is the guarantee, not the housekeeping. Without it a machine killed
+ * mid-encode — or a callback lost across a deploy — leaves the row `running`
+ * for ever: the publish dispatcher hands the waiting post back every ten
+ * minutes, the post never goes out, and NO row anywhere says "failed". That
+ * is the one outcome the whole design promises not to have.
+ *
+ * Three tries with a growing wait (90 minutes, then 180, then 270) so a
+ * transient blip does not permanently poison every future post of that clip,
+ * and then a plain sentence — at which point the waiting publish job takes
+ * the `failed` branch it already has and tells somebody.
+ *
+ * Every re-ask re-signs the SAME R2 key the row already holds, so a copy can
+ * never be recorded against an object it was not written to.
+ *
+ * (CLAUDE.md trap 5b: a NEW Inngest function does nothing until the app is
+ * re-synced. `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`.)
+ */
+export const encodeSweep = inngest.createFunction(
+  {
+    id: 'encode-sweep',
+    name: 'Settle stale copies',
+    triggers: [{ cron: '*/15 * * * *' }],
+    retries: 1,
+    // one sweep at a time: two would race to re-ask the same rows, and the
+    // claim would make one of them a no-op anyway
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => withRequestCache(async () => step.run('sweep', async () => {
+    const { sweepStaleEncodes } = await import('../lib/encode-run')
+    return sweepStaleEncodes()
+  }))
+)
+
 export const functions = [
   dueReminders,
   driveMirrorFile,
@@ -621,4 +660,5 @@ export const functions = [
   intakeEnrich,
   mediaEncode,
   mediaEncodeFinished,
+  encodeSweep,
 ]

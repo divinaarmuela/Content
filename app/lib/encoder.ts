@@ -42,7 +42,19 @@ export function encoderConfigured(): boolean {
   return Boolean(encoderUrl() && encoderToken())
 }
 
-/** Where the encoder should report back to. */
+/**
+ * Where the encoder should report back to.
+ *
+ * DELIBERATELY not per-job. The brief asked whether this URL should be
+ * unguessable and unique to each encode; it is neither — it is one fixed
+ * public path, outside the middleware matcher, the same for every job. What
+ * makes that sound is that guessing the URL buys nothing: the body must carry
+ * a valid HMAC under a secret only the encoder holds, the timestamp inside
+ * that signature stops a captured delivery being replayed, and the settle is
+ * a claim, so even a perfectly forged duplicate lands on a row that is
+ * already done. The per-job secret in this design is the presigned UPLOAD
+ * URL, which is where the bytes actually go.
+ */
 export function callbackUrl(): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'https://app.mdmmarketing.com.au')
     .trim().replace(/\/$/, '')
@@ -61,6 +73,16 @@ export type EncodeAsk = {
 export type EncodeAsked =
   | { accepted: true; stub: boolean }
   | { accepted: false; busy: boolean; reason: string }
+
+/**
+ * How long to wait for the encoder to say "yes, I have it".
+ *
+ * The answer is a 202 that arrives in milliseconds; anything slower is a
+ * machine that took the connection and stalled. Without a deadline that holds
+ * an Inngest step open until undici's own header timeout, which turns a
+ * momentary blip into a stuck step.
+ */
+export const ASK_TIMEOUT_MS = 30_000
 
 /**
  * Ask for one copy. Never throws: a refusal is a state the job row records,
@@ -88,6 +110,7 @@ export async function requestEncode(ask: EncodeAsk): Promise<EncodeAsked> {
         callbackUrl: ask.callbackUrl,
         target: ask.target,
       }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
       cache: 'no-store',
     })
     if (res.status === 503) {

@@ -8,7 +8,7 @@ import { publishBlockReason } from './posting-approval-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { encoderConfigured } from './encoder'
-import { smallerCopyOf } from './stream'
+import { previewFor, smallerCopyOf } from './stream'
 import { headStoredObject } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, type AssetProbe } from './media-fit-core'
@@ -376,7 +376,33 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
   const head = await headStoredObject(url).catch(() => null)
   if (head?.bytes == null) return {}
 
-  const probe: AssetProbe = { url, type: 'video', bytes: head.bytes }
+  /**
+   * How long the clip runs, if anything knows.
+   *
+   * It matters more than it looks. The bitrate a copy is made at is derived
+   * from the channel's size limit spread over the length being budgeted for,
+   * and with no length we have to budget for the channel's whole ceiling:
+   * Instagram's 300 MB over fifteen minutes is about 2 Mbps, against the
+   * 10 Mbps a twenty-second reel can afford. Because the copy is claimed on
+   * `source + channel`, whoever asks first fixes that for good — so an
+   * unmeasured automated post would quietly give back most of what this
+   * service was built to gain.
+   *
+   * `MediaItem` carries no duration, but the Cloudflare Stream preview row
+   * for the same file usually does — every upload goes through it for the
+   * portal player. When even that is missing the fallback still applies, and
+   * the job row records `target_source: 'fallback'` so the gap is findable.
+   */
+  const preview = await previewFor(url).catch(() => null)
+  const seconds = preview?.duration_sec && preview.duration_sec > 0 ? preview.duration_sec : undefined
+  if (seconds === undefined) {
+    console.warn(`[publish ${job.id}] no measured duration for ${url}; the copy will be budgeted for the channel's whole length ceiling`)
+  }
+
+  const probe: AssetProbe = {
+    url, type: 'video', bytes: head.bytes,
+    ...(seconds !== undefined ? { seconds } : {}),
+  }
   const kinds: Partial<Record<Platform, PostKind>> = {}
   const own: Partial<Record<Platform, MediaItem[]>> = {}
   for (const t of targets) {
@@ -389,7 +415,7 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
 
   const copies = new Map<Platform, { url: string }>()
   for (const platform of needing) {
-    const state = await smallerCopyOf(url, platform, kinds[platform])
+    const state = await smallerCopyOf(url, platform, kinds[platform], seconds)
     if (state.status === 'encoding') {
       return { wait: true, reason: cleanCopyWords(PLATFORM_MEDIA[platform]?.label ?? platform) }
     }
