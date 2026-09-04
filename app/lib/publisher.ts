@@ -120,14 +120,21 @@ export type ChannelOptions = {
   /** TikTok: the disclosures this creator may make */
   commercial: ChannelChoice[]
   /**
-   * TikTok: what this creator's account ALLOWS by default.
+   * TikTok: what this creator's account DOES when nobody touches it.
    *
-   * An account with comments turned off is not a post that asks for comments
-   * — TikTok refuses the whole thing. The window seeds its tick boxes from
-   * this rather than from our own "an agency means public with everything
-   * on", which is only true of an unrestricted account.
+   * An account whose own answer is "no comments" is not a post that asks for
+   * comments — TikTok refuses the whole thing. The window seeds its tick
+   * boxes from this rather than from our own "an agency means public with
+   * everything on", which is only true of an unrestricted account.
    */
   interactions: TikTokInteractions | null
+  /** …and whether each of those three may be changed at all, in TikTok's own
+   *  words. A setting the account has switched off is shown, and disabled. */
+  interactionRules: TikTokInteractionRules | null
+  /** TikTok: the longest video THIS account may post, in seconds */
+  maxVideoDurationSec: number | null
+  /** TikTok: who the account is, for a screen that wants to show it */
+  creator: { name: string | null; avatarUrl: string | null } | null
 }
 
 export type TikTokInteractions = {
@@ -136,27 +143,69 @@ export type TikTokInteractions = {
   allowStitch: boolean
 }
 
+export type TikTokInteractionRule = {
+  /** may a person change this at all */
+  enabled: boolean
+  /** TikTok insists the post carries this field either way */
+  required: boolean
+  /** TikTok's own name for it */
+  label: string
+}
+
+export type TikTokInteractionRules = {
+  allowComment: TikTokInteractionRule
+  allowDuet: TikTokInteractionRule
+  allowStitch: TikTokInteractionRule
+}
+
 export const NO_CHANNEL_OPTIONS: ChannelOptions = {
   playlists: [], organizations: [], pages: [], privacy: [],
-  commercial: [], interactions: null,
+  commercial: [], interactions: null, interactionRules: null,
+  maxVideoDurationSec: null, creator: null,
 }
 
 /**
- * Read TikTok's creator info into the three things the window needs.
+ * Read TikTok's creator info into what the window needs.
  *
  * `GET /accounts/{id}/tiktok/creator-info?mediaType=video|photo` answers
- * `{ creator, privacyLevels, postingLimits, commercialContentTypes }`. The
- * limits name what is DISABLED (TikTok's own wording: `comment_disabled`,
- * `duet_disabled`, `stitch_disabled`), so the defaults are the negation —
- * and an account that says nothing is an account with nothing turned off.
+ * `{ creator, privacyLevels, postingLimits, commercialContentTypes }`.
  *
- * Pure, and tolerant of both spellings: this is the one endpoint whose exact
- * shape was got wrong once already.
+ * ── THE SHAPE THAT WAS GOT WRONG TWICE ──
+ *
+ * The three interaction settings are NOT flags on `postingLimits`. They are
+ * one level deeper, under `postingLimits.interactionSettings`, and each is an
+ * object rather than a boolean:
+ *
+ *   allow_comment: { enabled: true, required: true, default: false,
+ *                    label: "Allow Comment" }
+ *
+ * `default` is what the ACCOUNT does when nobody touches it — and on the live
+ * account this was captured from, all three are FALSE. Reading flat keys found
+ * none of them and fell back to "nothing is turned off", so the window offered
+ * comments, duets and stitches as on for a creator whose own account has them
+ * off: the exact failure the endpoint fix was made to end, one field deeper.
+ *
+ * `enabled: false` means a person may not change it at all, so the window
+ * shows it disabled under TikTok's own label rather than hiding it.
+ * `required` needs nothing here: `tiktokSettingsFor` puts all three in every
+ * TikTok body already, so a required field is always sent.
+ *
+ * The old flat reading is kept underneath, as a fallback for an older or
+ * different response — but it is no longer what the parser looks at first.
+ *
+ * `commercialContentTypes[].requires` (`is_brand_organic_post`,
+ * `brand_partner_promote`) is deliberately dropped: Zernio's docs say
+ * `commercial_content_type` is sufficient on its own — `brand_organic` implies
+ * `is_brand_organic_post` and `brand_content` implies `brand_partner_promote`
+ * — so sending them again would be us restating what the provider infers.
  */
 export function readCreatorInfo(raw: unknown): {
   privacy: ChannelChoice[]
   commercial: ChannelChoice[]
   interactions: TikTokInteractions | null
+  interactionRules: TikTokInteractionRules | null
+  maxVideoDurationSec: number | null
+  creator: { name: string | null; avatarUrl: string | null } | null
 } {
   const j = (raw ?? {}) as Record<string, unknown>
   const info = (j.creatorInfo ?? j.creator_info ?? j) as Record<string, unknown>
@@ -180,23 +229,78 @@ export function readCreatorInfo(raw: unknown): {
   }))
 
   const limits = (pick('postingLimits', 'posting_limits') ?? {}) as Record<string, unknown>
-  const off = (...names: string[]) => names.some(n => limits[n] === true)
-  const on = (...names: string[]) => names.find(n => typeof limits[n] === 'boolean')
-  const interactions: TikTokInteractions | null = Object.keys(limits).length > 0
+  const nested = limits.interactionSettings ?? limits.interaction_settings ?? {}
+  const settings = nested as Record<string, unknown>
+
+  /** one setting, as TikTok sends it: `{ enabled, required, default, label }` */
+  const read = (
+    key: 'allow_comment' | 'allow_duet' | 'allow_stitch',
+    fallbackLabel: string,
+  ): { value: boolean; rule: TikTokInteractionRule } | null => {
+    const entry = settings[key] as Record<string, unknown> | undefined
+    if (entry && typeof entry === 'object') {
+      const enabled = entry.enabled !== false
+      return {
+        // `default` is the account's own answer; a setting that cannot be
+        // changed is whatever `enabled` leaves it as
+        value: typeof entry.default === 'boolean' ? entry.default : enabled,
+        rule: {
+          enabled,
+          required: entry.required === true,
+          label: typeof entry.label === 'string' && entry.label ? entry.label : fallbackLabel,
+        },
+      }
+    }
+    // ── the older, flat shape ──
+    const camel = key.replace(/_(.)/g, (_, c: string) => c.toUpperCase())
+    const flat = limits[key] ?? limits[camel]
+    if (typeof flat === 'boolean') {
+      return { value: flat, rule: { enabled: true, required: false, label: fallbackLabel } }
+    }
+    const offKey = key.replace('allow_', '') + '_disabled'
+    const offCamel = offKey.replace(/_(.)/g, (_, c: string) => c.toUpperCase())
+    const disabled = limits[offKey] ?? limits[offCamel]
+    if (typeof disabled === 'boolean') {
+      return { value: !disabled, rule: { enabled: true, required: false, label: fallbackLabel } }
+    }
+    return null
+  }
+
+  const comment = read('allow_comment', 'Allow Comment')
+  const duet = read('allow_duet', 'Allow Duet')
+  const stitch = read('allow_stitch', 'Allow Stitch')
+
+  // no answer at all is NO ANSWER — never "everything is allowed"
+  const interactions: TikTokInteractions | null = (comment || duet || stitch)
     ? {
-      allowComment: on('allow_comment', 'allowComment')
-        ? Boolean(limits.allow_comment ?? limits.allowComment)
-        : !off('comment_disabled', 'commentDisabled'),
-      allowDuet: on('allow_duet', 'allowDuet')
-        ? Boolean(limits.allow_duet ?? limits.allowDuet)
-        : !off('duet_disabled', 'duetDisabled'),
-      allowStitch: on('allow_stitch', 'allowStitch')
-        ? Boolean(limits.allow_stitch ?? limits.allowStitch)
-        : !off('stitch_disabled', 'stitchDisabled'),
+      allowComment: comment?.value ?? true,
+      allowDuet: duet?.value ?? true,
+      allowStitch: stitch?.value ?? true,
+    }
+    : null
+  const anyRule: TikTokInteractionRule = { enabled: true, required: false, label: '' }
+  const interactionRules: TikTokInteractionRules | null = interactions
+    ? {
+      allowComment: comment?.rule ?? { ...anyRule, label: 'Allow Comment' },
+      allowDuet: duet?.rule ?? { ...anyRule, label: 'Allow Duet' },
+      allowStitch: stitch?.rule ?? { ...anyRule, label: 'Allow Stitch' },
     }
     : null
 
-  return { privacy, commercial, interactions }
+  const seconds = limits.maxVideoDurationSec ?? limits.max_video_duration_sec
+    ?? limits.maxVideoPostDurationSec ?? limits.max_video_post_duration_sec
+  const maxVideoDurationSec = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? Math.trunc(seconds)
+    : null
+
+  const who = (pick('creator') ?? {}) as Record<string, unknown>
+  const name = typeof who.nickname === 'string' ? who.nickname
+    : typeof who.name === 'string' ? who.name : null
+  const avatarUrl = typeof who.avatarUrl === 'string' ? who.avatarUrl
+    : typeof who.avatar_url === 'string' ? who.avatar_url : null
+  const creator = name || avatarUrl ? { name, avatarUrl } : null
+
+  return { privacy, commercial, interactions, interactionRules, maxVideoDurationSec, creator }
 }
 
 /** Rows come back from the provider under whichever names that endpoint uses;
@@ -617,6 +721,9 @@ class ZernioPublisher implements Publisher {
       out.privacy = info.privacy
       out.commercial = info.commercial
       out.interactions = info.interactions
+      out.interactionRules = info.interactionRules
+      out.maxVideoDurationSec = info.maxVideoDurationSec
+      out.creator = info.creator
     }
     return out
   }
@@ -737,14 +844,33 @@ function dryRunPublisher(): Publisher {
       // what the ACCOUNT allows rather than from what we assume.
       const tiktok = platform === 'tiktok'
         ? readCreatorInfo({
-          creator: { nickname: 'Dry run creator' },
+          // the REAL response's shape, read through the same parser: an
+          // account whose own answer to all three interactions is "no", which
+          // is what the live capture this was verified against says
+          creator: { nickname: 'Dry run creator', avatarUrl: 'https://dry-run.invalid/a.jpg' },
           privacyLevels: [
-            'PUBLIC_TO_EVERYONE', 'FOLLOWER_OF_CREATOR', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY',
+            { value: 'PUBLIC_TO_EVERYONE', label: 'Public To Everyone' },
+            { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Mutual Follow Friends' },
+            { value: 'SELF_ONLY', label: 'Self Only' },
           ],
-          postingLimits: { comment_disabled: false, duet_disabled: true, stitch_disabled: false },
-          commercialContentTypes: ['none', 'brand_organic', 'brand_content'],
+          postingLimits: {
+            maxVideoDurationSec: 3600,
+            interactionSettings: {
+              allow_comment: { enabled: true, required: true, default: false, label: 'Allow Comment' },
+              allow_duet: { enabled: true, required: true, default: false, label: 'Allow Duet' },
+              allow_stitch: { enabled: true, required: true, default: false, label: 'Allow Stitch' },
+            },
+          },
+          commercialContentTypes: [
+            { value: 'none', label: 'No Commercial Content' },
+            { value: 'brand_organic', label: 'Your Brand', requires: ['is_brand_organic_post'] },
+            { value: 'brand_content', label: 'Branded Content', requires: ['brand_partner_promote'] },
+          ],
         })
-        : { privacy: [], commercial: [], interactions: null }
+        : {
+          privacy: [], commercial: [], interactions: null, interactionRules: null,
+          maxVideoDurationSec: null, creator: null,
+        }
       return {
         playlists: platform === 'youtube' ? [{ value: 'dry-run-playlist', label: 'Dry run playlist' }] : [],
         organizations: platform === 'linkedin'

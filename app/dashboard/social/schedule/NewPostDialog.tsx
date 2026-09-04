@@ -290,6 +290,25 @@ export default function NewPostDialog({
     return () => { live = false }
   }, [chosen, needsList, askedKind])
 
+  /**
+   * The longest video THIS TikTok account may post.
+   *
+   * We cannot measure the file from here — the window holds names and URLs,
+   * not durations — so this is said rather than checked: a number a person
+   * can hold a two-hour cut up against, before the platform refuses it
+   * silently hours later.
+   */
+  const tiktokLimit = useMemo(() => {
+    const account = chosen.find(a => String(a.platform) === 'tiktok')
+    const seconds = account ? lists[account.id]?.maxVideoDurationSec : null
+    if (!seconds || mediaLead !== 'video') return null
+    const minutes = Math.floor(seconds / 60)
+    const said = minutes >= 60
+      ? `${Math.floor(minutes / 60)} ${Math.floor(minutes / 60) === 1 ? 'hour' : 'hours'}`
+      : minutes >= 1 ? `${minutes} minutes` : `${seconds} seconds`
+    return `This TikTok account takes videos up to ${said} long.`
+  }, [chosen, lists, mediaLead])
+
   /* ── talking to the server ────────────────────────────────────────────── */
 
   const body = (s: ComposerState) => ({
@@ -644,6 +663,11 @@ export default function NewPostDialog({
                       )}
                       {group.label}
                     </span>
+                    {/* the account's OWN ceiling, said before a long video is
+                        sent to be refused by it */}
+                    {group.platform === 'tiktok' && tiktokLimit && (
+                      <p className="text-[11px] text-muted-foreground">{tiktokLimit}</p>
+                    )}
                     {group.options.map(o => (
                       <ExtraRow
                         key={o.key}
@@ -981,25 +1005,41 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
     : null
   const field = 'min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]'
 
-  /* ── a tick box: on, off, and what the network does untouched ── */
+  /* ── a tick box: on, off, and what the ACCOUNT does untouched ── */
   if (option.control === 'toggle') {
     // what the ACCOUNT does untouched beats what the network does untouched:
-    // a TikTok creator with duets turned off must not see a ticked box
+    // a TikTok creator whose own answer to "allow duets" is no must not see a
+    // ticked box, and one whose account will not let it be changed at all
+    // must not be able to change it here either
     const account = lists[first.id]?.interactions as Record<string, boolean> | null | undefined
+    const rules = lists[first.id]?.interactionRules as
+      Record<string, { enabled: boolean; required: boolean; label: string }> | null | undefined
     const seeded = account?.[option.field as string]
+    const rule = rules?.[option.field as string]
+    const locked = rule ? rule.enabled === false : false
+    const value = locked
+      ? (seeded ?? false)
+      : held === undefined ? (seeded ?? Boolean(option.defaultOn)) : Boolean(held)
     return (
       <div className="flex flex-col gap-1">
-        <label className="flex min-h-11 items-center gap-2.5 text-[14px] font-medium">
+        <label className={cn(
+          'flex min-h-11 items-center gap-2.5 text-[14px] font-medium',
+          locked && 'text-muted-foreground',
+        )}>
           <input
             type="checkbox"
-            checked={held === undefined
-              ? (seeded ?? Boolean(option.defaultOn))
-              : Boolean(held)}
+            checked={value}
+            disabled={locked}
             onChange={e => set(e.target.checked)}
             className="h-4 w-4"
           />
           {option.label}
         </label>
+        {locked && (
+          <p className="text-[11px] text-muted-foreground">
+            {`This account does not let “${rule?.label ?? option.label}” be changed.`}
+          </p>
+        )}
         {help}
       </div>
     )

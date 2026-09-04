@@ -88,39 +88,109 @@ const get = (query: string) => options.GET(
   new Request(`https://x.test/api/social/schedule/options${query}`))
   .then(async r => ({ status: r.status, body: await r.json() as Record<string, never> }))
 
-describe('reading TikTok’s creator info', () => {
-  const real = {
-    creator: { nickname: 'Acme', avatarUrl: 'https://x/a.jpg' },
-    privacyLevels: ['FOLLOWER_OF_CREATOR', 'SELF_ONLY'],
-    postingLimits: {
-      comment_disabled: false,
-      duet_disabled: true,
-      stitch_disabled: true,
-      max_video_post_duration_sec: 600,
+/**
+ * THE REAL RESPONSE, VERBATIM.
+ *
+ * Captured live from Zernio for the owner's own TikTok account
+ * (`.superpowers/…/zernio-creator-info-sample.json`, which is not in the
+ * repository — so it is pasted here rather than loaded, and this file is the
+ * copy the suite defends).
+ *
+ * The first cut of the parser read flat keys on `postingLimits` and found
+ * none of them, so all three interactions came out ON for an account whose
+ * own answer to every one of them is OFF. The fixture it was tested against
+ * had been invented to match the parser instead of the provider, which is why
+ * the suite stayed green while the parser was wrong. This is the provider's.
+ */
+const LIVE_CREATOR_INFO = {
+  creator: {
+    nickname: 'Yusuf',
+    avatarUrl: 'https://p16-common-sign.tiktokcdn.com/...webp',
+    isVerified: false,
+    canPostMore: true,
+  },
+  privacyLevels: [
+    { value: 'PUBLIC_TO_EVERYONE', label: 'Public To Everyone' },
+    { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Mutual Follow Friends' },
+    { value: 'SELF_ONLY', label: 'Self Only' },
+  ],
+  postingLimits: {
+    maxVideoDurationSec: 3600,
+    interactionSettings: {
+      allow_comment: { enabled: true, required: true, default: false, label: 'Allow Comment' },
+      allow_duet: { enabled: true, required: true, default: false, label: 'Allow Duet' },
+      allow_stitch: { enabled: true, required: true, default: false, label: 'Allow Stitch' },
     },
-    commercialContentTypes: ['none', 'brand_organic'],
-  }
+  },
+  commercialContentTypes: [
+    { value: 'none', label: 'No Commercial Content' },
+    { value: 'brand_organic', label: 'Your Brand', requires: ['is_brand_organic_post'] },
+    { value: 'brand_content', label: 'Branded Content', requires: ['brand_partner_promote'] },
+  ],
+}
 
-  it('offers only the privacy levels THIS creator may use, in plain words', () => {
-    const info = readCreatorInfo(real)
-    expect(info.privacy).toEqual([
-      { value: 'FOLLOWER_OF_CREATOR', label: 'Followers' },
-      { value: 'SELF_ONLY', label: 'Only the account itself' },
-    ])
-    // the level a restricted account may NOT use is not offered at all —
-    // offering it is a post refused hours after anybody was watching
-    expect(info.privacy.map(p => p.value)).not.toContain('PUBLIC_TO_EVERYONE')
+describe('reading TikTok’s creator info', () => {
+  it('takes the interaction defaults from where they actually live', () => {
+    // `postingLimits.interactionSettings.<field>.default`, one level deeper
+    // than the first parser looked. This account says no to all three, and
+    // seeding them ON would offer a creator what their own account refuses.
+    expect(readCreatorInfo(LIVE_CREATOR_INFO).interactions)
+      .toEqual({ allowComment: false, allowDuet: false, allowStitch: false })
   })
 
-  it('reads the limits as what is TURNED OFF, which is how TikTok words them', () => {
-    expect(readCreatorInfo(real).interactions)
-      .toEqual({ allowComment: true, allowDuet: false, allowStitch: false })
+  it('offers only the privacy levels THIS creator may use, in plain words', () => {
+    const info = readCreatorInfo(LIVE_CREATOR_INFO)
+    expect(info.privacy).toEqual([
+      { value: 'PUBLIC_TO_EVERYONE', label: 'Everyone' },
+      { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Friends — people they follow back' },
+      { value: 'SELF_ONLY', label: 'Only the account itself' },
+    ])
+    // the one this account is not offered is not in the menu at all —
+    // offering it is a post refused hours after anybody was watching
+    expect(info.privacy.map(p => p.value)).not.toContain('FOLLOWER_OF_CREATOR')
+  })
+
+  it('says which of the three may be changed at all, in TikTok’s own words', () => {
+    expect(readCreatorInfo(LIVE_CREATOR_INFO).interactionRules).toEqual({
+      allowComment: { enabled: true, required: true, label: 'Allow Comment' },
+      allowDuet: { enabled: true, required: true, label: 'Allow Duet' },
+      allowStitch: { enabled: true, required: true, label: 'Allow Stitch' },
+    })
+  })
+
+  it('a setting the account has switched off is off, and stays off', () => {
+    const locked = readCreatorInfo({
+      ...LIVE_CREATOR_INFO,
+      postingLimits: {
+        maxVideoDurationSec: 60,
+        interactionSettings: {
+          allow_comment: { enabled: false, required: true, default: true, label: 'Allow Comment' },
+          allow_duet: { enabled: true, required: true, default: true, label: 'Allow Duet' },
+          allow_stitch: { enabled: true, required: false, default: true, label: 'Allow Stitch' },
+        },
+      },
+    })
+    expect(locked.interactionRules?.allowComment.enabled).toBe(false)
+    expect(locked.interactions?.allowDuet).toBe(true)
+    expect(locked.maxVideoDurationSec).toBe(60)
+  })
+
+  it('carries the longest video this account may post, and who it is', () => {
+    const info = readCreatorInfo(LIVE_CREATOR_INFO)
+    expect(info.maxVideoDurationSec).toBe(3600)
+    expect(info.creator).toEqual({
+      name: 'Yusuf',
+      avatarUrl: 'https://p16-common-sign.tiktokcdn.com/...webp',
+    })
   })
 
   it('offers only the disclosures this creator may make', () => {
-    expect(readCreatorInfo(real).commercial).toEqual([
+    // `requires` (is_brand_organic_post / brand_partner_promote) is dropped on
+    // purpose: the disclosure implies them, and Zernio infers them from it
+    expect(readCreatorInfo(LIVE_CREATOR_INFO).commercial).toEqual([
       { value: 'none', label: 'Not a promotion' },
       { value: 'brand_organic', label: 'Promoting our own brand' },
+      { value: 'brand_content', label: 'Paid partnership' },
     ])
   })
 
@@ -128,22 +198,26 @@ describe('reading TikTok’s creator info', () => {
     const nothing = readCreatorInfo({})
     expect(nothing.privacy).toEqual([])
     expect(nothing.commercial).toEqual([])
-    // no limits is not "everything off": it is no answer, and the window
+    // no limits is not "everything allowed": it is no answer, and the window
     // keeps the network's own defaults
     expect(nothing.interactions).toBeNull()
+    expect(nothing.interactionRules).toBeNull()
+    expect(nothing.maxVideoDurationSec).toBeNull()
+    expect(nothing.creator).toBeNull()
   })
 
-  it('reads it through a wrapper, and reads the other spelling', () => {
-    const wrapped = readCreatorInfo({
+  it('still reads an older, flatter answer rather than ignoring it', () => {
+    const flat = readCreatorInfo({
       creator_info: {
         privacy_levels: ['PUBLIC_TO_EVERYONE'],
-        posting_limits: { commentDisabled: true },
+        posting_limits: { comment_disabled: true, max_video_post_duration_sec: 180 },
         commercial_content_types: ['brand_content'],
       },
     })
-    expect(wrapped.privacy).toEqual([{ value: 'PUBLIC_TO_EVERYONE', label: 'Everyone' }])
-    expect(wrapped.interactions?.allowComment).toBe(false)
-    expect(wrapped.commercial).toEqual([{ value: 'brand_content', label: 'Paid partnership' }])
+    expect(flat.privacy).toEqual([{ value: 'PUBLIC_TO_EVERYONE', label: 'Everyone' }])
+    expect(flat.interactions?.allowComment).toBe(false)
+    expect(flat.maxVideoDurationSec).toBe(180)
+    expect(flat.commercial).toEqual([{ value: 'brand_content', label: 'Paid partnership' }])
   })
 })
 
@@ -155,11 +229,13 @@ describe('the options route', () => {
     expect((res.body.privacy as unknown as { value: string }[]).length).toBeGreaterThan(0)
     expect((res.body.commercial as unknown as { value: string }[]).map(c => c.value))
       .toContain('none')
-    // the dry-run creator has duets turned off, which is what the window
-    // seeds its tick boxes from
+    // the dry-run creator answers in the real shape — all three off, which
+    // is what the window seeds its tick boxes from
     expect(res.body.interactions).toEqual({
-      allowComment: true, allowDuet: false, allowStitch: true,
+      allowComment: false, allowDuet: false, allowStitch: false,
     })
+    expect(res.body.maxVideoDurationSec).toBe(3600)
+    expect((res.body.creator as unknown as { name: string }).name).toBe('Dry run creator')
   })
 
   it('answers a channel with nothing of its own with empty lists, not an error', async () => {
@@ -167,6 +243,7 @@ describe('the options route', () => {
     expect(res.status).toBe(200)
     expect(res.body.privacy).toEqual([])
     expect(res.body.interactions).toBeNull()
+    expect(res.body.maxVideoDurationSec).toBeNull()
     expect((res.body.playlists as unknown as unknown[]).length).toBe(1)
   })
 
