@@ -32,6 +32,24 @@ describe('db-types (generated)', () => {
     expect(NULLABLE_COLUMNS.content_items).toContain('due_date')
     expect(NULLABLE_COLUMNS.content_items).not.toContain('id')
   })
+  // What the image editor saves for a VIDEO. No SQL ever created these, so
+  // the generator is the only place their shape is written down — and all
+  // three are nullable because the overwhelming majority of versions are
+  // pictures, or clips nobody has picked a cover for.
+  it('knows what a video version can carry', () => {
+    for (const c of ['cover_url', 'trim_start', 'trim_end']) {
+      expect(TABLE_COLUMNS.asset_versions).toContain(c)
+      expect(NULLABLE_COLUMNS.asset_versions).toContain(c)
+    }
+  })
+  // The client's group of accounts at the posting service is
+  // `social_profile_id` and has been since the connect flow was written. The
+  // Schedule access page writes THAT column: a second one meaning the same
+  // thing would be two answers to "which group does this client post from".
+  it('has exactly one column for the client’s provider group', () => {
+    expect(TABLE_COLUMNS.clients).toContain('social_profile_id')
+    expect(TABLE_COLUMNS.clients).not.toContain('zernio_profile_id')
+  })
   it('lists the tables that had an updated_at trigger', () => {
     for (const t of ['content_items','batches','team_users','projects','journal_posts','client_contacts','client_notes','client_credentials','agency_credentials','report_settings','client_agreements']) {
       expect(UPDATED_AT_TABLES.has(t as any)).toBe(true)

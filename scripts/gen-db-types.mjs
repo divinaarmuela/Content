@@ -140,9 +140,30 @@ for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
 //     and neither the Graph API nor Zernio has a place search, so the ids
 //     have to be looked up once by a person and kept; without this list every
 //     scheduler would be retyping a 15-digit number from a Facebook page.
+//   NOTE on the client's provider group: the Schedule access page maps a
+//     client to ONE group of accounts at the posting service (Zernio calls a
+//     group a "profile" — not an Instagram profile but a folder several
+//     connected accounts sit in; the owner keeps four). That mapping is
+//     `clients.social_profile_id`, which ALREADY exists and is what the
+//     connect flow, the automations route and the webhook matcher all read. A
+//     second column meaning the same thing would be two answers to "which
+//     group does this client post from", and posts would start coming out of
+//     whichever one the reader happened to consult. So the access page writes
+//     that column and no new one was added.
+//   asset_versions.cover_url / trim_start / trim_end — what the image editor
+//     saves for a VIDEO. Neither touches the file: a video is never
+//     re-encoded in the browser (we would be handing the client a worse copy
+//     of their own footage), so the cover is a still taken out of the already
+//     approved clip and the trim marks are an instruction that travels with
+//     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
   clients: [['instagram_locations', col('unknown', false, true, true)]],
+  asset_versions: [
+    ['cover_url', col('string', true)],
+    ['trim_start', col('number', true)],
+    ['trim_end', col('number', true)],
+  ],
 }
 for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {
   const existing = tables.get(t)

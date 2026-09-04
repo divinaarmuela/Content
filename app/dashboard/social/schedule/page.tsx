@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Images, StickyNote, X } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight, Images, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,6 +22,7 @@ import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
 import NoteEditor from './NoteEditor'
 import { useDragSchedule } from './useDragSchedule'
+import EditMediaLauncher from './EditMediaLauncher'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
 import PiecePicker from './PiecePicker'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
@@ -513,6 +515,21 @@ export default function SchedulePage() {
                   {noteMode ? 'Click the time for your note' : 'Add note'}
                 </button>
               )}
+              {/* Fixing a picture and seeing who is on this client are both
+                  things somebody does FROM the week, so both live on the week's
+                  own toolbar rather than in a settings page nobody finds. */}
+              <EditMediaLauncher
+                media={data.media}
+                posts={data.posts}
+                className="hidden md:flex"
+              />
+              <Link
+                href="/dashboard/social/schedule/access"
+                className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted md:flex"
+              >
+                <Users className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                Accounts and access
+              </Link>
               <span className="hidden text-[12px] font-semibold text-muted-foreground sm:inline">
                 {zoneLabel(tz)}
               </span>
