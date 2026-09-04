@@ -1,4 +1,142 @@
-# Project state — as at 3 September 2026
+# Project state — as at 4 September 2026
+
+## Social Schedule — 4 Sep 2026
+
+**What it is.** `/dashboard/social/schedule` — one client's week, the approved
+media on the left and the hours on the right. A person drags a piece onto a
+time, writes the caption, picks the channels, and the post goes out on its own.
+Every time on the page is the CLIENT's time zone (`clients.timezone`), because
+a posting time is a fact about the audience rather than about whoever is
+looking at the screen.
+
+Views: Week (the grid), Month, List, Preview (the feed as it will look) and
+Stories. Notes can be pinned to any time — "client is away until the 19th, hold
+everything" — and a profiles bar filters the week to one channel.
+
+### The two approvals, and the one way round them
+
+They are different questions and both are asked:
+
+1. **The work.** The client approves the MEDIA — the ordinary funnel, ending at
+   `approved_for_scheduling`. Only a piece at `approved_for_scheduling` or
+   `scheduled` can start a post, and only files from the approved version are
+   publishable (`eligibility` in `app/lib/social-schedule-core.ts`).
+2. **The post.** Somebody approves the CAPTION, the channels and the hour —
+   `content_items.posting_approval_state`, the gate
+   `publishBlockReason` enforces on every publish path. A post is created as a
+   `draft`, sent (`pending`), approved (`approved`), and only then bookable.
+
+**Skip approval** ("direct") is the one way round the second one, and only for
+somebody who could have given the answer: the client's account manager or a
+super admin. It goes THROUGH the state machine rather than around it — send,
+then approve, as that person — so the item page, the client portal, the publish
+lock and the activity trail all see an ordinary approved post. The post records
+`approval_mode: 'self'` and who cleared it. A scheduler or an editor gets the
+same refusal they would get for approving.
+
+**Editing takes the yes back.** Changing the WORDS or the MEDIA of an approved
+post returns it to `pending`: the yes was given to something that no longer
+exists. Moving the TIME does not — that is what makes dragging an approved tile
+sane. Cancelling a post resets the item's gate, so the next post on the same
+item cannot inherit an approval nobody gave for its words.
+
+### Per-network options
+
+The composer shows only the options the selected network actually has, in plain
+words, and every one of them is forwarded by a single mapping
+(`optionsFromExtras` → `toPlatformData`) rather than field by field. Instagram
+locations, trial Reels and audio names; TikTok's privacy level, interactions,
+cover frame, commercial-content type and its two consent flags; YouTube titles,
+visibility, tags, playlists, thumbnails; LinkedIn organisations and document
+titles; Facebook Pages and drafts. See `docs/ZERNIO_POSTING_OPTIONS.md` for the
+network → option → Zernio field table.
+
+### The image editor rule
+
+Crop, filters and one line of text, done in the browser on a canvas
+(`ImageEditor.tsx`, decided by `image-edit-core.ts`). The button says what the
+save will do to the client's approval BEFORE it is pressed:
+
+| edit | button | approval |
+|---|---|---|
+| crop only | **Save crop** | kept — same picture, tighter frame |
+| any filter or text | **Save as new version — needs client approval** | back to the client |
+
+A crop goes to `/api/social/schedule/derive`, which writes into the version that
+holds the file (never "the newest version"), re-points any post still holding
+the old URL, and cannot create a version — so it cannot smuggle in a file the
+client has not approved. Anything else goes to `/api/social/schedule/media`,
+which is the add-version path. A video is never re-encoded here; the editor
+stores the chosen cover frame and the trim marks on the version, and the cover
+is sent as the post's `thumbnailUrl` at booking time.
+
+Two ways in, one editor: "Edit media" on the week's toolbar, and "Edit image"
+in the composer (and on each slot of the media tray) for somebody already
+writing the post.
+
+### Accounts and access
+
+`/dashboard/social/schedule/access` — the channels we post to (with a
+three-state health badge plus "Not checked" when we could not ask), the client's
+group of accounts at Zernio (`clients.social_profile_id`, one column, no
+second), and who is on the client with plain rights ("Can plan" / "Can approve"
+/ "Can post"). Assignment itself still lives on the client page; this page
+describes the model rather than owning one.
+
+When Zernio says an account was revoked or expired, the row is marked inactive,
+the client's account manager is told (bell and email) with a link to this page,
+and every post booked onto that channel carries "… needs reconnecting" on its
+tile.
+
+### Routes
+
+| route | what |
+|---|---|
+| `GET/POST /api/social/schedule` | the calendar's posts; start a post |
+| `GET/PATCH/DELETE /api/social/schedule/[id]` | one post; edit; cancel |
+| `POST /api/social/schedule/[id]/send` | send for approval, or `mode: 'direct'` |
+| `POST /api/social/schedule/[id]/schedule` | book it in |
+| `POST /api/social/schedule/[id]/reschedule` | move it |
+| `GET/POST/PATCH/DELETE /api/social/schedule/notes` | notes on the calendar |
+| `POST /api/social/schedule/media` | a Drive file or an upload → a new version |
+| `POST /api/social/schedule/derive` | a crop, or a video's cover and trim marks |
+| `GET /api/social/schedule/drive` | the piece's Drive folder |
+| `GET /api/social/schedule/options` | the per-account lists (playlists, Pages, …) |
+| `GET /api/social/schedule/suggested` | suggested times from the client's own numbers |
+| `GET/POST /api/social/schedule/access` | health, groups, who is on the client |
+
+### Tables
+
+`social_posts` and `schedule_notes` are ghost tables in
+`scripts/gen-db-types.mjs` (there is no SQL for them; `lib/db-types.ts` is
+regenerated from that file). `asset_versions` gained `cover_url`, `trim_start`
+and `trim_end`. Everything else is existing: `content_items`
+(`posting_approval_state`), `asset_versions`, `social_accounts`, `publish_jobs`,
+`claim_locks`, `clients.social_profile_id`.
+
+### `PUBLISH_DRY_RUN`
+
+`PUBLISH_DRY_RUN=1` makes the publisher itself answer — a fake post id derived
+from the job's request id, and not a single socket opened. It is how the test
+suite and the live harness exercise booking without a post ever leaving the
+building. Exactly the string `1`; anything else is off, deliberately, because
+loose truthiness here would stop every real post going out while every screen
+reported success.
+
+### Running the live harness
+
+`tests/e2e/social-schedule-live.e2e.ts` plays the whole journey against the REAL
+database, on the ZZ TEST client only, with `.invalid` people, its own
+`zz-test-…` channel, and every row deleted and read back at the end.
+
+```bash
+EMAIL_TEST_ONLY=1 PUBLISH_DRY_RUN=1   npx vitest run --config vitest.e2e.config.mts tests/e2e/social-schedule-live.e2e.ts
+```
+
+It refuses to start without `EMAIL_TEST_ONLY=1`, against a client whose name
+does not begin "ZZ TEST", or if anybody assigned to that client has a real email
+address.
+
 
 ## Dashboard look — 3 Sep 2026
 
