@@ -38,6 +38,7 @@ export type TableName =
   | 'drive_files'
   | 'drive_uploads'
   | 'email_ingest_log'
+  | 'encode_jobs'
   | 'intake_files'
   | 'intake_forms'
   | 'intake_settings'
@@ -562,6 +563,28 @@ export interface EmailIngestLog {
   error: string | null
 }
 
+export interface EncodeJob {
+  id: string
+  source_url: string
+  platform: string
+  kind: string | null
+  asset_id: string | null
+  version_id: string | null
+  slide_index: number | null
+  status: string
+  attempts: number
+  output_key: string | null
+  target_source: string
+  bytes: number | null
+  width: number | null
+  height: number | null
+  duration_sec: number | null
+  video_kbps: number | null
+  error: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface IntakeFile {
   id: string
   created_at: string
@@ -1076,6 +1099,7 @@ export const TABLE_COLUMNS = {
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
+  encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
@@ -1148,6 +1172,7 @@ export const NULLABLE_COLUMNS = {
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
+  encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
   intake_files: [],
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],
@@ -1227,6 +1252,7 @@ export const JSON_COLUMNS = {
   drive_files: [],
   drive_uploads: [],
   email_ingest_log: [],
+  encode_jobs: [],
   intake_files: [],
   intake_forms: ['definition', 'answers'],
   intake_settings: [],
@@ -1305,6 +1331,7 @@ export const JSON_ARRAY_COLUMNS = {
   drive_files: [],
   drive_uploads: [],
   email_ingest_log: [],
+  encode_jobs: [],
   intake_files: [],
   intake_forms: [],
   intake_settings: [],
@@ -1341,7 +1368,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

@@ -94,6 +94,7 @@ export async function putObject(
 export async function signUpload(
   filename: string,
   contentType: string,
+  opts?: { expiresIn?: number },
 ): Promise<SignedUpload> {
   if (!r2Configured()) throw new Error('File storage is not configured')
   const key = objectKey(filename)
@@ -105,7 +106,50 @@ export async function signUpload(
       Key: key,
       ContentType: contentType || 'application/octet-stream',
     }),
-    { expiresIn: 60 * 60 }, // an hour — a 200MB master on a slow line is not quick
+    // an hour — a 200MB master on a slow line is not quick. The encoder asks
+    // for longer: it downloads a 2 GB master, encodes for up to 45 minutes and
+    // only then PUTs, and a URL that expired mid-job would lose the whole
+    // encode with nothing to show for the CPU.
+    { expiresIn: opts?.expiresIn ?? 60 * 60 },
+  )
+  return {
+    signedUrl,
+    publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`,
+    key,
+    backend: 'r2',
+  }
+}
+
+/**
+ * A URL to upload one file to a key we have ALREADY chosen.
+ *
+ * `signUpload` mints a fresh key every time, which is right for a person
+ * dragging in a file and wrong for a retry: the encoder job stores its key on
+ * the row before the encoder is told anything, and a retry that presigned a
+ * NEW key would leave the row naming an object nothing ever wrote — a copy
+ * that reads back `ready` and 404s when the post tries to use it. So the
+ * retry re-signs the same key, and the key on the row is always the key the
+ * bytes went to.
+ *
+ * The caller owns the key, so it must be one WE made (`objectKey`): anything
+ * with a slash or a `..` in it is refused rather than trusted.
+ */
+export async function signUploadForKey(
+  key: string,
+  contentType: string,
+  opts?: { expiresIn?: number },
+): Promise<SignedUpload> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
+  if (!key || key.includes('/') || key.includes('..')) throw new Error('That is not one of our storage keys')
+
+  const signedUrl = await getSignedUrl(
+    r2(),
+    new PutObjectCommand({
+      Bucket: R2_BUCKET!,
+      Key: key,
+      ContentType: contentType || 'application/octet-stream',
+    }),
+    { expiresIn: opts?.expiresIn ?? 60 * 60 },
   )
   return {
     signedUrl,

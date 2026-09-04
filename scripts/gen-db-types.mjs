@@ -144,13 +144,67 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // encode_jobs — one request to the encoder (services/encoder) for a
+  //   publish-grade copy of one video, for one channel. It exists so that
+  //   "is a clean copy of this file being made?" has ONE answer that survives
+  //   a deploy, a retry and a second person opening the composer: the row is
+  //   claimed on `source_url + platform`, so two asks for the same copy are
+  //   one encode, and a publish job waiting on a copy waits on this row
+  //   rather than on a poll. `output_key` is the R2 key the finished copy was
+  //   PUT to — the public URL is that key under the bucket's public base, so
+  //   the URL is never stored twice and can never disagree with itself.
+  encode_jobs: [
+    ['id', col('string', false)],
+    ['source_url', col('string', false)],
+    ['platform', col('string', false)],
+    // what the channel is posting this AS — reel, story, feed. Kept on the row
+    // because a retry has to make the same copy the first ask asked for: a
+    // sweep that re-asked with the kind forgotten silently rebuilt a measured
+    // 10 Mbps job at the 2 Mbps blind fallback, while `target_source` still
+    // said 'measured'.
+    ['kind', col('string', true)],
+    // where the video came from, when it came from a piece of work. All three
+    // are null for a copy asked for straight off a URL in the composer.
+    ['asset_id', col('string', true)],
+    ['version_id', col('string', true)],
+    ['slide_index', col('number', true)],
+    ['status', col('string', false)],       // queued | running | done | failed
+    // how many times the encoder has been ASKED for this copy. The stale
+    // sweep re-asks up to three times before settling the row failed, so a
+    // transient blip — an R2 500, a download that timed out on a slow
+    // morning — does not permanently poison every future post of that clip.
+    ['attempts', col('number', false)],
+    // the R2 key the copy is written to, chosen and stored BEFORE the encoder
+    // is told anything and never changed afterwards. A retry re-signs the
+    // SAME key: a row whose key names an object nothing ever wrote reads back
+    // as `ready` with a URL that 404s, which the publish job then attaches to
+    // a client's post.
+    ['output_key', col('string', true)],
+    // 'measured' when the clip's real length shaped the bitrate, 'fallback'
+    // when nobody knew it and the channel's whole length ceiling had to be
+    // budgeted for instead — which costs most of the quality this service
+    // exists to buy. Visible on the row so the gap can be found rather than
+    // guessed at.
+    ['target_source', col('string', false)],
+    ['bytes', col('number', true)],
+    ['width', col('number', true)],
+    ['height', col('number', true)],
+    // how long the clip runs. Written at claim time when anything measured it
+    // — it is what the bitrate was budgeted for, and what a retry must budget
+    // for again — and confirmed by the callback with what ffprobe actually saw.
+    ['duration_sec', col('number', true)],
+    ['video_kbps', col('number', true)],
+    ['error', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

@@ -5,7 +5,7 @@ import {
 } from '@/lib/db-types'
 import type {
   Batch, ScheduleEntry, WebhookDelivery, ScanMailbox, ContentItem, TeamUser,
-  SocialPost, ScheduleNote,
+  SocialPost, ScheduleNote, EncodeJob,
 } from '@/lib/db-types'
 
 // Compile-time guard: these interface names must exist and be PascalCase
@@ -20,7 +20,8 @@ const _item: Pick<ContentItem, 'id'> = { id: 'x' }
 const _user: Pick<TeamUser, 'id'> = { id: 'x' }
 const _post: Pick<SocialPost, 'id'> = { id: 'x' }
 const _note: Pick<ScheduleNote, 'id'> = { id: 'x' }
-void _batch, _entry, _delivery, _mailbox, _item, _user, _post, _note
+const _encode: Pick<EncodeJob, 'id'> = { id: 'x' }
+void _batch, _entry, _delivery, _mailbox, _item, _user, _post, _note, _encode
 
 describe('db-types (generated)', () => {
   it('knows the core tables and their columns', () => {
@@ -131,6 +132,53 @@ describe('db-types (generated)', () => {
     expect(NULLABLE_COLUMNS.schedule_notes).toEqual(['created_by'])
     expect(JSON_COLUMNS.schedule_notes).toEqual([])
     expect(UPDATED_AT_TABLES.has('schedule_notes')).toBe(true)
+  })
+
+  // One request to the encoder for one publish-grade copy. No SQL ever
+  // created it, so the generator is the only place its shape is written
+  // down. The id IS the claim (`<hash of source url>__<platform>`), which is
+  // what makes two people asking for the same copy one encode rather than two
+  // — an encode being minutes of a machine's time, not just a row.
+  it('knows the copy-job table', () => {
+    expect(TABLE_COLUMNS.encode_jobs).toEqual([
+      'id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id',
+      'slide_index', 'status', 'attempts', 'output_key', 'target_source',
+      'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error',
+      'created_at', 'updated_at',
+    ])
+    // a job always knows what it is copying, for which channel, how many
+    // times it has been asked for and where it has got to; everything a
+    // finished encode measures is null until it is
+    for (const c of ['source_url', 'platform', 'status', 'attempts', 'target_source']) {
+      expect(NULLABLE_COLUMNS.encode_jobs).not.toContain(c)
+    }
+    for (const c of ['asset_id', 'version_id', 'slide_index', 'output_key',
+      'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error']) {
+      expect(NULLABLE_COLUMNS.encode_jobs).toContain(c)
+    }
+    expect(JSON_COLUMNS.encode_jobs).toEqual([])
+    expect(UPDATED_AT_TABLES.has('encode_jobs')).toBe(true)
+  })
+
+  // `attempts` is what stops a transient blip — an R2 500, a download that
+  // timed out on a slow morning — permanently poisoning every future post of
+  // that clip: the stale sweep re-asks three times before giving up. And
+  // `target_source` is how a copy quietly made at 2 Mbps instead of 10 can be
+  // FOUND, rather than guessed at, when somebody says the video looks soft.
+  it('remembers how many tries a copy has had, and what shaped its bitrate', () => {
+    const _attempts: EncodeJob['attempts'] = 1
+    const _source: EncodeJob['target_source'] = 'measured'
+    void _attempts, _source
+    expect(TABLE_COLUMNS.encode_jobs).toContain('attempts')
+    expect(TABLE_COLUMNS.encode_jobs).toContain('target_source')
+    // and what the copy was asked FOR, so a retry asks for the same one: a
+    // sweep that forgot the kind and the length rebuilt a measured 10 Mbps
+    // job at the 2 Mbps blind fallback while the row still said 'measured'
+    expect(TABLE_COLUMNS.encode_jobs).toContain('kind')
+    expect(TABLE_COLUMNS.encode_jobs).toContain('duration_sec')
+    for (const c of ['kind', 'duration_sec']) {
+      expect(NULLABLE_COLUMNS.encode_jobs).toContain(c)
+    }
   })
 
   it('derives natural keys for composite tables', () => {

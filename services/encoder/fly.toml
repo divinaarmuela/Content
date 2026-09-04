@@ -1,0 +1,56 @@
+# The encoder machine.
+#
+# ── Why auto_stop is OFF, on a machine whose whole point is costing nothing ──
+#
+# Fly Proxy decides a machine is idle from IN-FLIGHT REQUESTS. This service
+# deliberately has none: `POST /encode` answers 202 in milliseconds and then
+# ffmpeg runs for two to forty-five minutes with no open connection. With
+# `auto_stop_machines` on, Fly's idle sweep stops the machine in the middle of
+# an encode — no callback, no error, and a client's post waiting forever.
+#
+# So the machine stops ITSELF instead: `src/server.ts` exits cleanly once the
+# queue has been empty for five minutes, and never while a job is running.
+# `auto_start_machines` brings it back on the next request and
+# `min_machines_running = 0` means nothing is paid for in between. Same bill,
+# on the one clock that can see what the box is actually doing.
+#
+# `app` is set by `fly apps create`; change it there, not here, if the name is
+# taken. Do NOT run `fly launch` against this file — it regenerates config from
+# its own detection and will rewrite the [[vm]] and concurrency blocks below.
+
+app = "mdm-encoder"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # "off" — see the note above. The string form; the old boolean is deprecated.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 0
+  # one at a time, matching the in-memory queue in src/queue.ts — Fly must not
+  # pile ten requests onto a machine that can only encode one. hard_limit 3 is
+  # one running plus two waiting, which is exactly what the queue accepts.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 1
+    hard_limit = 3
+
+  # Fly's own check. It is deliberately a GET with no auth: a health check
+  # that needs a secret is a health check that fails for the wrong reason.
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

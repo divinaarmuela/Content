@@ -1,0 +1,20 @@
+{
+  "name": "mdm-encoder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Publish-grade H.264 copies of videos that are too big for a channel.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "node --experimental-strip-types src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

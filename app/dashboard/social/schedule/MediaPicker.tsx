@@ -706,6 +706,13 @@ function UploadTab({ uploads, onFiles, files, onAdd, inTray, onDragStart }: {
       >
         <Upload className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         Drop files here, or choose them
+        {/* What an editor should export, so the master posts as it was graded.
+            A file inside the channel's limit goes out untouched; anything over
+            it has a copy made here first, which takes a few minutes and is one
+            more re-encode than the work deserves. */}
+        <span className="text-[12px] text-muted-foreground/80">
+          Export 1080p H.264 at 10–12 Mbps — a 90-second reel is about 120 MB and posts as-is.
+        </span>
         <input
           type="file"
           multiple

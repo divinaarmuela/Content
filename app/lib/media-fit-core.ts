@@ -864,3 +864,148 @@ export function sizeLimitFor(
   if (!rule?.maxMB) return null
   return { maxMB: rule.maxMB, oversize: rule.oversize ?? 'reject' }
 }
+
+// ── the encode ladder ─────────────────────────────────────────────────────
+
+/**
+ * What a publish-grade copy of a video is encoded AT, per channel.
+ *
+ * `PLATFORM_MEDIA` above says what a channel will ACCEPT. This says what we
+ * should hand it. The two are different questions and the second one has a
+ * history: a master over a channel's limit used to be replaced by Cloudflare
+ * Stream's web-player MP4, roughly 0.85 Mbps on a long clip. The platform
+ * re-compressed that in turn, and the client saw the loss on their own
+ * footage. Two re-encodes, the first of them ours, and the first one was the
+ * bad one.
+ *
+ * So the copy is made deliberately: 1080p H.264 High@4.1, CRF 20 with a
+ * per-channel bitrate ceiling, AAC 160k, +faststart, BT.709, constant frame
+ * rate. `services/encoder` runs it; this decides it.
+ *
+ * ── The one rule every target must satisfy ──
+ *
+ *   (maxrate + audio) x seconds / 8 / 1000  <  maxMB
+ *
+ * A copy that comes back OVER the channel's limit has bought nothing — the
+ * channel compresses it, which is the thing this exists to stop. So the
+ * bitrate is DERIVED from the channel's own size and length limits and only
+ * then capped at the ceiling below; whichever is smaller wins. The property
+ * test in tests/media-fit-core.test.ts holds it for every channel and kind.
+ */
+export type EncodeLadder = {
+  /** the most we would ever spend on picture, whatever the budget allows */
+  maxrateCapKbps: number
+  audioKbps: number
+  /** the long side of the finished picture; the short side is the 1080 in "1080p" */
+  longSide: number
+  shortSide: number
+  maxFps: number
+}
+
+/**
+ * The ceilings, per channel.
+ *
+ * 8-12 Mbps is where a 1080p H.264 delivery file stops looking obviously
+ * compressed on a phone, and it is roughly what each platform's own guidance
+ * asks for. Nothing here is a target — a still, easy clip at CRF 20 spends
+ * far less — it is the most a hard one may spend.
+ *
+ * 60 fps only for YouTube, which serves it. Everywhere else a 60 fps master
+ * is halved to 30, because the platform would do that anyway and doing it
+ * here means the bitrate goes into 30 good frames rather than 60 poor ones.
+ */
+export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
+  instagram: { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  twitter:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  youtube:   { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
+  // no published guidance of their own; 8 Mbps is the conservative end of the
+  // same band, and none of these four is a channel a 2 GB master goes to
+  threads:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  pinterest: { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  bluesky:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  reddit:    { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+}
+
+/** How much of a channel's size budget one copy may spend. The margin covers
+ *  container overhead and a VBR encoder overshooting its ceiling briefly. */
+export const ENCODE_BUDGET_HEADROOM = 0.85
+
+/** A channel with no length limit of its own still needs a number for the
+ *  budget maths. Ten minutes is longer than anything this agency posts. */
+export const ENCODE_ASSUMED_SECONDS = 10 * 60
+
+/** Below this the copy would be no better than the Stream player file this
+ *  service exists to replace, so no copy is offered at all. */
+export const ENCODE_MIN_KBPS = 1_500
+
+/** One job for the encoder: everything it needs, and nothing about us. */
+export type EncodeTarget = {
+  platform: Platform
+  maxMB: number
+  /** the seconds the budget was worked out for — the clip's own length when
+   *  we know it, the channel's ceiling when we do not */
+  maxSeconds: number
+  maxrateKbps: number
+  bufsizeKbps: number
+  audioKbps: number
+  longSide: number
+  shortSide: number
+  maxFps: number
+}
+
+/**
+ * The ladder for one channel, sized to one clip.
+ *
+ * `seconds` matters: Instagram takes 300 MB and fifteen minutes, and a target
+ * that had to be safe for a fifteen-minute Reel would be 2 Mbps — right for
+ * that clip and needlessly poor for the 20-second one actually being posted.
+ * So the budget is worked out for the clip in hand, and only falls back to
+ * the channel's ceiling when nobody measured the file.
+ *
+ * Returns null when no copy is worth making: the channel has no video limit
+ * to fit inside, or the budget will not stretch to a bitrate better than the
+ * player file we already have.
+ */
+export function encodeTargetFor(
+  platform: Platform, kind: PostKind | undefined, seconds?: number,
+): EncodeTarget | null {
+  const ladder = PLATFORM_ENCODE[platform]
+  const rule = ruleFor(platform, 'video', kind)
+  if (!ladder || !rule?.maxMB) return null
+
+  const ceiling = rule.maxSeconds ?? ENCODE_ASSUMED_SECONDS
+  const measured = seconds !== undefined && Number.isFinite(seconds) && seconds > 0
+    ? Math.ceil(seconds)
+    : null
+  // never budget for LESS than the clip, and never for more than the channel
+  const maxSeconds = Math.max(1, Math.min(measured ?? ceiling, ceiling))
+
+  // what the channel's own size limit affords, once the sound is paid for
+  const affordable = Math.floor(
+    (ENCODE_BUDGET_HEADROOM * rule.maxMB * 8 * 1000) / maxSeconds,
+  ) - ladder.audioKbps
+  const maxrateKbps = Math.min(ladder.maxrateCapKbps, affordable)
+  if (maxrateKbps < ENCODE_MIN_KBPS) return null
+
+  return {
+    platform,
+    maxMB: rule.maxMB,
+    maxSeconds,
+    maxrateKbps,
+    // twice the maxrate: the buffer a VBR encoder is allowed to swing inside
+    bufsizeKbps: maxrateKbps * 2,
+    audioKbps: ladder.audioKbps,
+    longSide: ladder.longSide,
+    shortSide: ladder.shortSide,
+    maxFps: ladder.maxFps,
+  }
+}
+
+/** The biggest this target's copy could come out at, in MB. The number the
+ *  property "a copy always fits the channel" is checked on. */
+export function encodeWorstCaseMB(target: EncodeTarget): number {
+  return ((target.maxrateKbps + target.audioKbps) * target.maxSeconds) / 8 / 1000
+}

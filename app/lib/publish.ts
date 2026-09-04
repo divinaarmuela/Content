@@ -7,6 +7,11 @@ import type {
 import { publishBlockReason } from './posting-approval-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
+import { encoderConfigured } from './encoder'
+import { measuredDurationOf, smallerCopyOf } from './stream'
+import { headStoredObject } from './storage'
+import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
+import { PLATFORM_MEDIA, type AssetProbe } from './media-fit-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
@@ -211,6 +216,34 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
   }
 
   try {
+    /**
+     * Wait, if a channel is still having its clean copy made.
+     *
+     * The alternative — sending the master anyway — is the bug this whole
+     * encoder exists to fix: Instagram takes a 2 GB file, silently
+     * re-compresses it, and the client sees the loss on their own footage.
+     * A post that goes out four minutes late is better than a post that goes
+     * out looking wrong.
+     *
+     * The job goes back to 'queued' with the reason on the row and is woken
+     * by `media/encode.finished` the moment the copy lands — no polling loop,
+     * and the ten-minute dispatcher is the backstop if that event is missed.
+     * `attempts` is deliberately NOT incremented: waiting is not a failed try.
+     */
+    const waited = await awaitCleanCopies(job)
+    if (waited.wait) {
+      await settle({ status: 'queued', error: waited.reason })
+      return 'queued'
+    }
+    if (waited.failed) {
+      await settle({ status: 'failed', attempts: job.attempts + 1, error: waited.reason })
+      return 'failed'
+    }
+    if (waited.targets) {
+      job.targets = waited.targets
+      await settle({ targets: waited.targets })
+    }
+
     // relay first, and persist the provider URLs so a retry does not re-upload
     const media = await relayMedia(job.media ?? [])
     if (media !== job.media) await settle({ media })
@@ -310,6 +343,121 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     await settle({ status: 'queued', attempts: job.attempts + 1, error: message })
     return 'queued'
   }
+}
+
+/**
+ * Is every channel that needs a clean copy holding one yet?
+ *
+ * Only ever relevant to a job whose media is ONE video: a carousel's slides
+ * are not one file to shrink, and a channel that already has its own file
+ * (the composer usually fills it in before the job is queued) is left alone.
+ *
+ * Answers one of three things, and never throws — a job must not be lost
+ * because a HEAD request had a bad afternoon:
+ *   { wait }              a copy is being made; try again when it lands
+ *   { failed }            no copy can be made, and the master must not be sent
+ *   { targets } or {}     go ahead, with the copies filled in
+ *
+ * With no encoder configured this does nothing at all, and the job behaves
+ * exactly as it did before the encoder existed.
+ */
+async function awaitCleanCopies(job: PublishJob): Promise<{
+  wait?: true; failed?: true; reason?: string; targets?: Target[]
+}> {
+  if (!encoderConfigured()) return {}
+  const media = job.media ?? []
+  if (media.length !== 1 || media[0]?.type !== 'video') return {}
+  const url = media[0].url
+  const targets = (job.targets ?? []) as Target[]
+  const platforms = targets.map(t => t.platform).filter(isPlatform)
+  if (platforms.length === 0) return {}
+
+  // the size is the whole question, and only the storage host knows it
+  const head = await headStoredObject(url).catch(() => null)
+  if (head?.bytes == null) return {}
+
+  /**
+   * How long the clip runs, if anything knows.
+   *
+   * It matters more than it looks. The bitrate a copy is made at is derived
+   * from the channel's size limit spread over the length being budgeted for,
+   * and with no length we have to budget for the channel's whole ceiling:
+   * Instagram's 300 MB over fifteen minutes is about 2 Mbps, against the
+   * 10 Mbps a twenty-second reel can afford. Because the copy is claimed on
+   * `source + channel`, whoever asks first fixes that for good — so an
+   * unmeasured automated post would quietly give back most of what this
+   * service was built to gain.
+   *
+   * `MediaItem` carries no duration, but the `video_previews` row for the same
+   * file usually does — every upload goes through it for the portal player.
+   * That row is OURS: `measuredDurationOf` reads it directly rather than
+   * through the Stream accessor, so the number keeps working on the day this
+   * workspace drops Cloudflare, which is the point of the encoder. When even
+   * that is missing the fallback still applies, and the job row records
+   * `target_source: 'fallback'` so the gap is findable.
+   */
+  const measured = await measuredDurationOf(url)
+  const seconds = measured ?? undefined
+  if (seconds === undefined) {
+    console.warn(`[publish ${job.id}] no measured duration for ${url}; the copy will be budgeted for the channel's whole length ceiling`)
+  }
+
+  const probe: AssetProbe = {
+    url, type: 'video', bytes: head.bytes,
+    ...(seconds !== undefined ? { seconds } : {}),
+  }
+  const kinds: Partial<Record<Platform, PostKind>> = {}
+  const own: Partial<Record<Platform, MediaItem[]>> = {}
+  for (const t of targets) {
+    if (t.options?.kind) kinds[t.platform] = t.options.kind
+    if (t.options?.media?.length) own[t.platform] = t.options.media
+  }
+
+  const needing = channelsNeedingCopy({ probes: [probe], platforms, kinds, own })
+  if (needing.length === 0) return {}
+
+  const copies = new Map<Platform, { url: string }>()
+  for (const platform of needing) {
+    const state = await smallerCopyOf(url, platform, kinds[platform], seconds)
+    if (state.status === 'encoding') {
+      return { wait: true, reason: cleanCopyWords(PLATFORM_MEDIA[platform]?.label ?? platform) }
+    }
+    if (state.status === 'failed') {
+      return {
+        failed: true,
+        reason: `Could not prepare a copy for ${PLATFORM_MEDIA[platform]?.label ?? platform} — try a smaller export (${state.reason})`,
+      }
+    }
+    copies.set(platform, { url: state.url })
+  }
+
+  // the copy becomes that channel's OWN file, so everything downstream —
+  // the relay, the payload, the provider — treats it like one added by hand
+  const next = targets.map(t => {
+    const copy = copies.get(t.platform)
+    if (!copy || t.options?.media?.length) return t
+    return { ...t, options: { ...(t.options ?? {}), media: [{ url: copy.url, type: 'video' as const }] } }
+  })
+  return { targets: next }
+}
+
+/**
+ * Hand back to the dispatcher every job that was waiting on this file.
+ *
+ * The wake-up, not a poll: `media/encode.finished` calls this and the jobs it
+ * names are dispatched again at once. A job that is not queued is not
+ * waiting, and the claim in `runPublishJob` means dispatching one twice is
+ * harmless.
+ */
+export async function jobsWaitingOnCopy(sourceUrl: string): Promise<string[]> {
+  if (!sourceUrl) return []
+  const rows = await table<PublishJobRow>('publish_jobs').list({
+    by: { status: 'queued' },
+    where: j => Array.isArray(j.media)
+      && (j.media as MediaItem[]).some(m => m?.url === sourceUrl),
+    limit: 50,
+  })
+  return rows.map(r => r.id)
 }
 
 /**

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { channelsNeedingCopy, copyDimensions, copyWords, probeForCopy } from '../app/lib/shrink-core'
+import {
+  channelsNeedingCopy, cleanCopyWords, copyDimensions, copyWords, probeForCopy,
+  tightestChannel,
+} from '../app/lib/shrink-core'
 import type { AssetProbe } from '../app/lib/media-fit-core'
 
 const MB = 1024 * 1024
@@ -74,5 +77,38 @@ describe('the words on the row', () => {
       .toBe('Instagram gets a smaller copy (180 MB) — the full file goes to the rest')
     expect(copyWords('Instagram', { status: 'failed', reason: 'the encode failed' }))
       .toBe('Could not make a smaller copy for Instagram: the encode failed')
+  })
+})
+
+/**
+ * ONE copy is made and every waiting channel gets it, so it has to be made
+ * for the tightest of them. A file that fits Instagram fits X; the other way
+ * round it does not. Taking the first of the list was taking whichever
+ * channel happened to be ticked first, which is not a rule at all.
+ */
+describe('which channel the one copy is made for', () => {
+  it('is the one with the least room', () => {
+    // Instagram 300 MB, X 512 MB, TikTok 4 GB
+    expect(tightestChannel(['tiktok', 'twitter', 'instagram'])).toBe('instagram')
+    expect(tightestChannel(['tiktok', 'twitter'])).toBe('twitter')
+    expect(tightestChannel(['tiktok'])).toBe('tiktok')
+  })
+
+  it('judges each channel on the kind it is posting as', () => {
+    // an Instagram Story takes 100 MB where a Reel takes 300
+    expect(tightestChannel(['instagram', 'twitter'], { instagram: 'story' })).toBe('instagram')
+    expect(tightestChannel(['twitter', 'instagram'], { instagram: 'story' })).toBe('instagram')
+  })
+
+  it('answers the same way twice, and nothing at all for nothing', () => {
+    expect(tightestChannel([])).toBeNull()
+    expect(tightestChannel(['instagram', 'instagram'])).toBe('instagram')
+  })
+
+  it('says how long a clean copy usually takes, in words', () => {
+    expect(cleanCopyWords('TikTok')).toBe('Making a clean copy for TikTok — usually a few minutes')
+    // and that sentence is what the channel's row shows
+    expect(copyWords('TikTok', { status: 'encoding', percent: null, note: cleanCopyWords('TikTok') }))
+      .toBe('Making a clean copy for TikTok — usually a few minutes')
   })
 })

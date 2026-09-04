@@ -7,7 +7,8 @@ import { isSettled } from '../../lib/upload-progress-core'
 import { probeFile, probeUrl } from './probeMedia'
 import AssetCheck from './AssetCheck'
 import {
-  channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, PRACTICAL_RELAY_MB, type CopyState,
+  channelsNeedingCopy, copyMeasureWords, copyWords, probeForCopy, tightestChannel,
+  PRACTICAL_RELAY_MB, type CopyState,
 } from '../../lib/shrink-core'
 import {
   assessAssets, kindLabel, postingAs, verdictByPlatform, PLATFORM_MEDIA,
@@ -216,15 +217,15 @@ export default function ComposeDialog({
   const failedUploads = uploads.filter(u => u.status === 'failed').length
 
   /**
-   * The smaller copy, made for us.
+   * The clean copy, made for us.
    *
    * A 2 GB master is right for YouTube and TikTok and wrong for Instagram, and
    * the provider's promise to shrink it did not hold — Instagram was handed
-   * the raw file and gave up. So the copy is ours: Cloudflare Stream, which
-   * already encodes every upload for the portal preview, hands back a 1080p
-   * MP4, and every channel the master is too big for gets THAT as its own
-   * file. One encode per file, ever; the download is built once and served
-   * from a fixed URL, so the next post of the same clip pays nothing.
+   * the raw file and gave up. So the copy is ours, and it is made properly:
+   * `services/encoder` re-encodes the clip at 1080p H.264, 8-12 Mbps for the
+   * channel it is for, and every channel the master is too big for gets THAT
+   * as its own file. It takes minutes rather than seconds — the row says so
+   * in words — and one encode per file and channel, ever.
    */
   const needingCopy = useMemo(
     () => channelsNeedingCopy({ probes, platforms, kinds, own: perMedia }),
@@ -241,9 +242,21 @@ export default function ComposeDialog({
     const ask = async () => {
       if (stopped) return
       try {
+        // the channel matters: the copy's bitrate is derived from THAT
+        // channel's size and length limits, and one copy serves every waiting
+        // channel — so it is made for the one with the LEAST room. A file that
+        // fits Instagram fits X; the other way round it does not.
+        const forPlatform = tightestChannel(needingCopy, kinds)
         const res = await fetch('/api/social/shrink', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: sharedVideoUrl }),
+          body: JSON.stringify({
+            url: sharedVideoUrl,
+            platform: forPlatform,
+            kind: forPlatform ? kinds[forPlatform] : undefined,
+            // the clip's own length, so the copy is budgeted for the video
+            // being posted rather than for the channel's whole ceiling
+            seconds: probes[0]?.seconds,
+          }),
         })
         const state = (await res.json()) as CopyState
         if (stopped) return
