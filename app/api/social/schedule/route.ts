@@ -28,6 +28,9 @@ export async function GET(req: Request) {
         clientId,
         from: url.searchParams.get('from'),
         to: url.searchParams.get('to'),
+        // scoped by the ITEM as well as by the client — the same rule the page
+        // applies, so the API is not the wider of the two surfaces
+        viewer: user,
       })
       return NextResponse.json({ posts })
     } catch (e) {

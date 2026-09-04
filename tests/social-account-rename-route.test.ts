@@ -3,7 +3,7 @@ import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 
 /**
- * RENAMING A CHANNEL IS SCOPED BY CLIENT, NOT BY JOB TITLE.
+ * READING AND RENAMING A CHANNEL ARE BOTH SCOPED BY CLIENT, NOT BY JOB TITLE.
  *
  * `PATCH /api/social/accounts/[id]` exists so a scheduler can call a channel
  * "Acme — main" rather than reading the platform's handle twice on one tile.
@@ -56,6 +56,21 @@ vi.mock('../app/lib/production-live', () => ({
 }))
 vi.mock('../lib/live', () => ({ announce: vi.fn(), announceAfter: vi.fn() }))
 vi.mock('../app/inngest/client', () => ({ inngest: { send: vi.fn(async () => ({})) } }))
+/** the provider, with the network taken out — the GET fans out to seven of its
+ *  endpoints and none of them is what this file is about */
+vi.mock('../app/lib/publisher', () => ({
+  getPublisher: () => ({
+    configured: () => true,
+    accountHealth: async () => ({ status: 'healthy' }),
+    accountInsights: async () => null,
+    dailyMetrics: async () => null,
+    followerStats: async () => null,
+    listPosts: async () => [],
+    postAnalytics: async () => [],
+    listComments: async () => [],
+  }),
+  isPublishDryRun: () => true,
+}))
 
 const route = await import('../app/api/social/accounts/[id]/route')
 
@@ -163,5 +178,62 @@ describe('PATCH /api/social/accounts/[id]', () => {
     )
     expect(res.status).toBe(400)
     expect(nameOf('acc-mine')).toBe('Acme on Instagram')
+  })
+})
+
+/**
+ * THE READ IS THE WIDER SURFACE OF THE TWO.
+ *
+ * A rename changes a label. This response carries the handle, the connection
+ * date, the token's health, the follower history, the last twenty posts,
+ * per-post analytics and the inbox comments — and it was gated on the ROLE
+ * alone, so anybody with it could paste another client's account uuid and read
+ * the lot. The PATCH beside it had been fixed; this had not.
+ */
+describe('GET /api/social/accounts/[id]', () => {
+  const read = async (id: string) => {
+    const res = await route.GET(
+      new Request(`https://x.test/api/social/accounts/${id}`),
+      { params: Promise.resolve({ id }) },
+    )
+    return { status: res.status, body: await res.json() as Record<string, unknown> }
+  }
+
+  it('hands the client’s own account manager their account', async () => {
+    as(AM)
+    const out = await read('acc-mine')
+    expect(out.status).toBe(200)
+    expect((out.body.account as { id: string }).id).toBe('acc-mine')
+  })
+
+  it('refuses another client’s account, and hands over none of it', async () => {
+    as(AM)
+    const out = await read('acc-theirs')
+    expect(out.status).toBe(403)
+    expect(out.body.error).toBe('That client is not one of yours')
+    // not the handle, not the analytics, not the comments
+    expect(out.body.account).toBeUndefined()
+    expect(out.body.analytics).toBeUndefined()
+    expect(out.body.comments).toBeUndefined()
+  })
+
+  it('refuses the editor on the other client ours', async () => {
+    as(OUTSIDER)
+    expect((await read('acc-mine')).status).toBe(403)
+  })
+
+  it('404s an account with no client on it, rather than letting it through', async () => {
+    // a row nobody owns must not become the same hole by another door
+    await (await import('@/lib/db')).table('social_accounts')
+      .update('acc-mine', { client_id: null })
+    as(AM)
+    const out = await read('acc-mine')
+    expect(out.status).toBe(404)
+    expect(out.body.account).toBeUndefined()
+  })
+
+  it('is a 404 for an account that never existed', async () => {
+    as(AM)
+    expect((await read('acc-nowhere')).status).toBe(404)
   })
 })

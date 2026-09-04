@@ -104,15 +104,56 @@ tile.
 | `GET /api/social/schedule/options` | the per-account lists (playlists, Pages, …) |
 | `GET /api/social/schedule/suggested` | suggested times from the client's own numbers |
 | `GET/POST /api/social/schedule/access` | health, groups, who is on the client |
+| `GET/PATCH /api/social/accounts/[id]` | one channel, everything about it; rename it for our screens |
+| `GET/POST/DELETE /api/clients/[id]/instagram-locations` | the places this client tags Instagram posts at — one at a time, never the whole list |
+
+### Who may do what — the security note
+
+Every route above is `requireRole('scheduler')` at least, plus either
+`assertClientAccess(user, clientId)` or `loadItemForUser` / `loadPostForUser`.
+
+**What that binds, exactly** (ruled 4 September 2026, and worth reading before
+trusting the sentence "scoped by client"):
+
+- **Account managers and editors** are bound to the clients they are assigned
+  to. This is the hole every scope check on this feature was added for.
+- **Schedulers and super admins are NOT bound by client, deliberately.**
+  `accessibleClientIds` answers `null` for them because those roles are scoped
+  by STATUS rather than by client — a scheduler sees every piece that has
+  reached scheduling, whoever it belongs to, exactly as the production board,
+  the Editor page and the Scheduler page have worked since 26 August. Binding
+  them here and nowhere else would give the app two answers to "whose work is
+  this".
+- A scheduler is still bound **by the job**: a piece handed to a named
+  scheduler (`scheduler_ids`) is hidden from the others, and `listPosts`
+  applies that server-side through the same `visibleItems` / `scopeContextOf`
+  the page uses — so the API is not the wider of the two surfaces.
+
+`app/lib/social-schedule.ts`'s `assertClientAccess` is the one function to
+change if schedulers are ever meant to be client-bound; every route asks it, so
+they would all move together.
 
 ### Tables
 
 `social_posts` and `schedule_notes` are ghost tables in
 `scripts/gen-db-types.mjs` (there is no SQL for them; `lib/db-types.ts` is
-regenerated from that file). `asset_versions` gained `cover_url`, `trim_start`
-and `trim_end`. Everything else is existing: `content_items`
-(`posting_approval_state`), `asset_versions`, `social_accounts`, `publish_jobs`,
-`claim_locks`, `clients.social_profile_id`.
+regenerated from that file — CLAUDE.md trap 12). New columns on existing
+tables: `asset_versions.cover_url`, `.trim_start`, `.trim_end` (the image
+editor's video panel), and `clients.instagram_locations` (the saved places the
+composer's location picker offers, one `{ name, pageId }` per entry, edited one
+at a time under a claim). Everything else is existing: `content_items`
+(`posting_approval_state`), `asset_versions`, `social_accounts`,
+`publish_jobs`, `claim_locks`, `clients.social_profile_id`.
+
+### The `auto` transition flag
+
+`performTransition(user, item, next, { auto: true })` marks an edge as the
+APP's own move rather than a person's — nobody may press a button called that.
+The composer's media picker uses it to send an approved piece back to
+`client_review` when a genuinely new file arrives (`addMediaVersion`), and the
+item page's upload does the same. It is why "editing takes the yes back"
+happens without anybody appearing to have asked for it in the activity trail,
+and why the edge is not offered anywhere in the UI.
 
 ### `PUBLISH_DRY_RUN`
 

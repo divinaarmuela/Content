@@ -482,7 +482,8 @@ afterAll(async () => {
   }
 
   /* ── the read-back: nothing this file made may survive ── */
-  const [items, versions, posts, notes, accounts, jobs, activity, notifications] = await Promise.all([
+  const lockIds = [...created.locks]
+  const [items, versions, posts, notes, accounts, jobs, activity, notifications, locks] = await Promise.all([
     table<ContentItem>('content_items').list({ fresh: true, where: i => String(i.title ?? '').startsWith(TAG) }),
     table<AssetVersion>('asset_versions').list({ fresh: true, where: v => itemIds.includes(String(v.item_id)) }),
     table<SocialPost>('social_posts').list({ fresh: true, where: p => itemIds.includes(String(p.item_id)) }),
@@ -493,13 +494,19 @@ afterAll(async () => {
       .list({ fresh: true, where: a => itemIds.includes(String(a.entity_id ?? '')) }).catch(() => []),
     table<{ id: string; entity_id?: string }>('notification_log')
       .list({ fresh: true, where: n => itemIds.some(i => String(n.entity_id ?? '').startsWith(i)) }).catch(() => []),
+    // the ninth table, and the one this run writes most rows in. A lock left
+    // standing makes its item unqueueable for ever — the self-healing in
+    // `takeClaimLock` only fires when somebody tries again, and nobody will.
+    table<{ id: string }>('claim_locks')
+      .list({ fresh: true, where: l => lockIds.includes(l.id) }).catch(() => []),
   ])
 
   console.log('[teardown] rows created:', JSON.stringify(gone))
   console.log('[teardown] read-back leftovers —',
     'items:', items.length, 'versions:', versions.length, 'posts:', posts.length,
     'notes:', notes.length, 'accounts:', accounts.length, 'jobs:', jobs.length,
-    'activity:', activity.length, 'notifications:', notifications.length)
+    'activity:', activity.length, 'notifications:', notifications.length,
+    'locks:', locks.length)
 
   expect(items.map(r => r.id), 'content_items').toEqual([])
   expect(versions.map(r => r.id), 'asset_versions').toEqual([])
@@ -509,4 +516,5 @@ afterAll(async () => {
   expect(jobs.map(r => r.id), 'publish_jobs').toEqual([])
   expect(activity.map(r => r.id), 'workflow_activity').toEqual([])
   expect(notifications.map(r => r.id), 'notification_log').toEqual([])
+  expect(locks.map(r => r.id), 'claim_locks').toEqual([])
 })

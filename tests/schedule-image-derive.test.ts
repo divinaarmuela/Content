@@ -341,13 +341,61 @@ describe('a crop', () => {
     expect(version().files.map((s: any) => s.url)).toEqual([ONE, TWO])
   })
 
-  it('throws away the upload when the save it had already begun falls over', async () => {
-    // the browser has to upload before it can save, so a failure once the
-    // save is under way would otherwise leave bytes nothing points at
+  /**
+   * THE WINDOW IS EXACTLY ONE STEP WIDE: THE CLAIM.
+   *
+   * Before it, nothing has been promised to the uploaded file, and a refusal
+   * should throw it away. After it, the version the client APPROVED points at
+   * that file — so deleting it because a later step fell over would leave the
+   * approved version, and any post already repointed at it, aiming at a URL
+   * that 404s. Silently, until somebody opens the piece.
+   */
+  it('keeps the file once the version points at it, whatever falls over next', async () => {
+    // the claim lands, and THEN Drive has a bad minute
     h.mirrorThrows = true
     const { status } = await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
     expect(status).toBeGreaterThanOrEqual(400)
-    expect(h.deleted).toEqual([CROPPED])
+    // the version really did take the crop…
+    expect(version().files.map((s: any) => s.url)).toEqual([CROPPED, TWO])
+    // …so the file it points at must still exist
+    expect(h.deleted).toEqual([])
+  })
+
+  it('throws away the upload of whoever LOSES the claim', async () => {
+    // two people cropping the same slide at the same moment: one write lands,
+    // and the other's freshly uploaded file is pointed at by nothing at all.
+    // That is the one failure that leaves a genuine orphan.
+    const OTHER = 'https://media.mdmmarketing.com.au/1756000000009-a1b2d0-one_again.jpg'
+    const [first, second] = await Promise.all([
+      derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' }),
+      derive({ item_id: ITEM, from_url: ONE, to_url: OTHER, kind: 'crop' }),
+    ])
+
+    const results = [
+      { res: first, url: CROPPED },
+      { res: second, url: OTHER },
+    ]
+    const won = results.filter(r => r.res.status === 200)
+    const lost = results.filter(r => r.res.status !== 200)
+    expect(won).toHaveLength(1)
+    expect(lost).toHaveLength(1)
+    expect(lost[0].res.status).toBe(409)
+
+    // the winner's file is in the version and was NOT deleted; the loser's was
+    expect(version().files.map((s: any) => s.url)).toEqual([won[0].url, TWO])
+    expect(h.deleted).toEqual([lost[0].url])
+  })
+
+  it('keeps a video’s cover once the version carries it', async () => {
+    fake.restore()
+    fake = seed({ slides: [{ url: CLIP, name: 'clip.mp4', type: 'video' }] })
+    h.deleted = []
+    const { status } = await derive({
+      item_id: ITEM, from_url: CLIP, cover_url: COVER, kind: 'video',
+    })
+    expect(status).toBe(200)
+    expect(version().cover_url).toBe(COVER)
+    expect(h.deleted).toEqual([])
   })
 
   it('deletes NOTHING when the request itself is refused', async () => {

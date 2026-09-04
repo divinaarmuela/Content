@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
+import { table } from '@/lib/db'
 import type { Row } from '@/lib/db-types'
 
 /**
@@ -961,5 +962,92 @@ describe('the calendar draws the note buttons the server would honour', () => {
       expect((await json(notesRoute.DELETE(
         new Request(`https://x.test/notes?id=${mine.id}`, { method: 'DELETE' })))).status).toBe(200)
     }
+  })
+})
+
+/* ── the calendar is scoped by the ITEM, not only by the client ──────────── */
+
+/**
+ * THE API MUST NOT BE THE WIDER OF THE TWO SURFACES.
+ *
+ * The page has always refused to draw a post whose ITEM the viewer may not
+ * see (`useSchedulePosts`'s `scopedItems`); the route filtered by `client_id`
+ * alone. A scheduler is not bound by client — that is the ruling — but they
+ * ARE bound by the job: a piece handed to a named scheduler belongs to that
+ * person, and the board, the Scheduler page and the rail all hide it from
+ * everybody else. Only the calendar's API did not, so the title and the
+ * caption of somebody else's job were one request away.
+ *
+ * Same rule now, from the same helpers — `visibleItems` with
+ * `scopeContextOf`, exactly as the items API and the page both call them.
+ */
+describe('listing a week', () => {
+  /** a piece on this client handed to a DIFFERENT scheduler */
+  const SOMEBODY_ELSES = 'a1b2c3d4-0000-4000-8000-0000000000ff'
+  const OTHER_SCHEDULER = 'u-sch-2'
+
+  const withSomebodyElsesJob = async () => {
+    await table('content_items').insert({
+      id: SOMEBODY_ELSES, client_id: CLIENT, title: 'Somebody else’s job',
+      status: 'approved_for_scheduling', content_type: 'carousel',
+      owner_id: OWNER.id, scheduler_ids: [OTHER_SCHEDULER], caption: 'Hello',
+      posting_approval_state: null, platform_targets: ['instagram'],
+    } as never)
+    await table('asset_versions').insert({
+      id: 'v2', item_id: SOMEBODY_ELSES, version_number: 1, files: SLIDES,
+      file_url: SLIDES[0].url, dropbox_url: '', drive_url: '', notes: null,
+      uploaded_by: OWNER.id,
+    } as never)
+    // the account manager, who may see everything on their client, starts it
+    as(AM)
+    const made = await json(schedule.POST(new Request('https://x.test/api/social/schedule', {
+      method: 'POST',
+      body: JSON.stringify({
+        item_id: SOMEBODY_ELSES, slides: SLIDES, caption: 'Words nobody else should read',
+        channels: ['acc-1'], scheduled_for: IN_TWO_DAYS(),
+      }),
+    })))
+    expect(made.status).toBe(200)
+    return made.body.post.id as string
+  }
+
+  it('hides a post whose job was handed to another scheduler', async () => {
+    const hidden = await withSomebodyElsesJob()
+
+    // the account manager on the client sees it
+    const forAm = await lib.listPosts({ clientId: CLIENT, viewer: AM as never })
+    expect(forAm.map(p => p.id)).toEqual([hidden])
+
+    // the scheduler it was NOT handed to does not — not the tile, not the words
+    const forScheduler = await lib.listPosts({ clientId: CLIENT, viewer: SCHEDULER as never })
+    expect(forScheduler).toEqual([])
+    expect(JSON.stringify(forScheduler)).not.toMatch(/nobody else should read/)
+  })
+
+  it('shows the scheduler the jobs that ARE theirs, and the unassigned ones', async () => {
+    await withSomebodyElsesJob()
+    as(SCHEDULER)
+    const mine = await create()            // ITEM has no scheduler_ids at all
+    expect(mine.status).toBe(200)
+
+    const listed = await lib.listPosts({ clientId: CLIENT, viewer: SCHEDULER as never })
+    expect(listed.map(p => p.id)).toEqual([mine.body.post.id])
+  })
+
+  it('the route asks with the person who called it', async () => {
+    await withSomebodyElsesJob()
+    as(SCHEDULER)
+    const answered = await json(schedule.GET(
+      new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
+    expect(answered.status).toBe(200)
+    expect(answered.body.posts).toEqual([])
+  })
+
+  it('with nobody asking, it is still the whole client — the internal callers', async () => {
+    const hidden = await withSomebodyElsesJob()
+    // `viewer` is optional so the two internal callers that have already
+    // proved access need not invent one; every ROUTE passes it
+    const all = await lib.listPosts({ clientId: CLIENT })
+    expect(all.map(p => p.id)).toEqual([hidden])
   })
 })

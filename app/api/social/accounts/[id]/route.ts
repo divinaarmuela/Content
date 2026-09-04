@@ -12,6 +12,16 @@ import { assertClientAccess } from '../../../../lib/social-schedule'
  * revoked insights scope should grey out the metrics, not blank the page. So
  * the response always has the same shape, with nulls where a source could not
  * be read, and the UI decides what to show.
+ *
+ * SCOPED BY CLIENT, like the PATCH below it. `requireRole('scheduler')` says
+ * what a person may DO and nothing about whose account this is — and this
+ * response is the widest one in the feature: the handle, the connection date,
+ * the token's health, the follower history, the last twenty posts, per-post
+ * analytics and the inbox comments. Anybody with the role could read all of
+ * that for any client in the agency by pasting a uuid.
+ *
+ * An account with no client on it 404s rather than falling through, or it is
+ * the same hole by another door.
  */
 export async function GET(
   _req: Request,
@@ -19,13 +29,17 @@ export async function GET(
 ) {
   return withRequestCache(async () => {
   try {
-    await requireRole('scheduler')
+    const user = await requireRole('scheduler')
     const { id } = await params
 
     // our row first — it carries the client link, which is what makes this
     // account "belong" to someone
     const row = await table<SocialAccount>('social_accounts').get(id)
     if (!row) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    if (!row.client_id) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+    }
+    await assertClientAccess(user, row.client_id)
     // the columns the old select named, and no others
     const account = {
       id: row.id, client_id: row.client_id, platform: row.platform,

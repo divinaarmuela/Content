@@ -132,10 +132,13 @@ const num = (v: unknown): number | null =>
  *
  * The box is filled in ONLY once every question about the REQUEST has been
  * answered yes: this person may edit this piece, the piece really holds the
- * file being edited, and the incoming file passed `ourPicture`. From that
- * point on the only failures left are the claim losing its race and the
- * tidying after it — which is exactly the window where a file really has been
- * uploaded for a save that did not happen.
+ * file being edited, and the incoming file passed `ourPicture`. And it is
+ * EMPTIED again the moment the claim lands, because from that instant the
+ * approved version points at the file and deleting it would break the very
+ * thing the save just built.
+ *
+ * So the window is exactly one step wide: the claim. Before it, nothing has
+ * been promised to the file; after it, everything has.
  *
  * Best effort throughout: a failed tidy-up must never turn into a failed edit.
  */
@@ -199,6 +202,18 @@ async function write(user: TeamUser, input: DeriveInput, orphan: Orphan): Promis
     if (!taken.claimed) {
       throw new AuthzError('Somebody changed this piece while you were cropping — reopen it and try again', 409)
     }
+    /**
+     * THE FILE IS REFERENCED NOW. It is not an orphan any more, whatever
+     * happens next.
+     *
+     * The version the client approved points at it from this line onwards, and
+     * so does any post `repointPosts` is about to update. Everything below can
+     * still throw — the Drive mirror is synchronous and unawaited, and the
+     * repoint's own read is not caught — and deleting the file on the way out
+     * would leave the APPROVED version pointing at a URL that 404s, silently,
+     * until somebody opens the piece.
+     */
+    orphan.url = null
 
     const slides = slidesOf(taken.row)
     mirrorVersionSlides(item.id, number, slides)
@@ -233,6 +248,9 @@ async function write(user: TeamUser, input: DeriveInput, orphan: Orphan): Promis
   if (!taken.claimed) {
     throw new AuthzError('Somebody changed this piece while you were editing — reopen it and try again', 409)
   }
+  // referenced now — the version carries this cover, so a later failure is not
+  // a reason to delete it (see the crop branch above)
+  orphan.url = null
 
   announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
 

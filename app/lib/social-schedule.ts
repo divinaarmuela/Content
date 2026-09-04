@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
-  AssetVersion, Client, ContentItem, PublishJob as PublishJobRow,
-  ScheduleNote, SocialAccount, SocialPost,
+  AssetVersion, Batch, Client, ContentItem, PublishJob as PublishJobRow,
+  ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
 import { AuthzError, authzErrorResponse, type TeamUser } from './authz'
 import { mayPublish } from './identity-core'
 import { accessibleClientIds, loadItemForUser } from './production-access'
+import { scopeContextOf, visibleItems } from './scope-client'
 import { actingRoles } from './workflow-core'
 import { actOnPostingApproval } from './posting-approval'
 import {
@@ -160,9 +161,28 @@ function assertMayPublish(user: TeamUser): void {
 }
 
 /**
- * Refuse a client this person is not on. `accessibleClientIds` answers null
- * for the roles that are scoped by STATUS rather than by client (scheduler,
- * super admin) — the same answer the production board acts on.
+ * Refuse a client this person is not on.
+ *
+ * -- WHO THIS ACTUALLY BINDS, AND WHO IT DOES NOT (ruled 4 Sep 2026) --
+ *
+ * Account managers and editors: bound to the clients they are assigned to.
+ * Schedulers and super admins: NOT bound, and deliberately so.
+ * `accessibleClientIds` answers `null` for them because those two roles are
+ * scoped by STATUS rather than by client — a scheduler sees every piece that
+ * has reached scheduling, whoever it belongs to, which is how the production
+ * board, the Editor page and the Scheduler page have all worked since 26
+ * August. Binding them here and nowhere else would give the app two different
+ * answers to "whose work is this", and the one nobody expects is the one that
+ * loses somebody's afternoon.
+ *
+ * So a sentence like "a scheduler on client A cannot touch client B" is NOT
+ * what this guarantees, and no comment on this branch should claim it does.
+ * What it guarantees is that a person scoped BY CLIENT stays inside their
+ * clients — which is the hole every route on this branch was opened for.
+ *
+ * If schedulers are ever meant to be client-bound, this is the one function
+ * to change: every route in the feature asks it, so they would all move
+ * together.
  */
 export async function assertClientAccess(user: TeamUser, clientId: string): Promise<void> {
   const ids = await accessibleClientIds(user)
@@ -606,6 +626,26 @@ export async function addMediaVersion(
   const slides = normaliseSlides(input.files)
   if (slides.length === 0) throw new ComposeError(['Pick at least one photo or video'])
 
+  /**
+   * EVERY file the caller offered, including the ones the slide cap dropped.
+   *
+   * `normaliseSlides` stops at `MAX_SLIDES`, which is right for what gets
+   * SAVED and wrong for what gets tidied up: a file past the tenth was
+   * uploaded, is referenced by nothing, and would be left in the bucket for
+   * ever because the list that decides the tidy-up had already forgotten it.
+   * Read one entry at a time through the same reader, so the cap cannot apply
+   * and there is still only one definition of what a slide is.
+   */
+  const offered: Slide[] = []
+  const seen = new Set<string>()
+  for (const entry of asArray<unknown>(input.files)) {
+    for (const slide of normaliseSlides([entry])) {
+      if (seen.has(slide.url)) continue
+      seen.add(slide.url)
+      offered.push(slide)
+    }
+  }
+
   // every file this item has EVER held, across every version -- the honest
   // test of "has the client ever been shown this picture"
   const versions = await versionsOf(item.id)
@@ -627,6 +667,9 @@ export async function addMediaVersion(
    *  • only a file that is genuinely NEW to this item is a candidate — a
    *    caller naming a file the client already approved gets it left exactly
    *    where it is;
+   *  • but EVERY file offered is considered, not only the ones that survived
+   *    the slide cap, because a file the cap dropped is the most orphaned of
+   *    the lot;
    *  • and only a file on our own storage, checked by the same guard, so a
    *    URL pointing anywhere else is not something we would delete.
    *
@@ -646,7 +689,8 @@ export async function addMediaVersion(
     const everywhere = new Set(
       (await table<AssetVersion>('asset_versions').list().catch(() => []))
         .flatMap(v => slidesOf(v).map(sl => sl.url)))
-    for (const slide of fresh) {
+    for (const slide of offered) {
+      if (known.has(slide.url)) continue
       if (everywhere.has(slide.url)) continue
       const ours = ourStorageUrl(slide.url, base, slide.type === 'video' ? 'video' : 'image')
       if (ours) await deleteStoredObject(ours).catch(() => {})
@@ -1252,6 +1296,12 @@ export async function listPosts(input: {
   clientId: string
   from?: string | null
   to?: string | null
+  /**
+   * Who is asking. Optional only so the two internal callers that have already
+   * proved access (and the tests) need not invent one; every ROUTE passes it,
+   * and without it this returns the client's whole calendar.
+   */
+  viewer?: TeamUser | null
 }): Promise<ListedPost[]> {
   const rows = await posts().list({ where: p => p.client_id === input.clientId })
   const inRange = rows.filter(p => {
@@ -1271,9 +1321,23 @@ export async function listPosts(input: {
     // this list have to give the same reason
     table<SocialAccount>('social_accounts').list({ where: a => a.client_id === input.clientId }),
   ])
-  const itemById = new Map(items.map(i => [i.id, i]))
 
-  return inRange.map(row => {
+  /**
+   * A POST WHOSE ITEM THIS PERSON MAY NOT SEE IS NOT ON THEIR CALENDAR.
+   *
+   * The page has always done this (`useSchedulePosts`'s `scopedItems`) and the
+   * server did not, so the API was the wider of the two surfaces: the title
+   * and the caption of an item somebody was not on, to anybody else on that
+   * client. Same rule, same helpers — `visibleItems` with `scopeContextOf`,
+   * exactly as the items API and the page both call it — so the browser and
+   * the route cannot come to different answers about the same row.
+   */
+  const visible = input.viewer
+    ? await scopeItemsFor(input.viewer, items)
+    : items
+  const itemById = new Map(visible.map(i => [i.id, i]))
+
+  return inRange.filter(row => itemById.has(row.item_id)).map(row => {
     const post = shape(row)
     const item = itemById.get(post.item_id) ?? null
     // this post's own jobs only -- see jobsOf
@@ -1286,6 +1350,36 @@ export async function listPosts(input: {
         ?? channelBlockReason(post.channels, accounts),
     }
   })
+}
+
+/**
+ * The items this person may actually see, out of the ones in hand.
+ *
+ * The same two calls the page makes and the items API makes — `scopeContextOf`
+ * for the context a bare item array cannot carry (the shoots they own, the
+ * work kinds), then `visibleItems`. Reading the assignments and shoots costs
+ * nothing extra: `lib/db.ts` lists the node once per request and the request
+ * cache serves the rest.
+ */
+async function scopeItemsFor(
+  viewer: TeamUser, items: ContentItem[],
+): Promise<ContentItem[]> {
+  const [assignments, batches, workKinds] = await Promise.all([
+    table<TeamUserClient>('team_user_clients').list().catch(() => []),
+    table<Batch>('batches').list().catch(() => []),
+    table<WorkKind>('work_kinds').list().catch(() => []),
+  ])
+  const who = { id: viewer.id, role: viewer.role, client_id: viewer.client_id ?? null }
+  return visibleItems(
+    who as never,
+    items as unknown as (ContentItem & { work_kinds?: null })[],
+    assignments as unknown as { team_user_id: string; client_id: string }[],
+    scopeContextOf({
+      viewer: who as never,
+      batches: batches as unknown as { id: string; client_id: string; owner_id?: string | null }[],
+      workKinds: workKinds as unknown as { id: string; slug: string }[],
+    }),
+  ) as unknown as ContentItem[]
 }
 
 /* ── notes on the calendar ──────────────────────────────────────────────── */

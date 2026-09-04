@@ -190,6 +190,20 @@ const createPost = () => json(
  *  written. Let the queue drain before looking at it. */
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 5)) }
 
+/** Make every write whose payload names `needle` fail the way a dropped
+ *  connection does. Returns the undo. */
+function failWritesNaming(needle: string) {
+  const inner = globalThis.fetch
+  globalThis.fetch = (async (input: any, init: any = {}) => {
+    if ((init?.method ?? 'GET').toUpperCase() !== 'GET'
+      && typeof init?.body === 'string' && init.body.includes(needle)) {
+      throw new TypeError('fetch failed')
+    }
+    return inner(input, init)
+  }) as typeof globalThis.fetch
+  return () => { globalThis.fetch = inner }
+}
+
 const item = () => fake.rows('content_items').find(i => i.id === ITEM) as any
 const versions = () => (fake.rows('asset_versions') as any[]).filter(v => v.item_id === ITEM)
 const posts = () => fake.rows('social_posts') as any[]
@@ -432,6 +446,28 @@ describe('addMediaVersion, called directly', () => {
       })).rejects.toThrow()
       expect(h.deleted).toEqual([])
       expect(versions()).toHaveLength(1)
+    })
+
+    it('includes the files the slide cap dropped', async () => {
+      // `normaliseSlides` stops at MAX_SLIDES, which is right for what gets
+      // SAVED and wrong for what gets tidied: a file past the tenth was
+      // uploaded, is referenced by nothing, and used to be left in the bucket
+      // for ever, because the list deciding the tidy-up had already forgotten
+      // it. Fourteen offered, ten saveable — and the version write falls over,
+      // so all fourteen are orphans.
+      const many = Array.from({ length: 14 }, (_, i) => uploaded(`over-${i}.jpg`))
+      const undo = failWritesNaming('over-0.jpg')
+      try {
+        await expect(lib.addMediaVersion(SCHEDULER as never, {
+          item_id: ITEM, files: many,
+        })).rejects.toThrow()
+      } finally {
+        undo()
+      }
+      expect(versions()).toHaveLength(1)
+      expect([...h.deleted].sort()).toEqual(many.map(m => m.url).sort())
+      // the four past the cap really are in there
+      expect(h.deleted).toContain(KEY('over-13.jpg'))
     })
 
     it('deletes nothing at all when the REQUEST is what was refused', async () => {
