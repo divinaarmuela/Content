@@ -10,8 +10,7 @@ import {
   APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions,
   initialComposer, moreOptionsFor, optionsFromExtras, readPerChannel, PAGE_ID_HELP,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
-  type OptionChoice, type SavedLocation,
-} from '@/app/lib/schedule-compose-core'
+  type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
   tileTone, validateComposition, type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
@@ -302,11 +301,7 @@ export default function NewPostDialog({
     const account = chosen.find(a => String(a.platform) === 'tiktok')
     const seconds = account ? lists[account.id]?.maxVideoDurationSec : null
     if (!seconds || mediaLead !== 'video') return null
-    const minutes = Math.floor(seconds / 60)
-    const said = minutes >= 60
-      ? `${Math.floor(minutes / 60)} ${Math.floor(minutes / 60) === 1 ? 'hour' : 'hours'}`
-      : minutes >= 1 ? `${minutes} minutes` : `${seconds} seconds`
-    return `This TikTok account takes videos up to ${said} long.`
+    return `This TikTok account takes videos up to ${durationWords(seconds)} long.`
   }, [chosen, lists, mediaLead])
 
   /* ── talking to the server ────────────────────────────────────────────── */

@@ -965,3 +965,16 @@ export function footerActions(input: {
     menu,
   }
 }
+
+/** "1 hour 30 minutes", "10 minutes", "45 seconds" — for a limit a person
+ *  holds a file up against, so a half hour must not vanish. */
+export function durationWords(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  if (s < 60) return `${s} ${s === 1 ? 'second' : 'seconds'}`
+  const hours = Math.floor(s / 3600)
+  const minutes = Math.floor((s % 3600) / 60)
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
+  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`)
+  return parts.join(' ')
+}

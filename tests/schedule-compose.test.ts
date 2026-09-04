@@ -525,3 +525,14 @@ describe('what comes back out of the stored blob', () => {
     expect(readChannelExtras({ allowComment: false }).allowComment).toBe(false)
   })
 })
+
+describe('durationWords', () => {
+  it('says the whole limit, half hours included', async () => {
+    const { durationWords } = await import('../app/lib/schedule-compose-core')
+    expect(durationWords(5400)).toBe('1 hour 30 minutes')
+    expect(durationWords(3600)).toBe('1 hour')
+    expect(durationWords(600)).toBe('10 minutes')
+    expect(durationWords(45)).toBe('45 seconds')
+    expect(durationWords(7260)).toBe('2 hours 1 minute')
+  })
+})
