@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowRight, Check, FolderOpen, Upload, X,
 } from 'lucide-react'
@@ -75,12 +75,36 @@ export default function MediaPicker({
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [over, setOver] = useState<number | 'tray' | null>(null)
+  /** what the tray was seeded from, so a listener cannot reseed it */
+  const seeded = useRef(false)
+  const [confirm, setConfirm] = useState(false)
 
   const uploadGroup = useMemo(() => `schedule-media:${itemId}`, [itemId])
   const uploads = useUploadGroup(uploadGroup)
 
-  // reopening on a different post must not show the last one's arrangement
-  useEffect(() => { if (open) { setTray(slides); setProblem(null) } }, [open, slides])
+  /**
+   * The tray is seeded ONCE PER OPENING, never again while it is open.
+   *
+   * `slides` is the composer's own state, and its identity changes whenever a
+   * `loaded` action fires — which is what an approval landing in another tab
+   * does. Reseeding on that discarded whatever somebody was in the middle of
+   * arranging, with no warning and nothing to undo it with. Same discipline
+   * as the composer's `loadedId` ref.
+   */
+  useEffect(() => {
+    if (!open) {
+      seeded.current = false
+      // the last piece's Drive imports must not haunt the next one's "Added"
+      // marks, or its Upload tab
+      setBrought([])
+      setConfirm(false)
+      return
+    }
+    if (seeded.current) return
+    seeded.current = true
+    setTray(slides)
+    setProblem(null)
+  }, [open, slides])
 
   const approvedUrls = useMemo(() => new Set(approved.map(s => s.url)), [approved])
   /** what is in the tray that the client has never seen */
@@ -170,6 +194,32 @@ export default function MediaPicker({
 
   useEffect(() => () => clearGroup(uploadGroup), [uploadGroup])
 
+  /** has the arrangement moved since the window opened? */
+  const trayMoved = useMemo(() => {
+    const a = tray.map(t => t.url)
+    const b = (slides ?? []).map(t => t.url)
+    return a.length !== b.length || a.some((url, i) => url !== b[i])
+  }, [tray, slides])
+
+  const requestClose = useCallback(() => {
+    if (trayMoved) { setConfirm(true); return }
+    onClose()
+  }, [trayMoved, onClose])
+
+  // Escape closes it. The COMPOSER's own Escape stands down while this window
+  // is open, so without this one Escape did nothing at all here — on the
+  // window that holds the most unsaved work of the two.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      requestClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [open, requestClose])
+
   if (!open) return null
 
   /* ── drag and drop ────────────────────────────────────────────────────── */
@@ -205,7 +255,10 @@ export default function MediaPicker({
     if (!payload) return
     const { slide, from } = payload
     if (at === 'tray') {
-      setTray(t => (from === null ? addToPost(t, slide) : t))
+      // from the library: add it at the end. From INSIDE the tray: move it
+      // there — dragging a slide onto the dashed slot is the obvious gesture
+      // for "put this last", and it used to do nothing at all.
+      setTray(t => (from === null ? addToPost(t, slide) : moveInPost(t, from, t.length - 1)))
       return
     }
     setTray(t => (from === null ? replaceInPost(t, at, slide) : moveInPost(t, from, at)))
@@ -218,6 +271,7 @@ export default function MediaPicker({
       role="dialog"
       aria-modal="true"
       aria-label="Add media"
+      onMouseDown={e => { if (e.target === e.currentTarget) requestClose() }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
     >
       <div className="flex max-h-full w-full max-w-[960px] overflow-hidden rounded-card bg-surface shadow-xl md:h-[600px]">
@@ -297,7 +351,7 @@ export default function MediaPicker({
             <h2 className="text-section-title">Add media</h2>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="Close"
               className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
             >
@@ -456,10 +510,34 @@ export default function MediaPicker({
             </p>
           )}
 
+          {confirm && (
+            <div className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+              <span className="text-[13px] font-medium">
+                You have moved the media around without saving. Close anyway?
+              </span>
+              <span className="ml-auto flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirm(false)}
+                  className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+                >
+                  Keep arranging
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background"
+                >
+                  Close and lose it
+                </button>
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="flex min-h-11 items-center rounded-full border border-border px-4 text-[14px] font-semibold hover:bg-muted"
             >
               Discard changes

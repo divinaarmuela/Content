@@ -79,11 +79,18 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
   'scheduled>published': { blocked: true },
 }
 
-export function checkTaskTransitionAs(roles: readonly Role[], from: ItemStatus, to: ItemStatus): TransitionCheck {
+export function checkTaskTransitionAs(
+  roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  /** the app's own move — see `checkTransitionAs`. An internal task has the
+   *  same `auto` edges an asset does (a new draft saved while the piece is
+   *  with the client pulls it back), and this wrapper has to be able to say
+   *  so, or those edges are simply unreachable for a task. */
+  opts?: { auto?: boolean },
+): TransitionCheck {
   const exists = TRANSITIONS[from]?.[to]
   if (!exists) return { ok: false, reason: `No transition from ${from} to ${to}` }
   const override = TASK_TRANSITION_OVERRIDES[`${from}>${to}`]
-  if (!override) return checkTransitionAs(roles, from, to)
+  if (!override) return checkTransitionAs(roles, from, to, opts)
   if ('blocked' in override) {
     return { ok: false, reason: 'A task ends when it is approved — there is nothing to schedule or publish' }
   }

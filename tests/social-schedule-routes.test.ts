@@ -267,6 +267,69 @@ describe('a planned post, end to end', () => {
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('pending')
   })
 
+  // THE CLICK THAT USED TO COST A CLIENT'S APPROVAL.
+  //
+  // The composer opened an approved post with an empty caption and empty
+  // per-channel extras, and pressing Schedule PATCHed the WHOLE composition
+  // — those empties included. `updatePost` read the empty caption as a
+  // content change and took the sign-off back, from a press that changed
+  // nothing anybody could see. The window now opens holding what the post
+  // holds, so the body it sends back is identical; this is the route's half
+  // of that promise.
+  it('an untouched Schedule press sends the same body and keeps the approval', async () => {
+    const id = (await create({
+      per_channel: { 'acc-1': { firstComment: '#launch', locationId: '102938475610293' } },
+    })).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+
+    const before = row(id)
+    // exactly what the composer sends when nobody has typed anything: every
+    // field, read back off the post it opened with
+    const unchanged = await json(one.PATCH(
+      new Request('https://x.test/x', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          item_id: ITEM,
+          slides: before.slides,
+          caption: before.caption,
+          channels: before.channels,
+          per_channel: before.per_channel,
+          scheduled_for: before.scheduled_for,
+          timezone: 'Australia/Melbourne',
+        }),
+      }),
+      params(id),
+    ))
+
+    expect(unchanged.status).toBe(200)
+    expect(unchanged.body.post.status).toBe('approved')
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
+    // …and nothing was quietly lost on the way through, either
+    expect(row(id).caption).toBe('Hello everyone')
+    expect(row(id).per_channel['acc-1'])
+      .toEqual({ firstComment: '#launch', locationId: '102938475610293' })
+  })
+
+  it('an EMPTY caption on an approved post is still a change, and still costs the approval', async () => {
+    // the other half: the guard must not have been loosened into "a caption
+    // edit no longer counts". Somebody deliberately clearing the words is a
+    // content change and has to be re-approved.
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+    const cleared = await json(one.PATCH(
+      new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: '' }) }),
+      params(id),
+    ))
+    expect(cleared.status).toBe(200)
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('pending')
+  })
+
   it('keeps the approval when only the time moves', async () => {
     const id = (await create()).body.post.id as string
     await post(id)

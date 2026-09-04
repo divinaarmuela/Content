@@ -384,6 +384,7 @@ export default function NewPostDialog({
               </>
             )}
             width={260}
+            closeOnPick={false}
           >
             {accounts.length === 0 && (
               <p className="p-2 text-[13px] text-muted-foreground">
@@ -736,9 +737,18 @@ function problemsOf(e: unknown): string[] {
  * ref pointing at the dialog card, so clicking the caption box left the
  * channel list hanging open over the words being typed.
  */
-function Dropdown({ label, width, children }: {
+function Dropdown({ label, width, closeOnPick = true, children }: {
   label: React.ReactNode
   width: number
+  /**
+   * Does clicking inside the panel finish the job?
+   *
+   * True for the post-type menu — one choice and you are done. FALSE for the
+   * channels list, which is a MULTI-SELECT with tick marks: closing it on the
+   * first tick means reopening the pill for every extra account, which is
+   * what happened when all the panels were given one shared close.
+   */
+  closeOnPick?: boolean
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -760,7 +770,7 @@ function Dropdown({ label, width, children }: {
   }, [open])
 
   return (
-    <div ref={box} className="relative" onClick={() => { /* clicks inside stay inside */ }}>
+    <div ref={box} className="relative">
       <button
         type="button"
         aria-expanded={open}
@@ -773,7 +783,7 @@ function Dropdown({ label, width, children }: {
       {open && (
         <div
           style={{ width }}
-          onClick={() => setOpen(false)}
+          onClick={closeOnPick ? () => setOpen(false) : undefined}
           className="absolute left-0 top-[calc(100%+6px)] z-50 rounded-inner border border-border bg-popover p-1.5 shadow-lg"
         >
           {children}

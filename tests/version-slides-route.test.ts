@@ -22,9 +22,9 @@ const addVersion = vi.fn(async (_actor: unknown, _id: string, links: Record<stri
   id: 'v-1', version_number: 3, ...links,
 }))
 const mirrorVersionSlides = vi.fn()
-const performTransition = vi.fn(async (_actor: unknown, it: { status: string }, to: string) => ({
-  ...it, status: to,
-}))
+const performTransition = vi.fn(async (
+  _actor: unknown, it: { status: string }, to: string, _opts?: { auto?: boolean },
+) => ({ ...it, status: to }))
 const logActivity = vi.fn()
 
 vi.mock('../app/lib/authz', () => ({
@@ -150,8 +150,37 @@ describe('POST /api/production/items/:id/versions — saving one while the clien
     expect(addVersion).toHaveBeenCalledTimes(1)
     expect(performTransition).toHaveBeenCalledTimes(1)
     expect(performTransition.mock.calls[0][2]).toBe('internal_review')
+    // `{ auto: true }` is not decoration: without it the move is refused —
+    // this edge is the app's own and nobody may press it — and the route
+    // swallows that refusal and still returns 201, so the piece would stay in
+    // front of the client showing a version nobody checked
+    expect(performTransition.mock.calls[0][3]).toEqual({ auto: true })
     // the live hint carries where the item actually IS now, not where it was
     expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'internal_review' })
+  })
+
+  it('sends a piece the client ALREADY APPROVED back to them', async () => {
+    // the newer half of the rule. The schedule's media rail and the
+    // composer's Approved tab read the latest version of an approved item, so
+    // a version saved here without this move would appear on the calendar
+    // wearing a "Client approved" badge and go out unseen.
+    item.status = 'approved_for_scheduling'
+    const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(status).toBe(201)
+    expect(addVersion).toHaveBeenCalledTimes(1)
+    expect(performTransition).toHaveBeenCalledTimes(1)
+    expect(performTransition.mock.calls[0][2]).toBe('client_review')
+    expect(performTransition.mock.calls[0][3]).toEqual({ auto: true })
+    expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'client_review' })
+  })
+
+  it('leaves a booked piece where it is — there is no edge back from there', async () => {
+    // stated rather than silently true: an item at `scheduled` is the one
+    // status the new-version rule does not cover, because coming back would
+    // mean cancelling the provider's job as well
+    item.status = 'scheduled'
+    await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
+    expect(performTransition).not.toHaveBeenCalled()
   })
 
   it('leaves a piece the client already sent back alone', async () => {

@@ -24,6 +24,12 @@ import { friendlyError } from '@/app/lib/support-core'
  * The id is checked as it is typed, because the mistake everybody makes is
  * pasting the @name — and Instagram answers that by refusing the post hours
  * later, with nobody watching.
+ *
+ * Every save sends ONE PLACE, never the list. Sending the array this browser
+ * is holding would be a read-modify-write: two managers with this page open,
+ * one adding a venue and one removing an old one, and whoever saved second
+ * would silently erase the other's edit. The route applies the operation
+ * inside a claim instead, and hands back the list as it now stands.
  */
 export default function InstagramLocations({ clientId }: { clientId: string }) {
   const [rows, setRows] = useState<SavedLocation[] | null>(null)
@@ -31,9 +37,11 @@ export default function InstagramLocations({ clientId }: { clientId: string }) {
   const [pageId, setPageId] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const url = `/api/clients/${clientId}/instagram-locations`
+
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/website/clients/${clientId}`)
+      const res = await fetch(`/api/clients/${clientId}/instagram-locations`)
       const json = await res.json()
       setRows(res.ok ? readLocations(json?.instagram_locations) : [])
     } catch {
@@ -43,40 +51,44 @@ export default function InstagramLocations({ clientId }: { clientId: string }) {
 
   useEffect(() => { void load() }, [load])
 
-  const save = async (next: SavedLocation[]) => {
+  /** One change, applied to whatever is stored — never the whole list. */
+  const send = async (init: RequestInit, path = '') => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/website/clients/${clientId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instagram_locations: next }),
-      })
+      const res = await fetch(url + path, init)
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error ?? 'Save failed')
       setRows(readLocations(json?.instagram_locations))
       toast.success('Saved')
+      return true
     } catch (e) {
       toast.error(friendlyError(e instanceof Error ? e.message : '', 'this client'))
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  const add = () => {
+  const add = async () => {
     const n = name.trim()
     const id = pageId.trim()
+    // checked here so the answer is instant, and checked again on the server,
+    // which is the check that counts
     if (!n) { toast.error('Give the place a name your team will recognise'); return }
     if (!isPageId(id)) {
       toast.error('That does not look like a Page ID — it is a long number, not the @name')
       return
     }
-    if ((rows ?? []).some(r => r.pageId === id)) {
-      toast.error('That place is already on the list')
-      return
-    }
-    void save([...(rows ?? []), { name: n, pageId: id }])
-    setName(''); setPageId('')
+    const ok = await send({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: n, pageId: id }),
+    })
+    if (ok) { setName(''); setPageId('') }
   }
+
+  const remove = (row: SavedLocation) =>
+    send({ method: 'DELETE' }, `?pageId=${encodeURIComponent(row.pageId)}`)
 
   return (
     <Card>
@@ -113,7 +125,7 @@ export default function InstagramLocations({ clientId }: { clientId: string }) {
                   type="button"
                   disabled={saving}
                   aria-label={`Remove ${row.name}`}
-                  onClick={() => void save(rows.filter(r => r.pageId !== row.pageId))}
+                  onClick={() => void remove(row)}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted disabled:opacity-60"
                 >
                   <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -143,7 +155,7 @@ export default function InstagramLocations({ clientId }: { clientId: string }) {
               onChange={e => setPageId(e.target.value)}
             />
           </div>
-          <Button type="button" onClick={add} disabled={saving} className="min-h-11">
+          <Button type="button" onClick={() => void add()} disabled={saving} className="min-h-11">
             <Plus className="mr-1.5 h-4 w-4" strokeWidth={2.2} aria-hidden />
             Add
           </Button>

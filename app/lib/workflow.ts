@@ -471,9 +471,13 @@ export async function performTransition(
       if (!rule) throw new AuthzError(`No transition from ${from} to ${to}`, 400)
       return { ok: true as const, rule }
     })()
+    // `auto` goes to ALL THREE forms, not just the asset one. A shoot brief
+    // and an internal task ride the same machine and reach the same `auto`
+    // edges; forwarding it to only one of them is how the new-version
+    // pull-back silently stopped working for two of the three item kinds.
     : isBriefTask
-      ? checkBriefTaskTransitionAs(hats, from, to)
-      : isInternal ? checkTaskTransitionAs(hats, from, to)
+      ? checkBriefTaskTransitionAs(hats, from, to, { auto: opts?.auto })
+      : isInternal ? checkTaskTransitionAs(hats, from, to, { auto: opts?.auto })
       : checkTransitionAs(hats, from, to, { auto: opts?.auto })
   if (!check.ok) throw new AuthzError(check.reason, 403)
 

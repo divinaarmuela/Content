@@ -39,6 +39,9 @@ export type ChannelExtras = {
   shareToFeed?: boolean
   /** the numeric Facebook Page id of the place — Instagram only */
   locationId?: string
+  /** this channel's OWN media, replacing the shared set for it alone. The
+   *  window does not edit this; it carries it so a save cannot lose it. */
+  slides?: Slide[]
 }
 
 /** Everything the window is holding about one post. */
@@ -97,8 +100,16 @@ export function initialComposer(input: {
   }
 }
 
-/** Read the `per_channel` blob off a stored post into the shape the window
- *  edits, dropping anything that is not one of the fields we send. */
+/**
+ * Read the `per_channel` blob off a stored post into the shape the window
+ * edits, dropping anything that is not one of the fields we send.
+ *
+ * It has to keep EVERY field the server's own `PerChannel` keeps — `slides`
+ * included, which nothing writes today. What this drops, the window sends
+ * back as absent: the server then reads that as a content change and takes
+ * the client's approval down with it, which is precisely the failure the
+ * seeding fix exists to end, surviving in one field.
+ */
 export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
   const out: Record<string, ChannelExtras> = {}
@@ -114,6 +125,10 @@ export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
     if (Array.isArray(r.collaborators)) {
       extras.collaborators = r.collaborators.map(String).filter(Boolean).slice(0, 3)
     }
+    // carried, not edited: this channel's OWN media set. Nothing writes it
+    // yet; dropping it here would silently delete it the first time something
+    // does, and take the approval with it.
+    if (Array.isArray(r.slides)) extras.slides = r.slides as Slide[]
     out[id] = extras
   }
   return out

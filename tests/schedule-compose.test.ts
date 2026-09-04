@@ -112,6 +112,16 @@ describe('the window holds one composition', () => {
     expect(readPerChannel([1, 2])).toEqual({})
   })
 
+  it('carries a field it does not edit rather than dropping it', () => {
+    // `slides` — a channel's own media set — is kept by the SERVER's
+    // PerChannel and compared on save. Dropping it here would send it back as
+    // absent, which the server reads as a content change: the field is gone
+    // from the row and the client's approval goes with it. Nothing writes it
+    // today; this is what stops that being a silent trap when something does.
+    const own = [{ url: 'https://x.invalid/a.jpg', name: 'a.jpg', type: 'image' as const }]
+    expect(readPerChannel({ acc1: { slides: own } })).toEqual({ acc1: { slides: own } })
+  })
+
   it('a load replaces what is on screen and clears dirty; nothing else does', () => {
     const typed = composerReducer(base(), { type: 'caption', caption: 'mine' })
     const loaded = composerReducer(typed, {
