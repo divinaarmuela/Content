@@ -28,6 +28,22 @@ describe('db-types (generated)', () => {
     expect(TABLE_COLUMNS.team_users).toContain('email')
     expect(TABLE_COLUMNS.clients).toContain('name')
   })
+  // Where the filing cabinet is, and whose it is. `root_origin` is the flag
+  // every Drive write consults before it changes anything: on 'picked' — a
+  // folder of the agency's own, handed over through the Google Picker — the
+  // app adds files and folders and does nothing else. `drive_folder_origin`
+  // is the same question one level down, per client: a folder the app made is
+  // its own to share, a folder it adopted is the owner's.
+  it('records where the Drive folders came from', () => {
+    for (const c of ['root_origin', 'root_folder_name', 'root_owner_email', 'clients_folder_id']) {
+      expect(TABLE_COLUMNS.drive_connection).toContain(c)
+      expect(NULLABLE_COLUMNS.drive_connection).toContain(c)
+    }
+    for (const c of ['drive_folder_id', 'drive_folder_origin']) {
+      expect(TABLE_COLUMNS.clients).toContain(c)
+      expect(NULLABLE_COLUMNS.clients).toContain(c)
+    }
+  })
   it('marks nullable columns', () => {
     expect(NULLABLE_COLUMNS.content_items).toContain('due_date')
     expect(NULLABLE_COLUMNS.content_items).not.toContain('id')

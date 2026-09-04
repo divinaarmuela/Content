@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
-  EDITS_FOLDER, FOLDER_MIME, MAX_SEGMENT, brandChain, chain, clientChain,
-  escapeQueryValue, folderNameFor, folderQuery, folderUrl, itemChain,
-  monthPrefix, noShootChain, normaliseRoot, safeSegment, shootChains,
-  kindGetsOwnFolder, shootFolderRename, taskChain, typeWord, uniqueName,
+  BRAND_FOLDER, EDITS_FOLDER, FOLDER_MIME, MAX_SEGMENT, NO_SHOOT_FOLDER,
+  SHOOT_SUBFOLDERS, TASKS_FOLDER, chain,
+  escapeQueryValue, folderNameFor, folderQuery, folderUrl,
+  monthPrefix, normaliseRoot, safeSegment,
+  kindGetsOwnFolder, shootFolderRename, typeWord, uniqueName,
 } from '../app/lib/gdrive-core'
 
 describe('safeSegment', () => {
@@ -151,37 +152,10 @@ describe('chains', () => {
     expect(chain('/a/', '/b/', 'c')).toEqual(['a', 'b', 'c'])
   })
 
-  it('builds the whole shoot set, parents before children', () => {
-    const c = shootChains('Nathan Fielder', '2026-08 Spring Campaign')
-    expect(c.shoot).toEqual(['Nathan Fielder', '2026-08 Spring Campaign'])
-    expect(c.raw).toEqual(['Nathan Fielder', '2026-08 Spring Campaign', '01 Raw'])
-    expect(c.edits).toEqual(['Nathan Fielder', '2026-08 Spring Campaign', '02 Edits'])
-    expect(c.final).toEqual(['Nathan Fielder', '2026-08 Spring Campaign', '03 Final'])
-  })
-
   it('numbers the shoot subfolders so they sort in working order', () => {
-    const c = shootChains('C', 'S')
-    const names = [c.raw, c.edits, c.final].map(x => x[x.length - 1])
+    const names = [...SHOOT_SUBFOLDERS]
     expect([...names].sort()).toEqual(names)
     expect(EDITS_FOLDER).toBe('02 Edits')
-  })
-
-  it('puts a deliverable under 02 Edits', () => {
-    expect(itemChain('Acme', '2026-08 Shoot', 'Reel 01 - Hook'))
-      .toEqual(['Acme', '2026-08 Shoot', '02 Edits', 'Reel 01 - Hook'])
-  })
-
-  it('files internal work under _Tasks and reference under _Brand', () => {
-    expect(taskChain('Acme', 'Rebrand research')).toEqual(['Acme', '_Tasks', 'Rebrand research'])
-    expect(brandChain('Acme')).toEqual(['Acme', '_Brand'])
-    expect(clientChain('Acme')).toEqual(['Acme'])
-  })
-
-  it('files a real deliverable with no shoot under _No shoot, not _Tasks', () => {
-    // client-sent footage is a deliverable, not a research job — it belongs
-    // beside the shoots, where an editor looking for footage would go
-    expect(noShootChain('Acme', 'Reel 01 - Phone footage'))
-      .toEqual(['Acme', '_No shoot', 'Reel 01 - Phone footage'])
   })
 
   it('the three fixed folders group together, away from the dated shoots', () => {
@@ -189,13 +163,16 @@ describe('chains', () => {
     // client folder — NOT above the shoots, however much the underscore
     // prefix suggests otherwise. The property that matters is that they are
     // contiguous and the shoots stay chronological.
-    const names = ['2026-07 A', '2026-08 B', '_Brand', '_No shoot', '_Tasks']
+    const names = ['2026-07 A', '2026-08 B', BRAND_FOLDER, NO_SHOOT_FOLDER, TASKS_FOLDER]
     expect([...names].sort()).toEqual(names)
   })
 
-  it('sanitises a client name that would otherwise open a new folder level', () => {
-    expect(clientChain('Acme / Beta')).toEqual(['Acme', 'Beta'])
-    expect(taskChain('Acme / Beta', 'Job')).toEqual(['Acme', 'Beta', '_Tasks', 'Job'])
+  it('sanitises a name that would otherwise open a new folder level', () => {
+    // the walk starts at the client's folder ID now, but the names below it
+    // are still built from text a person typed
+    expect(chain('Acme / Beta')).toEqual(['Acme', 'Beta'])
+    expect(chain('Acme / Beta', TASKS_FOLDER, 'Job'))
+      .toEqual(['Acme', 'Beta', '_Tasks', 'Job'])
   })
 })
 

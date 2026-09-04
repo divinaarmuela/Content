@@ -431,7 +431,14 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
     return { status: 'skipped', detail: 'nothing to file it under' }
   }
   if (!driveConfigured()) return { status: 'skipped', detail: 'Drive not configured' }
-  if (!(await rootFolderId())) return { status: 'skipped', detail: 'Drive not connected' }
+  // a picked HQ folder whose Clients folder nobody has confirmed yet throws
+  // rather than answering — the file waits, and nothing is created in somebody
+  // else's folder while it does
+  try {
+    if (!(await rootFolderId())) return { status: 'skipped', detail: 'Drive not connected' }
+  } catch (e) {
+    return { status: 'skipped', detail: e instanceof Error ? e.message : 'Drive folder not confirmed yet' }
+  }
 
   // (source_url, target) was a composite unique key; it is checked here
   const files = table<DriveFile>('drive_files')
@@ -443,9 +450,16 @@ export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> 
   const item = clientScoped ? null : await loadItem(String(req.item_id))
   if (!clientScoped && !item) return { status: 'skipped', detail: 'item is gone' }
 
-  const folder = item
-    ? await targetFolder(item, req.target)
-    : await clientTargetFolder(String(req.client_id), req.target, req.received_at ?? null)
+  // the same guard one level down: resolving a target walks the client's
+  // folder, which is where the "not confirmed yet" answer actually comes from
+  let folder: { id: string } | { skip: string }
+  try {
+    folder = item
+      ? await targetFolder(item, req.target)
+      : await clientTargetFolder(String(req.client_id), req.target, req.received_at ?? null)
+  } catch (e) {
+    return { status: 'skipped', detail: e instanceof Error ? e.message : 'no folder' }
+  }
   if ('skip' in folder) return { status: 'skipped', detail: folder.skip }
 
   // an already-mirrored scheduled file whose month has changed is re-parented,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -123,15 +123,33 @@ type Plan = {
   rows: PlanRow[]
   folders: { id: string; name: string }[]
   extra: { id: string; name: string }[]
+  same_name: { normalised: string; clients: string[] }[]
   matched: number
   total: number
   to_create: number
 }
 
-/** What each row is set to right now — 'create', or a folder id. */
+/** What each row is set to right now: a folder id, 'create', or '' for a row
+ *  nobody has decided yet. */
 type Choice = Record<string, string>
 
 const CREATE = 'create'
+const UNDECIDED = ''
+
+/**
+ * What a row starts as.
+ *
+ * A folder the app is SURE about — the names agree once tidied, or somebody
+ * already saved this one — starts filled in. A "worth a check" match starts
+ * blank on purpose: 80% of the words shared is one different word in five, and
+ * "Melbourne Property Group Toorak South" against "…Toorak North" clears that
+ * bar. Those are the rows the review step exists for, so linking one takes a
+ * deliberate act rather than a single press of Save.
+ */
+function startingChoice(row: PlanRow): string {
+  if (row.confidence === 'likely') return UNDECIDED
+  return row.folder_id ?? CREATE
+}
 
 async function ask<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
@@ -150,6 +168,21 @@ export default function DriveFolderCard() {
   // through a variable would come out undefined in the browser
   const pickerKey = process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY
   const appId = process.env.NEXT_PUBLIC_GOOGLE_PICKER_APP_ID
+
+  // counted from what is on screen right now, not from what the server
+  // proposed: the numbers are what the person is being asked to approve, and a
+  // stale count is worse than none
+  const counts = useMemo(() => {
+    const rows = plan?.rows ?? []
+    let linked = 0, creating = 0, undecided = 0
+    for (const r of rows) {
+      const pick = choice[r.client_id] ?? UNDECIDED
+      if (pick === CREATE) creating++
+      else if (pick === UNDECIDED) undecided++
+      else linked++
+    }
+    return { linked, creating, undecided, total: rows.length }
+  }, [plan, choice])
 
   const load = useCallback(() => {
     ask<RootState>('/api/gdrive/root')
@@ -170,7 +203,7 @@ export default function DriveFolderCard() {
         })
         : await ask<Plan>('/api/gdrive/root/plan')
       setPlan(next)
-      setChoice(Object.fromEntries(next.rows.map(r => [r.client_id, r.folder_id ?? CREATE])))
+      setChoice(Object.fromEntries(next.rows.map(r => [r.client_id, startingChoice(r)])))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'The folders could not be read')
     } finally {
@@ -251,6 +284,9 @@ export default function DriveFolderCard() {
   async function apply() {
     if (!plan) return
     const rows = plan.rows
+      // a row nobody has decided is left exactly as it is
+      .filter(r => (choice[r.client_id] ?? UNDECIDED) !== UNDECIDED)
+      // and one that is already saved to the folder it shows needs no write
       .filter(r => r.action !== 'linked' || choice[r.client_id] !== r.folder_id)
       .map(r => {
         const pick = choice[r.client_id]
@@ -259,7 +295,7 @@ export default function DriveFolderCard() {
           : { client_id: r.client_id, folder_id: pick }
       })
     if (rows.length === 0) {
-      toast.success('Every client already points at a folder')
+      toast.success('Nothing to save — pick a folder for a client first')
       return
     }
     setBusy('apply')
@@ -371,11 +407,24 @@ export default function DriveFolderCard() {
         {plan && !plan.needs_clients_folder && (
           <div className="flex flex-col gap-3">
             <p className="text-body-15 text-foreground">
-              Matched {plan.matched} of {plan.total} clients
-              {plan.to_create > 0
-                ? ` — ${plan.to_create} folder${plan.to_create === 1 ? '' : 's'} will be made`
-                : ' — nothing new to make'}.
+              Matched {counts.linked} of {counts.total} clients
+              {counts.creating > 0
+                ? ` — ${counts.creating} folder${counts.creating === 1 ? '' : 's'} will be made`
+                : ' — nothing new to make'}
+              {counts.undecided > 0
+                ? `, ${counts.undecided} still to decide`
+                : ''}.
             </p>
+
+            {plan.same_name.length > 0 && (
+              <p className="text-body-15 text-muted-foreground">
+                Two clients have the same name once it is tidied up
+                {' — '}
+                {plan.same_name.map(g => g.clients.join(' and ')).join('; ')}.
+                Only one of them can have the folder, so give the other one its
+                own.
+              </p>
+            )}
 
             <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {plan.rows.map(row => {
@@ -387,9 +436,9 @@ export default function DriveFolderCard() {
                   >
                     <span className="min-w-0 flex-1 text-body-15 text-foreground">
                       {row.client_name}
-                      {row.confidence === 'likely' && pick === row.folder_id && (
+                      {row.confidence === 'likely' && (
                         <span className="ml-2 rounded-full bg-accent-amber/15 px-2 py-0.5 text-secondary-13 text-foreground">
-                          worth a check
+                          close, not certain — “{row.folder_name}”?
                         </span>
                       )}
                       {row.action === 'linked' && pick === row.folder_id && (
@@ -408,6 +457,7 @@ export default function DriveFolderCard() {
                       onChange={e =>
                         setChoice(c => ({ ...c, [row.client_id]: e.target.value }))}
                     >
+                      <option value={UNDECIDED}>Leave this one for now</option>
                       <option value={CREATE}>Make a new folder</option>
                       {plan.folders.map(f => (
                         <option key={f.id} value={f.id}>{f.name}</option>

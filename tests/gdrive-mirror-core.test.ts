@@ -9,9 +9,7 @@ import {
 } from '../app/lib/gdrive-mirror-core'
 import {
   FROM_CLIENT_FOLDER, NO_SHOOT_FINAL_FOLDER, NO_SHOOT_RAW_FOLDER, RAW_FOLDER,
-  SCHEDULED_FOLDER, dayStamp, fromClientChain, intakeFileTarget,
-  noShootFinalChain, noShootRawChain, scheduledChain, shootFinalChain,
-  shootRawChain,
+  SCHEDULED_FOLDER, dayStamp, intakeFileTarget,
 } from '../app/lib/gdrive-core'
 
 describe('isMirrorableUrl', () => {
@@ -133,38 +131,8 @@ describe('earliestScheduledMonth', () => {
   })
 })
 
-describe('scheduledChain / final chains', () => {
-  it('puts the month under the client, not under a shoot', () => {
-    expect(scheduledChain('Nathan Homes', '2026-09'))
-      .toEqual(['Nathan Homes', SCHEDULED_FOLDER, '2026-09'])
-  })
-
-  it('sends a shoot item to the shoot it came from', () => {
-    expect(shootFinalChain('Nathan Homes', '2026-08 Spring Campaign'))
-      .toEqual(['Nathan Homes', '2026-08 Spring Campaign', '03 Final'])
-  })
-
-  it('gives a shoot-less item its own Final, not a number counting nothing', () => {
-    expect(noShootFinalChain('Nathan Homes', 'Reel 01 - Hook'))
-      .toEqual(['Nathan Homes', '_No shoot', 'Reel 01 - Hook', NO_SHOOT_FINAL_FOLDER])
-    expect(NO_SHOOT_FINAL_FOLDER).toBe('Final')
-  })
-
-  it('reads the client name exactly as every other chain does', () => {
-    // `chain` splits on `/`, so a slashed client name becomes two levels
-    // here just as it does in clientChain — one client, one folder, whichever
-    // chain built it
-    expect(scheduledChain('A/B Testing Co', '2026-09'))
-      .toEqual(['A', 'B Testing Co', SCHEDULED_FOLDER, '2026-09'])
-    expect(scheduledChain('  Nathan  Homes  ', '2026-09'))
-      .toEqual(['Nathan Homes', SCHEDULED_FOLDER, '2026-09'])
-  })
-})
-
-describe('fromClientChain / dayStamp', () => {
-  it('files a delivery by the DAY it arrived', () => {
-    expect(fromClientChain('Nathan Homes', '2026-08-27'))
-      .toEqual(['Nathan Homes', FROM_CLIENT_FOLDER, '2026-08-27'])
+describe('dayStamp', () => {
+  it('names the folder a delivery is filed in by the DAY it arrived', () => {
     expect(FROM_CLIENT_FOLDER).toBe('_From client')
   })
 
@@ -223,17 +191,14 @@ describe('where raw footage goes', () => {
     // `02 Edits/{Item}` is the bench — what the editor MADE. Source material
     // dropped in beside the cuts is the bug this target exists to fix, and it
     // also hid the day's footage from every other item cut from the shoot.
-    expect(shootRawChain('Stretchworks', '2026-08 Monday Martin Shoot'))
-      .toEqual(['Stretchworks', '2026-08 Monday Martin Shoot', RAW_FOLDER])
     expect(RAW_FOLDER).toBe('01 Raw')
   })
 
   it('gives a shoot-less item its own Raw subfolder, unnumbered', () => {
     // no shoot means no stages for `01`/`02`/`03` to order — but the footage
     // still must not share a folder with the cuts made from it
-    expect(noShootRawChain('Stretchworks', 'Reel 01 - Hook'))
-      .toEqual(['Stretchworks', '_No shoot', 'Reel 01 - Hook', NO_SHOOT_RAW_FOLDER])
     expect(NO_SHOOT_RAW_FOLDER).toBe('Raw')
+    expect(NO_SHOOT_FINAL_FOLDER).toBe('Final')
   })
 
   it('is a real target, and one that belongs to a piece of work', () => {

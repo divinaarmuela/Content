@@ -161,6 +161,14 @@ const GHOST_COLUMNS = {
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],
     ['drive_folder_id', col('string', true)],
+    //   clients.drive_folder_origin — 'app' if this app made the folder,
+    //     'adopted' if it was already in the owner's Drive and was matched to
+    //     the client in Settings. It decides one thing: whether the app may
+    //     change PERMISSIONS on the folder. An adopted folder is the owner's,
+    //     shared however they chose to share it years ago, and a domain grant
+    //     the app added "helpfully" is a change to someone else's filing that
+    //     nobody asked for and nothing undoes.
+    ['drive_folder_origin', col('string', true)],
   ],
   //   drive_connection.root_* — WHERE the filing cabinet is.
   //     The app can only see folders it made itself (the drive.file scope), so
@@ -174,7 +182,14 @@ const GHOST_COLUMNS = {
   drive_connection: [
     ['root_folder_name', col('string', true)],
     ['root_owner_email', col('string', true)],
-    ['root_picked', col('boolean', true)],
+    //   root_origin — 'app' (the app made its own Clients folder, the original
+    //     behaviour) or 'picked' (a person handed the app the agency's real HQ
+    //     folder through the Google Picker). Everything that could CHANGE
+    //     somebody else's Drive reads this first: on a picked root the app adds
+    //     files and folders and does nothing else — no domain sharing, no
+    //     member sync, and above all no permission removals. The owner manages
+    //     who can see HQ, and the app is a guest there.
+    ['root_origin', col('string', true)],
     ['root_picked_at', col('string', true)],
     ['root_picked_by', col('string', true)],
     ['clients_folder_id', col('string', true)],

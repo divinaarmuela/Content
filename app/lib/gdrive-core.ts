@@ -24,9 +24,14 @@
  *
  * A note on the difference from a filesystem: **Drive has no paths.** A folder
  * is an id, and two sibling folders may share a name without Drive minding at
- * all. So this module builds *chains of names* — the walk from the root down —
- * and gdrive.ts resolves each chain to ids, creating what is missing. Nothing
- * here ever pretends a slash-joined string identifies a folder.
+ * all. Nothing here ever pretends a slash-joined string identifies a folder.
+ *
+ * Since the app was taught to file into the agency's own HQ folder, every walk
+ * starts at an ID — the client's folder, recorded on the client — and goes down
+ * by name from there. The client's folder may be called anything; it was named
+ * by a person years ago. So this module supplies the NAMES of the folders
+ * below it (`_Brand`, `_Scheduled`, `01 Raw`) and the rules for making one
+ * safe, and gdrive.ts resolves them against a parent id.
  */
 
 /** Drive stores a name as a plain string; only `/` genuinely misleads a
@@ -188,119 +193,16 @@ export function chain(...parts: (string | null | undefined)[]): string[] {
     .map(safeSegment)
 }
 
-/** `{root}/{Client}` — everything for one client hangs off this. */
-export function clientChain(client: string): string[] {
-  return chain(client)
-}
 
-/** `{root}/{Client}/_Brand` — long-lived reference, not tied to any shoot. */
-export function brandChain(client: string): string[] {
-  return chain(client, BRAND_FOLDER)
-}
 
-/** `{root}/{Client}/_Tasks/{Task}` — internal work with nothing to shoot. */
-export function taskChain(client: string, taskFolder: string): string[] {
-  return chain(client, TASKS_FOLDER, taskFolder)
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}` — a real deliverable with no shoot.
- *
- * Not the same thing as `_Tasks`: this is footage that exists (the client sent
- * it, an old shoot supplied it) being cut into a deliverable, so it belongs
- * beside the shoots rather than among the research jobs.
- */
-export function noShootChain(client: string, itemFolder: string): string[] {
-  return chain(client, NO_SHOOT_FOLDER, itemFolder)
-}
 
-export type ShootChains = {
-  /** `{root}/{Client}/{Shoot}` */
-  shoot: string[]
-  /** `{root}/{Client}/{Shoot}/01 Raw` */
-  raw: string[]
-  /** `{root}/{Client}/{Shoot}/02 Edits` */
-  edits: string[]
-  /** `{root}/{Client}/{Shoot}/03 Final` */
-  final: string[]
-}
 
-/** Every folder a shoot needs, parents before children. */
-export function shootChains(client: string, shootFolder: string): ShootChains {
-  const shoot = chain(client, shootFolder)
-  const [raw, edits, final] = SHOOT_SUBFOLDERS
-  return {
-    shoot,
-    raw: [...shoot, raw],
-    edits: [...shoot, edits],
-    final: [...shoot, final],
-  }
-}
 
-/** `{root}/{Client}/{Shoot}/02 Edits/{Item}` — where one deliverable is cut. */
-export function itemChain(
-  client: string, shootFolder: string, itemFolder: string,
-): string[] {
-  return [...shootChains(client, shootFolder).edits, safeSegment(itemFolder)]
-}
 
-/**
- * `{root}/{Client}/{Shoot}/03 Final` — where the approved cut is archived.
- *
- * The same folder the shoot already has, reached by name rather than by id,
- * so an item approved long after its shoot still lands in the shoot's own
- * finals rather than in a second one.
- */
-export function shootFinalChain(client: string, shootFolder: string): string[] {
-  return shootChains(client, shootFolder).final
-}
 
-/**
- * `{root}/{Client}/{Shoot}/01 Raw` — the footage a shoot produced.
- *
- * Everything shot on the day lands in ONE folder per shoot, not one per
- * deliverable: the same clip is cut into three Reels, and filing it under the
- * first item that happened to claim it hides it from the other two. Reached by
- * name from the root, like the finals, so a raw file attached to an item long
- * after the shoot still lands in that shoot's own raw folder.
- */
-export function shootRawChain(client: string, shootFolder: string): string[] {
-  return shootChains(client, shootFolder).raw
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}/Raw` — given footage for a shoot-less item.
- *
- * It hangs off the ITEM's folder for the same reason its finals do: with no
- * shoot to group them, the deliverable is the only grouping there is. What it
- * must NOT be is the item folder itself, which is the editing bench.
- */
-export function noShootRawChain(client: string, itemFolder: string): string[] {
-  return [...noShootChain(client, itemFolder), NO_SHOOT_RAW_FOLDER]
-}
 
-/**
- * `{root}/{Client}/_No shoot/{Item}/Final` — finals for a shoot-less item.
- *
- * It hangs off the ITEM's own folder, not off a client-wide finals bin: with
- * no shoot to group them, the deliverable is the only grouping there is.
- */
-export function noShootFinalChain(client: string, itemFolder: string): string[] {
-  return [...noShootChain(client, itemFolder), NO_SHOOT_FINAL_FOLDER]
-}
-
-/**
- * `{root}/{Client}/_Scheduled/{YYYY-MM}` — what goes out, by the month it
- * goes out in.
- *
- * Deliberately per CLIENT and not per shoot: "what are we posting for them in
- * September" is a question about a client and a month, and answering it from
- * the shoot tree means opening every shoot. A month with nothing scheduled
- * never gets a folder, because nothing is ever copied into it.
- */
-export function scheduledChain(client: string, month: string): string[] {
-  return chain(client, SCHEDULED_FOLDER, month)
-}
 
 /** `YYYY-MM-DD` from an ISO date or timestamp, or null if it is not a date. */
 export function dayStamp(iso: string | null | undefined): string | null {
@@ -316,24 +218,6 @@ export function dayStamp(iso: string | null | undefined): string | null {
   ].join('-')
 }
 
-/**
- * `{root}/{Client}/_From client/{YYYY-MM-DD}` — what the client sent, by the
- * day it arrived.
- *
- * By DAY rather than by month, and by day rather than by form: a client sends
- * things in bursts — an intake form, then a folder of product photos a week
- * later — and "the stuff they sent on the 14th" is how anyone refers to a
- * burst afterwards. A form id would be accurate and unusable; a month would
- * put three unrelated deliveries in one pile.
- *
- * Brand material is the deliberate exception and goes to `_Brand` instead
- * (see `intakeFileTarget`): a logo is not a delivery, it is a long-lived
- * reference, and hunting for it under the date it happened to arrive is
- * exactly the filing this tree exists to avoid.
- */
-export function fromClientChain(client: string, day: string): string[] {
-  return chain(client, FROM_CLIENT_FOLDER, day)
-}
 
 /**
  * Which folder a client-submitted file belongs in.
@@ -588,23 +472,45 @@ export function matchClientFolders<C extends NamedClient, F extends NamedFolder>
     }
   }
 
-  // pass 2 — likely, over what is left on both sides
-  const unmatched: C[] = []
-  for (const client of remainingClients) {
-    const near = subfolders
+  // pass 2 — likely, best pair first across the WHOLE board rather than in
+  // client order. Taking them in list order lets the first client to clear the
+  // bar walk off with a folder that fits a later client better, and which
+  // client that is depends on nothing more meaningful than alphabetical order.
+  const pairs = remainingClients
+    .flatMap(client => subfolders
       .filter(f => !takenFolders.has(f.id))
-      .map(f => ({ folder: f, score: nameOverlap(client.name, f.name) }))
-      .filter(x => x.score >= LIKELY_OVERLAP)
-      .sort((a, b) => b.score - a.score)
-    const best = near[0]
-    const ambiguous = near.length > 1 && near[1].score === best?.score
-    if (best && !ambiguous) {
-      takenFolders.add(best.folder.id)
-      matched.push({ client, folder: best.folder, confidence: 'likely' })
-    } else {
-      unmatched.push(client)
+      .map(folder => ({ client, folder, score: nameOverlap(client.name, folder.name) })))
+    .filter(p => p.score >= LIKELY_OVERLAP)
+    .sort((a, b) =>
+      b.score - a.score
+      || a.client.name.localeCompare(b.client.name)
+      || a.folder.name.localeCompare(b.folder.name))
+
+  const matchedClients = new Set<string>()
+  // a client (or a folder) wanted equally by two candidates is not a match, it
+  // is a question — and a question answered by a coin toss is worse than one
+  // put to a person on the review screen
+  const undecided = new Set<string>()
+
+  for (const pair of pairs) {
+    if (matchedClients.has(pair.client.id) || undecided.has(pair.client.id)) continue
+    if (takenFolders.has(pair.folder.id)) continue
+    const contested = pairs.some(other =>
+      other !== pair
+      && other.score === pair.score
+      && !takenFolders.has(other.folder.id)
+      && !matchedClients.has(other.client.id)
+      && (other.client.id === pair.client.id || other.folder.id === pair.folder.id))
+    if (contested) {
+      undecided.add(pair.client.id)
+      continue
     }
+    takenFolders.add(pair.folder.id)
+    matchedClients.add(pair.client.id)
+    matched.push({ client: pair.client, folder: pair.folder, confidence: 'likely' })
   }
+
+  const unmatched = remainingClients.filter(c => !matchedClients.has(c.id))
 
   return {
     matched,

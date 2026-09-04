@@ -1,11 +1,20 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
-import { matchClientFolders, safeSegment } from './gdrive-core'
+import { matchClientFolders, normaliseFolderName, safeSegment } from './gdrive-core'
 import {
-  createSubfolder, driveConfigured, findSubfolder, listSubfolders, pickedRoot,
+  createSubfolder, driveConfigured, listSubfolders, pickedRoot,
   readFolder, saveClientsFolder, savePickedRoot, shareWithDomain,
 } from './gdrive'
+
+/**
+ * A Google Drive file id, as Drive writes them. Not a security boundary — the
+ * id is escaped everywhere it is used — but a typo'd or half-pasted id becomes
+ * a client permanently pointed at nothing, discovered weeks later as "why did
+ * that shoot never get a folder". Better to refuse it while a person is still
+ * looking at the screen.
+ */
+export const DRIVE_ID = /^[A-Za-z0-9_-]+$/
 
 /**
  * Pointing the app at the filing cabinet the agency already has.
@@ -54,6 +63,12 @@ export type RootPlan = {
   folders: { id: string; name: string }[]
   /** folders that belong to no client on the list */
   extra: { id: string; name: string }[]
+  /**
+   * Clients whose names tidy down to the same thing — "Alia Fragrance" and
+   * "Alia Fragrance Pty Ltd". Only one of them can have the folder, and the
+   * other would otherwise quietly get a second folder with the same name.
+   */
+  same_name: { normalised: string; clients: string[] }[]
   matched: number
   total: number
   to_create: number
@@ -86,6 +101,7 @@ export async function choosePickedRoot(args: {
   if (!driveConfigured()) return fail('Google Drive is not set up yet')
   const id = String(args.id ?? '').trim()
   if (!id) return fail('No folder was chosen')
+  if (!DRIVE_ID.test(id)) return fail('That is not a Google Drive folder')
 
   const info = await readFolder(id)
   if (!info.ok) {
@@ -116,9 +132,12 @@ export async function buildRootPlan(opts?: {
   // the Clients folder: recorded, or found by name, or (only on request) made
   let clientsFolderId = root.clients_folder_id
   if (!clientsFolderId) {
-    const found = await findSubfolder(root.id, CLIENTS_FOLDER)
-    if (!found.ok) return fail(`Google Drive would not list that folder — ${found.message}`)
-    clientsFolderId = found.id
+    const inRoot = await listSubfolders(root.id)
+    if (!inRoot.ok) return fail(`Google Drive would not list that folder — ${inRoot.message}`)
+    // normalised, so a folder called "clients" or "Clients " is found rather
+    // than joined by a second one
+    const wanted = normaliseFolderName(CLIENTS_FOLDER)
+    clientsFolderId = inRoot.folders.find(f => normaliseFolderName(f.name) === wanted)?.id ?? null
     if (!clientsFolderId && opts?.createClientsFolder) {
       const made = await createSubfolder(root.id, CLIENTS_FOLDER)
       if (!made.ok) return fail(`The Clients folder could not be made — ${made.message}`)
@@ -145,7 +164,8 @@ export async function buildRootPlan(opts?: {
           client_id: c.id, client_name: c.name, folder_id: null, folder_name: null,
           confidence: null, action: 'create' as const,
         })),
-        folders: [], extra: [], matched: 0, to_create: clients.length,
+        folders: [], extra: [], same_name: sameName(clients),
+        matched: 0, to_create: clients.length,
       },
     }
   }
@@ -201,10 +221,27 @@ export async function buildRootPlan(opts?: {
       rows,
       folders,
       extra: plan.extra,
+      same_name: sameName(clients),
       matched: rows.filter(r => r.action !== 'create').length,
       to_create: rows.filter(r => r.action === 'create').length,
     },
   }
+}
+
+/** Clients whose tidied names are the same. Two folders with one name in
+ *  Drive is legal and unreadable, so it is said out loud instead. */
+function sameName(clients: Client[]): { normalised: string; clients: string[] }[] {
+  const byName = new Map<string, string[]>()
+  for (const c of clients) {
+    const key = normaliseFolderName(c.name)
+    if (!key) continue
+    const list = byName.get(key)
+    if (list) list.push(c.name)
+    else byName.set(key, [c.name])
+  }
+  return [...byName]
+    .filter(([, names]) => names.length > 1)
+    .map(([normalised, names]) => ({ normalised, clients: names }))
 }
 
 export type ApplyRow = {
@@ -223,10 +260,23 @@ export type ApplyResult = {
 /**
  * Attach the folders, and make only the ones that were confirmed.
  *
- * The write is a claim, not a read-then-write: two people pressing Apply on
- * two screens must not end with one client carrying two folder ids. A row that
- * names a folder overrules whatever was there — a person choosing a folder by
- * hand is the most reliable input this whole feature has.
+ * Three rules, each of which the owner's Drive would have paid for:
+ *
+ * 1. **Idempotent.** Pressing Save twice, or a request that timed out at the
+ *    edge and completed on the server, must not leave two "100 Hundred Million
+ *    Group" folders in Clients — Drive allows duplicate names without a
+ *    murmur. So the create branch re-reads the client, and then looks for an
+ *    existing folder by TIDIED name, and only creates when neither answers.
+ * 2. **Nothing is guessed at.** A folder id must look like a Drive id and must
+ *    be one of the folders actually inside the Clients folder. A pasted id
+ *    that points somewhere else in the owner's Drive is refused here rather
+ *    than discovered months later.
+ * 3. **One folder, one client.** Two clients filing into one folder interleaves
+ *    two clients' shoots, brand material and schedules with no warning and no
+ *    way to see it afterwards.
+ *
+ * The write is a claim, not a read-then-write, so two people pressing Save on
+ * two screens cannot leave one client carrying two folder ids.
  */
 export async function applyRootPlan(
   rows: ApplyRow[],
@@ -234,9 +284,30 @@ export async function applyRootPlan(
   if (!driveConfigured()) return fail('Google Drive is not set up yet')
   const root = await pickedRoot()
   if (!root) return fail('Choose the folder first')
-  if (!root.clients_folder_id) return fail('The Clients folder has not been set up yet')
+  const clientsFolderId = root.clients_folder_id
+  if (!clientsFolderId) return fail('The Clients folder has not been set up yet')
+
+  // one listing for the whole apply: it is both the "is this folder really in
+  // there" check and the "has somebody made it already" check
+  const listed = await listSubfolders(clientsFolderId)
+  if (!listed.ok) {
+    return fail(`Google Drive would not list the Clients folder — ${listed.message}`)
+  }
+  const inside = new Map(listed.folders.map(f => [f.id, f.name]))
+  const byTidyName = new Map<string, string>()
+  for (const f of listed.folders) {
+    const key = normaliseFolderName(f.name)
+    if (key && !byTidyName.has(key)) byTidyName.set(key, f.id)
+  }
 
   const clients = table<Client>('clients')
+  // who already holds which folder — a folder cannot be given to two clients
+  const held = new Map<string, string>()
+  for (const c of await clients.list()) {
+    const id = String(c.drive_folder_id ?? '').trim()
+    if (id) held.set(id, c.id)
+  }
+
   const result: ApplyResult = { linked: 0, created: 0, skipped: [] }
 
   for (const row of rows) {
@@ -247,31 +318,71 @@ export async function applyRootPlan(
     }
 
     let folderId = String(row.folder_id ?? '').trim()
-    let made = false
-    if (!folderId) {
+    let origin: 'app' | 'adopted' = 'adopted'
+
+    if (folderId) {
+      if (!DRIVE_ID.test(folderId)) {
+        result.skipped.push({ client_id: row.client_id, why: 'that is not a Google Drive folder' })
+        continue
+      }
+      if (!inside.has(folderId)) {
+        result.skipped.push({
+          client_id: row.client_id,
+          why: 'that folder is not inside the Clients folder',
+        })
+        continue
+      }
+    } else {
       if (!row.create) {
         result.skipped.push({ client_id: row.client_id, why: 'no folder chosen' })
         continue
       }
-      const create = await createSubfolder(root.clients_folder_id, client.name)
-      if (!create.ok) {
-        result.skipped.push({ client_id: row.client_id, why: create.message })
+      // already done — a second press, or a retry of a request that landed
+      const already = String(client.drive_folder_id ?? '').trim()
+      if (already) {
+        result.skipped.push({ client_id: row.client_id, why: 'that client already has a folder' })
         continue
       }
-      folderId = create.id
-      made = true
-      await shareWithDomain(folderId)
+      // somebody made it by hand between loading the plan and pressing Save,
+      // or the first press of this very button did
+      const adopted = byTidyName.get(normaliseFolderName(client.name))
+      if (adopted) {
+        folderId = adopted
+      } else {
+        const create = await createSubfolder(clientsFolderId, client.name)
+        if (!create.ok) {
+          result.skipped.push({ client_id: row.client_id, why: create.message })
+          continue
+        }
+        folderId = create.id
+        origin = 'app'
+        inside.set(folderId, client.name)
+        const key = normaliseFolderName(client.name)
+        if (key) byTidyName.set(key, folderId)
+        // a no-op on a picked root: the owner shares their own HQ tree
+        await shareWithDomain(folderId)
+      }
+    }
+
+    const owner = held.get(folderId)
+    if (owner && owner !== row.client_id) {
+      result.skipped.push({ client_id: row.client_id, why: 'another client already uses that folder' })
+      continue
     }
 
     const claimed = await clients.claim(row.client_id, cur =>
-      cur ? { ...cur, drive_folder_id: folderId } : null)
+      cur ? { ...cur, drive_folder_id: folderId, drive_folder_origin: origin } : null)
     if (!claimed.claimed) {
       result.skipped.push({ client_id: row.client_id, why: 'that client changed while this was saving' })
       continue
     }
-    if (made) result.created++
+    const previous = String(client.drive_folder_id ?? '').trim()
+    if (previous && previous !== folderId) held.delete(previous)
+    held.set(folderId, row.client_id)
+    if (origin === 'app') result.created++
     else result.linked++
   }
 
   return { ok: true, result }
+
 }

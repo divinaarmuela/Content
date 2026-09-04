@@ -6,7 +6,8 @@ import {
   forgetGoogleToken, googleAccessToken, inboxClientId, inboxClientSecret,
 } from './inbox-connect'
 import {
-  FOLDER_MIME, escapeQueryValue, folderQuery, folderUrl, normaliseRoot, safeSegment,
+  FOLDER_MIME, escapeQueryValue, folderQuery, folderUrl, normaliseFolderName,
+  normaliseRoot, safeSegment,
 } from './gdrive-core'
 
 /**
@@ -91,6 +92,10 @@ export type DriveFailure = {
   reason: 'not_configured' | 'not_connected' | 'exchange_failed' | 'no_refresh_token' | 'api_error'
   message: string
   detail?: string
+  /** the HTTP status Drive answered with, where there was one. A 404 means
+   *  GONE; a 429 or a 500 means ASK AGAIN LATER, and confusing the two is how
+   *  a folder that was merely unreachable for a second gets replaced. */
+  status?: number
 }
 type Ok<T> = { ok: true } & T
 export type DriveResult<T> = Ok<T> | DriveFailure
@@ -104,6 +109,49 @@ const notConnected = (): DriveFailure =>
 
 /** ONE connection for the whole team; the row's primary key says so. */
 const TEAM = 'team'
+
+/**
+ * Where the filing cabinet came from, and therefore what the app may do to it.
+ *
+ * `'app'` — the app made its own folder in the connected account's My Drive.
+ * Everything inside it was made by this app (the `drive.file` scope means the
+ * app cannot even SEE anything else), so tidying permissions there is tidying
+ * its own work.
+ *
+ * `'picked'` — a person handed the app the agency's real HQ folder through the
+ * Google Picker. It is full of years of other people's filing, shared with
+ * clients and freelancers and a bookkeeper. The app is a GUEST: it adds
+ * folders and files and does nothing else. No sharing, no member sync, and
+ * absolutely no permission removals.
+ */
+export type RootOrigin = 'app' | 'picked'
+
+export function rootOriginOf(row: DriveConnection | null | undefined): RootOrigin {
+  return row?.root_origin === 'picked' ? 'picked' : 'app'
+}
+
+/** The folder the app was handed is not its own to change. */
+function isPicked(row: DriveConnection | null | undefined): boolean {
+  return rootOriginOf(row) === 'picked'
+}
+
+/**
+ * A picked root whose Clients folder nobody has confirmed yet.
+ *
+ * Thrown rather than returned as null on purpose: null means "Drive is not
+ * connected, do nothing", and every hook already treats that as a no-op. This
+ * is a different thing — Drive IS connected and a folder HAS been picked, but
+ * the review is half done, and the honest answer is neither "nowhere" nor
+ * "the HQ folder itself". Creating client folders at the top of somebody's HQ
+ * folder because a tab was closed mid-review is precisely the mess this
+ * feature exists to end.
+ */
+export class DriveNotConfirmedError extends Error {
+  constructor() {
+    super('Drive folder not confirmed yet')
+    this.name = 'DriveNotConfirmedError'
+  }
+}
 
 /**
  * The single connection row, or null. ONE connection for the whole team, so
@@ -147,8 +195,8 @@ export type DriveStatus = {
   sharing_domain: string | null
   /** Plain English for the Integrations card, including the last refusal. */
   sharing_note: string | null
-  /** The folder a person PICKED with the Google Picker, if they have. */
-  root_picked: boolean
+  /** 'picked' once a person has handed the app a folder of the agency's own. */
+  root_origin: RootOrigin
   root_folder_name: string | null
   root_owner_email: string | null
   /** The "Clients" folder inside it — what every client folder hangs off. */
@@ -175,7 +223,7 @@ export async function driveStatus(): Promise<DriveStatus> {
     connected_by: row?.connected_by ?? null,
     sharing: domain ? 'domain' : 'none',
     sharing_domain: domain,
-    root_picked: Boolean(row?.root_picked),
+    root_origin: rootOriginOf(row),
     root_folder_name: row?.root_folder_name ?? null,
     root_owner_email: row?.root_owner_email ?? null,
     clients_folder_id: row?.clients_folder_id ?? null,
@@ -286,7 +334,7 @@ export async function completeDriveConnect(
   const existing = await connection()
   const wantedRoot = normaliseRoot(existing?.root_name)
   let rootId = existing?.root_folder_id ?? null
-  if (token.access_token && !existing?.root_picked) {
+  if (token.access_token && !isPicked(existing)) {
     const made = await ensureRootFolder(token.access_token, wantedRoot, rootId)
     if (!made.ok) return made
     rootId = made.id
@@ -311,7 +359,6 @@ export async function completeDriveConnect(
 
   // a fresh connection invalidates whatever this process had cached
   forgetGoogleToken()
-  cachedRootId = null
   lastSharingError = null
 
   return { ok: true, email: account?.email ?? '', name: account?.name ?? '' }
@@ -324,7 +371,6 @@ export async function disconnectDrive(): Promise<void> {
   if (row?.refresh_token_encrypted) {
     try { forgetGoogleToken(decryptSecret(row.refresh_token_encrypted)) } catch { forgetGoogleToken() }
   }
-  cachedRootId = null
   lastSharingError = null
   await writeConnection({
     refresh_token_encrypted: null,
@@ -396,6 +442,7 @@ export async function driveFetch<T>(
       ok: false, reason: 'api_error',
       message: `Google Drive ${res.status}`,
       detail: (await res.text()).slice(0, 400),
+      status: res.status,
     }
   }
   return { ok: true, data: await res.json() as T }
@@ -506,8 +553,6 @@ export async function listFolderNames(parentId: string): Promise<string[]> {
 
 // ── the root folder ───────────────────────────────────────────────────────
 
-let cachedRootId: string | null = null
-
 /**
  * The app's own root folder, created if it is not there.
  *
@@ -517,6 +562,12 @@ let cachedRootId: string | null = null
  * invisible to us and will not be adopted (or clobbered). If a previously
  * recorded id still resolves, it wins outright — the folder may have been
  * moved or renamed since, and the id is what is true.
+ *
+ * A read that FAILS is not the same as a folder that is gone. Only a 404 (and
+ * a folder that really is in the bin) means "make another one"; a 429, a 500 or
+ * a dropped connection is passed straight back to the caller, because
+ * replacing a live folder on the strength of one bad minute is how a tree gets
+ * forked in two.
  */
 async function ensureRootFolder(
   token: string, name: string, knownId: string | null,
@@ -526,6 +577,7 @@ async function ensureRootFolder(
       new URLSearchParams({ fields: 'id,trashed', ...ALL_DRIVES })
     const res = await driveFetch<{ id?: string; trashed?: boolean }>(token, url)
     if (res.ok && res.data.id && !res.data.trashed) return { ok: true, id: res.data.id }
+    if (!res.ok && res.status !== 404) return res
     // gone or trashed: fall through and make a new one
   }
   const found = await findFolder(token, 'root', name)
@@ -539,16 +591,20 @@ async function ensureRootFolder(
  * no-op for every caller, never an error.
  */
 export async function rootFolderId(): Promise<string | null> {
-  if (cachedRootId) return cachedRootId
+  // deliberately NOT cached in the process: a warm lambda that cached the old
+  // app-made root before somebody picked HQ would go on filing into the
+  // abandoned folder until it recycled. The connection row is served from the
+  // request cache (lib/db.ts) anyway, so this costs one read per request, not
+  // one per call.
   const row = await connection()
   if (!row?.refresh_token_encrypted) return null
 
-  // a picked HQ folder wins outright, and nothing is created from a name:
+  // a picked HQ folder wins outright, and nothing is ever created from a name:
   // the whole point of picking was that the folder already exists and the app
   // must file INTO it rather than beside it
-  if (row.root_picked && row.clients_folder_id) {
-    cachedRootId = row.clients_folder_id
-    return cachedRootId
+  if (isPicked(row)) {
+    if (!row.clients_folder_id) throw new DriveNotConfirmedError()
+    return row.clients_folder_id
   }
 
   const auth = await accessToken()
@@ -560,7 +616,6 @@ export async function rootFolderId(): Promise<string | null> {
   if (made.id !== row.root_folder_id) {
     await writeConnection({ root_folder_id: made.id })
   }
-  cachedRootId = made.id
   return made.id
 }
 
@@ -584,7 +639,7 @@ export type PickedRoot = {
 
 export async function pickedRoot(): Promise<PickedRoot | null> {
   const row = await connection()
-  if (!row?.root_picked || !row.root_folder_id) return null
+  if (!row || !isPicked(row) || !row.root_folder_id) return null
   return {
     id: row.root_folder_id,
     name: row.root_folder_name ?? '',
@@ -638,18 +693,16 @@ export async function savePickedRoot(args: {
     root_folder_id: args.id,
     root_folder_name: args.name,
     root_owner_email: args.ownerEmail,
-    root_picked: true,
+    root_origin: 'picked',
     root_picked_at: new Date().toISOString(),
     root_picked_by: args.by,
     clients_folder_id: null,
   })
-  cachedRootId = null
 }
 
 /** Remember which folder inside the picked root the clients live in. */
 export async function saveClientsFolder(id: string): Promise<void> {
   await writeConnection({ clients_folder_id: id })
-  cachedRootId = null
 }
 
 /** The folders directly inside a folder, with their ids. `listFolderNames`
@@ -720,14 +773,55 @@ export async function clientFolderId(
   const recorded = String(row?.drive_folder_id ?? '').trim()
   if (recorded) return recorded
 
+  // throws DriveNotConfirmedError on a picked root whose Clients folder nobody
+  // has confirmed — deliberately, so nothing is filed into the HQ folder itself
   const root = await rootFolderId()
   if (!root) return null
-  const made = await ensureFolder(root, name)
-  if (!made.ok) return null
+
+  const found = await adoptClientFolder(root, name)
+  if (!found) return null
 
   await clients.claim(clientId, cur =>
-    cur && !cur.drive_folder_id ? { ...cur, drive_folder_id: made.id } : null)
-  return made.id
+    cur && !cur.drive_folder_id
+      ? { ...cur, drive_folder_id: found.id, drive_folder_origin: found.origin }
+      : null)
+  // whoever won the race is what the row says; read it back rather than
+  // assuming we won
+  const after = await clients.get(clientId)
+  return String(after?.drive_folder_id ?? '').trim() || found.id
+}
+
+/**
+ * The client's folder inside the Clients folder: the one that is already
+ * there, or a new one.
+ *
+ * Matching is on the NORMALISED name, the same rule the review screen used —
+ * because that is the whole point. Drive says "Alia Fragrance" and the client
+ * record says "Alia Fragrance Pty Ltd"; an exact string comparison would call
+ * that a miss and create a second folder beside the real one, which is the
+ * duplication this feature exists to stop. A client added after the review, or
+ * reactivated, or simply skipped, comes through here.
+ */
+async function adoptClientFolder(
+  parentId: string, name: string,
+): Promise<{ id: string; origin: 'app' | 'adopted' } | null> {
+  const listed = await listSubfolders(parentId)
+  if (!listed.ok) {
+    // a listing that failed is NOT "there is nothing there" — creating on the
+    // strength of a 429 is how a duplicate appears
+    console.error('[gdrive] could not list the Clients folder:', listed.message)
+    return null
+  }
+  const wanted = normaliseFolderName(name)
+  const existing = wanted
+    ? listed.folders.find(f => normaliseFolderName(f.name) === wanted)
+    : undefined
+  if (existing) return { id: existing.id, origin: 'adopted' }
+
+  const made = await createSubfolder(parentId, name)
+  if (!made.ok) return null
+  await shareWithDomain(made.id)
+  return { id: made.id, origin: 'app' }
 }
 
 /** A chain of folders BELOW the client's own folder, created as needed. */
@@ -740,13 +834,27 @@ export async function ensureClientChain(
   return ensureChain(clientDir, tail)
 }
 
-/** The same, plus the link and the team share — what the mirror wants. */
+/**
+ * The same, plus the link — and the team share ONLY where the app owns the
+ * tree it is sharing.
+ *
+ * `ensureChain` adopts a subfolder whose name matches instead of making a
+ * second one, so inside an adopted client folder the `_Brand` this returns may
+ * well be the `_Brand` the team made by hand in 2023. Granting the whole
+ * domain writer on it is a change to the owner's own filing that nobody asked
+ * for, so an adopted client folder is left exactly as it was found.
+ */
 export async function ensureClientChainWithLink(
   clientId: string, name: string, tail: string[],
 ): Promise<{ id: string; url: string } | null> {
   const made = await ensureClientChain(clientId, name, tail)
   if (!made.ok) return null
-  return { id: made.id, url: await shareWithDomain(made.id) }
+  const row = await table<Client>('clients').get(clientId)
+  const adopted = row?.drive_folder_origin === 'adopted'
+  return {
+    id: made.id,
+    url: adopted ? folderUrl(made.id) : await shareWithDomain(made.id),
+  }
 }
 
 // ── sharing ───────────────────────────────────────────────────────────────
@@ -766,10 +874,22 @@ export async function ensureClientChainWithLink(
  *
  * Returns the folder's URL either way: the link works for whoever does have
  * access, and the folder existing is the part the board depends on.
+ *
+ * ── Never on a picked root ──
+ *
+ * On a root the app was HANDED, this does nothing at all. The owner's HQ
+ * folder is already shared the way the owner shares things — with clients, a
+ * bookkeeper, freelancers — and a folder inside it may be one they made years
+ * ago. `ensureFolder` adopts a folder whose name matches rather than making a
+ * second one, so "share the folder we just made" and "re-permission a folder
+ * that was already there" are the same call from here; the only safe reading
+ * is that the app does not change sharing on somebody else's tree. Who can see
+ * HQ is the owner's decision, made in Drive.
  */
 export async function shareWithDomain(folderId: string): Promise<string> {
   const url = folderUrl(folderId)
   const row = await connection()
+  if (isPicked(row)) return url
   const domain = sharingDomainFor(row?.account_email)
   if (!domain) return url
 
@@ -792,18 +912,6 @@ export async function shareWithDomain(folderId: string): Promise<string> {
     console.error('[gdrive] domain share failed:', res.message, res.detail)
   }
   return url
-}
-
-/** Create the folder chain and return its id and link — the pair every hook
- *  wants. Null when Drive is not connected. */
-export async function ensureChainWithLink(
-  names: string[],
-): Promise<{ id: string; url: string } | null> {
-  const root = await rootFolderId()
-  if (!root) return null
-  const made = await ensureChain(root, names)
-  if (!made.ok) return null
-  return { id: made.id, url: await shareWithDomain(made.id) }
 }
 
 /** What a folder is called right now, and what it sits in. Drive is the truth

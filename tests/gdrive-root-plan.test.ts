@@ -17,7 +17,7 @@ const drive = {
   root: { id: 'hq', name: 'MD Media HQ', owner: 'tech@mdmmarketing.com.au' } as
     { id: string; name: string; owner: string | null } | null,
   clientsFolderId: null as string | null,
-  subfolders: [] as { id: string; name: string }[],
+  folders: [] as { id: string; name: string; parent: string }[],
   created: [] as { parent: string; name: string }[],
   nextId: 1,
 }
@@ -35,16 +35,15 @@ vi.mock('../app/lib/gdrive', () => ({
   readFolder: async (id: string) => ({ ok: true, name: `folder ${id}`, ownerEmail: null }),
   savePickedRoot: async () => {},
   saveClientsFolder: async (id: string) => { drive.clientsFolderId = id },
-  findSubfolder: async (_parent: string, name: string) => ({
+  listSubfolders: async (parent: string) => ({
     ok: true,
-    id: name === 'Clients' ? drive.clientsFolderId : null,
+    folders: drive.folders.filter(f => f.parent === parent).map(f => ({ id: f.id, name: f.name })),
   }),
-  listSubfolders: async () => ({ ok: true, folders: [...drive.subfolders] }),
   createSubfolder: async (parent: string, name: string) => {
     const id = `made-${drive.nextId++}`
     drive.created.push({ parent, name })
+    drive.folders.push({ id, name, parent })
     if (parent === 'hq' && name === 'Clients') drive.clientsFolderId = id
-    else drive.subfolders.push({ id, name })
     return { ok: true, id }
   },
   shareWithDomain: async (id: string) => `https://drive.google.com/drive/folders/${id}`,
@@ -62,10 +61,11 @@ let fake: ReturnType<typeof seedDb>
 beforeEach(() => {
   drive.root = { id: 'hq', name: 'MD Media HQ', owner: 'tech@mdmmarketing.com.au' }
   drive.clientsFolderId = 'clients-folder'
-  drive.subfolders = [
-    { id: 'f1', name: 'Cecconis Toorak and Flinders' },
-    { id: 'f2', name: 'Alia Fragrance' },
-    { id: 'f3', name: 'Some Old Project' },
+  drive.folders = [
+    { id: 'clients-folder', name: 'Clients', parent: 'hq' },
+    { id: 'f1', name: 'Cecconis Toorak and Flinders', parent: 'clients-folder' },
+    { id: 'f2', name: 'Alia Fragrance', parent: 'clients-folder' },
+    { id: 'f3', name: 'Some Old Project', parent: 'clients-folder' },
   ]
   drive.created = []
   drive.nextId = 1
@@ -127,7 +127,10 @@ describe('the plan', () => {
 })
 
 describe('the Clients folder', () => {
-  beforeEach(() => { drive.clientsFolderId = null })
+  beforeEach(() => {
+    drive.clientsFolderId = null
+    drive.folders = drive.folders.filter(f => f.id !== 'clients-folder')
+  })
 
   it('asks rather than making one', async () => {
     const res = await buildRootPlan()
@@ -199,5 +202,110 @@ describe('applying it', () => {
     const res = await applyRootPlan([{ client_id: 'c1', folder_id: 'f1' }])
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.message).toBe('Choose the folder first')
+  })
+})
+
+describe('two clients cannot share one folder', () => {
+  it('refuses the second one rather than interleaving their work', async () => {
+    const res = await applyRootPlan([
+      { client_id: 'c1', folder_id: 'f1' },
+      { client_id: 'c2', folder_id: 'f1' },
+    ])
+    if (!res.ok) throw new Error(res.message)
+    expect(res.result.linked).toBe(1)
+    expect(res.result.skipped).toEqual([
+      { client_id: 'c2', why: 'another client already uses that folder' },
+    ])
+  })
+
+  it('refuses a folder another client already holds from an earlier run', async () => {
+    await applyRootPlan([{ client_id: 'c1', folder_id: 'f1' }])
+    const res = await applyRootPlan([{ client_id: 'c2', folder_id: 'f1' }])
+    if (!res.ok) throw new Error(res.message)
+    expect(res.result.skipped).toEqual([
+      { client_id: 'c2', why: 'another client already uses that folder' },
+    ])
+  })
+
+  it('says which client names tidy down to the same thing', async () => {
+    await fake.restore()
+    fake = seedDb({
+      clients: [
+        client('c1', 'Alia Fragrance Pty Ltd'),
+        client('c2', 'Alia Fragrance'),
+      ],
+    })
+    const res = await buildRootPlan()
+    if (!res.ok) throw new Error(res.message)
+    expect(res.plan.same_name).toEqual([
+      { normalised: 'alia fragrance', clients: ['Alia Fragrance', 'Alia Fragrance Pty Ltd'] },
+    ])
+  })
+})
+
+describe('applying twice', () => {
+  it('creates nothing the second time', async () => {
+    const first = await applyRootPlan([{ client_id: 'c3', create: true }])
+    if (!first.ok) throw new Error(first.message)
+    expect(first.result.created).toBe(1)
+
+    const second = await applyRootPlan([{ client_id: 'c3', create: true }])
+    if (!second.ok) throw new Error(second.message)
+    expect(second.result.created).toBe(0)
+    expect(second.result.skipped).toEqual([
+      { client_id: 'c3', why: 'that client already has a folder' },
+    ])
+    expect(drive.created).toHaveLength(1)
+  })
+
+  it('adopts a folder somebody made by hand while the plan was open', async () => {
+    // the owner walks over to Drive and makes it themselves between loading
+    // the review and pressing Save. Drive allows two folders with one name
+    // without a murmur, and the app must not be the one to make the second.
+    drive.folders.push({ id: 'by-hand', name: '100 Hundred Million Group', parent: 'clients-folder' })
+    const res = await applyRootPlan([{ client_id: 'c3', create: true }])
+    if (!res.ok) throw new Error(res.message)
+    expect(drive.created).toEqual([])
+    expect(res.result).toMatchObject({ linked: 1, created: 0 })
+    const row = fake.rows('clients').find(r => r.id === 'c3') as unknown as Client
+    expect(row.drive_folder_id).toBe('by-hand')
+    expect(row.drive_folder_origin).toBe('adopted')
+  })
+
+  it('adopts one whose name is only tidily the same', async () => {
+    drive.folders.push({ id: 'by-hand', name: 'Alia Fragrance', parent: 'clients-folder' })
+    const res = await applyRootPlan([{ client_id: 'c2', create: true }])
+    if (!res.ok) throw new Error(res.message)
+    expect(drive.created).toEqual([])
+    const row = fake.rows('clients').find(r => r.id === 'c2') as unknown as Client
+    // "Alia Fragrance Pty Ltd" is the client; "Alia Fragrance" is the folder
+    expect(row.drive_folder_id).toBe('f2')
+  })
+})
+
+describe('a folder id that is not one of ours', () => {
+  it('refuses anything that is not shaped like a Drive id', async () => {
+    const res = await applyRootPlan([{ client_id: 'c1', folder_id: "f1' or '1" }])
+    if (!res.ok) throw new Error(res.message)
+    expect(res.result.skipped).toEqual([
+      { client_id: 'c1', why: 'that is not a Google Drive folder' },
+    ])
+  })
+
+  it('refuses a folder that is somewhere else in the owner’s Drive', async () => {
+    drive.folders.push({ id: 'elsewhere', name: 'Finance', parent: 'hq' })
+    const res = await applyRootPlan([{ client_id: 'c1', folder_id: 'elsewhere' }])
+    if (!res.ok) throw new Error(res.message)
+    expect(res.result.skipped).toEqual([
+      { client_id: 'c1', why: 'that folder is not inside the Clients folder' },
+    ])
+    const row = fake.rows('clients').find(r => r.id === 'c1') as unknown as Client
+    expect(row.drive_folder_id).toBeFalsy()
+  })
+
+  it('will not apply anything when the Clients folder cannot be listed', async () => {
+    drive.clientsFolderId = null
+    const res = await applyRootPlan([{ client_id: 'c1', folder_id: 'f1' }])
+    expect(res.ok).toBe(false)
   })
 })

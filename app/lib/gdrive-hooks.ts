@@ -4,8 +4,7 @@ import { table } from '@/lib/db'
 import type { Batch, Client, ContentItem, WorkKind } from '@/lib/db-types'
 import {
   BRAND_FOLDER, EDITS_FOLDER, NO_SHOOT_FOLDER, SHOOT_SUBFOLDERS, TASKS_FOLDER,
-  folderNameFor, itemChain, noShootChain,
-  kindGetsOwnFolder, shootFolderRename, taskChain, uniqueName,
+  folderNameFor, kindGetsOwnFolder, shootFolderRename, uniqueName,
 } from './gdrive-core'
 import {
   clientFolderId, driveConfigured, ensureChain, ensureClientChain,
@@ -326,5 +325,4 @@ export async function ensureBrandFolderNow(clientId: string): Promise<string | n
   return made?.id ?? null
 }
 
-/** Re-exported so a caller can predict a chain without creating it. */
-export { itemChain, taskChain, noShootChain, BRAND_FOLDER }
+export { BRAND_FOLDER }

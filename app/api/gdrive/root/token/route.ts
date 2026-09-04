@@ -33,7 +33,12 @@ export async function GET() {
         { status: 400 },
       )
     }
-    return NextResponse.json({ token: auth.token })
+    // never stored anywhere on the way back: an OAuth token in a proxy
+    // cache, or in the back/forward cache, is a token somebody else can
+    // read minutes later
+    return NextResponse.json({ token: auth.token }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
