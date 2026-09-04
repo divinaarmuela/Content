@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { friendlyError } from '@/app/lib/support-core'
-import { isFolder, type Crumb, type DriveEntry } from '@/app/lib/files-core'
+import {
+  isFolder, moveConfirmWords, moveOutcomeWords, renameConfirmWords,
+  type Crumb, type DriveEntry,
+} from '@/app/lib/files-core'
 import { buildQuery } from './useDriveBrowse'
 
 /**
@@ -28,19 +31,28 @@ import { buildQuery } from './useDriveBrowse'
 
 type Busy = { busy: boolean; error: string | null }
 
-function useAction() {
+/**
+ * One press of a button that changes something in Drive.
+ *
+ * `done` is handed the parsed body and may REFUSE by returning a sentence.
+ * That is not a nicety: `/api/drive/move` answers per item, so a 200 can carry
+ * three files that did not move, and a version of this that read only the HTTP
+ * status closed the dialog and told the person nothing. A route that reports
+ * a partial failure needs a caller that can hear one.
+ */
+function useAction<T extends { error?: string }>() {
   const [state, setState] = useState<Busy>({ busy: false, error: null })
-  const run = async (fn: () => Promise<Response>, done: () => void) => {
+  const run = async (fn: () => Promise<Response>, done: (body: T) => string | void) => {
     setState({ busy: true, error: null })
     try {
       const res = await fn()
-      const json = await res.json().catch(() => null) as { error?: string } | null
-      if (!res.ok || json?.error) {
+      const json = await res.json().catch(() => null) as T | null
+      if (!res.ok || !json || json.error) {
         setState({ busy: false, error: friendlyError(json?.error ?? '', 'Files') })
         return
       }
-      setState({ busy: false, error: null })
-      done()
+      const refused = done(json)
+      setState({ busy: false, error: refused || null })
     } catch {
       setState({ busy: false, error: friendlyError('', 'Files') })
     }
@@ -59,7 +71,7 @@ export function NewFolderDialog({
   onMade: (id: string, created: boolean) => void
 }) {
   const [name, setName] = useState('')
-  const action = useAction()
+  const action = useAction<{ id?: string; created?: boolean; error?: string }>()
   useEffect(() => { if (open) { setName(''); action.reset() } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -90,7 +102,10 @@ export function NewFolderDialog({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ parent: parent?.id, name: name.trim() }),
               }),
-              () => onMade(parent!.id, true),
+              // `created: false` means the folder was already there and we
+              // adopted it. That is the one moment adopt-not-duplicate becomes
+              // visible to a person, so it is said rather than swallowed.
+              body => { onMade(parent!.id, body.created !== false) },
             )}
           >
             {action.busy ? 'Making it…' : 'Make the folder'}
@@ -111,7 +126,7 @@ export function RenameDialog({
   onDone: () => void
 }) {
   const [name, setName] = useState('')
-  const action = useAction()
+  const action = useAction<{ name?: string; error?: string }>()
   useEffect(() => { if (entry) { setName(entry.name); action.reset() } }, [entry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const changed = entry && name.trim() && name.trim() !== entry.name
@@ -121,8 +136,9 @@ export function RenameDialog({
         <DialogHeader>
           <DialogTitle>Rename</DialogTitle>
           <DialogDescription>
+            {/* the sentence a test pins, not a second copy of it */}
             {changed
-              ? `Rename “${entry.name}” to “${name.trim()}”?`
+              ? renameConfirmWords(entry.name, name.trim())
               : 'This renames the real file in Google Drive. Nobody else is told.'}
           </DialogDescription>
         </DialogHeader>
@@ -144,7 +160,7 @@ export function RenameDialog({
                 // the flag the server will not act without
                 body: JSON.stringify({ id: entry!.id, name: name.trim(), confirm: true }),
               }),
-              onDone,
+              () => { onDone() },
             )}
           >
             {action.busy ? 'Renaming…' : 'Rename'}
@@ -165,15 +181,22 @@ export type MoveRequest = {
 }
 
 export function MoveDialog({
-  request, root, onClose, onDone,
+  request, root, onClose, onDone, onMoved,
 }: {
   request: MoveRequest | null
   root: Crumb | null
   onClose: () => void
+  /** everything moved — close up and refresh */
   onDone: (targetId: string) => void
+  /** SOME of it moved — refresh, but leave the dialog saying what did not */
+  onMoved: (targetId: string) => void
 }) {
   const [picked, setPicked] = useState<Crumb | null>(null)
-  const action = useAction()
+  const action = useAction<{
+    moved?: string[]
+    failed?: { id: string; name: string | null; error: string }[]
+    error?: string
+  }>()
   useEffect(() => {
     if (request) { setPicked(request.target ?? root); action.reset() }
   }, [request, root]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,8 +211,8 @@ export function MoveDialog({
         <DialogHeader>
           <DialogTitle>Move</DialogTitle>
           <DialogDescription>
-            {picked
-              ? `Move ${what} into “${picked.name}”?`
+            {picked && request
+              ? moveConfirmWords(request.names, picked.name)
               : `Choose where ${what} should go.`}
           </DialogDescription>
         </DialogHeader>
@@ -208,7 +231,18 @@ export function MoveDialog({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ids: request!.ids, to: picked!.id, confirm: true }),
               }),
-              () => onDone(picked!.id),
+              // the route answers per item; a 200 can still carry files Google
+              // refused. The dialog stays open and names them.
+              body => {
+                const outcome = moveOutcomeWords(body.moved ?? [], body.failed ?? [])
+                if (!outcome.ok) {
+                  // whatever DID move still has to reach the page, or the
+                  // folder it went into keeps showing yesterday's contents
+                  if ((body.moved ?? []).length) onMoved(picked!.id)
+                  return outcome.words ?? undefined
+                }
+                onDone(picked!.id)
+              },
             )}
           >
             {action.busy ? 'Moving…' : 'Move'}
@@ -308,7 +342,7 @@ export function ShareDialog({
   onClose: () => void
 }) {
   const [url, setUrl] = useState<string | null>(null)
-  const action = useAction()
+  const action = useAction<{ url?: string; error?: string }>()
   useEffect(() => { if (entry) { setUrl(null); action.reset() } }, [entry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -342,7 +376,7 @@ export function ShareDialog({
                   if (res.ok && json?.url) setUrl(json.url)
                   return res
                 },
-                () => {},
+                () => undefined,
               )}
             >
               {action.busy ? 'Making a link…' : 'Make a link'}

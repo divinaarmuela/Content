@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MAX_UPLOAD_BYTES, PARTIAL_VIEW_NOTE, UPLOAD_CHUNK,
+  MAX_UPLOAD_BYTES, PARTIAL_VIEW_NOTE, RESUME_UNIT, UPLOAD_CHUNK,
   applyChunk, confirmRefusal, crumbTrail, driveOrderBy, driveQuery, escapeQuery,
-  extensionBadge, filterEntries, formatBytes, formatModified, isDriveId, isFolder,
-  kindOf, modifiedSince, moveConfirmWords, moveRefusal, nextChunk, nextSelection,
-  openForPath, parseListRequest, pathInto, pathUpTo, renameConfirmWords, sortEntries,
+  extensionBadge, filterEntries, formatBytes, formatModified, isDriveId,
+  isGoogleContentUrl, isGoogleUploadUri, isFolder, isRowId,
+  kindOf, modifiedSince, moveConfirmWords, moveOutcomeWords, moveRefusal, nextChunk,
+  nextSelection, openForPath, parentsClause, parseListRequest, pathInto, pathUpTo,
+  renameConfirmWords, searchBatchQuery, searchWords, sortEntries,
   startUpload, toggleOpen, uploadPercent, uploadSummary, uploadWords,
   type DriveEntry, type Filters, type UploadState,
 } from '../app/lib/files-core'
@@ -436,5 +438,117 @@ describe('words on the screen', () => {
   it('admits what the app cannot see, in plain words', () => {
     expect(PARTIAL_VIEW_NOTE).toMatch(/Google Drive/)
     expect(PARTIAL_VIEW_NOTE).not.toMatch(/scope|drive\.file|OAuth/i)
+  })
+})
+
+/* ── hosts a token may be sent to ───────────────────────────────────────── */
+
+describe('a URI is checked before Google’s token is attached to it', () => {
+  it('accepts Google’s own upload hosts', () => {
+    expect(isGoogleUploadUri('https://www.googleapis.com/upload/drive/v3/files?upload_id=1')).toBe(true)
+    expect(isGoogleUploadUri('https://googleapis.com/upload/x')).toBe(true)
+  })
+
+  it('refuses everything else — the row lives in a database with open rules', () => {
+    for (const bad of [
+      'https://evil.example.invalid/collect',
+      'http://www.googleapis.com/upload',            // not https
+      'https://googleapis.com.evil.invalid/upload',  // suffix trick
+      'https://notgoogleapis.com/upload',
+      'not a url', '', null, undefined, 42,
+    ]) {
+      expect(isGoogleUploadUri(bad as unknown), String(bad)).toBe(false)
+    }
+  })
+
+  it('applies the same rule to a thumbnail link', () => {
+    expect(isGoogleContentUrl('https://lh3.googleusercontent.com/abc=s220')).toBe(true)
+    expect(isGoogleContentUrl('https://evil.invalid/abc')).toBe(false)
+    expect(isGoogleContentUrl('https://googleusercontent.com.evil.invalid/a')).toBe(false)
+  })
+
+  it('checks a row id of ours as strictly as a Drive id', () => {
+    expect(isRowId('abc-123_XY')).toBe(true)
+    // encodePath splits on `/`, so this would read a different table
+    expect(isRowId('../clients')).toBe(false)
+    expect(isRowId('a/b')).toBe(false)
+    expect(isRowId('')).toBe(false)
+  })
+})
+
+/* ── a resumed offset ───────────────────────────────────────────────────── */
+
+describe('a chunk that starts where Drive says, not where we thought', () => {
+  it('keeps every non-final chunk a multiple of 256 KB', () => {
+    // Drive stopped mid-boundary, which it is allowed to do
+    const state = { ...startUpload('big.mov', UPLOAD_CHUNK * 4), sent: 3_000_001 }
+    const slice = nextChunk(state)!
+    expect(slice.start).toBe(3_000_001)
+    expect((slice.end - 0) % RESUME_UNIT).toBe(0)
+    expect(slice.end).toBeLessThanOrEqual(3_000_001 + UPLOAD_CHUNK)
+  })
+
+  it('leaves the LAST chunk alone — only Drive’s non-final rule needs rounding', () => {
+    const state = { ...startUpload('small.mov', 3_000_500), sent: 3_000_001 }
+    expect(nextChunk(state)).toEqual({ start: 3_000_001, end: 3_000_500 })
+  })
+
+  it('never returns an empty slice and stalls the loop', () => {
+    // an offset so close to a boundary that rounding down would go backwards
+    const state = { ...startUpload('x.mov', UPLOAD_CHUNK * 3), sent: UPLOAD_CHUNK * 2 - 1 }
+    const slice = nextChunk(state)!
+    expect(slice.end).toBeGreaterThan(slice.start)
+  })
+})
+
+/* ── searching below ────────────────────────────────────────────────────── */
+
+describe('searching a subtree', () => {
+  it('asks Drive about several folders at once', () => {
+    expect(parentsClause(['a'])).toBe("'a' in parents")
+    expect(parentsClause(['a', 'b'])).toBe("('a' in parents or 'b' in parents)")
+  })
+
+  it('keeps the usual filters and swaps the single parent for the batch', () => {
+    const q = searchBatchQuery({ text: 'reel', type: 'video' }, ['a', 'b'])
+    expect(q).toContain("name contains 'reel'")
+    expect(q).toContain("mimeType contains 'video/'")
+    expect(q).toContain("('a' in parents or 'b' in parents)")
+    // the caller's own parentId must not survive into a batch query
+    expect(q.match(/in parents/g)).toHaveLength(2)
+  })
+
+  it('says how far it looked, and says so loudest when it ran out', () => {
+    expect(searchWords(3, 'reel', 12, false)).toBe('3 things called “reel”. Searched 12 folders.')
+    expect(searchWords(0, 'reel', 1, false)).toMatch(/^Nothing called “reel” in here or below it\. Searched this folder\./)
+    const capped = searchWords(0, 'reel', 200, true)
+    expect(capped).toMatch(/Searched 200 folders/)
+    expect(capped).toMatch(/more below than we could look through/)
+  })
+})
+
+/* ── a move that half worked ────────────────────────────────────────────── */
+
+describe('a move reports which half failed', () => {
+  it('is quiet when everything moved', () => {
+    expect(moveOutcomeWords(['a', 'b'], [])).toEqual({ ok: true, words: null })
+  })
+
+  it('names what Google refused, and says where it still is', () => {
+    const out = moveOutcomeWords(['a'], [{ name: 'Spring reel v2.mp4', error: 'Google Drive 403' }])
+    expect(out.ok).toBe(false)
+    expect(out.words).toBe(
+      '1 moved. Google Drive would not move “Spring reel v2.mp4”. They are still where they were.',
+    )
+  })
+
+  it('does not read out twenty names', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ name: `f${i}.mp4` }))
+    expect(moveOutcomeWords([], many).words)
+      .toBe('Nothing moved. Google Drive would not move “f0.mp4”, “f1.mp4”, “f2.mp4” and 3 more. They are still where they were.')
+  })
+
+  it('never blames a file it cannot name', () => {
+    expect(moveOutcomeWords([], [{ name: null }]).words).toMatch(/“one file”/)
   })
 })

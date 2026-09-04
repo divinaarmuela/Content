@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { authzErrorResponse } from '../../../lib/authz'
 import { trailTo } from '../../../lib/gdrive-files'
-import { filesRoot, requireFilesAccess } from '../../../lib/drive-page'
+import { FILES_BLOCK_WORDS, blockFor, filesRoot, requireFilesAccess } from '../../../lib/drive-page'
 import { isDriveId } from '../../../lib/files-core'
 
 /**
@@ -23,13 +23,14 @@ export async function GET(req: Request) {
     }
     const root = await filesRoot()
     if (!root) {
-      return NextResponse.json(
-        { error: 'Google Drive is not connected yet. An admin can connect it in Settings.' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: FILES_BLOCK_WORDS.not_picked }, { status: 409 })
     }
     const result = await trailTo(id, root.id)
-    if (!result.ok) return NextResponse.json({ error: result.message }, { status: 502 })
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: FILES_BLOCK_WORDS[blockFor(result.reason)] }, { status: 502 },
+      )
+    }
     return NextResponse.json({ trail: result.trail })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

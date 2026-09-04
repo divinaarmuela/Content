@@ -1,6 +1,12 @@
 'use client'
 
-import { FileText, Film, Folder, Image as ImageIcon, Music, Plus, Table2 } from 'lucide-react'
+import {
+  FileText, Film, Folder, FolderInput, Image as ImageIcon, Link2, Music,
+  MoreVertical, Pencil, Plus, Table2,
+} from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import {
   extensionBadge, formatBytes, formatModified, isFolder, kindOf,
@@ -45,6 +51,62 @@ export type GridProps = {
   onDragEnd: () => void
   draggingIds: string[]
   now: Date
+  /** the mockup's `⋮`: the three things you can do to one item, reachable
+   *  without first selecting it and walking to the info panel */
+  onRename: (entry: DriveEntry) => void
+  onMoveOne: (entry: DriveEntry) => void
+  onShare: (entry: DriveEntry) => void
+}
+
+/**
+ * The per-item menu from the mockup.
+ *
+ * It opens the same dialogs the info panel does — which means it goes through
+ * the same confirmation, and the same server-side `confirm: true`. A shortcut
+ * to an action is not a shortcut past the question.
+ *
+ * There is no Delete on it, and there is nowhere for one to go: nothing on
+ * this page can remove a file from the owner's Drive.
+ */
+function ItemMenu({
+  entry, onRename, onMoveOne, onShare, tone = 'dim',
+}: {
+  entry: DriveEntry
+  onRename: (entry: DriveEntry) => void
+  onMoveOne: (entry: DriveEntry) => void
+  onShare: (entry: DriveEntry) => void
+  tone?: 'dim' | 'plain'
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`More for ${entry.name}`}
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => e.stopPropagation()}
+          className={cn(
+            'ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full',
+            'hover:bg-foreground/[0.08]',
+            tone === 'dim' ? 'text-foreground/55' : 'text-foreground',
+          )}
+        >
+          <MoreVertical className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-popover">
+        <DropdownMenuItem className="min-h-[44px]" onSelect={() => onRename(entry)}>
+          <Pencil className="mr-2 h-4 w-4" strokeWidth={2} />Rename…
+        </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-[44px]" onSelect={() => onMoveOne(entry)}>
+          <FolderInput className="mr-2 h-4 w-4" strokeWidth={2} />Move…
+        </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-[44px]" onSelect={() => onShare(entry)}>
+          <Link2 className="mr-2 h-4 w-4" strokeWidth={2} />Get a link…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export default function FilesGrid(props: GridProps) {
@@ -98,6 +160,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function FolderTile({
   folder, selected, onPick, onOpenFolder, onDropOnto, onDragStart, onDragEnd, draggingIds,
+  onRename, onMoveOne, onShare,
 }: GridProps & { folder: DriveEntry }) {
   const isSelected = selected.includes(folder.id)
   const canDrop = draggingIds.length > 0 && !draggingIds.includes(folder.id)
@@ -131,12 +194,13 @@ function FolderTile({
     >
       <Folder className="h-[22px] w-[22px] shrink-0 text-accent-blue" strokeWidth={1.8} />
       <span className="truncate">{folder.name}</span>
+      <ItemMenu entry={folder} onRename={onRename} onMoveOne={onMoveOne} onShare={onShare} />
     </div>
   )
 }
 
 function FileTile({
-  file, selected, onPick, onDragStart, onDragEnd,
+  file, selected, onPick, onDragStart, onDragEnd, onRename, onMoveOne, onShare,
 }: GridProps & { file: DriveEntry }) {
   const kind = kindOf(file.mimeType, file.name)
   const Icon = ICON[kind]
@@ -159,9 +223,10 @@ function FileTile({
         isSelected ? 'border-accent-blue ring-1 ring-accent-blue' : 'border-border hover:border-foreground/25',
       )}
     >
-      <div className="flex h-12 items-center gap-2.5 px-3.5 text-secondary-13 font-semibold">
+      <div className="flex h-12 items-center gap-2.5 pl-3.5 pr-1 text-secondary-13 font-semibold">
         <Icon className={cn('h-4 w-4 shrink-0', ICON_TONE[kind])} strokeWidth={2} />
         <span className="truncate">{file.name}</span>
+        <ItemMenu entry={file} onRename={onRename} onMoveOne={onMoveOne} onShare={onShare} />
       </div>
       <div className="relative h-[150px] border-t border-border bg-paper">
         {file.hasThumbnail ? (
@@ -190,6 +255,7 @@ function FileTile({
 
 function ListView({
   entries, selected, onPick, onOpenFolder, onDropOnto, onDragStart, onDragEnd, draggingIds, now,
+  onRename, onMoveOne, onShare,
 }: GridProps) {
   return (
     <div className="min-h-0 flex-1 overflow-auto rounded-inner border border-border bg-surface">
@@ -200,6 +266,7 @@ function ListView({
             <th scope="col" className="px-4 py-3">Owner</th>
             <th scope="col" className="px-4 py-3">Last changed</th>
             <th scope="col" className="px-4 py-3">Size</th>
+            <th scope="col" className="px-4 py-3"><span className="sr-only">More</span></th>
           </tr>
         </thead>
         <tbody>
@@ -246,6 +313,15 @@ function ListView({
                 <td className="px-4 py-3 text-muted-foreground">{formatModified(entry.modified, now)}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {folder ? '—' : formatBytes(entry.size)}
+                </td>
+                <td className="py-1 pr-2">
+                  <ItemMenu
+                    entry={entry}
+                    tone="plain"
+                    onRename={onRename}
+                    onMoveOne={onMoveOne}
+                    onShare={onShare}
+                  />
                 </td>
               </tr>
             )

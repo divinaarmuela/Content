@@ -4,7 +4,8 @@ import type {
   AssetVersion, Client, ContentItem, DriveFile, DriveUpload,
 } from '@/lib/db-types'
 import { requireRole, type TeamUser } from './authz'
-import { pickedRoot, rootFolderId } from './gdrive'
+import { isGoogleUploadUri, isRowId } from './files-core'
+import { pickedRoot } from './gdrive'
 
 /**
  * What the Files page needs from OUR side of the world: who may look, where
@@ -42,32 +43,70 @@ export async function requireFilesAccess(): Promise<TeamUser> {
 export type FilesRoot = {
   id: string
   name: string
-  /** the "Clients" folder inside it, when a person has pointed us at one */
+  /** the "Clients" folder inside it, when a person has confirmed one */
   clientsFolderId: string | null
-  /** false when nobody has chosen the HQ folder yet */
-  picked: boolean
 }
 
 /**
- * Where the tree starts.
+ * Where the tree starts — READ ONLY, and null until a person has chosen.
  *
- * The picked folder if a super admin has chosen one in Settings, and the
- * app-made root otherwise — the same order `rootFolderId()` uses, so the page
- * and the mirror can never be looking at two different cabinets.
+ * This used to fall through to `rootFolderId()` when nothing had been picked.
+ * That call is not a read: it creates a folder at the top of the tech
+ * account's Drive and stamps `root_folder_id` on the connection row. A
+ * scheduler opening this page out of curiosity, before the owner had picked
+ * HQ, would have made a stray folder and settled a question nobody had
+ * answered — from a plain GET.
+ *
+ * So: `pickedRoot()` and nothing else. No fallback, no create, no write. When
+ * nobody has picked yet the answer is null and the page says so in words a
+ * person can act on ("Choose the HQ folder in Settings"). A page that shows
+ * nothing is a smaller failure than a page that files something somewhere
+ * nobody agreed to.
  */
 export async function filesRoot(): Promise<FilesRoot | null> {
   const picked = await pickedRoot()
-  if (picked) {
-    return {
-      id: picked.id,
-      name: picked.name || 'MD Media HQ',
-      clientsFolderId: picked.clients_folder_id ?? null,
-      picked: true,
-    }
+  if (!picked) return null
+  return {
+    id: picked.id,
+    name: picked.name || 'MD Media HQ',
+    clientsFolderId: picked.clients_folder_id ?? null,
   }
-  const fallback = await rootFolderId()
-  if (!fallback) return null
-  return { id: fallback, name: 'Clients', clientsFolderId: fallback, picked: false }
+}
+
+/**
+ * Why the page cannot show anything, in the words a person needs.
+ *
+ * Three different things were all reading "Google Drive is not connected yet",
+ * and only one of them was true. Somebody whose refresh token had expired was
+ * told to connect an account that was already connected, went to Settings, saw
+ * it connected, and had nowhere to go.
+ */
+export type FilesBlock = 'not_configured' | 'not_connected' | 'not_picked' | 'unreachable'
+
+export const FILES_BLOCK_WORDS: Record<FilesBlock, string> = {
+  not_configured:
+    'Google Drive is not set up on this app yet. An admin can set it up in Settings.',
+  not_connected:
+    'Google Drive is not connected yet. An admin can connect it in Settings.',
+  not_picked:
+    'Nobody has chosen the MD Media HQ folder yet. An admin can choose it in '
+    + 'Settings → Integrations, under “Where the files go”.',
+  unreachable:
+    'Could not reach Google Drive just now. Nothing you did caused this — '
+    + 'try again in a moment.',
+}
+
+/**
+ * A Drive failure, turned into which of those four a person is looking at.
+ *
+ * A connection that exists but will not refresh is NOT "not connected": the
+ * row is there, the account is there, and telling somebody to connect it again
+ * sends them to a Settings page that already says Connected.
+ */
+export function blockFor(reason: string | null | undefined): FilesBlock {
+  if (reason === 'not_configured') return 'not_configured'
+  if (reason === 'not_connected') return 'not_connected'
+  return 'unreachable'
 }
 
 /* ── what the app knows about a Drive file ─────────────────────────────── */
@@ -274,13 +313,32 @@ export async function openUploadRow(row: {
   } as unknown as Omit<DriveUpload, 'id'>)
 }
 
-/** The row, but only while it is still open and still this person's. Anything
- *  else is "that upload is no longer going", which is the honest answer to a
- *  stale tab pushing chunks at a finished session. */
+/**
+ * The row, but only while it is still open and still THIS person's.
+ *
+ * Anything else is "that upload is no longer going", which is the honest
+ * answer to a stale tab pushing chunks at a finished session.
+ *
+ * The ownership check refuses when either side is unknown, rather than waving
+ * an unknown through. A team member whose Clerk record carries no email used
+ * to satisfy `row.created_by && by && …` by failing its second term, and could
+ * push bytes into anybody's open session. Team-only either way, so this was
+ * never reachable by a client — but "we could not tell who you are" is not a
+ * reason to say yes.
+ *
+ * The id is checked first: `encodePath` splits on `/`, so an id carrying a
+ * slash would read a different node of the database entirely. Every Drive id
+ * on this page is validated at the edge; a row id of ours deserves the same.
+ */
 export async function liveUploadRow(id: string, by: string | null): Promise<DriveUpload | null> {
+  if (!isRowId(id)) return null
   const row = await table<DriveUpload>('drive_uploads').get(id)
   if (!row || row.status !== 'open') return null
-  if (row.created_by && by && row.created_by !== by) return null
+  if (!row.created_by || !by || row.created_by !== by) return null
+  // a stored URI is only ever written from Drive's own Location header, but the
+  // database has open rules by the owner's decision (CLAUDE.md trap 10) — and
+  // the next thing this row does is send Google's bearer token to that host
+  if (!isGoogleUploadUri(row.upload_uri)) return null
   return row
 }
 

@@ -12,8 +12,12 @@ import { UPLOAD_CHUNK } from '../../../../lib/files-core'
  * The bytes are on somebody's laptop, so the browser drives the loop: ask for
  * a session, then PUT slice after slice here until Drive says it has the lot.
  * This route holds no state of its own — the session URI and how much Drive
- * has confirmed both live in `drive_uploads`, which is what lets a tab that
- * was closed halfway be picked up rather than started again.
+ * has confirmed both live in `drive_uploads`, so a slice knows where it goes
+ * without the browser ever holding a URI that writes into somebody's Drive.
+ * A tab closed halfway is NOT picked up again: the row is left open, nothing
+ * resumes it, and the person drops the file again. Half-restarting an upload
+ * nobody is watching is a way to write the same file twice, and Drive has no
+ * unique-name constraint to catch it.
  *
  * `received` in the reply is DRIVE's count, never ours. The browser resumes
  * from that number, which is the whole reason resumable upload exists: a slice

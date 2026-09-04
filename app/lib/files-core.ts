@@ -27,6 +27,53 @@ export function isDriveId(value: unknown): value is string {
   return typeof value === 'string' && ID_RE.test(value)
 }
 
+/**
+ * An id of OUR OWN — a `drive_uploads` row key.
+ *
+ * Same shape, same reason, different owner. `encodePath` in `lib/db.ts` splits
+ * a path on `/`, so an id carrying a slash reads a different node of the
+ * database entirely. Every Drive id on this page is checked at the edge; a row
+ * id that arrives in a query string deserves exactly the same.
+ */
+export function isRowId(value: unknown): value is string {
+  return typeof value === 'string' && ID_RE.test(value)
+}
+
+/**
+ * A URI it is safe to send Google's bearer token to.
+ *
+ * A resumable session URI only ever comes from Drive's own `Location` header —
+ * but it is then STORED, and the database has open read/write rules by the
+ * owner's decision (CLAUDE.md trap 10). Nothing in code stopped a row's
+ * `upload_uri` from pointing somewhere else, and the very next thing that row
+ * does is put an access token in an Authorization header. One host check
+ * closes that for free.
+ */
+export function isGoogleUploadUri(uri: unknown): uri is string {
+  if (typeof uri !== 'string') return false
+  try {
+    const url = new URL(uri)
+    if (url.protocol !== 'https:') return false
+    return url.host === 'googleapis.com' || url.host.endsWith('.googleapis.com')
+  } catch {
+    return false
+  }
+}
+
+/** The same rule for a thumbnail: Drive serves them from Google's own image
+ *  hosts, and a link we did not recognise is not worth a token. */
+export function isGoogleContentUrl(url: unknown): url is string {
+  if (typeof url !== 'string') return false
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return false
+    return ['googleapis.com', 'googleusercontent.com', 'google.com', 'gstatic.com']
+      .some(host => parsed.host === host || parsed.host.endsWith(`.${host}`))
+  } catch {
+    return false
+  }
+}
+
 /* ── what kind of thing is this ────────────────────────────────────────── */
 
 export const FOLDER_MIME = 'application/vnd.google-apps.folder'
@@ -412,6 +459,11 @@ export function nextSelection(
  */
 export const UPLOAD_CHUNK = 4 * 1024 * 1024
 
+/** Drive's own granularity: every chunk but the last must be a multiple of
+ *  this. It matters on a RESUMED offset, which is Drive's number and not
+ *  ours — see `nextChunk`. */
+export const RESUME_UNIT = 256 * 1024
+
 /** Drive's own ceiling, restated so the browser can refuse early. */
 export const MAX_UPLOAD_BYTES = 5 * 1024 ** 4
 
@@ -442,7 +494,15 @@ export function nextChunk(state: UploadState): { start: number; end: number } | 
   if (state.status === 'done' || state.status === 'failed') return null
   if (state.size === 0) return state.sent === 0 ? { start: 0, end: 0 } : null
   if (state.sent >= state.size) return null
-  return { start: state.sent, end: Math.min(state.sent + UPLOAD_CHUNK, state.size) }
+  const end = Math.min(state.sent + UPLOAD_CHUNK, state.size)
+  if (end === state.size) return { start: state.sent, end }
+  // Not the last slice, so Drive requires a multiple of 256 KB. `sent` is
+  // DRIVE's count, not ours, and Drive does not promise to stop on a boundary
+  // — so a resumed offset of, say, 3,000,001 bytes would make the next chunk
+  // 4 MB long starting off-boundary, and Drive would reject it. Round the END
+  // down to a boundary instead; the slice is smaller, and the file is right.
+  const aligned = Math.floor(end / RESUME_UNIT) * RESUME_UNIT
+  return { start: state.sent, end: aligned > state.sent ? aligned : end }
 }
 
 /**
@@ -619,4 +679,84 @@ export function moveConfirmWords(names: readonly string[], folder: string): stri
     ? `“${names[0]}”`
     : `${names.length} items`
   return `Move ${what} into “${folder}”?`
+}
+
+/* ── searching below a folder ──────────────────────────────────────────── */
+
+/**
+ * How far a search is allowed to walk, and how long it may take.
+ *
+ * Drive's `q` has no subtree operator at all — `'x' in parents` means the
+ * DIRECT children of x and nothing else. So "search in here and below" has to
+ * be a walk, and a walk of somebody's whole archive is not a thing to start
+ * without a stop on it. Two hundred folders and five seconds is generous for
+ * a client folder and short enough that a search from the top of HQ comes back
+ * rather than hanging; when it runs out, the page SAYS it ran out instead of
+ * quietly showing a subset.
+ */
+export const SEARCH_FOLDER_CAP = 200
+export const SEARCH_MS = 5_000
+/** How many parents fit in one `q` before it gets silly. Drive has no
+ *  documented limit on the clause count; the URL length is the real one. */
+export const SEARCH_PARENT_BATCH = 40
+
+/** `('a' in parents or 'b' in parents)` — the one thing Drive gives us that
+ *  makes a subtree search fewer than one request per folder. */
+export function parentsClause(ids: readonly string[]): string {
+  const parts = ids.map(id => `'${escapeQuery(id)}' in parents`)
+  return parts.length === 1 ? parts[0] : `(${parts.join(' or ')})`
+}
+
+/** The `q` for one batch of the walk: the usual filters, plus "in any of
+ *  these folders". */
+export function searchBatchQuery(opts: QueryOptions, parentIds: readonly string[]): string {
+  const base = driveQuery({ ...opts, parentId: null })
+  return `${base} and ${parentsClause(parentIds)}`
+}
+
+/**
+ * What the person is told about a search, including when it gave up.
+ *
+ * A capped search that says nothing is the worst of the three outcomes: the
+ * person concludes the file is gone and uploads it again, into the owner's
+ * real archive. So the sentence always says how far it looked.
+ */
+export function searchWords(
+  found: number, text: string, foldersSearched: number, capped: boolean,
+): string {
+  const what = found === 0
+    ? `Nothing called “${text}” in here or below it`
+    : `${found} thing${found === 1 ? '' : 's'} called “${text}”`
+  const where = foldersSearched === 1 ? 'this folder' : `${foldersSearched} folders`
+  return capped
+    ? `${what}. Searched ${where} — there is more below than we could look through, so try searching inside a smaller folder.`
+    : `${what}. Searched ${where}.`
+}
+
+/* ── what happened to a move ───────────────────────────────────────────── */
+
+/**
+ * A move that half worked has to say WHICH half.
+ *
+ * The route already answers per item; the dialog used to read only the HTTP
+ * status, so eight files dragged onto a folder with three refused on
+ * permissions closed cleanly and looked like eight. Nothing about that is
+ * recoverable by a person who was not told.
+ */
+export function moveOutcomeWords(
+  moved: readonly string[],
+  failed: readonly { name?: string | null; error?: string }[],
+): { ok: boolean; words: string | null } {
+  if (!failed.length) return { ok: true, words: null }
+  const names = failed.map(f => `“${f.name || 'one file'}”`)
+  const list = names.length <= 3
+    ? names.join(', ')
+    : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+  const kept = moved.length
+    ? `${moved.length} moved. `
+    : 'Nothing moved. '
+  return {
+    ok: false,
+    words: `${kept}Google Drive would not move ${list}. They are still where they were.`,
+  }
 }

@@ -7,7 +7,9 @@ import {
 import { safeSegment } from './gdrive-core'
 import { CHUNK_SIZE, contentRange, receivedBytes } from './gdrive-mirror-core'
 import {
-  FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, driveOrderBy, driveQuery, isDriveId,
+  FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, SEARCH_FOLDER_CAP, SEARCH_MS,
+  SEARCH_PARENT_BATCH, driveOrderBy, driveQuery, isDriveId, isGoogleContentUrl,
+  isGoogleUploadUri, searchBatchQuery,
   type DriveEntry, type QueryOptions, type Sort,
 } from './files-core'
 
@@ -445,13 +447,17 @@ export type Listing = { entries: DriveEntry[]; nextPageToken: string | null }
  * forty-second wait.
  */
 export async function listEntries(
-  opts: QueryOptions & { sort?: Sort; pageToken?: string | null; pageSize?: number },
+  opts: QueryOptions & {
+    sort?: Sort; pageToken?: string | null; pageSize?: number
+    /** a `q` built elsewhere — the subtree search's batched parents clause */
+    rawQuery?: string
+  },
 ): Promise<DriveResult<Listing>> {
   const auth = await accessToken()
   if (!auth.ok) return auth
   const sort: Sort = opts.sort ?? { by: 'name', dir: 'asc' }
   const url = `${FILES}?` + new URLSearchParams({
-    q: driveQuery(opts),
+    q: opts.rawQuery ?? driveQuery(opts),
     fields: `nextPageToken, files(${ENTRY_FIELDS})`,
     pageSize: String(Math.min(Math.max(opts.pageSize ?? PAGE_SIZE, 1), PAGE_SIZE)),
     orderBy: driveOrderBy(sort),
@@ -511,20 +517,116 @@ export async function trailTo(
   return { ok: true, trail }
 }
 
-/** Is `candidate` inside `ancestor`, at any depth? The guard that stops a
- *  folder being dropped into one of its own folders — which Drive would
- *  accept, and which would take the branch out of the tree for good. */
-export async function isInside(candidate: string, ancestor: string): Promise<boolean> {
+/**
+ * Is `candidate` inside `ancestor`, at any depth?
+ *
+ * THREE answers, not two. This is the guard that stops a folder being dropped
+ * into one of its own folders — which Drive accepts, and which takes the whole
+ * branch out of the tree with nothing to undo it. It used to answer `false`
+ * when the walk hit a Drive error, ran past `MAX_DEPTH`, or reached a parent
+ * the `drive.file` grant does not cover; the route read `false` as "safe", so
+ * a transient 500 was enough to permit the one move on this page that cannot
+ * be taken back.
+ *
+ * A read error is an error. "I could not check" is its own answer, and the
+ * caller refuses on it.
+ */
+export type Ancestry = 'inside' | 'outside' | 'unknown'
+
+export async function isInside(candidate: string, ancestor: string): Promise<Ancestry> {
   let at = candidate
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    if (at === ancestor) return true
+    if (at === ancestor) return 'inside'
     const detail = await entryDetail(at)
-    if (!detail.ok) return false
+    if (!detail.ok) return 'unknown'
     const up = detail.entry.parents[0]
-    if (!up || !isDriveId(up)) return false
+    // no parent at all is a real answer: this is the top of what we can see,
+    // and the ancestor was not on the way up
+    if (!up) return 'outside'
+    if (!isDriveId(up)) return 'unknown'
     at = up
   }
-  return false
+  // ran out of depth without an answer — which is not "no"
+  return 'unknown'
+}
+
+/**
+ * Everything below a folder, as far as we are allowed to walk.
+ *
+ * Drive's `q` has no subtree operator: `'x' in parents` is x's DIRECT children
+ * and nothing else. So a search that says "in here or below it" has to walk,
+ * and a walk of somebody's whole archive needs a stop on it — breadth first,
+ * capped at `SEARCH_FOLDER_CAP` folders and `SEARCH_MS`. Breadth first because
+ * the near folders are the ones a person means; depth first would spend the
+ * whole budget down one branch of raw clips.
+ *
+ * `capped` is returned rather than hidden. A truncated search that says
+ * nothing is how a person concludes their file is gone and uploads it again,
+ * into the owner's real archive.
+ */
+export async function foldersUnder(
+  parentId: string,
+): Promise<DriveResult<{ ids: string[]; capped: boolean }>> {
+  if (!isDriveId(parentId)) return asError('That folder could not be found')
+  const started = Date.now()
+  const ids = [parentId]
+  const queue = [parentId]
+  let capped = false
+
+  while (queue.length) {
+    if (ids.length >= SEARCH_FOLDER_CAP || Date.now() - started > SEARCH_MS) {
+      capped = true
+      break
+    }
+    const at = queue.shift() as string
+    const page = await listEntries({ parentId: at, foldersOnly: true, pageSize: PAGE_SIZE })
+    // one unreadable branch does not sink the search; it is simply not walked,
+    // and `capped` already tells the person the answer may be short
+    if (!page.ok) { capped = true; continue }
+    if (page.nextPageToken) capped = true
+    for (const folder of page.entries) {
+      if (ids.length >= SEARCH_FOLDER_CAP) { capped = true; break }
+      ids.push(folder.id)
+      queue.push(folder.id)
+    }
+  }
+  return { ok: true, ids, capped: capped || queue.length > 0 }
+}
+
+export type SearchResult = {
+  entries: DriveEntry[]
+  foldersSearched: number
+  capped: boolean
+}
+
+/** The walk, then the search — batched, so a hundred folders is three
+ *  requests rather than a hundred. */
+export async function searchBelow(
+  opts: QueryOptions & { parentId: string; sort?: Sort },
+): Promise<DriveResult<SearchResult>> {
+  const under = await foldersUnder(opts.parentId)
+  if (!under.ok) return under
+
+  const found = new Map<string, DriveEntry>()
+  for (let at = 0; at < under.ids.length; at += SEARCH_PARENT_BATCH) {
+    const batch = under.ids.slice(at, at + SEARCH_PARENT_BATCH)
+    const page = await listEntries({
+      ...opts,
+      parentId: null,
+      rawQuery: searchBatchQuery(opts, batch),
+      pageSize: PAGE_SIZE,
+    })
+    if (!page.ok) return page
+    // the same file can sit in two of the folders we walked; a person wants
+    // one row for it, not one per parent
+    for (const entry of page.entries) found.set(entry.id, entry)
+  }
+  return {
+    ok: true,
+    entries: [...found.values()],
+    foldersSearched: under.ids.length,
+    capped: under.capped,
+  }
 }
 
 /**
@@ -633,6 +735,9 @@ export async function openThumbnail(
   // Drive's link ends in `=s220`; asking for a bigger one is a swap, not a
   // second request — and a 220px tile on a retina screen looks broken
   const sized = link.replace(/=s\d+$/, `=s${Math.min(Math.max(size, 64), 1600)}`)
+  // the token goes in an Authorization header on the next line, so the host it
+  // goes to is checked first — the same cheap rule the upload session gets
+  if (!isGoogleContentUrl(sized)) return asError('That preview could not be loaded')
   const res = await fetch(sized, { headers: { Authorization: `Bearer ${auth.token}` } })
   if (!res.ok || !res.body) return asError('That preview could not be loaded')
   return {
@@ -716,6 +821,9 @@ export type ChunkOutcome =
 export async function pushUploadChunk(
   uri: string, chunk: Uint8Array, start: number, total: number | null,
 ): Promise<ChunkOutcome> {
+  // belt and braces: `liveUploadRow` checks the stored URI too, and this is
+  // the line that actually attaches the token
+  if (!isGoogleUploadUri(uri)) return asError('That upload is no longer going')
   const auth = await accessToken()
   if (!auth.ok) return auth
   const end = start + chunk.length

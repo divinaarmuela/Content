@@ -51,10 +51,20 @@ export async function POST(req: Request) {
     if (ids.includes(body.to)) {
       return NextResponse.json({ error: 'A folder cannot go inside itself.' }, { status: 400 })
     }
+    // "I could not check" is not "no". A transient Drive 500, a folder deeper
+    // than the walk allows, or an ancestor the `drive.file` grant does not
+    // cover all used to read as safe — and permitting a folder into its own
+    // child is the one action on this page that cannot be taken back.
     for (const id of ids) {
-      if (await isInside(body.to, id)) {
+      const where = await isInside(body.to, id)
+      if (where === 'inside') {
         return NextResponse.json(
           { error: 'A folder cannot go inside one of its own folders.' }, { status: 400 },
+        )
+      }
+      if (where === 'unknown') {
+        return NextResponse.json(
+          { error: 'Could not check that folder just now — try again.' }, { status: 503 },
         )
       }
     }

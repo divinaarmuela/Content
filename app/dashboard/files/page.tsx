@@ -11,7 +11,7 @@ import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import {
   MODIFIED_FILTERS, NO_FILTERS, PARTIAL_VIEW_NOTE, SORT_LABEL, TYPE_FILTERS,
   crumbTrail, filterEntries, isFolder, nextSelection, openForPath, pathInto, pathUpTo,
-  toggleOpen, uploadPercent, uploadSummary, uploadWords,
+  searchWords, toggleOpen, uploadPercent, uploadSummary, uploadWords,
   type Crumb, type DriveEntry, type Filters, type Sort, type SortBy,
 } from '@/app/lib/files-core'
 import PageTitle from '../ui/PageTitle'
@@ -50,10 +50,14 @@ import { useUploads } from './useUploads'
  *     reload.
  */
 
+/** `useTable` memoises on the identity of this, so it lives outside the
+ *  component rather than being rebuilt every render. */
+const CLIENTS_BY_NAME: ['name', 'asc'][] = [['name', 'asc']]
+
 const OPEN_KEY = 'md-files-open'
 const VIEW_KEY = 'md-files-view'
 
-type RootInfo = { id: string; name: string; picked: boolean }
+type RootInfo = { id: string; name: string; clientsFolderId: string | null }
 
 export default function FilesPage() {
   const [root, setRoot] = useState<RootInfo | null>(null)
@@ -72,6 +76,7 @@ export default function FilesPage() {
   const [now] = useState(() => new Date())
 
   const [newFolder, setNewFolder] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<DriveEntry | null>(null)
   const [sharing, setSharing] = useState<DriveEntry | null>(null)
   const [moving, setMoving] = useState<MoveRequest | null>(null)
@@ -79,14 +84,26 @@ export default function FilesPage() {
 
   /* ── where the cabinet is ─────────────────────────────────────────────── */
 
+  // This GET reads and nothing else. It used to be able to CREATE a folder in
+  // the tech account's Drive through a fallback, so opening the page out of
+  // curiosity before the owner had chosen HQ settled a question nobody had
+  // answered. Now: no folder chosen means no folder chosen, said out loud.
   useEffect(() => {
     void fetch('/api/drive/root', { cache: 'no-store' })
       .then(async res => {
-        const json = await res.json().catch(() => null) as
-          { root?: RootInfo; connected?: boolean; error?: string } | null
-        if (!res.ok || json?.error) { setRootError(friendlyError(json?.error ?? '', 'Files')); return }
+        const json = await res.json().catch(() => null) as {
+          root?: RootInfo; message?: string; error?: string
+        } | null
+        if (!res.ok || json?.error) {
+          setRootError(friendlyError(json?.error ?? '', 'Files'))
+          return
+        }
         if (!json?.root) {
-          setRootError('Google Drive is not connected yet. An admin can connect it in Settings.')
+          // the route says WHICH of "not set up", "not connected", "nobody has
+          // picked HQ" and "could not reach Google" this is — three of those
+          // used to read as the second one, which sent people to a Settings
+          // page that already said Connected
+          setRootError(json?.message ?? loadFailedMessage('Files'))
           return
         }
         setRoot(json.root)
@@ -139,12 +156,26 @@ export default function FilesPage() {
 
   /* ── what the app knows about these files ─────────────────────────────── */
 
-  const mirrored = useTable<DriveFile>('drive_files', {})
-  const clients = useTable<Client>('clients', {})
+  // Which client a file belongs to arrives WITH the listing — one join on the
+  // server, for the files actually on screen. The browser used to subscribe to
+  // the whole of `drive_files` to answer the same question, which grows with
+  // every mirrored file the agency has ever made.
+  //
+  // The live subscription is still here, because the brief asks for realtime
+  // where the data is ours — but only while the Client filter is actually in
+  // use, which is the one moment it changes what a person sees. `enabled`
+  // false means no listener and no payload at all.
+  const usingClientFilter = filters.client !== null
+  const mirrored = useTable<DriveFile>('drive_files', { enabled: usingClientFilter })
+  const clients = useTable<Client>('clients', { orderBy: CLIENTS_BY_NAME })
+
   const clientOf = useCallback((driveFileId: string) => {
-    const row = mirrored.rows.find(r => r.drive_file_id === driveFileId)
-    return row?.client_id ?? null
-  }, [mirrored.rows])
+    if (usingClientFilter) {
+      const live = mirrored.rows.find(r => r.drive_file_id === driveFileId)
+      if (live) return live.client_id ?? null
+    }
+    return browse.clients[driveFileId] ?? null
+  }, [usingClientFilter, mirrored.rows, browse.clients])
 
   const entries = useMemo(
     () => filterEntries(browse.entries, filters, clientOf, now),
@@ -275,6 +306,18 @@ export default function FilesPage() {
       />
 
       <p className="text-secondary-13 text-muted-foreground">{PARTIAL_VIEW_NOTE}</p>
+
+      {notice && (
+        <p
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-inner border border-border bg-tint-blue px-4 py-3 text-secondary-13"
+        >
+          {notice}
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
+            Close
+          </button>
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 gap-4">
         {/* ── the tree ─────────────────────────────────────────────────── */}
@@ -450,9 +493,7 @@ export default function FilesPage() {
                 <>
                   {debounced && (
                     <p className="mb-2.5 text-secondary-13 text-muted-foreground">
-                      {entries.length === 0
-                        ? `Nothing called “${debounced}” in here or below it.`
-                        : `${entries.length} thing${entries.length === 1 ? '' : 's'} called “${debounced}”`}
+                      {searchWords(entries.length, debounced, browse.searched, browse.capped)}
                     </p>
                   )}
                   <FilesGrid
@@ -474,6 +515,11 @@ export default function FilesPage() {
                     onDropOnto={askToMove}
                     onDragStart={id => setDragging(idsForDrag(id))}
                     onDragEnd={() => setDragging([])}
+                    onRename={setRenaming}
+                    onShare={setSharing}
+                    onMoveOne={entry => setMoving({
+                      ids: [entry.id], names: [entry.name], target: null,
+                    })}
                   />
                   {browse.nextPage && (
                     <button
@@ -489,7 +535,10 @@ export default function FilesPage() {
               )}
             </div>
 
-            <div className={cn('hidden lg:block', panelOpen && 'block')}>
+            {/* Tailwind emits `.hidden` after `.block`, so at equal specificity
+                `hidden` wins whatever the order in the string — the panel could
+                never be revealed on a phone. Pick ONE of the two per breakpoint. */}
+            <div className={cn(panelOpen ? 'block' : 'hidden', 'lg:block')}>
               <FilesPanel
                 selectedId={selected.length === 1 ? selected[0] : null}
                 selectedCount={selected.length}
@@ -507,7 +556,13 @@ export default function FilesPage() {
         open={newFolder}
         parent={here}
         onClose={() => setNewFolder(false)}
-        onMade={folderId => { setNewFolder(false); afterWrite(folderId) }}
+        onMade={(folderId, created) => {
+          setNewFolder(false)
+          // adopt-not-duplicate, said out loud — otherwise "it did nothing"
+          // is indistinguishable from "it worked"
+          setNotice(created ? null : 'That folder is already there — nothing new was made.')
+          afterWrite(folderId)
+        }}
       />
       <RenameDialog
         entry={renaming}
@@ -520,6 +575,13 @@ export default function FilesPage() {
         onClose={() => setMoving(null)}
         onDone={targetId => {
           setMoving(null)
+          setSelected([])
+          afterWrite(targetId)
+          if (here) afterWrite(here.id)
+        }}
+        // some of it moved and some did not: the dialog stays open naming what
+        // Google refused, but the folders still have to catch up
+        onMoved={targetId => {
           setSelected([])
           afterWrite(targetId)
           if (here) afterWrite(here.id)

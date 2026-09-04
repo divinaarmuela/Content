@@ -23,7 +23,18 @@ import type { Crumb, DriveEntry, Filters, ListRequest, Sort } from '@/app/lib/fi
 
 const SOFT_CACHE_MS = 30_000
 
-export type Listing = { entries: DriveEntry[]; nextPage: string | null }
+export type Listing = {
+  entries: DriveEntry[]
+  nextPage: string | null
+  /** which of these files the app itself mirrored, and for whom — the
+   *  `drive_files` join, done on the server with the listing rather than by
+   *  the browser subscribing to the whole table to ask the same question */
+  clients: Record<string, string>
+  /** how many folders a search looked through (1 for a plain listing) */
+  searched: number
+  /** the search ran out of budget before it ran out of folders */
+  capped: boolean
+}
 
 type CacheEntry = { at: number; value: Listing }
 const cache = new Map<string, CacheEntry>()
@@ -55,12 +66,20 @@ async function readListing(query: string, fresh: boolean): Promise<Listing> {
   const hit = fresh ? null : cache.get(query)
   if (hit && Date.now() - hit.at < SOFT_CACHE_MS) return hit.value
   const res = await fetch(`/api/drive/list?${query}`, { cache: 'no-store' })
-  const json = await res.json().catch(() => null) as
-    { entries?: DriveEntry[]; next_page?: string | null; error?: string } | null
+  const json = await res.json().catch(() => null) as {
+    entries?: DriveEntry[]; next_page?: string | null; error?: string
+    clients?: Record<string, string>; searched?: number; capped?: boolean
+  } | null
   if (!res.ok || !json || json.error) {
     throw new Error(friendlyError(json?.error ?? '', 'Files'))
   }
-  const value: Listing = { entries: json.entries ?? [], nextPage: json.next_page ?? null }
+  const value: Listing = {
+    entries: json.entries ?? [],
+    nextPage: json.next_page ?? null,
+    clients: json.clients ?? {},
+    searched: json.searched ?? 1,
+    capped: Boolean(json.capped),
+  }
   cache.set(query, { at: Date.now(), value })
   return value
 }
@@ -71,6 +90,14 @@ export type BrowseState = {
   error: string | null
   nextPage: string | null
   loadingMore: boolean
+  clients: Record<string, string>
+  searched: number
+  capped: boolean
+}
+
+const EMPTY: BrowseState = {
+  entries: [], loading: true, error: null, nextPage: null, loadingMore: false,
+  clients: {}, searched: 1, capped: false,
 }
 
 /**
@@ -89,9 +116,7 @@ export function useDriveBrowse(args: {
   ready: boolean
 }): BrowseState & { refresh: () => void; loadMore: () => void } {
   const { parentId, text, filters, sort, ready } = args
-  const [state, setState] = useState<BrowseState>({
-    entries: [], loading: true, error: null, nextPage: null, loadingMore: false,
-  })
+  const [state, setState] = useState<BrowseState>(EMPTY)
   const seq = useRef(0)
   const [nonce, setNonce] = useState(0)
 
@@ -116,7 +141,7 @@ export function useDriveBrowse(args: {
       .catch((e: unknown) => {
         if (seq.current !== mine) return
         setState({
-          entries: [], loading: false, nextPage: null, loadingMore: false,
+          ...EMPTY, loading: false,
           error: e instanceof Error ? e.message : loadFailedMessage('Files'),
         })
       })
@@ -142,6 +167,7 @@ export function useDriveBrowse(args: {
           ...s,
           entries: [...s.entries, ...value.entries],
           nextPage: value.nextPage,
+          clients: { ...s.clients, ...value.clients },
           loadingMore: false,
         }))
       })
@@ -202,6 +228,9 @@ export function useFolderChildren(openIds: readonly string[], ready: boolean) {
 
   return { branches, forget }
 }
+
+/** The one place the tree's own listings are read, so a branch does not carry
+ *  a search's cap or client map into the rail. */
 
 /** The trail down to a folder somebody arrived at sideways. */
 export async function readTrail(id: string): Promise<Crumb[]> {

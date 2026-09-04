@@ -60,6 +60,14 @@ const drive = {
   entries: [] as Record<string, unknown>[],
   failNext: null as string | null,
   chunkDone: false,
+  /** has a person chosen the HQ folder in Settings yet? */
+  picked: true,
+  /** does the connection row exist at all? */
+  connected: true,
+  /** what `isInside` should answer — 'unknown' is the read-error case */
+  ancestry: 'outside' as 'inside' | 'outside' | 'unknown',
+  /** the URI the upload session hands back */
+  uploadUri: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=1',
 }
 const note = (op: string, ...args: unknown[]) => { drive.calls.push({ op, args }) }
 const count = (op: string) => drive.calls.filter(c => c.op === op).length
@@ -67,12 +75,20 @@ const fail = (message: string) => ({ ok: false, reason: 'api_error', message })
 
 vi.mock('../app/lib/gdrive', () => ({
   driveConfigured: () => true,
-  pickedRoot: async () => ({
+  driveStatus: async () => ({ connected: drive.connected }),
+  pickedRoot: async () => (drive.picked ? {
     id: 'HQ1', name: 'MD Media HQ', owner_email: 'tech@md.invalid',
     picked_at: '2026-09-01T00:00:00.000Z', picked_by: 'owner@md.invalid',
     clients_folder_id: 'CL1',
-  }),
-  rootFolderId: async () => 'CL1',
+  } : null),
+  // Deliberately present and deliberately loud. `filesRoot()` used to fall
+  // through to this, and this is the call that CREATES a folder in the tech
+  // account's Drive and stamps `root_folder_id`. If a read path ever reaches
+  // it again, a test fails rather than a folder appearing in somebody's Drive.
+  rootFolderId: async () => {
+    note('rootFolderId')
+    throw new Error('a read path must never call rootFolderId')
+  },
 }))
 
 vi.mock('../app/lib/gdrive-files', () => ({
@@ -99,7 +115,12 @@ vi.mock('../app/lib/gdrive-files', () => ({
   },
   isInside: async (candidate: string, ancestor: string) => {
     note('isInside', candidate, ancestor)
-    return candidate === 'deep' && ancestor === 'top'
+    if (drive.ancestry !== 'outside') return drive.ancestry
+    return candidate === 'deep' && ancestor === 'top' ? 'inside' : 'outside'
+  },
+  searchBelow: async (opts: unknown) => {
+    note('searchBelow', opts)
+    return { ok: true, entries: drive.entries, foldersSearched: 7, capped: false }
   },
   findOrCreateFolder: async (parent: string, name: string) => {
     note('findOrCreateFolder', parent, name)
@@ -121,7 +142,7 @@ vi.mock('../app/lib/gdrive-files', () => ({
     note('uploadStart', parent, name, size)
     return drive.failNext === 'start'
       ? fail('Google Drive 500 starting the upload')
-      : { ok: true, uri: 'https://upload.example.invalid/session-1', name }
+      : { ok: true, uri: drive.uploadUri, name }
   },
   pushUploadChunk: async (uri: string, chunk: Uint8Array, start: number) => {
     note('chunk', uri, chunk.length, start)
@@ -163,6 +184,10 @@ beforeEach(() => {
   drive.entries = []
   drive.failNext = null
   drive.chunkDone = false
+  drive.picked = true
+  drive.connected = true
+  drive.ancestry = 'outside'
+  drive.uploadUri = 'https://www.googleapis.com/upload/drive/v3/files?upload_id=1'
   fake = seedDb({ clients: [client('c1', 'PA1')], drive_files: [], drive_uploads: [] })
 })
 afterEach(() => fake.restore())
@@ -207,6 +232,7 @@ describe('reading Drive', () => {
   it('says where the cabinet is, and admits what it cannot see', async () => {
     const body = await (await rootRoute.GET()).json()
     expect(body.root.id).toBe('HQ1')
+    expect(body.picked).toBe(true)
     expect(body.partial).toBe(true)
     expect(body.note).toMatch(/Google Drive/)
   })
@@ -222,11 +248,39 @@ describe('reading Drive', () => {
     expect((drive.calls[0].args[0] as { parentId: string }).parentId).toBe('HQ1')
   })
 
-  it('searches everywhere when there is text and no folder', async () => {
-    await listRoute.GET(get('/api/drive/list?q=reel'))
-    const opts = drive.calls[0].args[0] as { parentId: string | null; text: string }
-    expect(opts.parentId).toBeNull()
+  it('searches BELOW the folder, not just its direct children', async () => {
+    // Drive's `q` has no subtree operator, so a search has to walk. The page
+    // says "in here or below it"; this is the call that makes that true.
+    const body = await (await listRoute.GET(get('/api/drive/list?parent=CL1&q=reel'))).json()
+    expect(count('searchBelow')).toBe(1)
+    expect(count('list')).toBe(0)
+    const opts = drive.calls[0].args[0] as { parentId: string; text: string }
+    expect(opts.parentId).toBe('CL1')
     expect(opts.text).toBe('reel')
+    expect(body.searched).toBe(7)
+  })
+
+  it('does not walk for a plain listing', async () => {
+    await listRoute.GET(get('/api/drive/list?parent=CL1'))
+    expect(count('list')).toBe(1)
+    expect(count('searchBelow')).toBe(0)
+  })
+
+  it('hands the listing its own drive_files join, so the browser need not', async () => {
+    fake.restore()
+    fake = seedDb({
+      clients: [client('c1', 'PA1')],
+      drive_files: [{
+        id: 'df1', item_id: null, client_id: 'c1', source_url: 'drive://FILE1',
+        target: 'files', drive_file_id: 'FILE1',
+      } as unknown as Row],
+    })
+    drive.entries = [{
+      id: 'FILE1', name: 'a.mp4', mimeType: 'video/mp4', size: 1, modified: null,
+      ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null,
+    }]
+    const body = await (await listRoute.GET(get('/api/drive/list?parent=CL1'))).json()
+    expect(body.clients).toEqual({ FILE1: 'c1' })
   })
 
   it('builds a breadcrumb from the picked root', async () => {
@@ -316,6 +370,19 @@ describe('moving, once it has been confirmed', () => {
     expect(count('move')).toBe(0)
   })
 
+  it('refuses when it could not CHECK — a read error is not a "no"', async () => {
+    // the dangerous shape: a transient Drive 500 during the ancestry walk used
+    // to read as "safe to move", and a folder into its own child is the one
+    // thing on this page nobody can undo
+    drive.ancestry = 'unknown'
+    const res = await moveRoute.POST(post('/api/drive/move', {
+      ids: ['top'], to: 'deep', confirm: true,
+    }))
+    expect(res.status).toBe(503)
+    expect((await res.json()).error).toBe('Could not check that folder just now — try again.')
+    expect(count('move')).toBe(0)
+  })
+
   it('moves what it can and names what it could not', async () => {
     drive.failNext = 'move'
     const body = await (await moveRoute.POST(post('/api/drive/move', {
@@ -367,10 +434,10 @@ describe('an upload a person started', () => {
   it('keeps the Google session on the server and hands out an id of ours', async () => {
     const body = await (await start()).json()
     expect(body.upload).toBeTruthy()
-    expect(JSON.stringify(body)).not.toContain('upload.example.invalid')
+    expect(JSON.stringify(body)).not.toContain('upload_id')
     const row = fake.rows('drive_uploads')[0] as unknown as
       { upload_uri: string; client_id: string; status: string }
-    expect(row.upload_uri).toBe('https://upload.example.invalid/session-1')
+    expect(row.upload_uri).toBe(drive.uploadUri)
     // the folder is this client's, so the upload is filed under them
     expect(row.client_id).toBe('c1')
     expect(row.status).toBe('open')
@@ -441,6 +508,42 @@ describe('an upload a person started', () => {
     expect(res.status).toBe(404)
   })
 
+  it('will not take an upload when it cannot tell who anybody is', async () => {
+    // `row.created_by && by && row.created_by !== by` used to wave through a
+    // team member with no email on their Clerk record — and any row whose
+    // created_by was null. "We could not tell who you are" is not a yes.
+    const upload = (await (await start()).json()).upload as string
+    me = { email: '', role: 'editor' }
+    const res = await chunkRoute.POST(new Request(
+      `https://app.test.invalid/api/drive/upload/chunk?upload=${upload}&offset=0`,
+      { method: 'POST', body: new Uint8Array(1) },
+    ))
+    expect(res.status).toBe(404)
+    expect(count('chunk')).toBe(0)
+  })
+
+  it('refuses a session whose stored URI is not Google', async () => {
+    // the row lives in a database with open rules by the owner's decision, and
+    // the next thing this route does is put a bearer token in a header
+    drive.uploadUri = 'https://evil.example.invalid/collect'
+    const upload = (await (await start()).json()).upload as string
+    const res = await chunkRoute.POST(new Request(
+      `https://app.test.invalid/api/drive/upload/chunk?upload=${upload}&offset=0`,
+      { method: 'POST', body: new Uint8Array(1) },
+    ))
+    expect(res.status).toBe(404)
+    expect(count('chunk')).toBe(0)
+  })
+
+  it('refuses an upload id that could walk out of its own table', async () => {
+    const res = await chunkRoute.POST(new Request(
+      'https://app.test.invalid/api/drive/upload/chunk?upload=..%2F..%2Fclients&offset=0',
+      { method: 'POST', body: new Uint8Array(1) },
+    ))
+    expect(res.status).toBe(404)
+    expect(count('chunk')).toBe(0)
+  })
+
   it('will not take somebody else’s upload', async () => {
     const upload = (await (await start()).json()).upload as string
     me = { email: 'sam@md.invalid', role: 'editor' }
@@ -449,6 +552,60 @@ describe('an upload a person started', () => {
       { method: 'POST', body: new Uint8Array(1) },
     ))
     expect(res.status).toBe(404)
+  })
+})
+
+/* ── a GET must not change anything ─────────────────────────────────────── */
+
+describe('a read path never creates a folder or settles the root', () => {
+  // C-1: `filesRoot()` used to fall through to `rootFolderId()`, which creates
+  // a folder at the top of the tech account's Drive and stamps
+  // `root_folder_id`. A scheduler opening the page out of curiosity, before
+  // the owner had picked HQ, would have made a stray folder and answered a
+  // question nobody had asked — from a plain GET. The stub throws if that call
+  // is reached at all, so this is a hard floor rather than an assertion about
+  // one route.
+
+  it('says "nobody has picked HQ yet" instead of picking one', async () => {
+    drive.picked = false
+    const res = await rootRoute.GET()
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.root).toBeNull()
+    expect(body.picked).toBe(false)
+    expect(body.block).toBe('not_picked')
+    expect(body.message).toMatch(/choose it in Settings/i)
+    expect(drive.calls).toEqual([])
+    expect(fake.rows('drive_connection')).toEqual([])
+  })
+
+  it('refuses to list, rather than making somewhere to list', async () => {
+    drive.picked = false
+    const res = await listRoute.GET(get('/api/drive/list'))
+    expect(res.status).toBe(409)
+    expect(count('list')).toBe(0)
+    expect(count('rootFolderId')).toBe(0)
+  })
+
+  it('refuses a breadcrumb the same way', async () => {
+    drive.picked = false
+    const res = await trailRoute.GET(get('/api/drive/trail?id=CL1'))
+    expect(res.status).toBe(409)
+    expect(count('trail')).toBe(0)
+  })
+
+  it('tells apart "not connected" from "could not reach Google"', async () => {
+    drive.connected = false
+    const body = await (await rootRoute.GET()).json()
+    expect(body.block).toBe('not_connected')
+    // …and the other one is a different sentence, because somebody whose token
+    // expired must not be sent to a Settings page that already says Connected
+    const { FILES_BLOCK_WORDS, blockFor } = await import('../app/lib/drive-page')
+    expect(blockFor('exchange_failed')).toBe('unreachable')
+    expect(blockFor('no_refresh_token')).toBe('unreachable')
+    expect(blockFor('not_connected')).toBe('not_connected')
+    expect(FILES_BLOCK_WORDS.unreachable).toMatch(/Could not reach Google Drive/)
+    expect(FILES_BLOCK_WORDS.unreachable).not.toMatch(/connect/i)
   })
 })
 
