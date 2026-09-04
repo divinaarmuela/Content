@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MAX_FPS, ffmpegArgs, ffprobeArgs, fitsBudget, outputFps, parseFrameRate,
-  parseProbe, targetDimensions, targetProblem, videoKbpsOf, worstCaseMB,
+  parseProbe, targetDimensions, targetProblem, toneMapNeeded, videoKbpsOf,
+  worstCaseMB, TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE,
   type EncodeTarget,
 } from '../src/ladder.js'
 
@@ -201,5 +202,71 @@ describe('the bitrate a copy came out at', () => {
   it('says nothing when it cannot know', () => {
     expect(videoKbpsOf(1000, undefined, 160)).toBeNull()
     expect(videoKbpsOf(0, 20, 160)).toBeNull()
+  })
+})
+
+describe('an HDR master is converted, not relabelled', () => {
+  const hdr = (transfer: string) => ({
+    width: 3840, height: 2160, fps: 30, durationSec: 20,
+    colorTransfer: transfer, colorPrimaries: 'bt2020',
+  })
+
+  it('recognises HLG and PQ, and nothing else', () => {
+    expect(toneMapNeeded({ colorTransfer: 'arib-std-b67' })).toBe('HLG')
+    expect(toneMapNeeded({ colorTransfer: 'ARIB-STD-B67' })).toBe('HLG')
+    expect(toneMapNeeded({ colorTransfer: 'smpte2084' })).toBe('PQ (HDR10)')
+    expect(toneMapNeeded({ colorTransfer: 'bt709' })).toBeNull()
+    expect(toneMapNeeded({ colorTransfer: 'bt2020-10' })).toBeNull()   // wide gamut, SDR curve
+    expect(toneMapNeeded({})).toBeNull()
+  })
+
+  it('tone-maps an HLG master BEFORE it scales it', () => {
+    const args = ffmpegArgs({
+      inputPath: '/tmp/x/source', outputPath: '/tmp/x/instagram.mp4',
+      target: instagram, source: hdr('arib-std-b67'),
+    })
+    expect(arg(args, '-vf')).toBe(
+      'zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,'
+      + 'scale=1920:1080:flags=lanczos,format=yuv420p',
+    )
+    // …and the tags still say 709, because by now the pixels really are
+    expect(arg(args, '-colorspace')).toBe('bt709')
+  })
+
+  it('tone-maps a PQ master the same way', () => {
+    const args = ffmpegArgs({
+      inputPath: '/tmp/x/source', outputPath: '/tmp/x/instagram.mp4',
+      target: instagram, source: hdr('smpte2084'),
+    })
+    expect(arg(args, '-vf')).toContain('tonemap=hable')
+  })
+
+  it('leaves an ordinary BT.709 clip alone', () => {
+    const args = ffmpegArgs({
+      inputPath: '/tmp/x/source', outputPath: '/tmp/x/instagram.mp4',
+      target: instagram,
+      source: { width: 1080, height: 1920, fps: 30, colorTransfer: 'bt709' },
+    })
+    expect(arg(args, '-vf')).toBe('scale=1080:1920:flags=lanczos,format=yuv420p')
+    expect(arg(args, '-vf')).not.toContain('zscale')
+  })
+
+  it('reads the colour tags off ffprobe', () => {
+    expect(parseProbe({
+      format: { duration: '20' },
+      streams: [{
+        codec_type: 'video', width: 1080, height: 1920, avg_frame_rate: '30/1',
+        color_transfer: 'arib-std-b67', color_primaries: 'bt2020',
+      }],
+    })).toEqual({
+      width: 1080, height: 1920, fps: 30, durationSec: 20,
+      colorTransfer: 'arib-std-b67', colorPrimaries: 'bt2020',
+    })
+  })
+
+  it('has a sentence for a machine that cannot do it', () => {
+    expect(TONE_MAP_MISSING_MESSAGE).toMatch(/HDR/)
+    expect(TONE_MAP_MISSING_MESSAGE).toMatch(/BT\.709/)
+    expect(TONE_MAP_FILTER_NAME).toBe('zscale')
   })
 })

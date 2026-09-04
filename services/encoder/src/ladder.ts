@@ -50,6 +50,10 @@ export type SourceInfo = {
   /** the source's frame rate, as a number; unknown is fine */
   fps?: number
   durationSec?: number
+  /** ffprobe's `color_transfer` — `arib-std-b67` is HLG, `smpte2084` is PQ */
+  colorTransfer?: string
+  /** ffprobe's `color_primaries` — `bt2020` on almost anything HDR */
+  colorPrimaries?: string
 }
 
 export const DEFAULT_SHORT_SIDE = 1080
@@ -71,6 +75,49 @@ export function fitsBudget(
 ): boolean {
   return worstCaseMB(target) < target.maxMB
 }
+
+/**
+ * The transfer curves that are NOT BT.709 and cannot be treated as if they
+ * were.
+ *
+ * A recent iPhone shoots HLG by default, and this agency shoots on phones. An
+ * HLG master encoded with `-color_trc bt709` is BT.2020 pixels wearing a 709
+ * label: every platform then renders it grey and desaturated — a WORSE result
+ * than the player file this service replaces, on exactly the footage it exists
+ * to protect. Tagging is not converting.
+ */
+export const HDR_TRANSFERS: Record<string, string> = {
+  'arib-std-b67': 'HLG',
+  'smpte2084': 'PQ (HDR10)',
+}
+
+/** Does this source have to be tone-mapped down to BT.709 before encoding? */
+export function toneMapNeeded(source: Pick<SourceInfo, 'colorTransfer'>): string | null {
+  const transfer = String(source.colorTransfer ?? '').trim().toLowerCase()
+  return HDR_TRANSFERS[transfer] ?? null
+}
+
+/**
+ * The tone map, as one filter.
+ *
+ * Linearise, roll the highlights off with Hable (which keeps skin tones where
+ * a simple clip loses them), then land in BT.709 primaries, transfer and
+ * matrix. `npl=100` is the nominal peak luminance a phone's HLG is graded
+ * against.
+ *
+ * It needs libzimg (`zscale`), which Debian's ffmpeg has and a minimal static
+ * build often does not — so the service checks for the filter and fails the
+ * job in plain words rather than shipping washed-out footage.
+ */
+export const TONE_MAP_FILTER =
+  'zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709'
+
+/** The filter this service cannot do without on an HDR master. */
+export const TONE_MAP_FILTER_NAME = 'zscale'
+
+/** What a person is told when the machine cannot convert an HDR master. */
+export const TONE_MAP_MISSING_MESSAGE =
+  'this clip is HDR and this encoder cannot convert it — export a standard (BT.709) version'
 
 /** H.264 wants even dimensions; yuv420p subsamples by two in each direction. */
 function even(n: number): number {
@@ -172,10 +219,13 @@ export function ffmpegArgs(input: {
     '-maxrate', `${Math.round(target.maxrateKbps)}k`,
     '-bufsize', `${Math.round(target.bufsizeKbps)}k`,
     // lanczos because a 4K master downscaled with the default filter looks
-    // soft next to the same frame downscaled in an editor
-    '-vf', `scale=${width}:${height}:flags=lanczos,format=yuv420p`,
-    // BT.709 is what every one of these platforms assumes. An untagged file
-    // gets guessed at, and the guess is BT.601 often enough to shift skin
+    // soft next to the same frame downscaled in an editor. On an HDR source
+    // the tone map comes FIRST: scaling BT.2020 pixels and then labelling the
+    // result 709 is the washed-out copy this exists to prevent.
+    '-vf', filterChain(width, height, source),
+    // BT.709 is what every one of these platforms assumes — and by this point
+    // the pixels really are 709, converted rather than relabelled. An untagged
+    // file gets guessed at, and the guess is BT.601 often enough to shift skin
     // tones on the client's own footage.
     '-color_primaries', 'bt709',
     '-color_trc', 'bt709',
@@ -201,12 +251,25 @@ export function ffmpegArgs(input: {
   ]
 }
 
+/** The `-vf` argument: tone map (only when it is needed), scale, then 8-bit 4:2:0. */
+export function filterChain(
+  width: number, height: number, source: Pick<SourceInfo, 'colorTransfer'>,
+): string {
+  const parts: string[] = []
+  if (toneMapNeeded(source)) parts.push(TONE_MAP_FILTER)
+  parts.push(`scale=${width}:${height}:flags=lanczos`)
+  parts.push('format=yuv420p')
+  return parts.join(',')
+}
+
 /** What ffprobe is asked, so the ladder has a picture size to work from. */
 export function ffprobeArgs(inputPath: string): string[] {
   return [
     '-hide_banner', '-loglevel', 'error',
     '-print_format', 'json',
     '-show_format',
+    // the streams carry `color_transfer`, which is how an HLG master is
+    // recognised before it is encoded rather than after a client complains
     '-show_streams',
     inputPath,
   ]
@@ -219,6 +282,8 @@ type ProbeStream = {
   avg_frame_rate?: string
   r_frame_rate?: string
   duration?: string
+  color_transfer?: string
+  color_primaries?: string
 }
 
 /** Turn one fraction ffprobe prints ("30000/1001") into a number. */
@@ -248,6 +313,8 @@ export function parseProbe(json: unknown): SourceInfo | null {
     height: Number(video.height),
     ...(fps !== undefined ? { fps } : {}),
     ...(Number.isFinite(durationRaw) && durationRaw > 0 ? { durationSec: durationRaw } : {}),
+    ...(video.color_transfer ? { colorTransfer: String(video.color_transfer) } : {}),
+    ...(video.color_primaries ? { colorPrimaries: String(video.color_primaries) } : {}),
   }
 }
 

@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { ffmpegArgs, ffprobeArgs, parseProbe, targetDimensions, videoKbpsOf, type EncodeTarget, type SourceInfo } from './ladder.js'
+import {
+  TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE, ffmpegArgs, ffprobeArgs,
+  parseProbe, targetDimensions, toneMapNeeded, videoKbpsOf,
+  type EncodeTarget, type SourceInfo,
+} from './ladder.js'
 
 /**
  * One job, start to finish: download, probe, encode, upload, report.
@@ -57,6 +61,32 @@ export function loggerFor(jobId: string): Logger {
     console.log(`[encode ${jobId}] ${message}${detail}`)
   }
 }
+
+/**
+ * Which filters this ffmpeg build actually has.
+ *
+ * Asked once and remembered: `ffmpeg -filters` is a fixed answer for the life
+ * of the image, and an HDR master must not be encoded by a build with no
+ * `zscale` — that produces the washed-out copy this service exists to
+ * prevent. The Docker image verifies the filter at BUILD time as well, so
+ * this is the second line of a two-line defence.
+ */
+let filterCache: Set<string> | null = null
+export async function ffmpegFilters(): Promise<Set<string>> {
+  if (filterCache) return filterCache
+  const listed = await run('ffmpeg', ['-hide_banner', '-filters'], 30_000)
+  const names = new Set<string>()
+  for (const line of splitLines(listed.stdout)) {
+    // "  T.. zscale           V->V       Video resizer and format converter."
+    const m = line.match(/^\s*[A-Z.]{3,}\s+([A-Za-z0-9_]+)\s/)
+    if (m?.[1]) names.add(m[1])
+  }
+  filterCache = names
+  return names
+}
+
+/** Only for tests and for a machine that wants to ask ffmpeg again. */
+export function forgetFilters(): void { filterCache = null }
 
 /** Run a child process to completion, with a deadline and a captured stderr. */
 function run(
@@ -174,6 +204,20 @@ export async function runEncode(req: EncodeRequest): Promise<EncodeResult> {
       if (!source) return { ...empty, error: 'the source has no video in it' }
       log('probed', { ...source })
 
+      // An HLG or PQ master has to be CONVERTED to BT.709, not relabelled as
+      // it. If this build cannot do that, say so plainly and stop — a
+      // washed-out copy that publishes is worse than a copy that never does,
+      // because nobody finds out until the client does.
+      const hdr = toneMapNeeded(source)
+      if (hdr) {
+        const filters = await ffmpegFilters()
+        if (!filters.has(TONE_MAP_FILTER_NAME)) {
+          log('cannot tone-map', { transfer: source.colorTransfer })
+          return { ...empty, error: TONE_MAP_MISSING_MESSAGE }
+        }
+        log('tone mapping', { from: hdr })
+      }
+
       const encoded = await run('ffmpeg', ffmpegArgs({ inputPath: input, outputPath: output, target: req.target, source }), ENCODE_TIMEOUT_MS)
       if (encoded.code !== 0) {
         return { ...empty, error: `the encode failed: ${lastLine(encoded.stderr) || 'no reason given'}` }
@@ -213,7 +257,12 @@ export function safeUrl(url: string): string {
   }
 }
 
+/** Lines, however the platform ended them. */
+function splitLines(text: string): string[] {
+  return text.split('\n').map(l => l.replace(/\r$/, ''))
+}
+
 function lastLine(text: string): string {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const lines = splitLines(text).map(l => l.trim()).filter(Boolean)
   return lines.length ? lines[lines.length - 1]! : ''
 }

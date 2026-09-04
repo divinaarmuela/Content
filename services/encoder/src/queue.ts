@@ -10,8 +10,15 @@
  *
  * The queue is in memory on purpose. A machine that dies loses its queue, and
  * that is the honest behaviour: the app owns the job rows and will ask again.
- * Persisting a queue here would mean two places that both believe they know
- * what is running.
+ *
+ * ── The running job is part of the queue ──
+ *
+ * `has()` covers the job being encoded RIGHT NOW as well as the ones waiting.
+ * It did not, and a re-POST of the job in flight — an Inngest step retry, or a
+ * response lost after the machine had already accepted it — queued the same
+ * encode behind itself: twenty minutes of CPU wasted, two PUTs to the same
+ * presigned URL, and a real job turned away with a 503 because a three-deep
+ * queue was full of one job twice.
  */
 
 export const MAX_WAITING = 2
@@ -19,21 +26,26 @@ export const MAX_WAITING = 2
 type Task = () => Promise<void>
 
 export class JobQueue {
-  private running = false
+  private runningId: string | null = null
   private waiting: { id: string; task: Task }[] = []
 
   /** How many jobs this machine is holding, running one included. */
   get depth(): number {
-    return (this.running ? 1 : 0) + this.waiting.length
+    return (this.runningId ? 1 : 0) + this.waiting.length
+  }
+
+  /** The job being encoded right now, if any. */
+  get running(): string | null {
+    return this.runningId
   }
 
   get busy(): boolean {
     return this.waiting.length >= MAX_WAITING
   }
 
-  /** Is this job already here? A retried POST must not encode twice. */
+  /** Is this job already here — running, or waiting to run? */
   has(id: string): boolean {
-    return this.waiting.some(w => w.id === id)
+    return this.runningId === id || this.waiting.some(w => w.id === id)
   }
 
   /** Accepted, or refused because the line is full. */
@@ -45,10 +57,10 @@ export class JobQueue {
   }
 
   private async pump(): Promise<void> {
-    if (this.running) return
+    if (this.runningId) return
     const next = this.waiting.shift()
     if (!next) return
-    this.running = true
+    this.runningId = next.id
     try {
       await next.task()
     } catch (e) {
@@ -56,7 +68,7 @@ export class JobQueue {
       // machine taking work — runEncode already reports its own failures
       console.error(`[queue ${next.id}] task threw:`, e instanceof Error ? e.message : e)
     } finally {
-      this.running = false
+      this.runningId = null
       void this.pump()
     }
   }
