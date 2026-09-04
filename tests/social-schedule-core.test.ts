@@ -649,7 +649,7 @@ describe('Approve without client', () => {
   it('is offered to the account manager and the super admin, and nobody else', () => {
     for (const role of ['account_manager', 'super_admin']) {
       expect(mayApproveWithoutClient(role, 'client_review')).toBe(true)
-      expect(mayApproveWithoutClient(role, 'internal_review')).toBe(true)
+      expect(mayApproveWithoutClient(role, 'internal_review', false)).toBe(true)
     }
     // booking a post in is not the same as deciding the client need not see it
     for (const role of ['scheduler', 'editor', 'client', null]) {
@@ -657,12 +657,23 @@ describe('Approve without client', () => {
     }
   })
 
+  it('respects the client policy the item page respects', () => {
+    // a client who signs their own work off cannot be skipped from
+    // `internal_review` on the item page — and must not be from here either
+    expect(mayApproveWithoutClient('account_manager', 'internal_review', true)).toBe(false)
+    expect(mayApproveWithoutClient('account_manager', 'internal_review')).toBe(false)
+    expect(mayApproveWithoutClient('account_manager', 'internal_review', false)).toBe(true)
+    // …but from `client_review` the client HAS been asked, and waiting no
+    // longer is the manager's call either way
+    expect(mayApproveWithoutClient('account_manager', 'client_review', true)).toBe(true)
+  })
+
   it('is only offered where somebody is WAITING, never on work still being made', () => {
     for (const status of [
       'draft_uploaded', 'revision_required', 'revision_complete',
       'client_changes_requested', 'approved_for_scheduling', 'scheduled', 'published',
     ]) {
-      expect(mayApproveWithoutClient('account_manager', status), status).toBe(false)
+      expect(mayApproveWithoutClient('account_manager', status, false), status).toBe(false)
     }
   })
 

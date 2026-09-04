@@ -22,7 +22,8 @@
  */
 
 import {
-  COMMERCIAL_CONTENT_LABELS, DEFAULT_YOUTUBE_CATEGORY, isPageId, kindTakesLocation,
+  asOrganizationUrn, COMMERCIAL_CONTENT_LABELS, DEFAULT_YOUTUBE_CATEGORY,
+  isPageId, isOrganizationUrn, kindTakesLocation,
   networkName, PLATFORM_RULES, TIKTOK_CONSENT_LINE, TIKTOK_CONSENT_TICK,
   TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS, YOUTUBE_CATEGORIES,
   YOUTUBE_VISIBILITY_LABELS,
@@ -67,6 +68,8 @@ export type ChannelExtras = {
   categoryId?: string
   playlistId?: string
   containsSyntheticMedia?: boolean
+  /** YouTube's custom thumbnail — it rides on the media, not the settings */
+  thumbnailUrl?: string
   /* LinkedIn */
   organizationUrn?: string
   disableLinkPreview?: boolean
@@ -107,7 +110,7 @@ const EXTRA_KEY_MAP: Record<keyof ChannelExtras, true> = {
   firstComment: true, collaborators: true, shareToFeed: true, locationId: true,
   trialGraduation: true, audioName: true,
   title: true, visibility: true, madeForKids: true, tags: true,
-  categoryId: true, playlistId: true, containsSyntheticMedia: true,
+  categoryId: true, playlistId: true, containsSyntheticMedia: true, thumbnailUrl: true,
   organizationUrn: true, disableLinkPreview: true, documentTitle: true,
   pageId: true, facebookDraft: true,
   privacyLevel: true, allowComment: true, allowDuet: true, allowStitch: true,
@@ -231,6 +234,7 @@ const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'lis
   trialGraduation: 'text', audioName: 'text',
   title: 'text', visibility: 'text', madeForKids: 'flag', tags: 'list',
   categoryId: 'text', playlistId: 'text', containsSyntheticMedia: 'flag',
+  thumbnailUrl: 'text',
   organizationUrn: 'text', disableLinkPreview: 'flag', documentTitle: 'text',
   pageId: 'text', facebookDraft: 'flag',
   privacyLevel: 'text', allowComment: 'flag', allowDuet: 'flag', allowStitch: 'flag',
@@ -273,6 +277,14 @@ export function readChannelExtras(raw: unknown): ChannelExtras {
         // a place NAME typed into the id box is the mistake people make, and
         // Instagram answers it by refusing the post hours later
         if (key === 'locationId' && !isPageId(value)) break
+        // …and a bare id pasted for a company page becomes the URN LinkedIn
+        // wants, or nothing: sending the number posts as the person
+        if (key === 'organizationUrn') {
+          const urn = asOrganizationUrn(value)
+          if (!urn) break
+          out[key] = urn
+          break
+        }
         out[key] = key === 'locationId' ? value.trim() : value
         break
       }
@@ -420,7 +432,7 @@ export type MoreOptionKey =
   | 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
   | 'trialReel' | 'audioName'
   | 'ytTitle' | 'ytVisibility' | 'ytCategory' | 'ytPlaylist' | 'ytTags'
-  | 'ytKids' | 'ytSynthetic'
+  | 'ytKids' | 'ytSynthetic' | 'ytThumbnail'
   | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle'
   | 'fbPage' | 'fbTitle' | 'fbDraft'
   | 'ttPrivacy' | 'ttComments' | 'ttDuet' | 'ttStitch' | 'ttCommercial'
@@ -435,7 +447,8 @@ export type OptionControl =
 export type OptionChoice = { value: string; label: string }
 
 /** A list only the network can give us — fetched per account, never guessed. */
-export type OptionSource = 'playlists' | 'organizations' | 'pages' | 'privacy'
+export type OptionSource =
+  'playlists' | 'organizations' | 'pages' | 'privacy' | 'commercial'
 
 export type MoreOption = {
   key: MoreOptionKey
@@ -487,6 +500,8 @@ const OPTION_SPECS: OptionSpec[] = [
   {
     key: 'collaborators', field: 'collaborators', control: 'collaborators',
     label: 'Invite collaborator', on: ['instagram'],
+    // a Story has no collaborators: Instagram answers the field with a 400
+    kinds: ['feed', 'reel', 'carousel'],
     placeholder: 'Up to three usernames, separated by commas',
   },
   {
@@ -518,7 +533,9 @@ const OPTION_SPECS: OptionSpec[] = [
   {
     key: 'ytTitle', field: 'title', control: 'text', label: 'Video title', on: ['youtube'],
     placeholder: 'Shown above the video',
-    help: 'Up to 100 letters. The first line of the caption is used if you leave this empty.',
+    help: 'Up to 100 letters. The first line of the caption is used if you leave this empty. '
+      + 'A standing-up video of three minutes or less goes out as a Short by itself — '
+      + 'there is nothing to switch on.',
   },
   {
     key: 'ytVisibility', field: 'visibility', control: 'select', label: 'Who can watch',
@@ -548,6 +565,14 @@ const OPTION_SPECS: OptionSpec[] = [
   {
     key: 'ytSynthetic', field: 'containsSyntheticMedia', control: 'toggle',
     label: 'Made with AI, or changed to look real', on: ['youtube'],
+  },
+  {
+    key: 'ytThumbnail', field: 'thumbnailUrl', control: 'text',
+    label: 'Cover picture', on: ['youtube'],
+    // YouTube ignores a custom thumbnail on a Short, so the row goes with it
+    kinds: ['feed', 'carousel'],
+    placeholder: 'Link to the picture',
+    help: 'A JPEG or PNG, 1280 x 720, up to 2 MB. Shorts do not have one.',
   },
 
   /* ── LinkedIn ── */
@@ -598,7 +623,7 @@ const OPTION_SPECS: OptionSpec[] = [
   },
   {
     key: 'ttCommercial', field: 'commercialContentType', control: 'select',
-    label: 'Is this a promotion?', on: ['tiktok'],
+    label: 'Is this a promotion?', on: ['tiktok'], source: 'commercial',
     choices: labelChoices(COMMERCIAL_CONTENT_LABELS),
     help: 'A paid partnership cannot be posted where only the account itself can see it.',
   },

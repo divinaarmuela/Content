@@ -5,7 +5,9 @@ import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { mayPublish } from '../../../lib/identity-core'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
 import { inngest } from '../../../inngest/client'
-import { isPlatform, type MediaItem, type Platform } from '../../../lib/publish-core'
+import {
+  isPlatform, type MediaItem, type Platform, type PostOptions, type Target,
+} from '../../../lib/publish-core'
 
 // relayMedia (lib/publish.ts) streams multi-hundred-MB files through this
 // function synchronously; the platform default timeout is too short for that.
@@ -35,7 +37,19 @@ export async function POST(req: Request) {
       .filter((t: unknown) => {
         const x = t as { platform?: unknown; accountId?: unknown }
         return typeof x.platform === 'string' && isPlatform(x.platform) && typeof x.accountId === 'string'
-      }) as { platform: Platform; accountId: string }[]
+      })
+      // KEEP THE OPTIONS. They were dropped here, so everything the compose
+      // window collected — the post type, this channel's own media and words,
+      // and TikTok's consent tick — was thrown away between the screen and
+      // the job. `toPlatformData` decides what each network may actually
+      // receive, so passing them through cannot send a field nobody knows.
+      .map((t: unknown) => {
+        const x = t as { platform: Platform; accountId: string; options?: unknown }
+        const options = x.options && typeof x.options === 'object' && !Array.isArray(x.options)
+          ? x.options as PostOptions
+          : undefined
+        return { platform: x.platform, accountId: x.accountId, ...(options ? { options } : {}) }
+      }) as Target[]
 
     if (targets.length === 0) {
       return NextResponse.json({ error: 'Select at least one connected account' }, { status: 400 })

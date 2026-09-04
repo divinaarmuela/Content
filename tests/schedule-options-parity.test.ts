@@ -45,6 +45,7 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
   categoryId: '27',
   playlistId: 'PL-abc',
   containsSyntheticMedia: true,
+  thumbnailUrl: 'https://media.invalid/cover.jpg',
   organizationUrn: 'urn:li:organization:99',
   disableLinkPreview: true,
   documentTitle: 'The deck',
@@ -68,6 +69,21 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
 /** every key the window can set, bar the media set, which is applied with the
  *  platform's own limits rather than forwarded */
 const SET_BY_THE_WINDOW = CHANNEL_EXTRA_KEYS.filter(k => k !== 'slides')
+
+/** what the provider calls the flags, where its name differs from ours */
+const SNAKE: Record<string, string> = {
+  madeForKids: 'madeForKids',
+  containsSyntheticMedia: 'containsSyntheticMedia',
+  disableLinkPreview: 'disableLinkPreview',
+  shareToFeed: 'shareToFeed',
+  facebookDraft: 'draft',
+  allowComment: 'allow_comment',
+  allowDuet: 'allow_duet',
+  allowStitch: 'allow_stitch',
+  videoMadeWithAi: 'video_made_with_ai',
+  tiktokDraft: 'draft',
+  autoAddMusic: 'auto_add_music',
+}
 
 const account = (over: Partial<SocialAccount> = {}): SocialAccount => ({
   id: 'acc-1',
@@ -123,6 +139,59 @@ describe('every posting option the window collects reaches the job', () => {
     for (const key of SET_BY_THE_WINDOW) {
       expect(options[key], `dropped on the way to the provider: ${key}`)
         .toEqual(EVERY_EXTRA[key])
+    }
+  })
+
+  /**
+   * Where each field is allowed to end up, and the three that end up nowhere.
+   *
+   * The allowlist is the point: a field added to `ChannelExtras` and
+   * forwarded by `targetsFor` but never given a line in `toPlatformData` or
+   * `tiktokSettingsFor` would otherwise pass every test above and reach
+   * Zernio as nothing — the failure this file exists to prevent, moved one
+   * step later. Anything not named here has to appear in the body somewhere.
+   */
+  const NEVER_IN_THE_BODY: Record<string, string> = {
+    // the post type is not a field; it becomes `contentType`, or the media
+    // itself decides
+    kind: 'becomes contentType, or nothing the provider needs to be told',
+    // this channel's own words travel as `customContent`, checked separately
+    caption: 'travels as customContent',
+    // the tick is what the two consent flags ASSERT; it never travels itself
+    tiktokConsent: 'asserted by content_preview_confirmed / express_consent_given',
+    // a cover PICTURE and a cover MOMENT are mutually exclusive, so this run
+    // sends the moment; the picture has its own test above
+    videoCoverImageUrl: 'the picture beats the moment — one of the two travels',
+  }
+
+  it('every field ends up in the body somewhere, or is named as one that does not', () => {
+    const targets: Target[] = ['instagram', 'youtube', 'linkedin', 'facebook', 'tiktok']
+      .map((platform, i) => targetsFor(
+        post({
+          [`acc-${i}`]: {
+            ...EVERY_EXTRA,
+            kind: platform === 'youtube' ? 'feed' : 'reel',
+            videoCoverImageUrl: undefined,
+          },
+        }),
+        [account({ id: `acc-${i}`, platform, provider_account_id: `prov-${i}` })],
+      )[0])
+    const body = buildPostBody({
+      caption: 'Everyone gets this', media: [{ url: 'https://media.invalid/a.mp4', type: 'video' }],
+      targets, scheduledFor: null,
+    })
+    const wire = JSON.stringify(body)
+
+    for (const key of SET_BY_THE_WINDOW) {
+      if (NEVER_IN_THE_BODY[key]) continue
+      const value = EVERY_EXTRA[key]
+      const needle = Array.isArray(value) ? String(value[0]) : String(value)
+      // a boolean's own word is too common to search for, so those are found
+      // by the provider's name for them instead
+      const found = typeof value === 'boolean'
+        ? new RegExp(`"(${key}|${SNAKE[key] ?? key})"`).test(wire)
+        : wire.includes(needle)
+      expect(found, `${key} reaches Zernio as nothing`).toBe(true)
     }
   })
 

@@ -101,9 +101,24 @@ export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review',
 export function mayApproveWithoutClient(
   role: string | null | undefined,
   status: string | null | undefined,
+  /**
+   * The item's `client_approval_required` — TRUE unless it was turned off.
+   *
+   * A client whose contract says they sign everything off is a client the
+   * item page will not let a manager skip: `presentTransitions` removes the
+   * `→ approved_for_scheduling` edge from every status except `client_review`
+   * when the flag is set. Schedule has to answer the same way, or the two
+   * screens disagree about a client's own policy — and it is `performTransition`
+   * that makes it true rather than presentation on either of them.
+   */
+  clientApprovalRequired: boolean | null | undefined = true,
 ): boolean {
   if (role !== 'account_manager' && role !== 'super_admin') return false
-  return (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(String(status ?? ''))
+  const from = String(status ?? '')
+  if (!(APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(from)) return false
+  // from `client_review` the client HAS been asked; skipping the wait is the
+  // manager's call either way
+  return from === 'client_review' || clientApprovalRequired === false
 }
 
 /** The one line somebody is asked before a client is skipped. */

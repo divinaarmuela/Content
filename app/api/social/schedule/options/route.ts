@@ -4,13 +4,20 @@ import type { SocialAccount } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { getPublisher, NO_CHANNEL_OPTIONS } from '@/app/lib/publisher'
-import { TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS } from '@/app/lib/publish-core'
+import {
+  COMMERCIAL_CONTENT_LABELS, TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS,
+} from '@/app/lib/publish-core'
 
 /**
  * The lists the composer's per-network options need — one connected account
  * at a time.
  *
- * `GET ?accountId=…` → `{ playlists, organizations, pages, privacy }`
+ * `GET ?accountId=…&mediaType=video|photo`
+ *   → `{ playlists, organizations, pages, privacy, commercial, interactions }`
+ *
+ * `mediaType` is TikTok's, and it matters: a creator's limits differ between
+ * a video and a set of pictures, so the window asks about the post it is
+ * actually making.
  *
  * Every one of these is a list only the network can give us: a YouTube
  * playlist id, a LinkedIn company page, a Facebook Page, the privacy levels
@@ -27,8 +34,10 @@ export async function GET(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await requireRole('scheduler')
-      const accountId = new URL(req.url).searchParams.get('accountId')
+      const url = new URL(req.url)
+      const accountId = url.searchParams.get('accountId')
       if (!accountId) return NextResponse.json({ error: 'Which channel?' }, { status: 400 })
+      const mediaType = url.searchParams.get('mediaType') === 'photo' ? 'photo' : 'video'
 
       const account = await table<SocialAccount>('social_accounts').get(accountId)
       if (!account) {
@@ -44,7 +53,7 @@ export async function GET(req: Request) {
 
       const platform = String(account.platform ?? '')
       const options = await getPublisher()
-        .channelOptions(String(account.provider_account_id || account.id), platform)
+        .channelOptions(String(account.provider_account_id || account.id), platform, mediaType)
         .catch(() => ({ ...NO_CHANNEL_OPTIONS }))
 
       // TikTok always has SOMETHING to choose between: when the creator's own
@@ -55,8 +64,16 @@ export async function GET(req: Request) {
         : platform === 'tiktok'
           ? TIKTOK_PRIVACY_LEVELS.map(value => ({ value, label: TIKTOK_PRIVACY_LABELS[value] }))
           : []
+      // …and the same for the disclosure: "not a promotion" has to be
+      // choosable even when TikTok's own list cannot be read
+      const commercial = options.commercial.length > 0
+        ? options.commercial
+        : platform === 'tiktok'
+          ? (Object.keys(COMMERCIAL_CONTENT_LABELS) as (keyof typeof COMMERCIAL_CONTENT_LABELS)[])
+            .map(value => ({ value, label: COMMERCIAL_CONTENT_LABELS[value] }))
+          : []
 
-      return NextResponse.json({ ...options, privacy })
+      return NextResponse.json({ ...options, privacy, commercial })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

@@ -165,7 +165,12 @@ export default function MediaRail({
                 }}
                 className={cn(
                   'group relative h-[84px] overflow-hidden rounded-tile border border-border bg-foreground/[0.06]',
-                  !m.ok && 'opacity-45',
+                  // the DIM goes on the picture, never on the card: `opacity`
+                  // makes a stacking context, so a button inside a 45% parent
+                  // cannot be drawn at full strength by any class of its own —
+                  // which is how the one new affordance on this page ended up
+                  // at 45%, cream on a dimmed thumbnail
+                  !m.ok && 'border-dashed',
                 )}
               >
                 <button
@@ -175,7 +180,11 @@ export default function MediaRail({
                   aria-label={m.ok ? `Start a post from ${m.title}` : `${m.title} — ${m.reason}`}
                   className="absolute inset-0 z-0 disabled:cursor-not-allowed"
                 />
-                <Thumb slide={m.cover} label={m.title} className="pointer-events-none h-full w-full" />
+                <Thumb
+                  slide={m.cover}
+                  label={m.title}
+                  className={cn('pointer-events-none h-full w-full', !m.ok && 'opacity-45')}
+                />
                 {m.ok && (
                   <span className="pointer-events-none absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-[9px] font-bold text-ink">
                     ✓<span className="sr-only">Approved</span>
@@ -199,23 +208,25 @@ export default function MediaRail({
                     strokeWidth={2}
                   />
                 </button>
-                {!m.ok && m.reason && (
-                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
-                    {m.reason}
-                  </span>
-                )}
                 {/* waiting on somebody, and this person could be that
-                    somebody: one press signs it off, after one question */}
-                {!m.ok && mayApproveWithoutClient(role, m.status) && (
+                    somebody: the whole bottom half of the card signs it off,
+                    after one question. Full height, full strength, and it
+                    does not sit on top of the "start a post" target — that
+                    one is not offered on a piece that cannot start a post. */}
+                {!m.ok && mayApproveWithoutClient(role, m.status, m.clientApprovalRequired) ? (
                   <button
                     type="button"
                     onClick={() => onApprove(m)}
-                    title={`Approve ${m.title} without the client`}
-                    className="absolute inset-x-1 bottom-[22px] z-10 truncate rounded-full bg-cream px-2 py-1 text-[10px] font-semibold text-ink hover:opacity-90 [@media(pointer:coarse)]:py-2"
+                    title={m.reason ? `${m.title} — ${m.reason}` : m.title}
+                    className="absolute inset-x-0 bottom-0 z-10 min-h-11 w-full bg-cream/95 px-2 text-[11px] font-semibold leading-[1.2] text-ink hover:bg-cream"
                   >
                     Approve without client
                   </button>
-                )}
+                ) : !m.ok && m.reason ? (
+                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
+                    {m.reason}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

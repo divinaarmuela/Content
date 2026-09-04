@@ -16,7 +16,7 @@ import {
   tileTone, validateComposition, type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import {
-  autoKindFor, availableKinds, isPageId, isPlatform, networkName,
+  autoKindFor, availableKinds, isOrganizationUrn, isPageId, isPlatform, networkName,
   TIKTOK_CONSENT_LINE, type PostKind,
 } from '@/app/lib/publish-core'
 import type { ChannelOptions } from '@/app/lib/publisher'
@@ -249,22 +249,46 @@ export default function NewPostDialog({
   const asked = useRef<Set<string>>(new Set())
   const needsList = useMemo(
     () => new Set(options.filter(o => o.source).flatMap(o => o.platforms)), [options])
+  const askedKind = mediaLead === 'image' ? 'photo' : 'video'
   useEffect(() => {
     let live = true
     for (const account of chosen) {
       if (!needsList.has(String(account.platform))) continue
-      if (asked.current.has(account.id)) continue
-      asked.current.add(account.id)
-      fetch(`/api/social/schedule/options?accountId=${encodeURIComponent(account.id)}`)
+      // TikTok answers differently for a video and for a set of pictures, so
+      // the answer is remembered per channel AND per kind of post
+      const key = `${account.id}:${askedKind}`
+      if (asked.current.has(key)) continue
+      asked.current.add(key)
+      fetch(`/api/social/schedule/options?accountId=${encodeURIComponent(account.id)}`
+        + `&mediaType=${askedKind}`)
         .then(r => (r.ok ? r.json() : null))
         .then(json => {
           if (!live || !json || json.error) return
-          setLists(prev => ({ ...prev, [account.id]: json as ChannelOptions }))
+          const listed = json as ChannelOptions
+          setLists(prev => ({ ...prev, [account.id]: listed }))
+          /**
+           * WHAT THE ACCOUNT ITSELF FORBIDS BECOMES THE POST'S ANSWER.
+           *
+           * A creator with duets turned off is not a post that asks for
+           * duets — TikTok refuses the whole thing. Seeding only the
+           * restrictions (never turning something ON that nobody asked for)
+           * keeps an untouched post postable, and the window says "Not saved
+           * yet" because that is now true.
+           */
+          const seed = listed.interactions
+          if (!seed) return
+          const patch: ChannelExtras = {}
+          if (!seed.allowComment) patch.allowComment = false
+          if (!seed.allowDuet) patch.allowDuet = false
+          if (!seed.allowStitch) patch.allowStitch = false
+          if (Object.keys(patch).length > 0) {
+            dispatch({ type: 'extra', channel: account.id, patch })
+          }
         })
         .catch(() => { /* an unreadable list is a box to type in, not a failure */ })
     }
     return () => { live = false }
-  }, [chosen, needsList])
+  }, [chosen, needsList, askedKind])
 
   /* ── talking to the server ────────────────────────────────────────────── */
 
@@ -959,12 +983,18 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
 
   /* ── a tick box: on, off, and what the network does untouched ── */
   if (option.control === 'toggle') {
+    // what the ACCOUNT does untouched beats what the network does untouched:
+    // a TikTok creator with duets turned off must not see a ticked box
+    const account = lists[first.id]?.interactions as Record<string, boolean> | null | undefined
+    const seeded = account?.[option.field as string]
     return (
       <div className="flex flex-col gap-1">
         <label className="flex min-h-11 items-center gap-2.5 text-[14px] font-medium">
           <input
             type="checkbox"
-            checked={held === undefined ? Boolean(option.defaultOn) : Boolean(held)}
+            checked={held === undefined
+              ? (seeded ?? Boolean(option.defaultOn))
+              : Boolean(held)}
             onChange={e => set(e.target.checked)}
             className="h-4 w-4"
           />
@@ -1096,20 +1126,27 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
     )
   }
 
-  /* ── everything typed: one line, several lines, a list, or a moment ── */
-  const shown = option.control === 'tags' || option.control === 'collaborators'
-    ? (Array.isArray(held) ? (held as string[]).join(', ') : '')
-    : option.control === 'seconds'
-      ? (typeof held === 'number' ? String(Math.round(held / 100) / 10) : '')
-      : String(held ?? '')
+  /* ── a list of words: tags, collaborators ── */
+  if (option.control === 'tags' || option.control === 'collaborators') {
+    return (
+      <ListRow
+        option={option}
+        value={Array.isArray(held) ? held as string[] : []}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+        onChange={list => set(list.length > 0 ? list : undefined)}
+      />
+    )
+  }
+
+  /* ── everything else typed: one line, several lines, or a moment ── */
+  const shown = option.control === 'seconds'
+    ? (typeof held === 'number' ? String(Math.round(held / 100) / 10) : '')
+    : String(held ?? '')
+
+  const badUrn = option.field === 'organizationUrn' && shown !== '' && !isOrganizationUrn(shown)
 
   const write = (raw: string) => {
-    if (option.control === 'tags' || option.control === 'collaborators') {
-      const list = raw.split(',').map(x => x.trim().replace(/^@/, '')).filter(Boolean)
-      const capped = option.control === 'collaborators' ? list.slice(0, 3) : list
-      set(capped.length > 0 ? capped : undefined)
-      return
-    }
     if (option.control === 'seconds') {
       const seconds = Number(raw)
       set(raw.trim() && Number.isFinite(seconds) && seconds >= 0
@@ -1151,7 +1188,106 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
               className={field}
             />
           )}
+          {badUrn && (
+            <p className="text-[11px] font-medium text-accent-red">
+              That does not look like a company page — pick one from the list, or paste
+              its id, a plain number.
+            </p>
+          )}
           {help}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A list of short words — YouTube's tags, Instagram's collaborators.
+ *
+ * IT HOLDS WHAT WAS TYPED, not what has been parsed. The first version
+ * rendered the parsed array joined with commas on every keystroke, so typing
+ * a comma produced a list of one, which rendered back without the comma — the
+ * separator was erased by the keystroke that typed it, and a second tag could
+ * never be started. The raw string lives here; a comma, Enter or leaving the
+ * box is what commits it.
+ */
+function ListRow({ option, value, open, onToggle, onChange }: {
+  option: MoreOption
+  value: string[]
+  open: boolean
+  onToggle: () => void
+  onChange: (list: string[]) => void
+}) {
+  const [raw, setRaw] = useState<string | null>(null)
+  const shown = raw ?? value.join(', ')
+  const max = option.control === 'collaborators' ? 3 : 50
+
+  const commit = (text: string) => {
+    const list: string[] = []
+    for (const part of text.split(',')) {
+      const word = part.trim().replace(/^@/, '')
+      if (word && !list.includes(word)) list.push(word)
+    }
+    const capped = list.slice(0, max)
+    setRaw(null)
+    onChange(capped)
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
+      >
+        <Plus className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
+        {option.label}
+        {!open && value.length > 0 && (
+          <span className="truncate text-[12px] font-normal text-muted-foreground">
+            — {value.join(', ')}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          {value.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {value.map(word => (
+                <span
+                  key={word}
+                  className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[12px] font-medium"
+                >
+                  {word}
+                  <button
+                    type="button"
+                    aria-label={`Take ${word} off`}
+                    onClick={() => onChange(value.filter(w => w !== word))}
+                    className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-muted"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            value={shown}
+            onChange={e => {
+              // a comma is what finishes a word, so it commits rather than
+              // waiting for the box to be left
+              if (e.target.value.endsWith(',')) { commit(e.target.value); return }
+              setRaw(e.target.value)
+            }}
+            onKeyDown={e => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              commit(shown)
+            }}
+            onBlur={() => commit(shown)}
+            placeholder={option.placeholder}
+            className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
+          />
+          {option.help && <p className="text-[11px] text-muted-foreground">{option.help}</p>}
         </>
       )}
     </div>

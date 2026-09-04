@@ -3,6 +3,7 @@ import {
   validatePost, buildPostBody, classifyResponse, mediaTypeFor, isPlatform, toPlatformData,
   availableKinds, autoKindFor, describeRemoteOutcome, isStillProcessing, SUPPORTED_PLATFORMS,
   cleanTags, optionProblems, tagsLength, tiktokSettingsFor, youtubeDefaults,
+  asOrganizationUrn, isOrganizationUrn,
   TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX,
 } from '../app/lib/publish-core'
 
@@ -494,9 +495,11 @@ describe('a channel with its own media and words', () => {
       accountId: 'y',
       platformSpecificData: {
         title: 'long caption for everyone',
-        visibility: 'public',
         categoryId: '22',
         madeForKids: false,
+        // WHO CAN WATCH is not in here: a channel that publishes privately by
+        // default must not start publishing to the world because of a default
+        // we invented
       },
     })
     expect(body.platforms[1].customMedia).toEqual([{ url: 'https://x/short.mp4', type: 'video' }])
@@ -643,6 +646,28 @@ describe('per-network options land where the network takes them', () => {
     expect(toPlatformData({ kind: 'feed', title: 'Reel one' }, 'facebook')).toBeNull()
   })
 
+  it('keeps collaborators off a Story, which cannot have any', () => {
+    // Meta answers the field with a 400 and the post never goes out — the
+    // same class of failure as a location on a Story
+    expect(toPlatformData({ kind: 'story', collaborators: ['acme'] }, 'instagram'))
+      .toEqual({ contentType: 'story' })
+    expect(toPlatformData({ kind: 'feed', collaborators: ['acme'] }, 'instagram'))
+      .toEqual({ collaborators: ['acme'] })
+  })
+
+  it('refuses a company page that is not one, and takes a bare id as one', () => {
+    expect(isOrganizationUrn('urn:li:organization:99')).toBe(true)
+    expect(isOrganizationUrn('99')).toBe(false)
+    expect(isOrganizationUrn('urn:li:person:99')).toBe(false)
+    expect(asOrganizationUrn('99')).toBe('urn:li:organization:99')
+    expect(asOrganizationUrn('Acme Pty Ltd')).toBeNull()
+    // …and a bare id that reached the options anyway is not sent: posting as
+    // "99" posts as the person, quietly
+    expect(toPlatformData({ organizationUrn: '99' }, 'linkedin')).toBeNull()
+    expect(toPlatformData({ organizationUrn: 'urn:li:organization:99' }, 'linkedin'))
+      .toEqual({ organizationUrn: 'urn:li:organization:99' })
+  })
+
   it('keeps a first comment off a Story, which has no comments to put it under', () => {
     expect(toPlatformData({ kind: 'story', firstComment: '#tags' }, 'instagram'))
       .toEqual({ contentType: 'story' })
@@ -660,6 +685,29 @@ describe('per-network options land where the network takes them', () => {
     expect(cleanTags(['#one', 'one', ' two '])).toEqual(['one', 'two'])
     expect(tagsLength(['one', 'two'])).toBe('one,two'.length)
     expect(tagsLength([])).toBe(0)
+  })
+})
+
+describe('one channel per network in one post', () => {
+  // everything per-channel in the body is keyed by network — the options, the
+  // media override, the words, and TikTok's settings block, which is top
+  // level and singular. Two accounts on one network share one set of answers,
+  // so the second one's choices would be neither checked nor sent.
+  it('refuses a second channel on the same network, in a sentence', () => {
+    const issues = validatePost({
+      caption: 'hello', media: img(1), platforms: ['instagram', 'instagram'],
+    })
+    expect(issues.map(i => i.problem).join(' '))
+      .toMatch(/Two Instagram channels in one post is not something this can send yet/)
+  })
+
+  it('says it once, however many there are, and leaves one channel alone', () => {
+    const many = validatePost({
+      caption: 'hello', media: img(1), platforms: ['tiktok', 'tiktok', 'tiktok'],
+    }).filter(i => i.problem.startsWith('Two '))
+    expect(many).toHaveLength(1)
+    expect(validatePost({ caption: 'hello', media: img(1), platforms: ['instagram'] }))
+      .toEqual([])
   })
 })
 
@@ -725,11 +773,41 @@ describe('TikTok settings — top level, and never half sent', () => {
   })
 })
 
+describe('a YouTube cover picture rides on the media', () => {
+  it('gives YouTube its own copy of the media with the thumbnail on it', () => {
+    const body = buildPostBody({
+      caption: 'hello', media: vid(1), scheduledFor: null,
+      targets: [
+        { platform: 'youtube', accountId: 'y', options: { thumbnailUrl: 'https://x/cover.jpg' } },
+        { platform: 'instagram', accountId: 'i' },
+      ],
+    })
+    expect(body.platforms[0].customMedia)
+      .toEqual([{ ...vid(1)[0], thumbnail: 'https://x/cover.jpg' }])
+    // everybody else keeps the shared set, untouched
+    expect(body.mediaItems).toEqual(vid(1))
+    expect(body.platforms[1].customMedia).toBeUndefined()
+    // and it is never a setting: Zernio takes it on the media item
+    expect(body.platforms[0].platformSpecificData?.thumbnailUrl).toBeUndefined()
+    expect(body.platforms[0].platformSpecificData?.instagramThumbnail).toBeUndefined()
+  })
+
+  it('does not put one on a Short, which has none', () => {
+    const body = buildPostBody({
+      caption: 'hello', media: vid(1), scheduledFor: null,
+      targets: [{
+        platform: 'youtube', accountId: 'y',
+        options: { kind: 'reel', thumbnailUrl: 'https://x/cover.jpg' },
+      }],
+    })
+    expect(body.platforms[0].customMedia).toBeUndefined()
+  })
+})
+
 describe('YouTube never goes out half-addressed', () => {
   it('titles the video with the first line of the caption', () => {
     expect(youtubeDefaults('A morning in the roastery\nsecond line')).toEqual({
       title: 'A morning in the roastery',
-      visibility: 'public',
       categoryId: '22',
       madeForKids: false,
     })
@@ -746,6 +824,8 @@ describe('YouTube never goes out half-addressed', () => {
     expect(body.platforms[0].platformSpecificData).toEqual({
       title: 'Chosen', visibility: 'private', categoryId: '10', madeForKids: false,
     })
+    // and nothing decides "who can watch" on a post where nobody did
+    expect(youtubeDefaults('the caption').visibility).toBeUndefined()
   })
 
   it('leaves the title out rather than inventing one when there are no words', () => {
@@ -810,6 +890,18 @@ describe('what the options themselves get wrong, in plain words', () => {
     expect(problems('tiktok', { tiktokConsent: true, photoCoverIndex: 4 }, three).join(' '))
       .toMatch(/cover is picture 5, and this post has 3/)
     expect(problems('tiktok', { tiktokConsent: true, photoCoverIndex: 2 }, three)).toEqual([])
+  })
+
+  it('says a Story cannot have collaborators, rather than sending them', () => {
+    expect(problems('instagram', { kind: 'story', collaborators: ['acme'] }).join(' '))
+      .toMatch(/Story cannot have collaborators/)
+    expect(problems('instagram', { kind: 'reel', collaborators: ['acme'] })).toEqual([])
+  })
+
+  it('says when a company page is not one', () => {
+    expect(problems('linkedin', { organizationUrn: '99' }).join(' '))
+      .toMatch(/does not look like a company page/)
+    expect(problems('linkedin', { organizationUrn: 'urn:li:organization:99' })).toEqual([])
   })
 
   it('mentions a LinkedIn document name only when there is no document', () => {

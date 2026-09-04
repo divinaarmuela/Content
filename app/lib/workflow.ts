@@ -481,6 +481,25 @@ export async function performTransition(
       : checkTransitionAs(hats, from, to, { auto: opts?.auto })
   if (!check.ok) throw new AuthzError(check.reason, 403)
 
+  /**
+   * THE CLIENT'S OWN POLICY, ENFORCED RATHER THAN DISPLAYED.
+   *
+   * `presentTransitions` hides the `→ approved_for_scheduling` edge on every
+   * status except `client_review` when the item requires the client's
+   * sign-off — but only on the item page, and only by not drawing a button.
+   * Any other surface reaching this function (the Schedule rail's "Approve
+   * without client") got a different answer to the same question, which is a
+   * client policy that holds on one screen and not on another.
+   *
+   * The system's own moves are exempt: those are the provider reporting what
+   * has already happened, not somebody deciding to skip the client.
+   */
+  if (!system && to === 'approved_for_scheduling' && from !== 'client_review'
+    && (item as { client_approval_required?: boolean }).client_approval_required !== false) {
+    throw new AuthzError(
+      'This client signs their work off themselves — send it to them first', 403)
+  }
+
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {
       // "the brief page" is this page; the date lives on the SHOOT page

@@ -75,6 +75,9 @@ export type RailMedia = {
   /** the version the client would be approving, for the question they are
    *  asked before one is skipped */
   versionNumber: number | null
+  /** does this client sign their own work off — the flag the item page hides
+   *  "Approve without client" behind, so Schedule can answer the same way */
+  clientApprovalRequired: boolean
   /** a post already uses this item — one post, one item */
   used: boolean
   /**
@@ -245,6 +248,7 @@ export function useSchedulePosts(
           ok: elig.ok,
           reason: elig.ok ? null : elig.reason,
           status: String(item.status ?? ''),
+          clientApprovalRequired: item.client_approval_required !== false,
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           used: usedItems.has(item.id),

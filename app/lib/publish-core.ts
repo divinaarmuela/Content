@@ -30,7 +30,13 @@ export function networkName(platform: string): string {
   return NETWORK_LABEL[String(platform).toLowerCase()] ?? String(platform)
 }
 
-export type MediaItem = { url: string; type: MediaType }
+export type MediaItem = {
+  url: string
+  type: MediaType
+  /** a cover picture for THIS file — how YouTube takes a custom thumbnail
+   *  (JPEG/PNG/GIF, 1280x720, up to 2 MB; Shorts do not have one) */
+  thumbnail?: string
+}
 
 /** Per-platform limits.
  *
@@ -169,7 +175,34 @@ export function validatePost(input: {
     return [{ platform: 'instagram', problem: 'No platform selected' }]
   }
 
+  /**
+   * ONE CHANNEL PER NETWORK IN ONE POST.
+   *
+   * Everything per-channel in this body is keyed by NETWORK — the options,
+   * the media override, the words, and TikTok's settings block, which is top
+   * level and singular. Two Instagram accounts in one post therefore share
+   * one set of answers, and the second account's choices are neither checked
+   * nor sent. Refusing it in a sentence is honest; sending it and quietly
+   * dropping half of it is not.
+   */
+  const already = new Set<Platform>()
+  const platforms: Platform[] = []
   for (const p of input.platforms) {
+    if (already.has(p)) {
+      if (!issues.some(i => i.platform === p && i.problem.startsWith('Two '))) {
+        issues.push({
+          platform: p,
+          problem: `Two ${networkName(p)} channels in one post is not something `
+            + 'this can send yet — pick one, and make a second post for the other.',
+        })
+      }
+      continue
+    }
+    already.add(p)
+    platforms.push(p)
+  }
+
+  for (const p of platforms) {
     const caption = input.captionByPlatform?.[p] ?? input.caption
     const media = input.mediaByPlatform?.[p] ?? input.media
     const images = media.filter(m => m.type === 'image').length
@@ -301,6 +334,11 @@ export function optionProblems(
         `A ${name} Story has no comments, so the first comment would never `
         + 'appear — take it off.')
     }
+    if (o.collaborators?.length && platform === 'instagram') {
+      out.push(
+        'A Story cannot have collaborators — take them off, or make this a '
+        + 'feed post or a Reel.')
+    }
   }
 
   /* ── YouTube's three lengths ── */
@@ -341,6 +379,13 @@ export function optionProblems(
         `The TikTok cover is picture ${o.photoCoverIndex + 1}, and this post `
         + `has ${slides.length}.`)
     }
+  }
+
+  /* ── LinkedIn: a company page that is not one ── */
+  if (platform === 'linkedin' && o.organizationUrn && !isOrganizationUrn(o.organizationUrn)) {
+    out.push(
+      'That does not look like a company page — pick one from the list, or '
+      + 'paste the page id, a plain number.')
   }
 
   /* ── LinkedIn: a document title with no document on it ── */
@@ -564,6 +609,25 @@ export function isPageId(v: string | null | undefined): boolean {
   return /^\d{5,25}$/.test(String(v ?? '').trim())
 }
 
+/** Is `v` a LinkedIn company page — `urn:li:organization:<digits>`?
+ *
+ *  LinkedIn's lists sometimes hand back a bare numeric id, and a person with
+ *  a company page open in another tab will paste whatever they see. Neither
+ *  is refused by LinkedIn with an explanation; the post simply does not
+ *  appear as the company. `asOrganizationUrn` turns a bare number into the
+ *  real thing; anything else is dropped rather than sent. */
+export function isOrganizationUrn(v: string | null | undefined): boolean {
+  return /^urn:li:organization:\d+$/.test(String(v ?? '').trim())
+}
+
+/** …the same value as a URN, when it can be one. */
+export function asOrganizationUrn(v: string | null | undefined): string | null {
+  const value = String(v ?? '').trim()
+  if (isOrganizationUrn(value)) return value
+  if (/^\d+$/.test(value)) return `urn:li:organization:${value}`
+  return null
+}
+
 /** May a post of this kind carry a place at all? */
 export function kindTakesLocation(kind: PostKind | undefined): boolean {
   return kind !== 'story'
@@ -718,17 +782,24 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   // a Story has no comments to put a first comment under: Facebook refuses
   // it, and Instagram simply never posts it
   if (o.firstComment && o.kind !== 'story') put('firstComment', o.firstComment)
-  if (o.collaborators?.length) put('collaborators', o.collaborators.slice(0, 3))
+  // a Story has no collaborators either — Meta answers the field with a 400
+  // and the post never goes out, exactly as it does for a location
+  if (o.collaborators?.length && o.kind !== 'story') {
+    put('collaborators', o.collaborators.slice(0, 3))
+  }
   if (o.thumbnailUrl) put('instagramThumbnail', o.thumbnailUrl)
   if (typeof o.thumbOffset === 'number') put('thumbOffset', o.thumbOffset)
   if (o.isAiGenerated) put('isAiGenerated', true)
 
   /* ── Instagram: a trial Reel, and the name of its sound ── */
   // both are Reel settings; a carousel or a Story carrying them is a 400
-  if (o.trialGraduation && (o.kind === 'reel' || o.kind === undefined)) {
+  // 'reel' and nothing else: a post that was a Reel when this was set and is
+  // saved as a carousel later would otherwise still send it, and Instagram
+  // answers that with a 400
+  if (o.trialGraduation && o.kind === 'reel') {
     put('trialParams', { graduationStrategy: o.trialGraduation })
   }
-  if (o.audioName?.trim() && (o.kind === 'reel' || o.kind === undefined)) {
+  if (o.audioName?.trim() && o.kind === 'reel') {
     put('audioName', o.audioName.trim())
   }
 
@@ -747,7 +818,11 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   if (o.containsSyntheticMedia) put('containsSyntheticMedia', true)
 
   /* ── LinkedIn ── */
-  if (o.organizationUrn) put('organizationUrn', String(o.organizationUrn))
+  // a bare id pasted into the box is the mistake people make, and LinkedIn
+  // answers it by refusing the post rather than by asking
+  if (isOrganizationUrn(o.organizationUrn)) {
+    put('organizationUrn', String(o.organizationUrn).trim())
+  }
   if (o.disableLinkPreview !== undefined) put('disableLinkPreview', o.disableLinkPreview)
   if (o.documentTitle?.trim()) put('documentTitle', o.documentTitle.trim())
 
@@ -895,12 +970,16 @@ export const TIKTOK_DEFAULTS: TikTokSettings = {
  * agency makes per post. The title is the caption's first line — the words
  * already written — and anything actually chosen in the window wins over all
  * of it.
+ *
+ * WHO CAN WATCH IS NOT IN HERE, deliberately. A channel that publishes its
+ * uploads privately by default would start publishing them to the world
+ * because of a default WE invented; that is the provider's decision unless
+ * somebody in the window makes it.
  */
 export function youtubeDefaults(caption: string | null | undefined): Record<string, unknown> {
   const first = String(caption ?? '').split(/\r?\n/).map(l => l.trim()).find(Boolean) ?? ''
   return {
     ...(first ? { title: first.slice(0, YOUTUBE_TITLE_MAX) } : {}),
-    visibility: 'public' as YoutubeVisibility,
     categoryId: DEFAULT_YOUTUBE_CATEGORY,
     madeForKids: false,
   }
@@ -923,11 +1002,27 @@ export function buildPostBody(input: {
       const data = t.platform === 'youtube'
         ? { ...youtubeDefaults(t.options?.caption?.trim() || input.caption), ...(chosen ?? {}) }
         : chosen
+      /**
+       * A YOUTUBE THUMBNAIL RIDES ON THE MEDIA, NOT ON THE SETTINGS.
+       *
+       * Zernio takes it as `mediaItems[].thumbnail`, so the only way to give
+       * one channel its own cover picture without changing everybody's is to
+       * hand YouTube its own copy of the media with the thumbnail on it.
+       * Shorts have no custom thumbnail at all — YouTube ignores it there —
+       * so nothing is attached to one.
+       */
+      const media = t.options?.media?.length ? t.options.media : input.media
+      const wantsThumb = t.platform === 'youtube' && t.options?.thumbnailUrl?.trim()
+        && t.options?.kind !== 'reel' && media.length > 0
+      const customMedia = wantsThumb
+        ? media.map((m, i) => (i === 0 ? { ...m, thumbnail: t.options!.thumbnailUrl!.trim() } : m))
+        : t.options?.media?.length ? t.options.media : null
+
       return {
         platform: t.platform,
         accountId: t.accountId,
         ...(data && Object.keys(data).length > 0 ? { platformSpecificData: data } : {}),
-        ...(t.options?.media?.length ? { customMedia: t.options.media } : {}),
+        ...(customMedia ? { customMedia } : {}),
         ...(t.options?.caption?.trim() ? { customContent: t.options.caption } : {}),
       }
     }),

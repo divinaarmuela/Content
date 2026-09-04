@@ -120,7 +120,10 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
                   key={m.itemId}
                   className={cn(
                     'group relative flex aspect-[4/5] flex-col overflow-hidden rounded-tile border border-border bg-foreground/[0.06] text-left',
-                    m.ok ? 'hover:shadow-md' : 'opacity-45',
+                    // the dim goes on the PICTURE: `opacity` on the tile makes
+                    // a stacking context, and no class on a button inside it
+                    // can bring the button back to full strength
+                    m.ok ? 'hover:shadow-md' : 'border-dashed',
                   )}
                 >
                   <button
@@ -131,14 +134,18 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
                     aria-label={m.ok ? `Choose ${m.title}` : `${m.title} — ${m.reason}`}
                     className="absolute inset-0 z-0 disabled:cursor-not-allowed"
                   />
-                  <Thumb slide={m.cover} label={m.title} className="pointer-events-none h-full w-full" />
+                  <Thumb
+                    slide={m.cover}
+                    label={m.title}
+                    className={cn('pointer-events-none h-full w-full', !m.ok && 'opacity-45')}
+                  />
                   {/* waiting on somebody, and this person could be that
                       somebody: one press signs it off, after one question */}
-                  {!m.ok && mayApproveWithoutClient(role, m.status) && (
+                  {!m.ok && mayApproveWithoutClient(role, m.status, m.clientApprovalRequired) && (
                     <button
                       type="button"
                       onClick={() => onApprove(m)}
-                      className="absolute inset-x-1.5 bottom-[38px] z-10 truncate rounded-full bg-cream px-2 py-1.5 text-[11px] font-semibold text-ink hover:opacity-90"
+                      className="absolute inset-x-1.5 bottom-[46px] z-10 flex min-h-11 items-center justify-center rounded-full bg-cream px-2 text-center text-[11px] font-semibold leading-[1.2] text-ink hover:opacity-90"
                     >
                       Approve without client
                     </button>

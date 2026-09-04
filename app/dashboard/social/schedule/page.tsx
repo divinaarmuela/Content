@@ -257,6 +257,15 @@ export default function SchedulePage() {
     }
   }
 
+  // Escape closes the question, like every other window on this page. A
+  // dialog that only the mouse can dismiss is one somebody gets stuck in.
+  useEffect(() => {
+    if (!approving) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setApproving(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [approving])
+
   const target: ComposerTarget | null = useMemo(() => {
     if (!composing) return null
     const media = data.media.find(m => m.itemId === composing.itemId)

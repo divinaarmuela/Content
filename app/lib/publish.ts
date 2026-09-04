@@ -9,7 +9,8 @@ import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
-  type MediaItem, type PostKind, type Platform, type Target, type RemotePlatformRow,
+  type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
+  type RemotePlatformRow,
 } from './publish-core'
 export { LIVE_JOB_STATUSES }
 
@@ -67,15 +68,28 @@ export async function queuePublishJob(input: {
   const kinds: Partial<Record<Platform, PostKind>> = {}
   const mediaByPlatform: Partial<Record<Platform, MediaItem[]>> = {}
   const captionByPlatform: Partial<Record<Platform, string>> = {}
+  /**
+   * EVERY path is judged on its per-network options, this one included.
+   *
+   * This function is the one door onto a client's real account, and TikTok's
+   * two consent flags are attached to every TikTok target by `buildPostBody`.
+   * Leaving the options out of validation here meant the app told TikTok that
+   * a human had confirmed the preview and agreed to its terms on a path where
+   * no human was ever shown the sentence. That is a legal assertion, not a
+   * default, so the tick is required wherever a post is queued.
+   */
+  const optionsByPlatform: Partial<Record<Platform, PostOptions>> = {}
   for (const t of input.targets) {
     if (t.options?.kind) kinds[t.platform] = t.options.kind
     // a channel with its own media or words is judged on THOSE
     if (t.options?.media?.length) mediaByPlatform[t.platform] = t.options.media
     if (t.options?.caption?.trim()) captionByPlatform[t.platform] = t.options.caption
+    optionsByPlatform[t.platform] = t.options ?? {}
   }
 
   const issues = validatePost({
-    caption: input.caption, media: input.media, platforms, kinds, mediaByPlatform, captionByPlatform,
+    caption: input.caption, media: input.media, platforms, kinds, mediaByPlatform,
+    captionByPlatform, optionsByPlatform,
   })
   if (issues.length > 0) {
     return {

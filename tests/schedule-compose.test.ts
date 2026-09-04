@@ -182,7 +182,7 @@ describe('More options never offers what the provider cannot do', () => {
       .toEqual(['firstComment', 'liOrganization', 'liLinkPreview', 'liDocumentTitle'])
     expect(moreOptionsFor(['youtube']).map(o => o.key)).toEqual([
       'firstComment', 'ytTitle', 'ytVisibility', 'ytCategory', 'ytPlaylist',
-      'ytTags', 'ytKids', 'ytSynthetic',
+      'ytTags', 'ytKids', 'ytSynthetic', 'ytThumbnail',
     ])
     // TikTok's consent tick is always there, because a TikTok post cannot go
     // out without it
@@ -422,6 +422,14 @@ describe('only the selected network, and only what this post can carry', () => {
     expect(moreOptionsFor(null)).toEqual([])
   })
 
+  it('takes collaborators and the cover picture away where they cannot exist', () => {
+    // a Story has no collaborators; a Short has no custom cover picture
+    expect(moreOptionsFor(['instagram'], 'story').map(o => o.key)).not.toContain('collaborators')
+    expect(moreOptionsFor(['instagram'], 'feed').map(o => o.key)).toContain('collaborators')
+    expect(moreOptionsFor(['youtube'], 'reel').map(o => o.key)).not.toContain('ytThumbnail')
+    expect(moreOptionsFor(['youtube'], 'feed').map(o => o.key)).toContain('ytThumbnail')
+  })
+
   it('drops the Reel-only settings the moment the post is something else', () => {
     expect(moreOptionsFor(['instagram'], 'carousel').map(o => o.key))
       .not.toContain('trialReel')
@@ -472,6 +480,15 @@ describe('what comes back out of the stored blob', () => {
     expect(readChannelExtras({ visibility: 'secret' }).visibility).toBeUndefined()
     expect(readChannelExtras({ privacyLevel: 'SELF_ONLY' }).privacyLevel).toBe('SELF_ONLY')
     expect(readChannelExtras({ privacyLevel: 'EVERYONE' }).privacyLevel).toBeUndefined()
+  })
+
+  it('turns a bare company id into the thing LinkedIn wants, or drops it', () => {
+    expect(readChannelExtras({ organizationUrn: '99' }).organizationUrn)
+      .toBe('urn:li:organization:99')
+    expect(readChannelExtras({ organizationUrn: 'urn:li:organization:99' }).organizationUrn)
+      .toBe('urn:li:organization:99')
+    expect(readChannelExtras({ organizationUrn: 'Acme Pty Ltd' }).organizationUrn)
+      .toBeUndefined()
   })
 
   it('refuses a place NAME in the box that wants a number', () => {

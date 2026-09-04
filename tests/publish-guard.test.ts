@@ -88,6 +88,46 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
   })
 })
 
+/**
+ * TIKTOK'S CONSENT IS NEVER ASSERTED BY THE APP ALONE.
+ *
+ * Every TikTok target goes out with `content_preview_confirmed` and
+ * `express_consent_given` true — TikTok requires both — and they say a human
+ * saw how the post would look and agreed to TikTok's terms. `queuePublishJob`
+ * is the one door onto a client's real account, so it is the place that has
+ * to hold the post until somebody has actually said so.
+ */
+describe('the TikTok tick, on every path that queues a post', () => {
+  const tiktokPost = {
+    ...validPost,
+    contentItemId: null,
+    media: [{ url: 'https://media.mdmmarketing.com.au/a.mp4', type: 'video' as const }],
+    targets: [{ platform: 'tiktok' as const, accountId: 'acc-tt' }],
+  }
+
+  it('refuses a TikTok post nobody has ticked, in words a person can act on', async () => {
+    fake = seedDb({})
+    const result = await queuePublishJob(tiktokPost) as { error: string; issues?: string[] }
+    expect(result.error).toBe('This post is not valid for every selected platform')
+    expect((result.issues ?? []).join(' ')).toMatch(/Tick the TikTok box/)
+    expect(fake.rows('publish_jobs')).toHaveLength(0)
+  })
+
+  it('lets it through the moment the tick is there', async () => {
+    fake = seedDb({})
+    const result = await queuePublishJob({
+      ...tiktokPost,
+      targets: [{ platform: 'tiktok' as const, accountId: 'acc-tt', options: { tiktokConsent: true } }],
+    })
+    expect(result).toHaveProperty('id')
+  })
+
+  it('leaves every other network alone', async () => {
+    fake = seedDb({})
+    expect(await queuePublishJob({ ...validPost, contentItemId: null })).toHaveProperty('id')
+  })
+})
+
 describe('one row per (item, version) — asset_versions', () => {
   const version = (n: number) => ({
     item_id: ITEM, version_number: n, file_url: `https://x.invalid/v${n}.mp4`,
