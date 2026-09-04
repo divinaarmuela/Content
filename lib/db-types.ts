@@ -171,6 +171,8 @@ export interface AssetVersion {
   cover_url: string | null
   trim_start: number | null
   trim_end: number | null
+  source: string | null
+  source_drive_file_id: string | null
 }
 
 export interface Asset {
@@ -1045,7 +1047,7 @@ export const TABLE_COLUMNS = {
   asana_tasks: ['gid', 'name', 'assignee_gid', 'project_gid', 'completed', 'completed_at', 'due_on', 'modified_at', 'synced_at', 'permalink_url', 'id'],
   asana_webhooks: ['id', 'created_at', 'project_gid', 'webhook_gid', 'hook_secret', 'sync_token', 'last_heartbeat_at', 'last_event_at', 'last_error'],
   asset_clicks: ['id', 'asset_id', 'click_id', 'referrer', 'user_agent', 'clicked_at'],
-  asset_versions: ['id', 'created_at', 'item_id', 'version_number', 'file_url', 'dropbox_url', 'drive_url', 'notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end'],
+  asset_versions: ['id', 'created_at', 'item_id', 'version_number', 'file_url', 'dropbox_url', 'drive_url', 'notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end', 'source', 'source_drive_file_id'],
   assets: ['id', 'created_at', 'client_id', 'project_id', 'kind', 'orientation', 'purpose', 'url', 'alt'],
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
@@ -1117,7 +1119,7 @@ export const NULLABLE_COLUMNS = {
   asana_tasks: ['assignee_gid', 'project_gid', 'completed_at', 'due_on', 'modified_at', 'permalink_url'],
   asana_webhooks: ['webhook_gid', 'hook_secret', 'sync_token', 'last_heartbeat_at', 'last_event_at', 'last_error'],
   asset_clicks: ['referrer', 'user_agent'],
-  asset_versions: ['notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end'],
+  asset_versions: ['notes', 'uploaded_by', 'files', 'cover_url', 'trim_start', 'trim_end', 'source', 'source_drive_file_id'],
   assets: ['client_id', 'project_id', 'orientation', 'purpose', 'alt'],
   assistant_chats: [],
   assistant_prefs: [],

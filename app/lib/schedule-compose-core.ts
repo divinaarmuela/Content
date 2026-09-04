@@ -31,7 +31,7 @@ import {
   type TikTokPrivacy, type TrialGraduation, type YoutubeVisibility,
 } from './publish-core'
 import { NETWORK_LABEL, type SocialPostStatus } from './social-schedule-core'
-import { reorder, type Slide } from './version-files-core'
+import { reorder, type Slide, type SlideSource } from './version-files-core'
 import { fromZonedInput, wallTimeIn } from './timezone-core'
 
 /* ── the composition being edited ───────────────────────────────────────── */
@@ -828,7 +828,7 @@ export function clockPillLabel(
 /* ── the media picker's selection rules ─────────────────────────────────── */
 
 /** Where a file in the picker's left pane came from. */
-export type MediaSource = 'approved' | 'drive' | 'upload'
+export type MediaSource = 'approved' | SlideSource
 
 export type PickerFile = Slide & {
   source: MediaSource

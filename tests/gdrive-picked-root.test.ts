@@ -130,6 +130,22 @@ beforeEach(() => {
 
 afterEach(() => { fake?.restore() })
 
+/**
+ * These run with automatic filing ON.
+ *
+ * Automatic filing is off by default now (`gdrive-policy.ts`), which would
+ * make every case here pass for the wrong reason — nothing is created because
+ * nothing is attempted. The rules this file exists to prove are the ones INSIDE
+ * `gdrive.ts`: adopt rather than duplicate, never share, never revoke. So the
+ * switch is turned on for the duration and put back afterwards.
+ */
+const filingBefore = process.env.DRIVE_AUTO_FILING
+beforeEach(() => { process.env.DRIVE_AUTO_FILING = '1' })
+afterEach(() => {
+  if (filingBefore === undefined) delete process.env.DRIVE_AUTO_FILING
+  else process.env.DRIVE_AUTO_FILING = filingBefore
+})
+
 describe('a picked root that nobody has confirmed yet', () => {
   beforeEach(() => {
     fake = seedDb({

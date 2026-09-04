@@ -101,6 +101,17 @@ and `npm run build` must pass. Do not report completion on tests alone.
     has already cost an afternoon. Add a column to one by editing the ghost
     definition and re-running `node scripts/gen-db-types.mjs`.
 
+13. **Automatic filing to Google Drive is OFF** (`app/lib/gdrive-policy.ts`).
+    Every automatic write path — version mirroring, folder creation and
+    rename, brand/intake filing, member sync, the mirror sweep and the Inngest
+    job — calls `skipAutoFiling()` first and does nothing. Only the Files page
+    writes to Drive, because a person pressed a button there. Turn it back on
+    with `DRIVE_AUTO_FILING=1` in the environment (no UI, by design), and only
+    with the never-touch rule in mind: the owner's HQ folder is the agency's
+    real archive — the app may ADD to it, never share, rename, replace or
+    duplicate what is already there. Adding a new Drive writer means guarding
+    it and listing it in `tests/drive-auto-filing.test.ts`.
+
 ## Layout
 
 ```

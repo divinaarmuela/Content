@@ -217,10 +217,22 @@ const GHOST_COLUMNS = {
     ['root_picked_by', col('string', true)],
     ['clients_folder_id', col('string', true)],
   ],
+  //   asset_versions.source / source_drive_file_id — WHERE the files on this
+  //     version came from. 'drive' means somebody picked them in the
+  //     composer's Google Drive tab, so the originals are already in the
+  //     agency's Drive and must never be copied back into it (the owner's
+  //     ruling: no automatic filing, and a picker is not a round trip).
+  //     `source_drive_file_id` is the Drive file the version was built from,
+  //     so the piece can point back at the original rather than only at our
+  //     copy of it; the per-slide ids live on `files`. Both nullable: an
+  //     ordinary upload has neither, and so does every version written before
+  //     the picker existed.
   asset_versions: [
     ['cover_url', col('string', true)],
     ['trim_start', col('number', true)],
     ['trim_end', col('number', true)],
+    ['source', col('string', true)],
+    ['source_drive_file_id', col('string', true)],
   ],
   //   drive_files.parent_id / name / uploaded_by / moved_at — what the Files
   //     page needs the mirror to remember. The table was written for "this

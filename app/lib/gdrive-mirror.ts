@@ -15,6 +15,7 @@ import {
 } from './gdrive'
 import { copyDriveFile, driveFileUrl, moveDriveFile, uploadStreamToFolder } from './gdrive-files'
 import { ensureItemFoldersNow, ensureShootFoldersNow, type BatchLike, type ItemLike } from './gdrive-hooks'
+import { skipAutoFiling } from './gdrive-policy'
 import {
   RAW_ASSET_TARGET, earliestScheduledMonth, fileNameFromUrl, isClientTarget,
   isMirrorableUrl, mirrorKey, mirrorProgress, misfiledRawMirrors,
@@ -85,6 +86,7 @@ export type MirrorRequest = {
 let loggedNotConnected = false
 
 export async function requestMirror(files: MirrorRequest[]): Promise<number> {
+  if (skipAutoFiling('queue a file for Drive')) return 0
   const wanted = files.filter(f =>
     (f.item_id || f.client_id) && isMirrorableUrl(f.source_url))
   if (wanted.length === 0) return 0
@@ -127,6 +129,7 @@ export async function requestMirror(files: MirrorRequest[]): Promise<number> {
  * throws, and the detached call is the fallback.
  */
 export function mirrorFiles(files: MirrorRequest[]): void {
+  if (skipAutoFiling('queue a file for Drive')) return
   const job = () => requestMirror(files).catch(e => console.error('[gdrive] mirror request:', e))
   try {
     after(job)
@@ -172,6 +175,7 @@ export function newRawAssets(before: RawAsset[] | null, after: RawAsset[] | null
  * `(source_url, target)` claim already means the second one copies nothing.
  */
 export function mirrorRawAssets(itemId: string, assets: RawAsset[]): void {
+  if (skipAutoFiling('mirror job-pack files')) return
   mirrorFiles(assets.map(a => ({
     item_id: itemId,
     source_url: a.url,
@@ -184,6 +188,7 @@ export function mirrorRawAssets(itemId: string, assets: RawAsset[]): void {
 export function mirrorVersion(
   itemId: string, versionNumber: number, fileUrl: string | null | undefined,
 ): void {
+  if (skipAutoFiling('mirror a version')) return
   if (!isMirrorableUrl(fileUrl)) return
   mirrorFiles([{
     item_id: itemId,
@@ -205,7 +210,12 @@ export function mirrorVersion(
 export function mirrorVersionSlides(
   itemId: string, versionNumber: number, slides: readonly Slide[],
 ): void {
-  const wanted = slides.filter(s => isMirrorableUrl(s.url))
+  if (skipAutoFiling('mirror a version')) return
+  // a slide the composer picked out of Drive is ALREADY in Drive. Copying it
+  // back would put a second copy of the same file beside the first under a
+  // version-numbered name — see `Slide.source`. This holds even with the
+  // filing switch on: the picker is a picker, never a round trip.
+  const wanted = slides.filter(s => isMirrorableUrl(s.url) && s.source !== 'drive')
   if (wanted.length === 0) return
   mirrorFiles(wanted.map((s, i) => ({
     item_id: itemId,
@@ -226,6 +236,7 @@ export function mirrorVersionSlides(
 export async function mirrorLatestVersion(
   itemId: string, target: 'final' | 'scheduled',
 ): Promise<number> {
+  if (skipAutoFiling('mirror the approved version')) return 0
   if (!driveConfigured()) return 0
   const data = (await table<AssetVersion>('asset_versions').list({
     by: { item_id: itemId },
@@ -234,7 +245,7 @@ export async function mirrorLatestVersion(
   }))[0]
   if (!data) return 0
   // the whole carousel, not its cover: what was approved is the set of slides
-  const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url))
+  const slides = slidesOf(data).filter(s => isMirrorableUrl(s.url) && s.source !== 'drive')
   if (slides.length === 0) return 0
   const n = data.version_number as number
   return requestMirror(slides.map((s, i) => ({
@@ -247,6 +258,7 @@ export async function mirrorLatestVersion(
 
 /** Fire-and-forget version of the above, for transition and schedule paths. */
 export function mirrorLatestVersionSoon(itemId: string, target: 'final' | 'scheduled'): void {
+  if (skipAutoFiling('mirror the approved version')) return
   void mirrorLatestVersion(itemId, target)
     .catch(e => console.error('[gdrive] mirror latest version:', e))
 }
@@ -265,6 +277,7 @@ export function mirrorIntakeFiles(
   files: { block_id?: string | null; label?: string | null; filename?: string | null; url?: string | null }[],
   receivedAt?: string | null,
 ): void {
+  if (skipAutoFiling('file intake uploads')) return
   if (!clientId) return
   mirrorFiles(files
     .filter(f => isMirrorableUrl(f.url))
@@ -287,6 +300,7 @@ export function mirrorIntakeFiles(
 export function mirrorBrandDoc(
   clientId: string, url: string, filename: string,
 ): void {
+  if (skipAutoFiling('file a brand document')) return
   if (!clientId || !isMirrorableUrl(url)) return
   mirrorFiles([{
     client_id: clientId,
@@ -423,6 +437,11 @@ export type MirrorOutcome =
  * back rather than skip it as already done.
  */
 export async function mirrorFileNow(req: MirrorRequest): Promise<MirrorOutcome> {
+  // the Inngest job's body: an event queued before the switch was turned off,
+  // or replayed from the dashboard, must not file anything either
+  if (skipAutoFiling('copy a file into Drive')) {
+    return { status: 'skipped', detail: 'automatic filing is off' }
+  }
   const clientScoped = isClientTarget(req.target)
   if (!isMirrorableUrl(req.source_url)) {
     return { status: 'skipped', detail: 'not a file of ours' }
@@ -651,6 +670,7 @@ export async function sweepMissingMirrors(opts?: {
   cap?: number
 }): Promise<MirrorSweepResult> {
   const empty: MirrorSweepResult = { items: 0, missing: 0, queued: 0, moved: 0 }
+  if (skipAutoFiling('the half-hourly Drive sweep')) return empty
   if (!driveConfigured()) return empty
 
   const one = (opts?.itemIds ?? []).filter(Boolean).slice(0, 50)
@@ -767,7 +787,10 @@ export async function itemMirrorProgress(
   // "mirrored", and the line on the item page must not say it is
   for (const v of versions) {
     for (const s of slidesOf(v)) {
-      if (isMirrorableUrl(s.url)) wanted.add(mirrorKey('item', s.url))
+      // a picked Drive file is not a file we owe Drive a copy of, so it is not
+      // in the denominator — counting it would leave the item page saying
+      // "still copying" for ever
+      if (isMirrorableUrl(s.url) && s.source !== 'drive') wanted.add(mirrorKey('item', s.url))
     }
   }
   const have = mirrored

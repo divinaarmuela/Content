@@ -195,6 +195,15 @@ export async function importDriveFile(fileId: string): Promise<DriveImport> {
       name,
       type: mime.startsWith('video/') ? 'video' : slideTypeFromUrl(stored.publicUrl),
       bytes: bytes.byteLength,
+      // THE ONE FACT THAT STOPS IT GOING BACK.
+      //
+      // This file is already in the agency's Drive — it is where it was just
+      // picked from. Marking the slide with where it came from is what makes
+      // the mirror leave it alone instead of uploading a second copy of the
+      // same footage beside the first under a `v4 - 02 - …` name. The picker
+      // is a picker; it is not a round trip.
+      source: 'drive' as const,
+      drive_file_id: fileId,
     },
   }
 }

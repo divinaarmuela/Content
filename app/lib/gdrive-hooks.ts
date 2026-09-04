@@ -11,6 +11,7 @@ import {
   ensureClientChainWithLink, folderInfo, listFolderNames,
   renameFolder, rootFolderId, shareWithDomain,
 } from './gdrive'
+import { skipAutoFiling } from './gdrive-policy'
 
 /**
  * The folder tree, kept in step with the board — without ever getting in the
@@ -80,6 +81,7 @@ export type BatchLike = {
  * shoot folder existed still lands in the right place.
  */
 export async function ensureShootFoldersNow(batch: BatchLike): Promise<string | null> {
+  if (skipAutoFiling('make a shoot folder')) return null
   if (!driveConfigured()) return null
   if (batch.drive_folder_id) return batch.drive_folder_id
 
@@ -127,6 +129,7 @@ export async function ensureShootFoldersNow(batch: BatchLike): Promise<string | 
 
 /** Fire-and-forget: call this from the batch-create route. */
 export function onBatchCreated(batch: BatchLike): void {
+  if (skipAutoFiling('make a shoot folder')) return
   detach('batch create', () => ensureShootFoldersNow(batch))
 }
 
@@ -141,6 +144,7 @@ export function onBatchCreated(batch: BatchLike): void {
  * and the permissions on it all survive a rename.
  */
 export async function renameShootFolderNow(batch: BatchLike): Promise<void> {
+  if (skipAutoFiling('rename a shoot folder')) return
   if (!driveConfigured()) return
   const folderId = batch.drive_folder_id
   if (!folderId) return
@@ -168,6 +172,7 @@ export async function renameShootFolderNow(batch: BatchLike): Promise<void> {
 
 /** Fire-and-forget: call this wherever a shoot's date is set or locked. */
 export function onShootDateChanged(batch: BatchLike): void {
+  if (skipAutoFiling('rename a shoot folder')) return
   detach('shoot date', () => renameShootFolderNow(batch))
 }
 
@@ -225,6 +230,7 @@ async function kindIds(items: ItemLike[]): Promise<{
  * a background job must not quietly overwrite it.
  */
 export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
+  if (skipAutoFiling('make a deliverable folder')) return
   if (!driveConfigured() || items.length === 0) return
 
   const root = await rootFolderId()
@@ -313,11 +319,13 @@ export async function ensureItemFoldersNow(items: ItemLike[]): Promise<void> {
 
 /** Fire-and-forget: call this from the item-create route. */
 export function onItemsCreated(items: ItemLike[]): void {
+  if (skipAutoFiling('make a deliverable folder')) return
   detach('items create', () => ensureItemFoldersNow(items))
 }
 
 /** `{root}/{Client}/_Brand` — long-lived reference, independent of any shoot. */
 export async function ensureBrandFolderNow(clientId: string): Promise<string | null> {
+  if (skipAutoFiling('make a brand folder')) return null
   if (!driveConfigured()) return null
   const client = await clientName(clientId)
   if (!client) return null

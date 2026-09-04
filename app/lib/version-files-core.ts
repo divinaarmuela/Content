@@ -17,12 +17,33 @@
 
 export type SlideType = 'image' | 'video'
 
+/** How a file got here: picked out of the agency's Drive, or uploaded. */
+export type SlideSource = 'drive' | 'upload'
+
 export type Slide = {
   url: string
   name: string
   type: SlideType
   /** file size, when the uploader knew it — display only */
   bytes?: number
+  /**
+   * WHERE THIS FILE CAME FROM, and the one value that changes behaviour.
+   *
+   * `'drive'` means somebody picked it in the composer's Google Drive tab: the
+   * bytes were copied into our storage so a publisher can fetch them, but the
+   * file itself is ALREADY in the agency's Drive, in the folder the person
+   * picked it out of. Copying it back would put a second copy of the same
+   * footage beside the first under a version-numbered name — which is exactly
+   * the "auto upload to the drive" the owner ruled out. So a drive-sourced
+   * slide is never mirrored, whatever the filing switch says.
+   *
+   * `'upload'` is the ordinary case, and so is ABSENT — every slide written
+   * before this existed has no `source` at all and is an upload.
+   */
+  source?: SlideSource
+  /** the Drive file it was picked from, kept so the version can point back at
+   *  the original rather than only at our copy of it */
+  drive_file_id?: string
 }
 
 /** Instagram's carousel ceiling, and the tightest of any platform we post to. */
@@ -80,9 +101,17 @@ export function normaliseSlides(input: unknown): Slide[] {
       ? row.type
       : slideTypeFromUrl(url)
     const bytes = Number(row.bytes)
+    // where it came from survives the round trip: the picker sets it, the
+    // version stores it, and the mirror reads it to know not to copy the file
+    // back into the folder it was picked out of
+    const driveId = String(row.drive_file_id ?? '').trim()
     out.push({
       url, name, type,
       ...(Number.isFinite(bytes) && bytes > 0 ? { bytes: Math.floor(bytes) } : {}),
+      ...(row.source === 'drive' || row.source === 'upload'
+        ? { source: row.source as SlideSource }
+        : {}),
+      ...(driveId ? { drive_file_id: driveId } : {}),
     })
     if (out.length === MAX_SLIDES) break
   }

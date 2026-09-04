@@ -58,6 +58,18 @@ describe('db-types (generated)', () => {
       expect(NULLABLE_COLUMNS.asset_versions).toContain(c)
     }
   })
+  // Where the files on a version came from. 'drive' means somebody picked
+  // them in the composer's Google Drive tab, so the originals are already in
+  // the agency's Drive and are never copied back into it — the owner's ruling
+  // that automatic filing is off, written down as a column. Nullable: an
+  // ordinary upload has neither, and so does every version made before the
+  // picker existed.
+  it('remembers a version picked out of Drive', () => {
+    for (const c of ['source', 'source_drive_file_id']) {
+      expect(TABLE_COLUMNS.asset_versions).toContain(c)
+      expect(NULLABLE_COLUMNS.asset_versions).toContain(c)
+    }
+  })
   // The client's group of accounts at the posting service is
   // `social_profile_id` and has been since the connect flow was written. The
   // Schedule access page writes THAT column: a second one meaning the same

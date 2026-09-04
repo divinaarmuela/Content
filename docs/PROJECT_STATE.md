@@ -1,5 +1,45 @@
 # Project state — as at 4 September 2026
 
+## Automatic filing to Drive is OFF — 4 Sep 2026
+
+**The ruling.** "Remove any auto upload feature to the drive — disabled." The
+owner's HQ folder is the agency's real archive, and the app is a guest in it.
+So the app no longer files ANYTHING to Google Drive on its own.
+
+**What still writes to Drive:** the Files page, and only the Files page —
+upload, new folder, move, rename, each one an explicit, confirmed action by a
+person (`app/lib/gdrive-files.ts`, `app/api/drive/**`). Those do not go
+through the hooks and are deliberately untouched by the switch.
+
+**What is off:** version mirroring, shoot and deliverable folder creation, the
+shoot-folder rename when a date is set, `_Brand` and intake/monthly-form
+filing, the team member sync and every domain share that hung off those, the
+half-hourly mirror sweep, and the `drive/mirror.file` Inngest job's own body —
+so an event queued before the switch went off, or replayed from the dashboard,
+files nothing either. Each returns a logged skip
+(`[gdrive] automatic filing is off — skipped: …`), makes no Drive call and
+writes no `drive_files` row.
+
+**The Schedule composer's Google Drive tab is a picker.** A picked file is
+copied into R2 (a publisher cannot fetch bytes out of Drive) and becomes a
+version the client approves. It is NEVER copied back: the slide carries
+`source: 'drive'` and the Drive file id, the version records them in
+`asset_versions.source` / `source_drive_file_id`, and `mirrorVersionSlides`
+skips a drive-sourced slide even with the switch on. The picker is a picker,
+not a round trip.
+
+**Turning it back on.** One environment variable, read in exactly one place
+(`app/lib/gdrive-policy.ts`): set `DRIVE_AUTO_FILING=1` in Vercel and redeploy.
+There is deliberately no UI for it. Anything other than the literal `1` — unset,
+empty, `0`, `true` — means off. Before turning it on, read the never-touch
+rule: the app may ADD to the owner's tree; it may not share, re-share,
+un-share, rename, replace or duplicate anything already in it.
+
+**Tests.** `tests/drive-auto-filing.test.ts` calls every entry point with
+Google and Inngest replaced by counters and asserts zero of everything; the
+same harness with the switch on proves the code still works; and a read of the
+source itself fails if a new exported writer appears without the guard.
+
 ## Social Schedule — 4 Sep 2026
 
 **What it is.** `/dashboard/social/schedule` — one client's week, the approved

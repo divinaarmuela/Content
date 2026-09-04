@@ -78,7 +78,15 @@ vi.mock('../app/lib/schedule-drive', () => ({
     h.drive.imported.push(id)
     return {
       ok: true,
-      slide: { url: `https://media.mdmmarketing.com.au/drive-${id}.jpg`, name: `${id}.jpg`, type: 'image' },
+      // exactly what the real one returns: a picked file is marked with where
+      // it came from, and that mark is what stops it being copied BACK
+      slide: {
+        url: `https://media.mdmmarketing.com.au/drive-${id}.jpg`,
+        name: `${id}.jpg`,
+        type: 'image',
+        source: 'drive',
+        drive_file_id: id,
+      },
     }
   }),
   DRIVE_IMPORT_LIMIT_BYTES: 100 * 1024 * 1024,
@@ -504,6 +512,50 @@ describe('addMediaVersion, called directly', () => {
     // no edge out of client_review to client_review; the piece is already
     // with them, so there is nothing to move
     expect(item().status).toBe('client_review')
+  })
+})
+
+/* ── a file picked out of Drive ─────────────────────────────────────────── */
+
+/**
+ * THE DRIVE TAB IS A PICKER, AND THE VERSION REMEMBERS THAT.
+ *
+ * The file is already in the agency's Drive; our copy in R2 exists only
+ * because a publisher cannot fetch bytes out of Drive. So the version records
+ * where it came from — and nothing ever files it back, which is the owner's
+ * ruling in one column.
+ */
+describe('a slide brought across from Drive', () => {
+  beforeEach(() => { as(SCHEDULER) })
+
+  it('is marked on the version, with the Drive file it came from', async () => {
+    const brought = await json(driveRoute.POST(new Request('https://x.test/drive', {
+      method: 'POST', body: JSON.stringify({ item_id: ITEM, file_ids: ['gd-77'] }),
+    })))
+    const picked = brought.body.files[0]
+    expect(picked.source).toBe('drive')
+    expect(picked.drive_file_id).toBe('gd-77')
+
+    const { body } = await saveMedia({ item_id: ITEM, files: [...APPROVED, picked] })
+    expect(body.created).toBe(true)
+
+    const v2 = versions().find((v: any) => v.version_number === 2)
+    expect(v2.source).toBe('drive')
+    expect(v2.source_drive_file_id).toBe('gd-77')
+    // and per slide, so a mixed carousel still says which card is which
+    const slide = v2.files.find((f: any) => f.url === picked.url)
+    expect(slide.source).toBe('drive')
+    expect(slide.drive_file_id).toBe('gd-77')
+  })
+
+  it('leaves an ordinary upload unmarked', async () => {
+    const { body } = await saveMedia({ item_id: ITEM, files: [...APPROVED, NEW_FILE] })
+    expect(body.created).toBe(true)
+    const v2 = versions().find((v: any) => v.version_number === 2)
+    // `?? null` because the Realtime Database does not store a null — the
+    // column is simply absent, which is the same answer
+    expect(v2.source ?? null).toBe(null)
+    expect(v2.source_drive_file_id ?? null).toBe(null)
   })
 })
 
