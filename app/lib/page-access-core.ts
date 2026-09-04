@@ -35,6 +35,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/clients/:id/intake', label: 'Intake', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/brand', label: 'Brand', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/agreement', label: 'Agreement', parent: '/dashboard/clients' },
+  { href: '/dashboard/files', label: 'Files' },
   { href: '/dashboard/audience', label: 'Audience' },
   { href: '/dashboard/social', label: 'Social channels' },
   { href: '/dashboard/website', label: 'Website' },
@@ -87,7 +88,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // Settings (their profile and notification preferences live there)
   const personal = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
   if (role === 'editor') {
-    return [...personal, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler'].includes(href)
+    return [...personal, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/files'].includes(href)
   }
   // schedulers run the client channels day-to-day: queue, calendar, and the
   // social area itself (channels, inbox, analytics) — that is where they post
@@ -95,7 +96,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // else, and Production is the only page that lists one. Without it, a task
   // assigned to a scheduler was invisible to the person holding it.
   if (role === 'scheduler') {
-    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor', '/dashboard/production'].includes(href)
+    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor', '/dashboard/production', '/dashboard/files'].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable
@@ -105,6 +106,11 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // reasoning: a monthly client report IS client delivery, and the account
   // manager is the person who presents it. It was swept in with the other two
   // and nobody unpicked it.
+  // Files is on every team ladder above: it is the agency's shared filing
+  // cabinet, and an editor hunting last month's raws or a scheduler hunting an
+  // approved graphic is doing the job they were hired for. A client never sees
+  // it — `role === 'client'` returns false at the top, and the routes behind it
+  // require a team role of their own.
   if (role === 'account_manager') return !['/dashboard/leads', '/dashboard/audience'].includes(href)
   return true                                  // super_admin
 }

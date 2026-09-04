@@ -121,13 +121,36 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // drive_uploads — one in-flight upload started by a person on the Files
+  //   page. The bytes are on somebody's laptop, so they arrive a slice at a
+  //   time and each slice is a separate request; something has to remember the
+  //   Google resumable session URI between them. It is kept HERE, on the
+  //   server, and never handed to the browser: the browser holds `id` and
+  //   nothing else, so a session cannot be replayed by anyone who is not
+  //   signed in. The row is finished (or abandoned) the moment Drive returns a
+  //   file id, and carries no bytes of its own.
+  drive_uploads: [
+    ['id', col('string', false)],
+    ['upload_uri', col('string', false)],
+    ['name', col('string', false)],
+    ['parent_id', col('string', false)],
+    ['mime_type', col('string', true)],
+    ['size', col('number', true)],
+    ['received', col('number', false)],
+    ['client_id', col('string', true)],
+    ['status', col('string', false)],       // open | done | failed
+    ['drive_file_id', col('string', true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
@@ -198,6 +221,22 @@ const GHOST_COLUMNS = {
     ['cover_url', col('string', true)],
     ['trim_start', col('number', true)],
     ['trim_end', col('number', true)],
+  ],
+  //   drive_files.parent_id / name / uploaded_by / moved_at — what the Files
+  //     page needs the mirror to remember. The table was written for "this
+  //     source URL has been copied to this target", which never had to know
+  //     WHERE in Drive the copy ended up: the target implied the folder. The
+  //     Files page can move a file to any folder a person chooses, so the
+  //     folder became a fact of its own — without it the page and the mirror
+  //     would disagree about where a file is the moment somebody dragged one.
+  //     `name` is kept for the same reason (a renamed file is still the same
+  //     row), and `uploaded_by` answers "who put this here", which is the
+  //     first thing anybody asks about a file they did not expect.
+  drive_files: [
+    ['parent_id', col('string', true)],
+    ['name', col('string', true)],
+    ['uploaded_by', col('string', true)],
+    ['moved_at', col('string', true)],
   ],
 }
 for (const [t, cols] of Object.entries(GHOST_COLUMNS)) {
