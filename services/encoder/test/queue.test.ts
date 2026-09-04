@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { JobQueue, MAX_WAITING } from '../src/queue.js'
+import { JobQueue, MAX_WAITING, shouldExit } from '../src/queue.js'
 
 /**
  * One running, two waiting, and the third caller told so.
@@ -99,5 +99,34 @@ describe('the line', () => {
     await tick(); await tick(); await tick()
     expect(ran).toBe(true)
     expect(q.depth).toBe(0)
+  })
+})
+
+/**
+ * When the machine stops itself.
+ *
+ * This is the fix for the most serious thing the review found — Fly's own
+ * auto-stop cannot see an encode that has no open connection, so this rule is
+ * the whole of scale-to-zero now. A rule nothing exercises is a rule nobody
+ * can trust.
+ */
+describe('stopping the machine', () => {
+  const FIVE_MIN = 5 * 60 * 1000
+  const now = 1_000_000_000
+
+  it('never stops while anything is queued or running', () => {
+    // even after an hour of the SAME lastBusyAt, work in hand wins
+    expect(shouldExit(1, now - 60 * 60 * 1000, now, FIVE_MIN)).toBe(false)
+    expect(shouldExit(3, now - 60 * 60 * 1000, now, FIVE_MIN)).toBe(false)
+  })
+
+  it('never stops before it has been idle long enough', () => {
+    expect(shouldExit(0, now, now, FIVE_MIN)).toBe(false)
+    expect(shouldExit(0, now - FIVE_MIN + 1000, now, FIVE_MIN)).toBe(false)
+  })
+
+  it('stops once the queue has been empty for the whole window', () => {
+    expect(shouldExit(0, now - FIVE_MIN, now, FIVE_MIN)).toBe(true)
+    expect(shouldExit(0, now - 60 * 60 * 1000, now, FIVE_MIN)).toBe(true)
   })
 })

@@ -226,11 +226,24 @@ describe('an HDR master is converted, not relabelled', () => {
       target: instagram, source: hdr('arib-std-b67'),
     })
     expect(arg(args, '-vf')).toBe(
-      'zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,'
+      'zscale=t=linear:npl=100,format=gbrpf32le,tonemap=hable,'
+      + 'zscale=p=bt709:t=bt709:m=bt709,'
       + 'scale=1920:1080:flags=lanczos,format=yuv420p',
     )
     // …and the tags still say 709, because by now the pixels really are
     expect(arg(args, '-colorspace')).toBe('bt709')
+  })
+
+  it('converts to float before tone-mapping, rather than trusting negotiation', () => {
+    const args = ffmpegArgs({
+      inputPath: '/tmp/x/source', outputPath: '/tmp/x/instagram.mp4',
+      target: instagram, source: hdr('arib-std-b67'),
+    })
+    const vf = arg(args, '-vf')!
+    // tonemap takes float only; ffmpeg would insert this itself, but the one
+    // step that turns a client's HDR footage grey is worth spelling out
+    expect(vf.indexOf('format=gbrpf32le')).toBeLessThan(vf.indexOf('tonemap=hable'))
+    expect(vf.indexOf('tonemap=hable')).toBeLessThan(vf.indexOf('scale=1920:1080'))
   })
 
   it('tone-maps a PQ master the same way', () => {

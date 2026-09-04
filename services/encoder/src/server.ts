@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { ENCODE_TIMEOUT_MS, runEncode, loggerFor, safeUrl, type EncodeRequest, type EncodeResult } from './encode.js'
-import { JobQueue } from './queue.js'
+import { JobQueue, shouldExit } from './queue.js'
 import { parseJob as parseJobWith } from './request.js'
 import { SIGNATURE_HEADER, signCallback } from './sign.js'
 
@@ -222,8 +222,9 @@ server.listen(PORT, () => {
  * no open connection. Never fires while anything is queued or running.
  */
 const idleTimer = setInterval(() => {
-  if (queue.depth > 0) { lastBusyAt = Date.now(); return }
-  if (Date.now() - lastBusyAt < IDLE_EXIT_MS) return
+  const now = Date.now()
+  if (queue.depth > 0) { lastBusyAt = now; return }
+  if (!shouldExit(queue.depth, lastBusyAt, now, IDLE_EXIT_MS)) return
   console.log('[encoder] idle; stopping. Fly will start a machine when the next job arrives.')
   stopping = true
   server.close(() => process.exit(0))
@@ -277,4 +278,21 @@ function crashed(what: string, error: unknown): void {
   setTimeout(() => process.exit(1), 20_000).unref()
 }
 process.on('uncaughtException', e => crashed('uncaught exception', e))
-process.on('unhandledRejection', e => crashed('unhandled rejection', e))
+
+/**
+ * A stray rejection is LOUD, but it does not cost an encode.
+ *
+ * `uncaughtException` above leaves the process in an unknown state, so it
+ * reports and goes. A rejection is different: node cannot tell us which
+ * promise it came from, so blaming the running job for it would throw away
+ * twenty minutes of finished work on the strength of a guess — and the job
+ * that really is failing already reports its own failure (`runEncode` never
+ * throws). So this logs, and the encode carries on.
+ *
+ * If it turns out to have been fatal after all, the app's stale sweep settles
+ * the row within its window rather than leaving it stuck.
+ */
+process.on('unhandledRejection', reason => {
+  const message = reason instanceof Error ? reason.message : String(reason)
+  console.error('[encoder] unhandled rejection (continuing):', message, currentJob ? `while ${currentJob.jobId} runs` : '')
+})

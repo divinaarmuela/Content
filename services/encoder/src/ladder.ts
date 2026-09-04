@@ -100,17 +100,23 @@ export function toneMapNeeded(source: Pick<SourceInfo, 'colorTransfer'>): string
 /**
  * The tone map, as one filter.
  *
- * Linearise, roll the highlights off with Hable (which keeps skin tones where
- * a simple clip loses them), then land in BT.709 primaries, transfer and
- * matrix. `npl=100` is the nominal peak luminance a phone's HLG is graded
- * against.
+ * Linearise, convert to float, roll the highlights off with Hable (which keeps
+ * skin tones where a simple clip loses them), then land in BT.709 primaries,
+ * transfer and matrix. `npl=100` is the nominal peak luminance a phone's HLG
+ * is graded against.
+ *
+ * `format=gbrpf32le` is spelled out rather than left to ffmpeg. `tonemap`
+ * accepts only float pixel formats, and filter negotiation does insert the
+ * conversion on its own — but nothing here has ever run against a real ffmpeg,
+ * the published recipe writes it down, and it costs nothing to be explicit
+ * about the one step that turns a client's HDR footage grey if it is missed.
  *
  * It needs libzimg (`zscale`), which Debian's ffmpeg has and a minimal static
  * build often does not — so the service checks for the filter and fails the
  * job in plain words rather than shipping washed-out footage.
  */
 export const TONE_MAP_FILTER =
-  'zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709'
+  'zscale=t=linear:npl=100,format=gbrpf32le,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709'
 
 /** The filter this service cannot do without on an HDR master. */
 export const TONE_MAP_FILTER_NAME = 'zscale'

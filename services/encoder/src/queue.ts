@@ -73,3 +73,20 @@ export class JobQueue {
     }
   }
 }
+
+/**
+ * Should this machine stop itself?
+ *
+ * Pure, because it is the fix for the most serious thing the review found and
+ * a rule nothing exercises is a rule nobody can trust. `server.ts` reads the
+ * clock and the queue; the decision is here.
+ *
+ * Two conditions, and both must hold: the queue is EMPTY — which counts the
+ * job being encoded, so this can never fire mid-encode — and it has been empty
+ * long enough that no follow-on work is coming. Fly's own auto-stop cannot see
+ * either, which is why it is off (see fly.toml).
+ */
+export function shouldExit(queueDepth: number, idleSince: number, now: number, idleMs: number): boolean {
+  if (queueDepth > 0) return false
+  return now - idleSince >= idleMs
+}
