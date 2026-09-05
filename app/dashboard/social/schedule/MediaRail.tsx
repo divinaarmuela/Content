@@ -217,28 +217,42 @@ export default function MediaRail({
                     strokeWidth={2}
                   />
                 </button>
-                {/* waiting on somebody, and this person could be that
-                    somebody: the whole bottom half of the card signs it off,
-                    after one question. Full height, full strength, and it
-                    does not sit on top of the "start a post" target — that
-                    one is not offered on a piece that cannot start a post. */}
-                {/* usable, but the client has not seen it: a quiet marker,
-                    never a block — the sign-off happens by itself when the
-                    post goes out */}
+                {/* TWO MARKERS, TWO DIFFERENT SENTENCES.
+                    "Not yet approved by the client" is a piece nobody has
+                    asked the client about — it is usable, and the sign-off
+                    happens by itself when the post goes out. "With the client
+                    now" is a piece on the client's screen AT THIS MOMENT: it
+                    is NOT usable in one press, because posting it would take
+                    it out from under somebody who is reading it. That one is
+                    only ever skipped on purpose, through the button below and
+                    the question it asks. */}
                 {m.ok && m.needsClientApproval && (
                   <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
                     {NOT_CLIENT_APPROVED}
                   </span>
                 )}
+                {/* waiting on somebody, and this person could be that
+                    somebody: the whole bottom of the card signs it off, after
+                    one question. The reason sits ABOVE the button rather than
+                    being replaced by it — a manager pressing "Approve without
+                    client" has to be able to read that the client is looking
+                    at it right now. */}
                 {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) ? (
-                  <button
-                    type="button"
-                    onClick={() => onApprove(m)}
-                    title={m.reason ? `${m.title} — ${m.reason}` : m.title}
-                    className="absolute inset-x-0 bottom-0 z-10 min-h-11 w-full bg-cream/95 px-2 text-[11px] font-semibold leading-[1.2] text-ink hover:bg-cream"
-                  >
-                    Approve without client
-                  </button>
+                  <>
+                    {m.reason && (
+                      <span className="pointer-events-none absolute inset-x-1 bottom-12 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
+                        {m.reason}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onApprove(m)}
+                      title={m.reason ? `${m.title} — ${m.reason}` : m.title}
+                      className="absolute inset-x-0 bottom-0 z-10 min-h-11 w-full bg-cream/95 px-2 text-[11px] font-semibold leading-[1.2] text-ink hover:bg-cream"
+                    >
+                      Approve without client
+                    </button>
+                  </>
                 ) : !m.ok && m.reason ? (
                   <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
                     {m.reason}

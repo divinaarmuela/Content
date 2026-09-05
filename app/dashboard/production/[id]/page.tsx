@@ -1627,16 +1627,30 @@ export default function ItemDetailPage() {
             {hints.map(h => (
               <p key={h} className="text-secondary-13 text-accent-amber">{h}</p>
             ))}
-            {/* the flag that decides whether "approve without the client"
-                exists at all — the one place it is explained */}
+            {/* WHAT THIS SWITCH ACTUALLY DOES, said in its own words.
+                It used to read "The client signs this off before it goes
+                out". That stopped being true on 5 Sep 2026: an account
+                manager can post a piece from the Schedule page whatever this
+                says, so the only thing left of it is the route the work
+                takes — on, and the piece goes to the client for their answer;
+                off, and this page offers the manager the sign-off instead.
+                The promise about posting belongs to the CLIENT's own setting
+                ("This client signs off every post", on their page), which is
+                the one the server enforces. */}
             {canManage && !isInternal && (
-              <label className="flex min-h-11 items-center gap-2.5 text-secondary-13 text-muted-foreground md:min-h-0">
+              <label className="flex min-h-11 items-start gap-2.5 text-secondary-13 text-muted-foreground md:min-h-0">
                 <Switch
                   checked={detail.client_approval_required !== false}
                   disabled={busy !== null}
                   onCheckedChange={v => void saveApproval(v)}
                 />
-                The client signs this off before it goes out
+                <span>
+                  Send this to the client for their answer
+                  <span className="block text-muted-foreground/80">
+                    Turn it off and an account manager signs it off here instead. Whether
+                    this client sees every post before it goes out is set on their own page.
+                  </span>
+                </span>
               </label>
             )}
           </CardContent>
@@ -1832,8 +1846,11 @@ export default function ItemDetailPage() {
               <span className="text-body-15">
                 {reviewerNames.length > 0 ? reviewerNames.join(', ') : <span className="text-muted-foreground">no account manager on this client</span>}
               </span>
+              {/* "then <Client> signs off" was a promise this page cannot
+                  keep — a manager may post the piece from Schedule without
+                  them. What is true is where the work goes next. */}
               {detail.client_approval_required !== false && !isInternal && (
-                <span className="text-secondary-13 text-muted-foreground">then {detail.client_name ?? 'the client'} signs off</span>
+                <span className="text-secondary-13 text-muted-foreground">then it goes to {detail.client_name ?? 'the client'} for their answer</span>
               )}
             </div>
             {/* the scheduling seat — assets only */}

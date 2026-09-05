@@ -149,7 +149,11 @@ export default function PiecePicker({
                     className={cn('pointer-events-none h-full w-full', !m.ok && 'opacity-45')}
                   />
                   {/* waiting on somebody, and this person could be that
-                      somebody: one press signs it off, after one question */}
+                      somebody: one press signs it off, after one question.
+                      A piece with the client RIGHT NOW is only ever taken off
+                      their screen this way — deliberately, through this
+                      button, with the caption below still saying where it is.
+                      It is never usable media in one press. */}
                   {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) && (
                     <button
                       type="button"
@@ -185,8 +189,9 @@ export default function PiecePicker({
 
         <p className="text-[12px] text-muted-foreground">
           {postWithoutApproval
-            ? 'Media the client has not signed off yet is marked. You can still post it — '
-              + 'the app signs it off in your name when the post goes out.'
+            ? 'Media the client has not been asked about is marked. You can still post it — '
+              + 'the app signs it off in your name when the post goes out. A piece that is '
+              + 'with the client right now stays with them until you approve it without them.'
             : 'Only media the client has approved can start a post. Files from Google Drive '
               + 'or your computer are added inside the post window, and go back to the client '
               + 'for approval first.'}

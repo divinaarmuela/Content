@@ -12,7 +12,7 @@ import {
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
-  CLIENT_SIGNS_OFF_NOTE, tileTone, validateComposition,
+  CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED, tileTone, validateComposition,
   type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import {
@@ -74,6 +74,20 @@ export type ComposerTarget = {
   versionNumber: number | null
   /** the cover picture already chosen in the editor for this piece's media */
   coverUrl: string | null
+  /**
+   * The client has not signed this media off — the rail's quiet marker, said
+   * again HERE.
+   *
+   * The window is where the irreversible press happens, and it used to be the
+   * one screen with no marker on it at all: a card dragged straight from the
+   * rail onto a time showed the words for the half second it was under the
+   * cursor and never again. Somebody deserves to see what they are posting at
+   * the moment they post it.
+   */
+  needsClientApproval: boolean
+  /** where the piece actually is in the funnel — what the window's own
+   *  composition check judges, instead of assuming it is approved */
+  itemStatus: string
   /** an existing post to edit, or null for a new one */
   post: SchedulePostRow | null
   /** the time a click on the calendar meant, for a new post */
@@ -222,7 +236,11 @@ export default function NewPostDialog({
   })
 
   const check = useMemo(() => validateComposition({
-    item: { status: 'approved_for_scheduling', content_type: target.contentType },
+    // the piece as it ACTUALLY is, judged with this person's own rights: a
+    // hardcoded `approved_for_scheduling` was how the window came to know
+    // nothing about a piece the client had not seen
+    item: { status: target.itemStatus, content_type: target.contentType },
+    withoutApproval: mayApprove && !clientSignsOff,
     version: null,
     slides: state.slides,
     caption: state.caption,
@@ -865,6 +883,14 @@ export default function NewPostDialog({
               under the button that would otherwise have posted */}
           {clientSignsOff && mayApprove && primary.key === 'send' && (
             <p className="w-full text-[12px] text-muted-foreground">{CLIENT_SIGNS_OFF_NOTE}</p>
+          )}
+
+          {/* …and the marker the rail card wore, said again where the press
+              actually happens */}
+          {target.needsClientApproval && primary.key === 'direct' && (
+            <p className="w-full text-[12px] text-muted-foreground">
+              {NOT_CLIENT_APPROVED}. Posting this signs it off in your name.
+            </p>
           )}
 
           {state.scheduledFor && status === 'approved' && (
