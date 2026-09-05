@@ -33,7 +33,9 @@ import {
   mayEditNote, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
-import { normaliseSlides, slidesOf, slidesSatisfyType, type Slide } from './version-files-core'
+import {
+  normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
+} from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { previewVideos } from './stream'
@@ -475,6 +477,38 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
     if (problems.length > 0) throw new ComposeError(problems)
   }
 
+  return insertPost(user, item, {
+    slides,
+    caption,
+    channels: accounts.map(a => a.id),
+    perChannel,
+    scheduledFor,
+    timezone: input.timezone ?? null,
+    version: (elig.version as AssetVersion) ?? null,
+  })
+}
+
+/**
+ * THE POST ROW ITSELF — one writer, two ways in.
+ *
+ * `createPost` above (a piece that already exists and whose media the client
+ * has signed off) and `startPostOnItem` below (a file somebody just uploaded,
+ * with the piece made for them) both land here, so the one-post-per-item
+ * claim, the shape of the row and the announcement cannot drift apart.
+ */
+async function insertPost(
+  user: TeamUser,
+  item: ContentItem,
+  input: {
+    slides: Slide[]
+    caption: string
+    channels: string[]
+    perChannel: PerChannel
+    scheduledFor: string | null
+    timezone: string | null
+    version: AssetVersion | null
+  },
+): Promise<PlannedPost> {
   const id = randomUUID()
   // one live post per item. The lock is handed on the moment the post it
   // names stops being live (cancelled, or gone), so nothing is ever blocked
@@ -493,13 +527,13 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
       id,
       client_id: item.client_id,
       item_id: item.id,
-      version_id: (elig.version as AssetVersion)?.id ?? null,
-      version_number: (elig.version as AssetVersion)?.version_number ?? null,
-      slides,
-      caption,
-      per_channel: perChannel,
-      channels: accounts.map(a => a.id),
-      scheduled_for: scheduledFor,
+      version_id: input.version?.id ?? null,
+      version_number: input.version?.version_number ?? null,
+      slides: input.slides,
+      caption: input.caption,
+      per_channel: input.perChannel,
+      channels: input.channels,
+      scheduled_for: input.scheduledFor,
       timezone: await zoneOf(item.client_id, input.timezone),
       status: 'draft' satisfies SocialPostStatus,
       publish_job_ids: [],
@@ -519,6 +553,47 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
       e instanceof Error ? e.message : 'Could not start this post', 500,
     )
   }
+}
+
+/**
+ * START A POST ON A PIECE THIS REQUEST JUST MADE.
+ *
+ * The one caller is `createPostFromFiles`: somebody uploaded a file, the piece
+ * behind it was created for them a few lines earlier, and the version they
+ * uploaded IS its latest version.
+ *
+ * IT DELIBERATELY DOES NOT ASK `postingEligibility`. That question is "has the
+ * client signed this media off", and on a brand-new upload the answer is being
+ * decided in the same request: an account manager's piece has just travelled
+ * to `approved_for_scheduling` and a scheduler's is waiting at
+ * `internal_review`, which is precisely the state the composer then shows as
+ * "waiting for approval". Refusing to hold the draft at all would only make
+ * the upload vanish. Nothing about the PUBLISH gate moves: `publishBlockReason`
+ * and `sendForApproval`/`scheduleWithoutApproval` judge the item exactly as
+ * they do for every other post, so a piece nobody has approved still cannot go
+ * out.
+ */
+export async function startPostOnItem(
+  user: TeamUser,
+  item: ContentItem,
+  input: {
+    slides: Slide[]
+    version: AssetVersion | null
+    caption?: string | null
+    scheduled_for?: string | null
+    timezone?: string | null
+  },
+): Promise<PlannedPost> {
+  assertCompose(user, item)
+  return insertPost(user, item, {
+    slides: input.slides,
+    caption: String(input.caption ?? ''),
+    channels: [],
+    perChannel: {},
+    scheduledFor: input.scheduled_for ? String(input.scheduled_for) : null,
+    timezone: input.timezone ?? null,
+    version: input.version,
+  })
 }
 
 /* ── edit ───────────────────────────────────────────────────────────────── */
@@ -560,10 +635,38 @@ export async function updatePost(
     )
   }
 
-  const elig = await eligibleFor(user, item, await versionsOf(item.id))
-  if (!elig.ok) throw new ComposeError([elig.reason])
+  /**
+   * A DRAFT MAY BE WRITTEN WHILE THE PIECE IS STILL BEING CHECKED.
+   *
+   * `postingEligibility` answers "may this go OUT". Asked here, it also stopped
+   * somebody typing a caption while a manager looked at the media — and that
+   * is exactly where a post made from a fresh upload starts life: the file is
+   * saved as version 1 and the piece is waiting for the manager's check. A
+   * composer that refuses to keep the words somebody just typed is how an
+   * upload gets lost.
+   *
+   * So the answer is used for ONE thing — which files may be named on the post
+   * — and the item's latest version stands in when the client has not signed
+   * anything off yet. Nothing about publishing moves: `sendForApproval`,
+   * `scheduleWithoutApproval` and `publishBlockReason` all ask the same
+   * questions they always did, and a piece nobody has approved still cannot go
+   * out.
+   */
+  const versions = await versionsOf(item.id)
+  const elig = await eligibleFor(user, item, versions)
+  const latest = versions.reduce<AssetVersion | null>(
+    (best, v) => (Number(v.version_number ?? 0) > Number(best?.version_number ?? 0) ? v : best), null)
+  const editableVersion = elig.ok ? (elig.version as AssetVersion) : latest
+  const editableSlides = elig.ok
+    ? elig.slides
+    : postSlides(item.content_type as string, slidesOf(latest))
+  if (editableSlides.length === 0) {
+    throw new ComposeError([elig.ok ? 'No media yet' : elig.reason])
+  }
 
-  const slides = input.slides === undefined ? post.slides : chooseSlides(elig.slides, input.slides)
+  const slides = input.slides === undefined
+    ? post.slides
+    : chooseSlides(editableSlides, input.slides)
   const caption = input.caption === undefined ? String(post.caption ?? '') : String(input.caption ?? '')
   const channelIds = input.channels === undefined
     ? post.channels
@@ -576,11 +679,12 @@ export async function updatePost(
 
   if (accounts.length > 0 && slides.length > 0) {
     const problems = problemsWith({
-      item, version: (elig.version as AssetVersion) ?? null,
+      item, version: editableVersion,
       slides, caption, accounts, perChannel, scheduledFor,
       // media this person may post before the client has seen it is not a
-      // problem to hand back to them — the sign-off travels with the post
-      withoutApproval: elig.needsClientApproval,
+      // problem to hand back to them — the sign-off travels with the post,
+      // and saving a draft is never the moment to argue about it
+      withoutApproval: elig.ok ? elig.needsClientApproval : true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }

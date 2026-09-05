@@ -1,6 +1,6 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { ContentItem } from '@/lib/db-types'
+import type { Client, ContentItem } from '@/lib/db-types'
 import {
   ALL_DRIVES, ALL_DRIVES_LIST, FILES, accessToken, driveFetch, driveConfigured,
 } from './gdrive'
@@ -101,6 +101,12 @@ export async function listDriveMedia(itemId: string): Promise<DriveListing> {
       message: 'This piece does not have a Drive folder yet. Upload the file instead.',
     }
   }
+  return listMediaIn(folderId)
+}
+
+/** The pictures and video in one folder and its first subfolders. One reader,
+ *  whether the folder came from a piece or from the client. */
+async function listMediaIn(folderId: string): Promise<DriveListing> {
   const auth = await accessToken()
   if (!auth.ok) {
     return { ok: false, message: 'Google Drive needs reconnecting — ask an admin to sign it in again.' }
@@ -132,6 +138,32 @@ export async function listDriveMedia(itemId: string): Promise<DriveListing> {
       type: String(f.mimeType ?? '').startsWith('video/') ? 'video' as const : 'image' as const,
     }))
   return { ok: true, files, folderId }
+}
+
+/**
+ * THE SAME LIST, FOR A CLIENT WITH NO PIECE IN IT YET.
+ *
+ * "New post" now opens on the sources rather than on a chooser full of pieces,
+ * so Google Drive has to be answerable before any piece exists. The folder is
+ * the CLIENT's own — `clients.drive_folder_id`, read exactly as it is recorded
+ * and never created here: this file is a reader (CLAUDE.md trap 13), and a tab
+ * that made a folder in the owner's Drive as a side effect of being looked at
+ * would be the very thing the read-only rule exists to prevent.
+ */
+export async function listClientDriveMedia(clientId: string): Promise<DriveListing> {
+  if (!driveConfigured()) {
+    return { ok: false, message: 'Google Drive is not set up for this workspace yet.' }
+  }
+  const row = await table<Client>('clients').get(clientId).catch(() => null)
+  const folderId = String(
+    (row as unknown as { drive_folder_id?: string | null } | null)?.drive_folder_id ?? '').trim()
+  if (!folderId) {
+    return {
+      ok: false,
+      message: 'This client does not have a Drive folder yet. Upload the file instead.',
+    }
+  }
+  return listMediaIn(folderId)
 }
 
 export type DriveImport =

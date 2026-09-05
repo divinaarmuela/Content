@@ -203,6 +203,45 @@ exists. Moving the TIME does not — that is what makes dragging an approved til
 sane. Cancelling a post resets the item's gate, so the next post on the same
 item cannot inherit an approval nobody gave for its words.
 
+### Post straight from a file — no piece needed (6 Sep 2026)
+
+"New post" opens on the MEDIA SOURCES, not on a chooser full of pieces:
+**Upload** (drag files in or browse — photos and video, several at once, with
+the existing R2 signed-upload path and its progress rows), **Google Drive**
+(the client's own folder, read only, copied into our storage) and **Approved
+media** (the old grid, shown only when there is some). A file dragged off the
+desktop straight onto a day or an hour does the same thing with no window in
+between.
+
+The post still hangs off a piece — the version numbering, the Drive mirror, the
+portal and the publish planner all key off it — but the app MAKES the piece and
+nobody is asked about it (`app/lib/schedule-upload.ts`,
+`POST /api/social/schedule/from-upload`):
+
+* an ordinary item, exactly as `NewItemDialog` writes one: the resolved work
+  kind, no shoot with the ad-hoc reason on the activity line, `draft_uploaded`
+  at birth, owned by whoever uploaded — then moved forward on the ORDINARY
+  edges as that person. Its title is the file name (or the caption), its
+  `content_type` is read off the files (2+ = carousel, one video = reel, one
+  picture = static), and the upload is version 1.
+* **for an account manager or a super admin** the piece is carried to
+  `approved_for_scheduling` on the same `internal_review →
+  approved_for_scheduling` edge the "Approve without client" button presses,
+  recorded against them — so their post can go out with nothing waiting on
+  anybody, and `mode: 'direct'` has nothing left to do for the media.
+* **for a scheduler or an editor** the piece waits at `internal_review` for the
+  manager's check, and the short cut is refused exactly as it is today. They can
+  still write the caption and pick the channels: `updatePost` judges a DRAFT on
+  the item's latest version rather than on the client's sign-off, while every
+  publish gate (`sendForApproval`, `scheduleWithoutApproval`,
+  `publishBlockReason`) is untouched.
+* **a client who signs off every post** keeps the full flow, for everybody.
+
+Files are checked server-side before anything is written: on our own storage
+(`ourStorageUrl`), the right content type, and inside the size ceiling. Drive is
+still READ ONLY (trap 13) — `listClientDriveMedia` reads
+`clients.drive_folder_id` as recorded and never creates a folder.
+
 ### Per-network options
 
 The composer shows only the options the selected network actually has, in plain

@@ -13,6 +13,11 @@ import {
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { readLocations } from '@/app/lib/schedule-compose-core'
+import {
+  refusedFilesLine, usableUploadFiles, type UploadedPostSummary,
+} from '@/app/lib/schedule-upload-core'
+import type { Slide } from '@/app/lib/version-files-core'
+import { uploadFiles } from '../../uploadQueue'
 import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
@@ -25,7 +30,7 @@ import { useDragSchedule } from './useDragSchedule'
 import EditMediaLauncher from './EditMediaLauncher'
 import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
-import PiecePicker from './PiecePicker'
+import NewPostSources from './NewPostSources'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
@@ -99,6 +104,19 @@ export default function SchedulePage() {
    * meant is carried into the chooser and on into the composer.
    */
   const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
+
+  /**
+   * A POST THAT WAS A FILE ON SOMEBODY'S LAPTOP A SECOND AGO.
+   *
+   * The rail and the calendar are live, so the piece and the post an upload
+   * just made arrive here by themselves — but not instantly, and a window that
+   * does not open is indistinguishable from a press that did nothing. So the
+   * server's own answer is held and the composer opens on THAT; the live rows
+   * take over the moment they land.
+   */
+  const [pending, setPending] = useState<UploadedPostSummary | null>(null)
+  /** what is happening to a file dropped straight onto the calendar */
+  const [uploadNote, setUploadNote] = useState<string | null>(null)
 
   /**
    * MOVING A POST BY HAND.
@@ -222,6 +240,63 @@ export default function SchedulePage() {
     setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at })
   }
 
+  /** the upload became a post — open the composer on it */
+  const openMade = (made: UploadedPostSummary, at: string | null) => {
+    setChoosing(null)
+    setPending(made)
+    setComposing({ itemId: made.itemId, postId: made.postId || null, at })
+  }
+
+  /**
+   * A FILE DRAGGED OFF THE DESKTOP ONTO A DAY OR A TIME.
+   *
+   * The same two steps the New post window takes, with no window in between:
+   * the bytes go to storage, the server makes the piece and the post, and the
+   * composer opens at the time the file was dropped on. Anything that refuses
+   * says so where the eye already is.
+   */
+  const createFromFiles = async (files: File[], at: string | null) => {
+    if (!clientId) return
+    const { keep, refused } = usableUploadFiles(files)
+    const refusal = refusedFilesLine(refused)
+    if (keep.length === 0) { setUploadNote(refusal ?? 'Drop a photo or a video.'); return }
+    setUploadNote(refusal ?? 'Uploading…')
+    try {
+      const { done } = uploadFiles(keep as unknown as File[], {
+        group: `calendar-drop:${clientId}`, purpose: 'social',
+      })
+      const landed = await done
+      const slides: Slide[] = landed.map(({ file, url }) => ({
+        url,
+        name: file.name,
+        type: file.type.startsWith('video/') ? 'video' : 'image',
+        bytes: file.size,
+        source: 'upload',
+      }))
+      const res = await fetch('/api/social/schedule/from-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: clientId, files: slides, scheduled_for: at }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setUploadNote(friendlyError(String(json?.error ?? ''), 'Schedule'))
+        return
+      }
+      setUploadNote(null)
+      openMade({
+        itemId: String(json.item_id),
+        postId: String(json.post?.id ?? ''),
+        title: String(json.item_title ?? 'Post'),
+        contentType: String(json.content_type ?? ''),
+        slides: (json.post?.slides ?? slides) as Slide[],
+        needsApproval: Boolean(json.needs_approval),
+      }, at)
+    } catch (e) {
+      setUploadNote(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
+    }
+  }
+
   /** open an existing post in the composer */
   const openPost = (post: SchedulePostRow) =>
     setComposing({ itemId: post.item_id, postId: post.id, at: null })
@@ -298,21 +373,26 @@ export default function SchedulePage() {
     const post = composing.postId
       ? data.posts.find(p => p.id === composing.postId) ?? null
       : data.posts.find(p => p.item_id === composing.itemId) ?? null
-    if (!media && !post) return null
+    // the upload's own answer, until the live rows carry it
+    const fresh = pending && pending.itemId === composing.itemId ? pending : null
+    if (!media && !post && !fresh) return null
     return {
       itemId: composing.itemId,
-      title: media?.title ?? post?.item_title ?? 'Post',
-      contentType: media?.contentType ?? String(post?.item_type ?? ''),
-      approved: media?.slides ?? [],
-      knownUrls: media?.knownUrls ?? [],
+      title: media?.title ?? post?.item_title ?? fresh?.title ?? 'Post',
+      contentType: media?.contentType ?? String(post?.item_type ?? fresh?.contentType ?? ''),
+      approved: media?.slides ?? fresh?.slides ?? [],
+      knownUrls: media?.knownUrls ?? (fresh ? fresh.slides.map(s => s.url) : []),
       coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
-      needsClientApproval: media?.needsClientApproval ?? false,
-      itemStatus: media?.status ?? 'approved_for_scheduling',
+      needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
+      itemStatus: media?.status
+        ?? (fresh
+          ? (fresh.needsApproval ? 'internal_review' : 'approved_for_scheduling')
+          : 'approved_for_scheduling'),
       post,
       at: composing.at,
     }
-  }, [composing, data.media, data.posts])
+  }, [composing, data.media, data.posts, pending])
 
   // the client picked last time, then the first one this person works for —
   // a page that opens on "pick a client" every morning is a page with a step
@@ -337,6 +417,9 @@ export default function SchedulePage() {
   const locations = useMemo(
     () => readLocations((data.client as { instagram_locations?: unknown } | null)?.instagram_locations),
     [data.client])
+  /** the client has a Drive folder we can read — no folder, no Drive tab */
+  const driveAvailable = Boolean(
+    String((data.client as { drive_folder_id?: string | null } | null)?.drive_folder_id ?? '').trim())
   const todayKey = dayKeyInZone(now, tz)
   // keyed on the DAY, not the minute: the clock ticking must not rebuild the
   // week under every memo that reads it
@@ -615,6 +698,7 @@ export default function SchedulePage() {
                     const media = data.media.find(m => m.itemId === itemId)
                     if (media) openNew(media, iso)
                   }}
+                  onDropFiles={(files, iso) => void createFromFiles(files, iso)}
                   drag={drag}
                   noteMode={noteMode}
                   noteDraft={noteDraft}
@@ -656,6 +740,7 @@ export default function SchedulePage() {
                 const media = data.media.find(m => m.itemId === itemId)
                 if (media) openNew(media, iso)
               }}
+              onDropFiles={(files, iso) => void createFromFiles(files, iso)}
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -738,14 +823,18 @@ export default function SchedulePage() {
       )}
 
       {choosing && (
-        <PiecePicker
+        <NewPostSources
+          clientId={clientId}
           media={data.media}
           at={choosing.at}
           tz={tz}
           role={me?.role ?? null}
           postWithoutApproval={data.postWithoutApproval}
+          clientSignsOff={data.clientSignsOff}
+          driveAvailable={driveAvailable}
           onPick={m => openNew(m, choosing.at)}
           onApprove={m => { setApproveNote(null); setApproving(m) }}
+          onCreated={made => openMade(made, choosing.at)}
           onClose={() => setChoosing(null)}
         />
       )}
@@ -759,10 +848,28 @@ export default function SchedulePage() {
           role={me?.role ?? null}
           clientSignsOff={data.clientSignsOff}
           locations={locations}
-          onClose={() => setComposing(null)}
+          onClose={() => { setComposing(null); setPending(null) }}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
           onEditMedia={setEditing}
         />
+      )}
+
+      {/* a file dropped straight onto the calendar says where it got to */}
+      {uploadNote && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 flex max-w-[440px] -translate-x-1/2 items-start gap-3 rounded-card border border-border bg-popover px-4 py-3 shadow-xl"
+        >
+          <span className="text-[13px] font-medium">{uploadNote}</span>
+          <button
+            type="button"
+            onClick={() => setUploadNote(null)}
+            aria-label="Close"
+            className="-my-1.5 -mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+          >
+            <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
       )}
 
       {editSaved && (

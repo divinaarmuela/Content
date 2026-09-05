@@ -7,6 +7,7 @@ import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
 import { dropIntent, dropLabelAt, moveToDay, previewOrder } from '@/app/lib/schedule-drag-core'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
+import { isFileDrag } from '@/app/lib/schedule-upload-core'
 import { RAIL_DRAG_TYPE } from './MediaRail'
 import { DROP_KINDS } from './WeekGrid'
 import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
@@ -84,7 +85,8 @@ export function ListView({ posts, tz, todayKey, onOpen }: {
 }
 
 export function MonthGrid({
-  month, posts, tz, todayKey, onOpen, drag, onDropItem, defaultTime = '11:00',
+  month, posts, tz, todayKey, onOpen, drag, onDropItem, onDropFiles,
+  defaultTime = '11:00',
 }: {
   /** 'YYYY-MM' — the month on screen */
   month: string
@@ -97,6 +99,8 @@ export function MonthGrid({
   /** a card was dragged out of the rail onto a day: start a post there, at
    *  the client's usual posting time (a month cell has no hour in it) */
   onDropItem: (itemId: string, iso: string) => void
+  /** files dragged in off the desktop and dropped on a day */
+  onDropFiles: (files: File[], iso: string) => void
   /** the client's usual posting time, 'HH:MM' */
   defaultTime?: string
 }) {
@@ -151,6 +155,13 @@ export function MonthGrid({
                 else dayCells.current.delete(cell.key)
               }}
               onDragOver={e => {
+                // a photo coming off the desktop
+                if (isFileDrag(e.dataTransfer.types)) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'copy'
+                  setOver(cell.key)
+                  return
+                }
                 const kind = dropIntent(
                   e.dataTransfer.types, DROP_KINDS, drag.moving?.mode === 'mouse')
                 if (!kind) return
@@ -166,6 +177,12 @@ export function MonthGrid({
               onDrop={e => {
                 e.preventDefault()
                 setOver(null)
+                const dropped = Array.from(e.dataTransfer.files ?? [])
+                if (dropped.length > 0) {
+                  const start = moveToDay(null, cell.key, tz, defaultTime)
+                  if (start) onDropFiles(dropped, start)
+                  return
+                }
                 const at = moveToDay(drag.moving?.from ?? null, cell.key, tz, defaultTime)
                 if (e.dataTransfer.getData(TILE_DRAG_TYPE) || drag.moving?.mode === 'mouse') {
                   drag.dropAt(at)

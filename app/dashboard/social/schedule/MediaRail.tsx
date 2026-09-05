@@ -153,9 +153,11 @@ export default function MediaRail({
         ) : shown.length === 0 ? (
           <p className="px-1 text-[13px] text-muted-foreground">
             {media.length === 0
-              ? (postWithoutApproval
-                ? 'Nothing here yet. Media shows up once a piece has been made.'
-                : 'Nothing approved yet. Media shows up here once the client signs it off.')
+              // NOT "nothing here yet", full stop. An empty rail used to be
+              // the end of the road on a workspace with no pieces in it —
+              // which is exactly when somebody most needs to post something.
+              // The way in is one button above this line, and it says so.
+              ? 'Nothing here yet. Press New post to upload a photo or video.'
               : 'Nothing matches those filters.'}
           </p>
         ) : (
@@ -265,7 +267,8 @@ export default function MediaRail({
       </div>
 
       <p className="px-1.5 text-center text-[12px] text-muted-foreground">
-        Pick a piece of media to start a post, or drag it onto a time.
+        Pick a piece of media to start a post, or drag it onto a time. You can
+        also drop a file straight onto the calendar.
       </p>
 
       <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
