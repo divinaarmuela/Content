@@ -23,6 +23,13 @@ const LINE = '#e4e4e7'
 const BLUE = '#2563eb'
 const PAGE = { width: 595.28, height: 841.89, margin: 48 } // A4
 
+/* One rhythm for every question, answered or not — the gaps are named so the
+ * measurement and the drawing cannot drift apart again. */
+const LABEL_GAP = 1          // between wrapped lines of a question
+const ANSWER_GAP = 2         // between wrapped lines of an answer
+const LABEL_TO_ANSWER = 5    // question to its answer
+const BLOCK_GAP = 16         // answer to the next question
+
 export type IntakePdfData = {
   clientName: string
   formTitle: string
@@ -99,20 +106,33 @@ export function renderIntakePdf(data: IntakePdfData): Promise<Buffer> {
           : Array.isArray(raw) ? raw.join(', ')
           : (raw ?? '')
 
-        const body = answered || files.length > 0 ? String(text) : 'Not answered'
-        const qH = doc.font('Helvetica-Bold').fontSize(9).heightOfString(block.label, { width: contentW })
-        const aH = doc.font('Helvetica').fontSize(10).heightOfString(body, { width: contentW })
-        y = room(qH + aH + 22, y)
+        const has = answered || files.length > 0
+        const body = has ? String(text) : 'Not answered'
+        /* Measure with the FONT AND OPTIONS THE TEXT IS DRAWN WITH.
+         *
+         * These two calls used to disagree twice over: an unanswered line is
+         * drawn in Helvetica-Oblique but was measured in Helvetica, and every
+         * answer is drawn with `lineGap: 2` that the measurement did not know
+         * about — so a wrapped answer was measured short by two points a line
+         * and the next question was pulled up into it. Unanswered questions
+         * showed it worst, because a one-line "Not answered" between two bold
+         * labels left almost nothing between the two. */
+        const answerFont = has ? 'Helvetica' : 'Helvetica-Oblique'
+        const qH = doc.font('Helvetica-Bold').fontSize(9)
+          .heightOfString(block.label, { width: contentW, lineGap: LABEL_GAP })
+        const aH = doc.font(answerFont).fontSize(10)
+          .heightOfString(body, { width: contentW, lineGap: ANSWER_GAP })
+        y = room(qH + LABEL_TO_ANSWER + aH + BLOCK_GAP, y)
 
         doc.fillColor(DIM).font('Helvetica-Bold').fontSize(9)
-          .text(block.label, PAGE.margin, y, { width: contentW })
-        y += qH + 4
+          .text(block.label, PAGE.margin, y, { width: contentW, lineGap: LABEL_GAP })
+        y += qH + LABEL_TO_ANSWER
 
-        doc.fillColor(answered || files.length > 0 ? INK : FAINT)
-          .font(answered || files.length > 0 ? 'Helvetica' : 'Helvetica-Oblique')
+        doc.fillColor(has ? INK : FAINT)
+          .font(answerFont)
           .fontSize(10)
-          .text(body, PAGE.margin, y, { width: contentW, lineGap: 2 })
-        y += aH + 14
+          .text(body, PAGE.margin, y, { width: contentW, lineGap: ANSWER_GAP })
+        y += aH + BLOCK_GAP
       }
 
       y += 8
