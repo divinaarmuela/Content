@@ -11,6 +11,15 @@ import { scheduleErrorResponse, sendForApproval } from '@/app/lib/social-schedul
  * 'direct' schedules it without asking, which only somebody who could have
  * approved it may do; the post still passes through the same state machine,
  * so nothing downstream can tell the difference except `approval_mode`.
+ *
+ * As of the ruling of 5 Sep 2026 'direct' also does the MEDIA's sign-off when
+ * the client has not given one — the same `internal_review →
+ * approved_for_scheduling` edge the rail's "Approve without client" pressed,
+ * recorded against the same person. One request, because it was always one
+ * decision. It stays 'direct' rather than growing a second mode: the caller's
+ * question is "post this", and which approvals that implies is the server's
+ * to work out, not the button's. A client who signs every post off is refused
+ * here in plain words, whoever asks.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {

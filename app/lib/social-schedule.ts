@@ -27,9 +27,10 @@ import {
   optionsFromExtras, readChannelExtras, type ChannelExtras,
 } from './schedule-compose-core'
 import {
-  applySlideLimit, canReschedule, channelBlockReason, coverForSlide, eligibility,
-  mayEditNote, mirrorStatus, validateComposition,
-  type CoverSource, type SocialPostStatus,
+  applySlideLimit, APPROVE_WITHOUT_CLIENT_STATUSES, canReschedule, channelBlockReason,
+  CLIENT_SIGNS_OFF_REFUSAL, clientSignsOffEveryPost, coverForSlide, eligibility,
+  mayEditNote, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
+  type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
 import { normaliseSlides, slidesOf, slidesSatisfyType, type Slide } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
@@ -152,6 +153,41 @@ function assertCompose(user: TeamUser, item: ContentItem): void {
   if (!mayCompose(user, item)) {
     throw new AuthzError('Only the people scheduling this client can change this post', 403)
   }
+}
+
+/**
+ * MAY THIS PERSON POST WITH NO APPROVAL STEP IN THE WAY? (ruled 5 Sep 2026)
+ *
+ * The client's account manager, or a super admin — read off the hats they
+ * wear on THIS item, so an editor handed the scheduling of a piece does not
+ * inherit the manager's signature with it. A client whose contract says they
+ * see every post first turns it off for everybody.
+ *
+ * The answer decides two things and nothing else: which media this person may
+ * build a post out of (`eligibleFor`), and whether the app performs the two
+ * approvals for them when the post goes out. Every state the post passes
+ * through is the ordinary one.
+ */
+async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<boolean> {
+  return mayPostWithoutApproval(
+    actingRoles({ id: user.id, role: user.role }, item),
+    await clientSignsOff(item.client_id),
+  )
+}
+
+/** `clients.client_approval_required`, explicitly true. A client we cannot
+ *  read is treated as the ordinary arrangement — the same answer the row's
+ *  absent column gives, and the post is still gated on everything else. */
+async function clientSignsOff(clientId: string): Promise<boolean> {
+  const client = await table<Client>('clients').get(clientId).catch(() => null)
+  return clientSignsOffEveryPost(client)
+}
+
+/** The media this person may build a post out of. */
+async function eligibleFor(
+  user: TeamUser, item: ContentItem, versions: readonly AssetVersion[],
+): Promise<Eligibility> {
+  return postingEligibility(item, versions, await mayPostStraightOut(user, item))
 }
 
 function assertMayPublish(user: TeamUser): void {
@@ -306,6 +342,9 @@ function problemsWith(input: {
   accounts: SocialAccount[]
   perChannel: PerChannel
   scheduledFor: string | null
+  /** this person may post with no approval step in the way, so "still with
+   *  the client" is not a problem to hand back to them */
+  withoutApproval?: boolean
 }): string[] {
   const problems = validateComposition({
     item: input.item,
@@ -314,6 +353,7 @@ function problemsWith(input: {
     caption: input.caption,
     channels: input.accounts.map(a => ({ id: a.id, platform: a.platform })),
     scheduledFor: input.scheduledFor,
+    withoutApproval: input.withoutApproval,
     now: nowIso(),
   }).problems.slice()
 
@@ -397,7 +437,9 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
   const item = await loadItemForUser(user, String(input.item_id ?? ''))
   assertCompose(user, item)
 
-  const elig = eligibility(item, await versionsOf(item.id))
+  // an account manager may build a post out of media the client has not seen
+  // yet — the approval happens for them when the post goes out
+  const elig = await eligibleFor(user, item, await versionsOf(item.id))
   if (!elig.ok) throw new ComposeError([elig.reason])
 
   const slides = chooseSlides(elig.slides, input.slides)
@@ -412,6 +454,9 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
     const problems = problemsWith({
       item, version: (elig.version as AssetVersion) ?? null,
       slides, caption, accounts, perChannel, scheduledFor,
+      // media this person may post before the client has seen it is not a
+      // problem to hand back to them — the sign-off travels with the post
+      withoutApproval: elig.needsClientApproval,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
@@ -501,7 +546,7 @@ export async function updatePost(
     )
   }
 
-  const elig = eligibility(item, await versionsOf(item.id))
+  const elig = await eligibleFor(user, item, await versionsOf(item.id))
   if (!elig.ok) throw new ComposeError([elig.reason])
 
   const slides = input.slides === undefined ? post.slides : chooseSlides(elig.slides, input.slides)
@@ -519,6 +564,9 @@ export async function updatePost(
     const problems = problemsWith({
       item, version: (elig.version as AssetVersion) ?? null,
       slides, caption, accounts, perChannel, scheduledFor,
+      // media this person may post before the client has seen it is not a
+      // problem to hand back to them — the sign-off travels with the post
+      withoutApproval: elig.needsClientApproval,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
@@ -883,22 +931,52 @@ export async function sendForApproval(
  * themselves. The post records how it was cleared (`approval_mode: 'self'`)
  * and who cleared it, so nobody has to guess later.
  *
- * The client's approval of the MEDIA is untouched — that happens earlier,
- * and only approved media is ever in a post.
+ * The MEDIA's own sign-off travels with it (ruled 5 Sep 2026): a piece still
+ * waiting on a signature is approved without the client here, on the ordinary
+ * workflow edge and recorded against this person, so the two presses that used
+ * to be asked for are one request. A piece still being MADE is not rescued by
+ * anything — there is no edge, and the post refuses with the plain reason.
  */
 export async function scheduleWithoutApproval(
   user: TeamUser, id: string, note?: string,
 ): Promise<PlannedPost> {
-  const { post, item } = await loadPostForUser(user, id)
+  const { post, item: loaded } = await loadPostForUser(user, id)
+  let item = loaded
   assertCompose(user, item)
   if (!mayApprovePost(actingRoles({ id: user.id, role: user.role }, item))) {
     throw new AuthzError('Only an account manager (or the client) can approve the final post', 403)
+  }
+  // the client's own contract, checked before anything is written: on such a
+  // client this path does not exist, for anybody
+  if (await clientSignsOff(item.client_id)) {
+    throw new AuthzError(CLIENT_SIGNS_OFF_REFUSAL, 403)
   }
   if (SETTLED.includes(post.status) || post.status === 'scheduled') {
     throw new AuthzError('This post has already been dealt with', 409)
   }
 
-  const elig = eligibility(item, await versionsOf(item.id))
+  /**
+   * THE MEDIA'S OWN SIGN-OFF, PERFORMED RATHER THAN ASKED FOR.
+   *
+   * A manager posting a piece the client has not signed off used to press
+   * "Approve without client" on the rail first. That press was this: the
+   * ordinary `internal_review → approved_for_scheduling` edge, through
+   * `performTransition`, recorded against them. Nothing is bypassed — the
+   * edge, its role check, the client's policy and the activity line are all
+   * the ones the button went through, and if the piece is somewhere the edge
+   * does not leave from (still being made, changes asked for) the move
+   * refuses and so does the post.
+   */
+  let elig = eligibility(item, await versionsOf(item.id))
+  if (!elig.ok && (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(String(item.status))) {
+    const usable = postingEligibility(item, await versionsOf(item.id), true)
+    if (usable.ok) {
+      item = await performTransition(
+        user, item as never, 'approved_for_scheduling', { note },
+      ) as unknown as ContentItem
+      elig = eligibility(item, await versionsOf(item.id))
+    }
+  }
   if (!elig.ok) throw new ComposeError([elig.reason])
   const accounts = await channelsFor(item.client_id, post.channels)
   const problems = problemsWith({

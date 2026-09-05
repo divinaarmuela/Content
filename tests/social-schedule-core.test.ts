@@ -3,6 +3,8 @@ import {
   eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
+  mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
+  NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE,
   channelBlockReason, coverForSlide, mayEditNote, postTileFacts,
   type SocialPostStatus, type TileJob,
 } from '@/app/lib/social-schedule-core'
@@ -682,6 +684,88 @@ describe('Approve without client', () => {
     expect(approveWithoutClientQuestion(3)).toBe('Approve v3 without the client seeing it?')
     // …and says something true when there is no version number to hand
     expect(approveWithoutClientQuestion(null)).toBe('Approve this without the client seeing it?')
+  })
+})
+
+/* ── posting with no approval step in the way (5 Sep 2026) ───────────────── */
+
+describe('who may post without approval', () => {
+  it('is the account manager and the super admin, by role or by hat', () => {
+    expect(mayPostWithoutApproval('account_manager', false)).toBe(true)
+    expect(mayPostWithoutApproval('super_admin', false)).toBe(true)
+    expect(mayPostWithoutApproval(['editor', 'account_manager'], false)).toBe(true)
+  })
+
+  it('is nobody else — a scheduler still asks', () => {
+    for (const who of ['scheduler', 'editor', 'client', '', null, undefined]) {
+      expect(mayPostWithoutApproval(who, false), String(who)).toBe(false)
+    }
+    expect(mayPostWithoutApproval(['scheduler'], false)).toBe(false)
+  })
+
+  it('is nobody at all on a client who signs every post off', () => {
+    expect(mayPostWithoutApproval('account_manager', true)).toBe(false)
+    expect(mayPostWithoutApproval('super_admin', true)).toBe(false)
+  })
+
+  it('reads the CLIENT row, and only an explicit yes', () => {
+    expect(clientSignsOffEveryPost({ client_approval_required: true })).toBe(true)
+    expect(clientSignsOffEveryPost({ client_approval_required: false })).toBe(false)
+    // unset is the ordinary arrangement, not the exception
+    expect(clientSignsOffEveryPost({})).toBe(false)
+    expect(clientSignsOffEveryPost(null)).toBe(false)
+  })
+
+  it('says its two sentences in plain words', () => {
+    expect(CLIENT_SIGNS_OFF_NOTE).toBe('This client signs off every post.')
+    expect(NOT_CLIENT_APPROVED).toBe('Not yet approved by the client')
+    for (const line of [CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED]) {
+      expect(line.toLowerCase()).not.toContain('graphic')
+    }
+  })
+})
+
+describe('the media a manager may post', () => {
+  const version = { id: 'v1', version_number: 2, files: [img(1), img(2)], file_url: null }
+
+  it('includes work waiting on a signature, marked as not yet approved', () => {
+    for (const status of ['internal_review', 'client_review']) {
+      const r = postingEligibility({ status, content_type: 'carousel' }, [version], true)
+      expect(r.ok, status).toBe(true)
+      if (r.ok) {
+        expect(r.needsClientApproval).toBe(true)
+        expect(r.slides).toHaveLength(2)
+      }
+    }
+  })
+
+  it('leaves approved media exactly as it was — no marker on it', () => {
+    const r = postingEligibility(
+      { status: 'approved_for_scheduling', content_type: 'carousel' }, [version], true)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.needsClientApproval).toBe(false)
+  })
+
+  it('never includes work still being MADE — no edge would take it either', () => {
+    for (const status of [
+      'draft_uploaded', 'revision_required', 'revision_complete',
+      'client_changes_requested', 'published',
+    ]) {
+      expect(postingEligibility({ status, content_type: 'static' }, [version], true).ok, status)
+        .toBe(false)
+    }
+  })
+
+  it('still refuses a piece with no media at all', () => {
+    expect(postingEligibility({ status: 'internal_review' }, [], true))
+      .toEqual({ ok: false, reason: 'No media yet' })
+  })
+
+  it('changes nothing for everybody else', () => {
+    for (const status of ['internal_review', 'client_review']) {
+      expect(postingEligibility({ status, content_type: 'carousel' }, [version], false))
+        .toEqual(eligibility({ status, content_type: 'carousel' }, [version]))
+    }
   })
 })
 

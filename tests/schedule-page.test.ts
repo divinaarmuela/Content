@@ -74,7 +74,8 @@ describe('the media rail filters', () => {
     itemId: 'i1', title: 'A piece', contentType: 'static',
     slides: [], cover: { url: 'u', name: 'n', type: 'image' },
     ok: true, reason: null, used: false, knownUrls: [], coverUrl: null,
-    status: 'approved_for_scheduling', versionNumber: 1, clientApprovalRequired: true,
+    status: 'approved_for_scheduling', versionNumber: 1, clientSignsOff: false,
+    needsClientApproval: false,
     updatedAt: '2026-09-01T00:00:00.000Z',
     ...over,
   })

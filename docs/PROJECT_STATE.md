@@ -124,7 +124,7 @@ Google and Inngest replaced by counters and asserts zero of everything; the
 same harness with the switch on proves the code still works; and a read of the
 source itself fails if a new exported writer appears without the guard.
 
-## Social Schedule — 4 Sep 2026
+## Social Schedule — 5 Sep 2026
 
 **What it is.** `/dashboard/social/schedule` — one client's week, the approved
 media on the left and the hours on the right. A person drags a piece onto a
@@ -157,6 +157,45 @@ then approve, as that person — so the item page, the client portal, the publis
 lock and the activity trail all see an ordinary approved post. The post records
 `approval_mode: 'self'` and who cleared it. A scheduler or an editor gets the
 same refusal they would get for approving.
+
+### One press for an account manager (ruled 5 Sep 2026)
+
+An account manager on the client, and a super admin, post with **no approval
+step in the way**. It used to take two extra presses — "Approve without client"
+on the media, then "Schedule without approval" under the arrow — and both of
+them were the same person answering their own question.
+
+* **The rail and the Add media picker** carry media that is waiting on a
+  signature (`internal_review`, `client_review`) as ordinary, usable media for
+  those two roles: draggable, selectable, with a quiet marker reading
+  "Not yet approved by the client". Everybody else sees exactly what they saw
+  before — greyed, with the plain reason. Work still being MADE
+  (`revision_required` and friends) is never usable by anyone: no workflow edge
+  would take it either.
+* **The post window's primary button** is "Schedule" (or "Post now" when the
+  chosen time is inside the next two minutes); "Send for approval" moves under
+  the arrow. `footerActions` in `schedule-compose-core.ts`.
+* **Behind the scenes nothing is skipped.** `POST /api/social/schedule/[id]/send`
+  with `mode: 'direct'` now also performs the MEDIA's sign-off when the client
+  has not given one: the ordinary `internal_review → approved_for_scheduling`
+  edge through `performTransition`, recorded against that person, then the same
+  send → approve it always did (`approval_mode: 'self'`). One request, one
+  decision, and the activity trail reads exactly as it did when the two buttons
+  were pressed by hand. It stayed `'direct'` rather than growing a
+  `'direct-all'`: the caller's question is "post this", and which approvals that
+  implies is the server's to work out.
+* **The one exception** is a client whose own settings say they sign everything
+  off: `clients.client_approval_required === true` (a new, nullable column —
+  unset is the ordinary arrangement). On such a client everybody keeps the full
+  flow, the button reads "Send for approval" with the line "This client signs
+  off every post.", and the server refuses the short cut in the same words.
+  NOTE: the client's policy is now this CLIENT column, not the per-item
+  `content_items.client_approval_required`, which defaults to true on every
+  piece ever made — reading that one made the exception the rule.
+  `performTransition` enforces the client column on the
+  `→ approved_for_scheduling` edge for every surface.
+* Roles are enforced on the server on every path; showing or hiding a button is
+  presentation only.
 
 **Editing takes the yes back.** Changing the WORDS or the MEDIA of an approved
 post returns it to `pending`: the yes was given to something that no longer

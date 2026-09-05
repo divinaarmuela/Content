@@ -46,8 +46,19 @@ vi.mock('../app/lib/authz', () => {
 vi.mock('../app/lib/mailer', () => ({
   notify: vi.fn(), renderEmail: () => '', escapeHtml: (s: string) => s,
 }))
-vi.mock('../app/lib/workflow', () => ({
-  logActivity: vi.fn(), sanitiseRawAssets: (v: unknown) => (Array.isArray(v) ? v : []),
+/**
+ * The REAL workflow module, deliberately.
+ *
+ * A post an account manager sends straight out performs the media's own
+ * sign-off on the way (`internal_review → approved_for_scheduling`), and a
+ * stubbed `performTransition` would let that pass whatever it was given. The
+ * edge, its role check, the client's policy and the activity line are the
+ * point of the test, so the module runs for real over the fake database;
+ * `mailer`, `production-live` and Drive are the mocks that keep it in the
+ * room.
+ */
+vi.mock('../app/lib/gdrive-mirror', () => ({
+  mirrorLatestVersionSoon: vi.fn(), mirrorVersionSlides: vi.fn(async () => []),
 }))
 vi.mock('../app/lib/production-live', () => ({
   announceItemChange: vi.fn(), announceBatchChange: vi.fn(),
@@ -88,9 +99,14 @@ const IN_THREE_DAYS = () => new Date(Date.now() + 3 * 86_400_000).toISOString()
 
 let fake: ReturnType<typeof seedDb>
 
-function seed(itemPatch: Record<string, unknown> = {}) {
+function seed(
+  itemPatch: Record<string, unknown> = {},
+  clientPatch: Record<string, unknown> = {},
+) {
   return seedDb({
-    clients: [{ id: CLIENT, name: 'Acme', timezone: 'Australia/Melbourne' }] as unknown as Row[],
+    clients: [{
+      id: CLIENT, name: 'Acme', timezone: 'Australia/Melbourne', ...clientPatch,
+    }] as unknown as Row[],
     content_items: [{
       id: ITEM, client_id: CLIENT, title: 'The launch post', status: 'approved_for_scheduling',
       content_type: 'carousel', owner_id: OWNER.id, scheduler_ids: [], caption: 'Hello',
@@ -363,15 +379,23 @@ describe('a planned post, end to end', () => {
   it('refuses an item the client has not signed off, in that person’s own words', async () => {
     fake.restore()
     fake = seed({ status: 'client_review' })
-    // the account manager can SEE an item still with the client; a scheduler
-    // cannot see it at all, which is a different (older) refusal
+    // the account manager may build on it — the sign-off travels with the post
+    // (ruled 5 Sep 2026); a scheduler cannot see it at all, which is a
+    // different (older) refusal
+    as(AM)
+    expect((await create()).status).toBe(200)
+
+    as(SCHEDULER)
+    expect((await create()).status).toBe(404)
+  })
+
+  it('…and refuses even the manager on a client who signs every post off', async () => {
+    fake.restore()
+    fake = seed({ status: 'client_review' }, { client_approval_required: true })
     as(AM)
     const made = await create()
     expect(made.status).toBe(400)
     expect(made.body.error).toBe('Still with the client')
-
-    as(SCHEDULER)
-    expect((await create()).status).toBe(404)
     expect(fake.rows('social_posts')).toHaveLength(0)
   })
 })
@@ -417,6 +441,100 @@ describe('schedule without approval', () => {
     const id = (await create()).body.post.id as string
     await post(id)
     expect(row(id).approval_mode).toBe('client')
+  })
+})
+
+/* ── one press, no approval step (ruled 5 Sep 2026) ───────────────── */
+
+describe('an account manager posts media the client has not signed off', () => {
+  /** the ordinary case: the work is finished and waiting on the manager's own
+   *  check, and the item's own flag says the client normally sees it */
+  const waiting = () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review', client_approval_required: true })
+  }
+
+  it('does the media sign-off and the post approval in ONE request', async () => {
+    waiting()
+    as(AM)
+    const made = await create()
+    expect(made.status).toBe(200)
+    const id = made.body.post.id as string
+
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.status).toBe('scheduled')
+    expect(direct.body.post.approval_mode).toBe('self')
+    expect(direct.body.post.approved_by).toBe(AM.id)
+
+    // the MEDIA went the ordinary way: the item moved on the workflow edge…
+    const item = fake.rows('content_items')[0] as any
+    expect(item.status).toBe('approved_for_scheduling')
+    // …and the post's own approval is the ordinary one on top of it
+    expect(item.posting_approval_state).toBe('approved')
+    expect(jobs()).toHaveLength(1)
+  })
+
+  it('…and records WHO signed the media off, on the ordinary activity trail', async () => {
+    waiting()
+    as(AM)
+    const id = (await create()).body.post.id as string
+    await post(id, { mode: 'direct' })
+
+    const line = (fake.rows('workflow_activity') as any[]).find(
+      a => a.entity_id === ITEM && a.new_value === 'approved_for_scheduling')
+    expect(line).toBeTruthy()
+    expect(line.actor_id).toBe(AM.id)
+    expect(line.old_value).toBe('internal_review')
+  })
+
+  it('refuses a scheduler the same way approving would', async () => {
+    waiting()
+    // on a draft an account manager left behind — a scheduler cannot even see
+    // a piece still in internal review, so this is the only way they reach one
+    as(AM)
+    const id = (await create()).body.post.id as string
+    as(SCHEDULER)
+    const direct = await post(id, { mode: 'direct' })
+    // a piece still in internal review is not even theirs to look at, so the
+    // refusal arrives one door earlier than the approval check — either way
+    // nothing moved
+    expect(direct.status).toBe(404)
+    expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
+    expect(jobs()).toHaveLength(0)
+
+    // …and on a piece they CAN see, the refusal is the approval one, unchanged
+    fake.restore()
+    fake = seed()
+    as(AM)
+    const visible = (await create()).body.post.id as string
+    as(SCHEDULER)
+    const refused = await post(visible, { mode: 'direct' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error)
+      .toBe('Only an account manager (or the client) can approve the final post')
+  })
+
+  it('refuses everybody on a client who signs every post off, in plain words', async () => {
+    fake.restore()
+    fake = seed({}, { client_approval_required: true })
+    as(AM)
+    const id = (await create()).body.post.id as string
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(403)
+    expect(direct.body.error).toBe('This client signs off every post — send it for approval')
+    expect(jobs()).toHaveLength(0)
+    // nothing was written on the way to the refusal
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBeFalsy()
+  })
+
+  it('will not rescue a piece that is still being MADE — no edge takes it', async () => {
+    fake.restore()
+    fake = seed({ status: 'revision_required' })
+    as(AM)
+    const made = await create()
+    expect(made.status).toBe(400)
+    expect((fake.rows('content_items')[0] as any).status).toBe('revision_required')
   })
 })
 

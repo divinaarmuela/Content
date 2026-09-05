@@ -34,6 +34,8 @@ import {
 } from './brief-task-core'
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
+// pure, no I/O — the one question "does this client sign every post off"
+import { clientSignsOffEveryPost } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
 import type { Slide } from './version-files-core'
 
@@ -487,17 +489,29 @@ export async function performTransition(
    * `presentTransitions` hides the `→ approved_for_scheduling` edge on every
    * status except `client_review` when the item requires the client's
    * sign-off — but only on the item page, and only by not drawing a button.
-   * Any other surface reaching this function (the Schedule rail's "Approve
-   * without client") got a different answer to the same question, which is a
-   * client policy that holds on one screen and not on another.
+   * Any other surface reaching this function got a different answer to the
+   * same question, which is a client policy that holds on one screen and not
+   * on another.
+   *
+   * WHOSE POLICY IT IS (ruled 5 Sep 2026). It is the CLIENT'S:
+   * `clients.client_approval_required`, and only when it is explicitly true.
+   * This used to read the ITEM's column of the same name, which defaults to
+   * true on every piece ever made — so an account manager could not sign off
+   * their own client's work without first sending it to a client the agency
+   * never agreed to send it to. The item column still routes work through
+   * `client_review` in the ordinary way; what it no longer does is speak for
+   * the client's contract.
    *
    * The system's own moves are exempt: those are the provider reporting what
    * has already happened, not somebody deciding to skip the client.
    */
-  if (!system && to === 'approved_for_scheduling' && from !== 'client_review'
-    && (item as { client_approval_required?: boolean }).client_approval_required !== false) {
-    throw new AuthzError(
-      'This client signs their work off themselves — send it to them first', 403)
+  if (!system && to === 'approved_for_scheduling' && from !== 'client_review') {
+    const client = await table<{ id: string; client_approval_required?: unknown }>('clients')
+      .get(item.client_id).catch(() => null)
+    if (clientSignsOffEveryPost(client)) {
+      throw new AuthzError(
+        'This client signs their work off themselves — send it to them first', 403)
+    }
   }
 
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
