@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ChevronDown, ChevronUp, Copy, Eye, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  ChevronDown, ChevronUp, Copy, Eye, FileScan, GripVertical, Pencil, Plus, Trash2, X,
+} from 'lucide-react'
 import { archivo, sometype } from '@/app/components/lama/fonts'
 import {
   BLOCK_TYPES, duplicateSection, moveItem,
@@ -15,6 +17,7 @@ import {
 import {
   GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock,
 } from '@/app/intake/[token]/blocks'
+import IntakeScanDialog, { type ScanDraft } from './IntakeScanDialog'
 
 /**
  * Edit one form's questions.
@@ -67,6 +70,10 @@ export default function IntakeEditor({
    * string is held here and parsed on blur.
    */
   const [optionsDraft, setOptionsDraft] = useState<Record<string, string>>({})
+  /** open state of the "create from a document" dialog, and what came back from
+   *  it — the banner and the quiet markers, until the person dismisses them */
+  const [scanOpen, setScanOpen] = useState(false)
+  const [scanned, setScanned] = useState<{ notes: string[]; uncertain: Set<string> } | null>(null)
 
   const setSections = (sections: Section[]) => setDraft({ ...draft, sections })
   const patchSection = (si: number, patch: Partial<Section>) =>
@@ -93,6 +100,18 @@ export default function IntakeEditor({
 
   const questionCount = draft.sections.flatMap(s => s.blocks).filter(b => b.type !== 'guidance').length
 
+  /**
+   * Take the draft the document produced. In memory only — this is the review
+   * step, and the existing Save button is still the only thing that writes.
+   */
+  const applyDraft = (result: ScanDraft, mode: 'replace' | 'append') => {
+    setDraft(mode === 'append'
+      ? { ...draft, sections: [...draft.sections, ...result.definition.sections] }
+      : { ...draft, name: result.definition.name || draft.name, sections: result.definition.sections })
+    setScanned({ notes: result.notes, uncertain: new Set(result.uncertain) })
+    setPreview(false)
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* ── sticky toolbar, so Save is never a scroll away ── */}
@@ -106,6 +125,9 @@ export default function IntakeEditor({
           </p>
         </div>
         <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setScanOpen(true)} disabled={saving}>
+            <FileScan className="mr-1.5 h-3.5 w-3.5" /> Create from a document
+          </Button>
           <Button size="sm" variant="secondary" onClick={() => setPreview(!preview)}>
             {preview
               ? <><Pencil className="mr-1.5 h-3.5 w-3.5" /> Keep editing</>
@@ -117,6 +139,45 @@ export default function IntakeEditor({
           </Button>
         </div>
       </div>
+
+      <IntakeScanDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        templateKey={draft.key}
+        hasQuestions={draft.sections.some(s => s.blocks.length > 0)}
+        onDrafted={applyDraft}
+      />
+
+      {scanned && (
+        <div className="flex items-start gap-3 rounded-inner border border-primary/40 bg-primary/5 p-4"
+          role="status">
+          <div className="min-w-0 flex-1">
+            <p className="text-body-15 font-medium">
+              Drafted from your document. Check it before you save.
+            </p>
+            <p className="text-secondary-13 text-muted-foreground">
+              Nothing has been saved yet, and your document was not kept. Edit, reorder
+              or delete anything, then press Save.
+            </p>
+            {scanned.notes.length > 0 && (
+              <ul className="mt-2 list-disc pl-4 text-secondary-13 text-muted-foreground">
+                {scanned.notes.map((note, i) => <li key={i}>{note}</li>)}
+              </ul>
+            )}
+            {scanned.uncertain.size > 0 && (
+              <p className="mt-2 text-secondary-13 text-muted-foreground">
+                {scanned.uncertain.size === 1
+                  ? 'One question is marked "check this one" — we were not sure about it.'
+                  : `${scanned.uncertain.size} questions are marked "check this one" — we were not sure about them.`}
+              </p>
+            )}
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Dismiss this note"
+            onClick={() => setScanned(null)}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       {preview ? <Preview definition={draft} /> : (
         <>
@@ -233,6 +294,12 @@ export default function IntakeEditor({
                             ))}
                           </SelectContent>
                         </Select>
+                        {block.id && scanned?.uncertain.has(block.id) && (
+                          <span className="rounded-tile bg-muted px-2 py-1 text-secondary-13 text-muted-foreground"
+                            title="Drafted from your document — we were not sure about this one">
+                            Check this one
+                          </span>
+                        )}
                       </div>
 
                       {block.type !== 'guidance' && (
