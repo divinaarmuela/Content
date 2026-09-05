@@ -307,6 +307,8 @@ export default function SchedulePage() {
       knownUrls: media?.knownUrls ?? [],
       coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
+      needsClientApproval: media?.needsClientApproval ?? false,
+      itemStatus: media?.status ?? 'approved_for_scheduling',
       post,
       at: composing.at,
     }

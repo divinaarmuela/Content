@@ -68,27 +68,56 @@ export type ScheduleJob = { status?: string | null }
 /** The two statuses that mean the client has signed the WORK off. */
 const ELIGIBLE_STATUSES: ItemStatus[] = ['approved_for_scheduling', 'scheduled']
 
+/**
+ * THE PIECE IS IN FRONT OF THE CLIENT RIGHT NOW.
+ *
+ * A different sentence from "Not yet approved by the client", and it has to
+ * stay different: one means the client has not been asked yet and the manager
+ * may decide for them, the other means the client is looking at it as we
+ * speak. Posting that one from under them is the mistake this whole page is
+ * arranged to make impossible in one press.
+ */
+export const WITH_THE_CLIENT_NOW = 'With the client now'
+
 /** Why an item cannot start a post — said the way a person would say it. */
 const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
   draft_uploaded: 'Still being made',
   internal_review: 'Still being made',
   revision_required: 'Changes in progress',
   revision_complete: 'Changes in progress',
-  client_review: 'Still with the client',
+  client_review: WITH_THE_CLIENT_NOW,
   client_changes_requested: 'Changes in progress',
   published: 'Already posted',
 }
 
 /**
- * The statuses "Approve without client" can rescue a piece from.
+ * The statuses ONE PRESS may carry a piece out of.
  *
- * Both are waits on a person, not on work: `internal_review` is waiting for
- * the manager's own check and `client_review` is waiting for the client to
- * answer. Neither is a piece that is still being made, and neither is one the
- * client has already changed their mind about — those need the work doing,
- * not a signature.
+ * `internal_review` only: that wait is the manager's own check, and the whole
+ * ruling is that they should not have to press a button to tell themselves
+ * what they already decided.
+ *
+ * `client_review` was in this list until 6 Sep 2026 and must not come back.
+ * A piece there is in front of the client AT THIS MOMENT — it showed up in
+ * the rail as ordinary usable media, and one press took it off the client's
+ * screen and put it on their Instagram, with nothing asked in between. That
+ * case keeps the flow it always had: the explicit "Approve without client"
+ * press, and the question that goes with it
+ * (`APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES`).
  */
-export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review', 'client_review']
+export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review']
+
+/**
+ * …and the statuses the DELIBERATE two-press "Approve without client" still
+ * covers, which is the pair it always covered.
+ *
+ * The difference between the two lists is a question: this one is only ever
+ * reached through a button somebody chose to press and a dialog that names
+ * the version, so skipping a client who is mid-review is a decision rather
+ * than a slip of the hand.
+ */
+export const APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES: ItemStatus[] =
+  ['internal_review', 'client_review']
 
 /* ── posting with no approval steps in the way (ruled 5 Sep 2026) ───────── */
 
@@ -145,6 +174,18 @@ export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 export const CLIENT_SIGNS_OFF_REFUSAL =
   'This client signs off every post — send it for approval'
 
+/**
+ * …and what is said when we could not READ the client's settings at all.
+ *
+ * The gate exists for the one client whose contract says they see every post
+ * first. "We could not check, so go ahead" is the wrong answer to that: a
+ * dropped connection must not be able to post a client's work without them.
+ * So the read failing is a refusal, in words that say it is our fault and
+ * that trying again is the thing to do.
+ */
+export const CLIENT_POLICY_UNREADABLE =
+  'We could not check this client’s approval settings just now — try again in a moment'
+
 /** The quiet marker on media a manager may use before the client has seen it. */
 export const NOT_CLIENT_APPROVED = 'Not yet approved by the client'
 
@@ -168,6 +209,9 @@ export function mayApproveWithoutClient(
    * `internal_review`. `performTransition` makes that true rather than
    * presentation here.
    *
+   * This is the DELIBERATE two-press path, so both waits are offered on it —
+   * the one-press path is a shorter list (`APPROVE_WITHOUT_CLIENT_STATUSES`).
+   *
    * Until 5 Sep 2026 this read the ITEM's `client_approval_required`, which
    * defaults to true on every piece — so the ordinary case looked like the
    * exception, and a manager had to send work to a client the agency never
@@ -177,7 +221,7 @@ export function mayApproveWithoutClient(
 ): boolean {
   if (role !== 'account_manager' && role !== 'super_admin') return false
   const from = String(status ?? '')
-  if (!(APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(from)) return false
+  if (!(APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES as string[]).includes(from)) return false
   // from `client_review` the client HAS been asked; skipping the wait is the
   // manager's call either way
   return from === 'client_review' || clientApprovalRequired === false
@@ -241,12 +285,15 @@ export function eligibility(
  * The same question, asked for somebody who may post without approval.
  *
  * For an account manager or a super admin (and never on a client who signs
- * every post off) a piece waiting on a signature is usable media: the work is
- * finished, the only thing missing is the press this person was going to make
- * anyway. Both waits qualify — `internal_review` (their own check) and
- * `client_review` (the client's answer) — which is exactly the pair
- * "Approve without client" could already rescue a piece from, so the audit
- * trail the app writes for them is the ordinary one.
+ * every post off) a piece waiting on THEIR OWN check is usable media: the
+ * work is finished, the only thing missing is the press this person was going
+ * to make anyway.
+ *
+ * ONE wait qualifies — `internal_review`. A piece at `client_review` is in
+ * front of the client right now and stays unusable here, however senior the
+ * person looking at it: taking it off their screen is a decision, and a
+ * decision is made through the "Approve without client" button and its
+ * question, never by a tile that looks like every other tile.
  *
  * A piece still being MADE is never usable: `revision_required` and the rest
  * need work doing, not a signature, and no edge would take them either.

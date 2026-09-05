@@ -35,7 +35,7 @@ import {
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
 // pure, no I/O — the one question "does this client sign every post off"
-import { clientSignsOffEveryPost } from './social-schedule-core'
+import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
 import type { Slide } from './version-files-core'
 
@@ -506,8 +506,24 @@ export async function performTransition(
    * has already happened, not somebody deciding to skip the client.
    */
   if (!system && to === 'approved_for_scheduling' && from !== 'client_review') {
-    const client = await table<{ id: string; client_approval_required?: unknown }>('clients')
-      .get(item.client_id).catch(() => null)
+    /**
+     * AND IT FAILS CLOSED.
+     *
+     * This read used to end in `.catch(() => null)`, which made a dropped
+     * connection say "the ordinary arrangement" — i.e. go ahead. The whole
+     * job of this gate is the one client who insisted on signing every post
+     * off, so "we could not check" has to mean no, said in a sentence that
+     * blames us and invites another go. A client row that is genuinely
+     * ABSENT is a different answer: there is no policy to honour, and every
+     * other gate still applies.
+     */
+    let client: { id: string; client_approval_required?: unknown } | null
+    try {
+      client = await table<{ id: string; client_approval_required?: unknown }>('clients')
+        .get(item.client_id)
+    } catch {
+      throw new AuthzError(CLIENT_POLICY_UNREADABLE, 503)
+    }
     if (clientSignsOffEveryPost(client)) {
       throw new AuthzError(
         'This client signs their work off themselves — send it to them first', 403)
@@ -613,9 +629,21 @@ export async function performTransition(
 
   // approvals history for the decisions that matter
   if (!system && (to === 'approved_for_scheduling' || to === 'client_changes_requested')) {
+    /**
+     * WHO ACTUALLY GAVE THIS APPROVAL.
+     *
+     * The actor, and nothing else. This line used to read
+     * `from === 'client_review' ? 'client' : 'internal'` as well, which was a
+     * fair inference for as long as only a client could cause that move — and
+     * became a lie the day an account manager could make it too. It filed the
+     * manager's own decision in the `approvals` table under the client's name,
+     * so a client asking "who approved this?" was answered with themselves.
+     *
+     * An approval record is a record of a person. Infer nothing.
+     */
     await table('approvals').insert({
       item_id: item.id,
-      approval_type: actor.role === 'client' ? 'client' : from === 'client_review' ? 'client' : 'internal',
+      approval_type: actor.role === 'client' ? 'client' : 'internal',
       decided_by: actor.id,
       decision: to === 'approved_for_scheduling' ? 'approved' : 'changes_requested',
     })

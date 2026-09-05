@@ -77,6 +77,8 @@ const channelOptions = await import('../app/api/social/schedule/options/route')
 const approval = await import('../app/api/production/items/[id]/posting-approval/route')
 const adhoc = await import('../app/api/social/publish/route')
 const lib = await import('../app/lib/social-schedule')
+const transition = await import('../app/api/production/items/[id]/transition/route')
+const clientApproval = await import('../app/api/clients/[id]/approval/route')
 
 /* ── the cast ───────────────────────────────────────────────────────────── */
 
@@ -174,6 +176,20 @@ function failWritesNaming(needle: string) {
   globalThis.fetch = (async (input: any, init: any = {}) => {
     if ((init?.method ?? 'GET').toUpperCase() !== 'GET'
       && typeof init?.body === 'string' && init.body.includes(needle)) {
+      throw new TypeError('fetch failed')
+    }
+    return inner(input, init)
+  }) as typeof globalThis.fetch
+  return () => { globalThis.fetch = inner }
+}
+
+/** Make every READ of a path containing `needle` fail the way a dropped
+ *  connection does. Returns the undo. */
+function failReadsNaming(needle: string) {
+  const inner = globalThis.fetch
+  globalThis.fetch = (async (input: any, init: any = {}) => {
+    const url = typeof input === 'string' ? input : String(input?.url ?? '')
+    if ((init?.method ?? 'GET').toUpperCase() === 'GET' && url.includes(needle)) {
       throw new TypeError('fetch failed')
     }
     return inner(input, init)
@@ -376,26 +392,36 @@ describe('a planned post, end to end', () => {
     expect(fake.rows('social_posts')).toHaveLength(0)
   })
 
-  it('refuses an item the client has not signed off, in that person’s own words', async () => {
+  /**
+   * A PIECE THE CLIENT IS LOOKING AT RIGHT NOW IS NOT MEDIA TO POST WITH.
+   *
+   * For one day it was: `client_review` sat in the one-press set, so the
+   * manager's rail offered it as ordinary usable media and one press took it
+   * off the client's screen. Not even the account manager builds a post on it
+   * now — the "Approve without client" button, and the question it asks, is
+   * the only way past a review that is happening.
+   */
+  it('refuses a piece the client is looking at right now — for everybody', async () => {
     fake.restore()
     fake = seed({ status: 'client_review' })
-    // the account manager may build on it — the sign-off travels with the post
-    // (ruled 5 Sep 2026); a scheduler cannot see it at all, which is a
-    // different (older) refusal
     as(AM)
-    expect((await create()).status).toBe(200)
+    const made = await create()
+    expect(made.status).toBe(400)
+    expect(made.body.error).toBe('With the client now')
+    expect(fake.rows('social_posts')).toHaveLength(0)
 
+    // …and a scheduler cannot see it at all, which is a different (older) refusal
     as(SCHEDULER)
     expect((await create()).status).toBe(404)
   })
 
-  it('…and refuses even the manager on a client who signs every post off', async () => {
+  it('…and says the same on a client who signs every post off', async () => {
     fake.restore()
     fake = seed({ status: 'client_review' }, { client_approval_required: true })
     as(AM)
     const made = await create()
     expect(made.status).toBe(400)
-    expect(made.body.error).toBe('Still with the client')
+    expect(made.body.error).toBe('With the client now')
     expect(fake.rows('social_posts')).toHaveLength(0)
   })
 })
@@ -1167,5 +1193,235 @@ describe('listing a week', () => {
     // proved access need not invent one; every ROUTE passes it
     const all = await lib.listPosts({ clientId: CLIENT })
     expect(all.map(p => p.id)).toEqual([hidden])
+  })
+})
+
+
+/* ── whose approval it actually was ─────────────────────── */
+
+/**
+ * THE HONESTY FIXES (reviewed 6 Sep 2026, all live at the time).
+ *
+ * Separate faults, one theme: the app said things about a client's sign-off
+ * that were not true. Each test here fails without its fix.
+ */
+describe('an approval says who really gave it', () => {
+  const approvalRows = () => fake.rows('approvals') as any[]
+
+  const move = (to: string) => json(transition.POST(
+    new Request('https://x.test/transition', {
+      method: 'POST', body: JSON.stringify({ to }),
+    }),
+    params(ITEM),
+  ))
+
+  /**
+   * C1a. `approval_type` used to be `from === 'client_review' ? 'client'` —
+   * a fair inference while only a client could make that move, and a lie the
+   * day a manager could too. It filed the manager's own decision under the
+   * client's name, so a client asking "who approved this?" was told: you did.
+   */
+  it('files a manager\u2019s own sign-off as INTERNAL, never as the client\u2019s', async () => {
+    fake.restore()
+    fake = seed({ status: 'client_review' })
+    as(AM)
+    const done = await move('approved_for_scheduling')
+    expect(done.status).toBe(200)
+    const written = approvalRows().filter(a => a.item_id === ITEM)
+    expect(written).toHaveLength(1)
+    expect(written[0].approval_type).toBe('internal')
+    expect(written[0].decided_by).toBe(AM.id)
+  })
+
+  it('\u2026and still files the client\u2019s own approval as the client\u2019s', async () => {
+    fake.restore()
+    fake = seed({ status: 'client_review' })
+    as({ id: 'u-client', role: 'client', email: 'them@x.invalid', name: 'Bo', clerk_user_id: null, client_id: CLIENT } as never)
+    const done = await move('approved_for_scheduling')
+    expect(done.status).toBe(200)
+    expect(approvalRows()[0].approval_type).toBe('client')
+  })
+
+  /**
+   * M1. The workflow-level guard — the one that binds every surface, not just
+   * the Schedule page — had no test at all, with the flag set or unset.
+   */
+  it('refuses the manager\u2019s own sign-off on a client who signs every post off', async () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review' }, { client_approval_required: true })
+    as(AM)
+    const refused = await move('approved_for_scheduling')
+    expect(refused.status).toBe(403)
+    expect(refused.body.error)
+      .toBe('This client signs their work off themselves \u2014 send it to them first')
+    expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
+    expect(approvalRows()).toHaveLength(0)
+  })
+
+  it('\u2026and allows it on an ordinary client, with the flag unset', async () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review' })
+    as(AM)
+    const done = await move('approved_for_scheduling')
+    expect(done.status).toBe(200)
+    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
+    expect(approvalRows()[0].approval_type).toBe('internal')
+  })
+
+  /**
+   * I2. The policy read ended in `.catch(() => null)`, so a dropped connection
+   * answered "the ordinary arrangement" — i.e. go ahead — to the one question
+   * protecting the one client who insisted on seeing every post.
+   */
+  it('REFUSES rather than assumes when the client row cannot be read', async () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review' })
+    as(AM)
+    const undo = failReadsNaming('/clients/')
+    try {
+      const refused = await move('approved_for_scheduling')
+      expect(refused.status).toBe(503)
+      expect(refused.body.error).toContain('could not check')
+      expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
+    } finally {
+      undo()
+    }
+  })
+
+  it('\u2026and the Schedule page\u2019s own path refuses too', async () => {
+    fake.restore()
+    fake = seed({ status: 'approved_for_scheduling' })
+    as(AM)
+    const id = (await create()).body.post.id as string
+    const undo = failReadsNaming('/clients/')
+    try {
+      const refused = await post(id, { mode: 'direct' })
+      expect(refused.status).toBe(503)
+      expect(refused.body.error).toContain('could not check')
+      expect(jobs()).toHaveLength(0)
+    } finally {
+      undo()
+    }
+  })
+
+  /**
+   * I3. `performTransition` used to run BEFORE the composition was checked, so
+   * a caption one letter too long left the media signed off in the manager's
+   * name and the team emailed, with no post — and the person, looking at an
+   * error, believed nothing had happened.
+   */
+  it('a post that cannot be composed leaves the media UNSIGNED and nobody emailed', async () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review' })
+    as(AM)
+    const id = (await create()).body.post.id as string
+    // the channel goes away between the window opening and the press — the
+    // ordinary shape of this failure, and the one the reviewer described
+    await table('social_accounts').remove('acc-1')
+
+    const refused = await post(id, { mode: 'direct' })
+    expect(refused.status).toBe(400)
+    // the item never moved, so there is no approval, no activity line and no
+    // fan-out to undo
+    const item = fake.rows('content_items')[0] as any
+    expect(item.status).toBe('internal_review')
+    expect(item.posting_approval_state).toBeFalsy()
+    expect(approvalRows()).toHaveLength(0)
+    expect((fake.rows('workflow_activity') as any[]).filter(
+      a => a.entity_id === ITEM && a.new_value === 'approved_for_scheduling')).toHaveLength(0)
+    expect(jobs()).toHaveLength(0)
+  })
+})
+
+/* ── "Post now" posts now ────────────────────────────── */
+
+describe('the time a post is handed over with', () => {
+  /**
+   * I4. The button says "Post now"; the job carried a `scheduledFor` that had
+   * usually gone by the time the provider saw it. `buildPostBody` sends
+   * `publishNow: true` for a job with no time on it, so the honest thing is to
+   * send no time.
+   */
+  it('sends NO time for a post whose time is now, so the provider publishes it', async () => {
+    as(AM)
+    const soon = new Date(Date.now() + 60_000).toISOString()
+    const id = (await create({ scheduled_for: soon })).body.post.id as string
+    const sent = await post(id, { mode: 'direct' })
+    expect(sent.status).toBe(200)
+    expect(jobs()).toHaveLength(1)
+    // the row carries no time at all, so `buildPostBody` sends publishNow
+    expect(jobs()[0].scheduled_for).toBeFalsy()
+  })
+
+  it('\u2026and keeps the time on a post booked for a real date', async () => {
+    as(AM)
+    const later = IN_THREE_DAYS()
+    const id = (await create({ scheduled_for: later })).body.post.id as string
+    await post(id, { mode: 'direct' })
+    expect(jobs()).toHaveLength(1)
+    expect(jobs()[0].scheduled_for).toBe(later)
+  })
+})
+
+/* ── the switch the exception needs (I1) ──────────────────── */
+
+/**
+ * The column both server gates read was written by NOTHING: the owner's one
+ * carve-out could only be armed by hand-editing the database, so a client
+ * whose agreement said they see every post first was a client anybody could
+ * post without.
+ */
+describe('the client\u2019s own "signs off every post" switch', () => {
+  const read = () => json(clientApproval.GET(
+    new Request('https://x.test/approval'), params(CLIENT)))
+  const write = (body: unknown) => json(clientApproval.PUT(
+    new Request('https://x.test/approval', { method: 'PUT', body: JSON.stringify(body) }),
+    params(CLIENT),
+  ))
+
+  it('turns the exception ON, and the gates follow it in the same breath', async () => {
+    fake.restore()
+    fake = seed({ status: 'internal_review' })
+    as(AM)
+    expect((await read()).body.client_approval_required).toBe(false)
+
+    const saved = await write({ on: true })
+    expect(saved.status).toBe(200)
+    expect(saved.body.client_approval_required).toBe(true)
+    expect((fake.rows('clients')[0] as any).client_approval_required).toBe(true)
+
+    // …and now nobody takes the short cut on this client
+    const refused = await json(transition.POST(
+      new Request('https://x.test/transition', {
+        method: 'POST', body: JSON.stringify({ to: 'approved_for_scheduling' }),
+      }), params(ITEM)))
+    expect(refused.status).toBe(403)
+  })
+
+  it('turns it off again', async () => {
+    as(AM)
+    await write({ on: true })
+    const off = await write({ on: false })
+    expect(off.body.client_approval_required).toBe(false)
+  })
+
+  it('a scheduler may READ the arrangement and may not decide it', async () => {
+    as(SCHEDULER)
+    expect((await read()).status).toBe(200)
+    const refused = await write({ on: true })
+    expect(refused.status).toBe(403)
+    expect((fake.rows('clients')[0] as any).client_approval_required).toBeFalsy()
+  })
+
+  it('refuses somebody who is not on this client at all', async () => {
+    as(STRANGER)
+    expect((await write({ on: true })).status).toBe(403)
+  })
+
+  it('wants a yes or a no, not a guess', async () => {
+    as(AM)
+    const refused = await write({ on: 'yes' })
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toBe('Say whether it is on or off')
   })
 })

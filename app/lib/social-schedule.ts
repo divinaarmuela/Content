@@ -24,11 +24,12 @@ import {
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
 } from './publish-core'
 import {
-  optionsFromExtras, readChannelExtras, type ChannelExtras,
+  isPostingNow, optionsFromExtras, readChannelExtras, type ChannelExtras,
 } from './schedule-compose-core'
 import {
-  applySlideLimit, APPROVE_WITHOUT_CLIENT_STATUSES, canReschedule, channelBlockReason,
-  CLIENT_SIGNS_OFF_REFUSAL, clientSignsOffEveryPost, coverForSlide, eligibility,
+  applySlideLimit, canReschedule, channelBlockReason,
+  CLIENT_POLICY_UNREADABLE, CLIENT_SIGNS_OFF_REFUSAL, clientSignsOffEveryPost,
+  coverForSlide, eligibility,
   mayEditNote, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
@@ -175,11 +176,24 @@ async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<bo
   )
 }
 
-/** `clients.client_approval_required`, explicitly true. A client we cannot
- *  read is treated as the ordinary arrangement — the same answer the row's
- *  absent column gives, and the post is still gated on everything else. */
+/**
+ * `clients.client_approval_required`, explicitly true — AND IT FAILS CLOSED.
+ *
+ * A client we cannot READ used to be treated as the ordinary arrangement,
+ * which meant a dropped connection answered "go ahead" to the one question
+ * protecting the one client who insisted on seeing every post first. So a
+ * read that throws is a refusal, in a sentence that says it is our fault.
+ *
+ * A client row that is genuinely ABSENT is a different answer: there is no
+ * policy on file to honour, and every other gate still applies.
+ */
 async function clientSignsOff(clientId: string): Promise<boolean> {
-  const client = await table<Client>('clients').get(clientId).catch(() => null)
+  let client: Client | null
+  try {
+    client = await table<Client>('clients').get(clientId)
+  } catch {
+    throw new AuthzError(CLIENT_POLICY_UNREADABLE, 503)
+  }
   return clientSignsOffEveryPost(client)
 }
 
@@ -956,6 +970,34 @@ export async function scheduleWithoutApproval(
   }
 
   /**
+   * EVERYTHING THAT CAN REFUSE, BEFORE ANYTHING IS WRITTEN.
+   *
+   * The order here is the whole point. The media's own sign-off used to run
+   * FIRST — a real transition, an activity line, an `approvals` row and a
+   * notification fan-out — and only then was the composition checked. So a
+   * caption one letter too long for LinkedIn, or a channel list that had
+   * emptied since the window opened, left the piece signed off in the
+   * manager's name, the team emailed, and no post: the person pressed
+   * Schedule, saw an error, and reasonably believed nothing had happened.
+   *
+   * Judged with this person's own rights (`withoutApproval`), so "waiting on
+   * your check" is not handed back to them as a problem — it is the thing
+   * they are about to fix.
+   */
+  const versions = await versionsOf(item.id)
+  const usable = postingEligibility(item, versions, true)
+  if (!usable.ok) throw new ComposeError([usable.reason])
+
+  const accounts = await channelsFor(item.client_id, post.channels)
+  const problems = problemsWith({
+    item, version: (usable.version as AssetVersion) ?? null,
+    slides: post.slides, caption: String(post.caption ?? ''), accounts,
+    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
+    withoutApproval: true,
+  })
+  if (problems.length > 0) throw new ComposeError(problems)
+
+  /**
    * THE MEDIA'S OWN SIGN-OFF, PERFORMED RATHER THAN ASKED FOR.
    *
    * A manager posting a piece the client has not signed off used to press
@@ -963,28 +1005,17 @@ export async function scheduleWithoutApproval(
    * ordinary `internal_review → approved_for_scheduling` edge, through
    * `performTransition`, recorded against them. Nothing is bypassed — the
    * edge, its role check, the client's policy and the activity line are all
-   * the ones the button went through, and if the piece is somewhere the edge
-   * does not leave from (still being made, changes asked for) the move
-   * refuses and so does the post.
+   * the ones the button went through.
+   *
+   * A piece the client is looking at RIGHT NOW never arrives here: it is not
+   * usable media on this path at all (`APPROVE_WITHOUT_CLIENT_STATUSES`), so
+   * the check above has already refused it with "With the client now".
    */
-  let elig = eligibility(item, await versionsOf(item.id))
-  if (!elig.ok && (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(String(item.status))) {
-    const usable = postingEligibility(item, await versionsOf(item.id), true)
-    if (usable.ok) {
-      item = await performTransition(
-        user, item as never, 'approved_for_scheduling', { note },
-      ) as unknown as ContentItem
-      elig = eligibility(item, await versionsOf(item.id))
-    }
+  if (usable.needsClientApproval) {
+    item = await performTransition(
+      user, item as never, 'approved_for_scheduling', { note },
+    ) as unknown as ContentItem
   }
-  if (!elig.ok) throw new ComposeError([elig.reason])
-  const accounts = await channelsFor(item.client_id, post.channels)
-  const problems = problemsWith({
-    item, version: (elig.version as AssetVersion) ?? null,
-    slides: post.slides, caption: String(post.caption ?? ''), accounts,
-    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
-  })
-  if (problems.length > 0) throw new ComposeError(problems)
 
   // the ask — written and logged, but nobody is emailed to answer a question
   // that is being answered in the same breath
@@ -1146,13 +1177,28 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
     throw new AuthzError('This post is already on its way out — refresh to see where it got to', 409)
   }
 
+  /**
+   * "POST NOW" HAS TO POST NOW.
+   *
+   * The composer labels the button "Post now" when the chosen time is within
+   * two minutes, and the "Post now" menu item books a post for a minute's
+   * time. Both then handed the provider a `scheduledFor` — a time that has
+   * usually gone by the time the job is picked up — instead of saying
+   * "publish". `buildPostBody` sends `publishNow: true` for a job with no
+   * time on it, so the honest thing is to send no time.
+   *
+   * Only for a time that is genuinely NOW: a post booked for Thursday keeps
+   * its Thursday, held by the provider's own scheduler exactly as before.
+   */
+  const rightNow = isPostingNow(post.scheduled_for, Date.now())
+
   const queued = await queuePublishJob({
     clientId: item.client_id,
     contentItemId: item.id,
     caption: String(post.caption ?? ''),
     media: mediaOf(post.slides),
     targets: targetsFor(post, accounts, versions),
-    scheduledFor: post.scheduled_for,
+    scheduledFor: rightNow ? null : post.scheduled_for,
     timezone: post.timezone,
     createdBy: user.email,
   })

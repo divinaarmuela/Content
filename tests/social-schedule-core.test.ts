@@ -4,7 +4,8 @@ import {
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
   mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
-  NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE,
+  NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE, WITH_THE_CLIENT_NOW,
+  APPROVE_WITHOUT_CLIENT_STATUSES, APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES,
   channelBlockReason, coverForSlide, mayEditNote, postTileFacts,
   type SocialPostStatus, type TileJob,
 } from '@/app/lib/social-schedule-core'
@@ -49,9 +50,12 @@ describe('eligibility', () => {
     if (r.ok) expect(r.version.id).toBe('v3')
   })
 
-  it('says the item is still with the client in plain words', () => {
+  it('says the item is with the client RIGHT NOW in plain words', () => {
     const r = eligibility({ status: 'client_review' }, [version])
-    expect(r).toEqual({ ok: false, reason: 'Still with the client' })
+    expect(r).toEqual({ ok: false, reason: WITH_THE_CLIENT_NOW })
+    // and it is a DIFFERENT sentence from the one on media nobody has asked
+    // the client about — the two mean opposite things to the person reading
+    expect(WITH_THE_CLIENT_NOW).not.toBe(NOT_CLIENT_APPROVED)
   })
 
   it('says changes are in progress', () => {
@@ -635,7 +639,7 @@ describe('validateComposition', () => {
   it('carries the eligibility reason through', () => {
     const r = validateComposition({ ...good, item: { status: 'client_review' } })
     expect(r.ok).toBe(false)
-    expect(r.problems).toContain('Still with the client')
+    expect(r.problems).toContain(WITH_THE_CLIENT_NOW)
   })
 
   it('a post whose item is asking for changes cannot be scheduled', () => {
@@ -649,6 +653,12 @@ describe('validateComposition', () => {
 /* ── approving without the client, from Schedule ─────────────────────────── */
 
 describe('Approve without client', () => {
+  /**
+   * This is the DELIBERATE two-press path, and it still covers `client_review`
+   * — that is the whole point of it. Skipping a client mid-review is a
+   * decision somebody makes, through this button and the question it asks;
+   * what it must never be is a tile that looks like every other tile.
+   */
   it('is offered to the account manager and the super admin, and nobody else', () => {
     for (const role of ['account_manager', 'super_admin']) {
       expect(mayApproveWithoutClient(role, 'client_review')).toBe(true)
@@ -678,6 +688,20 @@ describe('Approve without client', () => {
     ]) {
       expect(mayApproveWithoutClient('account_manager', status, false), status).toBe(false)
     }
+  })
+
+  /**
+   * ONE PRESS AND TWO PRESSES ARE DIFFERENT LISTS, on purpose.
+   *
+   * If these two ever become the same list again, a piece the client is
+   * reading is one press from their Instagram — which is exactly the bug
+   * this pair was split to close.
+   */
+  it('covers one more status than the ONE-PRESS path does', () => {
+    expect(APPROVE_WITHOUT_CLIENT_STATUSES).toEqual(['internal_review'])
+    expect(APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES)
+      .toEqual(['internal_review', 'client_review'])
+    expect(APPROVE_WITHOUT_CLIENT_STATUSES).not.toContain('client_review')
   })
 
   it('asks about the version the client would have seen', () => {
@@ -728,15 +752,28 @@ describe('who may post without approval', () => {
 describe('the media a manager may post', () => {
   const version = { id: 'v1', version_number: 2, files: [img(1), img(2)], file_url: null }
 
-  it('includes work waiting on a signature, marked as not yet approved', () => {
-    for (const status of ['internal_review', 'client_review']) {
-      const r = postingEligibility({ status, content_type: 'carousel' }, [version], true)
-      expect(r.ok, status).toBe(true)
-      if (r.ok) {
-        expect(r.needsClientApproval).toBe(true)
-        expect(r.slides).toHaveLength(2)
-      }
+  it('includes work waiting on the manager’s OWN check, marked as not yet approved', () => {
+    const r = postingEligibility({ status: 'internal_review', content_type: 'carousel' }, [version], true)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.needsClientApproval).toBe(true)
+      expect(r.slides).toHaveLength(2)
     }
+  })
+
+  /**
+   * THE FIX THIS FILE EXISTS TO KEEP.
+   *
+   * A piece at `client_review` is on the client's screen at this moment. It
+   * was one-press postable for a day, undimmed and draggable, and posting it
+   * took it out from under somebody who was reading it — with the approvals
+   * table then recording the client as having approved it. It is not usable
+   * media on the one-press path, for anybody, ever.
+   */
+  it('NEVER includes a piece the client is looking at right now', () => {
+    const r = postingEligibility({ status: 'client_review', content_type: 'carousel' }, [version], true)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toBe(WITH_THE_CLIENT_NOW)
   })
 
   it('leaves approved media exactly as it was — no marker on it', () => {
