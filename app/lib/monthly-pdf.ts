@@ -20,6 +20,12 @@ const LINE = '#e4e4e7'
 const BLUE = '#2563eb'
 const PAGE = { width: 595.28, height: 841.89, margin: 48 } // A4
 
+/* One rhythm for every question, answered or not. */
+const LABEL_GAP = 1
+const ANSWER_GAP = 2
+const LABEL_TO_ANSWER = 5
+const BLOCK_GAP = 16
+
 export type MonthlyPdfData = {
   clientName: string
   formTitle: string
@@ -90,19 +96,24 @@ export function renderMonthlyPdf(data: MonthlyPdfData): Promise<Buffer> {
 
         const text = Array.isArray(raw) ? raw.join(', ') : (raw ?? '')
         const body = answered ? String(text) : 'Not answered'
-        const qH = doc.font('Helvetica-Bold').fontSize(9).heightOfString(block.label, { width: contentW })
-        const aH = doc.font('Helvetica').fontSize(10).heightOfString(body, { width: contentW })
-        y = room(qH + aH + 22, y)
+        /* Measured with the font and options the text is drawn with — see the
+         * same block in intake-pdf.ts for what drifting apart looked like. */
+        const answerFont = answered ? 'Helvetica' : 'Helvetica-Oblique'
+        const qH = doc.font('Helvetica-Bold').fontSize(9)
+          .heightOfString(block.label, { width: contentW, lineGap: LABEL_GAP })
+        const aH = doc.font(answerFont).fontSize(10)
+          .heightOfString(body, { width: contentW, lineGap: ANSWER_GAP })
+        y = room(qH + LABEL_TO_ANSWER + aH + BLOCK_GAP, y)
 
         doc.fillColor(DIM).font('Helvetica-Bold').fontSize(9)
-          .text(block.label, PAGE.margin, y, { width: contentW })
-        y += qH + 4
+          .text(block.label, PAGE.margin, y, { width: contentW, lineGap: LABEL_GAP })
+        y += qH + LABEL_TO_ANSWER
 
         doc.fillColor(answered ? INK : FAINT)
-          .font(answered ? 'Helvetica' : 'Helvetica-Oblique')
+          .font(answerFont)
           .fontSize(10)
-          .text(body, PAGE.margin, y, { width: contentW, lineGap: 2 })
-        y += aH + 14
+          .text(body, PAGE.margin, y, { width: contentW, lineGap: ANSWER_GAP })
+        y += aH + BLOCK_GAP
       }
 
       y += 8
