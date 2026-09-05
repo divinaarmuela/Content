@@ -186,6 +186,13 @@ const TYPE_ALIASES: Record<string, BlockType> = {
 
 const YES_NO = ['Yes', 'No']
 
+/** A document that never names itself still needs a title, and the editor this
+ *  draft opens in is shared by the intake form, the monthly form and the
+ *  settings templates — so "Intake form" was wrong two times out of three. */
+function fallbackName(key: TemplateKey): string {
+  return key === 'ongoing' ? 'Monthly form' : 'Intake form'
+}
+
 /** Page furniture, not questions. A scanned questionnaire is full of it and a
  *  model will happily hand back "Page 2 of 7" as a short-answer question. */
 const NOISE = [
@@ -408,7 +415,7 @@ export function normaliseScan(
   // assigned above are already unique, so they survive untouched — which is
   // what keeps `uncertain` pointing at the right questions.
   const definition = normaliseDefinition(
-    { name: str(src.name) || str(src.title) || 'Intake form', sections },
+    { name: str(src.name) || str(src.title) || fallbackName(key), sections },
     key,
   )
 
