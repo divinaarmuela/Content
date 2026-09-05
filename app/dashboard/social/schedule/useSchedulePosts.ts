@@ -31,8 +31,8 @@ import type {
   SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import {
-  coverForSlide, eligibility, postTileFacts,
-  type SocialPostStatus, type TileJob, type TileTone,
+  clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility,
+  postTileFacts, type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
 import {
@@ -69,15 +69,23 @@ export type RailMedia = {
   ok: boolean
   /** why not, in the words a person would use */
   reason: string | null
+  /**
+   * Usable, but the client has not seen it yet.
+   *
+   * Only ever true for an account manager or a super admin: they may post it
+   * (the app does the sign-off for them when it goes out), and the card wears
+   * a quiet marker so they know what they are posting. Never a block.
+   */
+  needsClientApproval: boolean
   /** where the piece is in the funnel — what says whether a manager may sign
    *  it off without the client from here */
   status: string
   /** the version the client would be approving, for the question they are
    *  asked before one is skipped */
   versionNumber: number | null
-  /** does this client sign their own work off — the flag the item page hides
-   *  "Approve without client" behind, so Schedule can answer the same way */
-  clientApprovalRequired: boolean
+  /** does THIS CLIENT sign every post off (`clients.client_approval_required`)
+   *  — the one client the short cut does not exist on, for anybody */
+  clientSignsOff: boolean
   /** a post already uses this item — one post, one item */
   used: boolean
   /**
@@ -118,6 +126,10 @@ export type ScheduleData = {
   notes: ScheduleNote[]
   accounts: SocialAccount[]
   media: RailMedia[]
+  /** this client signs every post off themselves — nobody skips the wait */
+  clientSignsOff: boolean
+  /** …and so this viewer may post with no approval step in the way */
+  postWithoutApproval: boolean
   /** how many pieces are still with someone for approval */
   waiting: number
   loading: boolean
@@ -252,13 +264,23 @@ export function useSchedulePosts(
       .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
   }, [posts.rows, jobs.rows, itemById, liveAccounts, clientId])
 
+  /**
+   * DOES THIS CLIENT SIGN EVERY POST OFF, AND MAY THIS PERSON SKIP THE WAIT?
+   *
+   * Two questions the rail, the pickers and the composer all ask, answered
+   * once here so they cannot disagree with each other — or with the server,
+   * which asks the same pair of pure functions of the same two rows.
+   */
+  const clientSignsOff = clientSignsOffEveryPost(client)
+  const postWithoutApproval = mayPostWithoutApproval(viewer?.role ?? null, clientSignsOff)
+
   /** the media rail: one card per item, ready-to-use first */
   const media: RailMedia[] = useMemo(() => {
     const usedItems = new Set(posts.rows.map(p => p.item_id))
     return scopedItems
       .map(item => {
         const itemVersions = versionsByItem.get(item.id) ?? []
-        const elig = eligibility(item, itemVersions)
+        const elig = postingEligibility(item, itemVersions, postWithoutApproval)
         const slides = elig.ok ? elig.slides : []
         return {
           itemId: item.id,
@@ -268,8 +290,9 @@ export function useSchedulePosts(
           cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
           reason: elig.ok ? null : elig.reason,
+          needsClientApproval: elig.ok && elig.needsClientApproval,
           status: String(item.status ?? ''),
-          clientApprovalRequired: item.client_approval_required !== false,
+          clientSignsOff,
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           used: usedItems.has(item.id),
@@ -280,7 +303,7 @@ export function useSchedulePosts(
       })
       .sort((a, b) =>
         Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
-  }, [scopedItems, versionsByItem, posts.rows])
+  }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff])
 
   const waiting = useMemo(
     () => scopedItems.filter(i => WAITING_STATUSES.includes(String(i.status))).length,
@@ -305,10 +328,15 @@ export function useSchedulePosts(
     notes: notes.rows.filter(n => n.client_id === clientId),
     accounts: liveAccounts,
     media,
+    clientSignsOff,
+    postWithoutApproval,
     waiting,
     loading,
     error,
-  }), [pickable, client, tz, tiles, notes.rows, liveAccounts, media, waiting, loading, error, clientId])
+  }), [
+    pickable, client, tz, tiles, notes.rows, liveAccounts, media,
+    clientSignsOff, postWithoutApproval, waiting, loading, error, clientId,
+  ])
 }
 
 /** Something to show for an item with no publishable media: the newest

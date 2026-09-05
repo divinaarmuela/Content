@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { mayApproveWithoutClient } from '@/app/lib/social-schedule-core'
+import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import { formatInZone } from '@/app/lib/timezone-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
@@ -22,7 +22,9 @@ import type { RailMedia } from './useSchedulePosts'
  * A piece that cannot start a post is still listed, greyed, with the reason
  * on it — hiding it only makes somebody ask where their video went.
  */
-export default function PiecePicker({ media, at, tz, role, onPick, onApprove, onClose }: {
+export default function PiecePicker({
+  media, at, tz, role, postWithoutApproval, onPick, onApprove, onClose,
+}: {
   media: RailMedia[]
   /** the time the click meant, carried through to the composer */
   at: string | null
@@ -30,6 +32,9 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
   /** the viewer's role — an account manager or a super admin may sign a piece
    *  off without the client from here */
   role: string | null
+  /** …and for those two the list also holds media the client has not signed
+   *  off yet, fully usable, marked */
+  postWithoutApproval: boolean
   onPick: (media: RailMedia) => void
   /** sign this piece off without waiting for the client */
   onApprove: (media: RailMedia) => void
@@ -110,7 +115,9 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
           {shown.length === 0 ? (
             <p className="py-6 text-center text-[13px] text-muted-foreground">
               {media.length === 0
-                ? 'Nothing approved yet. Media shows up here once the client signs it off.'
+                ? (postWithoutApproval
+                  ? 'Nothing here yet. Media shows up once a piece has been made.'
+                  : 'Nothing approved yet. Media shows up here once the client signs it off.')
                 : 'Nothing matches that.'}
             </p>
           ) : (
@@ -130,7 +137,9 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
                     type="button"
                     disabled={!m.ok}
                     onClick={() => onPick(m)}
-                    title={m.ok ? m.title : `${m.title} — ${m.reason}`}
+                    title={m.ok
+                      ? (m.needsClientApproval ? `${m.title} — ${NOT_CLIENT_APPROVED}` : m.title)
+                      : `${m.title} — ${m.reason}`}
                     aria-label={m.ok ? `Choose ${m.title}` : `${m.title} — ${m.reason}`}
                     className="absolute inset-0 z-0 disabled:cursor-not-allowed"
                   />
@@ -141,7 +150,7 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
                   />
                   {/* waiting on somebody, and this person could be that
                       somebody: one press signs it off, after one question */}
-                  {!m.ok && mayApproveWithoutClient(role, m.status, m.clientApprovalRequired) && (
+                  {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) && (
                     <button
                       type="button"
                       onClick={() => onApprove(m)}
@@ -154,6 +163,13 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
                     <span className="block truncate">{m.title}</span>
                     {!m.ok && m.reason && (
                       <span className="block truncate font-normal text-cream/80">{m.reason}</span>
+                    )}
+                    {/* usable, and said plainly: the sign-off happens by
+                        itself when the post goes out */}
+                    {m.ok && m.needsClientApproval && (
+                      <span className="block truncate font-normal text-cream/80">
+                        {NOT_CLIENT_APPROVED}
+                      </span>
                     )}
                     {m.ok && m.used && (
                       <span className="block truncate font-normal text-cream/80">
@@ -168,9 +184,12 @@ export default function PiecePicker({ media, at, tz, role, onPick, onApprove, on
         </div>
 
         <p className="text-[12px] text-muted-foreground">
-          Only media the client has approved can start a post. Files from Google Drive
-          or your computer are added inside the post window, and go back to the client
-          for approval first.
+          {postWithoutApproval
+            ? 'Media the client has not signed off yet is marked. You can still post it — '
+              + 'the app signs it off in your name when the post goes out.'
+            : 'Only media the client has approved can start a post. Files from Google Drive '
+              + 'or your computer are added inside the post window, and go back to the client '
+              + 'for approval first.'}
         </p>
       </div>
     </div>

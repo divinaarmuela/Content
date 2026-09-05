@@ -90,6 +90,64 @@ const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
  */
 export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review', 'client_review']
 
+/* ── posting with no approval steps in the way (ruled 5 Sep 2026) ───────── */
+
+/**
+ * MAY THIS PERSON JUST POST?
+ *
+ * The owner's ruling: an account manager on the client, or a super admin,
+ * posts without any approval step in the way. They were always allowed to do
+ * it — it took two extra presses ("Approve without client" on the media, then
+ * "Schedule without approval" under the arrow) to say so, and every one of
+ * those presses was the same person answering their own question.
+ *
+ * Nothing is skipped behind the scenes: the media still travels the
+ * `internal_review → approved_for_scheduling` edge and the post still travels
+ * send → approve, both recorded against this person. What changes is that the
+ * app performs them rather than asking somebody to press them.
+ *
+ * `who` is a role, or the hats this person wears on THIS item (rights follow
+ * assignment, so the server passes `actingRoles`).
+ *
+ * The one exception is the client's own policy — see `clientSignsOffEveryPost`.
+ */
+export function mayPostWithoutApproval(
+  who: string | null | undefined | readonly string[],
+  clientSignsOff: boolean | null | undefined,
+): boolean {
+  if (clientSignsOff === true) return false
+  const hats = typeof who === 'string' ? [who] : Array.isArray(who) ? who.map(String) : []
+  return hats.includes('account_manager') || hats.includes('super_admin')
+}
+
+/**
+ * DOES THIS CLIENT SIGN EVERY POST OFF THEMSELVES?
+ *
+ * `clients.client_approval_required`, and only when it is explicitly `true`.
+ * Unset means "the ordinary arrangement", which is the one the ruling
+ * describes: the account manager decides. A client whose contract says they
+ * see everything first keeps the full flow, for everybody, and the server
+ * refuses the short cut rather than hiding it.
+ *
+ * NOT the item's own `client_approval_required`, which defaults to true on
+ * every piece and would mean "the exception" was the rule.
+ */
+export function clientSignsOffEveryPost(
+  client: { client_approval_required?: unknown } | null | undefined,
+): boolean {
+  return client?.client_approval_required === true
+}
+
+/** The line under the button on such a client. */
+export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
+
+/** …and the refusal if somebody asks for the short cut anyway. */
+export const CLIENT_SIGNS_OFF_REFUSAL =
+  'This client signs off every post — send it for approval'
+
+/** The quiet marker on media a manager may use before the client has seen it. */
+export const NOT_CLIENT_APPROVED = 'Not yet approved by the client'
+
 /**
  * May THIS person sign a piece off without the client, from the Schedule page?
  *
@@ -102,14 +160,18 @@ export function mayApproveWithoutClient(
   role: string | null | undefined,
   status: string | null | undefined,
   /**
-   * The item's `client_approval_required` — TRUE unless it was turned off.
+   * Does THE CLIENT sign every post off — `clients.client_approval_required`.
    *
-   * A client whose contract says they sign everything off is a client the
-   * item page will not let a manager skip: `presentTransitions` removes the
-   * `→ approved_for_scheduling` edge from every status except `client_review`
-   * when the flag is set. Schedule has to answer the same way, or the two
-   * screens disagree about a client's own policy — and it is `performTransition`
-   * that makes it true rather than presentation on either of them.
+   * A client whose contract says they see everything first keeps the full
+   * flow: the manager may still skip the wait from `client_review` (the
+   * client has been asked; chasing them is the manager's call) but never from
+   * `internal_review`. `performTransition` makes that true rather than
+   * presentation here.
+   *
+   * Until 5 Sep 2026 this read the ITEM's `client_approval_required`, which
+   * defaults to true on every piece — so the ordinary case looked like the
+   * exception, and a manager had to send work to a client the agency never
+   * agreed to send it to.
    */
   clientApprovalRequired: boolean | null | undefined = true,
 ): boolean {
@@ -129,7 +191,12 @@ export function approveWithoutClientQuestion(versionNumber: number | null | unde
 }
 
 export type Eligibility =
-  | { ok: true; version: ScheduleVersion; slides: Slide[] }
+  | {
+    ok: true; version: ScheduleVersion; slides: Slide[]
+    /** the client has NOT signed this media off — true only on the manager's
+     *  own path, where the app approves it for them when the post goes out */
+    needsClientApproval: boolean
+  }
   | { ok: false; reason: string }
 
 /**
@@ -167,15 +234,43 @@ export function eligibility(
   item: ScheduleItem | null | undefined,
   versions: readonly ScheduleVersion[] | null | undefined,
 ): Eligibility {
+  return postingEligibility(item, versions, false)
+}
+
+/**
+ * The same question, asked for somebody who may post without approval.
+ *
+ * For an account manager or a super admin (and never on a client who signs
+ * every post off) a piece waiting on a signature is usable media: the work is
+ * finished, the only thing missing is the press this person was going to make
+ * anyway. Both waits qualify — `internal_review` (their own check) and
+ * `client_review` (the client's answer) — which is exactly the pair
+ * "Approve without client" could already rescue a piece from, so the audit
+ * trail the app writes for them is the ordinary one.
+ *
+ * A piece still being MADE is never usable: `revision_required` and the rest
+ * need work doing, not a signature, and no edge would take them either.
+ *
+ * `needsClientApproval` on the answer is what the rail's quiet marker and the
+ * server's own "approve it for them" step both read.
+ */
+export function postingEligibility(
+  item: ScheduleItem | null | undefined,
+  versions: readonly ScheduleVersion[] | null | undefined,
+  withoutApproval: boolean,
+): Eligibility {
   const status = String(item?.status ?? '') as ItemStatus
-  if (!ELIGIBLE_STATUSES.includes(status)) {
+  const approved = ELIGIBLE_STATUSES.includes(status)
+  const usable = approved
+    || (withoutApproval && (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(status))
+  if (!usable) {
     return { ok: false, reason: NOT_ELIGIBLE[status] ?? 'Not ready yet' }
   }
   const version = latestVersion(versions)
   if (!version) return { ok: false, reason: 'No media yet' }
   const slides = postSlides(item?.content_type, slidesOf(version))
   if (slides.length === 0) return { ok: false, reason: 'No media yet' }
-  return { ok: true, version, slides }
+  return { ok: true, version, slides, needsClientApproval: !approved }
 }
 
 /** The highest `version_number`; array order is the tie-break and the fallback
@@ -1103,6 +1198,9 @@ export type CompositionInput = {
   slides: readonly Slide[] | null | undefined
   caption: string | null | undefined
   channels: readonly ComposerChannel[] | null | undefined
+  /** the person composing may post without approval, so media the client has
+   *  not signed off yet is not a problem to state back at them */
+  withoutApproval?: boolean
   scheduledFor: string | null | undefined
   now: string | number | Date
 }
@@ -1120,7 +1218,8 @@ export type CompositionInput = {
 export function validateComposition(input: CompositionInput): { ok: boolean; problems: string[] } {
   const problems: string[] = []
 
-  const elig = eligibility(input.item, input.version ? [input.version] : [])
+  const elig = postingEligibility(
+    input.item, input.version ? [input.version] : [], input.withoutApproval === true)
   if (!elig.ok && elig.reason !== 'No media yet') problems.push(elig.reason)
 
   const slides = Array.isArray(input.slides) ? input.slides : []

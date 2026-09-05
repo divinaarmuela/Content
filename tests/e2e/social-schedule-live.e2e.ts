@@ -110,7 +110,11 @@ const nowPlus = (days: number) => new Date(Date.now() + days * 86_400_000).toISO
 
 /** A fresh piece on the ZZ TEST client, already approved for scheduling, with
  *  one version carrying two pictures. */
-async function makePiece(title: string): Promise<{ itemId: string; versionId: string }> {
+async function makePiece(
+  title: string,
+  /** where the piece sits — the default is work the client has signed off */
+  status = 'approved_for_scheduling',
+): Promise<{ itemId: string; versionId: string }> {
   const item = await table<ContentItem>('content_items').insert({
     client_id: TEST_CLIENT_ID,
     title: `${TAG} — ${title}`,
@@ -121,7 +125,7 @@ async function makePiece(title: string): Promise<{ itemId: string; versionId: st
     owner_id: IDS.editor,
     scheduler_ids: [],
     caption: 'Hello from the harness',
-    status: 'approved_for_scheduling',
+    status,
     current_version_number: 1,
     posting_approval_state: null,
   } as never)
@@ -328,6 +332,33 @@ describe('a planned post, live', () => {
     expect(straight.approved_by).toBe(am.id)
     expect((await itemRow(itemId)).posting_approval_state).toBe('approved')
     console.log(`[B] booked without asking — job ${straight.publish_job_ids[0]}`)
+
+    await cancelPost(am, draft.id)
+  })
+
+  it('the manager posts media the client has not signed off, in one request', async () => {
+    // the ruling of 5 Sep 2026: no approval step in the way for an account
+    // manager. The media's own sign-off happens on the ordinary workflow edge
+    // inside the same request, recorded against them.
+    const { itemId } = await makePiece('not signed off yet', 'internal_review')
+    const draft = await createPost(am, {
+      item_id: itemId,
+      slides: SLIDES,
+      caption: `${TAG} — straight out, unapproved media`,
+      channels: [channelId],
+      scheduled_for: nowPlus(6),
+    })
+    remember(draft)
+
+    const straight = await sendForApproval(am, draft.id, { mode: 'direct' })
+    remember(straight)
+    for (const j of straight.publish_job_ids) created.jobs.add(j)
+    expect(straight.status).toBe('scheduled')
+    expect(straight.approval_mode).toBe('self')
+    const item = await itemRow(itemId)
+    expect(item.status).toBe('approved_for_scheduling')
+    expect(item.posting_approval_state).toBe('approved')
+    console.log('[B2] media signed off and the post booked, in one request')
 
     await cancelPost(am, draft.id)
   })

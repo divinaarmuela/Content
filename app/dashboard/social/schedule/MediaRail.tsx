@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { mayApproveWithoutClient } from '@/app/lib/social-schedule-core'
+import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
 
@@ -70,7 +70,7 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, loading, role, onNew, onPick, onApprove,
+  media, waiting, loading, role, postWithoutApproval, onNew, onPick, onApprove,
 }: {
   media: RailMedia[]
   waiting: number
@@ -78,6 +78,9 @@ export default function MediaRail({
   /** the viewer's role — an account manager or a super admin may sign a piece
    *  off without the client from here */
   role: string | null
+  /** …and for those two the rail also carries media the client has not signed
+   *  off yet, which is why the heading cannot say "Approved" to them */
+  postWithoutApproval: boolean
   /** start a post with nothing chosen yet */
   onNew: () => void
   /** start a post from this piece */
@@ -134,7 +137,9 @@ export default function MediaRail({
       {/* the client's name is on the picker two inches away; repeating it here
           only truncated it */}
       <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="text-[13px] font-semibold">Approved media</span>
+        <span className="text-[13px] font-semibold">
+          {postWithoutApproval ? 'Media' : 'Approved media'}
+        </span>
         <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">{shown.length}</span>
       </div>
 
@@ -148,7 +153,9 @@ export default function MediaRail({
         ) : shown.length === 0 ? (
           <p className="px-1 text-[13px] text-muted-foreground">
             {media.length === 0
-              ? 'Nothing approved yet. Media shows up here once the client signs it off.'
+              ? (postWithoutApproval
+                ? 'Nothing here yet. Media shows up once a piece has been made.'
+                : 'Nothing approved yet. Media shows up here once the client signs it off.')
               : 'Nothing matches those filters.'}
           </p>
         ) : (
@@ -156,7 +163,9 @@ export default function MediaRail({
             {shown.map(m => (
               <div
                 key={m.itemId}
-                title={m.ok ? m.title : `${m.title} — ${m.reason}`}
+                title={m.ok
+                  ? (m.needsClientApproval ? `${m.title} — ${NOT_CLIENT_APPROVED}` : m.title)
+                  : `${m.title} — ${m.reason}`}
                 draggable={m.ok}
                 onDragStart={e => {
                   e.dataTransfer.effectAllowed = 'copy'
@@ -185,7 +194,7 @@ export default function MediaRail({
                   label={m.title}
                   className={cn('pointer-events-none h-full w-full', !m.ok && 'opacity-45')}
                 />
-                {m.ok && (
+                {m.ok && !m.needsClientApproval && (
                   <span className="pointer-events-none absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-[9px] font-bold text-ink">
                     ✓<span className="sr-only">Approved</span>
                   </span>
@@ -213,7 +222,15 @@ export default function MediaRail({
                     after one question. Full height, full strength, and it
                     does not sit on top of the "start a post" target — that
                     one is not offered on a piece that cannot start a post. */}
-                {!m.ok && mayApproveWithoutClient(role, m.status, m.clientApprovalRequired) ? (
+                {/* usable, but the client has not seen it: a quiet marker,
+                    never a block — the sign-off happens by itself when the
+                    post goes out */}
+                {m.ok && m.needsClientApproval && (
+                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
+                    {NOT_CLIENT_APPROVED}
+                  </span>
+                )}
+                {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) ? (
                   <button
                     type="button"
                     onClick={() => onApprove(m)}

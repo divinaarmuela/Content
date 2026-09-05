@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   APPROVAL_LINE, addToPost, clockPillLabel, composerReducer, footerActions,
-  inPost, initialComposer, joinClock, limitsLine, moreOptionsFor, moveInPost,
+  inPost, initialComposer, isPostingNow, joinClock, limitsLine, moreOptionsFor, moveInPost,
   readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
   to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
   CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
@@ -370,10 +370,50 @@ describe('the button at the bottom offers only what this person may do', () => {
     expect(menu.map(m => m.key)).toEqual(['draft'])
   })
 
-  it('an account manager is — they could have approved it anyway', () => {
-    const { menu } = footerActions({ status: 'draft', ...manager })
+  it('an account manager just posts — one press, no approval step', () => {
+    const { primary, menu } = footerActions({ status: 'draft', ...manager })
+    expect(primary).toEqual({ key: 'direct', label: 'Schedule' })
+    // asking is still there, one press away, for when they want it
+    expect(menu.map(m => m.key)).toEqual(['send', 'draft'])
+    expect(menu[0].label).toBe('Send for approval')
+  })
+
+  it('…and "Post now" when the time they picked is now', () => {
+    const { primary } = footerActions({ status: 'draft', ...manager, postingNow: true })
+    expect(primary).toEqual({ key: 'direct', label: 'Post now' })
+  })
+
+  it('a client who signs every post off puts the manager back on the full flow', () => {
+    const { primary, menu } = footerActions({ status: 'draft', ...manager, clientSignsOff: true })
+    expect(primary.label).toBe('Send for approval')
+    // the old shape, unchanged: asking first, with the short cut under the arrow
     expect(menu.map(m => m.key)).toEqual(['draft', 'direct'])
     expect(menu[1].label).toBe('Schedule without approval')
+  })
+
+  it('a scheduler on that client sees exactly what they saw before', () => {
+    const { primary, menu } = footerActions({ status: 'draft', ...scheduler, clientSignsOff: true })
+    expect(primary.label).toBe('Send for approval')
+    expect(menu.map(m => m.key)).toEqual(['draft'])
+  })
+
+  it('an editor is offered no short cut either way', () => {
+    for (const clientSignsOff of [false, true]) {
+      const { primary, menu } = footerActions({ status: 'draft', ...editor, clientSignsOff })
+      expect(primary.key).toBe('send')
+      expect(menu.map(m => m.key)).toEqual(['draft'])
+    }
+  })
+
+  it('"now" is the next couple of minutes, never a time already gone', () => {
+    const t = Date.parse('2026-09-05T10:00:00.000Z')
+    expect(isPostingNow(new Date(t + 30_000).toISOString(), t)).toBe(true)
+    expect(isPostingNow(new Date(t + 119_000).toISOString(), t)).toBe(true)
+    expect(isPostingNow(new Date(t + 10 * 60_000).toISOString(), t)).toBe(false)
+    // already gone: the composer says so plainly and the button stays disabled
+    expect(isPostingNow(new Date(t - 60_000).toISOString(), t)).toBe(false)
+    expect(isPostingNow(null, t)).toBe(false)
+    expect(isPostingNow('not a time', t)).toBe(false)
   })
 
   it('after approval the people who may publish get Schedule and Post now', () => {

@@ -936,6 +936,14 @@ export type FooterAction = { key: FooterActionKey; label: string }
  *                     the people who may publish.
  *  once it is booked in or finished → nothing to press.
  *
+ * …and the owner's ruling of 5 September, which turns that first line around
+ * for the two roles it was always asking to answer their own question: an
+ * account manager on the client, or a super admin, gets "Schedule" (or "Post
+ * now" when the time they picked is now) as the ONE press, and
+ * "Send for approval" moves under the arrow for the times they do want the
+ * client to see it first. Nobody else's window changes, and a client who
+ * signs every post off (`clientSignsOff`) puts everyone back on the full flow.
+ *
  * Hiding the option is presentation; the refusal itself lives in
  * `scheduleWithoutApproval` and `assertMayPublish` on the server.
  */
@@ -945,8 +953,14 @@ export function footerActions(input: {
   mayApprove: boolean
   /** may this person book a post in with the channel at all */
   mayPublish: boolean
+  /** this client signs every post off — the one exception to the ruling */
+  clientSignsOff?: boolean
+  /** the time on the post is now, so "Schedule" would read as a lie */
+  postingNow?: boolean
 }): { primary: FooterAction; menu: FooterAction[] } {
   const { status, mayApprove, mayPublish } = input
+  const clientSignsOff = input.clientSignsOff === true
+  const straightOut = mayApprove && !clientSignsOff
 
   if (status === 'approved') {
     return mayPublish
@@ -958,12 +972,41 @@ export function footerActions(input: {
     return { primary: { key: 'none', label: APPROVAL_LINE[status] }, menu: [] }
   }
 
+  const send: FooterAction = {
+    key: 'send', label: status === 'pending' ? 'Send again' : 'Send for approval',
+  }
+  if (straightOut) {
+    return {
+      primary: {
+        key: 'direct',
+        label: input.postingNow === true ? 'Post now' : 'Schedule',
+      },
+      menu: [send, { key: 'draft', label: 'Save as draft' }],
+    }
+  }
   const menu: FooterAction[] = [{ key: 'draft', label: 'Save as draft' }]
   if (mayApprove) menu.push({ key: 'direct', label: 'Schedule without approval' })
-  return {
-    primary: { key: 'send', label: status === 'pending' ? 'Send again' : 'Send for approval' },
-    menu,
-  }
+  return { primary: send, menu }
+}
+
+/**
+ * Is the time on this post "now"?
+ *
+ * Two minutes' grace: somebody who picked the next round minute and then took
+ * a moment over the caption still means now, and the button must not read
+ * "Schedule" over a post that goes out before they can put the kettle on.
+ *
+ * A time already GONE is not "now" — it is a problem the composer states
+ * plainly ("That time has already gone") and the button stays disabled
+ * behind it, rather than quietly posting at a time nobody chose.
+ */
+export function isPostingNow(
+  iso: string | null | undefined, now: number,
+): boolean {
+  if (!iso) return false
+  const at = Date.parse(iso)
+  if (!Number.isFinite(at)) return false
+  return at > now && at <= now + 2 * 60_000
 }
 
 /** "1 hour 30 minutes", "10 minutes", "45 seconds" — for a limit a person

@@ -237,6 +237,15 @@ const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],
+    //   clients.client_approval_required — does THIS CLIENT sign every post
+    //     off themselves. Unset on almost everybody, and that is the point:
+    //     the owner's ruling of 5 Sep 2026 is that an account manager or a
+    //     super admin posts with no approval step in the way, and the one
+    //     exception is a client whose contract says otherwise. The ITEM
+    //     column of the same name could not answer this — it defaults to true
+    //     on every piece, so reading it would have made the exception the
+    //     rule. Nullable: absent means "the ordinary arrangement".
+    ['client_approval_required', col('boolean', true)],
     ['drive_folder_id', col('string', true)],
     //   clients.drive_folder_origin — 'app' if this app made the folder,
     //     'adopted' if it was already in the owner's Drive and was matched to

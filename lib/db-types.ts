@@ -420,6 +420,7 @@ export interface Client {
   status: string
   notes: string | null
   instagram_locations: unknown
+  client_approval_required: boolean | null
   drive_folder_id: string | null
   drive_folder_origin: string | null
 }
@@ -1090,7 +1091,7 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id'],
@@ -1163,7 +1164,7 @@ export const NULLABLE_COLUMNS = {
   client_contacts: [],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'batch_id', 'owner_id', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id'],

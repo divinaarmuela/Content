@@ -7,12 +7,13 @@ import {
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
-  APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions,
+  APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions, isPostingNow,
   initialComposer, moreOptionsFor, optionsFromExtras, readPerChannel, PAGE_ID_HELP,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
-  tileTone, validateComposition, type SocialPostStatus, type SuggestedTime,
+  CLIENT_SIGNS_OFF_NOTE, tileTone, validateComposition,
+  type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import {
   autoKindFor, availableKinds, isOrganizationUrn, isPageId, isPlatform, networkName,
@@ -95,13 +96,17 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 }
 
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, locations, onClose, onOpenPost, onEditMedia,
+  target, tz, accounts, suggested, role, clientSignsOff, locations,
+  onClose, onOpenPost, onEditMedia,
 }: {
   target: ComposerTarget
   tz: string
   accounts: SocialAccount[]
   suggested: SuggestedTime[]
   role: Role | null
+  /** this client signs every post off themselves — the one client where an
+   *  account manager still sends a post for approval like everybody else */
+  clientSignsOff: boolean
   /** the places this client tags posts at, saved on the client's Social page */
   locations: SavedLocation[]
   onClose: () => void
@@ -203,7 +208,18 @@ export default function NewPostDialog({
   const status: SocialPostStatus = post?.live_status ?? 'draft'
   const mayApprove = role === 'account_manager' || role === 'super_admin'
   const canPublish = role ? roleMayPublish(role) : false
-  const { primary, menu: menuItems } = footerActions({ status, mayApprove, mayPublish: canPublish })
+  /**
+   * "Schedule" or "Post now" — the words have to match what pressing it does.
+   *
+   * Read at render, like the composition check two lines down: a time already
+   * GONE is not "now" (the check states that plainly and the button stays
+   * disabled behind it), so the worst a stale render can say is "Schedule"
+   * over a minute that has just arrived.
+   */
+  const postingNow = isPostingNow(state.scheduledFor, Date.now())
+  const { primary, menu: menuItems } = footerActions({
+    status, mayApprove, mayPublish: canPublish, clientSignsOff, postingNow,
+  })
 
   const check = useMemo(() => validateComposition({
     item: { status: 'approved_for_scheduling', content_type: target.contentType },
@@ -844,6 +860,12 @@ export default function NewPostDialog({
               />
             )}
           </div>
+
+          {/* the one client where a manager still asks — said once, plainly,
+              under the button that would otherwise have posted */}
+          {clientSignsOff && mayApprove && primary.key === 'send' && (
+            <p className="w-full text-[12px] text-muted-foreground">{CLIENT_SIGNS_OFF_NOTE}</p>
+          )}
 
           {state.scheduledFor && status === 'approved' && (
             <p className="w-full text-[12px] text-muted-foreground">

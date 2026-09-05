@@ -449,6 +449,7 @@ export default function SchedulePage() {
       waiting={data.waiting}
       loading={data.loading}
       role={me?.role ?? null}
+      postWithoutApproval={data.postWithoutApproval}
       onNew={() => openAt(weekSlots[0]?.iso ?? null)}
       onPick={m => openNew(m, null)}
       onApprove={m => { setApproveNote(null); setApproving(m) }}
@@ -740,6 +741,7 @@ export default function SchedulePage() {
           at={choosing.at}
           tz={tz}
           role={me?.role ?? null}
+          postWithoutApproval={data.postWithoutApproval}
           onPick={m => openNew(m, choosing.at)}
           onApprove={m => { setApproveNote(null); setApproving(m) }}
           onClose={() => setChoosing(null)}
@@ -753,6 +755,7 @@ export default function SchedulePage() {
           accounts={data.accounts}
           suggested={suggested.slice(0, 3)}
           role={me?.role ?? null}
+          clientSignsOff={data.clientSignsOff}
           locations={locations}
           onClose={() => setComposing(null)}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
