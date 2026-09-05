@@ -373,11 +373,13 @@ describe('the two new routes are gated like every other one', () => {
     expect(h.drive.imported).toHaveLength(0)
   })
 
-  it('the Drive tab says which piece it wants', async () => {
+  it('the Drive tab says what it wants to be pointed at', async () => {
     as(SCHEDULER)
     const { status, body } = await json(driveRoute.GET(new Request('https://x.test/drive')))
     expect(status).toBe(400)
-    expect(body.error).toBe('Which piece?')
+    // a piece OR a client: since 6 Sep the tab also answers for a post that
+    // has no piece behind it yet
+    expect(body.error).toBe('Which piece or client?')
   })
 
   it('a Drive refusal is a sentence, and never a 500', async () => {

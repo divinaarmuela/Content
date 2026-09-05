@@ -25,7 +25,7 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8')
 const ITEM_PAGE = 'app/dashboard/production/[id]/page.tsx'
 const COMPOSER = 'app/dashboard/social/schedule/NewPostDialog.tsx'
 const RAIL = 'app/dashboard/social/schedule/MediaRail.tsx'
-const PICKER = 'app/dashboard/social/schedule/PiecePicker.tsx'
+const PICKER = 'app/dashboard/social/schedule/NewPostSources.tsx'
 const CLIENT_SOCIAL = 'app/dashboard/clients/[id]/social/page.tsx'
 const SWITCH = 'app/dashboard/clients/ClientApproval.tsx'
 

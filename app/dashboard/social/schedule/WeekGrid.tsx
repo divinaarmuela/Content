@@ -8,6 +8,7 @@ import { dropIntent, dropLabelAt, LONG_PRESS_MS } from '@/app/lib/schedule-drag-
 import type { ScheduleNote } from '@/lib/db-types'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
+import { isFileDrag } from '@/app/lib/schedule-upload-core'
 import { RAIL_DRAG_TYPE } from './MediaRail'
 import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
 import { layoutLanes } from './week-nav'
@@ -232,7 +233,7 @@ export function SlotHint({ slot, top, tz, onPick }: {
 
 export default function WeekGrid({
   grid, posts, notes, suggested, todayKey, nowTop, onSlot, onOpen, onDropItem,
-  drag, noteDraft, noteEditor, onNoteAt, onNoteOpen, noteMode,
+  onDropFiles, drag, noteDraft, noteEditor, onNoteAt, onNoteOpen, noteMode,
 }: {
   grid: ScheduleWeekGrid
   posts: SchedulePostRow[]
@@ -249,6 +250,9 @@ export default function WeekGrid({
   onOpen: (post: SchedulePostRow) => void
   /** a card was dragged out of the rail and dropped here */
   onDropItem: (itemId: string, iso: string) => void
+  /** FILES were dragged in off the desktop and dropped on this time — upload
+   *  them and start a post there, with no window in the way */
+  onDropFiles: (files: File[], iso: string) => void
   /** moving a post that is already on the calendar */
   drag: DragSchedule
   /** a note being written, and where */
@@ -372,6 +376,16 @@ export default function WeekGrid({
               onPointerMove={clearHold}
               onPointerCancel={clearHold}
               onDragOver={e => {
+                // a photo coming off the desktop: the same landing slot, and
+                // 'copy' rather than 'move' because nothing is being taken
+                // from anywhere
+                if (isFileDrag(e.dataTransfer.types)) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'copy'
+                  setDropDay(day.index)
+                  setRailAt(timeAt(e.currentTarget, day.index, e.clientY))
+                  return
+                }
                 const kind = dropIntent(
                   e.dataTransfer.types, DROP_KINDS, drag.moving?.mode === 'mouse')
                 if (!kind) return
@@ -391,6 +405,11 @@ export default function WeekGrid({
                 setDropDay(null)
                 setRailAt(null)
                 const iso = timeAt(e.currentTarget, day.index, e.clientY)
+                const dropped = Array.from(e.dataTransfer.files ?? [])
+                if (dropped.length > 0) {
+                  if (iso) onDropFiles(dropped, iso)
+                  return
+                }
                 const kind = dropIntent(
                   [e.dataTransfer.getData(TILE_DRAG_TYPE) ? TILE_DRAG_TYPE : RAIL_DRAG_TYPE],
                   DROP_KINDS, drag.moving?.mode === 'mouse')
