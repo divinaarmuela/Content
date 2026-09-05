@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  RIGHT_LABEL, accessSummary, accountHealthWords, healthBlocksPosting,
+  RIGHT_LABEL, accessSummary, accountHealthWords, avatarFor, findGroupByName,
+  groupSetupReport, groupSetupWords, healthBlocksPosting, initialsOf,
   lastCheckedWords, mayChangeAccess, mayChangeProfile, peopleWithAccess,
-  profileMappingWords, readProfiles, rightsForRole, rightsWords,
+  profileMappingWords, readProfiles, rightsForRole, rightsWords, sameGroupName,
+  signedUrlExpired,
 } from '@/app/lib/social-access-core'
 import { channelBlockReason } from '@/app/lib/social-schedule-core'
 import { TEAM_ROLES, mayPublish, type Role } from '@/app/lib/identity-core'
@@ -657,5 +659,320 @@ describe('the posting service’s own health payload', () => {
       expect(words.needsReconnect, sample.accountId)
         .toBe(healthBlocksPosting(sample).blocked)
     }
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * THE FACE ON AN ACCOUNT.
+ *
+ * Verified live against `GET /v1/accounts` for the owner's four accounts on
+ * 5 Sep 2026: TikTok and YouTube carry a `profilePicture` URL, Instagram and
+ * LinkedIn carry null. So a missing photo is the ORDINARY case and initials
+ * are a first-class answer, not an error state — and the one thing that must
+ * never happen is a torn-image glyph next to a row whose whole job is to say
+ * whether the account is working.
+ */
+describe('a photo when there is one, initials when there is not', () => {
+  const now = Date.parse('2026-09-05T12:00:00Z')
+  const tiktok = { platform: 'tiktok', username: 'yusuf.k', name: 'Yusuf K' }
+
+  it('uses the photo the provider gave us', () => {
+    const face = avatarFor(
+      { ...tiktok, avatar_url: 'https://p16.tiktokcdn.com/yusuf.jpeg' }, now)
+    expect(face.kind).toBe('photo')
+    expect(face).toMatchObject({ url: 'https://p16.tiktokcdn.com/yusuf.jpeg' })
+  })
+
+  it('falls back to initials when the network has no photo — Instagram today', () => {
+    const face = avatarFor({ platform: 'instagram', username: 'md.media', avatar_url: null }, now)
+    expect(face.kind).toBe('initials')
+    expect(face.initials).toBe('M')
+  })
+
+  it('names the account the way a person would: handle, then name, then the client', () => {
+    expect(avatarFor({ platform: 'tiktok', username: 'yusuf.k', name: 'Yusuf K' }, now).name)
+      .toBe('yusuf.k')
+    expect(avatarFor({ platform: 'tiktok', name: 'Yusuf K' }, now).name).toBe('Yusuf K')
+    expect(avatarFor({ platform: 'tiktok' }, now, 'Sui Kitchen').initials).toBe('SK')
+  })
+
+  /**
+   * THE ONE THAT COST THE MOST TO GET WRONG.
+   *
+   * TikTok's CDN signs its links and puts the deadline in the query string.
+   * We store the URL so the browser is not asking Zernio on every render,
+   * which means the stored one goes stale — and a stale one must come out as
+   * initials, not as a broken picture.
+   */
+  it('a signed URL that has run out shows initials, not a broken picture', () => {
+    const expired = 'https://p16.tiktokcdn.com/yusuf.jpeg?x-expires=1757000000&x-signature=abc'
+    const fresh = 'https://p16.tiktokcdn.com/yusuf.jpeg?x-expires=9999999999&x-signature=abc'
+    expect(signedUrlExpired(expired, now)).toBe(true)
+    expect(signedUrlExpired(fresh, now)).toBe(false)
+
+    const face = avatarFor({ ...tiktok, avatar_url: expired }, now)
+    expect(face.kind).toBe('initials')
+    expect(face.initials).toBe('Y')
+    expect(avatarFor({ ...tiktok, avatar_url: fresh }, now).kind).toBe('photo')
+  })
+
+  it('reads the S3 spelling of the same deadline', () => {
+    const base = 'https://cdn.invalid/a.jpg?X-Amz-Date=20260905T110000Z&X-Amz-Expires='
+    expect(signedUrlExpired(base + '600', now)).toBe(true)     // ran out at 11:10
+    expect(signedUrlExpired(base + '7200', now)).toBe(false)   // good until 13:00
+  })
+
+  it('a deadline we cannot read is not treated as a deadline that has passed', () => {
+    // an unreadable expiry says nothing; the <img> tag finds out, and its
+    // onError is what falls back. Guessing "expired" here would throw away
+    // every working photo on a CDN that spells it some other way.
+    for (const url of [
+      'https://cdn.invalid/a.jpg',
+      'https://cdn.invalid/a.jpg?x-expires=soon',
+      'https://cdn.invalid/a.jpg?X-Amz-Date=nonsense&X-Amz-Expires=600',
+    ]) {
+      expect(signedUrlExpired(url, now), url).toBe(false)
+      expect(avatarFor({ ...tiktok, avatar_url: url }, now).kind, url).toBe('photo')
+    }
+  })
+
+  it('never trusts anything that is not an https picture', () => {
+    for (const url of ['', '   ', 'javascript:alert(1)', 'http://cdn.invalid/a.jpg', 'not a url']) {
+      expect(avatarFor({ ...tiktok, avatar_url: url }, now).kind, url).toBe('initials')
+    }
+  })
+
+  it('the bar and the access page ask the same question', async () => {
+    // one initials rule, not two: the calendar's bar re-exports this one, so
+    // a one-word name cannot come out as "S" in the bar and "SU" on the
+    // access page
+    const { initialsOf: fromBar } = await import('@/app/dashboard/social/schedule/ProfilesBar')
+    for (const name of ['Sui Kitchen', '  divina ', '', 'yusuf.k']) {
+      expect(fromBar(name), name).toBe(initialsOf(name))
+    }
+    expect(initialsOf('Sui Kitchen')).toBe('SK')
+  })
+})
+
+/**
+ * ONE GROUP PER CLIENT, ADOPTED RATHER THAN DUPLICATED.
+ *
+ * Today the owner's accounts sit in whatever group they were connected under
+ * — 100 Hundred Million Group's are in one called "test", and there is a group
+ * literally named "(DELETE IT) | Yusuf". A client's posts must never go out
+ * under another client's group, and the fix must never be to rename or delete
+ * what somebody made by hand.
+ */
+describe('setting a client’s group up in one press', () => {
+  it('two spellings of the same client are the same group', () => {
+    expect(sameGroupName('Sui Kitchen', 'sui kitchen')).toBe(true)
+    expect(sameGroupName('Sui Kitchen Pty Ltd', 'Sui Kitchen')).toBe(true)
+    expect(sameGroupName('Wilson & Co', 'Wilson and Co')).toBe(true)
+    expect(sameGroupName('', 'Sui Kitchen')).toBe(false)
+  })
+
+  it('does not adopt a group that merely mentions the client', () => {
+    // "(DELETE IT) | Yusuf" is somebody's leftover, not Yusuf's group, and
+    // adopting the WRONG group sends a post out under somebody else's name
+    expect(sameGroupName('(DELETE IT) | Yusuf', 'Yusuf')).toBe(false)
+    expect(sameGroupName('test', 'Sui Kitchen')).toBe(false)
+  })
+
+  it('finds the group that is already there', () => {
+    const groups = [
+      { id: 'p1', name: 'Default', accountCount: 2 },
+      { id: 'p2', name: 'Sui Kitchen Pty Ltd', accountCount: 3 },
+    ]
+    expect(findGroupByName(groups, 'Sui Kitchen')?.id).toBe('p2')
+    expect(findGroupByName(groups, 'Stretchworks')).toBeNull()
+  })
+
+  it('a client already in their own group is shown as done, with no button', () => {
+    const words = groupSetupWords({
+      clientName: 'Sui Kitchen',
+      profile: { id: 'p2', name: 'Sui Kitchen', accountCount: 3 },
+      accountCount: 3,
+      strayCount: 0,
+    })
+    expect(words.done).toBe(true)
+    expect(words.action).toBeNull()
+    expect(words.detail).toMatch(/Nothing to do/)
+  })
+
+  it('a client in somebody else’s group is offered the press', () => {
+    const words = groupSetupWords({
+      clientName: 'Sui Kitchen',
+      profile: { id: 'p1', name: 'test', accountCount: 9 },
+      accountCount: 3,
+      strayCount: 0,
+    })
+    expect(words.done).toBe(false)
+    expect(words.action).toBe('Set up Sui Kitchen’s group')
+    expect(words.detail).toMatch(/Nothing is renamed or deleted/)
+  })
+
+  it('accounts left behind in another group are still work to do', () => {
+    const words = groupSetupWords({
+      clientName: 'Sui Kitchen',
+      profile: { id: 'p2', name: 'Sui Kitchen', accountCount: 1 },
+      accountCount: 3,
+      strayCount: 2,
+    })
+    expect(words.done).toBe(false)
+    expect(words.detail).toMatch(/2 of Sui Kitchen’s accounts are still in another group/)
+  })
+
+  it('a client with no accounts is a plain “nothing to move yet”', () => {
+    const notYet = groupSetupWords({
+      clientName: 'Sui Kitchen', profile: null, accountCount: 0, strayCount: 0,
+    })
+    expect(notYet.detail).toMatch(/Nothing to move yet/)
+    expect(notYet.done).toBe(false)
+
+    const grouped = groupSetupWords({
+      clientName: 'Sui Kitchen',
+      profile: { id: 'p2', name: 'Sui Kitchen', accountCount: 0 },
+      accountCount: 0,
+      strayCount: 0,
+    })
+    expect(grouped.done).toBe(true)
+    expect(grouped.detail).toMatch(/Nothing to move yet/)
+  })
+
+  it('says what moved and what did not, by name', () => {
+    const all = groupSetupReport({
+      clientName: 'Sui Kitchen',
+      groupName: 'Sui Kitchen',
+      moved: ['@sui.kitchen', '@suikitchen_tt'],
+      failed: [],
+      adopted: false,
+    })
+    expect(all).toMatch(/All 2 accounts moved across/)
+
+    const partial = groupSetupReport({
+      clientName: 'Sui Kitchen',
+      groupName: 'Sui Kitchen',
+      moved: ['@sui.kitchen'],
+      failed: [{ name: '@suikitchen_tt', why: 'it would not move' }],
+      adopted: false,
+    })
+    // the failure this whole card exists to prevent: a half-moved set
+    // reported as "done"
+    expect(partial).not.toMatch(/All \d+ accounts/)
+    expect(partial).toMatch(/@sui\.kitchen/)
+    expect(partial).toMatch(/@suikitchen_tt — it would not move/)
+
+    const none = groupSetupReport({
+      clientName: 'Sui Kitchen', groupName: 'Sui Kitchen', moved: [], failed: [], adopted: true,
+    })
+    expect(none).toMatch(/already there/)
+    expect(none).toMatch(/Nothing to move yet/)
+  })
+})
+
+describe('finding or making the group, without a network', () => {
+  const OLD = { ...process.env }
+  beforeEach(() => {
+    vi.resetModules()
+    process.env.ZERNIO_API_URL = 'https://zernio.invalid/api/v1'
+    process.env.ZERNIO_API_KEY = 'test-key'
+    process.env.PUBLISH_DRY_RUN = '1'
+  })
+  afterEach(() => {
+    process.env = { ...OLD }
+    vi.restoreAllMocks()
+  })
+
+  it('adopts the group that already exists rather than making a second one', async () => {
+    const { findOrCreateProfile } = await import('@/app/lib/zernio-profiles')
+    // the dry run's workspace holds "Default" and "test"; asking for "Test"
+    // must adopt the one that is there, capital letter and all
+    const found = await findOrCreateProfile('Test')
+    expect(found.adopted).toBe(true)
+    expect(found.profile.id).toBe('dry-run-test')
+  })
+
+  it('makes one only when there is genuinely none', async () => {
+    const { findOrCreateProfile } = await import('@/app/lib/zernio-profiles')
+    const made = await findOrCreateProfile('Sui Kitchen')
+    expect(made.adopted).toBe(false)
+    expect(made.profile.name).toBe('Sui Kitchen')
+  })
+
+  it('refuses a nameless group rather than making one called “ ”', async () => {
+    const { findOrCreateProfile } = await import('@/app/lib/zernio-profiles')
+    await expect(findOrCreateProfile('  ')).rejects.toThrow(/name/i)
+  })
+
+  /**
+   * A LISTING WE COULD NOT READ IS NOT PROOF THERE IS NO GROUP.
+   *
+   * Falling through to "create" on a failed read is exactly how a duplicate
+   * gets made on a bad afternoon, and a duplicate is what this action exists
+   * to prevent. So the whole press fails and the person can try again.
+   */
+  it('does not create anything when it could not read the list', async () => {
+    vi.resetModules()
+    process.env.PUBLISH_DRY_RUN = '0'
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      calls.push(String(url))
+      return new Response('{"error":"upstream is down"}', {
+        status: 503, headers: { 'Content-Type': 'application/json' },
+      })
+    })
+    const { findOrCreateProfile } = await import('@/app/lib/zernio-profiles')
+    await expect(findOrCreateProfile('Sui Kitchen')).rejects.toThrow()
+    expect(calls).toEqual(['https://zernio.invalid/api/v1/profiles'])
+  })
+})
+
+/**
+ * THE PHOTO'S WAY IN.
+ *
+ * `GET /v1/accounts` spells it `profilePicture`; older endpoints on the same
+ * API use `avatarUrl` and `picture`. The account shape reads all three, and
+ * `syncSocialAccounts` is what puts the answer on `social_accounts.avatar_url`
+ * so the browser is not asking the provider on every render.
+ */
+describe('the provider’s account list carries the photo through', () => {
+  const OLD = { ...process.env }
+  beforeEach(() => {
+    vi.resetModules()
+    process.env.ZERNIO_API_URL = 'https://zernio.invalid/api/v1'
+    process.env.ZERNIO_API_KEY = 'test-key'
+    // the real reader is the thing under test here, and the fetch below is
+    // the only thing it can reach — the suite-wide dry run would hand back
+    // the stub publisher and prove nothing
+    process.env.PUBLISH_DRY_RUN = '0'
+  })
+  afterEach(() => {
+    process.env = { ...OLD }
+    vi.restoreAllMocks()
+  })
+
+  it('reads profilePicture, and drops anything that is not a URL string', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      accounts: [
+        { _id: 'a1', platform: 'tiktok', username: 'yusuf.k', profilePicture: 'https://cdn.invalid/y.jpg' },
+        { _id: 'a2', platform: 'instagram', username: 'md.media', profilePicture: null },
+        { _id: 'a3', platform: 'youtube', username: 'mdm', avatarUrl: 'https://cdn.invalid/m.jpg', profilePicture: 'https://cdn.invalid/ignored.jpg' },
+        { _id: 'a4', platform: 'linkedin', username: 'mdm', profilePicture: { url: 'https://cdn.invalid/x.jpg' } },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+    const { getPublisher } = await import('@/app/lib/publisher')
+    const rows = await getPublisher().listAccounts('p1')
+    expect(rows.map(r => r.avatarUrl)).toEqual([
+      'https://cdn.invalid/y.jpg',
+      null,
+      // avatarUrl still wins where an endpoint sends both
+      'https://cdn.invalid/m.jpg',
+      // an object is not a picture; passing it on makes a broken <img> three
+      // layers away, where nobody would think to look for it
+      null,
+    ])
   })
 })

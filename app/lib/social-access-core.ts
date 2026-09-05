@@ -11,6 +11,7 @@
  * Pure: no database, no fetch. The route hands it rows; it hands back words.
  */
 
+import { normaliseFolderName } from './gdrive-core'
 import { ROLE_LABEL, TEAM_ROLES, mayPublish, type Role } from './identity-core'
 import { mayApprovePost, maySendPostApproval } from './posting-approval-core'
 import { actingRoles } from './workflow-core'
@@ -493,6 +494,116 @@ export function lastCheckedWords(at: string | null | undefined, now: number): st
   return `Checked ${days} day${days === 1 ? '' : 's'} ago`
 }
 
+/* ── the face on an account ─────────────────────────────────────────────── */
+
+/**
+ * Two letters for an account when there is no photo to show.
+ *
+ * Lives here rather than beside the calendar bar because the bar is no longer
+ * the only place an account wears a face — the access page shows the same set
+ * of rows, and two initials functions would drift the first time somebody
+ * decided a one-word name should be one letter.
+ */
+export function initialsOf(name: string): string {
+  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '—'
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
+}
+
+/**
+ * HAS THIS SIGNED URL ALREADY RUN OUT?
+ *
+ * TikTok's photos come from a CDN that signs its links and puts the deadline
+ * in the query string (`x-expires`, seconds since the epoch); the same trick
+ * turns up as `Expires` on other CDNs and as `X-Amz-Date` + `X-Amz-Expires` on
+ * anything S3-shaped. We store the URL so the browser does not have to ask the
+ * provider on every render, which means the stored one is always a little bit
+ * stale and eventually dead.
+ *
+ * A dead one must degrade to initials, not to a broken picture: the row is
+ * about whether an account works, and a torn-image glyph next to it reads as
+ * the account being broken rather than the photo. So the deadline is READ
+ * before the URL is used, and `onError` in the component catches the rest —
+ * an expiry spelled some way we have never seen, a photo deleted upstream.
+ *
+ * Unreadable or absent deadline means "no reason to think it is dead", which
+ * is the honest answer: the image tag will find out.
+ */
+export function signedUrlExpired(url: string, now: number): boolean {
+  let params: URLSearchParams
+  try {
+    params = new URL(url).searchParams
+  } catch {
+    return false
+  }
+  const seconds = (raw: string | null): number | null => {
+    if (!raw) return null
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  const at = seconds(params.get('x-expires')) ?? seconds(params.get('X-Expires'))
+    ?? seconds(params.get('Expires')) ?? seconds(params.get('expires'))
+  if (at !== null) return at * 1000 <= now
+
+  // S3's pair: a start stamp plus a lifetime in seconds
+  const started = params.get('X-Amz-Date')
+  const lifetime = seconds(params.get('X-Amz-Expires'))
+  if (started && lifetime !== null) {
+    // 20260905T041500Z — no separators, so give it the ones Date wants
+    const iso = /^\d{8}T\d{6}Z$/.test(started)
+      ? `${started.slice(0, 4)}-${started.slice(4, 6)}-${started.slice(6, 8)}T${started.slice(9, 11)}:${started.slice(11, 13)}:${started.slice(13, 15)}Z`
+      : started
+    const from = new Date(iso).getTime()
+    if (!Number.isNaN(from)) return from + lifetime * 1000 <= now
+  }
+  return false
+}
+
+export type AccountFace =
+  | { kind: 'photo'; url: string; initials: string; name: string }
+  | { kind: 'initials'; initials: string; name: string }
+
+/** The least an account has to carry to be given a face. */
+export type FaceSubject = {
+  name?: string | null
+  username?: string | null
+  platform?: string | null
+  avatar_url?: string | null
+}
+
+/**
+ * THE ONE DECISION: this account's real photo, or its initials.
+ *
+ * Pure, so the rule can be tested without a browser and cannot be re-decided
+ * differently on each of the pages that draws an account. Three things stop a
+ * photo being used, and all three end in the same place rather than in a grey
+ * box or a torn image:
+ *
+ *   • there is none — Instagram and LinkedIn hand back null today;
+ *   • it is not a picture we can load over https;
+ *   • its signature has run out (see `signedUrlExpired`).
+ *
+ * The name is picked the way a person would say it: the handle first, because
+ * that is what identifies an account, then the account's own name, then
+ * whatever the caller offers (usually the client's name).
+ */
+export function avatarFor(
+  account: FaceSubject | null | undefined,
+  now: number = Date.now(),
+  fallbackName = '',
+): AccountFace {
+  const name = String(
+    account?.username || account?.name || fallbackName || account?.platform || '',
+  ).trim()
+  const initials = initialsOf(name)
+  const url = String(account?.avatar_url ?? '').trim()
+  if (!url) return { kind: 'initials', initials, name }
+  if (!/^https:\/\//i.test(url)) return { kind: 'initials', initials, name }
+  if (signedUrlExpired(url, now)) return { kind: 'initials', initials, name }
+  return { kind: 'photo', url, initials, name }
+}
+
 /* ── the client's group of accounts at the provider ────────────────────── */
 
 export type ProfileChoice = { id: string; name: string; accountCount: number | null }
@@ -558,4 +669,131 @@ export function profileMappingWords(input: {
     detail: `Every account for ${input.clientName} is in this group.`,
     action: 'Change group',
   }
+}
+
+/* ── setting the group up in one press ─────────────────────────────────── */
+
+/**
+ * IS THIS GROUP THE ONE NAMED AFTER THE CLIENT?
+ *
+ * Asked with the Drive matcher's own normaliser, on purpose. Somebody typing
+ * a group name at the posting service varies capitals, punctuation and a
+ * trailing "Pty Ltd" without meaning anything by it, and the agency already
+ * decided once what makes two names the same client — in `normaliseFolderName`,
+ * where the HQ folders are adopted rather than duplicated. A second, slightly
+ * different rule here would mean a client whose Drive folder was adopted and
+ * whose posting group was duplicated, which is the worst of both.
+ *
+ * Deliberately exact-after-normalising, like the Drive one: making a duplicate
+ * group is annoying, and adopting the WRONG client's group sends a post out
+ * under somebody else's name.
+ */
+export function sameGroupName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = normaliseFolderName(a)
+  const right = normaliseFolderName(b)
+  return left.length > 0 && left === right
+}
+
+/** The group already named after this client, if the provider has one. */
+export function findGroupByName(
+  profiles: readonly ProfileChoice[], name: string,
+): ProfileChoice | null {
+  return profiles.find(p => sameGroupName(p.name, name)) ?? null
+}
+
+export type GroupSetup = {
+  /** is there nothing left to do */
+  done: boolean
+  /** what the button says, or null when there is no button to show */
+  action: string | null
+  /** the line under it */
+  detail: string
+}
+
+/**
+ * "SET UP THIS CLIENT'S GROUP" — offered, or shown as already done.
+ *
+ * The page used to offer `Make one called "X"` whatever the state was, which
+ * invites a second group with the same name for a client that already has
+ * one. So the state is worked out first, and the button only exists while
+ * pressing it would change something:
+ *
+ *   • mapped to the group named after the client, nothing astray → done;
+ *   • mapped somewhere else, or accounts left behind in another group → the
+ *     action, described in terms of what will move;
+ *   • no accounts connected at all → done in the only sense available, and
+ *     said plainly rather than offered as a button that moves nothing.
+ *
+ * Never a word about renaming or deleting: a group at the provider may be
+ * somebody's by hand, and this action only ever adopts one or adds one.
+ */
+export function groupSetupWords(input: {
+  clientName: string
+  profile: ProfileChoice | null
+  accountCount: number
+  strayCount: number
+}): GroupSetup {
+  const { clientName, profile, accountCount, strayCount } = input
+  const named = profile !== null && sameGroupName(profile.name, clientName)
+
+  if (accountCount === 0) {
+    return {
+      done: named,
+      action: named ? null : `Set up ${clientName}’s group`,
+      detail: named
+        ? `${clientName} has a group of their own. Nothing to move yet — no accounts are connected.`
+        : `Nothing to move yet — no accounts are connected. You can still make ${clientName} a group of their own, ready for the first one.`,
+    }
+  }
+
+  if (named && strayCount === 0) {
+    return {
+      done: true,
+      action: null,
+      detail: `All ${accountCount} of ${clientName}’s account${accountCount === 1 ? '' : 's'} are in this group. Nothing to do.`,
+    }
+  }
+
+  const willMove = named ? strayCount : accountCount
+  return {
+    done: false,
+    action: `Set up ${clientName}’s group`,
+    detail: named
+      ? `${strayCount} of ${clientName}’s account${strayCount === 1 ? ' is' : 's are'} still in another group. This moves ${strayCount === 1 ? 'it' : 'them'} across.`
+      : `This finds or makes a group called “${clientName}” and moves ${willMove === 1 ? 'their account' : `all ${willMove} of their accounts`} into it. Nothing is renamed or deleted.`,
+  }
+}
+
+/**
+ * What happened, per account.
+ *
+ * A half-moved set reported as "done" is the failure this whole action exists
+ * to prevent, so the sentence names the accounts that would not move and says
+ * why for each — the provider's own reason, which is usually the only clue
+ * anybody has. "All of them" is only said when the read-back agreed.
+ */
+export function groupSetupReport(input: {
+  clientName: string
+  groupName: string
+  moved: readonly string[]
+  failed: readonly { name: string; why: string }[]
+  adopted: boolean
+}): string {
+  const { clientName, groupName, moved, failed, adopted } = input
+  const where = `“${groupName}”`
+  const opening = adopted
+    ? `${clientName} is in the group ${where}, which was already there.`
+    : `${clientName} has a group of their own, ${where}.`
+
+  if (moved.length === 0 && failed.length === 0) {
+    return `${opening} Nothing to move yet — no accounts are connected.`
+  }
+  if (failed.length === 0) {
+    return `${opening} ${moved.length === 1 ? 'The account' : `All ${moved.length} accounts`} moved across: ${moved.join(', ')}.`
+  }
+  const stuck = failed.map(f => `${f.name} — ${f.why}`).join('; ')
+  if (moved.length === 0) {
+    return `${opening} Nothing moved: ${stuck}.`
+  }
+  return `${opening} Moved: ${moved.join(', ')}. Still where ${failed.length === 1 ? 'it' : 'they'} ${failed.length === 1 ? 'was' : 'were'}: ${stuck}.`
 }

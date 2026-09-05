@@ -8,6 +8,8 @@ import {
 import { cn } from '@/lib/utils'
 import type { Client, SocialAccount } from '@/lib/db-types'
 import { PLATFORM_RULES } from '@/app/lib/publish-core'
+import { initialsOf as accountInitials } from '@/app/lib/social-access-core'
+import AccountAvatar from '../AccountAvatar'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 
 /**
@@ -60,12 +62,16 @@ export function profileSlots(
   return out
 }
 
-/** Two letters for an account, when there is no profile picture to show. */
-export function initialsOf(name: string): string {
-  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '—'
-  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
-}
+/**
+ * Two letters for an account, when there is no profile picture to show.
+ *
+ * The rule itself moved to `social-access-core` when the access page started
+ * drawing the same faces — one initials rule, or the two of them disagree the
+ * first time somebody decides a one-word name should be one letter. Kept
+ * exported here because this is where the calendar's bar has always been
+ * asked about it.
+ */
+export const initialsOf = accountInitials
 
 /** The brand's own colour as a ring — Instagram's mark is a gradient, and a
  *  ring cannot be one, so it wears its pink. */
@@ -96,25 +102,10 @@ function AccountSlot({ slot, selected, onPick, fallbackName }: {
         style={selected ? { boxShadow: `0 0 0 2px var(--dbx-surface, #fff), 0 0 0 4px ${ring}` } : undefined}
         className="relative flex h-11 w-11 items-center justify-center overflow-visible rounded-full"
       >
-        {account.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={account.avatar_url}
-            alt=""
-            className="h-11 w-11 rounded-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <span
-            style={{ background: brandFor(platform).background }}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-bold text-white"
-          >
-            {initialsOf(name)}
-          </span>
-        )}
-        <span className="absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-surface">
-          <PlatformIcon platform={platform} size={16} />
-        </span>
+        {/* the real photo when the network gives us one, initials when it
+            does not, and initials again when a signed URL has run out — see
+            AccountAvatar. The network's own mark rides in the corner. */}
+        <AccountAvatar account={account} size={44} fallbackName={fallbackName} />
         {selected && (
           <span
             style={{ background: ring }}

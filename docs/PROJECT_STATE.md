@@ -251,6 +251,27 @@ the client's account manager is told (bell and email) with a link to this page,
 and every post booked onto that channel carries "… needs reconnecting" on its
 tile.
 
+**Every account wears its own face** — the channel bar on the week and the rows
+here. The photo comes from the provider (`profilePicture` on `GET /v1/accounts`,
+stored on `social_accounts.avatar_url` by `syncSocialAccounts` so the browser
+never asks Zernio per render, and refreshed every time somebody presses "Check
+them"). It is OPTIONAL by design: TikTok and YouTube hand one back, Instagram
+and LinkedIn hand back null, and TikTok's are signed links that EXPIRE. So
+`avatarFor` reads the deadline out of the query string before using the URL,
+`AccountAvatar` falls back again on `onError`, and the answer either way is the
+account's initials on the network's colour — never a grey box, never a torn
+image next to a row asserting the account is healthy.
+
+**"Set up this client's group"** is one press for an account manager or super
+admin: it ADOPTS the group at Zernio already named after the client — matched
+with the Drive adoption's own normaliser, so "Sui Kitchen Pty Ltd" is "Sui
+Kitchen" — makes one only when there genuinely is none, moves that client's
+accounts into it, writes `clients.social_profile_id`, and reports account by
+account what moved and what did not. A client already in a correctly named
+group with nothing astray shows "Set up" as done rather than offering to make
+a duplicate; a client with no accounts is told plainly there is nothing to move
+yet. Nothing here ever renames or deletes a group somebody made by hand.
+
 ### Routes
 
 | route | what |

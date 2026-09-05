@@ -1,6 +1,6 @@
 import 'server-only'
 import { isPublishDryRun } from './publisher'
-import { readProfiles, type ProfileChoice } from './social-access-core'
+import { findGroupByName, readProfiles, type ProfileChoice } from './social-access-core'
 
 /**
  * THE PROVIDER'S GROUPS OF ACCOUNTS.
@@ -240,4 +240,44 @@ export async function moveAccountsToProfile(
     }
   }
   return out
+}
+
+/**
+ * THE GROUP FOR THIS CLIENT — adopted if it is already there, made if not.
+ *
+ * `createProfile` alone would be enough IF the provider always answered a
+ * duplicate name with 409 and the id of the one that exists. It does that for
+ * an exact name; it does not, and cannot, know that "Sui Kitchen Pty Ltd" and
+ * "Sui Kitchen" are the same client. The owner's workspace is full of groups
+ * made by hand over a year — "test", "Stretchworks", "(DELETE IT) | Yusuf" —
+ * and a second "Sui Kitchen" appearing next to the first is exactly the mess
+ * this action is meant to clear up.
+ *
+ * So the list is READ FIRST and matched with the same normaliser the Drive
+ * adoption uses, and only a genuine absence creates anything. Two outcomes,
+ * and the caller is told which, because "we adopted the group you already
+ * made" and "we made you a group" are different sentences to a person.
+ *
+ * NOTHING HERE RENAMES OR DELETES. An adopted group keeps the name somebody
+ * gave it — the client is mapped to it, which is the fact the app acts on —
+ * and a group that turns out to be the wrong one is a person's decision to
+ * unpick, not ours to make tidy.
+ */
+export async function findOrCreateProfile(
+  name: string,
+): Promise<{ profile: ProfileChoice; adopted: boolean }> {
+  const clean = String(name ?? '').trim()
+  if (!clean) throw new Error('Give the group a name')
+
+  // a listing we could not read is not proof there is no group: falling
+  // through to create on a failed read is how a duplicate gets made on a bad
+  // afternoon. `listProfiles` throws rather than answering [], so the whole
+  // action stops and the person can press again.
+  const existing = findGroupByName(await listProfiles(), clean)
+  if (existing) return { profile: existing, adopted: true }
+
+  const made = await createProfile(clean)
+  // createProfile adopts a 409 by id and hands back the name we asked for, so
+  // an id we did not mint is still an adoption as far as the words go
+  return { profile: made, adopted: made.accountCount === null }
 }

@@ -329,6 +329,14 @@ export function readChoices(
 
 export type ReplyButton = { type?: string; title: string; url?: string; payload?: string }
 
+/** The first of these that is actually a non-empty string, or null. */
+function firstString(...values: unknown[]): string | null {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim()) return v
+  }
+  return null
+}
+
 export type ProviderAccount = {
   providerAccountId: string
   platform: string
@@ -404,7 +412,17 @@ class ZernioPublisher implements Publisher {
         platform: String(a.platform ?? ''),
         name: (a.name ?? a.displayName ?? null) as string | null,
         username: (a.username ?? a.handle ?? null) as string | null,
-        avatarUrl: (a.avatarUrl ?? a.picture ?? null) as string | null,
+        // THE PHOTO. `GET /v1/accounts` spells it `profilePicture` — checked
+        // live against the owner's four accounts on 5 Sep 2026, where TikTok
+        // and YouTube carry a URL and Instagram and LinkedIn carry null. The
+        // other two spellings stay in the chain because other endpoints on
+        // this API use them, and a fallback that costs nothing is cheaper
+        // than finding out which one a new endpoint picked.
+        //
+        // Anything that is not a string is dropped rather than passed on: a
+        // number or an object here becomes a broken <img> three layers away,
+        // where nobody would think to look for it.
+        avatarUrl: firstString(a.avatarUrl, a.profilePicture, a.picture),
       }
     }).filter(a => a.providerAccountId && a.platform)
   }

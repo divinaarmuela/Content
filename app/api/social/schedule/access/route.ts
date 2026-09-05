@@ -5,10 +5,11 @@ import { AuthzError, requireRole } from '@/app/lib/authz'
 import { assertClientAccess, scheduleErrorResponse } from '@/app/lib/social-schedule'
 import { getPublisher } from '@/app/lib/publisher'
 import {
-  mayChangeAccess, mayChangeProfile, type AccountHealth,
+  groupSetupReport, mayChangeAccess, mayChangeProfile,
+  type AccountHealth, type ProfileChoice,
 } from '@/app/lib/social-access-core'
 import {
-  createProfile, listProfiles, moveAccountsToProfile, providerConfigured,
+  findOrCreateProfile, listProfiles, moveAccountsToProfile, providerConfigured,
 } from '@/app/lib/zernio-profiles'
 
 /**
@@ -129,8 +130,9 @@ export async function GET(req: Request) {
 /**
  * POST — put this client in a group of accounts at the posting service.
  *
- * `{ clientId, profileId }` maps to an existing group; `{ clientId, name }`
- * makes one first (adopting the one that exists if the name is taken). Either
+ * `{ clientId, profileId }` maps to an existing group; `{ clientId, name }` is
+ * the "set this client up" press — it ADOPTS the group already named after
+ * them and only makes one when there is none. Either
  * way the client's connected accounts are moved into it, the group is READ
  * BACK, and the answer says which really moved and which did not, by name — a
  * half-moved set reported as "done" is the worst outcome available, and so is
@@ -151,10 +153,36 @@ export async function POST(req: Request) {
       const client = await table<Client>('clients').get(clientId)
       if (!client) throw new AuthzError('That client no longer exists', 404)
 
+      /**
+       * TWO WAYS IN, ONE PATH THROUGH.
+       *
+       * `{ name }` is "set this client up": find the group named after them or
+       * make one — `findOrCreateProfile` reads the list first and matches it
+       * the way the Drive adoption matches a folder, so pressing this twice,
+       * or pressing it for a client whose group somebody made by hand, adopts
+       * rather than leaving a second group with the same name behind.
+       *
+       * `{ profileId }` is somebody choosing a particular group from the menu,
+       * including one that is not named after the client at all — a decision
+       * the page is allowed to make and this route is not allowed to second
+       * guess. Its name is looked up only so the answer can say where the
+       * accounts went; a listing we could not read costs a nicer sentence and
+       * nothing else.
+       */
       const name = String(body.name ?? '').trim()
-      const profile = name
-        ? await createProfile(name)
-        : { id: String(body.profileId ?? ''), name: '', accountCount: null }
+      let adopted = true
+      let profile: ProfileChoice
+      if (name) {
+        const found = await findOrCreateProfile(name)
+        profile = found.profile
+        adopted = found.adopted
+      } else {
+        const id = String(body.profileId ?? '')
+        const known = id
+          ? await listProfiles().then(ps => ps.find(p => p.id === id) ?? null).catch(() => null)
+          : null
+        profile = known ?? { id, name: '', accountCount: null }
+      }
       if (!profile.id) throw new AuthzError('Pick a group, or give a new one a name', 400)
 
       // the mapping is written before the moves: it is what every other part
@@ -183,11 +211,19 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         profileId: profile.id,
+        groupName: profile.name || name || 'this group',
+        adopted,
         moved: outcome.moved,
         failed: outcome.failed,
-        message: outcome.failed.length === 0
-          ? `${client.name}’s accounts are all in this group now.`
-          : `${outcome.failed.length} account${outcome.failed.length === 1 ? '' : 's'} would not move: ${outcome.failed.map(f => `${f.name} — ${f.why}`).join('; ')}`,
+        // per account, by name, and never "done" while something is still
+        // where it was — see `groupSetupReport`
+        message: groupSetupReport({
+          clientName: client.name,
+          groupName: profile.name || name || 'this group',
+          moved: outcome.moved,
+          failed: outcome.failed,
+          adopted,
+        }),
       })
     } catch (e) {
       return scheduleErrorResponse(e)

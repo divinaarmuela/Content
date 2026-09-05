@@ -12,10 +12,11 @@ import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { accessibleClientIdsOf, type ScopeViewer } from '@/app/lib/scope-client'
 import { isValidZone, zoneLabel } from '@/app/lib/timezone-core'
 import {
-  accountHealthWords, lastCheckedWords, peopleWithAccess, profileMappingWords,
-  type AccountHealth, type ProfileChoice,
+  accountHealthWords, groupSetupWords, lastCheckedWords, peopleWithAccess,
+  profileMappingWords, type AccountHealth, type ProfileChoice,
 } from '@/app/lib/social-access-core'
 import { useRole } from '../../../useRole'
+import AccountAvatar from '../../AccountAvatar'
 import PlatformIcon, { brandFor } from '../../PlatformIcon'
 import PageTitle from '../../../ui/PageTitle'
 
@@ -137,6 +138,7 @@ export default function AccessPage() {
     setClientId(id)
     setProblem(null)
     setNote(null)
+    setReport(null)
     try { localStorage.setItem(CLIENT_KEY, id) } catch { /* private mode */ }
   }
 
@@ -274,11 +276,24 @@ export default function AccessPage() {
 
   /* ── the group at the posting service ────────────────────────────────── */
 
+  /**
+   * What the last press actually did, account by account.
+   *
+   * Kept beside the group rather than in the page's one note line: "3 moved,
+   * TikTok did not" is a list, and a list squeezed into a sentence at the top
+   * of the page is a list nobody reads. Cleared the moment another client is
+   * picked, because it is about this one.
+   */
+  const [report, setReport] = useState<
+    { message: string; moved: string[]; failed: { name: string; why: string }[] } | null
+  >(null)
+
   const setProfile = async (input: { profileId?: string; name?: string }) => {
     if (!clientId) return
     setBusy('profile')
     setProblem(null)
     setNote(null)
+    setReport(null)
     try {
       const res = await fetch('/api/social/schedule/access', {
         method: 'POST',
@@ -287,7 +302,14 @@ export default function AccessPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? ''))
-      setNote(String(json?.message ?? 'Saved.'))
+      setReport({
+        message: String(json?.message ?? 'Saved.'),
+        moved: Array.isArray(json?.moved) ? json.moved.map(String) : [],
+        failed: Array.isArray(json?.failed)
+          ? json.failed.map((f: { name?: unknown; why?: unknown }) =>
+              ({ name: String(f?.name ?? ''), why: String(f?.why ?? '') }))
+          : [],
+      })
       await askProvider(clientId)
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
@@ -305,6 +327,23 @@ export default function AccessPage() {
   const mapping = profileMappingWords({
     clientName,
     profile: mapped ?? (mappedId ? { id: mappedId, name: 'A group', accountCount: null } : null),
+    strayCount: view?.stray.length ?? 0,
+  })
+
+  /**
+   * IS THIS CLIENT SET UP, OR IS THERE A PRESS TO MAKE?
+   *
+   * Asked of `mapped` — the group we can actually NAME — rather than of the
+   * stored id: a client mapped to a group whose name we could not read is not
+   * demonstrably set up, and offering the press again is harmless because the
+   * press adopts. The one thing it must never do is offer to make a second
+   * group for a client who already has one, which is what the old
+   * `Make one called “X”` button did every time it was drawn.
+   */
+  const setup = groupSetupWords({
+    clientName,
+    profile: mapped,
+    accountCount: accounts.length,
     strayCount: view?.stray.length ?? 0,
   })
 
@@ -419,7 +458,11 @@ export default function AccessPage() {
                   key={a.id}
                   className="flex flex-wrap items-center gap-3 rounded-inner border border-border bg-paper px-3 py-2.5"
                 >
-                  <PlatformIcon platform={a.platform} size={32} />
+                  {/* the account's own photo when the network gives us one,
+                      its initials when it does not — the network's mark rides
+                      in the corner either way, so the row still says at a
+                      glance which platform it is */}
+                  <AccountAvatar account={a} size={36} fallbackName={clientName} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[14px] font-semibold">{a.name || brand.label}</span>
@@ -512,18 +555,52 @@ export default function AccessPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    disabled={busy === 'profile'}
-                    onClick={() => void setProfile({ name: clientName })}
-                    className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
-                  >
-                    {busy === 'profile' ? 'Working…' : `Make one called “${clientName}”`}
-                  </button>
+                  {setup.done ? (
+                    // no button: pressing it would make a second group with
+                    // the same name, which is the mess this action exists to
+                    // clear up
+                    <span className="flex min-h-11 items-center gap-2 rounded-full bg-tint-green px-4 text-[13px] font-semibold">
+                      <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                      Set up
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy === 'profile'}
+                      onClick={() => void setProfile({ name: clientName })}
+                      className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50"
+                    >
+                      {busy === 'profile' ? 'Working…' : setup.action}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
             <p className="text-[12px] text-muted-foreground">{mapping.detail}</p>
+            {/* only while it adds something: once the client is set up,
+                `mapping.detail` has already said so and a second sentence
+                saying it again is a sentence nobody reads */}
+            {view.can.profile && !setup.done && (
+              <p className="text-[12px] text-muted-foreground">{setup.detail}</p>
+            )}
+
+            {/* what the last press did, account by account — a half-moved set
+                reported as "done" is the failure this whole card exists to
+                prevent */}
+            {report && (
+              <div className="flex flex-col gap-1 rounded-inner border border-border bg-surface px-3 py-2">
+                <p className="text-[13px] font-medium">{report.message}</p>
+                {report.failed.length > 0 && (
+                  <ul className="flex flex-col gap-0.5">
+                    {report.failed.map(f => (
+                      <li key={f.name} className="text-[12px] text-muted-foreground">
+                        <span className="font-semibold">{f.name}</span> — {f.why}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
