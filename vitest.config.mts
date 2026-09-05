@@ -3,6 +3,10 @@ import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   test: {
+    // An agent's isolated worktree lives under .claude/worktrees and carries a
+    // full copy of this suite; collecting it doubles every run and reports a
+    // mid-edit copy's failures as ours.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/worktrees/**'],
     /**
      * The two kill-switches, on for the whole suite.
      *
