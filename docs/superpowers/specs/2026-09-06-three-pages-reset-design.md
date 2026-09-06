@@ -209,6 +209,24 @@ Owner: "ensure that they can leave comments on the board on which part of the bo
   still do not see client comments.
 
 
+## One shoot is one card, all the way through
+
+Owner, on the current portal: "the look shoot shoot wrapped part … and how there is another
+card for when its booked … i just dont get it".
+
+Today a single shoot appears as several cards on the portal — one for the booking, one for
+the plan, another once it is wrapped — and nothing says they are the same shoot. That is the
+confusion.
+
+- **One shoot is one card**, from booked to wrapped. Its state changes on the card; a stage
+  never spawns a second card.
+- The card says, in one line, where the shoot stands: the date once booked, "your plan is
+  ready to look at" when it is with them, "wrapped" afterwards.
+- The plan lives on that card — the link, the PDF, the one tap to approve — not beside it.
+- The same rule holds everywhere else: a card is a thing, not a stage. Stages are shown by
+  which column the card sits in and what its own line says.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
