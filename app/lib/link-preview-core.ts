@@ -38,6 +38,9 @@ export type LinkPreview = {
    *  Never true: absent means "not known to be broken", which is the default
    *  and needs no field. */
   embeddable?: false
+  /** the account the post belongs to — "@handle" where the provider says
+   *  one, else the display name — so a mock-up can wear the real account */
+  author?: string
 }
 
 export type Provider = {
@@ -223,10 +226,12 @@ export function fromOembed(json: unknown, url: string): LinkPreview {
   const handle = str(j.author_unique_id) ?? /\/@([\w.-]+)/.exec(str(j.author_url) ?? '')?.[1]
   const canonical = provider?.name === 'TikTok' && id && TIKTOK_ID.test(id)
     ? tiktokCanonicalUrl(id, handle) : undefined
+  const who = handle ? `@${handle}` : author
   return {
     ...(title || author ? { title: (title ?? author)!.slice(0, 200) } : {}),
     ...(thumb && isSafePreviewUrl(thumb) ? { thumb: thumb.slice(0, 2000) } : {}),
     ...(provider ? { provider: provider.name } : {}),
+    ...(who ? { author: who.slice(0, 80) } : {}),
     ...(canonical && canonical !== url ? { canonical } : {}),
     media: str(j.type) === 'photo' ? 'image' : provider?.media ?? 'page',
   }
@@ -304,9 +309,12 @@ export function fromInstagramEmbedHtml(html: string): LinkPreview | null {
   }
 
   const cap = /<div\s+class="Caption"[^>]*>([\s\S]*?)(?:<div\s+class="CaptionComments"|<\/div>)/i.exec(html)?.[1]
+  let author: string | undefined
   if (cap) {
     const words = textOf(cap.replace(/<a\s+class="CaptionUsername"[^>]*>[\s\S]*?<\/a>/i, ''))
     if (words) title = words.slice(0, 200)
+    const who = textOf(/<a\s+class="CaptionUsername"[^>]*>([\s\S]*?)<\/a>/i.exec(cap)?.[1] ?? '')
+    if (who && /^[\w.]{1,60}$/.test(who)) author = `@${who}`
   }
 
   if (!thumb || !title) {
@@ -332,6 +340,7 @@ export function fromInstagramEmbedHtml(html: string): LinkPreview | null {
   return {
     ...(title ? { title } : {}),
     ...(thumb ? { thumb } : {}),
+    ...(author ? { author } : {}),
     provider: 'Instagram',
     media: isVideo ? 'video' : 'image',
   }
@@ -416,6 +425,7 @@ export function mergePreview(...parts: (LinkPreview | null | undefined)[]): Link
     if (!out.provider && p.provider) out.provider = p.provider
     if ((!out.media || out.media === 'page') && p.media) out.media = p.media
     if (!out.canonical && p.canonical) out.canonical = p.canonical
+    if (!out.author && p.author) out.author = p.author
     if (p.embeddable === false) out.embeddable = false
   }
   // a canonical URL is what lets a short link play, and "cannot be framed" is

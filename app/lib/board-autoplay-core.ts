@@ -64,10 +64,14 @@ const ID_OK = /^[\w-]{6,20}$/
  * anything that is not one of the three. The click-to-play path
  * (`embedUrlFor`) is untouched and still knows how to play those.
  */
-export function autoplayEmbedUrlFor(url: string, canonical?: string | null): string | null {
+export function autoplayEmbedUrlFor(url: string, canonical?: string | null, origin?: string | null): string | null {
   const yt = youtubeId(url)
   if (yt && ID_OK.test(yt)) {
-    return `https://www.youtube-nocookie.com/embed/${yt}?autoplay=1&mute=1&loop=1&playlist=${yt}&controls=0&rel=0&playsinline=1`
+    // `enablejsapi=1&origin=<ours>` is what lets the page talk to the
+    // player after it is up — unmute in place, no second frame. YouTube
+    // only listens when the origin is stated and matches the page's own.
+    const api = origin && /^https?:\/\/[^/]+$/.test(origin) ? `&enablejsapi=1&origin=${encodeURIComponent(origin)}` : ''
+    return `https://www.youtube-nocookie.com/embed/${yt}?autoplay=1&mute=1&loop=1&playlist=${yt}&controls=0&rel=0&playsinline=1${api}`
   }
   let u: URL
   try { u = new URL(url) } catch { return null }
@@ -88,6 +92,46 @@ export function autoplayEmbedUrlFor(url: string, canonical?: string | null): str
 
   return null
 }
+
+/** Which player is inside a frame we built — by the host the frame is on,
+ *  never by anything a user typed. */
+export type FramePlayer = 'youtube' | 'tiktok' | 'vimeo'
+
+export function framePlayerOf(src: string | null | undefined): FramePlayer | null {
+  if (!src) return null
+  if (src.startsWith('https://www.youtube-nocookie.com/')) return 'youtube'
+  if (src.startsWith('https://www.tiktok.com/player/')) return 'tiktok'
+  if (src.startsWith('https://player.vimeo.com/')) return 'vimeo'
+  return null
+}
+
+/**
+ * The message that turns a running frame's sound on or off, IN PLACE — the
+ * same player, no reload, no resize. Each provider's own wire format,
+ * checked against their docs on 2026-09-06, and each sent only to that
+ * provider's origin so a frame that is not theirs never hears it:
+ *
+ *  - YouTube (IFrame API): a JSON string `{"event":"command","func":"unMute"}`
+ *    to `https://www.youtube-nocookie.com`; needs `enablejsapi=1` on the frame.
+ *  - TikTok (Embed Player): an object `{"x-tiktok-player":true,"type":"unMute"}`
+ *    to `https://www.tiktok.com`.
+ *  - Vimeo (Player API): a JSON string `{"method":"setMuted","value":false}`
+ *    to `https://player.vimeo.com`.
+ */
+export function soundCommand(player: FramePlayer, on: boolean): { message: string | Record<string, unknown>; targetOrigin: string } {
+  switch (player) {
+    case 'youtube':
+      return { message: JSON.stringify({ event: 'command', func: on ? 'unMute' : 'mute', args: [] }), targetOrigin: 'https://www.youtube-nocookie.com' }
+    case 'tiktok':
+      return { message: { 'x-tiktok-player': true, type: on ? 'unMute' : 'mute' }, targetOrigin: 'https://www.tiktok.com' }
+    case 'vimeo':
+      return { message: JSON.stringify({ method: 'setMuted', value: !on }), targetOrigin: 'https://player.vimeo.com' }
+  }
+}
+
+/** What YouTube's player wants to hear first, so it starts reporting and
+ *  accepts commands — sent once the frame has loaded. */
+export const YOUTUBE_LISTEN = JSON.stringify({ event: 'listening' })
 
 /**
  * Instagram's embed page for a post, as the card's face.

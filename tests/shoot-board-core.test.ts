@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  boardTrail, childrenOf, deleteWarning, descendantsOf, insideLabel, insideOf, pruneOrphans, stillThere,
+  boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, insideOf, PLACE_GAP, pruneOrphans, stillThere,
+  type Box,
 } from '../app/lib/shoot-board-core'
 import { applyCanvasOp, sanitiseCanvasCards } from '../app/lib/batch-brief-core'
 
@@ -131,3 +132,66 @@ describe('the tile on the wire', () => {
 function withGeometry<T extends { id: string }>(cards: readonly T[]) {
   return cards.map((c, i) => ({ x: i * 10, y: 0, ...c }))
 }
+
+const clearOf = (a: Box, b: Box) =>
+  a.x >= b.x + b.w + PLACE_GAP || a.y >= b.y + b.h + PLACE_GAP || b.x >= a.x + a.w + PLACE_GAP || b.y >= a.y + a.h + PLACE_GAP
+
+describe('where a new card lands — freeSpot', () => {
+  it('takes the spot the person is looking at when nothing is there, on the 8px grid', () => {
+    expect(freeSpot({ x: 101, y: 203 }, { w: 176, h: 176 }, [])).toEqual({ x: 104, y: 200 })
+  })
+
+  it('a second board does not land on the first: it goes beside it', () => {
+    // the bug: every tile went to the centre of the screen, on top of the
+    // last one, so pressing Board twice looked like one board
+    const first = { ...freeSpot({ x: 100, y: 100 }, { w: 176, h: 176 }, []), w: 176, h: 176 }
+    const second = { ...freeSpot({ x: 100, y: 100 }, { w: 176, h: 176 }, [first]), w: 176, h: 176 }
+    expect([second.x, second.y]).not.toEqual([first.x, first.y])
+    expect(clearOf(second, first)).toBe(true)
+    // beside, not far away: one card plus the gap, on the grid
+    expect(Math.abs(second.x - first.x) + Math.abs(second.y - first.y)).toBeLessThanOrEqual(176 + PLACE_GAP + 8)
+  })
+
+  it('five in a row all find their own space', () => {
+    const taken: Box[] = []
+    for (let i = 0; i < 5; i++) {
+      const at = { ...freeSpot({ x: 0, y: 0 }, { w: 176, h: 176 }, taken), w: 176, h: 176 }
+      for (const t of taken) expect(clearOf(at, t)).toBe(true)
+      taken.push(at)
+    }
+    expect(new Set(taken.map(t => `${t.x},${t.y}`)).size).toBe(5)
+  })
+
+  it('falls back to the wanted spot when the board is solid to the horizon', () => {
+    const wall: Box[] = []
+    for (let i = -20; i <= 20; i++) for (let j = -20; j <= 20; j++) wall.push({ x: i * 200, y: j * 200, w: 200, h: 200 })
+    expect(freeSpot({ x: 0, y: 0 }, { w: 100, h: 100 }, wall)).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe('boards without limit', () => {
+  it('two boards added in a row both exist, with their own ids and positions', () => {
+    const a = { id: 'b1', kind: 'board', name: 'Models', x: 0, y: 0, w: 176, z: 1 }
+    const at = freeSpot({ x: 0, y: 0 }, { w: 176, h: 176 }, [{ x: 0, y: 0, w: 176, h: 176 }])
+    const b = { id: 'b2', kind: 'board', name: 'Props', x: at.x, y: at.y, w: 176, z: 2 }
+    const one = applyCanvasOp([], { upsert: [a] })
+    const two = applyCanvasOp(one, { upsert: [b] })
+    expect(two.map(c => c.id)).toEqual(['b1', 'b2'])
+    expect(two.every(c => c.kind === 'board')).toBe(true)
+    expect(`${two[0].x},${two[0].y}`).not.toBe(`${two[1].x},${two[1].y}`)
+    expect(childrenOf(two, null).length).toBe(2)
+  })
+
+  it('a board inside a board inside a board', () => {
+    const cards = applyCanvasOp([], { upsert: [
+      { id: 'b1', kind: 'board', name: 'One', x: 0, y: 0, w: 176, z: 1 },
+      { id: 'b2', kind: 'board', name: 'Two', x: 0, y: 0, w: 176, z: 1, parent: 'b1' },
+      { id: 'b3', kind: 'board', name: 'Three', x: 0, y: 0, w: 176, z: 1, parent: 'b2' },
+      { id: 'b3b', kind: 'board', name: 'Three too', x: 200, y: 0, w: 176, z: 2, parent: 'b2' },
+    ] })
+    expect(cards.length).toBe(4)
+    expect(childrenOf(cards, 'b2').map(c => c.id)).toEqual(['b3', 'b3b'])
+    expect(boardTrail(cards, 'b3').map(c => c.name)).toEqual(['Shoot brief', 'One', 'Two', 'Three'])
+    expect(descendantsOf(cards, 'b1')).toEqual(['b2', 'b3', 'b3b'])
+  })
+})

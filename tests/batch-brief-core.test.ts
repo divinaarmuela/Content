@@ -410,3 +410,91 @@ describe('canvas card sizes — resize any card both ways, and smaller', () => {
     expect(resizeCard('image', { w: 400, h: 100 }, -300, 0, true)).toEqual({ w: 360, h: 90 })
   })
 })
+
+describe('captions, posts in mock-ups, and the widest word', () => {
+  it('a caption is kept on a picture and a link, trimmed and bounded, and dropped when empty', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const [img, link, blank, note] = sanitiseCanvasCards([
+      { id: 'i', kind: 'image', x: 0, y: 0, w: 240, z: 1, url: 'https://x.example/a.jpg', caption: '  Hero shot\nfor the cover  ' },
+      { id: 'l', kind: 'link', x: 0, y: 0, w: 240, z: 1, url: 'https://www.youtube.com/watch?v=abc123XYZ', caption: 'x'.repeat(2000) },
+      { id: 'b', kind: 'link', x: 0, y: 0, w: 240, z: 1, url: 'https://x.example/', caption: '   ' },
+      { id: 'n', kind: 'note', x: 0, y: 0, w: 208, z: 1, text: 't', caption: 'not for a note' },
+    ])
+    expect(img.caption).toBe('Hero shot\nfor the cover')
+    expect(link.caption?.length).toBe(1000)
+    expect('caption' in blank).toBe(false)
+    expect('caption' in note).toBe(false)
+  })
+
+  it('a link card keeps the account it came from', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const [l] = sanitiseCanvasCards([{ id: 'l', kind: 'link', x: 0, y: 0, w: 240, z: 1, url: 'https://www.tiktok.com/@a/video/1', author: '@petsmeowwoof', provider: 'TikTok' }])
+    expect(l.author).toBe('@petsmeowwoof')
+  })
+
+  it('a mock-up made from a post keeps the link and what it resolved to, through the same gate a link card uses', async () => {
+    const { sanitiseCanvasCards, applyCanvasOp } = await import('../app/lib/batch-brief-core')
+    const [m] = sanitiseCanvasCards([{
+      id: 'm', kind: 'mockup', platform: 'ig_reel', x: 0, y: 0, w: 200, z: 1,
+      link_url: 'https://www.instagram.com/reel/Cabc123/', text: 'the post said this',
+      preview: { thumb: 'http://not-https.example/x.jpg', title: 'the post said this', provider: 'Instagram', media: 'video', author: '@someone', junk: 'no' },
+    }])
+    expect(m.link_url).toBe('https://www.instagram.com/reel/Cabc123/')
+    expect(m.preview).toEqual({ title: 'the post said this', provider: 'Instagram', media: 'video', author: '@someone' })
+    expect(m.text).toBe('the post said this')
+    // an http link is no link; a preview with nothing in it is not stored
+    const [bad] = sanitiseCanvasCards([{ id: 'x', kind: 'mockup', platform: 'tiktok', x: 0, y: 0, w: 200, z: 1, link_url: 'http://x/', preview: { thumb: 'https://x.example/a.jpg' } }])
+    expect('link_url' in bad).toBe(false)
+    expect('preview' in bad).toBe(false)
+    const [empty] = sanitiseCanvasCards([{ id: 'y', kind: 'mockup', platform: 'tiktok', x: 0, y: 0, w: 200, z: 1, link_url: 'https://www.tiktok.com/@a/video/1', preview: { junk: 1 } }])
+    expect(empty.link_url).toBe('https://www.tiktok.com/@a/video/1')
+    expect('preview' in empty).toBe(false)
+    // and it rides the upsert to the portal like every other field
+    const merged = applyCanvasOp([], { upsert: [{ id: 'm', kind: 'mockup', platform: 'youtube', x: 0, y: 0, w: 300, z: 1, link_url: 'https://youtu.be/abc123XYZ', preview: { thumb: 'https://i.ytimg.com/vi/abc123XYZ/hqdefault.jpg' } }] })
+    expect(merged[0].preview?.thumb).toBe('https://i.ytimg.com/vi/abc123XYZ/hqdefault.jpg')
+  })
+
+  it('a pasted link picks its own frame', async () => {
+    const { mockupPlatformFor } = await import('../app/lib/batch-brief-core')
+    expect(mockupPlatformFor('https://www.instagram.com/reel/Cabc123/')).toBe('ig_reel')
+    expect(mockupPlatformFor('https://www.instagram.com/reels/Cabc123/')).toBe('ig_reel')
+    expect(mockupPlatformFor('https://www.instagram.com/p/Cabc123/?igsh=x')).toBe('ig_post')
+    expect(mockupPlatformFor('https://www.instagram.com/stories/someone/123/')).toBe('ig_story')
+    expect(mockupPlatformFor('https://www.tiktok.com/@a/video/7412345678901234567')).toBe('tiktok')
+    expect(mockupPlatformFor('https://vm.tiktok.com/ZMrRs9oPp/')).toBe('tiktok')
+    expect(mockupPlatformFor('https://www.youtube.com/watch?v=abc123XYZ')).toBe('youtube')
+    expect(mockupPlatformFor('https://youtu.be/abc123XYZ')).toBe('youtube')
+    expect(mockupPlatformFor('https://www.youtube.com/shorts/abc123XYZ')).toBe('yt_short')
+    expect(mockupPlatformFor('https://www.linkedin.com/posts/someone_x-activity-1')).toBe('linkedin')
+    expect(mockupPlatformFor('https://www.facebook.com/page/posts/123')).toBe('facebook')
+    // no frame for these — they stay link cards
+    expect(mockupPlatformFor('https://x.com/a/status/1')).toBeNull()
+    expect(mockupPlatformFor('https://vimeo.com/12345678')).toBeNull()
+    expect(mockupPlatformFor('https://example.com/blog')).toBeNull()
+    expect(mockupPlatformFor('https://www.youtube.com/@channel')).toBeNull()
+    expect(mockupPlatformFor('not a url')).toBeNull()
+  })
+
+  it('a card never gets narrower than its widest word', async () => {
+    const { minCardWidth, longestWordWidth, resizeCard, CANVAS_SIZE_LIMITS } = await import('../app/lib/batch-brief-core')
+    expect(minCardWidth('note')).toBe(CANVAS_SIZE_LIMITS.note.minW)
+    expect(minCardWidth('note', 'short words only')).toBe(CANVAS_SIZE_LIMITS.note.minW)
+    // a long word raises the floor
+    const long = 'Supercalifragilisticexpialidocious'
+    expect(longestWordWidth('note', long)).toBeGreaterThan(CANVAS_SIZE_LIMITS.note.minW)
+    expect(minCardWidth('note', `a ${long} b`)).toBe(Math.round(longestWordWidth('note', long)))
+    // a heading is wider per letter (mono, upper-case, tracked)
+    expect(longestWordWidth('label', 'CONCEPTS')).toBeGreaterThan(longestWordWidth('note', 'CONCEPTS'))
+    // resizing honours it: a pull well past the floor stops at the word
+    expect(resizeCard('note', { w: 400, h: 200 }, -1000, 0, false, `a ${long} b`).w).toBe(minCardWidth('note', long))
+    expect(resizeCard('label', { w: 400, h: 20 }, -1000, 0, false, 'PRODUCTION NOTES').w).toBe(minCardWidth('label', 'PRODUCTION'))
+    // and under Shift the height follows the width it stopped at
+    const locked = resizeCard('note', { w: 400, h: 200 }, -1000, 0, true, long)
+    expect(locked.w).toBe(minCardWidth('note', long))
+    expect(locked.h).toBe(Math.round(locked.w / 2))
+    // no text, no change from before
+    expect(resizeCard('note', { w: 240, h: 200 }, -500, -500)).toEqual({ w: 160, h: 80 })
+    // an absurd word never pushes the floor past the ceiling
+    expect(resizeCard('note', { w: 400, h: 200 }, 0, 0, false, 'x'.repeat(5000)).w).toBeLessThanOrEqual(CANVAS_SIZE_LIMITS.note.maxW)
+  })
+})

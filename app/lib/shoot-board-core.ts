@@ -122,3 +122,45 @@ export function stillThere(cards: readonly BoardCard[], boardId: string | null):
   if (!boardId) return null
   return cards.some(c => c.id === boardId && c.kind === 'board') ? boardId : null
 }
+
+export type Box = { x: number; y: number; w: number; h: number }
+
+/** How far apart two cards sit when one is placed beside the other. */
+export const PLACE_GAP = 16
+
+const overlaps = (a: Box, b: Box, gap: number) =>
+  a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y
+
+/**
+ * Where a new card goes: the spot the person is looking at (`want`) if it is
+ * free, otherwise the nearest free spot around it, searched in rings on the
+ * board's 8px grid. This is what let "Board" appear to make only one board:
+ * every tile landed on the centre of the screen, on top of the last one,
+ * and the pile looked like a single tile. Pure — the caller measures the
+ * cards that are on the board and hands their boxes in.
+ */
+export function freeSpot(want: { x: number; y: number }, size: { w: number; h: number }, taken: readonly Box[], gap = PLACE_GAP): { x: number; y: number } {
+  const snap = (n: number) => Math.round(n / 8) * 8
+  const fits = (x: number, y: number) => !taken.some(t => overlaps({ x, y, w: size.w, h: size.h }, t, gap))
+  const start = { x: snap(want.x), y: snap(want.y) }
+  if (fits(start.x, start.y)) return start
+  // rings of candidates, nearest first; the step is a card's width or
+  // height so the search lands beside a neighbour, not a pixel past it
+  const stepX = size.w + gap
+  const stepY = size.h + gap
+  for (let ring = 1; ring <= 12; ring++) {
+    const cands: { x: number; y: number; d: number }[] = []
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue
+        const x = snap(start.x + i * stepX)
+        const y = snap(start.y + j * stepY)
+        cands.push({ x, y, d: Math.hypot(i * stepX, j * stepY) })
+      }
+    }
+    // to the right and below before up and left: the way a page reads
+    cands.sort((a, b) => a.d - b.d || (a.x + a.y) - (b.x + b.y))
+    for (const c of cands) if (fits(c.x, c.y)) return { x: c.x, y: c.y }
+  }
+  return start
+}
