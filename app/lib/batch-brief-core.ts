@@ -11,6 +11,8 @@
 
 import type { Role } from './identity-core'
 import { planLines, type PlanLine } from './deliverable-group-core'
+import { colourOf, iconOf } from './board-canvas-core'
+import { pruneOrphans } from './shoot-board-core'
 
 export const BATCH_STATUSES = ['brief', 'locked', 'shot', 'wrapped'] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
@@ -180,7 +182,7 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 
 /* ── the brief canvas: freeform cards on a pan/zoom board ── */
 
-export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo'] as const
+export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo', 'board'] as const
 export const MOCKUP_PLATFORMS = [
   'ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin',
   'youtube', 'yt_short', 'tiktok', 'facebook',
@@ -189,7 +191,9 @@ export const CANVAS_NOTE_COLORS = [
   'paper', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'ink',
 ] as const
 const CANVAS_BOUND = 20_000
-const CANVAS_MAX_CARDS = 200
+/** across the WHOLE tree — a shoot with a few boards inside boards is still
+ *  one array, so the cap is the shoot's, not one board's */
+const CANVAS_MAX_CARDS = 600
 
 export type CanvasCard = {
   id: string
@@ -220,6 +224,14 @@ export type CanvasCard = {
   title?: string
   provider?: string
   media?: 'video' | 'image' | 'page'
+  /** board tile — its look. The names are board-canvas-core's palette and
+   *  icon set, validated there, so a tile reads in both themes. */
+  icon?: string
+  colour?: string
+  /** the board tile this card lives inside; absent = the shoot's own board.
+   *  One flat array, boards to any depth: a board is nothing more than its
+   *  tile, and its contents are the cards that point at it. */
+  parent?: string
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -246,6 +258,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
     if (kind === 'mockup' && !(MOCKUP_PLATFORMS as readonly string[]).includes(platform)) continue
     const id = String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10)
     const color = String(r.color ?? '')
+    const parent = String(r.parent ?? '').slice(0, 40)
     const card: CanvasCard = {
       id,
       kind: kind as CanvasCard['kind'],
@@ -269,6 +282,15 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
           })()
         : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      ...(kind === 'board'
+        ? {
+            name: String(r.name ?? '').trim().slice(0, 80) || 'Board',
+            icon: iconOf(typeof r.icon === 'string' ? r.icon : undefined),
+            colour: colourOf('board', typeof r.colour === 'string' ? r.colour : undefined),
+          }
+        : {}),
+      // a card can only live inside a board tile, and never inside itself
+      ...(parent && parent !== id ? { parent } : {}),
       // a link's resolved preview. The thumbnail is rendered as an <img src>,
       // so it goes through the same https-only gate the card's own url does —
       // a preview is not a reason to relax it.
@@ -321,7 +343,10 @@ export function applyCanvasOp(
   for (const c of [...byId.values()]) {
     if (c.kind === 'arrow' && (!solid.has(c.from ?? '') || !solid.has(c.to ?? ''))) byId.delete(c.id)
   }
-  return [...byId.values()].slice(0, CANVAS_MAX_CARDS)
+  // deleting a board tile deletes everything inside it, to any depth, whoever
+  // deleted it and whatever the client sent — a card whose board is gone has
+  // nowhere to be shown
+  return pruneOrphans([...byId.values()]).slice(0, CANVAS_MAX_CARDS)
 }
 
 /** First-open seeding: the existing reference images laid out as a grid.

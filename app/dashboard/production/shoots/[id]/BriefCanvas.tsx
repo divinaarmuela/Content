@@ -6,15 +6,23 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
-  ExternalLink, ImagePlus, Link2, ListTodo, Maximize2, Minimize2, Minus, MoveUpRight,
-  Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  ChevronRight, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
+  Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
+import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
 import {
   CANVAS_NOTE_COLORS, seedCardsFromReferences,
   type CanvasCard, type ReferenceMedia,
 } from '../../../../lib/batch-brief-core'
+import {
+  boardTrail, childrenOf, deleteWarning, descendantsOf, insideLabel, stillThere,
+} from '../../../../lib/shoot-board-core'
 
 type Camera = { x: number; y: number; s: number }
 export type CanvasOp = { upsert?: CanvasCard[]; remove?: string[] }
@@ -63,6 +71,16 @@ export default function BriefCanvas({
   const [cards, setCards] = useState<CanvasCard[]>(savedCards.length ? savedCards : seeded ?? [])
   const seedPendingRef = useRef(Boolean(seeded && savedCards.length === 0))
 
+  /** The board tile that is open; null is the shoot's own board. Cards are
+   *  ONE array to any depth — this only decides which of them are shown. */
+  const [board, setBoard] = useState<string | null>(null)
+  const visible = useMemo(() => childrenOf(cards, board), [cards, board])
+  const trail = useMemo(() => boardTrail(cards, board), [cards, board])
+  /** the new-board / rename dialog: the tile it is for, or null for a new one */
+  const [boardDialog, setBoardDialog] = useState<{ card: CanvasCard | null } | null>(null)
+  /** a tile with something inside it, waiting for a yes before it goes */
+  const [confirmDelete, setConfirmDelete] = useState<{ card: CanvasCard; warning: string } | null>(null)
+
   const interactingRef = useRef(false)
   const pendingOpsRef = useRef(0)
   useEffect(() => {
@@ -76,6 +94,8 @@ export default function BriefCanvas({
     setCards(prev =>
       JSON.stringify(prev) === JSON.stringify(savedCards) ? prev : savedCards)
     seedPendingRef.current = false
+    // someone else deleted the board you were standing in — back to the shoot
+    setBoard(b => stillThere(savedCards, b))
   }, [savedCards])
 
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -104,6 +124,8 @@ export default function BriefCanvas({
   const linkInputRef = useRef<HTMLInputElement>(null)
   /** arrow-drawing mode: the card the next click will connect FROM */
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
+  /** the first fit onto the cards has happened for the board that is open */
+  const fitDoneRef = useRef(false)
 
   const readOnly = !canEdit
   const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -299,7 +321,8 @@ export default function BriefCanvas({
 
   const connectCards = (from: string, to: string) => {
     if (from === to) return
-    const arrow: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, from, to }
+    // an arrow lives on the board its cards are on
+    const arrow: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, from, to, ...(board ? { parent: board } : {}) }
     upsertLocal(arrow)
     persist([arrow])
     setSelected(arrow.id)
@@ -446,14 +469,27 @@ export default function BriefCanvas({
     const card: CanvasCard = {
       id: mint(), x: at.x, y: at.y,
       z: Math.max(0, ...cards.map(c => c.z)) + 1,
-      w: partial.w ?? (partial.kind === 'note' ? 208 : 240),
+      w: partial.w ?? (partial.kind === 'note' ? 208 : partial.kind === 'board' ? 176 : 240),
       ...partial,
+      // a new card lands on the board that is open
+      ...(board ? { parent: board } : {}),
     }
     upsertLocal(card)
     persist([card])
     setSelected(card.id)
     if (card.kind === 'note' || card.kind === 'label') setEditing(card.id)
     if (card.kind === 'link' && card.url) void resolveLink(card.id, card.url)
+  }
+
+  /** Go into a board (or back out to the shoot's own board with null). */
+  const openBoard = (id: string | null) => {
+    setBoard(id)
+    setSelected(null); setEditing(null); setPlaying(null); setConnectFrom(null)
+    setMockupMenu(false); setLinkPrompt(false)
+    // land on its cards, or on a clean origin when there are none yet
+    fitDoneRef.current = false
+    camRef.current = { x: 0, y: 0, s: 1 }
+    paint(); commitCamera()
   }
 
   /**
@@ -532,14 +568,33 @@ export default function BriefCanvas({
     }
   }
 
-  const removeCard = (card: CanvasCard) => {
-    setCards(prev => prev.filter(c => c.id !== card.id))
+  /** Delete a card. A board tile with anything inside it asks first. */
+  const removeCard = (card: CanvasCard, confirmed = false) => {
+    const warning = deleteWarning(cards, card)
+    if (warning && !confirmed) { setConfirmDelete({ card, warning }); return }
+    // a tile takes everything inside it — the server would cascade anyway,
+    // but listing them means Undo can bring the lot back
+    const gone = card.kind === 'board' ? [card.id, ...descendantsOf(cards, card.id)] : [card.id]
+    const goneSet = new Set(gone)
+    const restore = cards.filter(c => goneSet.has(c.id))
+    setCards(prev => prev.filter(c => !goneSet.has(c.id)))
     setSelected(null)
-    persist([], [card.id])
-    toast('Card deleted', {
-      action: { label: 'Undo', onClick: () => { upsertLocal(card); persist([card]) } },
+    persist([], gone)
+    toast(card.kind === 'board' ? 'Board deleted' : 'Card deleted', {
+      action: { label: 'Undo', onClick: () => { for (const c of restore) upsertLocal(c); persist(restore) } },
       duration: 5000,
     })
+  }
+
+  /** A tile's name, icon and colour — from the dialog, new or renamed. */
+  const saveBoardTile = (v: { name: string; icon: string; colour: string }) => {
+    const existing = boardDialog?.card
+    if (existing) {
+      const next = { ...existing, ...v }
+      upsertLocal(next); persist([next])
+    } else {
+      addCard({ kind: 'board', ...v })
+    }
   }
 
   const commitText = (card: CanvasCard, text: string) => {
@@ -561,11 +616,12 @@ export default function BriefCanvas({
    * card ID only and read the live handlers from a ref, so they are created
    * once per card and stay referentially equal.
    */
-  const liveRef = useRef({ cards, commitText, upsertLocal, persist })
-  liveRef.current = { cards, commitText, upsertLocal, persist }
+  const liveRef = useRef({ cards, commitText, upsertLocal, persist, openBoard })
+  liveRef.current = { cards, commitText, upsertLocal, persist, openBoard }
   const cbCache = useRef(new Map<string, {
     onCommitText: (text: string) => void
     onUpdate: (next: CanvasCard) => void
+    onOpen: () => void
   }>())
   const cardCallbacks = (id: string) => {
     let entry = cbCache.current.get(id)
@@ -579,6 +635,7 @@ export default function BriefCanvas({
           liveRef.current.upsertLocal(next)
           liveRef.current.persist([next])
         },
+        onOpen: () => liveRef.current.openBoard(id),
       }
       cbCache.current.set(id, entry)
     }
@@ -588,11 +645,11 @@ export default function BriefCanvas({
   /* ── fit + zoom controls ── */
   const fitToCards = useCallback(() => {
     const rect = viewportRef.current?.getBoundingClientRect()
-    if (!rect || cards.length === 0) return
-    const xs = cards.map(c => c.x); const ys = cards.map(c => c.y)
+    if (!rect || visible.length === 0) return
+    const xs = visible.map(c => c.x); const ys = visible.map(c => c.y)
     const minX = Math.min(...xs) - 64
     const minY = Math.min(...ys) - 64
-    const maxX = Math.max(...cards.map(c => c.x + c.w)) + 64
+    const maxX = Math.max(...visible.map(c => c.x + c.w)) + 64
     const maxY = Math.max(...ys) + 64 + 240
     const s = clampScale(Math.min(rect.width / (maxX - minX), rect.height / (maxY - minY), 1))
     camRef.current = {
@@ -601,7 +658,7 @@ export default function BriefCanvas({
       y: (rect.height - (maxY - minY) * s) / 2 - minY * s,
     }
     paint(); commitCamera()
-  }, [cards, paint, commitCamera])
+  }, [visible, paint, commitCamera])
 
   const zoomBy = (factor: number) => {
     const rect = viewportRef.current?.getBoundingClientRect()
@@ -614,11 +671,10 @@ export default function BriefCanvas({
     paint(); commitCamera()
   }
 
-  const fitDoneRef = useRef(false)
   useEffect(() => {
-    if (!fitDoneRef.current && cards.length > 0) { fitDoneRef.current = true; fitToCards() }
+    if (!fitDoneRef.current && visible.length > 0) { fitDoneRef.current = true; fitToCards() }
     else paint()
-  }, [cards.length, fitToCards, paint])
+  }, [visible.length, board, fitToCards, paint])
 
   /* ── keyboard ── */
   const nudgeTimer = useRef<number | null>(null)
@@ -630,6 +686,7 @@ export default function BriefCanvas({
         if (connectFrom) setConnectFrom(null)
         else if (editing) setEditing(null)
         else if (selected) setSelected(null)
+        else if (board) openBoard(trail[trail.length - 2]?.id ?? null) // one board up
         else if (fullscreen) setFullscreen(false)
         return
       }
@@ -665,12 +722,36 @@ export default function BriefCanvas({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, selected, editing, fullscreen, viewOnly])
+  }, [cards, selected, editing, fullscreen, viewOnly, board, trail])
 
   const selectedCard = cards.find(c => c.id === selected) ?? null
-  const ordered = useMemo(() => [...cards].sort((a, b) => a.z - b.z), [cards])
+  const ordered = useMemo(() => [...visible].sort((a, b) => a.z - b.z), [visible])
 
-  const board = (
+  /** "Shoot brief / Concepts / Day two" — every step a 44px button back up. */
+  const crumbs = board !== null && (
+    <nav aria-label="Where you are" className="flex min-h-11 flex-wrap items-center gap-0.5 px-1 pb-2">
+      {trail.map((c, i) => {
+        const last = i === trail.length - 1
+        return (
+          <span key={c.id ?? 'root'} className="flex items-center gap-0.5">
+            {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
+            {last ? (
+              <span aria-current="page" className="inline-flex h-11 items-center gap-1.5 px-2 text-body-15 font-semibold">
+                <FolderOpen className="h-4 w-4" /> {c.name}
+              </span>
+            ) : (
+              <button type="button" onClick={() => openBoard(c.id)}
+                className="inline-flex h-11 items-center rounded-full px-3 text-body-15 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
+                {c.name}
+              </button>
+            )}
+          </span>
+        )
+      })}
+    </nav>
+  )
+
+  const view = (
     // Expanded, the board covers the whole window. The cover MUST be opaque:
     // the restyle once gave it the canvas's 4% tint, and the sidebar, header
     // and the rest of the shoot page showed straight through it.
@@ -686,6 +767,8 @@ export default function BriefCanvas({
           </Button>
         </div>
       )}
+
+      {crumbs}
 
       <div
         ref={viewportRef}
@@ -716,6 +799,7 @@ export default function BriefCanvas({
           const card: CanvasCard = {
             id: mint(), kind: 'note', x, y, w: 208,
             z: Math.max(0, ...cards.map(c => c.z)) + 1, text: '', color: 'yellow',
+            ...(board ? { parent: board } : {}),
           }
           upsertLocal(card); persist([card]); setSelected(card.id); setEditing(card.id)
         }}
@@ -775,7 +859,7 @@ export default function BriefCanvas({
               data-card
               data-cid={card.id}
               tabIndex={0}
-              aria-label={`${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
+              aria-label={card.kind === 'board' ? `Board: ${card.name ?? 'Board'}` : `${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
                 selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
@@ -785,7 +869,11 @@ export default function BriefCanvas({
               onPointerUp={e => onCardPointerUp(e, card)}
               onClick={e => {
                 e.stopPropagation()
-                if (viewOnly) { setSheetCard(card); return }
+                if (viewOnly) {
+                  if (card.kind === 'board') openBoard(card.id)
+                  else setSheetCard(card)
+                  return
+                }
                 if (connectFrom === '') { setConnectFrom(card.id); return }
                 if (connectFrom && connectFrom !== card.id) {
                   connectCards(connectFrom, card.id)
@@ -797,6 +885,7 @@ export default function BriefCanvas({
               }}
               onDoubleClick={e => {
                 e.stopPropagation()
+                if (card.kind === 'board') { openBoard(card.id); return }
                 if (!viewOnly && (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup')) {
                   interactingRef.current = true
                   setEditing(card.id)
@@ -813,6 +902,8 @@ export default function BriefCanvas({
                 onUpdate={viewOnly ? undefined : cardCallbacks(card.id).onUpdate}
                 playing={playing === card.id}
                 onPlay={() => setPlaying(card.id)}
+                insideLabel={card.kind === 'board' ? insideLabel(cards, card.id) : undefined}
+                onOpen={card.kind === 'board' ? cardCallbacks(card.id).onOpen : undefined}
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div
@@ -893,12 +984,14 @@ export default function BriefCanvas({
         </div>
 
         {/* empty states */}
-        {cards.length === 0 && (
+        {visible.length === 0 && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
             <p className="text-body-15 text-muted-foreground">
               {viewOnly
-                ? 'Nothing on the board yet.'
-                : 'Your board. Drop images, paste links, or double-click anywhere to write a note.'}
+                ? (board ? 'Nothing in this board yet.' : 'Nothing on the board yet.')
+                : board
+                  ? 'This board is empty. Add a note, an image, a link — or another board.'
+                  : 'Your board. Drop images, paste links, or double-click anywhere to write a note.'}
             </p>
             {!viewOnly && (
               <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
@@ -951,6 +1044,11 @@ export default function BriefCanvas({
             <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => setMockupMenu(v => !v)}>
               <Smartphone className="h-3.5 w-3.5" /> Post
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
+              title="A board inside this one — open it like a page"
+              onClick={() => { setMockupMenu(false); setLinkPrompt(false); setBoardDialog({ card: null }) }}>
+              <BoardIcon className="h-3.5 w-3.5" /> Board
             </Button>
             <span className="mx-0.5 h-4 w-px bg-foreground/[0.08]" />
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={undo}
@@ -1013,6 +1111,18 @@ export default function BriefCanvas({
                   : (selectedCard.url ? 'Swap image' : 'Add image')}
               </Button>
             )}
+            {selectedCard.kind === 'board' && (
+              <>
+                <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
+                  onClick={() => openBoard(selectedCard.id)}>
+                  <FolderOpen className="h-3.5 w-3.5" /> Open
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
+                  onClick={() => setBoardDialog({ card: selectedCard })}>
+                  <Pencil className="h-3.5 w-3.5" /> Rename
+                </Button>
+              </>
+            )}
             {selectedCard.kind !== 'arrow' && (
               <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
                 onClick={() => { setConnectFrom(selectedCard.id); setSelected(null) }}>
@@ -1063,6 +1173,36 @@ export default function BriefCanvas({
       <input ref={fileRef} type="file" multiple accept="image/*" className="sr-only"
         onChange={e => e.target.files?.length && void addImages(e.target.files)} />
 
+      {/* a new board, or a tile's new name / icon / colour — the boards page's
+          own dialog: a name, the icon set, the palette's swatches, no picker */}
+      <NewBoardDialog
+        open={!viewOnly && boardDialog !== null}
+        onOpenChange={o => { if (!o) setBoardDialog(null) }}
+        onSubmit={saveBoardTile}
+        initial={boardDialog?.card
+          ? { name: boardDialog.card.name ?? '', icon: boardDialog.card.icon ?? '', colour: boardDialog.card.colour ?? '' }
+          : undefined}
+        title={boardDialog?.card ? 'Rename the board' : 'New board'}
+        submitLabel={boardDialog?.card ? 'Save' : 'Make the board'}
+      />
+
+      {/* a tile with something inside it asks first, and says what will go */}
+      <AlertDialog open={!viewOnly && confirmDelete !== null} onOpenChange={o => { if (!o) setConfirmDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &ldquo;{confirmDelete?.card.name || 'Board'}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDelete?.warning}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-11">Keep it</AlertDialogCancel>
+            <AlertDialogAction className="h-11 bg-accent-red text-cream hover:bg-accent-red/90"
+              onClick={() => { if (confirmDelete) removeCard(confirmDelete.card, true); setConfirmDelete(null) }}>
+              Delete the board
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* mobile / read-only card viewer */}
       <Sheet open={sheetCard !== null} onOpenChange={o => !o && setSheetCard(null)}>
         <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
@@ -1110,5 +1250,5 @@ export default function BriefCanvas({
     </div>
   )
 
-  return board
+  return view
 }

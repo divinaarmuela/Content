@@ -8,6 +8,8 @@ import {
 import { Link2 } from 'lucide-react'
 import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
+import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
+import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 export const NOTE_COLORS: Record<string, string> = {
@@ -46,7 +48,7 @@ function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
 }
 
 function CanvasCardInner({
-  card, selected, editing, clientName, onCommitText, onUpdate, playing, onPlay,
+  card, selected, editing, clientName, onCommitText, onUpdate, playing, onPlay, insideLabel, onOpen,
 }: {
   card: Card
   selected: boolean
@@ -59,9 +61,42 @@ function CanvasCardInner({
   onCommitText: (text: string) => void
   /** whole-card change (todo rows etc.) — absent means read-only */
   onUpdate?: (next: Card) => void
+  /** board tile — what it holds, already worded ("3 cards · 1 board") */
+  insideLabel?: string
+  /** board tile — open it. Works for a viewer too: looking is not editing */
+  onOpen?: () => void
 }) {
   // carousel mockups page through their slides — per-card, view-only state
   const [slide, setSlide] = React.useState(0)
+
+  if (card.kind === 'board') {
+    // the same tile as the boards page draws (CanvasItemView's board branch):
+    // a tinted square, the icon, the name, the count — and an Open button
+    // that is 44px and stops the pointer so it never starts a drag
+    const Icon = ICON[iconOf(card.icon)]
+    return (
+      <div
+        data-kind="board"
+        className={`group flex select-none flex-col items-center justify-center gap-2 rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
+        style={{ width: card.w }}
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10">
+          <Icon className="h-7 w-7" />
+        </div>
+        <p className="line-clamp-2 max-w-full text-[15px] font-semibold leading-tight">{card.name || 'Board'}</p>
+        <p className="text-[12px] text-muted-foreground">{insideLabel ?? 'Empty'}</p>
+        <button
+          type="button"
+          aria-label={`Open ${card.name || 'Board'}`}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onOpen?.() }}
+          className="mt-1 inline-flex h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background opacity-0 transition-opacity hover:bg-foreground/90 focus:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
+        >
+          Open
+        </button>
+      </div>
+    )
+  }
   if (card.kind === 'todo') {
     const items = card.items ?? []
     const done = items.filter(t => t.done).length
