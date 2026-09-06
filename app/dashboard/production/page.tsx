@@ -163,7 +163,6 @@ const SHOOT_CHIP: Record<BatchStatus, ChipTone> = {
  */
 export default function ProductionPage() {
   const router = useRouter()
-  const [taskOpen, setTaskOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   /** the group the "add a piece" dialog is collecting content for */
   const [pieceTarget, setPieceTarget] = useState<AddPieceTarget | null>(null)
@@ -729,7 +728,7 @@ export default function ProductionPage() {
                     <Link2 className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
                       New card
-                      <span className="text-[13px] text-muted-foreground">one thing to make, with a Drive or Dropbox link</span>
+                      <span className="text-[13px] text-muted-foreground">one thing to make — a reel, a graphic, research, anything. Type what it is.</span>
                     </span>
                   </DropdownMenuItem>
                 )}
@@ -739,15 +738,6 @@ export default function ProductionPage() {
                     <span className="flex flex-col">
                       New shoot plan
                       <span className="text-[13px] text-muted-foreground">the plan the client signs off — creates the shoot with it</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                {canPlan && (
-                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setTaskOpen(true)}>
-                    <ListChecks className="mt-0.5 h-4 w-4" />
-                    <span className="flex flex-col">
-                      Other work
-                      <span className="text-[13px] text-muted-foreground">research, strategy or copy — nothing to post</span>
                     </span>
                   </DropdownMenuItem>
                 )}
@@ -974,17 +964,6 @@ export default function ProductionPage() {
         clients={clients}
         batches={shoots ?? []}
         briefedBatchIds={[...briefByBatch.keys()]}
-        team={team}
-      />
-
-      {/* a TASK: research, strategy, copy — no shoot, no post, ends at Done */}
-      <NewItemDialog
-        open={taskOpen}
-        onOpenChange={setTaskOpen}
-        onCreated={revealCreated}
-        presetKind="task"
-        clients={clients}
-        batches={shoots ?? []}
         team={team}
       />
 
