@@ -420,7 +420,10 @@ export function clientArrivalLine(from: ItemStatus): string {
 
 /** Notification fan-out per transition (doc 1 §10 trigger map). The server
  *  resolves audiences to concrete people. */
-export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers'
+/** `creator` is whoever raised the card (`assigned_by`). They hear about
+ *  anything the CLIENT does to it, because they are the person who will be
+ *  asked about it — owner's rule, 6 Sep 2026. */
+export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator'
 export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatus}`, Audience[]>> = {
   // 'owner_editor' is the item's OWNER whatever their role (anyone can carry a
   // task) — every move an item makes reaches the person assigned to it, and
@@ -432,7 +435,7 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'revision_complete>revision_required': ['owner_editor'],
   'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
-  'client_review>client_changes_requested': ['account_managers'], // NEVER the editor directly
+  'client_review>client_changes_requested': ['account_managers', 'creator'], // NEVER the editor directly
   // a new cut pulled the piece back off the client's desk: the manager has to
   // know there is something to check, and the CLIENT must not be told that the
   // thing they were reviewing has been taken away and re-made. They see it in
@@ -450,7 +453,7 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   // approving prefers the people the approver picked, then the item's own
   // scheduler_ids. Only when nobody at all has been named does the approval
   // reach every scheduler — an open queue has to be announced to somebody.
-  'client_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'client_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers', 'creator'],
   'internal_review>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'revision_complete>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'approved_for_scheduling>scheduled': ['account_managers', 'owner_editor'],

@@ -47,6 +47,8 @@ export type ContentItem = {
   content_type: string
   status: ItemStatus
   owner_id: string | null
+  /** whoever raised the card — the `creator` notification audience */
+  assigned_by?: string | null
   caption: string | null
   client_approval_required: boolean
   current_version_number: number
@@ -124,6 +126,14 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users').list({
         where: u => u.role === 'client' && u.client_id === item.client_id && u.active_status,
       })
+    case 'creator': {
+      // whoever raised the card. They are the person the client's answer is
+      // really for, and they are not always its owner or its manager.
+      const id = typeof item.assigned_by === 'string' ? item.assigned_by : null
+      if (!id) return []
+      return table<TeamUserRow>('team_users')
+        .list({ where: u => u.id === id && u.active_status && u.role !== 'client' })
+    }
   }
 }
 
@@ -753,6 +763,9 @@ export async function performTransition(
           entityId: `${item.id}#${updated.updated_at ?? `v${item.current_version_number}`}`,
           recipientId: person.id,
           recipientEmail: person.email,
+          // so PAUSE_CLIENT_NOTIFICATIONS can hold the client's side back
+          // during a rebuild while the team keeps hearing everything
+          toClient: audience === 'client_users',
           subject,
           bodyHtml: renderEmail(
             subject,
