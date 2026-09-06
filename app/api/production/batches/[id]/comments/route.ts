@@ -8,6 +8,9 @@ import { announceBatchChange } from '../../../../../lib/production-live'
 import {
   notifyTagged, resolveTags, settleTagNotifications, taggableTeam,
 } from '../../../../../lib/comment-tags'
+import { sanitiseCanvasCards } from '../../../../../lib/batch-brief-core'
+import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../../../lib/canvas-comments-core'
+import { notifyManagersOfComment } from '../../../../../lib/portal-actor'
 
 /**
  * The shoot's comment thread, team side — the same rows the client reads
@@ -17,6 +20,11 @@ import {
  * sets `assigned_to`, emails them with a link to this shoot, and keeps the
  * note under "Waiting on you" until it is marked done. The client never sees
  * who is tagged — the portal reads the body only.
+ *
+ * A comment may be pinned to ONE card of the planning board (`card_id`):
+ * it then shows on that card, on both sides. A signed-in CLIENT may read and
+ * write their own shared shoot's thread here too — the same rows the share
+ * link writes, with the same people told.
  */
 
 /** Every comment carries who wrote it — "who said this" is half its meaning. */
@@ -26,16 +34,34 @@ const withAuthors = (rows: BatchComment[]) =>
 async function guard(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
   const batch = await table<Batch>('batches').get(id)
   if (!batch) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
+  if (user.role === 'client') {
+    // a client sees only their own SHARED shoot — an unshared one is not there
+    if (user.client_id !== batch.client_id || !batch.shared_with_client) {
+      return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
+    }
+    return { batch }
+  }
   if (!(await canOpenBatch(user, batch))) {
     return { response: NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 }) }
   }
   return { batch }
 }
 
+/** The team's roles pass their usual gate; a signed-in client passes their own. */
+async function requireTeamOrClient(minimum: 'scheduler' | 'editor') {
+  try {
+    return await requireRole(minimum)
+  } catch (e) {
+    const user = await requireRole('client')
+    if (user.role !== 'client') throw e
+    return user
+  }
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const user = await requireRole('scheduler')
+    const user = await requireTeamOrClient('scheduler')
     const { id } = await params
     const g = await guard(user, id)
     if ('response' in g) return g.response
@@ -61,7 +87,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const user = await requireRole('editor')
+    const user = await requireTeamOrClient('editor')
     const { id } = await params
     const g = await guard(user, id)
     if ('response' in g) return g.response
@@ -69,11 +95,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = String(json.body ?? '').trim().slice(0, 4000)
     if (!body) return NextResponse.json({ error: 'Write a comment first' }, { status: 400 })
 
-    const explicit = [
+    // pinned to one card of the board — only a card that is actually on it
+    const cardId = json.card_id == null ? null : String(json.card_id).slice(0, 80)
+    const card = cardId ? findCanvasCard(sanitiseCanvasCards(g.batch.canvas_cards), cardId) : null
+    if (cardId && !card) {
+      return NextResponse.json({ error: 'That card is not on the board any more.' }, { status: 404 })
+    }
+
+    const isClient = user.role === 'client'
+    // a client tags nobody — the words are the whole message
+    const explicit = isClient ? [] : [
       ...(Array.isArray(json.mention_ids) ? json.mention_ids.map(String) : []),
       ...(json.assigned_to ? [String(json.assigned_to)] : []),
     ]
-    const tagged = resolveTags(body, explicit, await taggableTeam(), user.id)
+    const tagged = isClient ? [] : resolveTags(body, explicit, await taggableTeam(), user.id)
     const assignedTo = tagged[0]?.id ?? null
 
     let data: (BatchComment & { team_users: Record<string, unknown> | null }) | null = null
@@ -83,10 +118,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // an unstamped boolean reads back absent, and "still open" filters
         // test `resolved === false`
         resolved: false,
+        card_id: card ? card.id : null,
       })
       data = (await withAuthors([row as unknown as BatchComment]))[0]
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not save the comment' }, { status: 500 })
+    }
+    if (isClient) {
+      // the signed-in client spoke: the same people the share link tells —
+      // the manager and whoever created the shoot
+      await notifyManagersOfComment({
+        clientId: g.batch.client_id, speaker: user.name || 'Your client',
+        subjectTitle: commentSubject(String(g.batch.title ?? 'a shoot'), card ? canvasCardLabel(card) : null),
+        body, dashboardPath: shootCommentPath(id, card?.id), alsoUserIds: [g.batch.owner_id],
+      }).catch(e => console.error('client comment notify error:', e))
     }
     if (tagged.length > 0 && data) {
       await notifyTagged({

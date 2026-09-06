@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  APPROVE_PLAN_WITH_NOTE, PLAN_APPROVED_WITH_NOTE_LINE, PLAN_NOTE_PLACEHOLDER,
-  PLAN_STATE_LINE, clientStatusWord, planState, planStateLine, scheduledWhen,
+  APPROVED_TOAST, PLAN_STATE_LINE, approveConsequence, clientStatusWord, planState, planStateLine, scheduledWhen,
 } from '../app/lib/portal-words'
 
 describe('clientStatusWord — a booked post says so', () => {
@@ -92,36 +91,29 @@ describe('planState — the client’s own decision, said back to them', () => {
   })
 })
 
-describe('planStateLine — a plan approved WITH something to say', () => {
-  it('says both things happened: the approval and the note', () => {
-    expect(planStateLine('approved', true)).toBe(PLAN_APPROVED_WITH_NOTE_LINE)
-    expect(PLAN_APPROVED_WITH_NOTE_LINE).toContain('Approved')
-    expect(PLAN_APPROVED_WITH_NOTE_LINE).toContain('your note')
-  })
-
-  it('is the ordinary line when the approval carried nothing', () => {
+describe('planStateLine — one approval, no note', () => {
+  it('is the state\u2019s own line, nothing about a note — approving never asks for one', () => {
     expect(planStateLine('approved')).toBe(PLAN_STATE_LINE.approved)
-    expect(planStateLine('approved', false)).toBe(PLAN_STATE_LINE.approved)
-  })
-
-  it('never overrides a bigger fact about their diary', () => {
-    // the date being confirmed outranks a note they wrote on the way past
-    expect(planStateLine('date_confirmed', true)).toBe(PLAN_STATE_LINE.date_confirmed)
-    expect(planStateLine('awaiting_you', true)).toBe(PLAN_STATE_LINE.awaiting_you)
-    expect(planStateLine('changes_sent', true)).toBe(PLAN_STATE_LINE.changes_sent)
-  })
-
-  it('asks about the day, not about a file — a shoot is a diary entry', () => {
-    expect(PLAN_NOTE_PLACEHOLDER).toMatch(/before the day/i)
-    expect(APPROVE_PLAN_WITH_NOTE).toBe('Approve with a note')
+    expect(planStateLine('date_confirmed')).toBe(PLAN_STATE_LINE.date_confirmed)
+    expect(planStateLine('awaiting_you')).toBe(PLAN_STATE_LINE.awaiting_you)
+    expect(planStateLine('changes_sent')).toBe(PLAN_STATE_LINE.changes_sent)
   })
 
   it('every word on the plan card is a client word', () => {
-    const all = [
-      PLAN_APPROVED_WITH_NOTE_LINE, PLAN_NOTE_PLACEHOLDER, APPROVE_PLAN_WITH_NOTE,
-      ...Object.values(PLAN_STATE_LINE),
-    ].join(' ')
+    const all = Object.values(PLAN_STATE_LINE).join(' ')
     // no database status, no internal vocabulary
     expect(all).not.toMatch(/_|brief|batch|client_review|approved_for_scheduling/i)
+  })
+})
+
+describe('approving, in the client\u2019s words', () => {
+  it('thanks them and says nothing about scheduling', () => {
+    expect(APPROVED_TOAST).toBe('Approved — thank you.')
+    expect(APPROVED_TOAST).not.toMatch(/schedul/i)
+  })
+
+  it('says what approving does, and that no note is needed', () => {
+    expect(approveConsequence()).toMatch(/no note needed/i)
+    expect(approveConsequence()).not.toMatch(/schedul|book/i)
   })
 })

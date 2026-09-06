@@ -8,130 +8,34 @@ import {
   Calendar, Check, ChevronDown, ExternalLink, FileDown, MapPin, MessageCircle, Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import Lane from '../../dashboard/ui/Lane'
 import Chip from '../../dashboard/ui/Chip'
 import type { PortalCard } from '../../lib/portal-data'
+import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
+import { onCardLine } from '../../lib/canvas-comments-core'
 import {
-  EMPTY_BOARD_LINE, PORTAL_COLUMNS, actedLine, planPdfHref, swipeOffset, swipeToApprove,
-  waitingOnYou, type PortalColumnKey,
-} from '../../lib/portal-core'
-import { pickPortalTheme } from '../../lib/portal-theme'
-import {
-  APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, changesSentToast,
+  APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, approveConsequence, changesSentToast,
 } from '../../lib/portal-words'
 import { PostMetricsRow } from './PortalSections'
 
 /**
- * THE CLIENT'S BOARD.
+ * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
  *
- * Their work and their shoots as cards in the five columns, named for what
- * they mean to a client. Built from the restyle's Lane, Chip and card
- * classes so it looks like the agency's own dashboard, and dressed in the
- * client's brand colour and logo where the client record has them.
+ * Read-only except for the card that is with them: that one carries the
+ * link to where the work lives, one tap to approve (a swipe from the right
+ * on a phone) — no note, ever — and the smaller "Ask for a change", which
+ * opens one box and does want a few words. Comments are pinned to the card
+ * they are about, signed with the client's name, remembered on the device.
  *
- * Read-only except for the card that is with them: that one carries the link
- * to where the work lives, one tap to approve (a swipe from the right on a
- * phone), and the smaller "Ask for a change" which opens one box. Comments
- * are pinned to the card they are about.
- *
- * Two surfaces, one board: the share link acts with its token through
- * /api/portal/*; the signed-in client acts through the item API. Every action
- * is a route that already existed — nothing here invents a second path.
+ * Two surfaces, one card: the share link acts with its token through
+ * /api/portal/*; the signed-in client acts through the item API. Every
+ * action is a route that already existed.
  */
 
-type Surface =
+export type Surface =
   | { token: string }
   | { loggedIn: true; onChanged: () => void }
 
-export default function PortalBoard({ cards, clientName, amName, brand, logoUrl, surface }: {
-  cards: PortalCard[]
-  clientName: string
-  amName: string | null
-  /** the client's brand profile in the scan's shape — the theme is derived from it */
-  brand: Record<string, unknown> | null
-  logoUrl: string | null
-  surface: Surface
-}) {
-  const theme = pickPortalTheme(brand as Parameters<typeof pickPortalTheme>[0])
-  const accent = theme.branded ? { background: theme.accent, color: theme.accentInk } : undefined
-  const waiting = waitingOnYou(cards)
-  const scroller = useRef<HTMLDivElement>(null)
-  const reviewLane = useRef<HTMLDivElement>(null)
-
-  // on a phone the board scrolls sideways; it opens on the column that has
-  // something waiting on them, so the first thing they see is their move
-  useEffect(() => {
-    const el = scroller.current
-    const lane = reviewLane.current
-    if (!el || !lane || waiting === 0) return
-    if (window.matchMedia('(min-width: 1024px)').matches) return
-    el.scrollLeft = lane.offsetLeft - el.offsetLeft
-  }, [waiting])
-
-  const byColumn = (key: PortalColumnKey) => cards.filter(c => c.column === key)
-
-  return (
-    <section className="flex flex-col gap-5">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={clientName} className="h-9 w-auto max-w-[160px] object-contain" />
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.01em] sm:text-[26px]">Your board</h2>
-          <p className="mt-1 text-[14px] text-muted-foreground">
-            {waiting > 0
-              ? `${waiting} ${waiting === 1 ? 'thing is' : 'things are'} waiting on you — open it, then approve or ask for a change.`
-              : 'Everything we are making for you, left to right, from first cut to done.'}
-          </p>
-        </div>
-        {waiting > 0 && <Chip tone="amber">{waiting} waiting on you</Chip>}
-      </header>
-
-      {cards.length === 0 ? (
-        <div className="rounded-card border border-dashed border-border bg-surface px-6 py-14 text-center">
-          <p className="mx-auto max-w-md text-[15px] text-muted-foreground">{EMPTY_BOARD_LINE}</p>
-        </div>
-      ) : (
-        <div
-          ref={scroller}
-          className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-3 sm:-mx-10 sm:px-10 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0"
-        >
-          {PORTAL_COLUMNS.map(col => {
-            const list = byColumn(col.key)
-            return (
-              // the ref rides on a wrapper: Lane is a plain <section> and the
-              // scroll above needs to find the column that matters
-              <div
-                key={col.key}
-                ref={col.key === 'your_review' ? reviewLane : undefined}
-                className="flex w-[84vw] shrink-0 snap-start sm:w-[340px] lg:w-auto"
-              >
-                <Lane
-                  title={col.title}
-                  count={list.length}
-                  hint={<span className="hidden truncate text-[12px] text-muted-foreground xl:inline">· {col.hint}</span>}
-                >
-                  {list.length === 0 ? (
-                    <p className="rounded-inner border border-dashed border-border px-3.5 py-5 text-center text-[13px] text-muted-foreground">
-                      Nothing here right now.
-                    </p>
-                  ) : list.map(card => (
-                    <PortalCardView key={`${card.kind}-${card.id}`} card={card} amName={amName} accent={accent} surface={surface} />
-                  ))}
-                </Lane>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      <p className="text-[13px] text-muted-foreground">
-        Questions? {amPhrase(amName).replace(/^\w/, c => c.toUpperCase())} is one message away.
-      </p>
-    </section>
-  )
-}
+const NAME_KEY = 'mdm-portal-name'
 
 const TONE: Record<NonNullable<PortalCard['tone']>, string> = {
   amber: 'bg-tint-amber',
@@ -143,13 +47,13 @@ const TONE: Record<NonNullable<PortalCard['tone']>, string> = {
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
-/** One card, on its own — the board uses it, and so does a card's own page. */
-export function PortalCardView({ card, amName, accent, surface }: {
+export function PortalCardView({ card, amName, accent, surface, className }: {
   card: PortalCard
   amName: string | null
   /** the client's brand colour on the Approve button, when they have one */
   accent?: React.CSSProperties
   surface: Surface
+  className?: string
 }) {
   const router = useRouter()
   const token = 'token' in surface ? surface.token : null
@@ -166,8 +70,12 @@ export function PortalCardView({ card, amName, accent, surface }: {
   const [open, setOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [draft, setDraft] = useState('')
+  const [name, setName] = useState('')
   const [comments, setComments] = useState(card.comments)
   useEffect(() => setComments(card.comments), [card.comments])
+  useEffect(() => {
+    try { setName(localStorage.getItem(NAME_KEY) ?? '') } catch { /* private mode */ }
+  }, [])
 
   const canApprove = card.actions.approve && !acted && !!card.act_item_id
   const canAsk = card.actions.askForChange && !acted && !!card.act_item_id
@@ -178,20 +86,24 @@ export function PortalCardView({ card, amName, accent, surface }: {
     if ('loggedIn' in surface) surface.onChanged()
   }
 
+  /** Approve sends NO note — one tap is the whole decision. Asking for a
+   *  change sends the words, and wants a few. */
   const act = async (action: 'approve' | 'request_changes') => {
     if (!card.act_item_id || busy) return
-    const text = note.trim()
+    const text = action === 'request_changes' ? note.trim() : ''
     if (action === 'request_changes' && !text) {
       toast.error('Tell us what to change — a few words is enough')
       return
     }
+    const who = name.trim().slice(0, 60)
+    if (who) { try { localStorage.setItem(NAME_KEY, who) } catch { /* fine */ } }
     setBusy(action)
     try {
       if (token) {
         const res = await fetch('/api/portal/act', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, item_id: card.act_item_id, action, comment: action === 'request_changes' ? text : '' }),
+          body: JSON.stringify({ token, item_id: card.act_item_id, action, comment: text, author_name: who }),
         })
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Something went wrong')
       } else {
@@ -228,21 +140,28 @@ export function PortalCardView({ card, amName, accent, surface }: {
     const text = draft.trim()
     const target = card.comment_target
     if (!text || busy || !target) return
+    const who = name.trim().slice(0, 60)
+    try { localStorage.setItem(NAME_KEY, who) } catch { /* fine */ }
     setBusy('comment')
     try {
       if (token) {
         const res = await fetch('/api/portal/comment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, kind: target.kind, id: target.id, body: text }),
+          body: JSON.stringify({ token, kind: target.kind, id: target.id, body: text, author_name: who }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not send — try again')
+      } else if (target.kind === 'shoot') {
+        // the signed-in client writes the shoot's own thread — the same rows
+        // the share link writes
+        const res = await fetch(`/api/production/batches/${target.id}/comments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: text }),
         })
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not send — try again')
       } else {
-        // the signed-in client has no shoot thread route of their own; a note
-        // on a shoot goes on its brief, which is the thread the team reads too
-        const itemId = target.kind === 'item' ? target.id : card.shoot?.brief_item_id
-        if (!itemId) throw new Error('Comments on this one are not set up yet — ask your account manager.')
-        const res = await fetch(`/api/production/items/${itemId}/comments`, {
+        const res = await fetch(`/api/production/items/${target.id}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ body: text }),
@@ -252,8 +171,9 @@ export function PortalCardView({ card, amName, accent, surface }: {
       // shown at once, in the client's own name; the reload replaces it with
       // the row the server wrote
       setComments(c => [...c, {
-        id: `local-${Date.now()}`, created_at: new Date().toISOString(), body: text,
-        author_name: 'You', from_team: false,
+        id: `local-${Date.now()}`, created_at: new Date().toISOString(),
+        body: who ? `${text}\n— ${who}` : text,
+        author_name: 'You', from_team: false, card_id: null,
       }])
       setDraft('')
       toast.success(`Sent to ${amPhrase(amName)}.`)
@@ -276,7 +196,7 @@ export function PortalCardView({ card, amName, accent, surface }: {
     if (!start.current) return
     const mx = e.touches[0].clientX - start.current.x
     const my = e.touches[0].clientY - start.current.y
-    // a mostly vertical drag is the board scrolling — let go of the card
+    // a mostly vertical drag is the page scrolling — let go of the card
     if (Math.abs(my) > Math.abs(mx) && Math.abs(my) > 12) { start.current = null; setDx(0); return }
     setDx(swipeOffset(mx))
   }
@@ -298,7 +218,7 @@ export function PortalCardView({ card, amName, accent, surface }: {
   const line = acted ?? card.line
 
   return (
-    <div className="relative">
+    <div className={cn('relative', className)}>
       {/* the green underneath — revealed as the card slides left, so the
           swipe says what it is about to do before the finger lets go */}
       {canApprove && (
@@ -308,13 +228,14 @@ export function PortalCardView({ card, amName, accent, surface }: {
       )}
       <article
         data-tone={card.tone ?? 'surface'}
+        data-portal-card={`${card.kind}-${card.id}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => { start.current = null; setDx(0) }}
         style={{ transform: dx ? `translateX(${dx}px)` : undefined, touchAction: 'pan-y' }}
         className={cn(
-          'relative flex flex-col gap-2.5 rounded-inner p-3.5 transition-transform',
+          'relative flex h-full flex-col gap-2.5 rounded-inner p-3.5 transition-transform',
           card.tone ? TONE[card.tone] : 'border border-border bg-surface',
           ink ? '' : 'text-foreground',
           dx ? 'duration-0' : 'duration-200',
@@ -322,7 +243,7 @@ export function PortalCardView({ card, amName, accent, surface }: {
       >
         {card.preview_url && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={card.preview_url} alt="" loading="lazy" className="h-[92px] w-full rounded-tile object-cover" />
+          <img src={card.preview_url} alt="" loading="lazy" className="h-[120px] w-full rounded-tile object-cover" />
         )}
         <div className="flex items-center gap-2">
           {card.word && (
@@ -337,11 +258,11 @@ export function PortalCardView({ card, amName, accent, surface }: {
           )}
         </div>
         {href ? (
-          <Link href={href} className="text-[15px] font-semibold leading-[1.25] underline-offset-4 hover:underline">{card.title}</Link>
+          <Link href={href} className="text-[16px] font-semibold leading-[1.25] underline-offset-4 hover:underline">{card.title}</Link>
         ) : (
-          <span className="text-[15px] font-semibold leading-[1.25]">{card.title}</span>
+          <span className="text-[16px] font-semibold leading-[1.25]">{card.title}</span>
         )}
-        <p className={cn('text-[13px]', muted)}>{line}</p>
+        <p className={cn('text-[14px]', muted)}>{line}</p>
         {card.shoot?.location && (
           <p className={cn('flex items-center gap-1.5 text-[13px]', muted)}>
             <MapPin className="h-3.5 w-3.5 shrink-0" /> {card.shoot.location}
@@ -356,35 +277,36 @@ export function PortalCardView({ card, amName, accent, surface }: {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {card.link && (
               <a href={card.link.url} target="_blank" rel="noreferrer noopener"
-                className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold underline-offset-4 hover:underline">
+                className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
                 <ExternalLink className="h-3.5 w-3.5" /> {card.link.label}
               </a>
             )}
             {card.live_url && (
               <a href={card.live_url} target="_blank" rel="noreferrer noopener"
-                className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold underline-offset-4 hover:underline">
+                className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
                 <ExternalLink className="h-3.5 w-3.5" /> See the live post
               </a>
             )}
             {pdf && (
               <a href={pdf}
-                className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold underline-offset-4 hover:underline">
+                className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
                 <FileDown className="h-3.5 w-3.5" /> The plan (PDF)
               </a>
             )}
           </div>
         )}
 
-        {/* the plan, on the same card */}
+        {/* the written plan, on the same card — the board itself is drawn
+            open, under the card, by ShootBoard */}
         {card.shoot?.shared && (card.shoot.concept || card.shoot.planned_deliverables.length > 0 || card.shoot.shot_list.length > 0) && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setPlanOpen(v => !v)}
-              className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[13px] font-semibold', muted)}>
+              className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>
               <ChevronDown className={cn('h-4 w-4 transition-transform', planOpen && 'rotate-180')} />
               {planOpen ? 'Hide the plan' : 'See the plan'}
             </button>
             {planOpen && (
-              <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[13px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
+              <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
                 {card.shoot.concept && <p className="whitespace-pre-wrap leading-relaxed">{card.shoot.concept}</p>}
                 {card.shoot.planned_deliverables.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
@@ -405,11 +327,6 @@ export function PortalCardView({ card, amName, accent, surface }: {
                     ))}
                   </ul>
                 )}
-                {href && card.shoot.board_cards > 0 && (
-                  <Link href={href} className="inline-flex min-h-11 items-center text-[13px] font-semibold underline-offset-4 hover:underline">
-                    See the planning board · {card.shoot.board_cards} cards
-                  </Link>
-                )}
               </div>
             )}
           </div>
@@ -420,6 +337,16 @@ export function PortalCardView({ card, amName, accent, surface }: {
           <div className="flex flex-col gap-2 pt-1">
             {asking ? (
               <>
+                {token && (
+                  <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Your name"
+                    aria-label="Your name"
+                    maxLength={60}
+                    className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
+                  />
+                )}
                 <textarea
                   rows={3}
                   value={note}
@@ -440,30 +367,34 @@ export function PortalCardView({ card, amName, accent, surface }: {
                 </div>
               </>
             ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                {canApprove && (
-                  <button type="button" disabled={busy !== null} onClick={() => act('approve')}
-                    style={accent}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50 sm:flex-none">
-                    <Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve'}
-                  </button>
-                )}
-                {canAsk && (
-                  <button type="button" disabled={busy !== null} onClick={() => setAsking(true)}
-                    className="inline-flex min-h-11 items-center justify-center px-3 text-[14px] font-medium text-foreground underline-offset-4 hover:underline disabled:opacity-50">
-                    Ask for a change
-                  </button>
-                )}
-              </div>
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  {canApprove && (
+                    <button type="button" disabled={busy !== null} onClick={() => act('approve')}
+                      style={accent}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50 sm:flex-none">
+                      <Check className="h-4 w-4" /> {busy === 'approve' ? 'Approving…' : 'Approve'}
+                    </button>
+                  )}
+                  {canAsk && (
+                    <button type="button" disabled={busy !== null} onClick={() => setAsking(true)}
+                      className="inline-flex min-h-11 items-center justify-center px-3 text-[14px] font-medium text-foreground underline-offset-4 hover:underline disabled:opacity-50">
+                      Ask for a change
+                    </button>
+                  )}
+                </div>
+                {canApprove && <p className={cn('text-[12px]', muted)}>{approveConsequence()}</p>}
+              </>
             )}
           </div>
         )}
 
-        {/* comments, pinned to this card */}
+        {/* comments, pinned to this card. A comment the client left on a
+            card of the planning board says which card. */}
         {canComment && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setOpen(v => !v)}
-              className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[13px] font-semibold', muted)}>
+              className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>
               <MessageCircle className="h-4 w-4" />
               {comments.length === 0 ? 'Leave a comment' : `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}`}
               <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
@@ -471,15 +402,28 @@ export function PortalCardView({ card, amName, accent, surface }: {
             {open && (
               <div className="flex flex-col gap-2.5">
                 {comments.map(c => (
-                  <div key={c.id} className={cn('rounded-tile p-2.5 text-[13px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
+                  <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
                     <p className={cn('flex flex-wrap items-baseline gap-x-2 text-[12px]', muted)}>
                       <span className="font-semibold">{c.author_name}</span>
                       {c.from_team && <Chip tone={ink ? 'muted' : 'ink'} className="px-1.5 py-0.5 text-[10px]">MD Media</Chip>}
                       <span suppressHydrationWarning>{when(c.created_at)}</span>
+                      {onCardLine(c.card_label) && (
+                        <span className="italic">{onCardLine(c.card_label)}</span>
+                      )}
                     </p>
                     <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{c.body}</p>
                   </div>
                 ))}
+                {token && (
+                  <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Your name"
+                    aria-label="Your name"
+                    maxLength={60}
+                    className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
+                  />
+                )}
                 <div className="flex items-end gap-2">
                   <textarea
                     rows={2}

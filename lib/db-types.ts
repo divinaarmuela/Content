@@ -215,6 +215,7 @@ export interface BatchComment {
   batch_id: string
   author_id: string | null
   body: string
+  card_id: string | null
   assigned_to: string | null
   resolved: boolean | null
 }
@@ -1131,7 +1132,7 @@ export const TABLE_COLUMNS = {
   assets: ['id', 'created_at', 'client_id', 'project_id', 'kind', 'orientation', 'purpose', 'url', 'alt'],
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
-  batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'assigned_to', 'resolved'],
+  batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id'],
   board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
   board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
@@ -1207,7 +1208,7 @@ export const NULLABLE_COLUMNS = {
   assets: ['client_id', 'project_id', 'orientation', 'purpose', 'alt'],
   assistant_chats: [],
   assistant_prefs: [],
-  batch_comments: ['author_id', 'assigned_to', 'resolved'],
+  batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id'],
   board_comments: ['author_id', 'resolved_at'],
   board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],

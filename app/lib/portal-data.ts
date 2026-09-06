@@ -30,6 +30,7 @@ import {
   portalColumnFor, shootDayLabel, shootStanding, toPortalComment,
   type PortalActions, type PortalCardComment, type PortalCardTone, type PortalColumnKey, type PortalLink,
 } from './portal-core'
+import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -155,6 +156,11 @@ export type PortalCard = {
     planned_deliverables: PlannedDeliverable[]
     shot_list: ShotRow[]
     board_cards: number
+    /** the planning board itself, the same cards the team's page draws — the
+     *  portal renders it read-only, open, under the shoot's card. Empty for
+     *  an unshared shoot. */
+    canvas_cards: CanvasCard[]
+    board_name: string | null
     shared: boolean
     /** the plan's brief item — the signed-in portal files a comment on it,
      *  having no token for the shoot's own thread */
@@ -426,9 +432,10 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       board_name: shared ? b.board_name ?? null : null,
       planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
       shot_list: shared ? sanitiseShotList(b.shot_list) : [],
-      // the board is its own share decision; rows predating the migration
-      // (share_board undefined) keep the old behaviour of following the brief
-      canvas_cards: shared && (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
+      // the board goes with the plan, by the owner's rule: a shared shoot
+      // shows its planning board, open, always. `share_board` stays on the
+      // row so old data still parses; it no longer hides anything.
+      canvas_cards: shared ? sanitiseCanvasCards(b.canvas_cards) : [],
       details_shared: shared,
       // only a shared plan can be decided on — approving something you were
       // never shown is not a decision
@@ -476,7 +483,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // client-visible item comments and the shoot's own thread; both reads are
   // tolerant, because a thread that cannot be read is an empty thread, not a
   // portal that cannot load.
-  type CommentRow = { id: string; created_at: string; body: string; item_id?: string; batch_id?: string; team_users: { name?: string | null; role?: string | null } | null }
+  type CommentRow = { id: string; created_at: string; body: string; item_id?: string; batch_id?: string; card_id?: string | null; team_users: { name?: string | null; role?: string | null } | null }
   const facingIds = items.filter(i => isClientFacing(i.status as ItemStatus)).map(i => i.id)
   const briefIds = [...briefByBatch.values()].map(b => b.id)
   const commentItemIds = [...new Set([...facingIds, ...briefIds])]
@@ -504,10 +511,17 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     list.push(asComment(r))
     commentsByItem.set(r.item_id!, list)
   }
+  // the board each shoot shares, read once — a pinned comment names its card
+  const boardByShoot = new Map<string, CanvasCard[]>()
+  for (const b of shootRows) {
+    boardByShoot.set(b.id, b.shared_with_client === true ? sanitiseCanvasCards(b.canvas_cards) : [])
+  }
   const commentsByShoot = new Map<string, PortalCardComment[]>()
   for (const r of shootCommentRows as unknown as CommentRow[]) {
     const list = commentsByShoot.get(r.batch_id!) ?? []
-    list.push(asComment(r))
+    const c = asComment(r)
+    if (c.card_id) c.card_label = canvasCardLabel(findCanvasCard(boardByShoot.get(r.batch_id!) ?? [], c.card_id))
+    list.push(c)
     commentsByShoot.set(r.batch_id!, list)
   }
 
@@ -589,7 +603,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
         concept: shared ? b.concept ?? null : null,
         planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
         shot_list: shared ? sanitiseShotList(b.shot_list) : [],
-        board_cards: shared && (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards).length : 0,
+        board_cards: (boardByShoot.get(b.id) ?? []).length,
+        canvas_cards: boardByShoot.get(b.id) ?? [],
+        board_name: shared ? b.board_name ?? null : null,
         shared,
         brief_item_id: shared ? brief?.id ?? null : null,
       },
