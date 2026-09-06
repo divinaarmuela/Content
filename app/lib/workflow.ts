@@ -555,6 +555,15 @@ export async function performTransition(
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
+    } else if (typeof (item as { link_url?: string | null }).link_url === 'string'
+        && (item as { link_url?: string | null }).link_url) {
+      // A CARD WITH A LINK IS EVIDENCE ENOUGH.
+      //
+      // Since the board reset a card is one deliverable with one pasted link —
+      // Google Drive or Dropbox — instead of nested versions carrying slides.
+      // The old check only ever looked at `asset_versions`, so a link-only card
+      // was refused at "Submit for review" with a message telling the person to
+      // add the link they had already added.
     } else {
       const latest = (await table<AssetVersion>('asset_versions')
         .list({ by: { item_id: item.id }, orderBy: [['version_number', 'desc']], limit: 1 }))[0] ?? null
