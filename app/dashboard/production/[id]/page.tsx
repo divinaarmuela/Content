@@ -51,6 +51,7 @@ import {
 import GettingStarted from '../../GettingStarted'
 import HelpHint from '../../HelpHint'
 import CollapsibleCard from '../../CollapsibleCard'
+import ItemBoard from '../../boards/ItemBoard'
 import MentionBox from '../../MentionBox'
 import { toastOpen } from '../../toastLink'
 import { extractMentions } from '../../../lib/mention-core'
@@ -1998,6 +1999,20 @@ export default function ItemDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* 5b — THE BOARD. The canvas behind this piece: notes, images, links,
+          boards inside boards. It is a section of THIS page, not a second
+          screen — folded until wanted, so the link, the status, whose move it
+          is and the one blue button above stay in view. The first open makes
+          the board (claimed on the item, so two people opening at once share
+          one); the API decides who may, the same way it decides who may open
+          the card. */}
+      <CollapsibleCard id="board" title="Board" summary="plan this piece — notes, images, links, boards inside">
+        <p className="text-secondary-13 text-muted-foreground">
+          The place to plan this piece. Put down notes, images and links, and make a board inside it for anything bigger.
+        </p>
+        <ItemBoard itemId={id} backHref={{ href: `/dashboard/production/${id}`, label: detail.title }} />
+      </CollapsibleCard>
 
       {/* 6 — POSTING. Only once the item is signed off: before that a
           caption box and a platform picker are questions nobody can answer. */}
