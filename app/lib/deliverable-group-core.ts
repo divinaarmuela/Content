@@ -1,18 +1,14 @@
 /**
- * Pure quota-card logic — no I/O.
+ * The shoot plan's pure logic — no I/O — and what is left of deliverable
+ * groups.
  *
- * Creating "5 reels" used to mean five titled cards on the board before a
- * frame was edited. A deliverable GROUP is the promise itself: one row saying
- * "5 reels for this client", drawn as one card that fills up — "Reels · 2 of
- * 5" — as pieces are actually added to it.
- *
- * The group is presentation only. The client's agreement counts PUBLISHED
- * items exactly as before (agreement-core), the portal shows published
- * pieces, and an item with no group renders exactly as it always has. A
- * group with target 1 is not a quota at all and renders as a plain card.
+ * A GROUP used to be a promise ("5 reels for this client") drawn as one card
+ * that filled up, with pieces nested inside it. A card is one deliverable
+ * now: the pages draw every piece as its own card and ignore the group it
+ * was made in. The group rows still exist and the API still cleans a
+ * `planned` list on the way in (plannedFormats / plannedTarget); nothing
+ * here draws a quota card any more.
  */
-
-import type { ItemStatus } from './workflow-core'
 
 /** One line of a mixed promise: "2 reels", "2 carousels". */
 export type PlannedFormat = { type: string; qty: number }
@@ -38,137 +34,6 @@ export type DeliverableGroup = {
   created_by?: string | null
   created_at?: string
 }
-
-/** A TASK group lives on the Production board; everything else on Editor. */
-export function isTaskGroup(g: DeliverableGroup): boolean {
-  const k = g.work_kinds
-  return !!k && k.slug !== 'shoot_brief' && k.uses_media === false
-}
-
-export type GroupableItem = {
-  id: string
-  status: ItemStatus
-  group_id?: string | null
-  /** the piece's own format — the "reel" vs "carousel" a mixed card counts by.
-   *  Optional so single-format callers need not supply it. */
-  content_type?: string | null
-}
-
-/** One card on the board: the group, its pieces so far, and where it sits. */
-export type GroupCard<T extends GroupableItem> = {
-  group: DeliverableGroup
-  items: T[]
-  /** pieces made so far — the "2" of "2 of 5" */
-  count: number
-  /** the promise — the "of 5" */
-  target: number
-  /** true once every promised piece exists */
-  full: boolean
-  /**
-   * The status whose lane this card sits in: the LEAST advanced open piece,
-   * because a quota card is about the work still owed — a group with one
-   * published reel and one first draft belongs with the draft. With no
-   * pieces yet it sits at the very start: nothing has begun.
-   */
-  laneStatus: ItemStatus
-}
-
-/** The one order the pipeline moves in — used to find the least-advanced piece. */
-const STATUS_ORDER: ItemStatus[] = [
-  'draft_uploaded', 'internal_review', 'revision_required', 'revision_complete',
-  'client_review', 'client_changes_requested', 'approved_for_scheduling',
-  'scheduled', 'published',
-]
-const rank = (s: ItemStatus) => {
-  const i = STATUS_ORDER.indexOf(s)
-  return i === -1 ? 0 : i
-}
-
-/**
- * Split a board's rows into quota cards and plain items.
- *
- * An item whose group_id names a group the caller holds is folded into that
- * group's card and never rendered on its own. An item pointing at a group
- * this list does not contain (deleted, or filtered away) falls back to being
- * a plain card — a card is always better than a vanished piece of work.
- * A target-1 group is a plain promise, not a quota: its items render as
- * ordinary cards and no group card is drawn for it.
- */
-export function splitByGroup<T extends GroupableItem>(
-  items: T[], groups: DeliverableGroup[],
-): { groupCards: GroupCard<T>[]; plainItems: T[] } {
-  const byId = new Map(groups.filter(g => g.target > 1).map(g => [g.id, g]))
-  const members = new Map<string, T[]>()
-  const plainItems: T[] = []
-  for (const item of items) {
-    const g = item.group_id ? byId.get(item.group_id) : undefined
-    if (!g) { plainItems.push(item); continue }
-    const list = members.get(g.id) ?? []
-    list.push(item)
-    members.set(g.id, list)
-  }
-  const groupCards = groups
-    .filter(g => g.target > 1)
-    .map(g => groupCard(g, members.get(g.id) ?? []))
-  return { groupCards, plainItems }
-}
-
-/** One group's card, derived from its pieces. */
-export function groupCard<T extends GroupableItem>(
-  group: DeliverableGroup, items: T[],
-): GroupCard<T> {
-  const target = Math.max(1, group.target)
-  const count = items.length
-  const open = items.filter(i => i.status !== 'published')
-  const laneStatus: ItemStatus = count === 0
-    ? 'draft_uploaded'
-    : (open.length > 0 ? open : items)
-        .reduce((lo, i) => (rank(i.status) < rank(lo.status) ? i : lo)).status
-  return { group, items, count, target, full: count >= target, laneStatus }
-}
-
-/** "Reels · 2 of 5" — the card's one line. */
-export function groupLine(card: { group: DeliverableGroup; count: number; target: number }): string {
-  return `${card.group.title} · ${card.count} of ${card.target}`
-}
-
-/** The next piece's title: "October reels 03". Numbered by how many exist,
- *  padded so the files sort the way people expect. */
-export function nextPieceTitle(group: { title: string }, existingCount: number): string {
-  return `${group.title} ${String(existingCount + 1).padStart(2, '0')}`
-}
-
-/** What the primary button says: "Add the next reel". */
-export function addNextLabel(group: { content_type: string }): string {
-  const word = group.content_type && group.content_type !== 'other' ? group.content_type : 'piece'
-  return `Add the next ${word}`
-}
-
-// ─────────────────────────── mixed-format groups ───────────────────────────
-// A card can promise a MIX — 2 reels + 2 carousels + 2 videos — carried in the
-// group's `planned` list. Everything below tolerates `planned` being null (the
-// column not migrated, or an old single-format group) by falling straight back
-// to the single-format behaviour above.
-
-/** singular / plural word per format, so counts read as English. */
-const FORMAT_WORDS: Record<string, [string, string]> = {
-  reel: ['reel', 'reels'],
-  carousel: ['carousel', 'carousels'],
-  story: ['story', 'stories'],
-  static: ['image', 'images'],
-  video: ['video', 'videos'],
-  other: ['piece', 'pieces'],
-}
-
-/** "reel" / "reels" for a count — an unknown type just takes an "s". */
-export function pluralType(type: string, n: number): string {
-  const pair = FORMAT_WORDS[type]
-  if (pair) return n === 1 ? pair[0] : pair[1]
-  const base = type || 'piece'
-  return n === 1 ? base : `${base}s`
-}
-
-const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 /**
  * Clean the raw `planned` value into merged {type, qty} rows, or null.
@@ -197,105 +62,6 @@ export function plannedTarget(rows: PlannedFormat[]): number {
   return rows.reduce((s, r) => s + Math.max(0, Math.floor(r.qty || 0)), 0)
 }
 
-/** True only when the card promises MORE THAN ONE format — a single-format
- *  `planned` (one row) still renders as the plain "Reels · 2 of 5" card. */
-export function isMixedGroup(group: { planned?: PlannedFormat[] | null }): boolean {
-  const rows = plannedFormats(group)
-  return !!rows && rows.length > 1
-}
-
-export type FormatProgress = { type: string; done: number; target: number }
-
-/**
- * How full each promised format is, counted from the pieces' OWN content_type.
- * A single-format group (null planned) collapses to one row driven by the
- * group's content_type and item count — identical to today. Over-fill (more
- * pieces of a type than promised) reports the real `done`; pieces whose type
- * is not in the plan simply do not land in any row.
- */
-export function formatBreakdown<T extends GroupableItem>(
-  group: DeliverableGroup, items: T[],
-): FormatProgress[] {
-  const rows = plannedFormats(group)
-  if (!rows) {
-    return [{ type: group.content_type, done: items.length, target: Math.max(1, group.target) }]
-  }
-  return rows.map(r => ({
-    type: r.type,
-    done: items.filter(i => (i.content_type ?? group.content_type) === r.type).length,
-    target: r.qty,
-  }))
-}
-
-/** The formats still owed — a type whose pieces are all in gets hidden, so
- *  "Add the next piece" only offers work that is actually still missing. */
-export function remainingTypes<T extends GroupableItem>(
-  group: DeliverableGroup, items: T[],
-): string[] {
-  return formatBreakdown(group, items).filter(f => f.done < f.target).map(f => f.type)
-}
-
-/**
- * The mixed card's one summary line: "5 reels, 2 stories · 3 of 7".
- *
- * It used to be built from what EXISTS — "0 reels, 0 stories — 0 of 7" on a
- * fresh card — so the most important sentence on the card was the one it never
- * said: what we owe this client. The promise is fixed and belongs in the line;
- * progress moves and belongs in the chips and the count.
- */
-export function mixedGroupLine<T extends GroupableItem>(
-  group: DeliverableGroup, items: T[],
-): string {
-  const parts = formatBreakdown(group, items).map(f => `${f.target} ${pluralType(f.type, f.target)}`)
-  return `${parts.join(', ')} · ${items.length} of ${Math.max(1, group.target)}`
-}
-
-/**
- * How the pieces are spread across the pipeline, worst-first.
- *
- * A card's lane comes from its LEAST advanced piece, which is right — the card
- * is not done until all of it is. But five approved pieces and two the client
- * wants changed put a 100% green bar in the "Client wants changes" lane, and
- * nothing on the face of the card explained the contradiction. This is what
- * lets the card show both facts at once.
- */
-export function statusSpread<T extends GroupableItem>(
-  items: T[],
-): { status: ItemStatus; count: number }[] {
-  const counts = new Map<ItemStatus, number>()
-  for (const i of items) counts.set(i.status, (counts.get(i.status) ?? 0) + 1)
-  return [...counts.entries()]
-    .map(([status, count]) => ({ status, count }))
-    .sort((a, b) => rank(a.status) - rank(b.status))
-}
-
-/**
- * That spread in words: "5 need a posting date · 2 client changes".
- *
- * Only worth saying when the pieces actually disagree — one line repeating the
- * lane the card already sits in is noise, so a card whose pieces are all in
- * one state says nothing here.
- */
-export function spreadLine<T extends GroupableItem>(
-  items: T[], labels: Record<ItemStatus, string>,
-): string | null {
-  const spread = statusSpread(items)
-  if (spread.length < 2) return null
-  return spread.map(s => `${s.count} ${labels[s.status].toLowerCase()}`).join(' · ')
-}
-
-/** One per-format chip: "Reels 2/2", plus whether that format is finished. */
-export function formatChip(f: FormatProgress): { label: string; done: boolean } {
-  return { label: `${cap(pluralType(f.type, 2))} ${f.done}/${f.target}`, done: f.done >= f.target }
-}
-
-/** The menu entry for adding one more of a type: "Add a reel". */
-export function addTypeLabel(type: string): string {
-  const word = pluralType(type, 1)
-  const article = /^[aeiou]/i.test(word) ? 'an' : 'a'
-  return `Add ${article} ${word}`
-}
-
 // ───────────────────────────── the shoot plan ─────────────────────────────
 // A plan says what is coming out of the shoot, in plain lines — "Hero reel",
 // "Menu carousel", "Chef portrait". One line is one thing to be made, and when
@@ -310,6 +76,8 @@ export function addTypeLabel(type: string): string {
 /** One thing coming out of the shoot. `id` is stable across edits and
  *  reorders so the card it becomes can be found again. */
 export type PlanLine = { id: string; title: string }
+
+const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 const LINE_TITLE_MAX = 120
 const LINE_ID_MAX = 40

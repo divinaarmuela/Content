@@ -18,25 +18,22 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Camera, CalendarDays, ChevronDown, ChevronUp, FileText, Kanban, Link2, ListChecks, MoreHorizontal, Plus, Search, Trash2,
+  Camera, CalendarDays, ChevronDown, FileText, Kanban, Link2, ListChecks, MoreHorizontal, Plus, Search, Trash2,
 } from 'lucide-react'
+import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../../lib/board-core'
 import { pageColumns } from '../../lib/board-view-core'
-import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { Board, COLUMN_EMPTY, useBoardParams, type BoardCardRow } from '../board/Board'
 import { NewCardDialog } from '../board/BoardDialogs'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import { type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
 import { TASK_STATUS_TURN, taskStatusLabel } from '../../lib/task-kind-core'
 import {
-  BRIEF_LANES, activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
+  activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
   isBriefTask, isInternalTask, productionScope, recentlyDoneTasks, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
 import { SHOWN_SHOOT_LABEL, shownShootState } from '../../lib/shoot-lifecycle-core'
-import {
-  addNextLabel, groupLine, isTaskGroup, nextPieceTitle, splitByGroup,
-  type DeliverableGroup, type GroupCard,
-} from '../../lib/deliverable-group-core'
 import {
   dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
 } from '../../lib/work-calendar-core'
@@ -45,13 +42,12 @@ import { useWorkRows } from '../useLiveWork'
 import { AccountUnavailable } from './shoot-ui'
 import { teamNameMap, usePersistedChoice, usePersistedScope, useTeamMembers } from './workHooks'
 import { useRole } from '../useRole'
-import NewItemDialog, { type ClientRow } from './NewItemDialog'
+import NewShootPlanDialog, { type ClientRow } from './NewItemDialog'
 import { ClaimButton } from './ClaimButton'
 import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
 import { LaneBoard, type Lane } from './LaneBoard'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
-import AddPieceDialog, { type AddPieceTarget } from './AddPieceDialog'
 import PageTitle from '../ui/PageTitle'
 import Chip, { type ChipTone } from '../ui/Chip'
 import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
@@ -83,8 +79,6 @@ type BriefTask = {
   owner_id: string | null
   scheduler_ids?: unknown
   my_open_task?: boolean
-  /** the quota group this piece belongs to, when it was made inside one */
-  group_id?: string | null
   clients: { name: string } | null
   work_kinds?: { name: string; slug: string; color: string; uses_media?: boolean } | null
   /** the audit trail, as much of it as a card has room for */
@@ -110,15 +104,6 @@ const RANGE_KEY = 'md-production-cal-range'
  *  which is the view the owner asked for. */
 const VIEWS = ['list', 'board', 'calendar'] as const
 const RANGES = ['month', 'week'] as const
-
-/** What FILLS an empty column, in plain words — not just "nothing here". */
-const LANE_EMPTY: Record<string, string> = {
-  doing: 'New shoots, plans and tasks start here while they are being written.',
-  review: 'Work sent for review waits here for a manager.',
-  revising: 'Work the reviewer or client asked to change comes back here.',
-  client: 'Plans sent to the client for sign-off sit here.',
-  approved: 'Approved plans wait here until someone books the shoot.',
-}
 
 function whenShort(iso: string | null) {
   return iso
@@ -150,25 +135,19 @@ const SHOOT_CHIP: Record<BatchStatus, ChipTone> = {
 
 
 /**
- * Production: ONE board.
+ * Production: ONE board, and the List is the same five columns.
  *
  * It used to be three boards stacked — a Shoots section, a "Shoot plans" lane
- * board and a "Tasks" lane board — and finding one job meant scrolling past
- * two boards that were not about it. Now everything still being planned
- * flows across the same five columns the Editor board taught everyone:
- * Writing · Ready for review · Being revised · With client · Approved.
- * A shoot-plan card carries its shoot date and a status chip; a booked shoot
- * leaves the board (its chip lives in the strip below); tasks ride the same
- * columns in their own words.
+ * board and a "Tasks" lane board — and then a List with its own five stage
+ * names beside the Board's five. Now the List's columns ARE the board's
+ * (`BOARD_COLUMNS`, `columnOf`): Draft · Internal check · With client · Ready
+ * to post · Posted. A shoot-plan card carries its shoot date and a status
+ * chip; a booked shoot leaves the columns (its chip lives in the strip
+ * below); a task rides the same columns. A card is one thing — every piece
+ * is its own card, whatever group it was once made in.
  */
 export default function ProductionPage() {
   const router = useRouter()
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  /** the group the "add a piece" dialog is collecting content for */
-  const [pieceTarget, setPieceTarget] = useState<AddPieceTarget | null>(null)
-  /** the task quota card about to be deleted — irreversible, so confirmed */
-  const [groupToDelete, setGroupToDelete] = useState<GroupCard<BriefTask> | null>(null)
-  const [deletingGroup, setDeletingGroup] = useState(false)
   const [clientFilter, setClientFilter] = useState('all')
   const [search, setSearch] = useState('')
   /** finished tasks are a tail, not a queue — collapsed until asked for */
@@ -229,7 +208,6 @@ export default function ProductionPage() {
   const live = useWorkRows(viewer)
   const shoots: Shoot[] | null = live.loading ? null : (live.batches as unknown as Shoot[])
   const clients = live.clients as unknown as ClientRow[]
-  const groups = live.groups as unknown as DeliverableGroup[]
   const briefTasks = useMemo(
     () => (live.items as unknown as BriefTask[]).filter(isBriefTask), [live.items])
   const internalTasks = useMemo(
@@ -363,42 +341,31 @@ export default function ProductionPage() {
   // research / strategy / copy — production work with nothing to post
   const tasksInFilters = activeInternalTasks(internalTasks).filter(t => matches(t.client_id, t.title))
   const doneInFilters = recentlyDoneTasks(internalTasks).filter(t => matches(t.client_id, t.title))
-  const scopedTaskRows = viewer ? productionScope(tasksInFilters, viewer, scope, {}) : []
+  // every task is its own card — the group it was made in is not drawn
+  const taskRows = viewer ? productionScope(tasksInFilters, viewer, scope, {}) : []
   const doneRows = viewer ? productionScope(doneInFilters, viewer, scope, {}) : []
 
-  // "5 write-ups" is ONE card that fills up — a task group folds its pieces
-  // into a single card exactly like the asset quota cards on the Editor
-  // board. The card counts EVERY piece — done ones included, whatever the
-  // scope pills say — or a finished piece would shrink the count back down.
-  const taskGroups = groups.filter(g => isTaskGroup(g) && matches(g.client_id, g.title))
-  const { groupCards: taskGroupCards } = splitByGroup(
-    internalTasks.filter(t => matches(t.client_id, t.title)), taskGroups)
-  const groupedTaskIds = new Set(taskGroupCards.flatMap(c => c.items.map(i => i.id)))
-  const taskRows = scopedTaskRows.filter(t => !groupedTaskIds.has(t.id))
-  const doneShown = doneRows.filter(t => !groupedTaskIds.has(t.id))
-
   // shoots with NO plan yet, still in planning: they get their own card in
-  // Writing — the plan they are waiting for is written there. Booked and shot
+  // Draft — the plan they are waiting for is written there. Booked and shot
   // shoots have left the board; they live in the strip below the columns.
   const planlessShoots = visibleShoots.filter(s =>
     !briefByBatch.has(s.id) && (s.status ?? 'brief') === 'brief')
   const bookedShoots = visibleShoots.filter(s => ['locked', 'shot'].includes(s.status ?? ''))
   const closedShoots = visibleShoots.filter(s => (s.status ?? '') === 'wrapped')
 
-  const boardCount = briefRows.length + taskRows.length + taskGroupCards.length + planlessShoots.length
+  const boardCount = briefRows.length + taskRows.length + planlessShoots.length
   // "18 items across 6 clients" — counted from the cards actually on screen,
   // so the sentence and the board can never disagree
   const boardClients = new Set<string>([
     ...briefRows.map(b => b.client_id),
     ...taskRows.map(t => t.client_id),
-    ...taskGroupCards.map(c => c.group.client_id),
     ...planlessShoots.map(s => s.client_id),
   ].filter(Boolean))
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
   const boardSummary = shoots === null
     ? 'Everything being planned, shot and written — it updates the moment anyone moves something.'
     : `${plural(boardCount, 'item')} across ${plural(boardClients.size, 'client')} · updates the moment anyone moves something`
-  const outOfScope = (briefsInFilters.length - briefRows.length) + (tasksInFilters.length - scopedTaskRows.length)
+  const outOfScope = (briefsInFilters.length - briefRows.length) + (tasksInFilters.length - taskRows.length)
   const nothingToShow = shoots !== null && boardCount === 0 && doneRows.length === 0
     && bookedShoots.length === 0 && closedShoots.length === 0
 
@@ -443,7 +410,7 @@ export default function ProductionPage() {
 
   /** A shoot plan's card — the shoot date and state chip ride it, because the
    *  plan and its shoot are one job on one card now. */
-  const briefCard = (b: BriefTask, laneKey: string) => {
+  const briefCard = (b: BriefTask, column: BoardColumnKey) => {
     const shoot = b.batch_id ? batchById.get(b.batch_id) : undefined
     const state = shoot ? shownShootState(shoot) : null
     const when = shoot?.shoot_date ?? b.due_date
@@ -479,7 +446,7 @@ export default function ProductionPage() {
         </>}
         note={credits(b)}
         actions={<>
-          {laneKey === 'approved' && shoot && (
+          {column === 'ready_to_post' && shoot && (
             // the ONE action an approved plan wants: the date is picked and
             // committed on the shoot page
             <Button className="h-11 rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink" asChild>
@@ -504,7 +471,7 @@ export default function ProductionPage() {
         people={holder(t.owner_id)}
         className={muted ? 'opacity-60' : ''}
         chips={<>
-          {/* "Not started" and "In progress" share the Writing lane — the
+          {/* "Not started" and "In progress" share the Draft column — the
               card is the only place that can tell them apart */}
           <Chip>{taskStatusLabel(t.work_kinds, t.status, t.status, { hasWork: (t.current_version_number ?? 0) > 0 })}</Chip>
           {t.work_kinds?.name && (
@@ -538,113 +505,10 @@ export default function ProductionPage() {
     )
   }
 
-  /** Open the "add a piece" dialog for a task group — the task is created only
-   *  once a file or link is provided there, never on this click. */
-  const openAddPiece = (card: GroupCard<BriefTask>) => {
-    setPieceTarget({
-      group_id: card.group.id,
-      client_id: card.group.client_id,
-      batch_id: null,
-      content_type: 'other',
-      work_kind_id: card.group.work_kind_id ?? null,
-      title: nextPieceTitle(card.group, card.count),
-    })
-  }
-
-  /** The dialog created a real task (item + its first version). Nothing left
-   *  to do here: the listener has already folded it into its card. */
-  const applyCreatedPiece = () => {}
-
-  /** Delete a task quota card. Pieces are detached server-side and stay on the
-   *  board as plain cards; drop the group and unlink its pieces optimistically. */
-  const deleteGroupCard = async (card: GroupCard<BriefTask>) => {
-    setDeletingGroup(true)
-    try {
-      const res = await fetch(`/api/production/groups/${card.group.id}`, { method: 'DELETE' })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) throw new Error((json as { error?: string } | null)?.error ?? 'Could not delete the card')
-      toast.success(card.count
-        ? `Card deleted — ${card.count} piece${card.count === 1 ? '' : 's'} kept on the board`
-        : 'Card deleted')
-      setGroupToDelete(null)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete the card')
-    } finally {
-      setDeletingGroup(false)
-    }
-  }
-
-  /** A task quota card: the promise, how full it is, and the pieces inside. */
-  const taskGroupCard = (card: GroupCard<BriefTask>) => {
-    const open = openGroups.has(card.group.id)
-    const pct = Math.min(100, Math.round((card.count / card.target) * 100))
-    return (
-      <div key={`group-${card.group.id}`}
-        className="flex flex-col gap-2.5 rounded-inner border border-border bg-surface p-3.5 text-foreground">
-        <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
-          {clients.find(c => c.id === card.group.client_id)?.name ?? '—'}
-        </span>
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-[15px] font-semibold leading-[1.25]">{groupLine(card)}</span>
-          <div className="flex shrink-0 items-center">
-            <button type="button" aria-label={open ? 'Hide the pieces' : 'Show the pieces'}
-              onClick={() => setOpenGroups(prev => {
-                const next = new Set(prev)
-                if (next.has(card.group.id)) next.delete(card.group.id); else next.add(card.group.id)
-                return next
-              })}
-              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
-              {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            <button type="button" aria-label="Delete this card"
-              onClick={() => setGroupToDelete(card)}
-              className="-my-2 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-accent-red">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        {/* the small filled bar — how much of the promise exists */}
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.08]">
-          <div className="h-full rounded-full bg-accent-green transition-all" style={{ width: `${pct}%` }} />
-        </div>
-        {card.group.work_kinds?.name && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone={kindTone(card.group.work_kinds.color)}>
-              {card.group.work_kinds.name}
-            </Chip>
-          </div>
-        )}
-        {open && (
-          <div className="flex flex-col gap-1">
-            {card.items.length === 0 && (
-              <p className="text-[13px] text-muted-foreground">No pieces yet — add the first one below.</p>
-            )}
-            {card.items.map(i => (
-              <Link key={i.id} href={`/dashboard/production/${i.id}`}
-                className="flex min-h-11 items-center justify-between gap-2 rounded-tile px-2 text-[13px] hover:bg-foreground/[0.05]">
-                <span className="truncate">{i.title}</span>
-                <span className="shrink-0 text-muted-foreground">
-                  {taskStatusLabel(i.work_kinds, i.status, i.status, { hasWork: (i.current_version_number ?? 0) > 0 })}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-        {!card.full && (
-          <Button className="h-11 w-fit rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90"
-            onClick={() => openAddPiece(card)}>
-            <Plus className="h-4 w-4" />
-            {addNextLabel(card.group)}
-          </Button>
-        )}
-      </div>
-    )
-  }
-
   /** A shoot with no plan yet — its card IS the reminder to write one. */
   const shootCard = (s: Shoot) => {
     // no longer "only while it is empty": a shoot plan is itself an item, so
-    // the option vanished the moment anyone described the shoot. The pieces
+    // the option vanished the moment anyone described the shoot. Its cards
     // are kept and detached server-side; the dialog says so before you commit.
     const canDelete = isManager
     return (
@@ -714,7 +578,7 @@ export default function ProductionPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
-                  <Plus className="h-4 w-4" /> New item <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  <Plus className="h-4 w-4" /> New card <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
@@ -780,7 +644,7 @@ export default function ProductionPage() {
         </div>
       </div>
       <p className="-mt-2 text-[13px] text-muted-foreground">
-        The Mine / Nobody&rsquo;s / Everyone switch covers plans and tasks. Shoots are always shown.
+        Mine, Unassigned and Everyone cover plans and tasks. Shoots are always shown.
         {outOfScope > 0 && <> ({outOfScope} more outside this view)</>}
       </p>
 
@@ -860,34 +724,33 @@ export default function ProductionPage() {
         <>
           <LaneBoard
             ariaLabel="Production columns"
-            initialLane={BRIEF_LANES.find(l =>
-              briefRows.some(b => l.statuses.includes(b.status) && b.owner_id === viewer?.id)
-              || taskRows.some(t => l.statuses.includes(t.status) && (t.owner_id === viewer?.id || t.my_open_task)))?.key}
-            lanes={BRIEF_LANES.map((lane): Lane => {
-              const laneBriefs = briefRows.filter(b => lane.statuses.includes(b.status))
-              const laneTasks = taskRows.filter(t => lane.statuses.includes(t.status))
-              // a task quota card sits in the lane of its least-finished
-              // piece — the work still owed — and starts in Writing
-              const laneGroups = taskGroupCards.filter(c => lane.statuses.includes(c.laneStatus))
-              const laneShoots = lane.key === 'doing' ? planlessShoots : []
+            initialLane={BOARD_COLUMNS.find(c =>
+              briefRows.some(b => columnOf(b.status) === c.key && b.owner_id === viewer?.id)
+              || taskRows.some(t => columnOf(t.status) === c.key && (t.owner_id === viewer?.id || t.my_open_task)))?.key}
+            lanes={BOARD_COLUMNS.map((column): Lane => {
+              const laneBriefs = briefRows.filter(b => columnOf(b.status) === column.key)
+              const laneTasks = taskRows.filter(t => columnOf(t.status) === column.key)
+              // a shoot with no plan yet has no status of its own: it starts
+              // in Draft, where the plan it is waiting for gets written
+              const laneShoots = column.key === 'draft' ? planlessShoots : []
               const cards = [
                 ...laneShoots.map(shootCard),
-                ...laneBriefs.map(b => briefCard(b, lane.key)),
-                ...laneGroups.map(taskGroupCard),
+                ...laneBriefs.map(b => briefCard(b, column.key)),
                 ...laneTasks.map(t => taskCard(t)),
               ]
-              // finished tasks are a tail on the last column, collapsed:
+              // finished tasks are a tail on their own column, collapsed:
               // "Back" from a finished task still lands somewhere real
-              if (lane.key === 'approved' && doneShown.length > 0) {
+              const laneDone = doneRows.filter(t => columnOf(t.status) === column.key)
+              if (laneDone.length > 0) {
                 cards.push(!doneOpen
                   ? (
                     <button key="done-toggle" type="button" onClick={() => setDoneOpen(true)}
                       className="min-h-11 rounded-inner border border-dashed border-border py-4 text-center text-[13px] text-muted-foreground hover:text-foreground">
-                      {doneShown.length} task{doneShown.length === 1 ? '' : 's'} finished in the last 14 days — show
+                      {laneDone.length} task{laneDone.length === 1 ? '' : 's'} finished in the last 14 days — show
                     </button>
                   ) : (
                     <div key="done-list" className="flex flex-col gap-2.5">
-                      {doneShown.map(t => taskCard(t, true))}
+                      {laneDone.map(t => taskCard(t, true))}
                       <button type="button" onClick={() => setDoneOpen(false)}
                         className="min-h-11 self-start px-1 text-[13px] text-muted-foreground hover:text-foreground">
                         Hide finished tasks
@@ -896,11 +759,12 @@ export default function ProductionPage() {
                   ))
               }
               return {
-                key: lane.key,
-                title: lane.title,
-                count: laneShoots.length + laneBriefs.length + laneGroups.length + laneTasks.length,
-                empty: LANE_EMPTY[lane.key] ?? 'Nothing here.',
+                key: column.key,
+                title: column.label,
+                count: laneShoots.length + laneBriefs.length + laneTasks.length,
+                empty: COLUMN_EMPTY[column.key],
                 cards,
+                hint: <span className="sr-only">{column.meaning}</span>,
               }
             })}
           />
@@ -954,13 +818,11 @@ export default function ProductionPage() {
         />
       )}
 
-      {/* the SHOOT PLAN — the reviewable plan that rides the item pipeline.
-          presetKind locks the kind: without it the dialog filters it out. */}
-      <NewItemDialog
+      {/* the SHOOT PLAN — the reviewable plan that rides the item pipeline */}
+      <NewShootPlanDialog
         open={briefOpen}
         onOpenChange={setBriefOpen}
         onCreated={revealCreated}
-        presetKind="shoot_brief"
         clients={clients}
         batches={shoots ?? []}
         briefedBatchIds={[...briefByBatch.keys()]}
@@ -973,11 +835,11 @@ export default function ProductionPage() {
             <AlertDialogTitle>Delete “{toDelete?.title}”?</AlertDialogTitle>
             <AlertDialogDescription>
               {/* the count the card already holds, said back before the click:
-                  "it cannot be undone" is only frightening, whereas "your four
-                  pieces are kept" is the fact somebody actually needs */}
+                  "it cannot be undone" is only frightening, whereas "its four
+                  cards stay" is the fact somebody actually needs */}
               This removes the shoot and its own record. It cannot be undone.{' '}
               {(toDelete?.content_items?.[0]?.count ?? 0) > 0
-                ? `Its ${toDelete!.content_items![0].count} piece${toDelete!.content_items![0].count === 1 ? ' is' : 's are'} kept and stay${toDelete!.content_items![0].count === 1 ? 's' : ''} on the board as ${toDelete!.content_items![0].count === 1 ? 'its own card' : 'their own cards'}.`
+                ? `Its ${toDelete!.content_items![0].count} card${toDelete!.content_items![0].count === 1 ? ' stays' : 's stay'} on the board.`
                 : 'Nothing is attached to it, so nothing else changes.'}
               {' '}A shoot with anything already scheduled or live is closed instead of deleted.
             </AlertDialogDescription>
@@ -988,33 +850,6 @@ export default function ProductionPage() {
               className="bg-accent-red text-cream hover:bg-accent-red/90"
               onClick={e => { e.preventDefault(); void remove() }}>
               {delBusy ? 'Deleting…' : 'Delete shoot'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AddPieceDialog
-        open={pieceTarget !== null}
-        onOpenChange={o => { if (!o) setPieceTarget(null) }}
-        target={pieceTarget}
-        onCreated={applyCreatedPiece}
-      />
-      <AlertDialog open={groupToDelete !== null} onOpenChange={o => { if (!o && !deletingGroup) setGroupToDelete(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this card?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {groupToDelete && groupToDelete.count > 0
-                ? `This removes the promise. The ${groupToDelete.count} piece${groupToDelete.count === 1 ? '' : 's'} already made will stay on the board as ${groupToDelete.count === 1 ? 'its' : 'their'} own card${groupToDelete.count === 1 ? '' : 's'}. This can’t be undone.`
-                : 'This removes the promise. This can’t be undone.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingGroup}>Keep it</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deletingGroup}
-              className="bg-accent-red text-cream hover:bg-accent-red/90"
-              onClick={e => { e.preventDefault(); if (groupToDelete) void deleteGroupCard(groupToDelete) }}>
-              {deletingGroup ? 'Deleting…' : 'Delete this card'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

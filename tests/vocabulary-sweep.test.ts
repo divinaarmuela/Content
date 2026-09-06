@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
-import { EDITOR_LANES, SCHEDULER_LANES } from '../app/lib/work-pages-core'
+import { BOARD_COLUMNS, boardColumn } from '../app/lib/board-core'
+import { DRAFTING_LANE } from '../app/lib/section-names'
 import { STATUS_LABELS } from '../app/lib/workflow-core'
 
 /**
@@ -221,9 +222,6 @@ ${show(unexpected)}`).toEqual([])
 
   it('the section people are sent to has exactly one spelling', () => {
     // three strings named one place on one screen, and two of them were wrong
-    const constant = readFileSync(join(process.cwd(), 'app', 'lib', 'section-names.ts'), 'utf8')
-    expect(constant).toMatch(/SHOOT_PLAN_SECTION/)
-    // only the constant's own explanation may still name the old spelling
     const others = sweep(/Briefs in flight/).filter(h => h.file !== 'app/lib/section-names.ts')
     expect(others).toEqual([])
   })
@@ -279,9 +277,9 @@ describe('the columns say the status words, and the claim says one thing', () =>
   // and a dynamic import here made the assertion race the 5s test timeout
   // whenever the suite ran under load — a green/red result that depended on
   // how busy the machine was, which is no result at all
-  it('every "approved" column is the status label, never the bare word "Approved"', () => {
-    expect(EDITOR_LANES.find(l => l.key === 'approved')?.title).toBe(STATUS_LABELS.approved_for_scheduling)
-    expect(SCHEDULER_LANES[0].title).toBe(STATUS_LABELS.approved_for_scheduling)
+  it('the signed-off column is "Ready to post", never the bare word "Approved"', () => {
+    expect(boardColumn('ready_to_post').label).toBe('Ready to post')
+    expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Approved')
     expect(STATUS_LABELS.approved_for_scheduling).not.toBe('Approved')
   })
 
@@ -291,9 +289,9 @@ describe('the columns say the status words, and the claim says one thing', () =>
     expect(hits.filter(h => !/label="Take this"/.test(h.text)), `other claim labels:\n${show(hits)}`).toEqual([])
   })
 
-  it('the section people are sent to is the glossary word', () => {
-    const constant = readFileSync(join(process.cwd(), 'app', 'lib', 'section-names.ts'), 'utf8')
-    expect(constant).toMatch(/SHOOT_PLAN_SECTION = 'Shoot plans'/)
+  it('the lane a new card is sent to is the board\'s own first column', () => {
+    expect(DRAFTING_LANE).toBe(boardColumn('draft').label)
+    expect(DRAFTING_LANE).toBe('Draft')
   })
 
   it('every work page and the item page carry a Getting started panel', () => {
@@ -343,5 +341,41 @@ describe('the overview sends people to the right page', () => {
     // the sidebar's nav data moved from layout.tsx into the shell it renders
     const shell = readFileSync(join(APP, 'dashboard', 'ui', 'Shell.tsx'), 'utf8')
     expect(shell).toMatch(/href: '\/dashboard\/production'/)
+  })
+})
+
+describe('the Production list speaks the board\'s five columns', () => {
+  // The List view used to carry its own five stage names — "Writing · Ready
+  // for review · Being revised · With client · Approved — book the shoot" —
+  // beside the Board's five, and a quota card ("Title · 2 of 5", a fill bar,
+  // "Add the next reel") with pieces nested inside it. A card is one thing;
+  // the columns are defined once.
+  const page = readFileSync(join(APP, 'dashboard', 'production', 'page.tsx'), 'utf8')
+
+  it('draws its lanes from BOARD_COLUMNS and columnOf, with the board\'s empty sentences', () => {
+    expect(page).toMatch(/lanes=\{BOARD_COLUMNS\.map\(/)
+    expect(page).toMatch(/columnOf\(b\.status\) === column\.key/)
+    expect(page).toMatch(/empty: COLUMN_EMPTY\[column\.key\]/)
+    expect(page).not.toMatch(/BRIEF_LANES|TASK_LANES|EDITOR_LANES|LANE_EMPTY/)
+    for (const old of ['Writing', 'Ready for review', 'Being revised', 'Approved — book the shoot']) {
+      expect(page, `old lane name "${old}" still on the page`).not.toMatch(new RegExp(`['"\`]${old}`))
+    }
+  })
+
+  it('has no quota card and no add-a-piece dialog', () => {
+    expect(page).not.toMatch(/AddPieceDialog|deliverable-group-core|groupLine|addNextLabel|splitByGroup/)
+    expect(page).not.toMatch(/Show the pieces|Hide the pieces|No pieces yet|removes the promise/)
+  })
+
+  it('the header button says New card, and the scope sentence names the real switch', () => {
+    expect(page).toMatch(/> New card <ChevronDown/)
+    expect(page).not.toMatch(/New item/)
+    expect(page).not.toMatch(/Nobody&rsquo;s/)
+    expect(page).toMatch(/Mine, Unassigned and Everyone/)
+  })
+
+  it('deleting a shoot says its cards stay, not its pieces', () => {
+    expect(page).toMatch(/stay'\} on the board\./)
+    expect(page).not.toMatch(/piece\$\{/)
   })
 })

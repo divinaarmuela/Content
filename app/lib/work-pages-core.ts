@@ -7,9 +7,13 @@
  * appear on two of them wearing two different hats. The scope filter is the
  * whole trick: by default you see your own work and the unclaimed pool, and
  * never the item that is plainly someone else's.
+ *
+ * The COLUMNS are not here. Every page draws the same five, from
+ * `board-core` (`BOARD_COLUMNS`, `columnOf`) — this module only decides which
+ * rows a page shows and whose they are.
  */
 
-import { SCHEDULER_STATUSES, STATUS_LABELS, schedulerIdsOf, type ItemStatus } from './workflow-core'
+import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
 import { isInternalKind, TASK_DONE_STATUSES } from './task-kind-core'
 import type { Role } from './identity-core'
@@ -81,69 +85,6 @@ export function recentlyDoneTasks<T extends WorkItem & { updated_at?: string | n
     .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
 }
 
-/** The editor board's columns. Together they cover every status before the
- *  scheduler takes over — each one exactly once. */
-export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
-  { key: 'drafting', title: 'Drafting', statuses: ['draft_uploaded'] },
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
-  { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
-  // the status's own label, not "Approved": that word meant four things
-  // across the app and read as "finished" on a column of work still to post
-  { key: 'approved', title: STATUS_LABELS.approved_for_scheduling, statuses: ['approved_for_scheduling'] },
-]
-
-/** The Scheduler queue's three tabs — the same words the Editor board's last
- *  column and the item's status badge use, so the hand-off says one thing. */
-export const SCHEDULER_LANES: { key: ItemStatus; title: string }[] = [
-  { key: 'approved_for_scheduling', title: STATUS_LABELS.approved_for_scheduling },
-  { key: 'scheduled', title: STATUS_LABELS.scheduled },
-  { key: 'published', title: STATUS_LABELS.published },
-]
-
-/**
- * The Production page's TASK columns — the same shape as EDITOR_LANES, in the
- * task's own vocabulary. A flat list of rows never showed where the approve /
- * review step was; a board does, and it is the board people already know from
- * the Editor page.
- *
- * 'Done' is the tail: it holds all three end statuses, and the page shows only
- * the recent ones (see `recentlyDoneTasks`) so the column stays a footnote.
- */
-export const TASK_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
-  // "To do", not "In progress": a task at draft_uploaded with nothing attached
-  // reads "Not started" on its own page, and a card saying Not started inside
-  // a column headed In progress is the board contradicting the item
-  { key: 'doing', title: 'To do', statuses: ['draft_uploaded'] },
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
-  { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
-  { key: 'done', title: 'Done', statuses: ['approved_for_scheduling', 'scheduled', 'published'] },
-]
-
-/**
- * The Production page's BRIEF columns — the Editor board's shape again, in the
- * shoot plan's own vocabulary.
- *
- * A flat list of briefs said only that they existed. The whole point of these
- * boards is that the column IS the step: a plan waiting on a manager and a
- * plan waiting on the client are different problems, and a list put them in
- * the same pile.
- *
- * There is no Done lane. A booked brief is a shoot, and it appears as one on
- * the shoot cards below — `activeBriefTasks` drops it before it ever reaches a
- * column here.
- */
-export const BRIEF_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
-  { key: 'doing', title: 'Writing', statuses: ['draft_uploaded'] },
-  // revision_complete is "the changes are in, look again" — the same waiting
-  // room as a first submission, and the manager's move either way
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review', 'revision_complete'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'client_changes_requested'] },
-  { key: 'client', title: 'With client', statuses: ['client_review'] },
-  { key: 'approved', title: 'Approved — book the shoot', statuses: ['approved_for_scheduling'] },
-]
-
 export type Assignment = 'mine' | 'unassigned' | 'other'
 
 export function editorAssignment(i: WorkItem, v: Viewer): Assignment {
@@ -211,18 +152,6 @@ export function unassignedCount<T extends WorkItem>(
   items: T[], v: Viewer, classify: (i: T, v: Viewer) => Assignment,
 ): number {
   return items.filter(i => classify(i, v) === 'unassigned').length
-}
-
-/** The two counts the editor page shows as a footnote rather than a column —
- *  work that is done, kept visible without taking up the board. */
-export function editorTail(items: WorkItem[]): { scheduled: number; published: number } {
-  // NOTE: pass the PRE-scope list. editorScope has already dropped 'scheduled'
-  // and 'published', so counting its output can only ever return two zeros.
-  const own = items.filter(i => isAsset(i))
-  return {
-    scheduled: own.filter(i => i.status === 'scheduled').length,
-    published: own.filter(i => i.status === 'published').length,
-  }
 }
 
 export function canClaimEditor(i: WorkItem, v: Viewer): boolean {

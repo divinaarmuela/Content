@@ -3,15 +3,17 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
- * The New card / New shoot plan form, pinned from its source.
+ * The New shoot plan form, pinned from its source.
  *
  * The spec (docs/superpowers/specs/2026-09-06-three-pages-reset-design.md):
- * a card is ONE deliverable — one thing, one link, a free-text kind. The form
- * used to carry the old model: "Formats — add a row for each kind", a "How
- * many pieces?" count, and a shoot plan's list of "What is coming out of
- * this shoot?". The owner saw it and asked what the point of it was. These
- * tests make sure it does not come back, and that the requirement — "What
- * needs doing" — sits right under the title for every kind.
+ * a card is ONE deliverable — one thing, one link, a free-text kind — and a
+ * shoot is one card. This file was once the dialog for everything (a regular
+ * card, a task, a shoot plan) and carried the old model: "Formats — add a row
+ * for each kind", a "How many pieces?" count, a "What is coming out of this
+ * shoot?" list, a Files drop zone in two steps. Only the shoot plan was ever
+ * opened from here, so that is all that is left. These tests make sure the
+ * rest does not come back, and that the requirement — "What needs doing" —
+ * sits right under the title.
  */
 
 const SRC = readFileSync(
@@ -19,7 +21,7 @@ const SRC = readFileSync(
   'utf8',
 )
 
-describe('New card form — one thing, one box', () => {
+describe('New shoot plan form — one shoot, one card', () => {
   it('has no Formats rows and no quantity', () => {
     expect(SRC).not.toMatch(/Add another format/)
     expect(SRC).not.toMatch(/draft\.formats/)
@@ -46,16 +48,14 @@ describe('New card form — one thing, one box', () => {
     expect(SRC.match(/fetch\('\/api\/production\/items'/g)).toHaveLength(1)
   })
 
-  it('"What needs doing" is one box, right under the title, above kind and priority', () => {
+  it('"What needs doing" is one box, right under the title, above priority', () => {
     const title = SRC.indexOf('<Label>Title *</Label>')
     const box = SRC.indexOf('<Label>What needs doing</Label>')
     const priority = SRC.indexOf('<Label>Priority</Label>')
-    const kind = SRC.indexOf('Kind of work')
     expect(title).toBeGreaterThan(-1)
     expect(box).toBeGreaterThan(title)
     expect(box).toBeLessThan(priority)
-    expect(box).toBeLessThan(kind)
-    // one label for every kind — not "Editing notes" / "Note to reviewer"
+    // one label — not "Editing notes" / "Note to reviewer"
     expect(SRC.match(/What needs doing/g)).toHaveLength(1)
     expect(SRC).not.toMatch(/Editing notes/)
     expect(SRC).not.toMatch(/Note to reviewer/)
@@ -64,11 +64,32 @@ describe('New card form — one thing, one box', () => {
     expect(SRC).toMatch(/it goes to them/)
   })
 
-  it('the first paint of "New shoot plan" is already the shoot-plan form', () => {
-    // the kinds arrive by fetch, so anything derived only from the selected
-    // kind is the regular form for a frame — the preset is known at render 1
-    expect(SRC).toMatch(/const isBriefKind = presetKind === 'shoot_brief' \|\|/)
-    expect(SRC).toMatch(/const hidesMedia = isBriefKind \|\| isTaskKind \|\|/)
+  it('is only ever the shoot-plan form — no regular-card or task branch, no kind chooser', () => {
+    expect(SRC).not.toMatch(/presetKind/)
+    expect(SRC).not.toMatch(/isTaskKind|isBriefKind|hidesMedia/)
+    expect(SRC).not.toMatch(/Kind of work/)
+    expect(SRC).not.toMatch(/work-kinds\/suggest/)
+    expect(SRC).not.toMatch(/New task|New card/)
+    // the plan is always a plan: the shoot-plan kind, and the client's sign-off
+    expect(SRC).toMatch(/work_kind_id: briefKind\.id/)
+    expect(SRC).toMatch(/client_approval_required: true/)
+  })
+
+  it('has no files, no footage fields, no two-step phone form', () => {
+    expect(SRC).not.toMatch(/No shoot — footage from elsewhere/)
+    expect(SRC).not.toMatch(/Client must approve this/)
+    expect(SRC).not.toMatch(/<Label>Files/)
+    expect(SRC).not.toMatch(/Step \{step/)
+    expect(SRC).not.toMatch(/raw_assets|uploadFiles|UploadRows|ExportWarnings|useIsMobile/)
+    expect(SRC).not.toMatch(/Where is the footage from/)
+  })
+
+  it('says what it is: New shoot plan — one shoot, one card', () => {
+    expect(SRC).toMatch(/<DialogTitle>New shoot plan <HelpHint term="shoot_plan" \/><\/DialogTitle>/)
+    expect(SRC).toMatch(/One shoot, one card\. \* required/)
+    expect(SRC).toMatch(/Create the shoot plan/)
+    // every control is 44px
+    expect(SRC.match(/className="h-11 rounded-full/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
   })
 })
 

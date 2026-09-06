@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  BRIEF_LANES, EDITOR_LANES, TASK_LANES, activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
-  canClaimScheduler, defaultScope, editorAssignment, editorScope, editorTail, isBriefTask,
+  activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
+  canClaimScheduler, defaultScope, editorAssignment, editorScope, isBriefTask,
   isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
   restoredChoice, schedulerScope, unassignedCount,
   type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
 } from '../app/lib/work-pages-core'
-import { ITEM_STATUSES, SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
-import { TASK_DONE_STATUSES, TASK_KIND_LABELS } from '../app/lib/task-kind-core'
+import { SCHEDULER_STATUSES, type ItemStatus } from '../app/lib/workflow-core'
 import type { Role } from '../app/lib/identity-core'
 
 const ME = 'me'
@@ -171,17 +170,10 @@ describe('productionScope — a brief belongs to whoever is planning the shoot',
   })
 })
 
-describe('unassignedCount / editorTail / activeBriefTasks', () => {
+describe('unassignedCount / activeBriefTasks', () => {
   it('counts what is waiting to be picked up', () => {
     const items = [item({ owner_id: null }), item({ owner_id: null }), item({ owner_id: ME }), item({ owner_id: THEM })]
     expect(unassignedCount(items, viewer(), editorAssignment)).toBe(2)
-  })
-  it('the tail counts finished content only, never briefs', () => {
-    const items = [
-      item({ status: 'scheduled' }), item({ status: 'published' }), item({ status: 'published' }),
-      brief({ status: 'scheduled' }), brief({ status: 'published' }), item({ status: 'draft_uploaded' }),
-    ]
-    expect(editorTail(items)).toEqual({ scheduled: 1, published: 2 })
   })
   it('a booked shoot is not an active brief', () => {
     const items = [
@@ -243,56 +235,13 @@ describe('backLinkFor — back goes where you came from', () => {
   })
 })
 
-describe('EDITOR_LANES', () => {
-  it('cover exactly these seven statuses, each once, in board order', () => {
-    expect(EDITOR_LANES.flatMap(l => l.statuses)).toEqual([
-      'draft_uploaded',
-      'internal_review',
-      'revision_required',
-      'revision_complete',
-      'client_review',
-      'client_changes_requested',
-      'approved_for_scheduling',
-    ])
-  })
-  it('never shows a scheduled or published item', () => {
-    const covered = EDITOR_LANES.flatMap(l => l.statuses) as ItemStatus[]
-    expect(covered).not.toContain('scheduled')
-    expect(covered).not.toContain('published')
-  })
-})
-
-describe('TASK_LANES', () => {
-  it('cover every one of the nine statuses, each exactly once', () => {
-    const covered = TASK_LANES.flatMap(l => l.statuses)
-    expect([...covered].sort()).toEqual([...ITEM_STATUSES].sort())
-    expect(new Set(covered).size).toBe(covered.length)
-  })
-
-  it('read in the task vocabulary — To do, never "Drafting"', () => {
-    expect(TASK_LANES.map(l => l.title)).toEqual([
-      'To do', 'Ready for review', 'Being revised', 'With client', 'Done',
-    ])
-  })
-
-  it('ends in one Done column holding all three finished statuses', () => {
-    const done = TASK_LANES[TASK_LANES.length - 1]
-    expect(done.key).toBe('done')
-    expect(done.statuses).toEqual([...TASK_DONE_STATUSES])
-  })
-
-  it('names each lane the same way the task labels do', () => {
-    for (const lane of TASK_LANES) {
-      for (const s of lane.statuses) {
-        // the column title is the status label, or the shared name of the
-        // pair the column merges — never a word from the asset pipeline
-        expect(TASK_KIND_LABELS[s]).toBeTruthy()
-      }
-    }
-    // the CARD says Not started or In progress; the LANE has to hold both
-    expect(TASK_KIND_LABELS.draft_uploaded).toBe('In progress')
-    expect(TASK_LANES[0].title).toBe('To do')
-    expect(TASK_KIND_LABELS.approved_for_scheduling).toBe('Done')
+describe('the work pages have no columns of their own', () => {
+  // Editor, Scheduler and Production once each carried a lane list here —
+  // "Drafting · Ready for review · Being revised …" beside the Board's five.
+  // The five columns live in board-core now and nowhere else.
+  it('work-pages-core exports no lane list', async () => {
+    const mod = await import('../app/lib/work-pages-core')
+    expect(Object.keys(mod).filter(k => /LANES$/.test(k))).toEqual([])
   })
 })
 
@@ -340,60 +289,12 @@ describe('recentlyDoneTasks', () => {
   })
 })
 
-describe('BRIEF_LANES — the shoot plan as a board', () => {
-  it('covers every stage a live brief can be at, exactly once', () => {
-    const seen = BRIEF_LANES.flatMap(l => l.statuses)
-    expect(new Set(seen).size).toBe(seen.length)
-    // a booked brief is a SHOOT and leaves the board — activeBriefTasks drops
-    // it before it reaches a column, so it needs no lane
-    const live = ITEM_STATUSES.filter(s => s !== 'scheduled' && s !== 'published')
-    expect([...seen].sort()).toEqual([...live].sort())
-  })
-
-  it('reads in the plan’s own words, in the order the work moves', () => {
-    expect(BRIEF_LANES.map(l => l.title)).toEqual([
-      'Writing', 'Ready for review', 'Being revised', 'With client', 'Approved — book the shoot',
-    ])
-  })
-
-  it('a plan the client sent back sits with the team, not with the client', () => {
-    const lane = (s: ItemStatus) => BRIEF_LANES.find(l => l.statuses.includes(s))?.key
-    expect(lane('client_review')).toBe('client')
-    expect(lane('client_changes_requested')).toBe('revising')
-    expect(lane('revision_complete')).toBe('review')
-  })
-
-  it('shares its lane keys with the task board, so the colours agree', () => {
-    for (const key of ['doing', 'review', 'revising', 'client']) {
-      expect(BRIEF_LANES.some(l => l.key === key)).toBe(true)
-      expect(TASK_LANES.some(l => l.key === key)).toBe(true)
-    }
-  })
-
-  it('a booked brief never reaches a column', () => {
+describe('a booked brief never reaches a column', () => {
+  it('activeBriefTasks drops it before the columns are drawn', () => {
     const rows = [
       { id: 'a', status: 'draft_uploaded' as ItemStatus, owner_id: null, work_kinds: { slug: 'shoot_brief' } },
       { id: 'b', status: 'scheduled' as ItemStatus, owner_id: null, work_kinds: { slug: 'shoot_brief' } },
     ]
     expect(activeBriefTasks(rows).map(r => r.id)).toEqual(['a'])
-  })
-})
-
-describe('restoredChoice — the link wins over what the browser remembers', () => {
-  const VIEWS = ['board', 'calendar'] as const
-  it('falls back when nothing is remembered', () => {
-    expect(restoredChoice(VIEWS, 'board', {})).toBe('board')
-  })
-  it('opens where the browser remembers', () => {
-    expect(restoredChoice(VIEWS, 'board', { fromStorage: 'calendar' })).toBe('calendar')
-  })
-  it('lets ?view=… override the remembered choice', () => {
-    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'board', fromStorage: 'calendar' })).toBe('board')
-    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'calendar', fromStorage: 'board' })).toBe('calendar')
-  })
-  it('ignores words it does not understand, in either place', () => {
-    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'kanban', fromStorage: 'calendar' })).toBe('calendar')
-    expect(restoredChoice(VIEWS, 'board', { fromUrl: 'kanban', fromStorage: 'list' })).toBe('board')
-    expect(restoredChoice(VIEWS, 'board', { fromUrl: '', fromStorage: null })).toBe('board')
   })
 })
