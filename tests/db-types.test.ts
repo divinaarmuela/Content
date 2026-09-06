@@ -49,6 +49,19 @@ describe('db-types (generated)', () => {
     expect(NULLABLE_COLUMNS.content_items).toContain('due_date')
     expect(NULLABLE_COLUMNS.content_items).not.toContain('id')
   })
+  // A CARD CARRIES A LINK (the three pages reset). Where the work lives —
+  // a Drive or Dropbox URL, labelled by host — and what the manager last
+  // said needs changing. All ghost columns, all nullable: every card made
+  // before this had neither, and a card with no link is still a card.
+  it('knows what a card carries: its link, and the words sent back with it', () => {
+    for (const c of ['link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at']) {
+      expect(TABLE_COLUMNS.content_items).toContain(c)
+      expect(NULLABLE_COLUMNS.content_items).toContain(c)
+    }
+    const _link: ContentItem['link_kind'] = 'drive'
+    const _note: ContentItem['change_note'] = null
+    void _link, _note
+  })
   // What the image editor saves for a VIDEO. No SQL ever created these, so
   // the generator is the only place their shape is written down — and all
   // three are nullable because the overwhelming majority of versions are

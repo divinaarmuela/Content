@@ -70,47 +70,61 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
 export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
 
 /**
- * The default ladder: editors live on the editor board and can see the shoots
- * they are filming (production) and where their work ends up (scheduler);
- * schedulers run the queue, calendar and social, and can look back at the
- * editor board their posts came from; clients get nothing, and account
- * managers and above see everything.
+ * The Schedule page — the posting calendar under Social. It is a CHILD of
+ * Social in the nav (whoever may see Social may see all of it), but it is
+ * also the one Social page a scheduler holds on its own, so it has a key of
+ * its own here.
+ */
+export const SCHEDULE_PAGE = '/dashboard/social/schedule'
+const SOCIAL_PAGE = '/dashboard/social'
+
+/** The Social page a child href rides on, or null for anything else. */
+export function socialParentOf(href: string): string | null {
+  return href.startsWith(`${SOCIAL_PAGE}/`) ? SOCIAL_PAGE : null
+}
+
+/** Every team role gets the Overview, their own Notifications feed, and
+ *  Settings (their profile and notification preferences live there). */
+const PERSONAL_PAGES = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
+
+/**
+ * The default ladder — THE THREE PAGES RESET (6 Sep 2026).
  *
- * Both extra pages are read-and-claim, not authority: what a person may DO on
- * an item is decided per item by their assignment, in workflow-core.
+ * The owner's words: "my team is currently confused on how to use it". Each
+ * role now sees the one page that is their job and nothing beside it:
+ *
+ *   editor          → Editor
+ *   scheduler       → Scheduler, Schedule
+ *   account_manager → their clients' pages (everything but business
+ *                     development: Leads and Audience stay grantable)
+ *   super_admin     → everything, plus Leads
+ *
+ * …plus the personal three (Overview, Notifications, Settings) for every
+ * team role. A super admin can still open any page to one person by grant.
+ *
+ * This is the NAV's answer. The API routes keep their own gates: what a
+ * person may DO on a card is decided per card by their assignment, in
+ * workflow-core, and the item page opens for any team member who is sent a
+ * link to it.
  */
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
   if (role === 'client') return false
   // a grant-only page is never default, however senior the role
   if (GRANT_ONLY_PAGES.has(href)) return false
-  // every team role gets the Overview, their own Notifications feed, and
-  // Settings (their profile and notification preferences live there)
-  const personal = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
+  // a Social child is nobody's default but the scheduler's Schedule: everyone
+  // else reaches the children THROUGH Social (canSeePage falls back to the
+  // parent), so hiding Social hides all of it in one move
+  if (socialParentOf(href)) return role === 'scheduler' && href === SCHEDULE_PAGE
   if (role === 'editor') {
-    return [...personal, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/files'].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
-  // schedulers run the client channels day-to-day: queue, calendar, and the
-  // social area itself (channels, inbox, analytics) — that is where they post
-  // …plus Production: a scheduler can be handed an internal task like anyone
-  // else, and Production is the only page that lists one. Without it, a task
-  // assigned to a scheduler was invisible to the person holding it.
   if (role === 'scheduler') {
-    return [...personal, '/dashboard/scheduler', '/dashboard/calendar', '/dashboard/social', '/dashboard/editor', '/dashboard/production', '/dashboard/files'].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable
-  // per person when someone wears both hats).
-  //
-  // Reports used to be excluded alongside them, which never fitted the same
-  // reasoning: a monthly client report IS client delivery, and the account
-  // manager is the person who presents it. It was swept in with the other two
-  // and nobody unpicked it.
-  // Files is on every team ladder above: it is the agency's shared filing
-  // cabinet, and an editor hunting last month's raws or a scheduler hunting an
-  // approved graphic is doing the job they were hired for. A client never sees
-  // it — `role === 'client'` returns false at the top, and the routes behind it
-  // require a team role of their own.
+  // per person when someone wears both hats). Reports ARE client delivery.
   if (role === 'account_manager') return !['/dashboard/leads', '/dashboard/audience'].includes(href)
   return true                                  // super_admin
 }
@@ -142,7 +156,11 @@ export function canSeePage(role: Role | null, href: string, granted: GrantedPage
   if (defaultAllows(role, href)) return true
   // a grant is for a team member; a client is a different axis entirely
   if (role === 'client') return false
-  return granted.includes(href)
+  if (granted.includes(href)) return true
+  // a Social child rides on Social itself: whoever may see the channels may
+  // see the schedule, the inbox and the rest — one permission, not six
+  const parent = socialParentOf(href)
+  return parent !== null && canSeePage(role, parent, granted, hidden)
 }
 
 /** Filter a nav list. Order is preserved — a granted page appears where it

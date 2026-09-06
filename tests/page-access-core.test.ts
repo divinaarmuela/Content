@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   GRANTABLE_PAGES, GRANT_ONLY_PAGES, canSeePage, canSeeSubpage, defaultAllows,
-  isGrantablePage, normaliseGrantedPages, subpageKey, visiblePages,
+  isGrantablePage, normaliseGrantedPages, SCHEDULE_PAGE, socialParentOf, subpageKey, visiblePages,
 } from '../app/lib/page-access-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -63,26 +63,35 @@ const NAV = [
 
 const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
 
-describe('defaultAllows — the ladder as it always was', () => {
-  it('keeps an editor on the work pages: editor board, production, scheduler', () => {
+/**
+ * THE THREE PAGES RESET (6 Sep 2026). The owner: "my team is currently
+ * confused on how to use it". Each role sees the one page that is their job
+ * and nothing beside it, plus the personal three — Overview, Notifications,
+ * Settings. A super admin can still open any page to one person by grant.
+ */
+describe('defaultAllows — one page per role', () => {
+  it('keeps an editor on the Editor page and nothing beside it', () => {
     expect(defaultAllows('editor', '/dashboard')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/editor')).toBe(true)
-    expect(defaultAllows('editor', '/dashboard/production')).toBe(true)
-    expect(defaultAllows('editor', '/dashboard/scheduler')).toBe(true)
-    for (const href of ['/dashboard/leads', '/dashboard/clients', '/dashboard/calendar']) {
-      expect(defaultAllows('editor', href)).toBe(false)
+    for (const href of [
+      '/dashboard/production', '/dashboard/scheduler', '/dashboard/files',
+      '/dashboard/leads', '/dashboard/clients', '/dashboard/calendar', '/dashboard/social',
+      SCHEDULE_PAGE,
+    ]) {
+      expect(defaultAllows('editor', href), href).toBe(false)
     }
   })
 
-  it('keeps a scheduler on their own pages, scheduler, calendar, social, editor and production', () => {
+  it('keeps a scheduler on Scheduler and Schedule', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/calendar')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/editor')).toBe(true)
-    // an internal task can be handed to anyone, and Production is the only
-    // page that lists one — without it the holder cannot see their own work
-    expect(defaultAllows('scheduler', '/dashboard/production')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/clients')).toBe(false)
+    expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
+    for (const href of [
+      '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
+      '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',
+    ]) {
+      expect(defaultAllows('scheduler', href), href).toBe(false)
+    }
   })
 
   it('every team role gets Notifications and Settings — their own feed and prefs', () => {
@@ -96,14 +105,16 @@ describe('defaultAllows — the ladder as it always was', () => {
     for (const role of TEAM_ROLES) expect(defaultAllows(role, '/dashboard')).toBe(true)
   })
 
-  it('gives super admins every page except the grant-only ones', () => {
+  it('gives super admins every page except the grant-only ones — Leads included', () => {
     for (const { href } of GRANTABLE_PAGES) {
       if (GRANT_ONLY_PAGES.has(href)) continue
       expect(defaultAllows('super_admin', href)).toBe(true)
     }
+    expect(defaultAllows('super_admin', '/dashboard/leads')).toBe(true)
+    expect(canSeePage('super_admin', SCHEDULE_PAGE, [])).toBe(true)
   })
 
-  it('account managers get everything except business development', () => {
+  it("account managers get their clients' pages — everything except business development", () => {
     // reports are NOT business development — a monthly client report is client
     // delivery, and the account manager is who presents it
     const excluded = ['/dashboard/leads', '/dashboard/audience']
@@ -112,6 +123,9 @@ describe('defaultAllows — the ladder as it always was', () => {
       if (excluded.includes(href) || GRANT_ONLY_PAGES.has(href)) continue
       expect(defaultAllows('account_manager', href)).toBe(true)
     }
+    for (const href of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', SCHEDULE_PAGE]) {
+      expect(canSeePage('account_manager', href, []), href).toBe(true)
+    }
     // and a grant can still open them for a specific person
     expect(canSeePage('account_manager', '/dashboard/leads', ['/dashboard/leads'])).toBe(true)
   })
@@ -119,6 +133,30 @@ describe('defaultAllows — the ladder as it always was', () => {
   it('shows nothing to a client or an unresolved identity', () => {
     expect(defaultAllows('client', '/dashboard')).toBe(false)
     expect(defaultAllows(null, '/dashboard')).toBe(false)
+  })
+})
+
+describe('the Social children ride on Social — and Schedule stands on its own', () => {
+  it('names the parent of a Social child', () => {
+    expect(socialParentOf(SCHEDULE_PAGE)).toBe('/dashboard/social')
+    expect(socialParentOf('/dashboard/social/inbox')).toBe('/dashboard/social')
+    expect(socialParentOf('/dashboard/social')).toBeNull()
+    expect(socialParentOf('/dashboard/scheduler')).toBeNull()
+  })
+  it('whoever may see Social may see its children, by role or by grant', () => {
+    expect(canSeePage('account_manager', '/dashboard/social/inbox', [])).toBe(true)
+    expect(canSeePage('editor', '/dashboard/social/inbox', [])).toBe(false)
+    expect(canSeePage('editor', '/dashboard/social/inbox', ['/dashboard/social'])).toBe(true)
+    expect(canSeePage('editor', SCHEDULE_PAGE, ['/dashboard/social'])).toBe(true)
+  })
+  it('a scheduler holds Schedule without holding Social', () => {
+    expect(canSeePage('scheduler', SCHEDULE_PAGE, [])).toBe(true)
+    expect(canSeePage('scheduler', '/dashboard/social', [])).toBe(false)
+    expect(canSeePage('scheduler', '/dashboard/social/inbox', [])).toBe(false)
+  })
+  it('hiding Social hides what rides on it — but not the page a scheduler holds on its own', () => {
+    expect(canSeePage('account_manager', '/dashboard/social/inbox', [], ['/dashboard/social'])).toBe(false)
+    expect(canSeePage('scheduler', SCHEDULE_PAGE, [], ['/dashboard/social'])).toBe(true)
   })
 })
 
@@ -135,7 +173,7 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
   })
 
   it('cannot take away what the ladder already gave', () => {
-    expect(canSeePage('editor', '/dashboard/production', [])).toBe(true)
+    expect(canSeePage('editor', '/dashboard/editor', [])).toBe(true)
     expect(canSeePage('scheduler', '/dashboard/scheduler', [])).toBe(true)
     expect(canSeePage('account_manager', '/dashboard/clients', [])).toBe(true)
   })
@@ -156,14 +194,13 @@ describe('visiblePages', () => {
   it('filters to what the person may see and preserves nav order', () => {
     const seen = visiblePages('editor', NAV, ['/dashboard/leads'])
     expect(seen.map(s => s.href)).toEqual([
-      '/dashboard', '/dashboard/leads', '/dashboard/production', '/dashboard/editor',
-      '/dashboard/scheduler', '/dashboard/settings',
+      '/dashboard', '/dashboard/leads', '/dashboard/editor', '/dashboard/settings',
     ])
   })
 
-  it('an editor with no grants sees only their own pages and the work boards', () => {
+  it('an editor with no grants sees only their own pages and the Editor page', () => {
     expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual([
-      '/dashboard', '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/settings',
+      '/dashboard', '/dashboard/editor', '/dashboard/settings',
     ])
   })
 
@@ -174,8 +211,8 @@ describe('visiblePages', () => {
   it('two people with the same role can differ', () => {
     const manal = visiblePages('editor', NAV, ['/dashboard/leads'])
     const other = visiblePages('editor', NAV, [])
-    expect(manal.length).toBe(6)
-    expect(other.length).toBe(5)
+    expect(manal.length).toBe(4)
+    expect(other.length).toBe(3)
   })
 })
 
@@ -203,9 +240,10 @@ describe('normaliseGrantedPages', () => {
 
   it('drops pages the person already has by default', () => {
     // storing these would let a later role change silently keep access
+    // Production is no longer an editor default, so that grant now survives
     expect(normaliseGrantedPages(['/dashboard/production', '/dashboard/leads'], 'editor'))
-      .toEqual(['/dashboard/leads'])
-    // the editor board is an editor default now — granting it stores nothing
+      .toEqual(['/dashboard/production', '/dashboard/leads'])
+    // the editor board is an editor default — granting it stores nothing
     expect(normaliseGrantedPages(['/dashboard/editor', '/dashboard/leads'], 'editor'))
       .toEqual(['/dashboard/leads'])
     expect(normaliseGrantedPages(['/dashboard/clients'], 'account_manager')).toEqual([])

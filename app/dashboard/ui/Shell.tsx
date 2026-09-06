@@ -186,9 +186,10 @@ export function resolveNav(
   // the role ladder decides by default; a super admin's grants can only add
   const main = visiblePages(role, NAV_MAIN, granted, hidden)
   const tools = visiblePages(role, NAV_TOOLS, granted, hidden)
-  // Social's children ride on Social's own permission
-  const socialOpen = main.some(i => i.href === '/dashboard/social')
-  const children = socialOpen ? NAV_SOCIAL_CHILDREN : []
+  // Social's children ride on Social's own permission — and a child a role
+  // holds ON ITS OWN (a scheduler's Schedule page) is drawn even when Social
+  // itself is not. `canSeePage` answers both: it falls back to the parent.
+  const children = visiblePages(role, NAV_SOCIAL_CHILDREN, granted, hidden)
   return {
     allowed: new Map([...main, ...tools].map(i => [i.href, i] as const)),
     children,
@@ -251,6 +252,17 @@ function NavLinks({ nav, onNavigate, part }: {
     <nav className="flex flex-col gap-0.5 px-3 pb-4">
       {GROUPS.map(group => {
         const items = group.hrefs.map(h => allowed.get(h)).filter((i): i is NavItem => !!i)
+        // a Social child held without Social itself (a scheduler's Schedule
+        // page) is drawn in Social's place, un-nested — a page someone may
+        // open has to be somewhere they can find it
+        if (items.length === 0 && group.label === 'Social' && children.length > 0) {
+          return (
+            <div key={group.label} className="contents">
+              {groupLabel(group.label)}
+              {children.map(c => link(c))}
+            </div>
+          )
+        }
         if (items.length === 0) return null
         return (
           <div key={group.label} className="contents">

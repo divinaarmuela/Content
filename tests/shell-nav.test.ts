@@ -55,6 +55,12 @@ describe('GROUPS covers the nav', () => {
 const seen = (role: Role | null, granted: string[] = [], hidden: string[] = [], path = '/dashboard') =>
   [...resolveNav(role, granted, hidden, path).allowed.keys()]
 
+/**
+ * THE THREE PAGES RESET (6 Sep 2026): each role sees the one page that is
+ * their job, plus the personal three. "my team is currently confused on how
+ * to use it" — the nav stops offering what a role cannot act on. The API
+ * routes keep their own gates; this is what the rail draws.
+ */
 describe('resolveNav by role', () => {
   it('gives a super admin everything except the grant-only page', () => {
     const list = seen('super_admin')
@@ -71,25 +77,50 @@ describe('resolveNav by role', () => {
     expect(list).not.toContain('/dashboard/audience')
     expect(list).toContain('/dashboard/clients')
     expect(list).toContain('/dashboard/reports')
+    for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/social']) {
+      expect(list, h).toContain(h)
+    }
   })
 
-  it('gives an editor their board, the shoots feeding it and where it lands', () => {
+  it('gives an editor the Editor page and nothing beside it', () => {
     expect(seen('editor').sort()).toEqual([
       '/dashboard',
       '/dashboard/editor',
-      // the agency's filing cabinet: an editor hunting last month's raws is
-      // doing the job they were hired for
-      '/dashboard/files',
       '/dashboard/notifications',
-      '/dashboard/production',
-      '/dashboard/scheduler',
       '/dashboard/settings',
     ].sort())
   })
 
-  it('puts Files on every team ladder and on no client', () => {
-    for (const role of ['editor', 'scheduler', 'account_manager', 'super_admin'] as const) {
+  it('gives a scheduler Scheduler and Schedule — and Schedule is drawn without Social', () => {
+    expect(seen('scheduler').sort()).toEqual([
+      '/dashboard',
+      '/dashboard/notifications',
+      '/dashboard/scheduler',
+      '/dashboard/settings',
+    ].sort())
+    const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
+    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule'])
+    expect(nav.allowed.has('/dashboard/social')).toBe(false)
+    // and the rail knows where they are
+    expect(nav.current).toBe('/dashboard/social/schedule')
+  })
+
+  it('keeps a scheduler off the pages that are not theirs to act on', () => {
+    const list = seen('scheduler')
+    for (const h of [
+      '/dashboard/social', '/dashboard/editor', '/dashboard/production',
+      '/dashboard/clients', '/dashboard/team', '/dashboard/calendar', '/dashboard/files',
+    ]) {
+      expect(list, h).not.toContain(h)
+    }
+  })
+
+  it("puts Files on the managers' ladders and on no client", () => {
+    for (const role of ['account_manager', 'super_admin'] as const) {
       expect(seen(role), role).toContain('/dashboard/files')
+    }
+    for (const role of ['editor', 'scheduler'] as const) {
+      expect(seen(role), role).not.toContain('/dashboard/files')
     }
     expect(seen('client')).not.toContain('/dashboard/files')
     // and a grant cannot hand it to one either — `client` is refused outright
@@ -102,16 +133,6 @@ describe('resolveNav by role', () => {
     expect(general.indexOf('/dashboard/files'))
       .toBe(general.indexOf('/dashboard/clients') + 1)
     expect(pageTitle('/dashboard/files')).toBe('Files')
-  })
-
-  it('gives a scheduler the queue, social and the board their posts came from', () => {
-    const list = seen('scheduler')
-    expect(list).toContain('/dashboard/scheduler')
-    expect(list).toContain('/dashboard/social')
-    expect(list).toContain('/dashboard/editor')
-    expect(list).toContain('/dashboard/production')
-    expect(list).not.toContain('/dashboard/clients')
-    expect(list).not.toContain('/dashboard/team')
   })
 
   it('gives a client nothing — the portal is a different app', () => {
@@ -137,10 +158,14 @@ describe('resolveNav by role', () => {
     expect(seen('editor', [], ['/dashboard/editor'])).not.toContain('/dashboard/editor')
   })
 
-  it('opens the Social children only when Social itself is visible', () => {
+  it('opens all the Social children when Social itself is visible, and none to an editor', () => {
     expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(5)
+    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(5)
     expect(resolveNav('editor', [], [], '/dashboard').children).toEqual([])
+    // hiding Social hides what rides on it
     expect(resolveNav('super_admin', [], ['/dashboard/social'], '/dashboard').children).toEqual([])
+    // a grant of Social opens all of it
+    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(5)
   })
 })
 
@@ -179,6 +204,10 @@ describe('activeNavHref', () => {
     // an editor cannot see Clients at all, so the only prefix left that they
     // hold is the Overview — the rail falls back to it rather than going blank
     expect(resolveNav('editor', [], [], '/dashboard/clients/abc-123').current)
+      .toBe('/dashboard')
+    // an editor sent a link to a card lands on it, and the rail says Overview
+    // rather than a Production entry they do not hold
+    expect(resolveNav('editor', [], [], '/dashboard/production/abc-123').current)
       .toBe('/dashboard')
   })
 })
