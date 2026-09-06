@@ -124,6 +124,15 @@ What that board actually contains, and therefore what we build:
   "Comment only" control pinned to an image. A comment belongs to that item, carries who
   left it and when, and never becomes one long thread for the whole board.
 - **Breadcrumbs** back up the nesting, since boards go several deep.
+- **Every item can be coloured and sized by the person who put it there.** A heading strip
+  takes a colour (their board uses a soft olive for "SHOOT CONCEPTS"); a board tile takes a
+  colour and an icon; a note takes a colour. Colours come from the restyle's palette, offered
+  as a small swatch row, never a free colour picker, so a board cannot be made ugly or
+  unreadable in dark mode.
+- **Length and width are the person's choice.** A heading spans the width it is dragged to;
+  a note, image or column is resized by its corner and remembers that size. Sensible
+  minimums so nothing collapses to nothing, and text wraps rather than clipping.
+
 
 Built with the restyle's cards, chips and tone map — the canvas is our look, not Milanote's.
 
