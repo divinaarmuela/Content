@@ -84,9 +84,9 @@ export function recentlyDoneTasks<T extends WorkItem & { updated_at?: string | n
 /** The editor board's columns. Together they cover every status before the
  *  scheduler takes over — each one exactly once. */
 export const EDITOR_LANES: { key: string; title: string; statuses: ItemStatus[] }[] = [
-  { key: 'drafting', title: 'Drafting', statuses: ['draft_uploaded'] },
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
+  { key: 'drafting', title: 'Draft', statuses: ['draft_uploaded'] },
+  { key: 'review', title: 'Ready for checking', statuses: ['internal_review'] },
+  { key: 'revising', title: 'Being changed', statuses: ['revision_required', 'revision_complete'] },
   { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
   // the status's own label, not "Approved": that word meant four things
   // across the app and read as "finished" on a column of work still to post
@@ -115,8 +115,8 @@ export const TASK_LANES: { key: string; title: string; statuses: ItemStatus[] }[
   // reads "Not started" on its own page, and a card saying Not started inside
   // a column headed In progress is the board contradicting the item
   { key: 'doing', title: 'To do', statuses: ['draft_uploaded'] },
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'revision_complete'] },
+  { key: 'review', title: 'Ready for checking', statuses: ['internal_review'] },
+  { key: 'revising', title: 'Being changed', statuses: ['revision_required', 'revision_complete'] },
   { key: 'client', title: 'With client', statuses: ['client_review', 'client_changes_requested'] },
   { key: 'done', title: 'Done', statuses: ['approved_for_scheduling', 'scheduled', 'published'] },
 ]
@@ -138,8 +138,8 @@ export const BRIEF_LANES: { key: string; title: string; statuses: ItemStatus[] }
   { key: 'doing', title: 'Writing', statuses: ['draft_uploaded'] },
   // revision_complete is "the changes are in, look again" — the same waiting
   // room as a first submission, and the manager's move either way
-  { key: 'review', title: 'Ready for review', statuses: ['internal_review', 'revision_complete'] },
-  { key: 'revising', title: 'Being revised', statuses: ['revision_required', 'client_changes_requested'] },
+  { key: 'review', title: 'Ready for checking', statuses: ['internal_review', 'revision_complete'] },
+  { key: 'revising', title: 'Being changed', statuses: ['revision_required', 'client_changes_requested'] },
   { key: 'client', title: 'With client', statuses: ['client_review'] },
   { key: 'approved', title: 'Approved — book the shoot', statuses: ['approved_for_scheduling'] },
 ]

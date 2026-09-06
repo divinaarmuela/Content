@@ -139,18 +139,23 @@ export const SCHEDULER_STATUSES: ItemStatus[] = ['approved_for_scheduling', 'sch
 
 /** What each stage is CALLED on screen — plain words, never the raw status. */
 export const STATUS_LABELS: Record<ItemStatus, string> = {
-  draft_uploaded: 'Drafting',
-  internal_review: 'Ready for review',
-  revision_required: 'Being revised',
-  revision_complete: 'Revised — check again',
+  // THE BOARD'S WORDS, and nobody else's. A stage is called one thing on the
+  // board chip, the card page badge, the Overview rows and in emails: the
+  // column names (Draft · Internal check · With client · Ready to post ·
+  // Posted) and the action names ("Ready for checking", "Booked in",
+  // "Posted"). A second vocabulary is how the team got confused.
+  draft_uploaded: 'Draft',
+  internal_review: 'Ready for checking',
+  revision_required: 'Being changed',
+  revision_complete: 'Changes made — check again',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
   // NOT "Approved": beside "Signed off. Needs a posting time." that read as
   // finished, and the word already meant four different things across the
-  // app. The label states the outstanding action instead.
-  approved_for_scheduling: 'Needs a posting date',
-  scheduled: 'Scheduled',
-  published: 'Published',
+  // app. The column's own name says what is left to do.
+  approved_for_scheduling: 'Ready to post',
+  scheduled: 'Booked in',
+  published: 'Posted',
 }
 
 /** One sentence explaining what the stage MEANS, for anyone who is new. */

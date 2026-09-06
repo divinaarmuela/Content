@@ -269,9 +269,9 @@ describe('TASK_LANES', () => {
     expect(new Set(covered).size).toBe(covered.length)
   })
 
-  it('read in the task vocabulary — To do, never "Drafting"', () => {
+  it('read in the task vocabulary — To do, never "Draft"', () => {
     expect(TASK_LANES.map(l => l.title)).toEqual([
-      'To do', 'Ready for review', 'Being revised', 'With client', 'Done',
+      'To do', 'Ready for checking', 'Being changed', 'With client', 'Done',
     ])
   })
 
@@ -352,7 +352,7 @@ describe('BRIEF_LANES — the shoot plan as a board', () => {
 
   it('reads in the plan’s own words, in the order the work moves', () => {
     expect(BRIEF_LANES.map(l => l.title)).toEqual([
-      'Writing', 'Ready for review', 'Being revised', 'With client', 'Approved — book the shoot',
+      'Writing', 'Ready for checking', 'Being changed', 'With client', 'Approved — book the shoot',
     ])
   })
 

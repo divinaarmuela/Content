@@ -27,8 +27,8 @@ describe('task vocabulary', () => {
     expect(TASK_KIND_LABELS.published).toBe('Done')
   })
   it('relabels only tasks', () => {
-    expect(taskStatusLabel({ slug: 'strategy', uses_media: false }, 'draft_uploaded', 'Drafting')).toBe('In progress')
-    expect(taskStatusLabel({ slug: 'edit', uses_media: true }, 'draft_uploaded', 'Drafting')).toBe('Drafting')
+    expect(taskStatusLabel({ slug: 'strategy', uses_media: false }, 'draft_uploaded', 'Draft')).toBe('In progress')
+    expect(taskStatusLabel({ slug: 'edit', uses_media: true }, 'draft_uploaded', 'Draft')).toBe('Draft')
   })
   it('is nobody’s turn once done', () => {
     expect(TASK_STATUS_TURN.approved_for_scheduling).toBeNull()

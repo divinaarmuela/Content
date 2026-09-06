@@ -94,8 +94,8 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
       linkLabel: 'See my clients',
     },
     {
-      title: 'Review, then send on',
-      body: 'Items in "Ready for review" are waiting on you. Approve them yourself, or send them to the client for sign-off.',
+      title: 'Check, then send on',
+      body: 'Cards in "Internal check" are waiting on you. Send them to the client, or send them back with what needs changing.',
       href: '/dashboard/editor',
       linkLabel: 'Review what is waiting',
     },
@@ -138,7 +138,7 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
   steps: [
     {
       title: 'Make a shoot plan',
-      body: 'Press New → New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
+      body: 'Press New card ▾ → New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
     },
     {
       title: 'Get it signed off',
@@ -155,20 +155,20 @@ const PRODUCTION_FOR_EDITORS: GettingStartedPanel = {
   heading: 'Production, in three steps',
   steps: [
     {
-      title: 'Shoots are the filming days',
-      body: 'Each card is one shoot. Open it for the date, the location, the shot list and the folder.',
+      title: 'A card is one thing to make',
+      body: 'One reel, one graphic, one piece of research — with one link to where it lives. Four reels is four cards. Cards move left to right across the five columns as they get checked.',
+      href: '/dashboard/production',
+      linkLabel: 'See the board',
+    },
+    {
+      title: 'Shoots are their own cards',
+      body: 'A shoot card is one filming day: the date, the location, the shot list and the folder. The cards made from it appear on your Editor board once it is booked.',
       href: '/dashboard/production',
       linkLabel: 'See the shoots',
     },
     {
-      title: 'Tasks are work with nothing to post',
-      body: 'Research, strategy, copy. A task with no owner says "Take this" — press it and the task is yours.',
-      href: '/dashboard/production',
-      linkLabel: 'See open tasks',
-    },
-    {
-      title: 'Items come from a shoot',
-      body: 'Once a shoot is booked, its items are created from the shoot page and appear on your Editor board.',
+      title: 'Make a card with New card',
+      body: 'Press New card ▾, type what it is, and paste the link when the work is ready. A card with nobody on it says "Nobody yet" — open it to make it yours.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
@@ -185,10 +185,10 @@ const ITEM_PAGE: GettingStartedPanel = {
       linkLabel: 'Jump to it',
     },
     {
-      title: 'Your work goes in Versions',
-      body: 'Drop the export in, or paste a link, then save. Each save is a new version; the latest one is what gets reviewed.',
+      title: 'Add the link on the card',
+      body: 'Paste the Google Drive or Dropbox link where the work lives, then save. Replacing it makes a new version; the latest one is what gets checked.',
       href: '#work',
-      linkLabel: 'Jump to Versions',
+      linkLabel: 'Jump to the link',
     },
     {
       title: 'Tag someone to ask a question',

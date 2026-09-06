@@ -134,7 +134,7 @@ export default function ScheduleCalendar() {
         undatedLabel={null}
         controls={
           <button type="button" aria-pressed={showDue} onClick={() => setShowDue(!showDue)}
-            title="Show the due dates of the items you are scheduling, under the posting times"
+            title="Show the due dates of the cards you are posting, under the posting times"
             className={`flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-[14px] font-semibold transition-colors ${
               showDue
                 ? 'border-transparent bg-foreground text-background'

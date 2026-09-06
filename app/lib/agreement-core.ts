@@ -50,7 +50,7 @@ export function normaliseDeliverableLines(raw: unknown): { lines: DeliverableLin
     seen.add(type)
     const qty = Number(r.monthly_qty)
     if (!Number.isInteger(qty) || qty < 0) {
-      return { error: `${TYPE_LABELS[type as ContentType]} needs a whole number of items per month` }
+      return { error: `${TYPE_LABELS[type as ContentType]} needs a whole number per month` }
     }
     const label = String(r.label ?? '').trim() || TYPE_LABELS[type as ContentType]
     lines.push({ type: type as ContentType, label: label.slice(0, 60), monthly_qty: qty })

@@ -164,9 +164,9 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
 
   it('refuses a column with no way in, in plain words', () => {
     const d = canMoveTo({ status: 'published' }, 'draft', AM)
-    expect(d).toEqual({ ok: false, reason: 'Nothing moves from Published to Draft' })
+    expect(d).toEqual({ ok: false, reason: 'Nothing moves from Posted to Draft' })
     const skip = canMoveTo({ status: 'draft_uploaded' }, 'posted', AM)
-    expect(skip).toEqual({ ok: false, reason: 'Nothing moves from Drafting to Posted' })
+    expect(skip).toEqual({ ok: false, reason: 'Nothing moves from Draft to Posted' })
   })
 
   it('with no hats at all, nothing moves', () => {

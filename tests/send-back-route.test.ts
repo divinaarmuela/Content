@@ -195,7 +195,7 @@ describe('POST /api/production/items/[id]/send-back', () => {
     fake = seed('approved_for_scheduling')
     const r = await post('Changed my mind')
     expect(r.status).toBe(403)
-    expect(r.json.error).toBe('Nothing moves from Needs a posting date to Internal check')
+    expect(r.json.error).toBe('Nothing moves from Ready to post to Internal check')
     expect(item().status).toBe('approved_for_scheduling')
   })
 

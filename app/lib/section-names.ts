@@ -17,5 +17,5 @@ export const SHOOT_PLAN_SECTION = 'Shoot plans'
 export const TASK_SECTION = 'Tasks'
 export const SHOOTS_SECTION = 'Shoots'
 
-/** The Editor board's first column, where every new item lands. */
-export const DRAFTING_LANE = 'Drafting'
+/** The board's first column, where every new card lands — the column's own name. */
+export const DRAFTING_LANE = 'Draft'

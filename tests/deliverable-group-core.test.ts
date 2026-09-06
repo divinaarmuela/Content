@@ -416,7 +416,7 @@ describe('a card can be green and stuck at the same time — so it says both', (
 
   it('says it in words the board can print', () => {
     expect(spreadLine(seven, STATUS_LABELS))
-      .toBe('2 client wants changes · 5 needs a posting date')
+      .toBe('2 client wants changes · 5 ready to post')
   })
 
   it('stays quiet when every piece agrees — the lane already said it', () => {

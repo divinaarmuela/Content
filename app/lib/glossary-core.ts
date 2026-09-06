@@ -28,21 +28,23 @@ export const GLOSSARY = {
     title: 'Shoot plan',
     body: 'The concept, shot list and references the client signs off before we film. Older parts of the app call this a "brief task".',
   },
+  // the keys stay — <HelpHint term="item" /> and friends point at them — but
+  // the words are the board's: a card, the Draft column, the Ready to post column
   item: {
-    title: 'Item',
-    body: 'One piece of content — a single reel, carousel, story or graphic — followed from first cut all the way to going live.',
+    title: 'Card',
+    body: 'One thing to make, for one client, with one link to where it lives. Four reels is four cards; they are never nested.',
   },
   approved_for_scheduling: {
-    title: 'Needs a posting date',
-    body: 'Signed off by the client. Nothing goes live until someone gives it a platform and a posting time.',
+    title: 'Ready to post',
+    body: 'Signed off. The scheduler posts it from the Schedule page.',
   },
   drafting: {
-    title: 'Drafting',
-    body: 'Work has started but nothing has been sent for review yet. Often nothing has been uploaded either — an item sits here from the moment it is created.',
+    title: 'Draft',
+    body: 'Being made. Add the link when it is ready.',
   },
   wrapped: {
     title: 'Wrapped',
-    body: 'The shoot is closed out and everything promised from it has been delivered. You can still cut new items from its footage later.',
+    body: 'The shoot is closed out and everything promised from it has been delivered. You can still make new cards from its footage later.',
   },
   deliverable: {
     title: 'Deliverable',

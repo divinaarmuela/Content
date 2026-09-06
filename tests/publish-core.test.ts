@@ -82,7 +82,7 @@ describe('post kinds — reels, stories, carousels', () => {
     const issues = validatePost({
       caption: 'a', media: img(1), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })
-    expect(issues.some(i => /at least two items/.test(i.problem))).toBe(true)
+    expect(issues.some(i => /at least two slides/.test(i.problem))).toBe(true)
   })
 
   it('accepts a ten-slide Instagram carousel and refuses an eleventh', () => {
