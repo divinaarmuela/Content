@@ -17,7 +17,7 @@ import {
 } from '../../lib/portal-core'
 import { pickPortalTheme } from '../../lib/portal-theme'
 import {
-  APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, changesSentToast, contentTypePlural,
+  APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, changesSentToast,
 } from '../../lib/portal-words'
 import { PostMetricsRow } from './PortalSections'
 
@@ -389,9 +389,7 @@ export function PortalCardView({ card, amName, accent, surface }: {
                 {card.shoot.planned_deliverables.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {card.shoot.planned_deliverables.map(d => (
-                      <Chip key={d.type} tone={ink ? 'muted' : 'surface'}>
-                        {d.qty} {contentTypePlural(d.type).toLowerCase().replace('graphics', 'images')}
-                      </Chip>
+                      <Chip key={d.id} tone={ink ? 'muted' : 'surface'}>{d.title}</Chip>
                     ))}
                   </div>
                 )}

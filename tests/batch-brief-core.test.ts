@@ -139,11 +139,13 @@ describe('sanitisers', () => {
     expect(rows[1].done).toBe(false)
   })
 
-  it('planned deliverables: positive integer quantities only', async () => {
+  it('planned deliverables: plain lines, and an old {type, qty} plan reads back as lines', async () => {
     const { sanitisePlannedDeliverables } = await import('../app/lib/batch-brief-core')
+    expect(sanitisePlannedDeliverables([{ id: 'a', title: 'Hero reel' }, { title: '' }]))
+      .toEqual([{ id: 'a', title: 'Hero reel' }])
     expect(sanitisePlannedDeliverables([
-      { type: 'static', qty: 8 }, { type: 'reel', qty: 0 }, { type: '', qty: 3 }, { type: 'video', qty: 2.5 },
-    ])).toEqual([{ type: 'static', qty: 8 }])
+      { type: 'static', qty: 2 }, { type: 'reel', qty: 0 }, { type: '', qty: 3 }, { type: 'video', qty: 2.5 },
+    ])).toEqual([{ id: 'static-1', title: 'Image 1' }, { id: 'static-2', title: 'Image 2' }])
   })
 
   it('reference media: https only, kind defaults to image', async () => {

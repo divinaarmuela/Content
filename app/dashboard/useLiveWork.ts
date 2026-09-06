@@ -38,7 +38,7 @@ import {
 /** A board row: the item, its joins and the items API's three annotations. */
 export type LiveItem = ContentItem & {
   clients: { name: string; timezone?: string | null } | null
-  batches: { title: string; status?: string; planned_deliverables?: { type: string; qty: number }[] } | null
+  batches: { title: string; status?: string; planned_deliverables?: unknown[] } | null
   work_kinds: { name: string; slug: string; color: string; uses_media?: boolean } | null
   my_open_task?: boolean
   created_by?: string | null
@@ -223,7 +223,7 @@ export function useWorkRows(
           ? {
               title: batch.title,
               status: batch.status ?? undefined,
-              planned_deliverables: (batch.planned_deliverables ?? undefined) as { type: string; qty: number }[] | undefined,
+              planned_deliverables: (batch.planned_deliverables ?? undefined) as unknown[] | undefined,
             }
           : null,
         work_kinds: kind

@@ -68,7 +68,7 @@ type Shoot = {
   owner_id?: string | null
   shoot_date: string | null
   shot_list?: { done?: boolean }[] | null
-  planned_deliverables?: { qty: number }[] | null
+  planned_deliverables?: unknown[] | null
   clients: { name: string } | null
   content_items?: { count: number }[]
 }

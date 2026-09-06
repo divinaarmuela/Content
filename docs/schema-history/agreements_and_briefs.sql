@@ -37,7 +37,7 @@ exception when duplicate_object then null; end $$;
 alter table batches add column if not exists concept text;
 alter table batches add column if not exists location text;
 alter table batches add column if not exists shot_list jsonb not null default '[]'::jsonb;            -- [{id,text,type?,qty?,done}]
-alter table batches add column if not exists planned_deliverables jsonb not null default '[]'::jsonb; -- [{type,qty}]
+alter table batches add column if not exists planned_deliverables jsonb not null default '[]'::jsonb; -- [{id,title}] one line per thing to be made; older rows [{type,qty}] are read as lines (planLines)
 alter table batches add column if not exists reference_media jsonb not null default '[]'::jsonb;      -- [{kind:'image'|'link',url,name?,note?}]
 alter table batches add column if not exists locked_at timestamptz;
 alter table batches add column if not exists locked_by uuid references team_users(id) on delete set null;

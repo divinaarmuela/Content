@@ -17,7 +17,9 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
-import { plannedSummary, plannedTarget } from '../../lib/deliverable-group-core'
+import {
+  moveLine, newLineId, planSummary, plannedTarget, type PlanLine,
+} from '../../lib/deliverable-group-core'
 import { DRAFTING_LANE } from '../../lib/section-names'
 import { useRole } from '../useRole'
 import { useIsMobile } from '../useIsMobile'
@@ -51,9 +53,10 @@ const ROLE_WORD: Record<string, string> = {
 const BLANK = {
   client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
   owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', brief_url: '',
-  deliverables: [] as { type: string; qty: number }[],
-  // one deliverable card can hold a MIX of formats — 2 reels + 2 carousels +
-  // 2 videos. One row {reel,1} is the plain single-item default.
+  // a shoot plan lists what is coming out of the shoot, one plain line per
+  // thing — "Hero reel", "Menu carousel". Each line becomes its own card when
+  // the shoot is booked. No type, no quantity: a card is one deliverable.
+  deliverables: [] as PlanLine[],
   formats: [{ type: 'reel', qty: 1 }] as { type: string; qty: number }[],
   raw_assets: [] as { url: string; name: string }[],
 }
@@ -338,10 +341,14 @@ export default function NewItemDialog({
   // nobody is blocked on "no shoot ready" any more — the no-shoot path is
   // open to everyone who makes work, with a reason
 
+  /** the plan's lines with something written on them — blank rows are not
+   *  things, so they are neither sent nor counted */
+  const planLinesDraft = draft.deliverables.filter(l => l.title.trim())
+
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
-    if (isBriefKind && draft.deliverables.length === 0) {
-      return toast.error('Add at least one deliverable — the plan is the promise of what gets made.')
+    if (isBriefKind && planLinesDraft.length === 0) {
+      return toast.error('Say at least one thing that is coming out of this shoot.')
     }
     if (needsAdhocReason && !adhocReason.trim()) {
       return toast.error('Say where the footage is from — it goes in the log.')
@@ -446,7 +453,7 @@ export default function NewItemDialog({
         ...(draft.work_kind_id ? { work_kind_id: draft.work_kind_id } : {}),
         ...(isBriefKind ? {
           brief_url: draft.brief_url.trim() || null,
-          planned_deliverables: draft.deliverables,
+          planned_deliverables: planLinesDraft,
           // an explicitly chosen shoot, or null to create one with the brief
           batch_id: draft.batch_id || null,
         } : {}),
@@ -526,7 +533,7 @@ export default function NewItemDialog({
   /** What still stops Create, in one line under the button. */
   const missing: string | null = !draft.client_id ? 'Choose a client first.'
     : !draft.title.trim() ? 'Give it a title.'
-    : isBriefKind && draft.deliverables.length === 0 ? 'Add at least one deliverable.'
+    : isBriefKind && planLinesDraft.length === 0 ? 'Say at least one thing that is coming out of this shoot.'
     : needsAdhocReason && !adhocReason.trim() ? 'Say where the footage is from.'
     : null
   /** the Files box exists for assets and tasks; a shoot plan has none */
@@ -687,7 +694,7 @@ export default function NewItemDialog({
                 the outcome, so the dialog no longer predicts two of them. */}
             {plannedTarget(draft.formats) > 1 && (
               <p className="text-[12px] text-muted-foreground">
-                One card — {plannedSummary(draft.formats)}.{' '}
+                One card — {draft.formats.map(f => `${f.qty} ${f.type}${f.qty > 1 ? 's' : ''}`).join(', ')}.{' '}
                 {draft.raw_assets.length > 0 || draft.raw_assets_url.trim()
                   ? 'The pieces are made now, and everything you attached goes on every one of them.'
                   : 'Add pieces on the Editor board.'}
@@ -876,30 +883,46 @@ export default function NewItemDialog({
           )}
           {isBriefKind && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Deliverables <HelpHint term="deliverable" /> * <span className="text-secondary-13 font-normal text-muted-foreground">(what the shoot must produce)</span></Label>
-              {draft.deliverables.map((d0, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Select value={d0.type} onValueChange={v => v && setDraft(d => ({
-                    ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, type: v } : x),
-                  }))}>
-                    <SelectTrigger className="flex-1 capitalize"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Input type="number" min={1} value={d0.qty} className="w-20 text-center font-mono"
+              <Label>What is coming out of this shoot? * <span className="text-secondary-13 font-normal text-muted-foreground">(one line per thing — each becomes its own card when the shoot is booked)</span></Label>
+              {draft.deliverables.map((line, i) => (
+                <div key={line.id} className="flex items-center gap-1">
+                  <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
+                  <Input value={line.title} autoFocus={i === draft.deliverables.length - 1 && !line.title}
+                    placeholder={['e.g. Hero reel', 'e.g. Menu carousel', 'e.g. Chef portrait'][i % 3]}
+                    className="min-w-0 flex-1"
                     onChange={e => setDraft(d => ({
-                      ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x),
-                    }))} />
-                  <button type="button" aria-label="Remove deliverable"
+                      ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, title: e.target.value } : x),
+                    }))}
+                    onKeyDown={e => {
+                      // Enter on the last line starts the next one — a plan is
+                      // typed like a list, not clicked together
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (i === draft.deliverables.length - 1 && line.title.trim()) {
+                          setDraft(d => ({ ...d, deliverables: [...d.deliverables, { id: newLineId(), title: '' }] }))
+                        }
+                      }
+                    }} />
+                  <button type="button" aria-label="Move up" disabled={i === 0}
+                    onClick={() => setDraft(d => ({ ...d, deliverables: moveLine(d.deliverables, i, i - 1) }))}
+                    className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
+                  <button type="button" aria-label="Move down" disabled={i === draft.deliverables.length - 1}
+                    onClick={() => setDraft(d => ({ ...d, deliverables: moveLine(d.deliverables, i, i + 1) }))}
+                    className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
+                  <button type="button" aria-label="Remove this line"
                     onClick={() => setDraft(d => ({ ...d, deliverables: d.deliverables.filter((_, j) => j !== i) }))}
                     className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-accent-red">&#10005;</button>
                 </div>
               ))}
               <Button type="button" variant="ghost" size="sm" className="w-fit text-muted-foreground"
-                onClick={() => setDraft(d => ({ ...d, deliverables: [...d.deliverables, { type: 'reel', qty: 1 }] }))}>
-                <Plus className="h-3.5 w-3.5" /> Add deliverable
+                onClick={() => setDraft(d => ({ ...d, deliverables: [...d.deliverables, { id: newLineId(), title: '' }] }))}>
+                <Plus className="h-3.5 w-3.5" /> Add a line
               </Button>
+              {planLinesDraft.length > 0 && (
+                <p className="text-[12px] text-muted-foreground">
+                  {planSummary(planLinesDraft)}. {planLinesDraft.length === 1 ? 'It becomes one card' : `They become ${planLinesDraft.length} cards`} on the board when the shoot is booked.
+                </p>
+              )}
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
