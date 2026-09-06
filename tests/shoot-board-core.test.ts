@@ -84,6 +84,23 @@ describe('deleting a tile', () => {
   })
 })
 
+describe('a link card on the wire', () => {
+  it('keeps what lets a share link play, and the provider\'s "cannot be framed" — and nothing made up', () => {
+    const [c] = sanitiseCanvasCards([{
+      id: 'l1', kind: 'link', x: 0, y: 0, url: 'https://vm.tiktok.com/ZMrRs9oPp/',
+      canonical: 'https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079', embeddable: false,
+    }])
+    expect(c.canonical).toBe('https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079')
+    expect(c.embeddable).toBe(false)
+    const [d] = sanitiseCanvasCards([{
+      id: 'l2', kind: 'link', x: 0, y: 0, url: 'https://vm.tiktok.com/ZMrRs9oPp/',
+      canonical: 'http://evil.example/', embeddable: true,
+    }])
+    expect(d.canonical).toBeUndefined()
+    expect(d.embeddable).toBeUndefined()
+  })
+})
+
 describe('the tile on the wire', () => {
   it('sanitises a board card: name, a palette colour, a known icon, its parent', () => {
     const [t] = sanitiseCanvasCards([{

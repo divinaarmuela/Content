@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
 import {
-  fromMetaTags, fromOembed, isSafePreviewUrl, mergePreview, oembedUrlFor,
-  offlinePreview, parseMetaTags, providerFor,
+  fromInstagramEmbedHtml, fromMetaTags, fromOembed, instagramEmbedPageUrl, isSafePreviewUrl, isTikTokHost,
+  isTikTokShortLink, mergePreview, oembedUrlFor, offlinePreview, parseMetaTags, providerFor,
+  tiktokCanonicalUrl, tiktokVideoId,
 } from '../../lib/link-preview-core'
 
 /**
@@ -36,10 +37,12 @@ const MAX_BYTES = 128 * 1024
  *  crawler. Saying plainly what we are is both honest and more effective. */
 const UA = 'Mozilla/5.0 (compatible; MDMediaBot/1.0; +https://app.mdmmarketing.com.au)'
 
-async function get(url: string, accept: string): Promise<Response | null> {
+/** `allowHop` narrows the redirect chain further than the SSRF guard does —
+ *  a TikTok short link may only ever lead to TikTok. */
+async function get(url: string, accept: string, allowHop?: (u: string) => boolean): Promise<Response | null> {
   let target = url
   for (let hop = 0; hop <= HOPS; hop++) {
-    if (!isSafePreviewUrl(target)) return null
+    if (!isSafePreviewUrl(target) || (allowHop && !allowHop(target))) return null
     const control = new AbortController()
     const timer = setTimeout(() => control.abort(), TIMEOUT_MS)
     let res: Response
@@ -58,11 +61,48 @@ async function get(url: string, accept: string): Promise<Response | null> {
       const next = res.headers.get('location')
       if (!next) return null
       try { target = new URL(next, target).toString() } catch { return null }
+      // a redirect's body is nothing we want; let the socket go
+      void res.body?.cancel().catch(() => {})
       continue
     }
     return res.ok ? res : null
   }
   return null
+}
+
+/**
+ * The numeric video id behind a `vm.tiktok.com` share link.
+ *
+ * TikTok's oEmbed refuses the short link outright (400), so the only way to
+ * learn what it points at is to follow it — three hops at most, every one of
+ * them on TikTok's own hosts, under the same SSRF guard as everything else.
+ * The id is read off each hop's URL as it goes by (the first hop is already
+ * `m.tiktok.com/v/<id>.html?…&share_item_id=<id>`), so the chain stops the
+ * moment it has told us what we came for.
+ */
+async function tiktokIdViaRedirect(url: string): Promise<string | null> {
+  let target = url
+  for (let hop = 0; hop <= HOPS; hop++) {
+    const id = tiktokVideoId(target)
+    if (id) return id
+    if (!isSafePreviewUrl(target) || !isTikTokHost(target)) return null
+    const control = new AbortController()
+    const timer = setTimeout(() => control.abort(), TIMEOUT_MS)
+    let res: Response
+    try {
+      res = await fetch(target, { redirect: 'manual', signal: control.signal, headers: { 'user-agent': UA } })
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+    void res.body?.cancel().catch(() => {})
+    if (res.status < 300 || res.status >= 400) return null
+    const next = res.headers.get('location')
+    if (!next) return null
+    try { target = new URL(next, target).toString() } catch { return null }
+  }
+  return tiktokVideoId(target)
 }
 
 /** Read at most MAX_BYTES, so a huge or endless body cannot hold the request. */
@@ -94,23 +134,45 @@ export async function POST(req: Request) {
     // free and instant, and it survives the provider blocking us
     const offline = offlinePreview(url)
 
-    // oEmbed where the provider still answers without a key — YouTube, TikTok
-    // and Vimeo do. Instagram and Facebook withdrew theirs, so those fall
-    // through to the page's own tags and often learn nothing.
+    // A TikTok share link (vm./vt.tiktok.com) names the video by a code its
+    // oEmbed will not accept. Follow it to the id first, then ask oEmbed
+    // about THAT — the answer carries the thumbnail, the caption and the
+    // author, and its `canonical` is what lets the card play.
+    let askUrl = url
+    let resolved = null
+    if (isTikTokShortLink(url)) {
+      const id = await tiktokIdViaRedirect(url)
+      if (id) {
+        askUrl = tiktokCanonicalUrl(id)
+        resolved = { provider: 'TikTok', media: 'video' as const, canonical: askUrl }
+      }
+    }
+
+    // oEmbed where the provider answers — YouTube, TikTok and Vimeo do with
+    // no key; Meta's endpoints only with `META_OEMBED_TOKEN`, and without one
+    // `oembedUrlFor` says not to bother asking.
     let oembed = null
-    // optional everywhere: Meta's endpoints answer public posts without it and
-    // it only buys a higher rate limit, so an unset variable costs nothing
-    const oembedUrl = oembedUrlFor(url, process.env.META_OEMBED_TOKEN ?? null)
+    const oembedUrl = oembedUrlFor(askUrl, process.env.META_OEMBED_TOKEN ?? null)
     if (oembedUrl) {
       const res = await get(oembedUrl, 'application/json')
       if (res) {
         const json = await res.json().catch(() => null)
-        if (json) oembed = fromOembed(json, url)
+        if (json) oembed = fromOembed(json, askUrl)
       }
     }
 
+    // Instagram's public embed page: the picture, the caption, and — the
+    // thing no other source can tell us — whether Instagram itself says the
+    // post cannot be framed. Read whenever oEmbed had nothing to say.
+    let embedPage = null
+    const embedPageUrl = oembed?.thumb ? null : instagramEmbedPageUrl(url)
+    if (embedPageUrl) {
+      const res = await get(embedPageUrl, 'text/html,application/xhtml+xml')
+      if (res) embedPage = fromInstagramEmbedHtml(await readCapped(res))
+    }
+
     let tags = null
-    if (!oembed?.thumb) {
+    if (!oembed?.thumb && !embedPage?.thumb) {
       const res = await get(url, 'text/html,application/xhtml+xml')
       const type = res?.headers.get('content-type') ?? ''
       if (res && /html|xml/i.test(type)) {
@@ -118,10 +180,11 @@ export async function POST(req: Request) {
       }
     }
 
-    const preview = mergePreview(offline, oembed, tags)
+    const preview = mergePreview(offline, oembed, embedPage, tags, resolved)
     if (!preview) {
-      // Not a failure — plenty of pages tell a robot nothing, and Meta tells
-      // us nothing on purpose. The card stays a chip and offers a cover.
+      // Not a failure — plenty of pages tell a robot nothing. An Instagram
+      // card still wears Instagram's own embed as its face; anything else
+      // stays a chip and offers a cover.
       return NextResponse.json({
         preview: null,
         provider: providerFor(url)?.name ?? null,

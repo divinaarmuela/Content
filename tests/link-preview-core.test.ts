@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
-  displayHost, embedUrlFor, fromMetaTags, fromOembed, isPlayableFile, isSafePreviewUrl, mergePreview,
-  oembedUrlFor, offlinePreview, parseMetaTags, providerFor, youtubeId,
+  displayHost, embedUrlFor, fromInstagramEmbedHtml, fromMetaTags, fromOembed, instagramEmbedPageUrl,
+  instagramShortcode, isInstagramCdnUrl, isPlayableFile, isSafePreviewUrl, isTikTokShortLink, mergePreview,
+  oembedUrlFor, offlinePreview, parseMetaTags, providerFor, tiktokCanonicalUrl, tiktokVideoId, youtubeId,
 } from '../app/lib/link-preview-core'
 
 describe('refusing to fetch our own network', () => {
@@ -79,23 +82,149 @@ describe('knowing which platform a link belongs to', () => {
     expect(oembedUrlFor('https://example.com')).toBeNull()
   })
 
-  it('asks Meta for Instagram again — tokenless since 15 June 2026', () => {
-    // this file was first written assuming Instagram could never resolve,
-    // because Meta put oEmbed behind an app token and App Review in 2020.
-    // That was reversed for public posts; the pinned version keeps us off
-    // whatever Graph ships next.
-    const ig = oembedUrlFor('https://www.instagram.com/reel/Cxyz/')!
-    expect(ig).toContain('graph.facebook.com/v25.0/instagram_oembed')
-    expect(ig).toContain('omitscript=true')
-    expect(ig).not.toContain('access_token')
+  it('does not ask Meta without a token — verified 2026-09-06, it answers 403 "(#200) Provide valid app ID"', () => {
+    // an earlier comment here claimed Meta's oEmbed had opened up in June
+    // 2026; the real endpoint says otherwise, and a 403 we wait on is worse
+    // than a call we never make. Without META_OEMBED_TOKEN the route reads
+    // the public embed page instead.
+    expect(oembedUrlFor('https://www.instagram.com/reel/Cxyz/')).toBeNull()
+    expect(oembedUrlFor('https://www.threads.net/@a/post/Cxyz')).toBeNull()
   })
 
-  it('sends the app token when there is one, and never invents one', () => {
-    // a token is optional and only raises the rate limit
-    expect(oembedUrlFor('https://www.instagram.com/reel/Cxyz/', 'abc|123'))
-      .toContain('access_token=abc%7C123')
+  it('asks Meta with the app token when there is one, pinned to v25.0, and never invents one', () => {
+    const ig = oembedUrlFor('https://www.instagram.com/reel/Cxyz/', 'abc|123')!
+    expect(ig).toContain('graph.facebook.com/v25.0/instagram_oembed')
+    expect(ig).toContain('access_token=abc%7C123')
+    expect(ig).toContain('omitscript=true')
     expect(oembedUrlFor('https://www.youtube.com/watch?v=a', 'abc|123'))
       .not.toContain('access_token')
+  })
+})
+
+describe("Instagram's public embed page — the source that needs no app", () => {
+  const captioned = readFileSync(join(__dirname, 'fixtures/instagram-embed-captioned.html'), 'utf8')
+  const broken = readFileSync(join(__dirname, 'fixtures/instagram-embed-broken.html'), 'utf8')
+
+  it('finds the shortcode under every link shape people paste, query and trailing slash or not', () => {
+    for (const u of [
+      'https://www.instagram.com/p/Dbqg-OzRmcw/',
+      'https://www.instagram.com/p/Dbqg-OzRmcw',
+      'https://instagram.com/p/Dbqg-OzRmcw/?igsh=MTc4bXh0NzU2NQ==',
+      'https://www.instagram.com/reel/Dbqg-OzRmcw/?utm_source=ig_web_copy_link&utm_campaign=x',
+      'https://www.instagram.com/reels/Dbqg-OzRmcw/',
+      'https://www.instagram.com/tv/Dbqg-OzRmcw/',
+    ]) {
+      expect(instagramShortcode(u), u).toBe('Dbqg-OzRmcw')
+      expect(instagramEmbedPageUrl(u), u).toBe('https://www.instagram.com/p/Dbqg-OzRmcw/embed/captioned/')
+    }
+  })
+
+  it('refuses a profile, a look-alike host, and nonsense', () => {
+    expect(instagramShortcode('https://www.instagram.com/someaccount/')).toBeNull()
+    expect(instagramShortcode('https://www.instagram.com.evil.example/p/Dbqg-OzRmcw/')).toBeNull()
+    expect(instagramShortcode('https://www.instagram.com/p/../embed/')).toBeNull()
+    expect(instagramEmbedPageUrl('nonsense')).toBeNull()
+  })
+
+  it('reads the picture and the caption out of a served post', () => {
+    // the real page for https://www.instagram.com/p/Da7nMMNS2PY/embed/captioned/
+    // as served to us on 2026-09-06
+    const p = fromInstagramEmbedHtml(captioned)!
+    expect(p.thumb).toMatch(/^https:\/\/scontent-mel1-1\.cdninstagram\.com\/v\/t51\.82787-15\/750738032_17937325905326353_3589560905606854491_n\.jpg\?stp=dst-jpg_e15_tt6&_nc_cat=109&/)
+    expect(p.thumb).not.toContain('&amp;')
+    // the username link is Instagram's furniture, not the caption; the
+    // numeric entities it writes an @ and an emoji in come back as text
+    expect(p.title).toBe('Recent work for @henriettasclt. Their new summer menu deserves all the love.🫶 Just a little nudge to give it a try.☀️')
+    expect(p.provider).toBe('Instagram')
+    expect(p.media).toBe('video')
+    expect(p.embeddable).toBeUndefined()
+  })
+
+  it('drops the "View all N comments" tail some captions carry', () => {
+    const html = '<div class="Caption"><a class="CaptionUsername" href="/x/">x</a> hello <b>there</b><div class="CaptionComments"><a href="/p/">View all 12 comments</a></div></div>'
+    expect(fromInstagramEmbedHtml(html)?.title).toBe('hello there')
+  })
+
+  it('reads the older __additionalDataLoaded blob when the markup has nothing', () => {
+    const html = `<html><body><script>window.__additionalDataLoaded('extra',{"shortcode_media":{"display_url":"https://scontent.cdninstagram.com/v/pic.jpg?x=1","is_video":false,"edge_media_to_caption":{"edges":[{"node":{"text":"a caption"}}]}}});</script></body></html>`
+    expect(fromInstagramEmbedHtml(html)).toEqual({
+      title: 'a caption', thumb: 'https://scontent.cdninstagram.com/v/pic.jpg?x=1', provider: 'Instagram', media: 'image',
+    })
+  })
+
+  it("recognises Instagram's own \"this post may have been removed\" page and says the post cannot be framed", () => {
+    // the real page for https://www.instagram.com/p/Dbqg-OzRmcw/embed/captioned/
+    // as served to us on 2026-09-06 — this is what the owner's card was
+    // showing in its frame, and it must never be a card's face
+    expect(broken).toContain('The link to this photo or video may be broken')
+    expect(fromInstagramEmbedHtml(broken)).toEqual({ provider: 'Instagram', media: 'video', embeddable: false })
+  })
+
+  it('takes a picture only from Instagram\'s and Facebook\'s CDNs, over https', () => {
+    const on = (src: string) => captioned.replace(/(class="EmbeddedMediaImage"[^>]*?\bsrc=")[^"]*"/, `$1${src}"`)
+    expect(on('https://x.example/a.jpg')).toContain('src="https://x.example/a.jpg"')
+    expect(fromInstagramEmbedHtml(on('https://scontent.xx.fbcdn.net/v/a.jpg'))?.thumb).toBe('https://scontent.xx.fbcdn.net/v/a.jpg')
+    expect(fromInstagramEmbedHtml(on('https://evil.example/cdninstagram.com/a.jpg'))?.thumb).toBeUndefined()
+    expect(fromInstagramEmbedHtml(on('http://scontent.cdninstagram.com/a.jpg'))?.thumb).toBeUndefined()
+    expect(fromInstagramEmbedHtml(on('https://cdninstagram.com.evil.example/a.jpg'))?.thumb).toBeUndefined()
+    expect(isInstagramCdnUrl('https://scontent-syd2-1.cdninstagram.com/x.jpg')).toBe(true)
+    expect(isInstagramCdnUrl('https://instagram.com/x.jpg')).toBe(false)
+  })
+
+  it('says nothing about a page it does not understand', () => {
+    expect(fromInstagramEmbedHtml('<html><body>login</body></html>')).toBeNull()
+    expect(fromInstagramEmbedHtml('')).toBeNull()
+  })
+})
+
+describe('TikTok share links — a code, not an id', () => {
+  it('knows the share short links from the real ones', () => {
+    expect(isTikTokShortLink('https://vm.tiktok.com/ZMrRs9oPp/')).toBe(true)
+    expect(isTikTokShortLink('https://vt.tiktok.com/ZSabc123/')).toBe(true)
+    expect(isTikTokShortLink('https://www.tiktok.com/t/ZTabc123/')).toBe(true)
+    expect(isTikTokShortLink('https://www.tiktok.com/@a/video/7290074173500706079')).toBe(false)
+    expect(isTikTokShortLink('https://vm.tiktok.com.evil.example/ZMabc/')).toBe(false)
+  })
+
+  it('reads the id off every TikTok URL shape their redirects pass through', () => {
+    // the real chain for vm.tiktok.com/ZMrRs9oPp/, followed 2026-09-06
+    expect(tiktokVideoId('https://m.tiktok.com/v/7290074173500706079.html?_d=x&share_item_id=7290074173500706079'))
+      .toBe('7290074173500706079')
+    expect(tiktokVideoId('https://www.tiktok.com/@/video/7290074173500706079?_r=1')).toBe('7290074173500706079')
+    expect(tiktokVideoId('https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079')).toBe('7290074173500706079')
+    expect(tiktokVideoId('https://www.tiktok.com/player/v1/7290074173500706079')).toBe('7290074173500706079')
+    expect(tiktokVideoId('https://vm.tiktok.com/ZMrRs9oPp/')).toBeNull()
+    expect(tiktokVideoId('https://evil.example/video/7290074173500706079')).toBeNull()
+  })
+
+  it('records the canonical URL from oEmbed, so a card can play a link that had no id', () => {
+    const p = fromOembed({
+      title: 'before sleep talk', thumbnail_url: 'https://p16.tiktokcdn.com/x.jpg',
+      author_name: 'Petsmeowwoof', author_url: 'https://www.tiktok.com/@petsmeowwoof',
+      author_unique_id: 'petsmeowwoof', embed_product_id: '7290074173500706079',
+    }, 'https://vm.tiktok.com/ZMrRs9oPp/')
+    expect(p.canonical).toBe('https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079')
+    // and not when the pasted link already IS the canonical one
+    expect(fromOembed({ embed_product_id: '7290074173500706079', author_unique_id: 'petsmeowwoof' },
+      'https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079').canonical).toBeUndefined()
+    // an id that is not an id never becomes a URL
+    expect(fromOembed({ embed_product_id: '../x', author_unique_id: 'a' }, 'https://vm.tiktok.com/Z/').canonical).toBeUndefined()
+    expect(tiktokCanonicalUrl('7290074173500706079', 'not a handle!')).toBe('https://www.tiktok.com/@_/video/7290074173500706079')
+  })
+
+  it('the click-to-play frame follows the canonical URL when the pasted one has no id', () => {
+    expect(embedUrlFor('https://vm.tiktok.com/ZMrRs9oPp/')).toBeNull()
+    expect(embedUrlFor('https://vm.tiktok.com/ZMrRs9oPp/', 'https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079'))
+      .toBe('https://www.tiktok.com/embed/v2/7290074173500706079')
+    // a canonical URL on some other host is not consulted
+    expect(embedUrlFor('https://vm.tiktok.com/ZMrRs9oPp/', 'https://evil.example/video/7290074173500706079')).toBeNull()
+  })
+
+  it('a canonical URL and a "cannot be framed" verdict each count as something learned', () => {
+    expect(mergePreview({ provider: 'TikTok', media: 'video', canonical: 'https://www.tiktok.com/@_/video/7290074173500706079' }))
+      .toEqual({ provider: 'TikTok', media: 'video', canonical: 'https://www.tiktok.com/@_/video/7290074173500706079' })
+    expect(mergePreview({ provider: 'Instagram', media: 'video', embeddable: false })?.embeddable).toBe(false)
+    expect(mergePreview({ provider: 'Instagram', media: 'video' })).toBeNull()
   })
 })
 
