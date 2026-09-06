@@ -57,6 +57,9 @@ create table if not exists content_items (
   platform_targets text[] not null default '{}',
   status        item_status not null default 'draft_uploaded',
   owner_id      uuid references team_users(id) on delete set null, -- editor
+  -- whoever raised the card. Written since the first board and read by the
+  -- notifications (the `creator` audience) — it was simply never declared.
+  assigned_by   uuid references team_users(id) on delete set null,
   due_date      date,
   priority      text not null default 'normal' check (priority in ('low','normal','high','urgent')),
   caption       text, -- caption/platform instructions for the scheduler

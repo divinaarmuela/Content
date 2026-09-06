@@ -2,8 +2,8 @@ import 'server-only'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
-  AssetVersion, Batch, Client, ContentItem, IntakeForm, MonthlyCommitment,
-  ScheduleEntry, TeamUserClient, WorkflowActivity,
+  AssetVersion, Batch, BatchComment, Client, ContentItem, IntakeForm, ItemComment,
+  MonthlyCommitment, ScheduleEntry, TeamUserClient, WorkflowActivity,
 } from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
@@ -13,7 +13,7 @@ import {
 import { isInternalKind } from './task-kind-core'
 import { slidesOf } from './version-files-core'
 import {
-  clientStatusWord, planState, progressLine, shootStatusLabel,
+  clientStatusWord, planState, progressLine, scheduledWhen, shootStatusLabel,
   type LastStatusChange, type PlanState,
 } from './portal-words'
 import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
@@ -25,6 +25,11 @@ import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
 import { awaitsClientPostApproval } from './posting-approval-core'
 import { portalIntakeForms, type PortalIntakeForm } from './intake-portal-core'
+import {
+  brandLogoUrl, cardLine, isClientFacing, kindWord, linkFor, portalActions, portalCardTone,
+  portalColumnFor, shootDayLabel, shootStanding, toPortalComment,
+  type PortalActions, type PortalCardComment, type PortalCardTone, type PortalColumnKey, type PortalLink,
+} from './portal-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -103,10 +108,68 @@ export type PortalShoot = {
   brief_item_id?: string | null
 }
 
+/**
+ * ONE CARD ON THE CLIENT'S BOARD — a piece of work or a shoot.
+ *
+ * A card is a thing, never a stage: the column and the one `line` say where
+ * it stands. Everything a card offers (`actions`) is decided by portal-core,
+ * and the routes consult the same rules, so a card cannot offer more than the
+ * server will accept.
+ */
+export type PortalCard = {
+  kind: 'work' | 'shoot'
+  /** the item id, or the shoot's batch id */
+  id: string
+  title: string
+  /** "Reel", "Image", "Shoot" — or null when there is no plain word for it */
+  word: string | null
+  column: PortalColumnKey
+  tone: PortalCardTone | undefined
+  /** the one sentence under the title */
+  line: string
+  /** where the work lives (Drive / Dropbox / the file) — only once it has reached the client */
+  link: PortalLink | null
+  /** a shared shoot plan has a PDF; the page builds the href from its token */
+  pdf: boolean
+  preview_url: string | null
+  slides: PortalItem['slides']
+  updated_at: string
+  /** the booked posting time, in the client's words, for a scheduled post */
+  posted_when: string | null
+  /** the live post, once there is one */
+  live_url: string | null
+  metrics: PortalItemMetrics | null
+  actions: PortalActions
+  /** the item the approve / ask-for-a-change acts on: the piece itself, or a shoot's brief */
+  act_item_id: string | null
+  /** where a comment on this card is filed: the item's thread, or the shoot's */
+  comment_target: { kind: 'item'; id: string } | { kind: 'shoot'; id: string } | null
+  comments: PortalCardComment[]
+  /** the item's own status — null on a shoot */
+  status: ItemStatus | null
+  /** the plan, on the same card */
+  shoot?: {
+    date_label: string | null
+    location: string | null
+    concept: string | null
+    planned_deliverables: { type: string; qty: number }[]
+    shot_list: ShotRow[]
+    board_cards: number
+    shared: boolean
+    /** the plan's brief item — the signed-in portal files a comment on it,
+     *  having no token for the shoot's own thread */
+    brief_item_id: string | null
+  }
+}
+
 export type PortalData = {
   /** `timezone` is the client's own — every posting time on the portal is
    *  rendered in it, and "this month" is counted by its calendar. */
   client: { id: string; name: string; timezone: string }
+  /** the board: every piece and every shoot, one card each, in column order */
+  cards: PortalCard[]
+  /** the client's logo, from the profile the team keeps — null when none */
+  brand_logo_url: string | null
   /** the name of the account manager assigned to this client, when there is
    *  one — the portal says a person's name instead of an org-chart role */
   am_name: string | null
@@ -204,9 +267,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // shoots an AM chose to share — plus any BOOKED shoot: a client should
     // always know their shoot is locked in (date, location), even before the
     // working plan is shared. A failure degrades to none.
+    // ONE SHOOT IS ONE CARD, booked through wrapped — so a wrapped shoot stays
+    // on the board as the same card, saying so, rather than vanishing
     table<Batch>('batches').list({
       by: { client_id: clientId },
-      where: r => r.shared_with_client === true || ['locked', 'shot'].includes(r.status ?? ''),
+      where: r => r.shared_with_client === true || ['locked', 'shot', 'wrapped'].includes(r.status ?? ''),
       orderBy: [['shoot_date', 'desc']],
       limit: 6,
     }).catch(() => [] as Batch[]),
@@ -406,11 +471,142 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     .filter(p => p.metrics)
     .map(p => ({ ...p.metrics!, content_type: p.content_type }))
 
+  // ── the board: one card per piece, one card per shoot ──────────────────
+  // Comments are pinned to the card they are about. The client sees only
+  // client-visible item comments and the shoot's own thread; both reads are
+  // tolerant, because a thread that cannot be read is an empty thread, not a
+  // portal that cannot load.
+  type CommentRow = { id: string; created_at: string; body: string; item_id?: string; batch_id?: string; team_users: { name?: string | null; role?: string | null } | null }
+  const facingIds = items.filter(i => isClientFacing(i.status as ItemStatus)).map(i => i.id)
+  const briefIds = [...briefByBatch.values()].map(b => b.id)
+  const commentItemIds = [...new Set([...facingIds, ...briefIds])]
+  const shootIds = shootRows.filter(b => b.shared_with_client === true).map(b => b.id)
+  const [itemCommentRows, shootCommentRows] = await Promise.all([
+    commentItemIds.length
+      ? table<ItemComment>('item_comments').list({
+          where: r => commentItemIds.includes(r.item_id) && r.visibility === 'client',
+          orderBy: [['created_at', 'asc']],
+          limit: 500,
+        }).then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])).catch(() => [])
+      : Promise.resolve([]),
+    shootIds.length
+      ? table<BatchComment>('batch_comments').list({
+          where: r => shootIds.includes(r.batch_id),
+          orderBy: [['created_at', 'asc']],
+          limit: 500,
+        }).then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])).catch(() => [])
+      : Promise.resolve([]),
+  ])
+  const asComment = toPortalComment(clientRow.name as string)
+  const commentsByItem = new Map<string, PortalCardComment[]>()
+  for (const r of itemCommentRows as unknown as CommentRow[]) {
+    const list = commentsByItem.get(r.item_id!) ?? []
+    list.push(asComment(r))
+    commentsByItem.set(r.item_id!, list)
+  }
+  const commentsByShoot = new Map<string, PortalCardComment[]>()
+  for (const r of shootCommentRows as unknown as CommentRow[]) {
+    const list = commentsByShoot.get(r.batch_id!) ?? []
+    list.push(asComment(r))
+    commentsByShoot.set(r.batch_id!, list)
+  }
+
+  const workCards: PortalCard[] = items.map(i => {
+    const p = toPortal(i)
+    const facing = isClientFacing(p.status)
+    const booked = p.schedule.find(s => s.scheduled_at && !s.live_url)
+    const live = p.schedule.find(s => s.live_url)?.live_url ?? p.metrics?.post_url ?? null
+    const postedWhen = booked ? scheduledWhen(booked.scheduled_at, tz) : null
+    // the link the team pasted on the card (`link_url`, labelled by its
+    // stored `link_kind`) wins; the item's old Drive mirror field and the
+    // latest version's Drive link are fallbacks for cards made before it
+    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null }
+    const pasted = facing ? row.link_url || null : null
+    const url = facing ? (pasted || row.drive_url || p.drive_url || null) : null
+    const kind = pasted ? row.link_kind ?? null : null
+    return {
+      kind: 'work',
+      id: p.id,
+      title: p.title,
+      word: kindWord(p.content_type),
+      column: portalColumnFor(p.status),
+      tone: portalCardTone(p.status),
+      line: cardLine(p.status, { postedWhen, progress: p.progress_line }),
+      link: linkFor(url, kind),
+      pdf: false,
+      preview_url: p.preview_url,
+      slides: p.slides,
+      updated_at: p.updated_at,
+      posted_when: postedWhen,
+      live_url: live,
+      metrics: p.metrics,
+      actions: portalActions(p.status),
+      act_item_id: p.id,
+      comment_target: facing ? { kind: 'item', id: p.id } : null,
+      comments: facing ? commentsByItem.get(p.id) ?? [] : [],
+      status: p.status,
+    }
+  })
+
+  const shootCards: PortalCard[] = shootRows.map(b => {
+    const shared = b.shared_with_client === true
+    const brief = briefByBatch.get(b.id)
+    const dateLabel = shootDayLabel(b.shoot_date ?? null)
+    const standing = shootStanding({
+      sharedWithClient: shared, briefStatus: brief?.status, shootStatus: b.status as string, dateLabel,
+    })
+    const shootComments = shared
+      ? [...(commentsByShoot.get(b.id) ?? []), ...(brief ? commentsByItem.get(brief.id) ?? [] : [])]
+          .sort((x, y) => x.created_at.localeCompare(y.created_at))
+      : []
+    return {
+      kind: 'shoot',
+      id: b.id,
+      title: b.title,
+      word: 'Shoot',
+      column: standing.column,
+      tone: standing.tone,
+      line: standing.line,
+      link: null,
+      pdf: shared,
+      preview_url: null,
+      slides: [],
+      updated_at: (b as { updated_at?: string }).updated_at ?? b.created_at ?? '',
+      posted_when: null,
+      live_url: null,
+      metrics: null,
+      actions: standing.actions,
+      // the decision acts on the plan's brief item — the same item the
+      // dashboard moves, through the same state machine
+      act_item_id: standing.actions.approve && brief ? brief.id : null,
+      comment_target: shared ? { kind: 'shoot', id: b.id } : null,
+      comments: shootComments,
+      status: null,
+      shoot: {
+        date_label: dateLabel,
+        location: b.location ?? null,
+        // an unshared booked shoot shows the fact, never the working detail
+        concept: shared ? b.concept ?? null : null,
+        planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
+        shot_list: shared ? sanitiseShotList(b.shot_list) : [],
+        board_cards: shared && (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards).length : 0,
+        shared,
+        brief_item_id: shared ? brief?.id ?? null : null,
+      },
+    }
+  })
+  // the card waiting on the client first, then newest first — the same order
+  // sortForColumn gives pieces, said in terms a shoot card shares
+  const cards = [...workCards, ...shootCards].sort((a, b) =>
+    (Number(b.actions.approve) - Number(a.actions.approve)) || b.updated_at.localeCompare(a.updated_at))
+
   // freshen anything stale once the response is out — never before it
   refreshStaleAnalyticsInBackground(clientId)
 
   return {
     client: { id: clientRow.id as string, name: clientRow.name as string, timezone: tz },
+    cards,
+    brand_logo_url: brandLogoUrl(clientRow.brand_profile ? normaliseProfile(clientRow.brand_profile) : null),
     am_name: amRes,
     // the team's edited profile once it exists (in the scan's shape, which is
     // what the theme reads), the raw scan until then

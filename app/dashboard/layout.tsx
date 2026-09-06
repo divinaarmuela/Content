@@ -12,7 +12,7 @@ import { Lock, RefreshCw } from 'lucide-react'
 import { useRole } from './useRole'
 import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
-import Shell, { NAV_MAIN, NAV_TOOLS } from './ui/Shell'
+import Shell, { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS } from './ui/Shell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 
 // the shell's markup lives in ./ui/Shell; the nav data and the active-entry
@@ -99,11 +99,17 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     const ORPHANS: Record<string, string> = {
       '/dashboard/calendar': '/dashboard/calendar',
       '/dashboard/tracker': '/dashboard/production',
+      // the canvas is a view of the work, so it answers to Production's access
+      '/dashboard/boards': '/dashboard/production',
     }
     if (ORPHANS[path]) return ORPHANS[path]
-    // NOT the social children: they inherit Social's permission by resolving
-    // to it through the prefix rule below, which is exactly what we want.
-    const all = [...NAV_MAIN, ...NAV_TOOLS]
+    // a board inside a board answers to Production too
+    if (path.startsWith('/dashboard/boards/')) return '/dashboard/production'
+    // The social children resolve to THEMSELVES: `canSeePage` falls back to
+    // Social's permission for any of them, and a scheduler holds Schedule
+    // on its own without holding Social — so the check has to be asked
+    // about the child, not its parent.
+    const all = [...NAV_MAIN, ...NAV_SOCIAL_CHILDREN, ...NAV_TOOLS]
     const exact = all.find(i => i.href === path)
     if (exact) return exact.href
     const nested = all

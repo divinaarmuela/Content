@@ -185,12 +185,40 @@ export type NotifyInput = {
   /** Record it for the in-app bell but send no email. For people who should
    *  SEE something happened without their inbox filling up. */
   bellOnly?: boolean
+  /** This notification is going to a CLIENT, not to the team. Set it on every
+   *  client-facing path so `PAUSE_CLIENT_NOTIFICATIONS` can hold them all back
+   *  during a rebuild without silencing the team. */
+  toClient?: boolean
+}
+
+/**
+ * The owner's switch for a rebuild in progress: while the dashboard and the
+ * portal are being rewritten, NOTHING reaches a client — not an email, not a
+ * bell — while the team keeps being told everything. It is not a test flag and
+ * it is not EMAIL_TEST_ONLY, which would silence the team as well and break
+ * bookings and intake for real people.
+ *
+ * On means: a notification whose recipient is a client account is dropped,
+ * quietly and safely, and says so in the log. Off (unset) is the ordinary
+ * arrangement. Owner's words, 6 Sep 2026: "make sure no notification gets send
+ * out to clients … when we are in this process".
+ */
+export function clientNotificationsPaused(): boolean {
+  return process.env.PAUSE_CLIENT_NOTIFICATIONS === '1'
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'
 
 /** Queue-and-send with the exactly-once guarantee described above. */
 export async function notify(input: NotifyInput): Promise<NotifyResult> {
+  // Checked FIRST, before the bell guard and before the notification_log
+  // claim, so a paused client notification leaves no trace at all — no email,
+  // no bell row, nothing for a later replay to send.
+  if (clientNotificationsPaused() && input.toClient === true) {
+    console.log('[notify] client notifications are paused — dropped:', input.eventType)
+    return 'muted'
+  }
+
   // The kill-switch covers the BELL too. A bell-only notification never
   // reaches smtp2goSend, so the guard down in the send path never runs for it
   // — and a test would otherwise write a real in_app row against a real team

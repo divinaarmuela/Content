@@ -169,6 +169,7 @@ export async function cancelShootProposal(id: string): Promise<void> {
     try {
       await notify({
         eventType: 'shoot_cancelled_client',
+        toClient: true,
         entityType: 'shoot_proposal',
         entityId: proposal.id,
         recipientEmail: to,
@@ -282,6 +283,7 @@ export async function respondToShoot(
     try {
       await notify({
         eventType: 'shoot_confirmed_client',
+        toClient: true,
         entityType: 'shoot_proposal',
         entityId: `${proposal.id}:${proposal.responded_at}`,
         recipientEmail: to,

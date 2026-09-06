@@ -4,6 +4,8 @@ import type { Client, ContentItem, Batch } from '@/lib/db-types'
 import { logActivity } from '../../../lib/workflow'
 import { announceItemChange, announceBatchChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
+import { NOT_WITH_YOU, portalActions } from '../../../lib/portal-core'
+import type { ItemStatus } from '../../../lib/workflow-core'
 
 /**
  * A comment from a portal child page — item or shoot thread. Token-bearer
@@ -37,6 +39,11 @@ export async function POST(req: Request) {
       const foundItem = await table<ContentItem>('content_items').get(id)
       const item = foundItem && foundItem.client_id === client.id ? foundItem : null
       if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      // a comment is pinned to a card the client can see — a draft nobody has
+      // checked is not theirs to talk about yet (same rule as the card)
+      if (!portalActions(item.status as ItemStatus).comment) {
+        return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+      }
       await table('item_comments').insert({
         item_id: item.id, author_id: actor.id, visibility: 'client', body: signed,
         resolved: false,

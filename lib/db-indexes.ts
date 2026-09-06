@@ -11,7 +11,7 @@
  */
 export const INDEXED_COLUMNS: ReadonlySet<string> = new Set([
   'client_id', 'status', 'batch_id', 'owner_id', 'team_user_id', 'created_at',
-  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at',
+  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at', 'board_id',
 ])
 
 /**

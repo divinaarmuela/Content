@@ -37,6 +37,42 @@ export type KindInput = {
 /** System kinds that a user must not create or rename onto. */
 export const RESERVED_KIND_SLUGS = new Set(['shoot_brief'])
 
+/**
+ * FREE-TEXT KINDS. Typing a kind that does not exist creates it.
+ *
+ * "Odd Job", "odd job" and "  odd   job " are one kind: the name is tidied
+ * (one space between words, no padding) and the slug is made from THAT, so
+ * the unique slug is what stops a second row. Capitalisation is kept on the
+ * name as first typed — a kind is displayed the way the person wrote it.
+ */
+export function normaliseKindName(raw: unknown): string {
+  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+/** A slug from a name: lowercase, a–z 0–9 and underscores only, at most 40
+ *  characters, never empty and never a reserved slug. */
+export function kindSlugOf(name: string): string {
+  const slug = normaliseKindName(name)
+    .toLowerCase()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // é → e
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40)
+    .replace(/_+$/g, '')
+  if (!slug) return 'kind'
+  return RESERVED_KIND_SLUGS.has(slug) ? `${slug}_2` : slug
+}
+
+/** Find the kind a typed name means, if it already exists — by slug first
+ *  (the unique key), then by name ignoring case and spacing. */
+export function findKindByName<T extends { slug: string; name: string }>(kinds: readonly T[], name: string): T | null {
+  const slug = kindSlugOf(name)
+  const wanted = normaliseKindName(name).toLowerCase()
+  return kinds.find(k => k.slug === slug)
+    ?? kinds.find(k => normaliseKindName(k.name).toLowerCase() === wanted)
+    ?? null
+}
+
 export function validateKindInput(raw: unknown): { ok: true; value: KindInput } | { ok: false; errors: string[] } {
   const r = (raw ?? {}) as Record<string, unknown>
   const errors: string[] = []
