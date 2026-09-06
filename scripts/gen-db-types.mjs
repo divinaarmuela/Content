@@ -206,6 +206,22 @@ const GHOST_TABLES = {
   //   ever exist, claimed rather than checked for). `icon` and `colour` are
   //   TOKEN NAMES from board-canvas-core, never a hex — both themes resolve
   //   them, so a board cannot be made unreadable in dark mode.
+  // instagram_videos — the video behind an Instagram link, cached per post
+  //   shortcode because Instagram's CDN URL is signed and expires (app/lib/
+  //   instagram-video-core.ts). Asked for only when a card is looked at.
+  instagram_videos: [
+    ['id', col('string', false)],
+    ['video', col('string', true)],
+    ['poster', col('string', true)],
+    ['caption', col('string', true)],
+    ['author', col('string', true)],
+    ['duration', col('number', true)],
+    ['fetched_at', col('string', false)],
+    ['expires_at', col('string', true)],
+    ['fail_count', col('number', false)],
+    ['last_error', col('string', true)],
+    ['updated_at', col('string', false)],
+  ],
   boards: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
@@ -270,7 +286,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

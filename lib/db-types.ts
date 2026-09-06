@@ -42,6 +42,7 @@ export type TableName =
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
+  | 'instagram_videos'
   | 'intake_files'
   | 'intake_forms'
   | 'intake_settings'
@@ -642,6 +643,20 @@ export interface EncodeJob {
   updated_at: string
 }
 
+export interface InstagramVideo {
+  id: string
+  video: string | null
+  poster: string | null
+  caption: string | null
+  author: string | null
+  duration: number | null
+  fetched_at: string
+  expires_at: string | null
+  fail_count: number
+  last_error: string | null
+  updated_at: string
+}
+
 export interface IntakeFile {
   id: string
   created_at: string
@@ -1160,6 +1175,7 @@ export const TABLE_COLUMNS = {
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
+  instagram_videos: ['id', 'video', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
@@ -1236,6 +1252,7 @@ export const NULLABLE_COLUMNS = {
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
+  instagram_videos: ['video', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
   intake_files: [],
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],
@@ -1319,6 +1336,7 @@ export const JSON_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  instagram_videos: [],
   intake_files: [],
   intake_forms: ['definition', 'answers'],
   intake_settings: [],
@@ -1401,6 +1419,7 @@ export const JSON_ARRAY_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  instagram_videos: [],
   intake_files: [],
   intake_forms: [],
   intake_settings: [],
@@ -1437,7 +1456,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

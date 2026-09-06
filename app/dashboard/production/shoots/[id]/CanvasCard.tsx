@@ -13,6 +13,7 @@ import {
   instagramPlayHint, playableFileFor, soundCommand, YOUTUBE_LISTEN,
 } from '../../../../lib/board-autoplay-core'
 import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
+import { useInstagramVideo, usePortalToken } from '../../../../lib/instagram-video-client'
 import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
 import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 // canvas comments — see the marked block at the bottom of this file
@@ -201,6 +202,16 @@ function CanvasCardInner({
       ? { kind: 'link' as const, url: card.link_url, ...card.preview }
       : null
 
+  // An Instagram video comes from the owner's own account with the
+  // service behind /api/instagram-video — asked for once, the first time
+  // the card is near the viewport, and then played exactly like a file of
+  // ours. Until it answers (or when it cannot) the card is what it was:
+  // the picture, the caption, Instagram's frame behind a tap.
+  const portalToken = usePortalToken()
+  const [seen, setSeen] = React.useState(false)
+  const ig = useInstagramVideo(post?.url, seen && !!post && autoplayKindFor(post) === 'instagram', portalToken)
+  const src = post ? (ig.video ? { ...post, video: ig.video } : post) : null
+
   // A reference clip plays by itself: silent, looping, only while it is on
   // screen, and only a few at a time. All the deciding is in
   // board-autoplay-core; this is one seat at that table. A card that can
@@ -212,10 +223,11 @@ function CanvasCardInner({
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const reducedMotion = useReducedMotion()
-  const autoKind = autoplayKindFor(post ?? card)
+  const autoKind = autoplayKindFor(src ?? card)
   const { near, inRange, chosen } = useAutoplaySlot(card.id, frameRef,
     autoKind === 'instagram' ? 'watch' : autoKind !== 'none' && !reducedMotion ? 'play' : 'off')
   const auto = decideAutoplay({ kind: autoKind, reducedMotion, near, inRange, chosen, userPlaying: playing })
+  React.useEffect(() => { if (near) setSeen(true) }, [near])
   // the Instagram frame reports in when it has painted; until then the
   // thumbnail is the face, so the board never shows a blank square
   const [frameReady, setFrameReady] = React.useState(false)
@@ -438,7 +450,7 @@ function CanvasCardInner({
     // a Pinterest video pin's own mp4); Instagram's picture, and
     // Instagram's own frame behind one tap
     const igFrame = playing && autoKind === 'instagram' && post ? instagramEmbedUrlFor(post.url ?? '') : null
-    const film = post ? playableFileFor(post) : null
+    const film = src ? playableFileFor(src) : null
     const img = post ? (
       <div ref={frameRef} className="absolute inset-0 bg-black">
         {post.thumb && (
@@ -448,7 +460,7 @@ function CanvasCardInner({
         )}
         {film && (
           <video ref={videoRef} src={auto.load ? film : undefined} muted loop playsInline
-            preload={auto.load ? 'metadata' : 'none'}
+            preload={auto.load ? 'metadata' : 'none'} onError={() => { if (ig.video) ig.refresh() }}
             className="absolute inset-0 h-full w-full select-none object-cover" style={{ pointerEvents: 'none' }} />
         )}
         {/* Instagram's frame comes only behind the tap — inside a mock-up
@@ -793,11 +805,11 @@ function CanvasCardInner({
   // an Instagram video will not play here, and the card says what will —
   // only to someone who can put the file on the board (`onUpdate` is the
   // canvas's word for that; the portal never passes one)
-  const playHint = instagramPlayHint(card, Boolean(onUpdate))
+  const playHint = ig.video ? null : instagramPlayHint(card, Boolean(onUpdate))
   // a post whose provider hands out a plain mp4 (a Pinterest video pin) is
   // a <video>, played the way our own files are: silently by itself while
   // it is on screen, with sound and controls in place behind one tap
-  const film = card.kind === 'link' && card.video ? playableFileFor(card) : null
+  const film = card.kind === 'link' && src?.video ? playableFileFor(src) : null
 
   /** The strip under the media: the platform's mark and name, the account
    *  when known, the post's own words in one clipped line, the plain line
@@ -896,6 +908,7 @@ function CanvasCardInner({
             // element, so nothing resizes under the pointer
             <video
               ref={videoRef}
+              onError={() => { if (ig.video) ig.refresh() }}
               src={playing || auto.load ? film : undefined}
               poster={card.thumb}
               controls={playing}

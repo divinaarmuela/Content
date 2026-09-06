@@ -8,6 +8,7 @@ import { Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { CanvasCommentsProvider } from '../canvas/CanvasComments'
+import { PortalTokenProvider } from '../../lib/instagram-video-client'
 import CardCommentPanel from '../canvas/CardCommentPanel'
 import type { CanvasCard } from '../../lib/batch-brief-core'
 import type { PortalCardComment } from '../../lib/portal-core'
@@ -161,7 +162,9 @@ export default function ShootBoard({
           {/* the canvas reads `.dark` from <html>, where PortalShell puts the
               choice, so it follows the page */}
           <div ref={wrapRef} className="min-w-0 overflow-hidden rounded-inner border border-border">
-            <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} />
+            <PortalTokenProvider value={token}>
+              <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} />
+            </PortalTokenProvider>
           </div>
           {openCard && (
             <div ref={panelRef} className="min-w-0">
