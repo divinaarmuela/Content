@@ -3,11 +3,13 @@
 import React from 'react'
 import {
   Bookmark, Forward, Globe, Heart, ImagePlus, MessageCircle, MoreHorizontal,
-  Music2, Play, Send, ThumbsUp,
+  Music2, Play, Send, ThumbsUp, Volume2,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
 import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
+import { autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, instagramEmbedUrlFor } from '../../../../lib/board-autoplay-core'
+import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
 import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
 import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 
@@ -47,6 +49,26 @@ function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
   )
 }
 
+/** The badge a clip wears while it is already moving: silent and looping by
+ *  itself, so the one thing left to offer is sound. Corner, not centre — the
+ *  clip is the point — and a 44px target because it is tapped on phones. */
+function SoundBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Play ${label} with sound`}
+      title="Play with sound"
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => { e.stopPropagation(); onPlay?.() }}
+      className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center"
+    >
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-transform hover:scale-110">
+        <Volume2 className="h-4 w-4" />
+      </span>
+    </button>
+  )
+}
+
 function CanvasCardInner({
   card, selected, editing, clientName, onCommitText, onUpdate, playing, onPlay, insideLabel, onOpen,
 }: {
@@ -68,6 +90,31 @@ function CanvasCardInner({
 }) {
   // carousel mockups page through their slides — per-card, view-only state
   const [slide, setSlide] = React.useState(0)
+
+  // A reference clip plays by itself: silent, looping, only while it is on
+  // screen, and only a few at a time. All the deciding is in
+  // board-autoplay-core; this is one seat at that table. A card that can
+  // never play (a page link, or a clip for a viewer who asked for less
+  // motion) is not observed at all. An Instagram card is only watched: its
+  // frame goes up when the card is within range and comes down when it is
+  // not, and the one tap it needs is Instagram's own play button.
+  const frameRef = React.useRef<HTMLDivElement>(null)
+  const videoRef = React.useRef<HTMLVideoElement>(null)
+  const reducedMotion = useReducedMotion()
+  const autoKind = autoplayKindFor(card)
+  const { near, inRange, chosen } = useAutoplaySlot(card.id, frameRef,
+    autoKind === 'instagram' ? 'watch' : autoKind !== 'none' && !reducedMotion ? 'play' : 'off')
+  const auto = decideAutoplay({ kind: autoKind, reducedMotion, near, inRange, chosen, userPlaying: playing })
+  // the Instagram frame reports in when it has painted; until then the
+  // thumbnail is the face, so the board never shows a blank square
+  const [frameReady, setFrameReady] = React.useState(false)
+  React.useEffect(() => { if (!auto.load) setFrameReady(false) }, [auto.load])
+  React.useEffect(() => {
+    const v = videoRef.current
+    if (!v || playing) return
+    if (auto.play) v.play().catch(() => { /* the browser said no; the badge is still there */ })
+    else v.pause()
+  }, [auto.play, playing])
 
   if (card.kind === 'board') {
     // the same tile as the boards page draws (CanvasItemView's board branch):
@@ -423,23 +470,32 @@ function CanvasCardInner({
     // an <img> — a broken picture on the board with no way to tell why. It is
     // a <video>, and it PLAYS: `preload="none"` so a board full of clips costs
     // nothing to open, `controls` only once somebody asked for it.
+    //
+    // And it plays by itself, silently, while it is on screen (`auto`): the
+    // src is only attached once the card has come near the viewport, so a
+    // board full of clips still opens for free.
     const isFilm = isPlayableFile(card.url ?? '')
     return (
       <div className="overflow-hidden rounded-inner border border-border bg-surface shadow-sm" style={{ width: card.w }}>
         {isFilm ? (
-          <div className="relative">
+          <div className="relative" ref={frameRef}>
             <video
-              src={card.url}
+              ref={videoRef}
+              src={playing || auto.load ? card.url : undefined}
               // the whole point of playing in place: the element must get the
               // pointer, and the canvas must not read that as a drag
               controls={playing}
               autoPlay={playing}
+              muted={!playing}
+              loop={!playing}
               playsInline
-              preload={playing ? 'metadata' : 'none'}
+              preload={playing || auto.load ? 'metadata' : 'none'}
               className="w-full select-none bg-black"
               style={{ pointerEvents: playing ? 'auto' : 'none' }}
             />
-            {!playing && <PlayBadge onPlay={onPlay} label={card.name ?? 'video'} />}
+            {!playing && (auto.play
+              ? <SoundBadge onPlay={onPlay} label={card.name ?? 'video'} />
+              : <PlayBadge onPlay={onPlay} label={card.name ?? 'video'} />)}
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
@@ -493,36 +549,72 @@ function CanvasCardInner({
     )
   }
 
-  if (card.thumb) {
+  // The frame that plays by itself (YouTube, TikTok, Vimeo — silent, looping,
+  // nothing to click) or Instagram's own embed, which waits for one tap. Its
+  // src exists only while `auto.load` says so: an off-screen card is a
+  // thumbnail again and costs nothing.
+  const autoSrc = auto.load
+    ? autoKind === 'instagram' ? instagramEmbedUrlFor(card.url ?? '') : autoplayEmbedUrlFor(card.url ?? '')
+    : null
+  // The face keeps one shape whether it is a still or a frame, so starting
+  // to play never resizes the card under the pointer. Vertical for a Reel,
+  // a Short or a TikTok; wide for the rest of YouTube and Vimeo; Instagram's
+  // embed carries its header and action row, so it is taller than its media.
+  const faceAspect = autoKind === 'instagram' ? 'aspect-[5/9]'
+    : autoKind === 'embed'
+      ? (card.provider === 'TikTok' || /\/shorts\//.test(card.url ?? '') ? 'aspect-[9/16]' : 'aspect-video')
+      : card.media === 'video' ? 'aspect-[4/5]' : 'aspect-video'
+
+  if (card.thumb || autoKind === 'embed' || autoKind === 'instagram') {
     return (
       <div
         className="overflow-hidden rounded-inner border border-border bg-surface shadow-sm"
         style={{ width: card.w }}
       >
-        <div className="relative bg-foreground/[0.06]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={card.thumb}
-            alt={heading}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            // vertical for a Reel or a Short, wide for anything else: a 9:16
-            // clip letterboxed into 16:9 is mostly grey, and grey is what the
-            // board is trying not to be
-            className={`w-full object-cover ${card.media === 'video' ? 'aspect-[4/5]' : 'aspect-video'}`}
-          />
-          {/* a badge that plays where we can, and opens the post where we
-              cannot — never one that does nothing */}
-          {(card.media === 'video' || embed) && (
-            embed
-              ? <PlayBadge onPlay={onPlay} label={card.title ?? 'post'} />
-              : <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
-                    <Play className="h-4 w-4 translate-x-[1px] fill-white text-white" />
-                  </span>
-                </span>
+        <div className={`relative bg-foreground/[0.06] ${faceAspect}`} ref={frameRef}>
+          {card.thumb && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={card.thumb}
+              alt={heading}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           )}
+          {autoSrc && (
+            <iframe
+              src={autoSrc}
+              title={card.title || card.name || 'Reference clip'}
+              allow="autoplay; encrypted-media; picture-in-picture"
+              tabIndex={-1}
+              onLoad={() => setFrameReady(true)}
+              // a clip that runs by itself is a picture that moves: the
+              // pointer goes through it to the card, so it still drags and
+              // selects. Instagram's frame must take the tap — the play
+              // button is theirs — so only that one is interactive.
+              className={`absolute inset-0 h-full w-full border-0 bg-black transition-opacity duration-300 ${
+                frameReady ? 'opacity-100' : 'opacity-0'
+              } ${autoKind === 'instagram' ? '' : 'pointer-events-none'}`}
+            />
+          )}
+          {/* a badge that plays where we can, and opens the post where we
+              cannot — never one that does nothing. A clip already moving
+              offers sound instead; Instagram's frame has its own button. */}
+          {auto.play
+            ? <SoundBadge onPlay={onPlay} label={card.title ?? 'post'} />
+            : autoKind === 'instagram' && auto.load
+              ? null
+              : (card.media === 'video' || embed) && (
+                  embed
+                    ? <PlayBadge onPlay={onPlay} label={card.title ?? 'post'} />
+                    : <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
+                          <Play className="h-4 w-4 translate-x-[1px] fill-white text-white" />
+                        </span>
+                      </span>
+                )}
           {card.provider && (
             <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[12px] font-medium uppercase tracking-wide text-white backdrop-blur-sm">
               {card.provider}
