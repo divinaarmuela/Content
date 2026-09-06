@@ -282,7 +282,7 @@ describe('eventsFor — Editor', () => {
   })
 
   it('an asset says which step it is on, in the board’s own words', () => {
-    expect(byDay.get('2026-08-27')![0].statusWord).toBe('Drafting')
+    expect(byDay.get('2026-08-27')![0].statusWord).toBe('Draft')
   })
 })
 
@@ -318,7 +318,7 @@ describe('eventsFor — Scheduler', () => {
     const e = live.get('2026-08-27')![0]
     expect(e.live).toBe(true)
     expect(e.liveUrl).toBe('https://example.test/p/1')
-    expect(e.statusWord).toBe('Published')
+    expect(e.statusWord).toBe('Posted')
   })
 })
 
@@ -439,7 +439,7 @@ describe('status words come from the vocabulary, never from the database', () =>
     expect(statusWordFor(brief({ status: 'client_review' }))).not.toBe('client_review')
     expect(statusWordFor(task({ status: 'draft_uploaded', current_version_number: 0 })))
       .toBe('Not started')
-    expect(statusWordFor(item({ status: 'internal_review' }))).toBe('Ready for review')
+    expect(statusWordFor(item({ status: 'internal_review' }))).toBe('Ready for checking')
   })
 
   it('no event anywhere prints an underscore', () => {

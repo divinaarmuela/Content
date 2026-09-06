@@ -46,7 +46,7 @@ describe('the lines on a card', () => {
     expect(l.due).toBe('Due 12 Sep')
     expect(l.dueNow).toBe(false)
     expect(l.version).toBe('version 3')
-    expect(l.stage).toBe('Drafting')
+    expect(l.stage).toBe('Draft')
   })
 
   it('carries what needs doing as plain text, and null when nobody has said', () => {

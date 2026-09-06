@@ -177,11 +177,6 @@ describe('the canonical words are the only words', () => {
    * fail, which is the point: the fix and the entry's removal ship together.
    */
   const KNOWN: Known[] = [
-    // the 409 here used to read "This shoot has content items — wrap it
-    // instead of deleting". It now says what happens to the pieces instead of
-    // naming the table they live in, so this entry has nothing left to track.
-    { file: 'app/lib/brief-task-core.ts', contains: 'content item',
-      why: 'the reason string on a blocked edge; it moves with the Production board' },
     { file: 'app/lib/production-publish.ts', contains: 'content item',
       why: 'a console.error for a developer, not a screen' },
     { file: 'app/lib/publish.ts', contains: 'content item',
@@ -343,5 +338,71 @@ describe('the overview sends people to the right page', () => {
     // the sidebar's nav data moved from layout.tsx into the shell it renders
     const shell = readFileSync(join(APP, 'dashboard', 'ui', 'Shell.tsx'), 'utf8')
     expect(shell).toMatch(/href: '\/dashboard\/production'/)
+  })
+})
+
+describe('one vocabulary — the board’s', () => {
+  /**
+   * The board's columns are Draft · Internal check · With client · Ready to
+   * post · Posted, and things on it are CARDS. For a while the Overview, the
+   * glossary and the status labels each had their own words for the same
+   * stages — "Drafting", "Ready for review", "Needs a posting date", "Ready to
+   * schedule", "items" — and a person who learned one page could not read the
+   * next. This sweeps every string a person reads in the pure copy modules
+   * (`app/lib/*-core.ts`) and on the Overview page for the losing side.
+   *
+   * Comments are stripped and only string literals (single, double, template)
+   * and JSX text are read: an identifier called `items` is code, not copy, and
+   * a Tailwind `items-center` is neither.
+   */
+  const RETIRED: RegExp[] = [
+    /Drafting/,
+    /Ready for review/,
+    /Needs a posting date/,
+    /Ready to schedule/i,
+    / items\b(?!-)/,
+  ]
+
+  const KNOWN: Known[] = [
+    { file: 'app/lib/files-core.ts', contains: '${names.length} items',
+      why: 'a count of files and folders picked in Drive — they are not cards, and "3 items" is what Drive itself says' },
+  ]
+
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*/g, '$1 ')
+
+  const hits: Hit[] = []
+  for (const file of FILES) {
+    const rel = relative(process.cwd(), file).split(sep).join('/')
+    if (!/^app\/lib\/[^/]+-core\.ts$/.test(rel) && rel !== 'app/dashboard/page.tsx') continue
+    const flat = stripComments(readFileSync(file, 'utf8'))
+    const copy: string[] = []
+    // one line at a time: a template literal may span lines, but a quote
+    // inside a regex literal must not swallow the rest of the file
+    for (const m of flat.matchAll(/(["'`])((?:\\.|(?!\1)[^\\\n])*)\1/g)) copy.push(m[2])
+    for (const m of flat.matchAll(/>([^<{}\n]+)</g)) copy.push(m[1])
+    for (const lit of copy) {
+      for (const re of RETIRED) {
+        if (re.test(lit)) hits.push({ file: rel, line: 0, text: lit.trim() })
+      }
+    }
+  }
+  const { unexpected, stale } = split(hits, KNOWN)
+
+  it('no Overview or copy module says Drafting, Ready for review, Needs a posting date, Ready to schedule or "items"', () => {
+    expect(unexpected, `not the board’s words:\n${show(unexpected)}`).toEqual([])
+  })
+
+  it('the known list has no stale entries — remove one when its site is fixed', () => {
+    expect(stale.map(s => `${s.file} — ${s.contains}`), 'these no longer match; delete them from KNOWN').toEqual([])
+  })
+
+  it('the labels are the columns’ own names', () => {
+    expect(STATUS_LABELS.draft_uploaded).toBe('Draft')
+    expect(STATUS_LABELS.internal_review).toBe('Ready for checking')
+    expect(STATUS_LABELS.approved_for_scheduling).toBe('Ready to post')
+    expect(STATUS_LABELS.published).toBe('Posted')
+    expect(EDITOR_LANES[0].title).toBe('Draft')
+    expect(SCHEDULER_LANES[0].title).toBe('Ready to post')
   })
 })

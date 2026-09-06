@@ -159,7 +159,7 @@ describe('notifications say something, and go somewhere', () => {
     expect(splitTransition('internal_review_approved_for_scheduling'))
       .toEqual({ from: 'internal_review', to: 'approved_for_scheduling' })
     expect(eventWords('transition_internal_review_approved_for_scheduling'))
-      .toBe('Moved to Needs a posting date')
+      .toBe('Moved to Ready to post')
   })
 
   it('does not invent a meaning for an event it does not know', () => {
@@ -185,7 +185,7 @@ describe('emails are addressed to the person reading them', () => {
   it('tells the recipient what THEY have to do when it is their move', () => {
     expect(transitionSubject({
       title: 'Winter Reel 3', to: 'internal_review',
-      stageLabel: 'Ready for review', recipientRole: 'account_manager',
+      stageLabel: 'Ready for checking', recipientRole: 'account_manager',
     })).toBe('Winter Reel 3 needs your review')
   })
 
@@ -194,16 +194,16 @@ describe('emails are addressed to the person reading them', () => {
     // as an order to them, when it meant the opposite
     const subject = transitionSubject({
       title: 'Winter Reel 3', to: 'revision_required',
-      stageLabel: 'Being revised', recipientRole: 'scheduler',
+      stageLabel: 'Being changed', recipientRole: 'scheduler',
     })
-    expect(subject).toBe('Winter Reel 3 — now Being revised')
+    expect(subject).toBe('Winter Reel 3 — now Being changed')
     expect(subject).not.toMatch(/your|Ask for changes/i)
   })
 
   it('gives the scheduler the outstanding action, not the word "Approved"', () => {
     expect(transitionSubject({
       title: 'Winter Reel 3', to: 'approved_for_scheduling',
-      stageLabel: 'Needs a posting date', recipientRole: 'scheduler',
+      stageLabel: 'Ready to post', recipientRole: 'scheduler',
     })).toBe('Winter Reel 3 needs a posting date')
   })
 

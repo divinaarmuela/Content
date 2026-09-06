@@ -30,7 +30,8 @@ import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
-import { overviewTiles, type BoardViewCard } from '../lib/board-view-core'
+import { boardHref, overviewTiles, type BoardViewCard } from '../lib/board-view-core'
+import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
@@ -102,11 +103,18 @@ type Overview = {
 /** newest first — module-level so the live query stays referentially stable */
 const LEADS_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
-/** Plain words, and a shoot brief's own words when it is one. */
-const statusLabel = (i: ItemLite) =>
-  itemStatusLabel(i.work_kinds?.slug, i.status, STATUS_LABELS[i.status])
+/**
+ * The board's words for where a card is: its column, and — when the column
+ * holds more than one stage — the stage chip after it, exactly as the board
+ * draws it ("Internal check · Being changed"). A shoot plan keeps its own words.
+ */
+const statusLabel = (i: ItemLite) => {
+  if (i.work_kinds?.slug === 'shoot_brief') return itemStatusLabel(i.work_kinds.slug, i.status, STATUS_LABELS[i.status])
+  const col = boardColumn(columnOf(i.status))
+  return col.statuses.length > 1 ? `${col.label} · ${STATUS_LABELS[i.status]}` : col.label
+}
 
-/** "1 item" / "4 items" — the summary sentence reads as English or not at all. */
+/** "1 card" / "4 cards" — the summary sentence reads as English or not at all. */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 /** "instagram" is a proper noun on screen, exactly as the old badge printed it. */
@@ -248,7 +256,7 @@ function ItemRows({ items, empty, todayKey }: {
             tone={tone}
             title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
             /* the status is the detail line; the chip only ever adds a SECOND
-               fact — printing "Being revised" twice on one row said nothing
+               fact — printing "Being changed" twice on one row said nothing
                twice */
             detail={statusLabel(i)}
             chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : undefined}
@@ -570,26 +578,37 @@ function AtRiskThisMonth() {
   )
 }
 
-/** The production funnel at a glance — draft → review → approval → published. */
-const STAGES: { key: string; label: string; tone: ChipTone }[] = [
-  // the same words the board uses — a stage is called one thing everywhere
-  { key: 'draft_uploaded', label: STATUS_LABELS.draft_uploaded, tone: 'muted' },
-  { key: 'internal_review', label: STATUS_LABELS.internal_review, tone: 'blue' },
-  { key: 'revision_required', label: STATUS_LABELS.revision_required, tone: 'amber' },
-  { key: 'client_review', label: STATUS_LABELS.client_review, tone: 'blue' },
-  { key: 'approved_for_scheduling', label: STATUS_LABELS.approved_for_scheduling, tone: 'green' },
-  { key: 'scheduled', label: STATUS_LABELS.scheduled, tone: 'blue' },
-  { key: 'published', label: STATUS_LABELS.published, tone: 'green' },
-]
+/** The board at a glance — the same five columns, with the same words. */
+const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
+  draft: 'muted', internal_check: 'amber', with_client: 'blue', ready_to_post: 'green', posted: 'blue',
+}
 
-function Pipeline({ pipeline }: { pipeline: Record<string, number> | undefined }) {
+/** Per-status counts folded into the five columns — `columnOf` is the one
+ *  place a status is told which column it sits in, so the Overview can never
+ *  disagree with the board about where a card is. */
+function columnCounts(pipeline: Record<string, number> | undefined): Record<BoardColumnKey, number> {
+  const out = Object.fromEntries(BOARD_COLUMNS.map(c => [c.key, 0])) as Record<BoardColumnKey, number>
+  for (const [status, n] of Object.entries(pipeline ?? {})) {
+    const key = columnOf(status as ItemStatus) as BoardColumnKey | undefined
+    if (key) out[key] += n
+  }
+  return out
+}
+
+function Pipeline({ pipeline, page }: { pipeline: Record<string, number> | undefined; page: 'production' | 'editor' }) {
+  const counts = columnCounts(pipeline)
   return (
     <TintCard tone="paper" title="Where everything is right now">
       <div className="flex flex-wrap gap-2">
-        {STAGES.map(s => (
-          <Chip key={s.key} tone={s.tone}>
-            {s.label} · <span className="tabular-nums">{pipeline?.[s.key] ?? 0}</span>
-          </Chip>
+        {/* every count is a way in: the chip states the fact, the link around
+            it opens that column of the board */}
+        {BOARD_COLUMNS.map(c => (
+          <Link key={c.key} href={boardHref(page, { column: c.key })} title={c.meaning}
+            className="rounded-full underline-offset-4 hover:underline">
+            <Chip tone={COLUMN_TONE[c.key]}>
+              {c.label} · <span className="tabular-nums">{counts[c.key]}</span>
+            </Chip>
+          </Link>
         ))}
       </div>
     </TintCard>
@@ -625,7 +644,7 @@ export default function OverviewPage() {
    *
    * One `/api/overview` call, refetched in full every time anybody anywhere
    * moved anything, used to sit here. The cards now count live rows — an
-   * approval lands in "Ready for review" as the manager clicks it, with no
+   * approval lands in "Ready for checking" as the manager clicks it, with no
    * refetch and no reload.
    *
    * The counting itself is NOT reimplemented: `buildOverview` in
@@ -868,19 +887,19 @@ export default function OverviewPage() {
     if (!data) return undefined
     if (data.editor) {
       const e = data.editor
-      return `${plural(e.due_soon_count ?? e.due_soon.length, 'item')} due this week, `
-        + `${e.revisions_needed} being revised, and ${e.in_internal_review} with the account manager.`
+      return `${plural(e.due_soon_count ?? e.due_soon.length, 'card')} due this week, `
+        + `${e.revisions_needed} being changed, and ${e.in_internal_review} with the account manager.`
     }
     if (data.scheduler) {
       const s = data.scheduler
-      return `${plural(s.to_schedule, 'item')} ready to schedule, `
+      return `${plural(s.to_schedule, 'card')} ready to post, `
         + `${plural(s.upcoming_count ?? s.upcoming.length, 'post')} going out in the next 7 days, `
         + `and ${s.published_week} published this week.`
     }
     if (data.manager) {
       const m = data.manager
       const leads = m.latest_leads ? `, and ${plural(m.leads_week ?? 0, 'new lead')} came in this week` : ''
-      return `${plural(m.awaiting_internal_review, 'item')} waiting on you, `
+      return `${plural(m.awaiting_internal_review, 'card')} waiting on you, `
         + `${m.awaiting_client} with ${m.awaiting_client === 1 ? 'a client' : 'clients'}${leads}.`
     }
     return undefined
@@ -964,7 +983,7 @@ export default function OverviewPage() {
           {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
             <Button size="sm" className="min-h-11 w-fit" asChild>
               <Link href="/dashboard/editor">
-                Review {data!.manager!.needs_review.length} item{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
+                Check {data!.manager!.needs_review.length} card{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
@@ -973,17 +992,17 @@ export default function OverviewPage() {
           {/* ---- the lists, per role ---- */}
           {!loading && role === 'editor' && data?.editor && (
             <>
-              <Section title="Assigned to you" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+              <Section title="Assigned to you" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                 <ItemRows items={data.editor.needs_action} todayKey={todayKey}
-                  empty="Nothing waiting on you — all drafts are in review." />
+                  empty="Nothing waiting on you — everything is being checked." />
               </Section>
-              <Section title="Due soon" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+              <Section title="Due soon" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                 <ItemRows items={data.editor.due_soon} todayKey={todayKey}
                   empty="Nothing due in the next 7 days." />
               </Section>
               {/* the open pool: work nobody holds, one click from being yours */}
               {data.editor.unassigned && (
-                <Section title="Nobody has taken these yet" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                <Section title="Nobody has taken these yet" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                   <ItemRows items={data.editor.unassigned} todayKey={todayKey}
                     empty="Nothing is going spare." />
                 </Section>
@@ -993,9 +1012,9 @@ export default function OverviewPage() {
 
           {role === 'scheduler' && data?.scheduler && (
             <>
-              <Section title="Ready to schedule" action={{ label: 'Open queue', href: '/dashboard/scheduler' }}>
+              <Section title="Ready to post" action={{ label: 'Open the board', href: boardHref('scheduler', { column: 'ready_to_post' }) }}>
                 <ItemRows items={data.scheduler.queue} todayKey={todayKey}
-                  empty="Nothing waiting — approved items land here the moment they’re signed off." />
+                  empty="Nothing waiting — a card lands here the moment it is signed off." />
               </Section>
               <Section title="Going out next" action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
                 {data.scheduler.upcoming.length === 0 ? (
@@ -1031,13 +1050,13 @@ export default function OverviewPage() {
           {data?.manager && (
             <>
               {(data.manager.my_tasks?.length ?? 0) > 0 && (
-                <Section title="Assigned to you" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+                <Section title="Assigned to you" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                   <ItemRows items={data.manager.my_tasks} todayKey={todayKey} empty="" />
                 </Section>
               )}
               {/* the three stages whose turn is a MANAGER's — the same
                   population the stat above it counts */}
-              <Section title="Waiting on your sign-off" action={{ label: 'Open board', href: '/dashboard/editor' }}>
+              <Section title="Waiting on your sign-off" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                 <ItemRows items={data.manager.needs_review} todayKey={todayKey}
                   empty="Nothing is waiting on you right now." />
               </Section>
@@ -1073,7 +1092,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── the wide blocks, under both columns ── */}
-      {!loading && (role === 'editor' || data?.manager) && <Pipeline pipeline={data?.pipeline} />}
+      {!loading && (role === 'editor' || data?.manager) && <Pipeline pipeline={data?.pipeline} page={role === 'editor' ? 'editor' : 'production'} />}
 
       {data?.manager && (
         <>

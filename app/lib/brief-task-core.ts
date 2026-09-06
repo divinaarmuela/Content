@@ -21,9 +21,9 @@ export const SHOOT_BRIEF_SLUG = 'shoot_brief'
  *  and "plan" for the rest, as if they were two documents. */
 export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
   draft_uploaded: 'Plan being written',
-  internal_review: 'Plan ready for review',
-  revision_required: 'Plan being revised',
-  revision_complete: 'Plan revised — check again',
+  internal_review: 'Plan ready for checking',
+  revision_required: 'Plan being changed',
+  revision_complete: 'Plan changes made — check again',
   client_review: 'Plan with client',
   client_changes_requested: 'Client wants plan changes',
   approved_for_scheduling: 'Plan approved — book the shoot',
@@ -111,7 +111,7 @@ export function checkBriefTaskTransitionAs(
   const override = BRIEF_TRANSITION_OVERRIDES[`${from}>${to}`]
   if (!override) return checkTransitionAs(roles, from, to, opts)
   if ('blocked' in override) {
-    return { ok: false, reason: 'A booked shoot is the end of the brief — the content items publish, not the brief' }
+    return { ok: false, reason: 'A booked shoot is the end of the plan — its cards get posted, not the plan' }
   }
   if (!roles.includes('super_admin') && !override.roles.some(r => roles.includes(r))) {
     return { ok: false, reason: `${roles.join('/') || 'nobody'} may not perform "${override.label}"` }

@@ -27,9 +27,9 @@ export function isInternalKind(kind: KindShape): boolean {
 /** What each stage is CALLED for a task. Approved is the end: Done. */
 export const TASK_KIND_LABELS: Record<ItemStatus, string> = {
   draft_uploaded: 'In progress',
-  internal_review: 'Ready for review',
-  revision_required: 'Being revised',
-  revision_complete: 'Revised — check again',
+  internal_review: 'Ready for checking',
+  revision_required: 'Being changed',
+  revision_complete: 'Changes made — check again',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
   approved_for_scheduling: 'Done',

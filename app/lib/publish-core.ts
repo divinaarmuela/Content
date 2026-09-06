@@ -267,7 +267,7 @@ export function validatePost(input: {
       if (r.carousel === 0) {
         issues.push({ platform: p, problem: `${p} does not post carousels` })
       } else if (media.length < 2) {
-        issues.push({ platform: p, problem: 'A carousel needs at least two items' })
+        issues.push({ platform: p, problem: 'A carousel needs at least two slides' })
       } else if (media.length > r.carousel) {
         issues.push({
           platform: p,

@@ -36,7 +36,7 @@ describe('overlay — an item is read in its own vocabulary', () => {
   })
 
   it('the status word is the item\'s own, never the raw status', () => {
-    expect(statusWordOf(item({ status: 'internal_review' }))).toBe('Ready for review')
+    expect(statusWordOf(item({ status: 'internal_review' }))).toBe('Ready for checking')
     expect(statusWordOf(brief({ status: 'draft_uploaded' }))).toBe('Plan being written')
     expect(statusWordOf(task({ status: 'approved_for_scheduling' }))).toBe('Done')
     // nothing anywhere prints an underscore
@@ -173,8 +173,8 @@ describe('what a person is holding, grouped by the stage\'s own word', () => {
       item({ id: '4', status: 'published' }),
     ])
     expect(groups).toEqual([
-      { word: 'Being revised', count: 2 },
-      { word: 'Ready for review', count: 1 },
+      { word: 'Being changed', count: 2 },
+      { word: 'Ready for checking', count: 1 },
     ])
   })
 })
