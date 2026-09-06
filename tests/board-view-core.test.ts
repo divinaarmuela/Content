@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BOOK_LABEL, NEEDS_CLIENT_REASON, PUBLISH_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
+  BOOKED_LABEL, NEEDS_CLIENT_REASON, POSTED_LABEL, READY_FOR_CHECK_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
   applyShow, boardHref, cardActions, cardLines, dropAction, initialsOf, isAssignedTo,
   moveTargets, overviewTiles, pageCards, pageColumns, shortDate,
   type BoardViewCard, type BoardViewer,
@@ -20,7 +20,7 @@ const TODAY = '2026-09-06'
 const card = (over: Partial<BoardViewCard> = {}): BoardViewCard => ({
   id: 'i1', title: 'Spring reel', status: 'draft_uploaded', client_id: 'c1',
   clients: { name: 'Pure Allure' }, work_kinds: { name: 'Video edit', slug: 'edit', color: 'sky' },
-  link_url: null, link_kind: null, owner_id: 'ed', due_date: null,
+  link_url: null, link_kind: null, brief: null, owner_id: 'ed', due_date: null,
   current_version_number: 1, change_note: null, client_approval_required: true,
   ...over,
 })
@@ -31,20 +31,29 @@ const scheduler: BoardViewer = { id: 'sc', role: 'scheduler' }
 const admin: BoardViewer = { id: 'sa', role: 'super_admin' }
 
 describe('the lines on a card', () => {
-  it('are one each: client, title, kind, link with its label, assignee, due, version', () => {
+  it('are one each: client, title, kind, link with its label, what needs doing, assignee, due, version', () => {
     const l = cardLines(card({
       link_url: 'https://drive.google.com/x', link_kind: 'drive',
+      brief: '  Cut to 30s, captions on, end card with the logo  ',
       due_date: '2026-09-12', current_version_number: 3,
     }), { today: TODAY, names: new Map([['ed', 'Jess M']]), viewerId: 'am' })
     expect(l.client).toBe('Pure Allure')
     expect(l.title).toBe('Spring reel')
     expect(l.kind).toBe('Video edit')
     expect(l.link).toEqual({ url: 'https://drive.google.com/x', label: 'Google Drive' })
+    expect(l.brief).toBe('Cut to 30s, captions on, end card with the logo')
     expect(l.assignee).toBe('Jess M')
     expect(l.due).toBe('Due 12 Sep')
     expect(l.dueNow).toBe(false)
     expect(l.version).toBe('version 3')
     expect(l.stage).toBe('Drafting')
+  })
+
+  it('carries what needs doing as plain text, and null when nobody has said', () => {
+    expect(cardLines(card({ brief: 'Two versions: square and story' }), { today: TODAY }).brief).toBe('Two versions: square and story')
+    expect(cardLines(card({ brief: '   ' }), { today: TODAY }).brief).toBeNull()
+    expect(cardLines(card({ brief: undefined }), { today: TODAY }).brief).toBeNull()
+    expect(cardLines(card(), { today: TODAY }).brief).toBeNull()
   })
 
   it('says "You" to the person holding it and "Nobody yet" when nobody is', () => {
@@ -84,7 +93,8 @@ describe('the lines on a card', () => {
 describe('the control on a card', () => {
   it('an editor hands a draft on for checking, and that is the only button', () => {
     const { primary, more } = cardActions(card(), editor)
-    expect(primary).toEqual({ kind: 'transition', to: 'internal_review', label: 'Submit for review' })
+    expect(primary).toEqual({ kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL })
+    expect(READY_FOR_CHECK_LABEL).toBe('Ready for checking')
     expect(more).toEqual([])
   })
 
@@ -115,11 +125,29 @@ describe('the control on a card', () => {
     expect(more).toContainEqual({ kind: 'transition', to: 'approved_for_scheduling', label: "Log the client's approval" })
   })
 
-  it('a scheduler books a ready card in, then marks it posted', () => {
+  it('a scheduler moves a ready card to Booked in, then to Posted — plain moves, nothing asked', () => {
     expect(cardActions(card({ status: 'approved_for_scheduling' }), scheduler).primary)
-      .toEqual({ kind: 'book', to: 'scheduled', label: BOOK_LABEL })
+      .toEqual({ kind: 'transition', to: 'scheduled', label: BOOKED_LABEL })
     expect(cardActions(card({ status: 'scheduled' }), scheduler).primary)
-      .toEqual({ kind: 'publish', to: 'published', label: PUBLISH_LABEL })
+      .toEqual({ kind: 'transition', to: 'published', label: POSTED_LABEL })
+    expect(BOOKED_LABEL).toBe('Booked in')
+    expect(POSTED_LABEL).toBe('Posted')
+  })
+
+  it('the card never asks anyone to post: no action on any card, for anyone, is a book or publish dialog', () => {
+    // posting happens on the Schedule page; the board only records that it did
+    for (const status of ITEM_STATUSES) {
+      for (const v of [editor, manager, scheduler, admin]) {
+        const { primary, more } = cardActions(card({ status }), v)
+        for (const a of [primary, ...more]) {
+          if (!a) continue
+          expect(['transition', 'send_back']).toContain(a.kind)
+        }
+        for (const t of moveTargets(card({ status }), v)) {
+          expect(['transition', 'send_back']).toContain(t.action.kind)
+        }
+      }
+    }
   })
 
   it('a scheduler handed nothing on a card someone else holds gets no button', () => {
@@ -155,7 +183,7 @@ describe('the control on a card', () => {
 describe('dragging a card', () => {
   it('lands on the status a button would, worded as the action', () => {
     const d = dropAction(card(), 'internal_check', editor)
-    expect(d).toEqual({ ok: true, column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: 'Submit for review' } })
+    expect(d).toEqual({ ok: true, column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
   })
 
   it('a manager dropping a client card on Internal check is asked what to change', () => {
@@ -163,9 +191,9 @@ describe('dragging a card', () => {
     expect(d.ok && d.action.kind).toBe('send_back')
   })
 
-  it('a scheduler dropping on Posted is asked to book it in', () => {
+  it('a scheduler dropping on Posted just moves the card — "Booked in", no dialog', () => {
     const d = dropAction(card({ status: 'approved_for_scheduling' }), 'posted', scheduler)
-    expect(d.ok && d.action.kind).toBe('book')
+    expect(d).toEqual({ ok: true, column: 'posted', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
   })
 
   it('a refused drop carries the machine\'s own reason', () => {
@@ -180,6 +208,7 @@ describe('dragging a card', () => {
     const t = moveTargets(card({ status: 'internal_review' }), manager)
     expect(t.map(x => x.column)).toEqual(['with_client'])
     expect(t[0].label).toBe('Move to With client — Send to client')
+    expect(moveTargets(card(), editor)[0].label).toBe('Move to Internal check — Ready for checking')
     // a card that needs the client has no way straight to Ready to post
     expect(t.some(x => x.column === 'ready_to_post')).toBe(false)
     const d = dropAction(card({ status: 'internal_review' }), 'ready_to_post', manager)
@@ -191,7 +220,6 @@ describe('dragging a card', () => {
 })
 
 describe('what each page shows', () => {
-  const asset = (c: BoardViewCard) => c.work_kinds?.slug !== 'task'
   const rows: BoardViewCard[] = [
     card({ id: 'a', owner_id: 'ed', status: 'draft_uploaded' }),
     card({ id: 'b', owner_id: 'other', status: 'internal_review' }),
@@ -209,20 +237,21 @@ describe('what each page shows', () => {
   })
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
-    expect(pageCards('editor', rows, editor, { isAsset: asset }).map(c => c.id)).toEqual(['a', 'c', 'u'])
+    expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
     expect(pageColumns('editor', editor, rows)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
     // every card still being made, whatever its kind and whoever holds it
-    expect(pageCards('editor', rows, manager, { isAsset: asset }).map(c => c.id)).toEqual(['a', 'b', 't', 'u'])
+    expect(pageCards('editor', rows, manager).map(c => c.id)).toEqual(['a', 'b', 't', 'u'])
   })
 
-  it('Scheduler is the posting queue PLUS anything handed to the scheduler', () => {
-    // 'c' and 'd' are the queue; 't' is a task the scheduler holds and would
-    // otherwise be on no page they can open
-    expect(pageCards('scheduler', rows, scheduler, { isAsset: asset }).map(c => c.id)).toEqual(['c', 'd', 't'])
-    // …and Draft appears on their board while that task sits there
+  it('Scheduler is the same cards as Production — the whole flow, so they see what is coming', () => {
+    // every card for the clients they hold, in every column — not only the
+    // queue; the columns say what is ready
+    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(pageCards('production', rows, manager).map(c => c.id))
+    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
+    // …under all five columns
     expect(pageColumns('scheduler', scheduler, rows)).toEqual(BOARD_COLUMNS.map(c => c.key))
     expect(pageColumns('scheduler', scheduler, [])).toEqual(BOARD_COLUMNS.map(c => c.key))
   })

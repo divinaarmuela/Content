@@ -5,7 +5,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useTable } from '@/lib/db-client'
 import type { ScheduleEntry } from '@/lib/db-types'
 import { pageCards, pageColumns, type BoardViewer } from '../../lib/board-view-core'
-import { isAsset } from '../../lib/work-pages-core'
 import { dayKeyInZone, DEFAULT_TZ } from '../../lib/timezone-core'
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
@@ -15,15 +14,18 @@ import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 
 /**
- * THE SCHEDULER PAGE: the posting queue, on the whole board.
+ * THE SCHEDULER PAGE: links and what needs doing, on the whole board.
  *
- * All five columns of the one board, so what is coming is visible before it
- * is ready. A Ready-to-post card is booked in from the
- * card — a channel and a time — and marked posted the same way. The Schedule
- * page (the posting calendar) is one pill away in the header.
+ * All five columns of the one board, every content card for the clients
+ * the person holds, so what is coming is visible before it is ready. Each
+ * card carries the link to the work and what needs doing. The scheduler
+ * takes those and posts on the Schedule page — one pill away in the header
+ * — or wherever they post; back here the card just moves, Ready to post →
+ * Posted. The card never asks for a channel, a time or a live link.
  *
- * Anything handed to the scheduler rides along whatever column it is in, so
- * an internal task they hold is never on a page they cannot open.
+ * The two fetches below feed the Overview's lenses only — "Going out today"
+ * (`?show=today`) and "Waiting on an account" (`?show=account`) — and the
+ * board works without either.
  */
 export default function SchedulerPage() {
   const { me, noAccount } = useRole()
@@ -36,9 +38,8 @@ export default function SchedulerPage() {
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
 
-  /** every client's connected channels, for booking in and for "waiting on
-   *  an account" — the board still works without it */
-  const [connected, setConnected] = useState<Record<string, string[]>>({})
+  /** clients with at least one connected channel — for "Waiting on an account" */
+  const [connectedClientIds, setConnectedClientIds] = useState<ReadonlySet<string>>(() => new Set())
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -46,19 +47,17 @@ export default function SchedulerPage() {
         const res = await fetch('/api/social/accounts', { cache: 'no-store' })
         if (!res.ok) return
         const json = await res.json()
-        const map: Record<string, string[]> = {}
+        const ids = new Set<string>()
         for (const a of (json.accounts ?? []) as { client_id: string | null; platform: string; active: boolean }[]) {
-          if (!a.active || !a.client_id) continue
-          ;(map[a.client_id] ??= []).push(String(a.platform).toLowerCase())
+          if (a.active && a.client_id) ids.add(a.client_id)
         }
-        if (!cancelled) setConnected(map)
-      } catch { /* no channels known — every platform is offered */ }
+        if (!cancelled) setConnectedClientIds(ids)
+      } catch { /* no channels known — the lens shows every ready card */ }
     })()
     return () => { cancelled = true }
   }, [])
-  const connectedClientIds = useMemo(() => new Set(Object.keys(connected)), [connected])
 
-  /** the posts booked for today, so "Going out today" is a lens here too */
+  /** the posts booked for today — for "Going out today" */
   const { rows: entries } = useTable<ScheduleEntry>('schedule_entries', { enabled: viewer !== null })
   const zone = me?.timezone || DEFAULT_TZ
   const postingToday = useMemo(() => {
@@ -76,8 +75,10 @@ export default function SchedulerPage() {
 
   const cards = useMemo(() => {
     if (!viewer) return [] as BoardCardRow[]
+    // the same cards Production shows, minus shoot briefs — those are plans
+    // for a shoot, not something to post
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return pageCards('scheduler', rows, viewer, { isAsset: c => isAsset(c) })
+    return pageCards('scheduler', rows, viewer)
   }, [live.items, viewer])
   const columns = useMemo(() => (viewer ? pageColumns('scheduler', viewer, cards) : []), [viewer, cards])
   const ready = viewer !== null && !live.loading && today !== null
@@ -103,10 +104,9 @@ export default function SchedulerPage() {
           initialColumn={column}
           show={show}
           onClearShow={clearShow}
-          connected={connected}
           postingToday={postingToday}
           connectedClientIds={connectedClientIds}
-          ariaLabel="Cards to post, by stage"
+          ariaLabel="Every card, by stage"
         />
       )}
     </div>

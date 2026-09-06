@@ -13,7 +13,7 @@ import { friendlyError } from '../../lib/support-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard } from './BoardCard'
 import {
-  BookDialog, DeleteDialog, KindDialog, LinkDialog, PublishDialog, SendBackDialog, type KindRow,
+  DeleteDialog, KindDialog, LinkDialog, SendBackDialog, type KindRow,
 } from './BoardDialogs'
 
 /**
@@ -28,6 +28,10 @@ import {
  * The board owns the few dialogs a card can open and the fetches they make.
  * The rows come from the page's live listeners, so nothing here reloads:
  * the listener repaints the moment the row lands.
+ *
+ * Nothing here asks anyone to post. "Booked in" and "Posted" are plain
+ * moves — the posting itself happens on the Schedule page, or wherever the
+ * scheduler posts, and the card only records that it happened.
  */
 
 export type BoardCardRow = BoardViewCard & {
@@ -40,7 +44,7 @@ const EMPTY: Record<BoardColumnKey, string> = {
   internal_check: 'Nothing waiting on a check.',
   with_client: 'Nothing with a client.',
   ready_to_post: 'Nothing ready to post.',
-  posted: 'Nothing booked in or live.',
+  posted: 'Nothing booked in or posted.',
 }
 
 /**
@@ -73,7 +77,7 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 
 export function Board({
   cards, viewer, columns, names, kinds, today, initialColumn, show, onClearShow,
-  connected = {}, postingToday, connectedClientIds, ariaLabel,
+  postingToday, connectedClientIds, ariaLabel,
 }: {
   cards: BoardCardRow[]
   viewer: BoardViewer
@@ -86,8 +90,7 @@ export function Board({
   /** the Overview's lens, if the person came through one */
   show?: ShowFilter | null
   onClearShow?: () => void
-  /** each client's connected channels, lower case — for booking in */
-  connected?: Record<string, string[]>
+  /** the Overview's two lenses: cards posting today, clients with a channel */
   postingToday?: ReadonlySet<string>
   connectedClientIds?: ReadonlySet<string>
   ariaLabel: string
@@ -98,8 +101,6 @@ export function Board({
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
-  const [bookFor, setBookFor] = useState<BoardCardRow | null>(null)
-  const [publishFor, setPublishFor] = useState<BoardCardRow | null>(null)
   const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
 
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
@@ -136,12 +137,11 @@ export function Board({
     }
   }, [])
 
-  /** every press on a card comes through here — a plain move, or a dialog */
+  /** every press on a card comes through here — a plain move, or the one
+   *  dialog that asks what needs changing */
   const act = useCallback((card: BoardCardRow, action: CardAction) => {
     switch (action.kind) {
       case 'send_back': setSendBackFor(card); return
-      case 'book': setBookFor(card); return
-      case 'publish': setPublishFor(card); return
       case 'transition': void transition(card, action.to, action.label)
     }
   }, [transition])
@@ -244,8 +244,6 @@ export function Board({
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
       <KindDialog card={kindFor} kinds={kinds} onClose={() => setKindFor(null)} />
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} />
-      <BookDialog card={bookFor} connected={bookFor ? connected[bookFor.client_id] ?? [] : []} onClose={() => setBookFor(null)} />
-      <PublishDialog card={publishFor} connected={publishFor ? connected[publishFor.client_id] ?? [] : []} onClose={() => setPublishFor(null)} />
       {/* the live listener drops the row once the server has removed it */}
       <DeleteDialog card={deleteFor} onClose={() => setDeleteFor(null)} />
     </div>

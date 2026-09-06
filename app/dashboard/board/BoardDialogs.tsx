@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +19,6 @@ import {
 import { linkKindOf } from '../../lib/card-link-core'
 import { findKindByName, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
-import { platformLabel } from '../../lib/posting-card-core'
 import { friendlyError } from '../../lib/support-core'
 import type { BoardViewCard, BoardViewer } from '../../lib/board-view-core'
 
@@ -287,156 +286,6 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
         <DialogFooter>
           <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
             {busy ? 'Sending…' : 'Send back'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-const PLATFORM_CHOICES = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'threads', 'pinterest', 'twitter']
-
-/** Connected channels first, the rest after — the person picks one. */
-function platformChoices(connected: readonly string[]): string[] {
-  const live = connected.map(p => p.toLowerCase())
-  return [...live, ...PLATFORM_CHOICES.filter(p => !live.includes(p))]
-}
-
-/** A platform and a time. The card moves to Posted as "Scheduled". */
-export function BookDialog({ card, connected, onClose, onDone }: {
-  card: BoardViewCard | null
-  /** the client's connected channels, lower case */
-  connected: readonly string[]
-  onClose: () => void
-  onDone?: () => void
-}) {
-  const choices = useMemo(() => platformChoices(connected), [connected])
-  const [platform, setPlatform] = useState(choices[0] ?? 'instagram')
-  const [when, setWhen] = useState('')
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { setPlatform(choices[0] ?? 'instagram'); setWhen('') }, [card, choices])
-
-  const book = async () => {
-    if (!card || !when) return
-    setBusy(true)
-    try {
-      const iso = new Date(when).toISOString()
-      const res = await fetch(`/api/production/items/${card.id}/schedule`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, scheduled_at: iso }),
-      })
-      if (!res.ok) throw new Error(await readError(res, 'Could not save the time'))
-      const moved = await fetch(`/api/production/items/${card.id}/transition`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'scheduled' }),
-      })
-      if (!moved.ok) throw new Error(await readError(moved, 'The time is saved, but the card could not be moved'))
-      toast.success(`Booked in — ${platformLabel(platform)}, ${new Date(when).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`)
-      onDone?.()
-      onClose()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not book it in')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Book it in</DialogTitle>
-          <DialogDescription>Where it goes out, and when.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label>Channel</Label>
-            <Select value={platform} onValueChange={v => v && setPlatform(v)}>
-              <SelectTrigger className={field}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {choices.map(p => <SelectItem key={p} value={p}>{platformLabel(p)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {connected.length === 0 && (
-              <p className="text-[13px] text-muted-foreground">This client has no channel connected yet — the time is still kept.</p>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="book-when">When</Label>
-            <Input id="book-when" type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} className={field} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button disabled={busy || !when} onClick={book} className={primary}>
-            {busy ? 'Booking…' : 'Book it in'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** It went out: the live link if there is one, or just the fact. */
-export function PublishDialog({ card, connected, onClose, onDone }: {
-  card: BoardViewCard | null
-  connected: readonly string[]
-  onClose: () => void
-  onDone?: () => void
-}) {
-  const choices = useMemo(() => platformChoices(connected), [connected])
-  const [platform, setPlatform] = useState(choices[0] ?? 'instagram')
-  const [url, setUrl] = useState('')
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { setPlatform(choices[0] ?? 'instagram'); setUrl('') }, [card, choices])
-
-  const done = async () => {
-    if (!card) return
-    setBusy(true)
-    try {
-      const link = url.trim()
-      const res = await fetch(`/api/production/items/${card.id}/schedule`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, ...(link ? { live_url: link } : { mark_posted: true }) }),
-      })
-      if (!res.ok) throw new Error(await readError(res, 'Could not mark it posted'))
-      const moved = await fetch(`/api/production/items/${card.id}/transition`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'published' }),
-      })
-      if (!moved.ok) throw new Error(await readError(moved, 'The post is recorded, but the card could not be moved'))
-      toast.success('Marked posted')
-      onDone?.()
-      onClose()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not mark it posted')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Mark posted</DialogTitle>
-          <DialogDescription>Paste the live link if there is one. A story has none — that is fine.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label>Channel</Label>
-            <Select value={platform} onValueChange={v => v && setPlatform(v)}>
-              <SelectTrigger className={field}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {choices.map(p => <SelectItem key={p} value={p}>{platformLabel(p)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="live-url">Live link (optional)</Label>
-            <Input id="live-url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" className={field} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button disabled={busy} onClick={done} className={primary}>
-            {busy ? 'Saving…' : 'Mark posted'}
           </Button>
         </DialogFooter>
       </DialogContent>
