@@ -16,6 +16,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/production(.*)',
   '/api/overview(.*)',
   '/api/assistant(.*)',
+  '/api/boards(.*)',
 ])
 
 /**
@@ -90,6 +91,7 @@ export const config = {
     '/sign-up/:path*',
     '/api/assistant/:path*',
     '/api/audience/:path*',
+    '/api/boards/:path*',
     // the ADMIN half of bookings only: it calls auth() through requireRole,
     // which throws unless middleware ran. /api/booking/public stays absent on
     // purpose — a stranger booking a time has no Clerk session and must be

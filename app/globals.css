@@ -215,6 +215,15 @@ body:has(.dbx) {
   :where(body:has(.dbx) ul, body:has(.dbx) ol) { list-style: none; margin: 0; padding: 0; }
   :where(body:has(.dbx) img, body:has(.dbx) video, body:has(.dbx) svg) { display: block; max-width: 100%; }
   :where(body:has(.dbx) table) { border-collapse: collapse; }
+  /* A note on a board canvas is the one place the dashboard shows prose: a
+     heading, bold, bullets and a highlight (app/dashboard/boards). Scoped
+     to .canvas-note so the list reset above stays true everywhere else. */
+  :where(body:has(.dbx) .canvas-note h3) { font-size: 17px; font-weight: 600; line-height: 1.3; margin: 0 0 4px; }
+  :where(body:has(.dbx) .canvas-note p, body:has(.dbx) .canvas-note div) { margin: 0 0 4px; }
+  :where(body:has(.dbx) .canvas-note ul) { list-style: disc; margin: 0 0 4px; padding-left: 20px; }
+  :where(body:has(.dbx) .canvas-note li) { margin: 0; }
+  :where(body:has(.dbx) .canvas-note mark) { background: var(--dbx-tint-blue); color: inherit; border-radius: 3px; padding: 0 2px; }
+  :where(body:has(.dbx) .canvas-note b, body:has(.dbx) .canvas-note strong) { font-weight: 600; }
   /* the marketing grid + noise overlays don't belong over the app shell */
   body:has(.dbx)::before, body:has(.dbx)::after { display: none; }
 }

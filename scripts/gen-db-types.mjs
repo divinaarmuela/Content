@@ -198,13 +198,79 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // boards — a Milanote-style canvas. One board is either a client's own
+  //   (parent_board_id and item_id both null), a board INSIDE a board
+  //   (parent_board_id set — the tile on the parent's canvas points here
+  //   through board_items.child_board_id), or the sub-page behind one piece
+  //   of work (item_id set; its id is `item-<item_id>` so exactly one can
+  //   ever exist, claimed rather than checked for). `icon` and `colour` are
+  //   TOKEN NAMES from board-canvas-core, never a hex — both themes resolve
+  //   them, so a board cannot be made unreadable in dark mode.
+  boards: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['parent_board_id', col('string', true)],
+    ['item_id', col('string', true)],
+    ['name', col('string', false)],
+    ['icon', col('string', false)],
+    ['colour', col('string', false)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  // board_items — one thing on a canvas: a note, an image, a link, a nested
+  //   board's tile, a heading strip or a column. Position and size are in
+  //   canvas units (px at zoom 1), snapped by the core; `z` orders overlap.
+  //   The fields each kind needs: `text` (note, heading — rich text is
+  //   sanitised HTML, a small allowlist), `url` + `label` (image, link — a
+  //   link is a LINK: pasted, never written to Drive, trap 13),
+  //   `child_board_id` (board), `column_title` (column). `parent_item_id`
+  //   is the column an item was dropped into, null when it sits free on the
+  //   canvas — the seam the work board's five status columns hang off.
+  board_items: [
+    ['id', col('string', false)],
+    ['board_id', col('string', false)],
+    ['kind', col('string', false)],        // note | image | link | board | heading | column
+    ['x', col('number', false)],
+    ['y', col('number', false)],
+    ['w', col('number', false)],
+    ['h', col('number', false)],
+    ['z', col('number', false)],
+    ['colour', col('string', true)],
+    ['text', col('string', true)],
+    ['url', col('string', true)],
+    ['label', col('string', true)],
+    ['child_board_id', col('string', true)],
+    ['column_title', col('string', true)],
+    ['parent_item_id', col('string', true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  // board_comments — a comment pinned to ONE item on a canvas, never a
+  //   thread for the whole board. `author_role` is kept on the row because
+  //   who may read it is decided by who wrote it: a client's comment is for
+  //   the account manager, and an editor or scheduler never sees it.
+  //   `author_name` is copied at write time so the portal (no team_users
+  //   row per person) and the team read the same shape.
+  board_comments: [
+    ['id', col('string', false)],
+    ['board_id', col('string', false)],
+    ['item_id', col('string', false)],
+    ['author_id', col('string', true)],
+    ['author_name', col('string', false)],
+    ['author_role', col('string', false)],  // client | scheduler | editor | account_manager | super_admin
+    ['body', col('string', false)],
+    ['created_at', col('string', false)],
+    ['resolved_at', col('string', true)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

@@ -99,8 +99,12 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     const ORPHANS: Record<string, string> = {
       '/dashboard/calendar': '/dashboard/calendar',
       '/dashboard/tracker': '/dashboard/production',
+      // the canvas is a view of the work, so it answers to Production's access
+      '/dashboard/boards': '/dashboard/production',
     }
     if (ORPHANS[path]) return ORPHANS[path]
+    // a board inside a board answers to Production too
+    if (path.startsWith('/dashboard/boards/')) return '/dashboard/production'
     // The social children resolve to THEMSELVES: `canSeePage` falls back to
     // Social's permission for any of them, and a scheduler holds Schedule
     // on its own without holding Social — so the check has to be asked

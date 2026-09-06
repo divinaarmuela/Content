@@ -5,7 +5,7 @@ import {
 } from '@/lib/db-types'
 import type {
   Batch, ScheduleEntry, WebhookDelivery, ScanMailbox, ContentItem, TeamUser,
-  SocialPost, ScheduleNote, EncodeJob,
+  SocialPost, ScheduleNote, EncodeJob, Board, BoardItem, BoardComment,
 } from '@/lib/db-types'
 
 // Compile-time guard: these interface names must exist and be PascalCase
@@ -21,7 +21,10 @@ const _user: Pick<TeamUser, 'id'> = { id: 'x' }
 const _post: Pick<SocialPost, 'id'> = { id: 'x' }
 const _note: Pick<ScheduleNote, 'id'> = { id: 'x' }
 const _encode: Pick<EncodeJob, 'id'> = { id: 'x' }
-void _batch, _entry, _delivery, _mailbox, _item, _user, _post, _note, _encode
+const _board: Pick<Board, 'id'> = { id: 'x' }
+const _boardItem: Pick<BoardItem, 'id'> = { id: 'x' }
+const _boardComment: Pick<BoardComment, 'id'> = { id: 'x' }
+void _batch, _entry, _delivery, _mailbox, _item, _user, _post, _note, _encode, _board, _boardItem, _boardComment
 
 describe('db-types (generated)', () => {
   it('knows the core tables and their columns', () => {
@@ -124,6 +127,42 @@ describe('db-types (generated)', () => {
       .toEqual(['slides', 'channels', 'publish_job_ids'])
     expect(JSON_ARRAY_COLUMNS.social_posts).not.toContain('per_channel')
     expect(UPDATED_AT_TABLES.has('social_posts')).toBe(true)
+  })
+
+  // The three ghost tables behind the board canvas. A board is one of three
+  // things — a client's own, a board inside a board, or the sub-page behind
+  // a piece of work — and the two nullable parents are how it says which.
+  it('knows the canvas: boards, what is on them, and the comments pinned to one item', () => {
+    expect(TABLE_COLUMNS.boards).toEqual([
+      'id', 'client_id', 'parent_board_id', 'item_id', 'name', 'icon', 'colour',
+      'created_by', 'created_at', 'updated_at',
+    ])
+    expect(NULLABLE_COLUMNS.boards).toContain('parent_board_id')
+    expect(NULLABLE_COLUMNS.boards).toContain('item_id')
+    for (const c of ['client_id', 'name', 'icon', 'colour']) expect(NULLABLE_COLUMNS.boards).not.toContain(c)
+    expect(UPDATED_AT_TABLES.has('boards')).toBe(true)
+
+    // position, size and depth are never null; the per-kind fields all are,
+    // because a note has no url and a link has no column title
+    expect(TABLE_COLUMNS.board_items).toEqual([
+      'id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label',
+      'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at',
+    ])
+    for (const c of ['board_id', 'kind', 'x', 'y', 'w', 'h', 'z']) expect(NULLABLE_COLUMNS.board_items).not.toContain(c)
+    for (const c of ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id']) {
+      expect(NULLABLE_COLUMNS.board_items).toContain(c)
+    }
+    expect(UPDATED_AT_TABLES.has('board_items')).toBe(true)
+
+    // a comment belongs to ONE item, says who wrote it (and as what, since
+    // that decides who may read it) and when, and is resolved or not
+    expect(TABLE_COLUMNS.board_comments).toEqual([
+      'id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at',
+    ])
+    expect(NULLABLE_COLUMNS.board_comments).not.toContain('item_id')
+    expect(NULLABLE_COLUMNS.board_comments).not.toContain('author_role')
+    expect(NULLABLE_COLUMNS.board_comments).toContain('resolved_at')
+    expect(UPDATED_AT_TABLES.has('board_comments')).toBe(false)
   })
 
   // A ghost COLUMN, not a ghost table: the client row is real SQL, and this
