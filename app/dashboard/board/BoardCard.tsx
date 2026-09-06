@@ -1,6 +1,6 @@
 'use client'
 
-import { ExternalLink, MoreHorizontal } from 'lucide-react'
+import { ExternalLink, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -26,7 +26,7 @@ import { cardTone, kindTone } from '../ui/tone'
  * Presentation only: the board decides what each press does.
  */
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onAction, onMove, onLink, onKind,
+  card, viewer, names, today, busy, canEdit, onAction, onMove, onLink, onKind, canDelete, onDelete,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -40,6 +40,9 @@ export function BoardCard({
   onMove: (card: BoardViewCard, action: CardAction) => void
   onLink: (card: BoardViewCard) => void
   onKind: (card: BoardViewCard) => void
+  /** may this person delete the card — a manager, matching the route */
+  canDelete?: boolean
+  onDelete?: (card: BoardViewCard) => void
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const { primary, more } = cardActions(card, viewer)
@@ -57,7 +60,8 @@ export function BoardCard({
   const people = card.owner_id
     ? [{ id: card.owner_id, initials: initialsOf(names.get(card.owner_id) ?? (lines.assignee === 'You' ? 'You' : '')), name: names.get(card.owner_id) ?? lines.assignee }]
     : []
-  const hasMenu = more.length > 0 || targets.length > 0 || canEdit
+  const mayDelete = Boolean(canDelete && onDelete)
+  const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete
 
   return (
     <WorkCard
@@ -146,6 +150,15 @@ export function BoardCard({
                   </DropdownMenuItem>
                   <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
                     Change the kind of work
+                  </DropdownMenuItem>
+                </>
+              )}
+              {mayDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="min-h-11 text-accent-red focus:text-accent-red"
+                    onClick={() => onDelete!(card)}>
+                    <Trash2 className="h-4 w-4" /> Delete this card
                   </DropdownMenuItem>
                 </>
               )}

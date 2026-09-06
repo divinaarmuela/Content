@@ -23,8 +23,9 @@ const DASHBOARD = join(process.cwd(), 'app', 'dashboard')
 const LAYOUTS_THAT_TITLE_EVERYTHING = ['clients/[id]', 'scheduler', 'settings']
 
 /**
- * `production/layout.tsx` draws a PageTitle for its own three views ONLY —
- * for anything else (the item page, a shoot's page) it returns bare children.
+ * `production/layout.tsx` draws a PageTitle for Availability and Proposals
+ * ONLY — for anything else (the board, the item page, a shoot's page) it
+ * returns bare children.
  * So the two views it covers are listed by hand rather than the whole subtree
  * being waved through.
  */

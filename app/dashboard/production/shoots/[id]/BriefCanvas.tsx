@@ -671,13 +671,18 @@ export default function BriefCanvas({
   const ordered = useMemo(() => [...cards].sort((a, b) => a.z - b.z), [cards])
 
   const board = (
-    <div className={fullscreen ? 'fixed inset-0 z-50 flex flex-col bg-foreground/[0.04]' : 'relative'}>
+    // Expanded, the board covers the whole window. The cover MUST be opaque:
+    // the restyle once gave it the canvas's 4% tint, and the sidebar, header
+    // and the rest of the shoot page showed straight through it.
+    <div className={fullscreen ? 'fixed inset-0 z-50 flex flex-col bg-background text-foreground' : 'relative'}>
       {fullscreen && (
-        <div className="flex items-center gap-3 border-b border-border px-4 py-2">
+        <div className="flex items-center gap-3 border-b border-border bg-background px-4 py-2">
           <span className="text-body-15 font-semibold">Board</span>
-          <span className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Esc to exit</span>
-          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setFullscreen(false)}>
-            <Minimize2 className="h-4 w-4" />
+          <span className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Esc to go back</span>
+          <Button size="sm" variant="ghost" aria-label="Back to the page"
+            className="ml-auto h-11 gap-2 rounded-full px-4 text-[13px] font-semibold"
+            onClick={() => setFullscreen(false)}>
+            <Minimize2 className="h-4 w-4" /> Back to the page
           </Button>
         </div>
       )}
@@ -1045,7 +1050,7 @@ export default function BriefCanvas({
             <Scan className="h-3 w-3" />
           </Button>
           {!fullscreen && (
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setFullscreen(true)} aria-label="Fullscreen">
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setFullscreen(true)} aria-label="Expand the board">
               <Maximize2 className="h-3 w-3" />
             </Button>
           )}

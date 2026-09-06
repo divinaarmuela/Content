@@ -13,7 +13,7 @@ import { friendlyError } from '../../lib/support-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard } from './BoardCard'
 import {
-  BookDialog, KindDialog, LinkDialog, PublishDialog, SendBackDialog, type KindRow,
+  BookDialog, DeleteDialog, KindDialog, LinkDialog, PublishDialog, SendBackDialog, type KindRow,
 } from './BoardDialogs'
 
 /**
@@ -100,6 +100,7 @@ export function Board({
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
   const [bookFor, setBookFor] = useState<BoardCardRow | null>(null)
   const [publishFor, setPublishFor] = useState<BoardCardRow | null>(null)
+  const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
 
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
   const canEdit = useCallback((c: BoardCardRow) => isManager || isAssignedTo(c, viewer.id), [isManager, viewer.id])
@@ -199,6 +200,10 @@ export function Board({
               onMove={act}
               onLink={setLinkFor}
               onKind={setKindFor}
+              // the DELETE route is manager-only, so the menu entry is too —
+              // a person never sees a button the server would refuse
+              canDelete={isManager}
+              onDelete={setDeleteFor}
             />
           </div>
         ))}
@@ -241,6 +246,8 @@ export function Board({
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} />
       <BookDialog card={bookFor} connected={bookFor ? connected[bookFor.client_id] ?? [] : []} onClose={() => setBookFor(null)} />
       <PublishDialog card={publishFor} connected={publishFor ? connected[publishFor.client_id] ?? [] : []} onClose={() => setPublishFor(null)} />
+      {/* the live listener drops the row once the server has removed it */}
+      <DeleteDialog card={deleteFor} onClose={() => setDeleteFor(null)} />
     </div>
   )
 }

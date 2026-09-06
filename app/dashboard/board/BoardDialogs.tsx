@@ -7,6 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
@@ -569,5 +573,56 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Delete one card. Asks first, names the card, and says what goes with it:
+ * the DELETE route removes its versions, comments, approvals and posting
+ * times and cancels any posting still queued. Never more than one card.
+ * If the route refuses, its own sentence is shown.
+ */
+export function DeleteDialog({ card, onClose, onDeleted }: {
+  card: BoardViewCard | null
+  onClose: () => void
+  onDeleted?: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  const remove = async () => {
+    if (!card) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/production/items/${card.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await readError(res, 'Could not delete this card'))
+      toast.success(`Deleted “${card.title}”`)
+      onDeleted?.()
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete this card')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AlertDialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{card?.title}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This cannot be undone. Its link, versions, comments and any booked posting
+            time go with it — for everyone, including the client&rsquo;s portal.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy} className={quiet}>Keep it</AlertDialogCancel>
+          <AlertDialogAction disabled={busy} onClick={e => { e.preventDefault(); void remove() }}
+            className="h-11 rounded-full bg-accent-red px-5 text-[14px] font-semibold text-white hover:bg-accent-red/90">
+            {busy ? 'Deleting…' : 'Delete this card'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
