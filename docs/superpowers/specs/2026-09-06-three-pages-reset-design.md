@@ -170,6 +170,20 @@ Owner: "also by default make the board show on the portal".
 - No status jargon on the client's side: the columns are named for what they mean to them.
 
 
+## A comment belongs to the thing it is about
+
+Owner: "ensure that they can leave comments on the board on which part of the board".
+
+- A client can comment **on a specific card**, not in one long thread for the whole project.
+  The comment is pinned to that card and shown on it, so nobody has to work out what
+  "the second one" referred to.
+- On a **sub-page** (the Milanote-style canvas behind a card), a comment can be left on a
+  specific item on that canvas — a note, an image, a link — again pinned where it was left.
+- The comment carries who left it and when, and the account manager sees it on the card
+  (see "The client's words go to the person who has to act on them"). Editors and schedulers
+  still do not see client comments.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
