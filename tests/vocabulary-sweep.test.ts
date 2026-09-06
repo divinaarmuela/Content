@@ -65,8 +65,6 @@ describe('no raw database words reach the screen', () => {
   // metrics-key fallback are legitimate. The ones that ARE statuses are the
   // debt.
   const KNOWN: Known[] = [
-    { file: 'app/dashboard/production/[id]/page.tsx', contains: 'status.replace(/_/g',
-      why: 'publishStatusWord renders a SCHEDULE ROW publish_status — an integration state, not an item status. "scheduled" and "published" get real words; the underscore strip is only the tidy-up for an unmapped provider state, and is correct here.' },
     { file: 'app/dashboard/social/[id]/page.tsx', contains: "METRIC_LABEL[k] ?? k.replace(/_/g",
       why: 'fallback for an unmapped analytics metric key, not an item status' },
     { file: 'app/lib/gmail-core.ts', contains: "replace(/-/g, '+').replace(/_/g",
