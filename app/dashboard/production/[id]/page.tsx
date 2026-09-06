@@ -130,7 +130,7 @@ type Detail = {
   work_kind?: { name: string; slug: string; color: string; uses_media?: boolean } | null
   batch?: {
     id: string; title: string; status?: string
-    planned_deliverables?: { type: string; qty: number }[]
+    planned_deliverables?: unknown[]
     /** the brief page's own content — either of these satisfies submission */
     concept?: string | null; shot_list?: unknown[] | null
   } | null
@@ -487,7 +487,7 @@ export default function ItemDetailPage() {
       batch: batch
         ? {
             id: batch.id, title: batch.title, status: batch.status ?? undefined,
-            planned_deliverables: (batch.planned_deliverables ?? undefined) as { type: string; qty: number }[] | undefined,
+            planned_deliverables: (batch.planned_deliverables ?? undefined) as unknown[] | undefined,
             concept: (batch as { concept?: string | null }).concept ?? null,
             shot_list: (batch.shot_list ?? null) as unknown[] | null,
           }

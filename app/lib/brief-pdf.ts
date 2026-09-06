@@ -92,17 +92,17 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       doc.y += 18
     }
 
-    // ─── Deliverables ───
+    // ─── What is being made — one line, one thing ───
     if (data.deliverables.length > 0) {
-      section('PLANNED DELIVERABLES')
-      for (const d of data.deliverables) {
+      section('WHAT IS BEING MADE')
+      data.deliverables.forEach((d, i) => {
         ensureRoom(18)
         doc.fillColor(BLUE).font('Helvetica-Bold').fontSize(10)
-          .text(String(d.qty), PAGE.margin, doc.y, { continued: true, width: contentW })
+          .text(String(i + 1), PAGE.margin, doc.y, { continued: true, width: contentW })
         doc.fillColor(INK).font('Helvetica').fontSize(10)
-          .text(`  ${d.type}${d.qty > 1 ? 's' : ''}`)
+          .text(`  ${d.title}`)
         doc.y += 4
-      }
+      })
       doc.y += 12
     }
 

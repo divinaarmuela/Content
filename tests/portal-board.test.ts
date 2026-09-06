@@ -87,7 +87,10 @@ describe('one shoot is one card, all the way through', () => {
       comment_target: { kind: 'shoot', id: 'b-1' },
     })
     expect(shootCards(d)[0].shoot).toMatchObject({ date_label: 'Thu 17 Sep', location: 'Brighton', shared: true, brief_item_id: 'brief-1' })
-    expect(shootCards(d)[0].shoot?.planned_deliverables).toEqual([{ type: 'reel', qty: 2 }])
+    // an old "2 reels" plan reads as two lines — the portal never says "2 reels"
+    expect(shootCards(d)[0].shoot?.planned_deliverables).toEqual([
+      { id: 'reel-1', title: 'Reel 1' }, { id: 'reel-2', title: 'Reel 2' },
+    ])
 
     // approved and booked: same card, the date is the line
     d = await load({ shootStatus: 'locked', shared: true, briefStatus: 'approved_for_scheduling' })

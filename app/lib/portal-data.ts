@@ -8,7 +8,7 @@ import type {
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
-  type CanvasCard, type ShotRow,
+  type CanvasCard, type PlannedDeliverable, type ShotRow,
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
 import { slidesOf } from './version-files-core'
@@ -88,7 +88,7 @@ export type PortalShoot = {
   location: string | null
   concept: string | null
   board_name: string | null
-  planned_deliverables: { type: string; qty: number }[]
+  planned_deliverables: PlannedDeliverable[]
   shot_list: ShotRow[]
   canvas_cards: CanvasCard[]
   /** false = a booked shoot whose PLAN was not shared: the client sees that
@@ -152,7 +152,7 @@ export type PortalCard = {
     date_label: string | null
     location: string | null
     concept: string | null
-    planned_deliverables: { type: string; qty: number }[]
+    planned_deliverables: PlannedDeliverable[]
     shot_list: ShotRow[]
     board_cards: number
     shared: boolean

@@ -7,6 +7,7 @@ import { canOpenBatch } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
+import { ensurePlanCards } from '../../../../lib/plan-cards'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
@@ -186,6 +187,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await table('batches').update(id, { last_edited_by: user.id, last_edited_at: new Date().toISOString() })
     } catch { /* the edit itself already landed */ }
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status ?? 'brief', kind: 'updated' })
+    // a line added to the plan of a shoot that is already booked is work
+    // now, so it gets its card straight away — the same claim per line that
+    // booking used, so lines that already have one are left alone
+    if ('planned_deliverables' in patch && data.status !== 'brief') {
+      try {
+        await ensurePlanCards(user, data)
+      } catch (e) {
+        console.error('plan cards after edit:', e)
+      }
+    }
     // a shoot folder is named by its MONTH, and a plan with no date yet was
     // filed under the month it was raised in — put it right the moment the
     // date exists

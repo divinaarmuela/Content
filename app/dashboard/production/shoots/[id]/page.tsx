@@ -36,13 +36,16 @@ import {
 import { SHOWN_SHOOT_LABEL, shownShootState } from '../../../../lib/shoot-lifecycle-core'
 import { createCoalescer } from '../../../../lib/coalesce-core'
 import { TYPE_LABELS, type ContentType } from '../../../../lib/agreement-core'
+import { newLineId, planCardId, planLines } from '../../../../lib/deliverable-group-core'
 
 type Batch = {
   id: string; client_id: string; title: string; status: BatchStatus
   description: string | null; concept: string | null; location: string | null
   shoot_date: string | null; shot_list: ShotRow[]; reference_media: ReferenceMedia[]
   canvas_cards?: CanvasCard[]
-  planned_deliverables: { type: string; qty: number }[]
+  /** the plan's lines — read through `planLines`, which also understands the
+   *  old {type, qty} shape still on some shoots */
+  planned_deliverables: unknown[]
   locked_at: string | null; shot_at: string | null
   shared_with_client?: boolean
   share_board?: boolean | null
@@ -54,7 +57,6 @@ type Batch = {
   clients: { name: string } | null
 }
 type ItemLite = { id: string; title: string; status: string; work_kinds?: { slug?: string } | null }
-type Progress = { type: string; label: string; quota: number; planned: number; delivered: number }
 
 const CONTENT_TYPE_OPTIONS = Object.entries(TYPE_LABELS) as [ContentType, string][]
 
@@ -92,7 +94,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [lastEdited, setLastEdited] = useState<{ name: string | null; at: string | null }>({ name: null, at: null })
   const [role, setRole] = useState<string>('')
-  const [progress, setProgress] = useState<Progress[] | null>(null)
+  /** the line being typed under the plan, saved on Enter or Add */
+  const [newLine, setNewLine] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [lockOpen, setLockOpen] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
@@ -120,16 +123,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     setLastEdited({ name: json.last_edited_by_name ?? null, at: json.last_edited_at ?? null })
     setRole(json.viewer_role ?? '')
     setPortalToken(json.portal_token ?? null)
-    // monthly context for the deliverable captions
-    if (json.batch?.client_id) {
-      const m = json.batch.month ?? (json.batch.shoot_date ? new Date(json.batch.shoot_date).getUTCMonth() + 1 : null)
-      const y = json.batch.year ?? (json.batch.shoot_date ? new Date(json.batch.shoot_date).getUTCFullYear() : null)
-      const qs = m && y ? `&month=${m}&year=${y}` : ''
-      fetch(`/api/production/deliverables-progress?client_id=${json.batch.client_id}${qs}`)
-        .then(r => (r.ok ? r.json() : null))
-        .then(p => setProgress(p?.per_type ?? []))
-        .catch(() => setProgress([]))
-    }
   }, [id, router])
   useEffect(() => { void load() }, [load])
   useProductionLive(useCallback(() => { void load() }, [load]))
@@ -275,7 +268,15 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const quiet = transitions.filter(t => t.to !== 'locked' && t.to !== 'shot')
   const state = shownShootState(batch)
   const stateStyle = { planning: 'brief', booked: 'locked', shot: 'shot', closed: 'wrapped' } as const
-  const progressFor = (type: string) => (progress ?? []).find(p => p.type === type)
+  /** the plan as lines, whichever shape it was stored in */
+  const planned = planLines(batch.planned_deliverables)
+  const itemById = new Map(items.map(i => [i.id, i]))
+  const addLine = async () => {
+    const title = newLine.trim()
+    if (!title) return
+    setNewLine('')
+    await patch('planned_deliverables', [...planned, { id: newLineId(), title }], true)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -543,57 +544,57 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
-              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Planned deliverables</p>
-              {(batch.planned_deliverables ?? []).map((d, i) => {
-                const prog = progressFor(d.type)
-                const over = prog && prog.planned + d.qty > prog.quota && prog.quota > 0
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">What is coming out of this shoot</p>
+              {/* one plain line per thing; each becomes its own card when the
+                  shoot is booked. Old plans stored as "2 reels" read back as
+                  "Reel 1", "Reel 2" — the first edit saves them that way. */}
+              {planned.map((line, i) => {
+                const card = itemById.get(planCardId(batch.id, line.id))
                 return (
-                  <div key={`${d.type}-${i}`} className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <Select value={d.type} onValueChange={v => v && void patch('planned_deliverables',
-                        (batch.planned_deliverables ?? []).map((x, j) => j === i ? { ...x, type: v } : x), true)}>
-                        <SelectTrigger className="h-8 flex-1 text-body-15"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CONTENT_TYPE_OPTIONS.map(([t, label]) => <SelectItem key={t} value={t}>{label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Input type="number" min={1} key={`${d.type}:${d.qty}`} defaultValue={d.qty} disabled={!canEdit}
-                        className="h-8 w-16 text-center font-mono text-body-15 tabular-nums"
-                        onBlur={e => {
-                          const qty = Math.max(1, Number(e.target.value) || 1)
-                          if (qty !== d.qty) void patch('planned_deliverables',
-                            (batch.planned_deliverables ?? []).map((x, j) => j === i ? { ...x, qty } : x), true)
-                        }} />
-                      {canEdit && (
-                        <button type="button" onClick={() => void patch('planned_deliverables',
-                          (batch.planned_deliverables ?? []).filter((_, j) => j !== i), true)}>
-                          <X className="h-3.5 w-3.5 text-muted-foreground hover:text-accent-red" />
-                        </button>
-                      )}
-                    </div>
-                    {prog && prog.quota > 0 && (
-                      <p className={`font-mono text-[10.5px] ${over ? 'text-accent-amber' : 'text-muted-foreground'}`}>
-                        {over
-                          ? `Exceeds the monthly agreement by ${prog.planned + d.qty - prog.quota}`
-                          : `Covers ${Math.min(d.qty, prog.quota)} of this month's ${prog.quota} ${prog.label} for this client`}
-                      </p>
+                  <div key={line.id} className="flex items-center gap-1.5">
+                    <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
+                    <Input key={`${line.id}:${line.title}`} defaultValue={line.title} disabled={!canEdit}
+                      className="h-9 min-w-0 flex-1 text-body-15"
+                      onBlur={e => {
+                        const title = e.target.value.trim()
+                        if (title && title !== line.title) void patch('planned_deliverables',
+                          planned.map((x, j) => j === i ? { ...x, title } : x), true)
+                      }} />
+                    {card && (
+                      <Link href={`/dashboard/production/${card.id}`} className="shrink-0 text-secondary-13 text-accent-blue-deep hover:underline">
+                        Open card
+                      </Link>
+                    )}
+                    {canEdit && (
+                      <button type="button" aria-label="Remove this line"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center"
+                        onClick={() => void patch('planned_deliverables', planned.filter((_, j) => j !== i), true)}>
+                        <X className="h-3.5 w-3.5 text-muted-foreground hover:text-accent-red" />
+                      </button>
                     )}
                   </div>
                 )
               })}
-              {progress !== null && progress.length === 0 && (
-                <p className="text-secondary-13 text-muted-foreground">
-                  {isManager
-                    ? <Link href={`/dashboard/clients/${batch.client_id}/agreement`} className="underline decoration-dotted">No agreement on file — set one up</Link>
-                    : 'No agreement on file'}
-                </p>
+              {planned.length === 0 && (
+                <p className="text-secondary-13 text-muted-foreground">Nothing listed yet.</p>
               )}
               {canEdit && (
-                <Button size="sm" variant="ghost" className="w-fit text-muted-foreground"
-                  onClick={() => void patch('planned_deliverables', [...(batch.planned_deliverables ?? []), { type: 'reel', qty: 1 }], true)}>
-                  <Plus className="h-3.5 w-3.5" /> Add deliverable
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{planned.length + 1}</span>
+                  <Input value={newLine} placeholder="Add a line — e.g. Hero reel" className="h-9 min-w-0 flex-1 text-body-15"
+                    onChange={e => setNewLine(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addLine() } }} />
+                  <Button size="sm" variant="ghost" className="shrink-0 text-muted-foreground" disabled={!newLine.trim()}
+                    onClick={() => void addLine()}>
+                    <Plus className="h-3.5 w-3.5" /> Add
+                  </Button>
+                </div>
               )}
+              <p className="text-[12px] text-muted-foreground">
+                {batch.status === 'brief'
+                  ? 'Each line becomes its own card on the board when the shoot is booked.'
+                  : 'Each line is its own card on the board. A line added now gets a card too.'}
+              </p>
             </CardContent>
           </Card>
 

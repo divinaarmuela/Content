@@ -10,6 +10,7 @@
  */
 
 import type { Role } from './identity-core'
+import { planLines, type PlanLine } from './deliverable-group-core'
 
 export const BATCH_STATUSES = ['brief', 'locked', 'shot', 'wrapped'] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
@@ -152,15 +153,13 @@ export function sanitiseShotList(raw: unknown): ShotRow[] {
     .slice(0, 100)
 }
 
-export type PlannedDeliverable = { type: string; qty: number }
+/** One line of the plan — one thing coming out of the shoot, one card later. */
+export type PlannedDeliverable = PlanLine
 
+/** The plan as lines, whichever shape it was stored in: new `{id, title}`
+ *  rows as written, old `{type, qty}` rows expanded ("Reel 1", "Reel 2"). */
 export function sanitisePlannedDeliverables(raw: unknown): PlannedDeliverable[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-    .map(r => ({ type: String(r.type ?? '').slice(0, 20), qty: Number(r.qty) }))
-    .filter(r => r.type !== '' && Number.isInteger(r.qty) && r.qty > 0 && r.qty <= 500)
-    .slice(0, 20)
+  return planLines(raw)
 }
 
 export type ReferenceMedia = { kind: 'image' | 'link'; url: string; name?: string; note?: string }
