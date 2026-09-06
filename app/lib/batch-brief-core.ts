@@ -13,6 +13,7 @@ import type { Role } from './identity-core'
 import { planLines, type PlanLine } from './deliverable-group-core'
 import { colourOf, iconOf } from './board-canvas-core'
 import { pruneOrphans } from './shoot-board-core'
+import { providerFor, youtubeId } from './link-preview-core'
 
 export const BATCH_STATUSES = ['brief', 'locked', 'shot', 'wrapped'] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
@@ -234,6 +235,17 @@ export type CanvasCard = {
   canonical?: string
   /** false only when the provider said the post cannot be framed */
   embeddable?: false
+  /** the account the post belongs to, when the provider said ("@handle") */
+  author?: string
+  /** what the team says about a picture, a clip or a link — written under
+   *  the media on the card, shown the same way on the client portal */
+  caption?: string
+  /** mockup frame — the real post it was made from. The frame keeps its
+   *  platform chrome; the post's media, mark, account and caption fill it. */
+  link_url?: string
+  /** mockup frame — what that link resolved to, the same shape a link card
+   *  stores flat */
+  preview?: LinkPreviewFields
   /** board tile — its look. The names are board-canvas-core's palette and
    *  icon set, validated there, so a tile reads in both themes. */
   icon?: string
@@ -245,6 +257,80 @@ export type CanvasCard = {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+/** A resolved link, as a card stores it. */
+export type LinkPreviewFields = {
+  thumb?: string
+  title?: string
+  provider?: string
+  media?: 'video' | 'image' | 'page'
+  canonical?: string
+  embeddable?: false
+  author?: string
+}
+
+/** The preview fields out of an untrusted record. The thumbnail is drawn as
+ *  an <img src>, so it goes through the same https-only gate the card's own
+ *  url does — a preview is not a reason to relax it. */
+export function sanitisePreviewFields(r: Record<string, unknown>): LinkPreviewFields {
+  return {
+    ...(String(r.thumb ?? '').startsWith('https://') ? { thumb: String(r.thumb).slice(0, 2000) } : {}),
+    ...(r.title ? { title: String(r.title).slice(0, 200) } : {}),
+    ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
+    ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
+      ? { media: String(r.media) as LinkPreviewFields['media'] } : {}),
+    ...(String(r.canonical ?? '').startsWith('https://') ? { canonical: String(r.canonical).slice(0, 2000) } : {}),
+    ...(r.embeddable === false ? { embeddable: false as const } : {}),
+    ...(r.author ? { author: String(r.author).slice(0, 80) } : {}),
+  }
+}
+
+/**
+ * Which mock-up frame a pasted post belongs in. A Reel is a Reel, a Short is
+ * a Short; a plain Instagram post or a carousel both come back as a post
+ * (a URL cannot tell them apart). `null` for a link no frame fits — X, a
+ * blog — which stays a link card.
+ */
+export function mockupPlatformFor(url: string): NonNullable<CanvasCard['platform']> | null {
+  const p = providerFor(url)
+  if (!p) return null
+  let path = ''
+  try { path = new URL(url).pathname } catch { return null }
+  switch (p.name) {
+    case 'Instagram':
+      if (/^\/(reel|reels)\//.test(path)) return 'ig_reel'
+      if (/^\/stories\//.test(path)) return 'ig_story'
+      return 'ig_post'
+    case 'TikTok': return 'tiktok'
+    case 'YouTube': return youtubeId(url) ? (/\/shorts\//.test(path) ? 'yt_short' : 'youtube') : null
+    case 'LinkedIn': return 'linkedin'
+    case 'Facebook': return 'facebook'
+    default: return null
+  }
+}
+
+/**
+ * The narrowest a card may be made without a word of its text being cut:
+ * the widest word, at the kind's font size, plus its padding. An estimate
+ * from character counts (no canvas on the server), erring wide, so a
+ * heading never breaks mid-word and a note never shows half a word.
+ */
+export function longestWordWidth(kind: CanvasCard['kind'], text: string | undefined): number {
+  if (!text) return 0
+  // px per character, erring wide: a heading is mono, upper-case, widely
+  // tracked; a note is 13px proportional text
+  const perChar = kind === 'label' ? 11.5 : 8
+  const pad = kind === 'label' ? 0 : 26
+  let longest = 0
+  for (const word of text.split(/\s+/)) longest = Math.max(longest, word.length)
+  return Math.min(longest, 40) * perChar + pad
+}
+
+/** The floor for a card's width: its kind's minimum, or its widest word if
+ *  that is wider. */
+export function minCardWidth(kind: CanvasCard['kind'], text?: string): number {
+  return Math.max(CANVAS_SIZE_LIMITS[kind].minW, Math.round(longestWordWidth(kind, text)))
+}
 
 /* ── card sizes: what the corner handle may do to each kind ── */
 
@@ -293,21 +379,24 @@ export function resizeCard(
   start: { w: number; h: number },
   dx: number, dy: number,
   lockAspect = false,
+  /** the card's words: the width never goes under its widest one */
+  text?: string,
 ): { w: number; h?: number } {
   const lim = CANVAS_SIZE_LIMITS[kind]
-  if (lim.minH === null) return clampCardSize(kind, start.w + dx)
+  const minW = Math.min(minCardWidth(kind, text), lim.maxW)
+  if (lim.minH === null) return { w: clamp(Math.round(start.w + dx) || 240, minW, lim.maxW) }
   if (lockAspect && start.w > 0 && start.h > 0) {
     const ratio = start.h / start.w
     // the width is clamped first, then the height derived from it, then
     // clamped again — if the height clamp bites, the width follows it back
-    let w = clamp(Math.round(start.w + dx), lim.minW, lim.maxW)
+    let w = clamp(Math.round(start.w + dx), minW, lim.maxW)
     let h = clamp(Math.round(w * ratio), lim.minH, lim.maxH)
-    if (Math.round(w * ratio) !== h) w = clamp(Math.round(h / ratio), lim.minW, lim.maxW)
+    if (Math.round(w * ratio) !== h) w = clamp(Math.round(h / ratio), minW, lim.maxW)
     return { w, h }
   }
   // a pull past zero is a card at its minimum, not a card without a height
   return {
-    w: clamp(Math.round(start.w + dx), lim.minW, lim.maxW),
+    w: clamp(Math.round(start.w + dx), minW, lim.maxW),
     h: clamp(Math.round(start.h + dy), lim.minH, lim.maxH),
   }
 }
@@ -370,17 +459,20 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       // a link's resolved preview. The thumbnail is rendered as an <img src>,
       // so it goes through the same https-only gate the card's own url does —
       // a preview is not a reason to relax it.
-      ...(kind === 'link'
+      ...(kind === 'link' ? sanitisePreviewFields(r) : {}),
+      // what the team wrote under the media — a picture, a clip or a link
+      ...((kind === 'image' || kind === 'link') && typeof r.caption === 'string' && r.caption.trim()
+        ? { caption: r.caption.trim().slice(0, 1000) } : {}),
+      // a mock-up made from a real post: the link, and what it resolved to
+      ...(kind === 'mockup' && String(r.link_url ?? '').startsWith('https://')
         ? {
-            ...(String(r.thumb ?? '').startsWith('https://')
-              ? { thumb: String(r.thumb).slice(0, 2000) } : {}),
-            ...(r.title ? { title: String(r.title).slice(0, 200) } : {}),
-            ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
-            ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
-              ? { media: String(r.media) as CanvasCard['media'] } : {}),
-            ...(String(r.canonical ?? '').startsWith('https://')
-              ? { canonical: String(r.canonical).slice(0, 2000) } : {}),
-            ...(r.embeddable === false ? { embeddable: false as const } : {}),
+            link_url: String(r.link_url).slice(0, 2000),
+            ...(r.preview && typeof r.preview === 'object'
+              ? (() => {
+                  const p = sanitisePreviewFields(r.preview as Record<string, unknown>)
+                  return Object.keys(p).length ? { preview: p } : {}
+                })()
+              : {}),
           }
         : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)

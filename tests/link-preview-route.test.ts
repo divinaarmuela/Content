@@ -139,6 +139,8 @@ describe('link-preview route (replayed providers)', () => {
       provider: 'TikTok',
       media: 'video',
       canonical: 'https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079',
+      // the account, so a mock-up made from this post can wear it
+      author: '@petsmeowwoof',
     })
   })
 

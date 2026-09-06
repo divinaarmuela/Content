@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   AutoplayArbiter, MAX_AUTOPLAY, autoplayEmbedUrlFor, autoplayKindFor, centreDistance, decideAutoplay,
-  instagramEmbedUrlFor, isNear, pickPlayers,
+  framePlayerOf, instagramEmbedUrlFor, isNear, pickPlayers, soundCommand, YOUTUBE_LISTEN,
 } from '../app/lib/board-autoplay-core'
 import { embedUrlFor, isSafePreviewUrl } from '../app/lib/link-preview-core'
 
@@ -266,5 +266,52 @@ describe('the SSRF guard is untouched by any of this', () => {
       'https://intranet/x', 'https://build.internal/x', 'http://example.com', 'file:///etc/passwd',
     ]) expect(isSafePreviewUrl(bad), bad).toBe(false)
     expect(isSafePreviewUrl('https://www.youtube.com/watch?v=abc')).toBe(true)
+  })
+})
+
+describe('sound in place — the same player, told to unmute', () => {
+  it("YouTube's frame is built to listen to us: enablejsapi and OUR origin, only when given one", () => {
+    const withApi = autoplayEmbedUrlFor('https://www.youtube.com/watch?v=abc123XYZ', null, 'https://app.mdmmarketing.com.au')!
+    expect(withApi).toContain('enablejsapi=1')
+    expect(withApi).toContain('origin=https%3A%2F%2Fapp.mdmmarketing.com.au')
+    expect(withApi.startsWith('https://www.youtube-nocookie.com/embed/abc123XYZ?autoplay=1&mute=1')).toBe(true)
+    // no origin, no api flag — the old URL exactly
+    expect(autoplayEmbedUrlFor('https://www.youtube.com/watch?v=abc123XYZ')).not.toContain('enablejsapi')
+    // an origin that is not an origin is not written into the URL
+    expect(autoplayEmbedUrlFor('https://www.youtube.com/watch?v=abc123XYZ', null, 'javascript:alert(1)')).not.toContain('enablejsapi')
+    // TikTok and Vimeo take no origin and are unchanged
+    expect(autoplayEmbedUrlFor('https://vimeo.com/12345678', null, 'https://x.example')).not.toContain('origin')
+  })
+
+  it('knows which player is in a frame by the host we put it on', () => {
+    expect(framePlayerOf('https://www.youtube-nocookie.com/embed/x?autoplay=1')).toBe('youtube')
+    expect(framePlayerOf('https://www.tiktok.com/player/v1/1?autoplay=1')).toBe('tiktok')
+    expect(framePlayerOf('https://player.vimeo.com/video/1?background=1')).toBe('vimeo')
+    expect(framePlayerOf('https://www.instagram.com/p/x/embed/')).toBeNull()
+    expect(framePlayerOf(null)).toBeNull()
+    expect(framePlayerOf('https://www.youtube-nocookie.com.evil.example/embed/x')).toBeNull()
+  })
+
+  it("speaks each provider's own words, to that provider's origin only", () => {
+    expect(soundCommand('youtube', true)).toEqual({
+      message: '{"event":"command","func":"unMute","args":[]}', targetOrigin: 'https://www.youtube-nocookie.com',
+    })
+    expect(JSON.parse(soundCommand('youtube', false).message as string).func).toBe('mute')
+    expect(soundCommand('tiktok', true)).toEqual({
+      message: { 'x-tiktok-player': true, type: 'unMute' }, targetOrigin: 'https://www.tiktok.com',
+    })
+    expect((soundCommand('tiktok', false).message as { type: string }).type).toBe('mute')
+    expect(soundCommand('vimeo', true)).toEqual({
+      message: '{"method":"setMuted","value":false}', targetOrigin: 'https://player.vimeo.com',
+    })
+    expect(JSON.parse(soundCommand('vimeo', false).message as string).value).toBe(true)
+    expect(JSON.parse(YOUTUBE_LISTEN).event).toBe('listening')
+  })
+
+  it('a mock-up made from a post is the same kind of player its post is', () => {
+    expect(autoplayKindFor({ kind: 'link', url: 'https://www.tiktok.com/@a/video/7412345678901234567' })).toBe('embed')
+    expect(autoplayKindFor({ kind: 'link', url: 'https://www.instagram.com/reel/Cabc123/' })).toBe('instagram')
+    // and a mock-up with no post is not a player at all
+    expect(autoplayKindFor({ kind: 'mockup' })).toBe('none')
   })
 })

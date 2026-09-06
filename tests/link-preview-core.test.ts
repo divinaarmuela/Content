@@ -275,7 +275,24 @@ describe('oEmbed, where the provider still answers', () => {
       thumb: 'https://p16.tiktokcdn.com/x.jpg',
       provider: 'TikTok',
       media: 'video',
+      author: 'someone',
     })
+  })
+
+  it('names the account, as a handle where the provider gives one', () => {
+    // TikTok says both; the handle wins, spelled the way the app shows it
+    expect(fromOembed({ author_name: 'Petsmeowwoof', author_unique_id: 'petsmeowwoof' }, 'https://www.tiktok.com/@a/video/1').author)
+      .toBe('@petsmeowwoof')
+    expect(fromOembed({ author_name: 'Some Channel' }, 'https://www.youtube.com/watch?v=abc123XYZ').author).toBe('Some Channel')
+    expect(fromOembed({ title: 'x' }, 'https://vimeo.com/1').author).toBeUndefined()
+    // Instagram's embed page carries the username on the caption
+    const served = readFileSync(join(__dirname, 'fixtures/instagram-embed-captioned.html'), 'utf8')
+    expect(fromInstagramEmbedHtml(served)?.author).toBe('@fielddaymktg')
+    // …and a username that is not a username is not one
+    const odd = '<div class="Caption"><a class="CaptionUsername" href="/x/">not a <b>handle</b></a> hello</div>'
+    expect(fromInstagramEmbedHtml(odd)?.author).toBeUndefined()
+    // merged previews carry it along like the rest
+    expect(mergePreview({ title: 'a' }, { author: '@b', provider: 'Instagram' })?.author).toBe('@b')
   })
 
   it('falls back to the author when a post has no title of its own', () => {
