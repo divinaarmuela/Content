@@ -229,6 +229,11 @@ export type CanvasCard = {
   title?: string
   provider?: string
   media?: 'video' | 'image' | 'page'
+  /** the provider's own URL for the post when the pasted one was a share
+   *  short link with no id (vm.tiktok.com) — what lets the card play */
+  canonical?: string
+  /** false only when the provider said the post cannot be framed */
+  embeddable?: false
   /** board tile — its look. The names are board-canvas-core's palette and
    *  icon set, validated there, so a tile reads in both themes. */
   icon?: string
@@ -373,6 +378,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
             ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
             ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
               ? { media: String(r.media) as CanvasCard['media'] } : {}),
+            ...(String(r.canonical ?? '').startsWith('https://')
+              ? { canonical: String(r.canonical).slice(0, 2000) } : {}),
+            ...(r.embeddable === false ? { embeddable: false as const } : {}),
           }
         : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)

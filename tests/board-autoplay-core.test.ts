@@ -25,6 +25,22 @@ describe('the frame that plays by itself', () => {
       .toBe('https://player.vimeo.com/video/12345678?autoplay=1&muted=1&loop=1&background=1')
   })
 
+  it('plays a vm.tiktok.com share link once the route has recorded where it points', () => {
+    // the pasted link has no id; the card stores the canonical URL the
+    // link-preview route found by following it, and that is what plays
+    expect(autoplayEmbedUrlFor('https://vm.tiktok.com/ZMrRs9oPp/', 'https://www.tiktok.com/@petsmeowwoof/video/7290074173500706079'))
+      .toBe('https://www.tiktok.com/player/v1/7290074173500706079?autoplay=1&muted=1&loop=1&controls=0')
+    expect(autoplayKindFor({ kind: 'link', url: 'https://vm.tiktok.com/ZMrRs9oPp/' })).toBe('none')
+    expect(autoplayKindFor({ kind: 'link', url: 'https://vm.tiktok.com/ZMrRs9oPp/', canonical: 'https://www.tiktok.com/@_/video/7290074173500706079' })).toBe('embed')
+    // never from a canonical URL on someone else's host
+    expect(autoplayEmbedUrlFor('https://vm.tiktok.com/ZMrRs9oPp/', 'https://evil.example/video/7290074173500706079')).toBeNull()
+  })
+
+  it('an Instagram post Instagram itself said cannot be framed is a still, not a frame', () => {
+    expect(autoplayKindFor({ kind: 'link', url: 'https://www.instagram.com/p/Dbqg-OzRmcw/' })).toBe('instagram')
+    expect(autoplayKindFor({ kind: 'link', url: 'https://www.instagram.com/p/Dbqg-OzRmcw/', embeddable: false })).toBe('none')
+  })
+
   it('refuses Instagram, Facebook, a short link with no id, and anything else', () => {
     expect(autoplayEmbedUrlFor('https://www.instagram.com/reel/Cabc123/')).toBeNull()
     expect(autoplayEmbedUrlFor('https://www.facebook.com/page/posts/123')).toBeNull()

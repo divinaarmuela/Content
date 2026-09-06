@@ -527,7 +527,10 @@ function CanvasCardInner({
   // the board was to look at it, and a chip naming its hostname is the least
   // useful thing that link can be. Without one it stays the chip it was: a
   // grey box promising a picture that never comes is worse than a tidy line.
-  const embed = embedUrlFor(card.url ?? '')
+  // …and never a frame for a post the provider said cannot be framed: an
+  // Instagram embed that answers "this post may have been removed" is not a
+  // face, it is an error message wearing our card. Such a card is a still.
+  const embed = card.embeddable === false ? null : embedUrlFor(card.url ?? '', card.canonical)
 
   // Playing IN PLACE, not in a lightbox. The reason to put a competitor's Reel
   // on a moodboard is to watch it next to the concept it is sitting beside;
@@ -564,7 +567,7 @@ function CanvasCardInner({
   // src exists only while `auto.load` says so: an off-screen card is a
   // thumbnail again and costs nothing.
   const autoSrc = auto.load
-    ? autoKind === 'instagram' ? instagramEmbedUrlFor(card.url ?? '') : autoplayEmbedUrlFor(card.url ?? '')
+    ? autoKind === 'instagram' ? instagramEmbedUrlFor(card.url ?? '') : autoplayEmbedUrlFor(card.url ?? '', card.canonical)
     : null
   // The face keeps one shape whether it is a still or a frame, so starting
   // to play never resizes the card under the pointer. Vertical for a Reel,

@@ -23,7 +23,7 @@
  *     comes down again when the card leaves the screen, like the others.
  */
 
-import { isPlayableFile, youtubeId } from './link-preview-core'
+import { isPlayableFile, tiktokVideoId, youtubeId } from './link-preview-core'
 
 /** How many clips may run at once. Three is "the ones you are looking at";
  *  more than that and a laptop fan is the first thing anyone notices. */
@@ -64,7 +64,7 @@ const ID_OK = /^[\w-]{6,20}$/
  * anything that is not one of the three. The click-to-play path
  * (`embedUrlFor`) is untouched and still knows how to play those.
  */
-export function autoplayEmbedUrlFor(url: string): string | null {
+export function autoplayEmbedUrlFor(url: string, canonical?: string | null): string | null {
   const yt = youtubeId(url)
   if (yt && ID_OK.test(yt)) {
     return `https://www.youtube-nocookie.com/embed/${yt}?autoplay=1&mute=1&loop=1&playlist=${yt}&controls=0&rel=0&playsinline=1`
@@ -80,8 +80,10 @@ export function autoplayEmbedUrlFor(url: string): string | null {
   }
 
   if (host.endsWith('tiktok.com')) {
-    const m = /\/video\/(\d+)/.exec(path)
-    return m ? `https://www.tiktok.com/player/v1/${m[1]}?autoplay=1&muted=1&loop=1&controls=0` : null
+    // a vm.tiktok.com share link carries no id; the link-preview route
+    // followed it and stored the real URL as `canonical`, so that plays too
+    const id = tiktokVideoId(url) ?? (canonical ? tiktokVideoId(canonical) : null)
+    return id ? `https://www.tiktok.com/player/v1/${id}?autoplay=1&muted=1&loop=1&controls=0` : null
   }
 
   return null
@@ -112,12 +114,17 @@ export function instagramEmbedUrlFor(url: string): string | null {
  *  URL) is a `<video>`; YouTube, TikTok and Vimeo are frames that run by
  *  themselves; an Instagram post is a frame that waits for one tap;
  *  everything else is `none` and keeps today's behaviour. */
-export function autoplayKindFor(card: { kind?: string; url?: string; media?: string }): AutoplayKind {
+export function autoplayKindFor(card: {
+  kind?: string; url?: string; media?: string; canonical?: string; embeddable?: false
+}): AutoplayKind {
   const url = card.url ?? ''
   if (!url) return 'none'
   if (isPlayableFile(url)) return 'file'
   if (card.kind !== 'link') return 'none'
-  if (autoplayEmbedUrlFor(url)) return 'embed'
+  if (autoplayEmbedUrlFor(url, card.canonical)) return 'embed'
+  // a post Instagram itself said cannot be framed is a still, never a frame
+  // that would show their "this post may have been removed" as the card
+  if (card.embeddable === false) return 'none'
   if (instagramEmbedUrlFor(url)) return 'instagram'
   return 'none'
 }
