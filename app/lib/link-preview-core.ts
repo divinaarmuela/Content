@@ -41,6 +41,11 @@ export type LinkPreview = {
   /** the account the post belongs to — "@handle" where the provider says
    *  one, else the display name — so a mock-up can wear the real account */
   author?: string
+  /** a plain https mp4 of the post itself, on the provider's own CDN, when
+   *  the provider exposes one (Pinterest does, for a video pin) — the card
+   *  plays it the way it plays our own files: silent, looping, in place.
+   *  Absent for a post that is only HLS, or a frame, or a picture. */
+  video?: string
 }
 
 export type Provider = {
@@ -75,7 +80,12 @@ export const PROVIDERS: Provider[] = [
   { name: 'Facebook', hosts: ['facebook.com', 'fb.watch'], media: 'video' },
   { name: 'X', hosts: ['twitter.com', 'x.com'], media: 'page' },
   { name: 'LinkedIn', hosts: ['linkedin.com'], media: 'page' },
-  { name: 'Pinterest', hosts: ['pinterest.com', 'pin.it'], media: 'image' },
+  // Pinterest's oEmbed answers with no key (verified 2026-09-06): the pin's
+  // words, the pinner, and a 236px thumbnail. `www.` 302s to the viewer's
+  // country host (`au.pinterest.com` from here) — followed, on Pinterest's
+  // hosts only. Whether a pin is a VIDEO, and its mp4, the pin page alone
+  // says (`fromPinterestPageHtml`).
+  { name: 'Pinterest', hosts: ['pinterest.com', 'pin.it'], oembed: 'https://www.pinterest.com/oembed.json', media: 'image' },
 ]
 
 function hostOf(url: string): string | null {
@@ -223,13 +233,18 @@ export function fromOembed(json: unknown, url: string): LinkPreview {
   // lacks. Recorded as the canonical URL so the card can play even though
   // the link that was pasted could not.
   const id = str(j.embed_product_id)
+  // Pinterest names the pinner by profile URL (`pinterest.com/<username>/`),
+  // which is the handle the way TikTok's `@user` is
   const handle = str(j.author_unique_id) ?? /\/@([\w.-]+)/.exec(str(j.author_url) ?? '')?.[1]
+    ?? (provider?.name === 'Pinterest' ? pinterestUsername(str(j.author_url) ?? '') : undefined)
   const canonical = provider?.name === 'TikTok' && id && TIKTOK_ID.test(id)
     ? tiktokCanonicalUrl(id, handle) : undefined
   const who = handle ? `@${handle}` : author
+  // Pinterest's oEmbed thumbnail is 236px wide — a tile, not a card's face
+  const face = thumb && provider?.name === 'Pinterest' ? pinterestLargerImage(thumb) : thumb
   return {
     ...(title || author ? { title: (title ?? author)!.slice(0, 200) } : {}),
-    ...(thumb && isSafePreviewUrl(thumb) ? { thumb: thumb.slice(0, 2000) } : {}),
+    ...(face && isSafePreviewUrl(face) ? { thumb: face.slice(0, 2000) } : {}),
     ...(provider ? { provider: provider.name } : {}),
     ...(who ? { author: who.slice(0, 80) } : {}),
     ...(canonical && canonical !== url ? { canonical } : {}),
@@ -394,6 +409,207 @@ export function isTikTokHost(url: string): boolean {
   return host === 'tiktok.com' || host.endsWith('.tiktok.com')
 }
 
+/* ────────────────────────────── Pinterest ───────────────────────────── */
+
+/**
+ * What Pinterest actually serves — every line below observed 2026-09-06
+ * from this network with real requests, a browser UA and a bot UA alike:
+ *
+ *  - `pinterest.com/pin/<id>/` 308s to `www.`; `www.` 302s to the viewer's
+ *    country host (`au.pinterest.com` from here). The page is ~1.2 MB and
+ *    its `<meta property="og:…">` tags are INJECTED PAST THE 1 MB MARK, not
+ *    in the head — a reader that stops at a few KB sees none of them. An
+ *    image pin carries `og:image` (a 736px `i.pinimg.com` picture),
+ *    `og:title` and `og:description`; a video pin carries `og:image` only —
+ *    no `og:title`, no `og:video`. The pin's words, the pinner and the
+ *    video files live in a relay payload:
+ *    `window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("<query>", {json})`,
+ *    whose `data.v3GetPinQueryv2.data` is the Pin (`__typename: "Pin"`):
+ *    `description`, `title`, `pinner.username`, and for a video
+ *    `videos.videoList.v720P.url` — a plain H.264 mp4 on `v1.pinimg.com`
+ *    (`…/expMp4/…_720w.mp4`) beside the HLS `vHLSV4` m3u8 and the HEVC
+ *    `hevcMp4V3` renditions a browser cannot be relied on to play.
+ *  - `pin.it/<code>` 308s to `api.pinterest.com/url_shortener/<code>/redirect/`,
+ *    which 302s to `www.pinterest.com/pin/<id>/sent/?invite_code=…` — and
+ *    THAT page bounces to `/?show_error=true`, so the id is read off the
+ *    chain as it goes by, never off the page it lands on. A code Pinterest
+ *    does not know 302s to the home page: no id, no preview, no error.
+ *  - `www.pinterest.com/oembed.json?url=<pin>` 302s to the country host and
+ *    answers `{title, author_name, author_url, thumbnail_url (236px)}` with
+ *    no key. For a pin that is gone or private: 400 `"Url was not found"`.
+ *  - `/resource/PinResource/get/` — the JSON the page itself calls — is 403
+ *    to a server. Not an option.
+ */
+
+/** a pin id is a run of digits; loose floor, same reasoning as TikTok's */
+const PIN_ID = /^\d{5,25}$/
+
+const pinterestHostOf = (url: string): string | null => {
+  let u: URL
+  try { u = new URL(url) } catch { return null }
+  return u.protocol === 'https:' ? u.hostname.toLowerCase() : null
+}
+
+/** A redirect hop we are willing to follow for a Pinterest link: the hosts
+ *  their chain actually passes through (`pin.it`, `api.pinterest.com`,
+ *  `www.` and the country hosts), and nothing else. On top of the SSRF
+ *  guard, not instead of it. */
+export function isPinterestHost(url: string): boolean {
+  const host = pinterestHostOf(url)
+  if (!host) return false
+  return host === 'pin.it' || host === 'pinterest.com' || host.endsWith('.pinterest.com')
+}
+
+/** A `pin.it/<code>` share link — the shape the app's Share → Copy link
+ *  hands out — which names the pin by a code until it is followed. */
+export function isPinterestShortLink(url: string): boolean {
+  let u: URL
+  try { u = new URL(url) } catch { return false }
+  return u.hostname.toLowerCase() === 'pin.it' && /^\/[\w-]{3,40}\/?$/.test(u.pathname)
+}
+
+/** The pin's id from any Pinterest URL that carries one: `/pin/<id>/`, the
+ *  slugged `/pin/some-words--<id>/` the og:url uses, and the `/pin/<id>/sent/`
+ *  the short-link chain passes through. Null for a `pin.it` code. */
+export function pinterestPinId(url: string): string | null {
+  const host = pinterestHostOf(url)
+  if (!host || !(host === 'pinterest.com' || host.endsWith('.pinterest.com'))) return null
+  let path = ''
+  try { path = new URL(url).pathname } catch { return null }
+  const m = /^\/pin\/(?:[^/]*?--)?(\d{5,25})(?:\/|$)/.exec(path)
+  return m && PIN_ID.test(m[1]) ? m[1] : null
+}
+
+/** The one page for a pin, built from the id alone so nothing from the
+ *  pasted URL (a country host, a slug, a `?invite_code=`) reaches the
+ *  request — and the URL a short link is stored as, so the card is the
+ *  pin, not the code. */
+export function pinterestCanonicalUrl(id: string): string {
+  return `https://www.pinterest.com/pin/${id}/`
+}
+
+/** Only Pinterest's own CDN may be a card's face or its film: the page is
+ *  HTML we did not write, and a URL in it that pointed anywhere else would
+ *  be media of someone else's choosing. */
+export function isPinterestCdnUrl(url: string): boolean {
+  const host = pinterestHostOf(url)
+  return Boolean(host && (host === 'pinimg.com' || host.endsWith('.pinimg.com')))
+}
+
+/** The 736px rendition of a `i.pinimg.com` picture the oEmbed hands out at
+ *  236px. Every pin has one — it is the size the page's own `og:image`
+ *  points at — and the path is the same but for the size segment. */
+export function pinterestLargerImage(url: string): string {
+  return isPinterestCdnUrl(url) ? url.replace(/\/236x\//, '/736x/') : url
+}
+
+/** The username out of a pinner's profile URL, `pinterest.com/<username>/`. */
+export function pinterestUsername(profileUrl: string): string | undefined {
+  const host = pinterestHostOf(profileUrl)
+  if (!host || !(host === 'pinterest.com' || host.endsWith('.pinterest.com'))) return undefined
+  let path = ''
+  try { path = new URL(profileUrl).pathname } catch { return undefined }
+  const m = /^\/([\w.-]{1,60})\/?$/.exec(path)
+  return m && m[1] !== 'pin' ? m[1] : undefined
+}
+
+/** The mp4 a browser will play, out of the renditions Pinterest lists:
+ *  H.264 (`expMp4`) over HEVC, and the widest of those. Null when the pin
+ *  is HLS only. */
+function pickPinterestMp4(urls: string[]): string | null {
+  const mp4s = urls.filter(u => /\.mp4(\?|#|$)/i.test(u) && isPinterestCdnUrl(u) && !/hevc|h265/i.test(u))
+  if (!mp4s.length) return null
+  const width = (u: string) => Number(/_(\d+)w\.mp4/i.exec(u)?.[1] ?? 0)
+  return mp4s.sort((a, b) => width(b) - width(a))[0]
+}
+
+/** The Pin object out of a relay payload — walked for the one thing that
+ *  says it is a Pin, since the path around it is Pinterest's to change. */
+function findPinObject(node: unknown, depth = 0): Record<string, unknown> | null {
+  if (!node || typeof node !== 'object' || depth > 12) return null
+  if (Array.isArray(node)) {
+    for (const v of node) { const hit = findPinObject(v, depth + 1); if (hit) return hit }
+    return null
+  }
+  const o = node as Record<string, unknown>
+  if (o.__typename === 'Pin' && typeof o.entityId === 'string') return o
+  for (const v of Object.values(o)) { const hit = findPinObject(v, depth + 1); if (hit) return hit }
+  return null
+}
+
+/**
+ * What the pin page says about the pin.
+ *
+ * Two sources, merged, best first:
+ *  1. The relay payload(s): the pin's own words (`title`, else
+ *     `description`), the pinner's username, the mp4 and the poster.
+ *  2. The injected meta tags: `og:image` (736px) and, on an image pin,
+ *     `og:title` / `og:description`.
+ *
+ * Regexes and JSON.parse on the payload, no DOM library — same trade as
+ * `parseMetaTags`. A page with neither yields null: the card keeps the
+ * Pinterest mark and the link's label, never a broken picture.
+ */
+export function fromPinterestPageHtml(html: string): LinkPreview | null {
+  let title: string | undefined
+  let author: string | undefined
+  let thumb: string | undefined
+  let video: string | undefined
+  let hls = false
+
+  const relay = /__PWS_RELAY_REGISTER_COMPLETED_REQUEST__\(\s*"(?:[^"\\]|\\.)*"\s*,\s*/g
+  let m: RegExpExecArray | null
+  while ((m = relay.exec(html)) !== null) {
+    const start = m.index + m[0].length
+    const end = html.indexOf('</script>', start)
+    if (end < 0) break
+    const body = html.slice(start, end).trim().replace(/\)\s*;?\s*$/, '')
+    let pin: Record<string, unknown> | null = null
+    try { pin = findPinObject(JSON.parse(body)) } catch { continue }
+    if (!pin) continue
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+    if (!title) title = str(pin.title) ?? str(pin.description) ?? str(pin.gridTitle)
+    const pinner = pin.pinner as Record<string, unknown> | undefined
+    const username = str(pinner?.username)
+    if (!author && username && /^[\w.-]{1,60}$/.test(username)) author = `@${username}`
+    const videos = pin.videos as Record<string, unknown> | null | undefined
+    if (videos) {
+      const urls: string[] = []
+      const list = videos.videoList as Record<string, { url?: unknown; thumbnail?: unknown }> | undefined
+      if (list) {
+        for (const r of Object.values(list)) {
+          if (typeof r?.url === 'string') urls.push(r.url)
+          if (!thumb && typeof r?.thumbnail === 'string' && isPinterestCdnUrl(r.thumbnail)) thumb = r.thumbnail
+        }
+      }
+      if (Array.isArray(videos.videoUrls)) for (const u of videos.videoUrls) if (typeof u === 'string') urls.push(u)
+      if (urls.some(u => /\.m3u8(\?|#|$)/i.test(u))) hls = true
+      if (!video) video = pickPinterestMp4(urls) ?? undefined
+    }
+    const large = str(pin.imageLargeUrl)
+    if (!thumb && large && isPinterestCdnUrl(large)) thumb = large
+  }
+
+  const tags = parseMetaTags(html)
+  const og = tags['og:image'] ?? tags['twitter:image:src']
+  // the page's own picture beats a video's poster frame as the face
+  if (og && isPinterestCdnUrl(og)) thumb = og
+  if (!title) title = tags['og:title'] ?? tags['og:description'] ?? tags['description']
+  // the site's own name (the <title> of a page that told a robot nothing)
+  // is not a caption
+  if (title && /^pinterest$/i.test(title)) title = undefined
+
+  if (!thumb && !title && !video) return null
+  return {
+    ...(title ? { title: title.slice(0, 200) } : {}),
+    ...(thumb ? { thumb: thumb.slice(0, 2000) } : {}),
+    ...(author ? { author } : {}),
+    ...(video ? { video: video.slice(0, 2000) } : {}),
+    provider: 'Pinterest',
+    media: video || hls ? 'video' : 'image',
+  }
+}
+
 /** …and the same shape from a page's meta tags. */
 export function fromMetaTags(tags: Record<string, string>, url: string): LinkPreview {
   const provider = providerFor(url)
@@ -426,11 +642,15 @@ export function mergePreview(...parts: (LinkPreview | null | undefined)[]): Link
     if ((!out.media || out.media === 'page') && p.media) out.media = p.media
     if (!out.canonical && p.canonical) out.canonical = p.canonical
     if (!out.author && p.author) out.author = p.author
+    if (!out.video && p.video) out.video = p.video
     if (p.embeddable === false) out.embeddable = false
   }
-  // a canonical URL is what lets a short link play, and "cannot be framed" is
-  // what stops a card mounting a frame that says so — each is worth storing
-  return out.thumb || out.title || out.canonical || out.embeddable === false ? out : null
+  // a playable file makes the post a video whatever an earlier source said
+  if (out.video) out.media = 'video'
+  // a canonical URL is what lets a short link play, a film is what plays,
+  // and "cannot be framed" is what stops a card mounting a frame that says
+  // so — each is worth storing
+  return out.thumb || out.title || out.video || out.canonical || out.embeddable === false ? out : null
 }
 
 /**
