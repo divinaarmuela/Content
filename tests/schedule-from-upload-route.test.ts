@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isAdHocUploadVersion } from '../app/lib/schedule-upload-core'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 
@@ -202,6 +203,9 @@ describe('an account manager posts a file with no piece behind it', () => {
     expect(versions()[0].version_number).toBe(1)
     expect(versions()[0].item_id).toBe(item.id)
     expect(versions()[0].files).toHaveLength(1)
+    // the version says it was an upload the client was never asked about, so
+    // the image editor's footer can tell it from a piece the client approved
+    expect(isAdHocUploadVersion(versions()[0])).toBe(true)
 
     // …and the post, as a draft, holding the file
     expect(made.body.post.status).toBe('draft')

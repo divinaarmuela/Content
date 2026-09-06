@@ -23,9 +23,12 @@ import { uploadFiles } from '../../uploadQueue'
  * save will do to the client's approval BEFORE it is pressed. A crop is the
  * same picture in a tighter frame, so the approval stands and the button
  * reads "Save crop". A filter or a caption is a different picture, so it
- * becomes a new version the client has to look at again — and the button says
- * exactly that, in those words. `saveDecision` in `image-edit-core.ts` is the
- * one place that rule lives; nothing here decides it locally.
+ * becomes a new version — and the button says what that means FOR THE PERSON
+ * PRESSING IT: nothing, when no client ever approved the picture; "you can
+ * still schedule it yourself" for somebody who may; "the client is asked to
+ * look again" for somebody who may not. `saveDecision` in
+ * `image-edit-core.ts` is the one place that rule lives; nothing here decides
+ * it locally.
  *
  * Everything is done here, in the page: the file is drawn, cropped, filtered
  * and written out by the browser, then uploaded like any other file. No
@@ -58,14 +61,19 @@ export type ImageEditorTarget = {
   index: number
   /** the post this media is in, when there is one */
   postId: string | null
+  /** the client said yes to this media — false for a straight upload on the
+   *  Schedule page, or media a manager is posting before the client saw it */
+  clientApproved: boolean
 }
 
 /** one step of history — everything a person can undo */
 type Step = { crop: Rect; filters: Filters; text: TextLine; preset: string }
 
 export default function ImageEditor(
-  { target, onClose, onSaved }: {
+  { target, mayApprove, onClose, onSaved }: {
     target: ImageEditorTarget
+    /** this person may schedule the post themselves (`mayPostWithoutApproval`) */
+    mayApprove: boolean
     onClose: () => void
     onSaved: (message: string) => void
   },
@@ -124,7 +132,7 @@ export default function ImageEditor(
           />
         ) : (
           <PicturePanel
-            target={target} slide={slide} busy={busy} setBusy={setBusy}
+            target={target} slide={slide} mayApprove={mayApprove} busy={busy} setBusy={setBusy}
             setProblem={setProblem} onSaved={onSaved}
           />
         )}
@@ -135,9 +143,10 @@ export default function ImageEditor(
 
 /* ── the picture ───────────────────────────────────────────────────────── */
 
-function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
+function PicturePanel({ target, slide, mayApprove, busy, setBusy, setProblem, onSaved }: {
   target: ImageEditorTarget
   slide: Slide
+  mayApprove: boolean
   busy: boolean
   setBusy: (v: boolean) => void
   setProblem: (v: string | null) => void
@@ -365,7 +374,7 @@ function PicturePanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
     cropped,
     filtered: !filtersAreNeutral(filters),
     text: hasText(text),
-  })
+  }, { clientApproved: target.clientApproved, mayApprove })
 
   const out = natural ? exportSize(crop) : null
 

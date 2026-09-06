@@ -35,6 +35,7 @@ import {
   postTileFacts, type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
+import { isAdHocUploadVersion } from '@/app/lib/schedule-upload-core'
 import {
   accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
 } from '@/app/lib/scope-client'
@@ -77,6 +78,15 @@ export type RailMedia = {
    * a quiet marker so they know what they are posting. Never a block.
    */
   needsClientApproval: boolean
+  /**
+   * The client said yes to this media — so editing it into a different
+   * picture is something they would have to see again.
+   *
+   * False for a piece uploaded straight on the Schedule page (made silently,
+   * the client never asked) and for media a manager is posting before the
+   * client has seen it. The image editor's footer is written from this.
+   */
+  clientApproved: boolean
   /** where the piece is in the funnel — what says whether a manager may sign
    *  it off without the client from here */
   status: string
@@ -291,6 +301,8 @@ export function useSchedulePosts(
           ok: elig.ok,
           reason: elig.ok ? null : elig.reason,
           needsClientApproval: elig.ok && elig.needsClientApproval,
+          clientApproved: elig.ok && !elig.needsClientApproval
+            && !itemVersions.some(isAdHocUploadVersion),
           status: String(item.status ?? ''),
           clientSignsOff,
           versionNumber: itemVersions.reduce(

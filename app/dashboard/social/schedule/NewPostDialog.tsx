@@ -85,6 +85,9 @@ export type ComposerTarget = {
    * the moment they post it.
    */
   needsClientApproval: boolean
+  /** the client said yes to this media (see `RailMedia.clientApproved`) —
+   *  what the image editor's footer is written from */
+  clientApproved: boolean
   /** where the piece actually is in the funnel — what the window's own
    *  composition check judges, instead of assuming it is approved */
   itemStatus: string
@@ -299,6 +302,7 @@ export default function NewPostDialog({
       slides: state.slides,
       index,
       postId: state.postId,
+      clientApproved: target.clientApproved,
     })
   }
 

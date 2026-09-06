@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, Wand2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { editMediaFooterLine } from '@/app/lib/image-edit-core'
 import { Thumb } from './tiles'
 import type { ImageEditorTarget } from './ImageEditor'
 import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
@@ -27,9 +28,11 @@ import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
  * picture edited from one place and a picture edited from the other cannot
  * behave differently, and two of them can never be open at once.
  */
-export default function EditMediaLauncher({ media, posts, className, onEdit }: {
+export default function EditMediaLauncher({ media, posts, mayApprove, className, onEdit }: {
   media: RailMedia[]
   posts: SchedulePostRow[]
+  /** this person may schedule a post themselves — the footer says so */
+  mayApprove: boolean
   className?: string
   /** hand a picture to the page's editor */
   onEdit: (target: ImageEditorTarget) => void
@@ -138,6 +141,7 @@ export default function EditMediaLauncher({ media, posts, className, onEdit }: {
                           slides: t.media.slides,
                           index: t.index,
                           postId: t.postId,
+                          clientApproved: t.media.clientApproved,
                         })
                       }}
                       className="group relative flex aspect-[4/5] flex-col overflow-hidden rounded-tile border border-border bg-foreground/[0.06] text-left hover:shadow-md"
@@ -162,9 +166,7 @@ export default function EditMediaLauncher({ media, posts, className, onEdit }: {
             </div>
 
             <p className="text-[12px] text-muted-foreground">
-              Cropping keeps the client’s approval. A filter or a line of words
-              makes a new picture, so the client is asked to look at it again —
-              the button in the editor says which before you press it.
+              {editMediaFooterLine(mayApprove)}
             </p>
           </div>
         </div>

@@ -385,6 +385,8 @@ export default function SchedulePage() {
       coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
       needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
+      // a post made from an upload a moment ago was never the client's to approve
+      clientApproved: media?.clientApproved ?? false,
       itemStatus: media?.status
         ?? (fresh
           ? (fresh.needsApproval ? 'internal_review' : 'approved_for_scheduling')
@@ -626,6 +628,7 @@ export default function SchedulePage() {
               <EditMediaLauncher
                 media={data.media}
                 posts={data.posts}
+                mayApprove={data.postWithoutApproval}
                 onEdit={setEditing}
                 className="hidden md:flex"
               />
@@ -658,7 +661,12 @@ export default function SchedulePage() {
                       than not existing on a phone at all, which is where they
                       were. */}
                   <div className="flex flex-wrap gap-1.5 pb-3">
-                    <EditMediaLauncher media={data.media} posts={data.posts} onEdit={setEditing} />
+                    <EditMediaLauncher
+                      media={data.media}
+                      posts={data.posts}
+                      mayApprove={data.postWithoutApproval}
+                      onEdit={setEditing}
+                    />
                     <Link
                       href="/dashboard/social/schedule/access"
                       className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted"
@@ -884,6 +892,7 @@ export default function SchedulePage() {
       {editing && (
         <ImageEditor
           target={editing}
+          mayApprove={data.postWithoutApproval}
           onClose={() => setEditing(null)}
           onSaved={message => {
             setEditSaved(message)

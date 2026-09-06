@@ -907,8 +907,17 @@ async function writeMediaVersion(
   // back to the client. Best-effort and never fatal: the version is saved
   // either way, and a piece that stayed put is a piece somebody can still
   // send by hand — losing the upload would not be recoverable.
+  //
+  // Unless this person may post without any approval step in the way (an
+  // account manager on the client, or a super admin — the same rule as the
+  // composer's "Schedule" button). For them the client's old yes is simply
+  // no longer the point: the new version is recorded, the post is un-sent
+  // below, and whether it goes out is decided where it always was — in the
+  // schedule window, by them. Sending the piece to the client would only
+  // have parked it where the one-press path refuses to pick it up ("With
+  // the client now").
   let status = String(item.status)
-  if (status === 'approved_for_scheduling') {
+  if (status === 'approved_for_scheduling' && !(await mayPostStraightOut(user, item))) {
     try {
       // `auto: true` -- this edge is the app's own move; nobody may press it
       const moved = await performTransition(user, item as never, 'client_review', { auto: true })

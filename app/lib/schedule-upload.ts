@@ -19,7 +19,7 @@ import {
 import { headStoredObject, publicBase, MAX_DERIVED_BYTES } from './storage'
 import { ourStorageUrl, storedFileIsUsable } from './storage-core'
 import { normaliseSlides, slidesSatisfyType, type Slide } from './version-files-core'
-import { contentTypeForFiles, titleForUpload } from './schedule-upload-core'
+import { UPLOAD_ADHOC_REASON, contentTypeForFiles, titleForUpload } from './schedule-upload-core'
 
 /**
  * A POST FROM A FILE, WITH NO PIECE IN THE WAY.
@@ -79,8 +79,7 @@ export type UploadPostResult = {
   message: string
 }
 
-/** Why an item exists with no shoot behind it — recorded, as the gate asks. */
-export const UPLOAD_ADHOC_REASON = 'posted straight from an upload on the Schedule page'
+export { UPLOAD_ADHOC_REASON }
 
 /**
  * The biggest file this path will accept onto a post.
@@ -232,6 +231,9 @@ export async function createPostFromFiles(
   try {
     version = await addVersion(user, item.id, {
       file_url: slides[0].url, files: slides,
+      // the note is what tells the Schedule page this piece was never the
+      // client's to approve (`isAdHocUploadVersion`)
+      notes: UPLOAD_ADHOC_REASON,
     }) as unknown as AssetVersion
   } catch (e) {
     // an item with no version is an orphan on somebody's board; it is not

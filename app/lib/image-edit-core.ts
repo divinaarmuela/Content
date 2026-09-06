@@ -454,25 +454,73 @@ export type SavePlan = {
 }
 
 /**
+ * WHOSE APPROVAL IS RIDING ON THIS PICTURE — the two facts the sentence under
+ * the button is written from.
+ *
+ *  • `clientApproved`: the client said yes to the media this file belongs
+ *    to. False for a file uploaded straight on the Schedule page (the piece
+ *    behind it was made silently and the client was never asked), and false
+ *    for media a manager is posting before the client has seen it.
+ *  • `mayApprove`: this person may schedule the post themselves — an account
+ *    manager on the client or a super admin, on a client that does not sign
+ *    every post off. The same answer as `mayPostWithoutApproval`, so the
+ *    editor and the composer's footer can never disagree about it.
+ */
+export type ApprovalContext = {
+  clientApproved: boolean
+  mayApprove: boolean
+}
+
+/** The strict reading, for a caller that knows nothing: a client's yes is at
+ *  stake and this person cannot give it. */
+const STRICTEST: ApprovalContext = { clientApproved: true, mayApprove: false }
+
+/**
+ * THE WORDS FOR A NEW VERSION, for the person pressing the button.
+ *
+ * Three truths, one each:
+ *  1. nothing to lose — no client has approved this, so it just saves;
+ *  2. the client's yes no longer covers it, but this person may schedule it
+ *     themselves, so nothing is waiting on anybody;
+ *  3. the client's yes no longer covers it and this person cannot give a new
+ *     one — the client is asked again before the post can go out.
+ */
+export function versionSaveWords(
+  who: ApprovalContext,
+): { label: string; notice: string } {
+  if (!who.clientApproved) {
+    return {
+      label: 'Save',
+      notice: 'A filter or text makes a different picture, so it is saved as a new version.',
+    }
+  }
+  if (who.mayApprove) {
+    return {
+      label: 'Save as new version',
+      notice: 'A filter or text makes a different picture, so it is saved as a new version. The client’s earlier approval no longer covers it — you can still schedule it yourself.',
+    }
+  }
+  return {
+    label: 'Save as new version — needs client approval',
+    notice: 'A filter or a caption makes a different picture, so this is saved as a new version and the client is asked to look at it again before the post can go out.',
+  }
+}
+
+/**
  * THE RULE, and the only place it is written.
  *
  * A crop is the same picture in a tighter frame: the client's approval still
  * covers it, the file is written alongside the version it came from, and the
  * button says "Save crop". Anything that changes a pixel's colour or puts a
- * word on top is a new picture; it becomes a new version and the piece goes
- * back to the client — and the button says THAT, in the sentence a scheduler
- * would use, before anybody presses it.
+ * word on top is a new picture; it becomes a new version — and the button
+ * says what THAT means for the person pressing it (`versionSaveWords`),
+ * before anybody presses it.
  */
 export function saveDecision(edit: {
   cropped: boolean; filtered: boolean; text: boolean
-}): SavePlan {
+}, who: ApprovalContext = STRICTEST): SavePlan {
   if (edit.filtered || edit.text) {
-    return {
-      kind: 'version',
-      label: 'Save as new version — needs client approval',
-      notice: 'A filter or a caption makes a different picture, so this is saved as a new version and the client is asked to look at it again before the post can go out.',
-      disabled: false,
-    }
+    return { kind: 'version', ...versionSaveWords(who), disabled: false }
   }
   if (edit.cropped) {
     return {
@@ -488,6 +536,17 @@ export function saveDecision(edit: {
     notice: 'Nothing has changed yet.',
     disabled: true,
   }
+}
+
+/**
+ * The line under the "Edit media" chooser, before a picture is even opened.
+ * The crop half is the same for everybody; the other half says who a new
+ * picture waits on.
+ */
+export function editMediaFooterLine(mayApprove: boolean): string {
+  return mayApprove
+    ? 'Cropping keeps the client’s approval. A filter or a line of words makes a new picture — you can still schedule it yourself, and the button in the editor says which before you press it.'
+    : 'Cropping keeps the client’s approval. A filter or a line of words makes a new picture, so the client is asked to look at it again — the button in the editor says which before you press it.'
 }
 
 /* ── video ─────────────────────────────────────────────────────────────── */

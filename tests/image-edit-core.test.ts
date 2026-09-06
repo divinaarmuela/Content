@@ -4,8 +4,8 @@ import {
   applyMatrix, clampCover, clampCrop, clampTextSpot, clampTrim, clockOf,
   arrowDelta, cropRectFor, derivedName, exportSize, filterMatrix,
   filtersAreNeutral, hasText, isWholeImage, matrixIsIdentity, nudgeStep,
-  outputType, presetByKey, resizeCrop, saveDecision, textLayout, trimChanged,
-  videoSaveDecision, wholeClip,
+  editMediaFooterLine, outputType, presetByKey, resizeCrop, saveDecision, textLayout,
+  trimChanged, versionSaveWords, videoSaveDecision, wholeClip,
   type Rect,
 } from '@/app/lib/image-edit-core'
 
@@ -314,6 +314,66 @@ describe('THE RULE: which save this is, said before the button is pressed', () =
         }
       }
     }
+  })
+})
+
+describe('THE WORDS: a new version means something different to each person', () => {
+  const edit = { cropped: false, filtered: true, text: false }
+
+  it('a picture no client ever approved just saves — no approval sentence at all', () => {
+    const plan = saveDecision(edit, { clientApproved: false, mayApprove: true })
+    expect(plan.kind).toBe('version')
+    expect(plan.label).toBe('Save')
+    expect(plan.notice).not.toMatch(/approv|client/i)
+    // …and a scheduler editing the same upload gets the same answer
+    expect(saveDecision(edit, { clientApproved: false, mayApprove: false }).label).toBe('Save')
+  })
+
+  it('somebody who may schedule it themselves is told the old yes is gone, and that they can', () => {
+    const plan = saveDecision(edit, { clientApproved: true, mayApprove: true })
+    expect(plan.kind).toBe('version')
+    expect(plan.label).toBe('Save as new version')
+    expect(plan.notice).toMatch(/earlier approval no longer covers it/)
+    expect(plan.notice).toMatch(/schedule it yourself/)
+    expect(plan.notice).not.toMatch(/client is asked/)
+  })
+
+  it('somebody who cannot is told the client is asked again — today’s words, unchanged', () => {
+    const plan = saveDecision(edit, { clientApproved: true, mayApprove: false })
+    expect(plan.label).toBe('Save as new version — needs client approval')
+    expect(plan.notice).toMatch(/client is asked to look at it again before the post can go out/)
+  })
+
+  it('a caller that says nothing gets the strictest reading', () => {
+    expect(saveDecision(edit)).toEqual(saveDecision(edit, { clientApproved: true, mayApprove: false }))
+  })
+
+  it('a crop keeps the approval whoever is pressing it', () => {
+    for (const clientApproved of [false, true]) {
+      for (const mayApprove of [false, true]) {
+        const plan = saveDecision({ cropped: true, filtered: false, text: false }, { clientApproved, mayApprove })
+        expect(plan.kind).toBe('crop')
+        expect(plan.label).toBe('Save crop')
+        expect(plan.notice).toMatch(/approval stays/i)
+      }
+    }
+  })
+
+  it('the three cases never share a label', () => {
+    const labels = new Set([
+      versionSaveWords({ clientApproved: false, mayApprove: false }).label,
+      versionSaveWords({ clientApproved: true, mayApprove: true }).label,
+      versionSaveWords({ clientApproved: true, mayApprove: false }).label,
+    ])
+    expect(labels.size).toBe(3)
+  })
+
+  it('the chooser’s footer keeps "Cropping keeps the client’s approval" for everybody', () => {
+    for (const may of [false, true]) {
+      expect(editMediaFooterLine(may)).toMatch(/^Cropping keeps the client’s approval\./)
+    }
+    expect(editMediaFooterLine(true)).toMatch(/schedule it yourself/)
+    expect(editMediaFooterLine(false)).toMatch(/client is asked/)
   })
 })
 

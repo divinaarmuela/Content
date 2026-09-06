@@ -501,6 +501,34 @@ describe('addMediaVersion, called directly', () => {
     })
   })
 
+  it('a person who may post straight out keeps the piece — the version is recorded, nothing is sent back', async () => {
+    // an account manager on this client: the composer's own "Schedule" would
+    // book it in; sending the piece to the client would only park it where
+    // that path refuses to pick it up ("With the client now")
+    as(AM)
+    const out = await lib.addMediaVersion(AM as never, {
+      item_id: ITEM, files: [...APPROVED, NEW_FILE],
+    })
+    expect(out.created).toBe(true)
+    expect(out.version_number).toBe(2)
+    expect(out.status).toBe('approved_for_scheduling')
+    expect(out.message).not.toMatch(/client has to approve/)
+    expect(item().status).toBe('approved_for_scheduling')
+    expect(versions()).toHaveLength(2)
+  })
+
+  it('…but not on a client who signs every post off — there the piece goes back as before', async () => {
+    fake.restore()
+    fake = seed()
+    fake.rows('clients').forEach((c: any) => { if (c.id === CLIENT) c.client_approval_required = true })
+    as(AM)
+    const out = await lib.addMediaVersion(AM as never, {
+      item_id: ITEM, files: [...APPROVED, NEW_FILE],
+    })
+    expect(out.created).toBe(true)
+    expect(item().status).toBe('client_review')
+  })
+
   it('leaves a piece that is not approved-and-scheduled where it is', async () => {
     fake.restore()
     fake = seed({ status: 'client_review' })

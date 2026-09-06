@@ -20,6 +20,24 @@
 
 import type { Slide } from './version-files-core'
 
+/**
+ * Why an item exists with no shoot behind it — recorded, as the gate asks,
+ * AND written on the upload's own version 1 as its note. That note is how the
+ * Schedule page later tells "a picture the client said yes to" from "a
+ * picture somebody dropped on the calendar": the piece behind an upload was
+ * made silently and the client was never asked about it, so there is no
+ * approval to lose when it is edited.
+ */
+export const UPLOAD_ADHOC_REASON = 'posted straight from an upload on the Schedule page'
+
+/** Was this version the upload a post was made from on the Schedule page? */
+export function isAdHocUploadVersion(
+  version: { version_number?: unknown; notes?: unknown } | null | undefined,
+): boolean {
+  return Number(version?.version_number ?? 0) === 1
+    && String(version?.notes ?? '') === UPLOAD_ADHOC_REASON
+}
+
 /* ── the sources New post opens on ──────────────────────────────────────── */
 
 export type NewPostSourceKey = 'upload' | 'drive' | 'approved'
