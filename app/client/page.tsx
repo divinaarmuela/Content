@@ -3,20 +3,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
-import { ExternalLink, CheckCircle2, MessageSquare } from 'lucide-react'
-import { CommitmentCards, PortalHelpLine, PortalSection } from '../components/portal/PortalSections'
+import { CheckCircle2, MessageSquare } from 'lucide-react'
+import PortalBoard from '../components/portal/PortalBoard'
+import { CommitmentCards, PortalHelpLine } from '../components/portal/PortalSections'
 import SlideCarousel from '../components/media/SlideCarousel'
 import { slidesFor } from '../lib/slide-carousel-core'
-import { publishedLines } from '../lib/post-analytics-core'
-import ShootSection from '../components/portal/ShootSection'
 import PortalTabbedView from '../components/portal/PortalTabbedView'
-import { APPROVED_TOAST, approveConsequence, changesSentToast, contentTypeLabel, scheduledWhen } from '../lib/portal-words'
+import { changesSentToast, contentTypeLabel, scheduledWhen } from '../lib/portal-words'
 import type { PortalData, PortalItem } from '../lib/portal-data'
 
 /** The portal components are themed by --p-* variables; inside the dashboard
@@ -31,11 +30,14 @@ const DASH_TOKENS: React.CSSProperties = {
   ['--p-accent-ink' as string]: 'hsl(var(--primary-foreground))',
 }
 
+/**
+ * The signed-in client portal. The same board the share link shows — one
+ * card per piece and per shoot, one tap to approve — acting through the item
+ * API the viewer is already signed in to.
+ */
 export default function ClientPortalPage() {
   const [data, setData] = useState<(PortalData & { viewer_role: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [changing, setChanging] = useState<PortalItem | null>(null)
-  const [changeText, setChangeText] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   /** the FINAL POST being sent back for changes — a different ask from the
    *  piece itself, so it gets its own dialog state */
@@ -52,52 +54,6 @@ export default function ClientPortalPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
-
-  const approve = async (item: PortalItem) => {
-    setBusy(item.id)
-    try {
-      const res = await fetch(`/api/production/items/${item.id}/transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: 'approved_for_scheduling' }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Approval failed')
-      toast.success(APPROVED_TOAST)
-      load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Approval failed')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const requestChanges = async () => {
-    if (!changing || !changeText.trim()) return
-    setBusy(changing.id)
-    try {
-      // comment first so the AM gets the context, then the status change
-      const c = await fetch(`/api/production/items/${changing.id}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: changeText.trim() }),
-      })
-      if (!c.ok) throw new Error((await c.json()).error ?? 'Could not send your feedback')
-      const t = await fetch(`/api/production/items/${changing.id}/transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: 'client_changes_requested' }),
-      })
-      if (!t.ok) throw new Error((await t.json()).error ?? 'Could not submit the request')
-      toast.success(changesSentToast(data?.am_name))
-      setChanging(null)
-      setChangeText('')
-      load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Something went wrong')
-    } finally {
-      setBusy(null)
-    }
-  }
 
   /** the client's yes (or note) on the FINAL POST — caption and timing */
   const actOnPost = async (item: PortalItem, action: 'approve' | 'request_changes', note?: string) => {
@@ -125,7 +81,7 @@ export default function ClientPortalPage() {
   if (error) {
     return (
       <Card className="border-dashed shadow-none">
-        <CardContent className="py-14 text-center text-sm text-zinc-500">{error}</CardContent>
+        <CardContent className="py-14 text-center text-sm text-muted-foreground">{error}</CardContent>
       </Card>
     )
   }
@@ -140,203 +96,75 @@ export default function ClientPortalPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">{data.client.name}</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Everything we&apos;re making for you, in one place — no chasing required.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-8" style={DASH_TOKENS}>
       {/* an intake tab appears only when a form is toggled on; with none, this
-          renders the overview alone and the portal is unchanged */}
+          renders the board alone */}
       <PortalTabbedView intake={data.intake} themeStyle={DASH_TOKENS}>
-      <div className="flex flex-col gap-4">
-      <CommitmentCards data={data} />
-
-      {/* Needs review — the interactive heart of the portal */}
-      <Card className={data.needs_review.length > 0 ? 'border-violet-200 dark:border-violet-900' : ''}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            Needs your review
-            {data.needs_review.length > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 font-mono text-[10px] text-white">
-                {data.needs_review.length}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 pt-0">
-          {data.needs_review.length === 0 && (
-            <p className="text-sm text-zinc-400 dark:text-zinc-500">Nothing waiting on you right now.</p>
-          )}
-          {data.needs_review.map(item => (
-            <div key={item.id} className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-              {/* the same viewer the share-link portal uses: a carousel is
-                  approved whole, so the whole thing has to be reachable from
-                  the button that approves it */}
-              <SlideCarousel slides={slidesFor(item)} aspect="natural" naturalMax="max-h-96"
-                mode="full" chromeClassName="px-3"
-                label={item.title} />
-              <p className="px-3 pt-3 text-xs text-zinc-500 dark:text-zinc-400">{approveConsequence(data.am_name)}</p>
-              {/* on a phone the title and three `size="sm"` buttons fought over
-                  one 320px row; the buttons get their own full-width row and a
-                  44px hit area, and only line up beside the title from sm up */}
-              <div className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{item.title}</p>
-                  {contentTypeLabel(item.content_type) && (
-                    <p className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">{contentTypeLabel(item.content_type)}</p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {item.drive_url && (
-                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" asChild>
-                      <a href={item.drive_url} target="_blank" rel="noreferrer noopener">
-                        Open the file <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id}
-                    onClick={() => { setChanging(item); setChangeText('') }}>
-                    <MessageSquare className="h-3.5 w-3.5" /> Request changes
-                  </Button>
-                  <Button size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id} onClick={() => approve(item)}>
-                    <CheckCircle2 className="h-3.5 w-3.5" /> {busy === item.id ? 'Working…' : 'Approve'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* the FINAL POST — the caption and the timing — waiting on the client.
-          A different decision from approving the piece above, and the card
-          says so in as many words. Drawn only when something is waiting. */}
-      {data.post_approvals.length > 0 && (
-        <Card className="border-violet-200 dark:border-violet-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              Ready to post — needs your OK
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 font-mono text-[10px] text-white">
-                {data.post_approvals.length}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 pt-0">
-            {data.post_approvals.map(item => (
-              <div key={item.id} className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-                <SlideCarousel slides={slidesFor(item)} aspect="natural" naturalMax="max-h-96"
-                  mode="full" chromeClassName="px-3" label={item.title} />
-                <div className="flex flex-col gap-3 p-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{item.title}</p>
-                    <p className="font-mono text-[10px] uppercase text-zinc-400 dark:text-zinc-500">
-                      {[contentTypeLabel(item.content_type), 'Final post'].filter(Boolean).join(' · ')}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-400">The caption, as it will post</p>
-                    {item.caption?.trim()
-                      ? <p className="whitespace-pre-wrap text-sm">{item.caption}</p>
-                      : <p className="text-sm text-zinc-400">No caption — it would go out with just the title.</p>}
-                  </div>
-                  {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
-                    <p key={s.platform} className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
-                      {s.platform} · {scheduledWhen(s.scheduled_at, data.client.timezone)}
-                    </p>
-                  ))}
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    You approved this piece already — this is the caption and timing, exactly as it will post.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id}
-                      onClick={() => { setPostChanging(item); setPostChangeText('') }}>
-                      <MessageSquare className="h-3.5 w-3.5" /> Request changes
-                    </Button>
-                    <Button size="sm" className="h-11 flex-1 sm:h-8 sm:flex-none" disabled={busy === item.id}
-                      onClick={() => actOnPost(item, 'approve')}>
-                      <CheckCircle2 className="h-3.5 w-3.5" /> {busy === item.id ? 'Working…' : 'Approve this post'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* the shoot plans the team shared — the "your plan is ready" email
-          lands on THIS page, so the plan and its two moves have to be here */}
-      {/* the portal components are themed by --p-* variables; inside the
-          dashboard shell they take the dashboard's own tokens so the section
-          follows light/dark with everything else */}
-      <div style={{
-        ['--p-bg' as string]: 'hsl(var(--background))',
-        ['--p-ink' as string]: 'hsl(var(--foreground))',
-        ['--p-surface' as string]: 'hsl(var(--card))',
-        ['--p-border' as string]: 'hsl(var(--border))',
-        ['--p-accent' as string]: 'hsl(var(--primary))',
-        ['--p-accent-ink' as string]: 'hsl(var(--primary-foreground))',
-      }}>
-        <ShootSection shoots={data.shoots} clientName={data.client.name} amName={data.am_name}
-          loggedIn onActed={load} />
-      </div>
-
-      {data.changes_requested.length > 0 && (
-        <PortalSection title="Your changes are being made" items={data.changes_requested} empty="" tz={data.client.timezone} />
-      )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PortalSection title="In production" items={data.in_production} empty="Nothing in production right now." tz={data.client.timezone} />
-        <PortalSection title="Approved & scheduled" items={[...data.approved, ...data.scheduled]} empty="Nothing approved yet." tz={data.client.timezone} />
-      </div>
-      {/* the portal cards are themed by --p-* variables; inside the dashboard
-          shell they take the dashboard's own tokens */}
-      <PortalSection title="Published" items={data.published}
-        lines={publishedLines(data)}
-        empty="Published posts will appear here with live links." tz={data.client.timezone} />
-
-      {/* who to reach, always visible — a portal must never dead-end */}
-      <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <PortalHelpLine amName={data.am_name} className="text-zinc-500 opacity-100 dark:text-zinc-400" />
-      </div>
-      </div>
-      </PortalTabbedView>
-
-      {/* What should change about this PIECE?
-       *
-       *  This dialog did not exist. `setChanging(item)` was wired to the
-       *  button, `requestChanges` was written and correct, and nothing on the
-       *  page ever read `changing` — so a logged-in client pressed Request
-       *  changes and the page did nothing at all, every time. The anonymous
-       *  share-link portal had its own working version, which is why it was
-       *  never noticed. */}
-      <Dialog open={changing !== null} onOpenChange={o => !o && setChanging(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>What should change?</DialogTitle>
-          </DialogHeader>
-          <Textarea
-            rows={4}
-            value={changeText}
-            autoFocus
-            onChange={e => setChangeText(e.target.value)}
-            placeholder="e.g. “Tighter intro, and use the daytime shots instead.”"
+        <div className="flex flex-col gap-8">
+          <PortalBoard
+            cards={data.cards}
+            clientName={data.client.name}
+            amName={data.am_name}
+            brand={data.brand}
+            logoUrl={data.brand_logo_url}
+            surface={{ loggedIn: true, onChanged: load }}
           />
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            This goes straight to your account manager, and you will hear back
-            when the new version is ready.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" className="min-h-11" onClick={() => setChanging(null)} disabled={busy !== null}>Cancel</Button>
-            <Button className="min-h-11" disabled={busy !== null || !changeText.trim()}
-              onClick={() => void requestChanges()}>
-              {busy !== null ? 'Sending…' : 'Send'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+          {/* the FINAL POST — the caption and the timing — waiting on the
+              client. A different decision from approving the piece, and the
+              card says so in as many words. Drawn only when something is
+              waiting. */}
+          {data.post_approvals.length > 0 && (
+            <section className="flex flex-col gap-3">
+              <h2 className="text-[17px] font-semibold">Ready to post — needs your OK</h2>
+              {data.post_approvals.map(item => (
+                <div key={item.id} className="overflow-hidden rounded-inner border border-border bg-surface">
+                  <SlideCarousel slides={slidesFor(item)} aspect="natural" naturalMax="max-h-96"
+                    mode="full" chromeClassName="px-3" label={item.title} />
+                  <div className="flex flex-col gap-3 p-3.5">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold">{item.title}</p>
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
+                        {[contentTypeLabel(item.content_type)?.replace('Graphic', 'Image'), 'Final post'].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <div className="rounded-tile bg-foreground/[0.04] px-3 py-2.5">
+                      <p className="mb-1 text-[12px] text-muted-foreground">The caption, as it will post</p>
+                      {item.caption?.trim()
+                        ? <p className="whitespace-pre-wrap text-[14px]">{item.caption}</p>
+                        : <p className="text-[14px] text-muted-foreground">No caption — it would go out with just the title.</p>}
+                    </div>
+                    {item.schedule.filter(s => s.scheduled_at && !s.live_url).map(s => (
+                      <p key={s.platform} className="text-[13px] text-muted-foreground">
+                        {s.platform} · {scheduledWhen(s.scheduled_at, data.client.timezone)}
+                      </p>
+                    ))}
+                    <p className="text-[13px] text-muted-foreground">
+                      You approved this piece already — this is the caption and timing, exactly as it will post.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button className="min-h-11" disabled={busy === item.id} onClick={() => actOnPost(item, 'approve')}>
+                        <CheckCircle2 className="h-4 w-4" /> {busy === item.id ? 'Working…' : 'Approve this post'}
+                      </Button>
+                      <Button variant="ghost" className="min-h-11" disabled={busy === item.id}
+                        onClick={() => { setPostChanging(item); setPostChangeText('') }}>
+                        <MessageSquare className="h-4 w-4" /> Ask for a change
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <CommitmentCards data={data} />
+
+          {/* who to reach, always visible — a portal must never dead-end */}
+          <div className="border-t border-border pt-4">
+            <PortalHelpLine amName={data.am_name} className="text-muted-foreground opacity-100" />
+          </div>
+        </div>
+      </PortalTabbedView>
 
       {/* what should change about the POST? — the note rides the request */}
       <Dialog open={postChanging !== null} onOpenChange={o => !o && setPostChanging(null)}>
