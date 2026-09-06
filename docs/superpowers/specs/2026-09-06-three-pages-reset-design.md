@@ -111,6 +111,22 @@ adding a button" (reference: a Milanote board with nested pages).
   column or in the portal.
 
 
+## The look
+
+Owner: "make sure the board are using the current renewed layout", "yea client portal must
+be nice".
+
+- Every one of these screens is built from `app/dashboard/ui/*` — the Shell, PageTitle,
+  cards, chips and tone map from the September restyle. No new visual language, no
+  component invented beside the ones that exist.
+- The board's cards are the restyle's work cards: the tinted client colour, the status
+  chip, one line of text, 44px controls. A column is a lane, not a boxed panel.
+- **The client portal gets the same care as the dashboard, in the client's own brand.**
+  It carries the client's colour and logo, one card per piece, the link, and the tap to
+  approve. It should look like something the agency made for them, not an internal tool
+  with the chrome removed. Same light and dark handling as the dashboard.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
