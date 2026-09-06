@@ -235,6 +235,24 @@ for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_
 //     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
+  //   content_items.link_url / link_kind — A CARD CARRIES A LINK (the three
+  //     pages reset, 6 Sep 2026). Where the work lives: a Google Drive or
+  //     Dropbox URL somebody pasted, labelled by host ('drive' | 'dropbox' |
+  //     'other', app/lib/card-link-core.ts). Replacing it bumps
+  //     current_version_number and writes a workflow_activity line, so the
+  //     approval history survives without sub-cards. The app never touches
+  //     Drive because of this column — a pasted link is a link (trap 13).
+  //   content_items.change_note / change_note_by / change_note_at — what the
+  //     manager said needs changing, the last time the card was sent back.
+  //     Editors and schedulers never see the client's own thread; this is
+  //     the manager's words, on the card, for the person assigned to it.
+  content_items: [
+    ['link_url', col('string', true)],
+    ['link_kind', col('string', true)],
+    ['change_note', col('string', true)],
+    ['change_note_by', col('string', true)],
+    ['change_note_at', col('string', true)],
+  ],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],
     //   clients.client_approval_required — does THIS CLIENT sign every post

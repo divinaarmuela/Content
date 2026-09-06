@@ -23,6 +23,26 @@ export type VisibilityComment = {
 const FULL_ACCESS: Role[] = ['account_manager', 'super_admin']
 
 /**
+ * THE CLIENT IS TALKING TO THEIR MANAGER, NOT TO THE ROOM.
+ *
+ * The owner's rule: "make sure AM can see the client comments only and then
+ * if needs changes can send back to the person assigned". A client's words
+ * on a card reach the account manager (and a super admin); an editor or a
+ * scheduler never reads them — what they get is the manager's own words,
+ * sent back with the card. A client reads their own thread, of course.
+ */
+export function canReadClientComments(role: Role | null | undefined): boolean {
+  return role === 'account_manager' || role === 'super_admin'
+}
+
+/** The client-visible rows of a thread, for someone allowed to read them —
+ *  and nothing at all for anyone else. */
+export function clientCommentsFor<T extends { visibility: string }>(role: Role | null | undefined, comments: readonly T[]): T[] {
+  if (!canReadClientComments(role)) return []
+  return comments.filter(c => c.visibility === 'client')
+}
+
+/**
  * Filter a thread for one viewer.
  *
  * - client: only comments marked client-visible
