@@ -106,10 +106,15 @@ describe('the link on a card', () => {
     expect(linkFor('https://www.dropbox.com/scl/fi/abc/reel.mp4?dl=0')?.label).toBe('Open in Dropbox')
   })
 
-  it('calls anything else the file', () => {
+  it('calls anything else the link', () => {
     expect(linkFor('https://media.mdmmarketing.com.au/reel.mp4')).toEqual({
-      url: 'https://media.mdmmarketing.com.au/reel.mp4', label: 'Open the file', provider: 'other',
+      url: 'https://media.mdmmarketing.com.au/reel.mp4', label: 'Open the link', provider: 'other',
     })
+  })
+
+  it('trusts the kind the team stored with the link, and ignores a bad one', () => {
+    expect(linkFor('https://files.example.com/x', 'dropbox')?.label).toBe('Open in Dropbox')
+    expect(linkFor('https://drive.google.com/file/d/abc/view', 'nonsense')?.provider).toBe('drive')
   })
 
   it('offers nothing for an empty, broken or plain-http link', () => {

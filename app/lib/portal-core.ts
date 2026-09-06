@@ -13,6 +13,7 @@
  */
 
 import { ITEM_STATUSES, type ItemStatus } from './workflow-core'
+import { LINK_LABELS, linkKindOf, type LinkKind } from './card-link-core'
 
 // ── the five columns, in the client's words ─────────────────────────────────
 
@@ -137,26 +138,21 @@ export function cardLine(
 
 // ── the link on a card ──────────────────────────────────────────────────────
 
-export type PortalLink = { url: string; label: string; provider: 'drive' | 'dropbox' | 'other' }
+export type PortalLink = { url: string; label: string; provider: LinkKind }
 
 /**
- * Where the work lives. A pasted Google Drive or Dropbox link is labelled as
- * such; anything else is "the file". A link is a link — the portal never
- * writes to Drive (CLAUDE.md trap 13). Only https links are offered.
+ * Where the work lives. The team's pasted link (`content_items.link_url`,
+ * with its stored `link_kind`) is the card's link; the kind is detected by
+ * `linkKindOf` in card-link-core, the same rule the route that stores it
+ * uses, so the portal and the board never disagree about what a link is.
+ * A link is a link — the portal never writes to Drive (CLAUDE.md trap 13).
+ * Only https links are offered; a stored kind wins over re-detection.
  */
-export function linkFor(url: string | null | undefined): PortalLink | null {
-  const raw = (url ?? '').trim()
-  if (!raw) return null
-  let u: URL
-  try { u = new URL(raw) } catch { return null }
-  if (u.protocol !== 'https:') return null
-  const host = u.hostname.toLowerCase().replace(/^www\./, '')
-  const is = (h: string) => host === h || host.endsWith(`.${h}`)
-  if (is('drive.google.com') || is('docs.google.com')) {
-    return { url: raw, label: 'Open in Google Drive', provider: 'drive' }
-  }
-  if (is('dropbox.com')) return { url: raw, label: 'Open in Dropbox', provider: 'dropbox' }
-  return { url: raw, label: 'Open the file', provider: 'other' }
+export function linkFor(url: string | null | undefined, storedKind?: string | null): PortalLink | null {
+  const check = linkKindOf(url)
+  if (!check.ok) return null
+  const kind: LinkKind = storedKind && storedKind in LINK_LABELS ? storedKind as LinkKind : check.kind
+  return { url: check.url, label: `Open in ${LINK_LABELS[kind]}`.replace('Open in Link', 'Open the link'), provider: kind }
 }
 
 // ── the card's colour ───────────────────────────────────────────────────────

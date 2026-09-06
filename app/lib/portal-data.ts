@@ -517,9 +517,13 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     const booked = p.schedule.find(s => s.scheduled_at && !s.live_url)
     const live = p.schedule.find(s => s.live_url)?.live_url ?? p.metrics?.post_url ?? null
     const postedWhen = booked ? scheduledWhen(booked.scheduled_at, tz) : null
-    // the link the team pasted on the card wins; the latest version's Drive
-    // link is the older way of saying the same thing
-    const url = facing ? ((i as { drive_url?: string | null }).drive_url || p.drive_url || null) : null
+    // the link the team pasted on the card (`link_url`, labelled by its
+    // stored `link_kind`) wins; the item's old Drive mirror field and the
+    // latest version's Drive link are fallbacks for cards made before it
+    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null }
+    const pasted = facing ? row.link_url || null : null
+    const url = facing ? (pasted || row.drive_url || p.drive_url || null) : null
+    const kind = pasted ? row.link_kind ?? null : null
     return {
       kind: 'work',
       id: p.id,
@@ -528,7 +532,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       column: portalColumnFor(p.status),
       tone: portalCardTone(p.status),
       line: cardLine(p.status, { postedWhen, progress: p.progress_line }),
-      link: linkFor(url),
+      link: linkFor(url, kind),
       pdf: false,
       preview_url: p.preview_url,
       slides: p.slides,

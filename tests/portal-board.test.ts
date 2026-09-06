@@ -147,6 +147,30 @@ describe('a piece on the board', () => {
     expect(card.line).toMatch(/approve or ask for a change/)
   })
 
+  it('shows the link the team pasted (link_url + link_kind), over the old Drive mirror field', async () => {
+    const d = await load({
+      shootStatus: 'brief', shared: false, briefStatus: 'internal_review',
+      items: [piece('client_review', {
+        link_url: 'https://www.dropbox.com/scl/fi/abc/reel.mp4?dl=0', link_kind: 'dropbox',
+        drive_url: 'https://drive.google.com/file/d/old/view',
+      })],
+    })
+    const card = d.cards.find(c => c.kind === 'work')!
+    expect(card.link).toEqual({
+      url: 'https://www.dropbox.com/scl/fi/abc/reel.mp4?dl=0', label: 'Open in Dropbox', provider: 'dropbox',
+    })
+  })
+
+  it('a card from before pasted links still shows its old Drive link', async () => {
+    const d = await load({
+      shootStatus: 'brief', shared: false, briefStatus: 'internal_review',
+      items: [piece('client_review', { link_url: null, link_kind: null })],
+    })
+    expect(d.cards.find(c => c.kind === 'work')!.link).toEqual({
+      url: 'https://drive.google.com/file/d/abc/view', label: 'Open in Google Drive', provider: 'drive',
+    })
+  })
+
   it('still being made: no link, no actions, no thread — and it is still on the board', async () => {
     const d = await load({ shootStatus: 'brief', shared: false, briefStatus: 'internal_review', items: [piece('internal_review')] })
     const card = d.cards.find(c => c.kind === 'work')!
