@@ -127,6 +127,37 @@ be nice".
   with the chrome removed. Same light and dark handling as the dashboard.
 
 
+## Approving happens on the card, on the page you are already on
+
+Owner: "production, editor and schedular approve pages".
+
+Each of the three pages carries the approval that belongs to its stage, on the card, with
+no second screen and no navigation:
+
+- **Editor**: hand a card on for checking when it is ready.
+- **Production** (account manager): approve a card's work, send it to the client, or send it
+  back for changes with what needs changing.
+- **Scheduler**: take a Ready-to-post card and book it in.
+
+One control per card, labelled with what it does, using the transitions that already exist.
+A move the rules refuse says why in plain words.
+
+## Each role's Overview shows their own work
+
+Owner: "they can have their overview page shown nicely whats there and all".
+
+The Overview page is the first thing each person sees, and it answers "what is on me today"
+in one screen, in the restyle's cards, with no jargon:
+
+- **Editor**: what is assigned to them, what is due, what came back for changes.
+- **Scheduler**: what is ready to post, what goes out today, what is waiting on an account.
+- **Account manager**: their clients, what needs their decision now, what is with clients.
+- **Super admin**: the agency at a glance, plus their Leads.
+
+Every tile is a link into the card or column it counts. Counts are never shown without a
+way to act on them.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
