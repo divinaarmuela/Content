@@ -100,16 +100,32 @@ back to the person assigned, send them what needs changing".
 ## The board is a Milanote-style canvas
 
 Owner: "milanote board feature needs to be exactly like milanote, can create subpages by
-adding a button" (reference: a Milanote board with nested pages).
+adding a button", and a screenshot of their real Milanote board ("Golf Day") to work from.
 
-- The board is a **free canvas**, not only columns: cards can be placed, moved and grouped,
-  with the five status columns as the default arrangement.
-- A card can open a **sub-page**: a board of its own, made with one button, for the notes,
-  references and links that belong to that piece of work. This is the ONE place nesting is
-  wanted — a workspace behind a card, not sub-cards on the board.
-- Sub-pages hold notes, links and images. They are not deliverables and never appear in a
-  column or in the portal.
+What that board actually contains, and therefore what we build:
 
+- **A free canvas.** Items sit where they are put, at any position, not only in columns.
+  Pan and zoom; position is saved per item.
+- **Item types**, each a card on the canvas:
+  - **Note** — rich text: a heading, bold, bullet lists, and a highlight (their board uses a
+    blue highlight to mark a decision, e.g. a location name). This is the workhorse.
+  - **Image** — dropped or pasted, shown at a chosen size.
+  - **Link** — a Drive or Dropbox URL, shown with its label.
+  - **Board** — a NESTED board, shown as a coloured icon tile with its name and a count
+    underneath ("Models · 39 cards", "Concepts · 3 boards"). One button on the canvas makes
+    one, and opening it is the sub-page. Boards nest to any depth.
+  - **Heading / banner** — a full-width coloured title strip across the canvas
+    ("SHOOT CONCEPTS"), for dividing a board into areas.
+  - **Column** — a titled stack items can be dropped into ("Shoot Day 1 (Day time)"), which
+    is how the five status columns are drawn on the work board: a column is just an
+    arrangement of the same canvas.
+- **A card shows a count of what is inside it** when it holds other items.
+- **Comment on any single item**, exactly as their board does — the screenshot shows a
+  "Comment only" control pinned to an image. A comment belongs to that item, carries who
+  left it and when, and never becomes one long thread for the whole board.
+- **Breadcrumbs** back up the nesting, since boards go several deep.
+
+Built with the restyle's cards, chips and tone map — the canvas is our look, not Milanote's.
 
 ## The look
 
