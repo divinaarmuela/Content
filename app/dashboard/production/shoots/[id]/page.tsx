@@ -542,6 +542,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
 
+          {/* Plan lines are the OLD way of listing a shoot's work; a new
+              shoot has none, and its work is added as ordinary cards pointed
+              at the shoot (New card → Which shoot?). The section only shows on
+              a shoot that still carries lines, so those keep their cards. */}
+          {planned.length > 0 && (
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
               <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">What is coming out of this shoot</p>
@@ -575,9 +580,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </div>
                 )
               })}
-              {planned.length === 0 && (
-                <p className="text-secondary-13 text-muted-foreground">Nothing listed yet.</p>
-              )}
               {canEdit && (
                 <div className="flex items-center gap-1.5">
                   <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{planned.length + 1}</span>
@@ -597,6 +599,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               </p>
             </CardContent>
           </Card>
+          )}
 
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">

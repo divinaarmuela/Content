@@ -15,11 +15,7 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus } from 'lucide-react'
 import { KIND_COLORS } from '../../lib/work-kinds-core'
-import {
-  moveLine, newLineId, planSummary, plannedTarget, type PlanLine,
-} from '../../lib/deliverable-group-core'
 import { DRAFTING_LANE } from '../../lib/section-names'
 import { useRole } from '../useRole'
 import { useIsMobile } from '../useIsMobile'
@@ -40,8 +36,6 @@ export type Batch = {
   content_items?: { count: number }[]
 }
 
-const CONTENT_TYPES = ['reel', 'carousel', 'story', 'static', 'video', 'other']
-
 /** Job titles as people say them. */
 const ROLE_WORD: Record<string, string> = {
   super_admin: 'super admin',
@@ -50,14 +44,12 @@ const ROLE_WORD: Record<string, string> = {
   editor: 'editor',
 }
 
+// A card is ONE deliverable: one title, one kind, one "what needs doing".
+// No quantities, no format rows, no plan lines — work that comes out of a
+// shoot is added later as ordinary cards pointed at that shoot.
 const BLANK = {
-  client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '', count: 1,
+  client_id: '', batch_id: '', title: '', content_type: 'reel', priority: 'normal', due_date: '',
   owner_id: '', work_kind_id: '', raw_assets_url: '', brief: '', brief_url: '',
-  // a shoot plan lists what is coming out of the shoot, one plain line per
-  // thing — "Hero reel", "Menu carousel". Each line becomes its own card when
-  // the shoot is booked. No type, no quantity: a card is one deliverable.
-  deliverables: [] as PlanLine[],
-  formats: [{ type: 'reel', qty: 1 }] as { type: string; qty: number }[],
   raw_assets: [] as { url: string; name: string }[],
 }
 
@@ -94,7 +86,7 @@ export default function NewItemDialog({
   const assetFileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   // a phone gets the form in two screens — the details, then the files —
-  // because thirteen fields and a drop zone on one 390px screen is a scroll
+  // because a dozen fields and a drop zone on one 390px screen is a scroll
   // with the Create button somewhere past the bottom of it
   const mobile = useIsMobile()
   const [step, setStep] = useState<'details' | 'files'>('details')
@@ -318,11 +310,18 @@ export default function NewItemDialog({
   const defaultKind = (presetKind === 'task' ? null : kinds.find(k => k.slug === 'edit')) ?? selectableKinds[0] ?? null
 
   // the chosen work kind reshapes the dialog: a shoot BRIEF is planned, not
-  // produced — no footage fields, its own gate, deliverables instead of type
+  // produced — no footage fields, its own gate, a plan link instead of footage
   const selectedKind = kinds.find(k => k.id === draft.work_kind_id) ?? defaultKind
-  const isBriefKind = selectedKind?.slug === 'shoot_brief'
+  // From the PRESET first, not from the selected kind: the kinds arrive by
+  // fetch and the effect above sets `work_kind_id` a tick later, so a shoot
+  // plan derived only from `selectedKind` painted the regular card form for
+  // a frame before the plan fields appeared. The preset is known on the very
+  // first render, and the kind chooser is hidden under a shoot_brief preset,
+  // so it cannot disagree with it.
+  const isBriefKind = presetKind === 'shoot_brief' || selectedKind?.slug === 'shoot_brief'
   const isTaskKind = presetKind === 'task'
-  const hidesMedia = selectedKind ? !selectedKind.uses_media : false
+  // a plan and a task never have footage; an asset follows its kind
+  const hidesMedia = isBriefKind || isTaskKind || (selectedKind ? !selectedKind.uses_media : false)
 
   /** an asset with no shoot behind it needs a reason, and the reason is logged.
    *  Editors too, not just managers: footage often arrives with no shoot — the
@@ -341,132 +340,36 @@ export default function NewItemDialog({
   // nobody is blocked on "no shoot ready" any more — the no-shoot path is
   // open to everyone who makes work, with a reason
 
-  /** the plan's lines with something written on them — blank rows are not
-   *  things, so they are neither sent nor counted */
-  const planLinesDraft = draft.deliverables.filter(l => l.title.trim())
-
   const createItems = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
-    if (isBriefKind && planLinesDraft.length === 0) {
-      return toast.error('Say at least one thing that is coming out of this shoot.')
-    }
     if (needsAdhocReason && !adhocReason.trim()) {
       return toast.error('Say where the footage is from — it goes in the log.')
     }
     setNewBusy(true)
     try {
-      // a regular item card can hold a MIX of formats (2 reels + 2 carousels +
-      // 2 videos); each row's type repeated qty times is the pieces in order.
-      // Tasks and briefs keep their single count.
-      const isRegular = !isBriefKind && !isTaskKind
-      const formatSeq: string[] = isRegular
-        ? draft.formats.flatMap(f => Array.from({ length: Math.max(1, Math.floor(f.qty) || 1) }, () => f.type))
-        : []
-      // a quantity applies to assets AND tasks — "5 write-ups" is one promise
-      let count = isBriefKind ? 1
-        : isRegular ? Math.min(Math.max(1, formatSeq.length), 30)
-        : Math.min(Math.max(1, draft.count), 30)
-      const typeAt = (i: number) => isTaskKind ? 'other' : isRegular ? (formatSeq[i] ?? formatSeq[0] ?? 'reel') : draft.content_type
-
-      // ── a QUANTITY is a promise, not N cards ──
-      // "5 feeds + 2 stories" makes ONE group with target 7: the board shows
-      // one card ("… 0 of 7") that fills as pieces are added. If the groups
-      // table is not migrated yet the server says so, and we fall back to
-      // creating the numbered items exactly as before — never a dead end.
-      //
-      // This used to skip the group whenever files or a folder link were
-      // attached, on the reasoning that the work already existed rather than
-      // being promised. But whether the footage is in hand has nothing to do
-      // with whether the seven pieces are one job: attaching a folder to
-      // "5 feeds + 2 stories" scattered SEVEN cards across the board for a
-      // single promise, which is the opposite of what the grouping is for.
-      // So the group is made either way, and the pieces are filed under it.
-      // A TASK is the exception, and stays one: "5 write-ups" with a reference
-      // doc attached is one task holding that doc, which is what the hint under
-      // the count already promises. Grouping it would have created a card of 5
-      // holding exactly one piece, because the task collapse to count = 1 runs
-      // after the group is made.
-      const workAttached = draft.raw_assets.length > 0 || Boolean(draft.raw_assets_url.trim())
-      let groupId: string | null = null
-      if (count > 1 && !(isTaskKind && workAttached)) {
-        const res = await fetch('/api/production/groups', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client_id: draft.client_id,
-            batch_id: isTaskKind ? null : draft.batch_id || null,
-            content_type: isTaskKind ? 'other' : isRegular ? (draft.formats[0]?.type ?? 'reel') : draft.content_type,
-            title: draft.title.trim(),
-            target: count,
-            // the mix of formats, so the card fills per type. Single-format
-            // regular items send one row; the server tolerates the column
-            // being absent and falls back to a single-format group.
-            ...(isRegular ? { planned: draft.formats } : {}),
-            // a task group remembers its kind, so every piece added later is
-            // a task too — never an asset that would reach the Scheduler
-            ...(isTaskKind ? { work_kind_id: draft.work_kind_id || defaultKind?.id || undefined } : {}),
-            adhoc_reason: adhocReason.trim() || undefined,
-          }),
-        })
-        const json = await res.json().catch(() => null)
-        if (res.ok) {
-          groupId = typeof json?.id === 'string' ? json.id : null
-          // nothing in hand yet: the card IS the deliverable, and the pieces
-          // arrive later from the board. With work attached we carry on and
-          // create them now — under this group, so they fold into one card.
-          if (!workAttached) {
-            toastOpen(
-              `"${draft.title.trim()}" created — one card, 0 of ${count}. Add pieces from the ${isTaskKind ? 'Production' : 'Editor'} board.`,
-              isTaskKind ? '/dashboard/production' : '/dashboard/editor', router.push,
-            )
-            onOpenChange(false)
-            setDraft({ ...BLANK })
-            setAdhocReason('')
-            setAssetWarnings([])
-            setClientApproval(true)
-            setStep('details')
-            onCreated()
-            return
-          }
-        } else {
-          // 503 = the table is not migrated; 404/405 = the endpoint is not
-          // deployed yet. Either way the feature is off — fall back: a task
-          // becomes ONE task, assets become the numbered items as before.
-          if (![503, 404, 405].includes(res.status)) {
-            throw new Error(json?.error ?? 'Could not create the group')
-          }
-          if (isTaskKind) count = 1
-        }
-      }
-
-      // a task that did not become a group is always ONE task — attached
-      // files belong to it, and five copies of a file help nobody
-      if (isTaskKind) count = 1
-      const payload = Array.from({ length: count }, (_, i) => ({
+      // ONE card, one request. The old mixed-format / quantity path made a
+      // group and N numbered items; a card is one thing now.
+      const payload = [{
         client_id: draft.client_id,
         batch_id: draft.batch_id || null,
-        title: count === 1 ? draft.title.trim() : `${draft.title.trim()} ${String(i + 1).padStart(2, '0')}`,
-        content_type: typeAt(i),
+        title: draft.title.trim(),
+        content_type: isTaskKind ? 'other' : draft.content_type,
         priority: draft.priority,
         due_date: draft.due_date || null,
         ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
         ...(draft.work_kind_id ? { work_kind_id: draft.work_kind_id } : {}),
         ...(isBriefKind ? {
           brief_url: draft.brief_url.trim() || null,
-          planned_deliverables: planLinesDraft,
-          // an explicitly chosen shoot, or null to create one with the brief
+          // an explicitly chosen shoot, or null to create one with the plan
           batch_id: draft.batch_id || null,
         } : {}),
         ...(isTaskKind ? { batch_id: null } : {}),
-        // filed under the promise they fulfil, so the board draws ONE card
-        // that reads "5 of 7" rather than seven cards for one job
-        ...(groupId ? { group_id: groupId } : {}),
         raw_assets_url: draft.raw_assets_url.trim() || null,
         brief: draft.brief.trim() || null,
         raw_assets: draft.raw_assets,
         // a task is finished in-house; a brief always goes to the client
         client_approval_required: isTaskKind ? false : isBriefKind ? true : clientApproval,
-      }))
+      }]
       const res = await fetch('/api/production/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -474,11 +377,8 @@ export default function NewItemDialog({
       })
       const created = await res.json().catch(() => null)
       if (!res.ok) throw new Error(created?.error ?? 'Create failed')
-      // SOME OF THEM LANDED. Every item in a batch upload is its own write, so
-      // the server answers 207 with exactly what was saved and what was not.
-      // "10 items created" over eight is the worst answer available, and so is
-      // a red "Create failed" over eight that are sitting on the board — this
-      // says the number and names the ones to try again.
+      // the server answers 207 when a write in the body did not land; with
+      // one card that means "not saved", and it is said as such
       const partial = res.status === 207 && created && !Array.isArray(created)
       const rows = (Array.isArray(created)
         ? created
@@ -486,24 +386,16 @@ export default function NewItemDialog({
           ? (created.created ?? [])
           : []) as { id: string; owner_id?: string | null }[]
       const failed = (partial ? created.failed ?? [] : []) as { title: string }[]
-      // where it went, and a way to go there: one item opens itself, several
-      // open the board they landed on
+      // where it went, and a way to go there: the card opens itself
       const firstId = rows[0]?.id ? String(rows[0].id) : null
       const message = isTaskKind ? 'Task created — it is on the Production board'
         : isBriefKind ? 'Shoot plan created — it is on the Production board'
-        : count === 1 ? `Item created — it is on the Editor board, in ${DRAFTING_LANE}`
-        // grouped: one card holding the pieces, which is what the board draws
-        : groupId ? `"${draft.title.trim()}" created — one card holding all ${count} pieces, on the Editor board`
-        : `${count} items created — they are on the Editor board, in ${DRAFTING_LANE}`
-      const href = count === 1 && firstId
+        : `Card created — it is on the Editor board, in ${DRAFTING_LANE}`
+      const href = firstId
         ? `/dashboard/production/${firstId}`
         : isTaskKind || isBriefKind ? '/dashboard/production' : '/dashboard/editor'
       if (failed.length > 0) {
-        const names = failed.map(f => f.title).filter(Boolean).join(', ')
-        toast.error(
-          `${rows.length} of ${count} saved — ${failed.length} could not be saved${names ? `: ${names}` : ''}. Try those again.`,
-          { duration: 12_000 },
-        )
+        toast.error('The card could not be saved. Try again.', { duration: 12_000 })
       } else {
         toastOpen(message, href, router.push)
       }
@@ -519,9 +411,9 @@ export default function NewItemDialog({
       // may well have created everything. Check before inviting a retry that
       // would duplicate the batch.
       if (e instanceof TypeError) {
-        toast.message('Network hiccup — checking whether they were created…')
+        toast.message('Network hiccup — checking whether it was created…')
         onCreated()
-        toast.message('Board refreshed. If your items are there, do NOT create them again.')
+        toast.message('Board refreshed. If your card is there, do NOT create it again.')
       } else {
         toast.error(e instanceof Error ? e.message : 'Create failed')
       }
@@ -533,40 +425,27 @@ export default function NewItemDialog({
   /** What still stops Create, in one line under the button. */
   const missing: string | null = !draft.client_id ? 'Choose a client first.'
     : !draft.title.trim() ? 'Give it a title.'
-    : isBriefKind && planLinesDraft.length === 0 ? 'Say at least one thing that is coming out of this shoot.'
     : needsAdhocReason && !adhocReason.trim() ? 'Say where the footage is from.'
     : null
   /** the Files box exists for assets and tasks; a shoot plan has none */
   const hasFilesStep = !hidesMedia || isTaskKind
   const showDetails = !mobile || !hasFilesStep || step === 'details'
   const showFiles = hasFilesStep && (!mobile || step === 'files')
-  // for a regular item the promise is the formats list; a mix of 6 pieces with
-  // no files makes ONE card, so the button says so
-  const regularTotal = plannedTarget(draft.formats)
-  // a quantity is one card whether or not the files are in hand — the button
-  // has to promise what the create actually does, and it used to say
-  // "Create 7 items" for something that has made one card since the grouping
-  // stopped keying off the attachments
-  const regularCard = regularTotal > 1
-  const filesInHand = draft.raw_assets.length > 0 || Boolean(draft.raw_assets_url.trim())
-  const what = isBriefKind ? 'shoot plan' : isTaskKind ? 'task' : 'item'
   const createLabel = isBriefKind ? 'Create the shoot plan'
-    : isTaskKind ? (draft.count > 1 ? `Create it — 0 of ${draft.count}` : 'Create the task')
-    : regularCard ? `Create the card — ${filesInHand ? regularTotal : 0} of ${regularTotal}`
-    : `Create ${what}`
+    : isTaskKind ? 'Create the task'
+    : 'Create the card'
 
   return (
     <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o); kindTouchedRef.current = false; setKindHint(null); setNewKindName(null); setStep('details') }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {/* a quantity is ONE card, so the title stays singular */}
-            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New item <HelpHint term="item" /></>}
+            {isBriefKind ? <>New shoot plan <HelpHint term="shoot_plan" /></> : isTaskKind ? 'New task' : <>New card <HelpHint term="item" /></>}
           </DialogTitle>
           <DialogDescription className="text-secondary-13">
-            {isBriefKind ? 'The concept and shot list the client signs off before we film. * required'
-              : isTaskKind ? 'Research, strategy or copy — work with nothing to post. * required'
-              : `Lands on the Editor board in ${DRAFTING_LANE}, ready for an editor. * required`}
+            {isBriefKind ? 'One shoot, one card. * required'
+              : isTaskKind ? 'Work with nothing to post. * required'
+              : `One thing to make. Lands on the Editor board in ${DRAFTING_LANE}. * required`}
           </DialogDescription>
           {mobile && hasFilesStep && (
             <p className="text-secondary-13 font-medium text-muted-foreground">
@@ -590,14 +469,9 @@ export default function NewItemDialog({
               </SelectContent>
             </Select>
             {isTaskKind ? (
-              <p className="text-[12px] text-muted-foreground">
-                A task can be for any client — it never leaves the team.
-              </p>
+              <p className="text-[12px] text-muted-foreground">Any client — a task never leaves the team.</p>
             ) : isBriefKind ? (
-              <p className="text-[12px] text-muted-foreground">
-                Any client — planning a shoot is often the first work a new
-                client has, so this is not limited to the ones you run.
-              </p>
+              <p className="text-[12px] text-muted-foreground">Any client, not only the ones you run.</p>
             ) : null}
           </div>
           {/* a plan belongs to a shoot. Without this picker "New shoot plan"
@@ -619,10 +493,10 @@ export default function NewItemDialog({
                 {!draft.client_id
                   ? 'Choose a client to see their shoots.'
                   : briefableShoots.length === 0
-                    ? 'This client has no shoot waiting for a plan — one will be created with it.'
+                    ? 'A new shoot is created with it.'
                     : draft.batch_id
-                      ? 'The plan attaches to that shoot; no new shoot is created.'
-                      : 'A new shoot will be created with this plan.'}
+                      ? 'Attaches to that shoot.'
+                      : 'A new shoot is created with it.'}
               </p>
             </div>
           )}
@@ -645,63 +519,24 @@ export default function NewItemDialog({
                 </Label>
                 <Input value={adhocReason} placeholder="e.g. the client sent phone footage via WeTransfer"
                   onChange={e => setAdhocReason(e.target.value)} className="text-secondary-13" />
-                {/* the no-shoot path, explained in one sentence */}
-                <p className="text-[12px] text-muted-foreground">
-                  Items usually come from a shoot; when the footage came from somewhere else, say where, and it is kept with the item.
-                </p>
+                <p className="text-[12px] text-muted-foreground">Kept with the card.</p>
               </div>
             )}
           </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Title * {(draft.count > 1 || regularTotal > 1) && <span className="text-secondary-13 text-muted-foreground">(numbered automatically)</span>}</Label>
+            <Label>Title *</Label>
             <Input value={draft.title} placeholder={isTaskKind ? "e.g. Competitor research — October" : isBriefKind ? "e.g. October clinic day" : "e.g. May shoot — BTS reel"} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
-          {/* ONE card, a MIX of formats. One row {reel,1} = a single plain
-              item, exactly as before; add rows to promise 2 reels + 2
-              carousels + 2 videos in one card that fills up per type. */}
-          {!isBriefKind && !isTaskKind && (
+          {/* the requirement, right under the title, the same for every
+              kind. Stored as `brief`, and it goes to whoever is assigned. */}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Formats <span className="text-secondary-13 font-normal text-muted-foreground">(what this card is — add a row for each kind)</span></Label>
-            {draft.formats.map((f, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Select value={f.type} onValueChange={v => v && setDraft(d => ({
-                  ...d, formats: d.formats.map((x, j) => j === i ? { ...x, type: v } : x),
-                }))}>
-                  <SelectTrigger className="flex-1 capitalize"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CONTENT_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Input type="number" min={1} max={30} value={f.qty} className="w-20 text-center font-mono"
-                  aria-label="How many"
-                  onChange={e => setDraft(d => ({
-                    ...d, formats: d.formats.map((x, j) => j === i ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x),
-                  }))} />
-                {draft.formats.length > 1 && (
-                  <button type="button" aria-label="Remove format"
-                    onClick={() => setDraft(d => ({ ...d, formats: d.formats.filter((_, j) => j !== i) }))}
-                    className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-accent-red">&#10005;</button>
-                )}
-              </div>
-            ))}
-            <Button type="button" variant="ghost" size="sm" className="w-fit text-muted-foreground"
-              onClick={() => setDraft(d => ({ ...d, formats: [...d.formats, { type: 'reel', qty: 1 }] }))}>
-              <Plus className="h-3.5 w-3.5" /> Add another format
-            </Button>
-            {/* live plain-words summary — the whole promise in one line.
-                It is one line now, not two: attached files no longer change
-                the outcome, so the dialog no longer predicts two of them. */}
-            {plannedTarget(draft.formats) > 1 && (
-              <p className="text-[12px] text-muted-foreground">
-                One card — {draft.formats.map(f => `${f.qty} ${f.type}${f.qty > 1 ? 's' : ''}`).join(', ')}.{' '}
-                {draft.raw_assets.length > 0 || draft.raw_assets_url.trim()
-                  ? 'The pieces are made now, and everything you attached goes on every one of them.'
-                  : 'Add pieces on the Editor board.'}
-              </p>
-            )}
+            <Label>What needs doing</Label>
+            <Textarea rows={3} value={draft.brief}
+              placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
+              onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
+            <p className="text-[12px] text-muted-foreground">What the person making this needs to know — it goes to them.</p>
           </div>
-          )}
           <div className="grid gap-1.5">
             <Label>Priority</Label>
             <Select value={draft.priority} onValueChange={v => v && setDraft(d => ({ ...d, priority: v }))}>
@@ -714,27 +549,14 @@ export default function NewItemDialog({
           <div className="grid gap-1.5">
             <Label>{isBriefKind ? 'Target shoot date' : 'Due date'}</Label>
             <Input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))} className="font-mono" />
-            {/* the picker's own order follows the BROWSER's locale, which is
-                not ours to set — so echo the date back in words. An Australian
-                typing 09/15 for 15 September sees it immediately. */}
-            <p className="text-[12px] text-muted-foreground">
-              {draft.due_date
-                ? new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
-                : 'Shown in words once picked.'}
-            </p>
-          </div>
-          {isTaskKind && (
-          <div className="grid gap-1.5">
-            <Label>How many pieces? <span className="text-secondary-13 font-normal text-muted-foreground">(more than one makes a single card that fills up — &ldquo;2 of 5&rdquo;)</span></Label>
-            <Input type="number" min={1} max={30} value={draft.count}
-              onChange={e => setDraft(d => ({ ...d, count: Number(e.target.value) || 1 }))} className="font-mono" />
-            {draft.count > 1 && (
+            {/* the picker's order follows the browser's locale — echo the
+                date back in words so 09/15 is seen as 15 September */}
+            {draft.due_date && (
               <p className="text-[12px] text-muted-foreground">
-                One card on the Production board with {draft.count} pieces inside. Attached files make it a single task instead.
+                {new Date(`${draft.due_date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
             )}
           </div>
-          )}
           {selectableKinds.length > 0 && presetKind !== 'shoot_brief' && (
             <div className="grid gap-1.5">
               <Label>
@@ -781,11 +603,6 @@ export default function NewItemDialog({
                     ✕
                   </Button>
                 </div>
-              )}
-              {isTaskKind && (
-                <p className="text-[12px] text-muted-foreground">
-                  What kind of work this is. Managers can add a kind from the list.
-                </p>
               )}
               {kindHint && kindHint.match === 'existing' && kindHint.kind_id !== (draft.work_kind_id || defaultKind?.id) && (
                 <button type="button"
@@ -861,79 +678,28 @@ export default function NewItemDialog({
               <Switch checked={clientApproval} onCheckedChange={setClientApproval} />
               <span>
                 Client must approve this
-                <span className="block text-[12px] text-muted-foreground">
-                  Off means an account manager can approve it without sending it out.
-                </span>
+                <span className="block text-[12px] text-muted-foreground">Off: a manager can approve it in-house.</span>
               </span>
             </label>
           )}
           {!hidesMedia && (
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Folder link <span className="text-secondary-13 font-normal text-muted-foreground">(Google Drive — what the editor works from)</span></Label>
+            <Label>Folder link <span className="text-secondary-13 font-normal text-muted-foreground">(Google Drive or Dropbox)</span></Label>
             <Input value={draft.raw_assets_url} placeholder="https://drive.google.com/drive/folders/…"
               onChange={e => setDraft(d => ({ ...d, raw_assets_url: e.target.value }))} className="font-mono text-secondary-13" />
           </div>
           )}
           {isBriefKind && (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Plan link <span className="text-secondary-13 font-normal text-muted-foreground">(Milanote or anywhere — or write the concept and shot list on the shoot page)</span></Label>
+              <Label>Plan link <span className="text-secondary-13 font-normal text-muted-foreground">(Milanote or anywhere)</span></Label>
               <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
                 onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-secondary-13" />
             </div>
           )}
-          {isBriefKind && (
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label>What is coming out of this shoot? * <span className="text-secondary-13 font-normal text-muted-foreground">(one line per thing — each becomes its own card when the shoot is booked)</span></Label>
-              {draft.deliverables.map((line, i) => (
-                <div key={line.id} className="flex items-center gap-1">
-                  <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
-                  <Input value={line.title} autoFocus={i === draft.deliverables.length - 1 && !line.title}
-                    placeholder={['e.g. Hero reel', 'e.g. Menu carousel', 'e.g. Chef portrait'][i % 3]}
-                    className="min-w-0 flex-1"
-                    onChange={e => setDraft(d => ({
-                      ...d, deliverables: d.deliverables.map((x, j) => j === i ? { ...x, title: e.target.value } : x),
-                    }))}
-                    onKeyDown={e => {
-                      // Enter on the last line starts the next one — a plan is
-                      // typed like a list, not clicked together
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (i === draft.deliverables.length - 1 && line.title.trim()) {
-                          setDraft(d => ({ ...d, deliverables: [...d.deliverables, { id: newLineId(), title: '' }] }))
-                        }
-                      }
-                    }} />
-                  <button type="button" aria-label="Move up" disabled={i === 0}
-                    onClick={() => setDraft(d => ({ ...d, deliverables: moveLine(d.deliverables, i, i - 1) }))}
-                    className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
-                  <button type="button" aria-label="Move down" disabled={i === draft.deliverables.length - 1}
-                    onClick={() => setDraft(d => ({ ...d, deliverables: moveLine(d.deliverables, i, i + 1) }))}
-                    className="flex h-11 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
-                  <button type="button" aria-label="Remove this line"
-                    onClick={() => setDraft(d => ({ ...d, deliverables: d.deliverables.filter((_, j) => j !== i) }))}
-                    className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-accent-red">&#10005;</button>
-                </div>
-              ))}
-              <Button type="button" variant="ghost" size="sm" className="w-fit text-muted-foreground"
-                onClick={() => setDraft(d => ({ ...d, deliverables: [...d.deliverables, { id: newLineId(), title: '' }] }))}>
-                <Plus className="h-3.5 w-3.5" /> Add a line
-              </Button>
-              {planLinesDraft.length > 0 && (
-                <p className="text-[12px] text-muted-foreground">
-                  {planSummary(planLinesDraft)}. {planLinesDraft.length === 1 ? 'It becomes one card' : `They become ${planLinesDraft.length} cards`} on the board when the shoot is booked.
-                </p>
-              )}
-            </div>
-          )}
-          <div className="grid gap-1.5 sm:col-span-2">
-            <Label>{isBriefKind ? 'Note to reviewer' : isTaskKind ? 'What needs doing' : 'Editing notes'} <span className="text-secondary-13 font-normal text-muted-foreground">{isBriefKind ? '(context for whoever reviews the plan)' : isTaskKind ? '(the ask, in a few lines — sent to whoever takes it)' : '(what the edit should be — sent to the editor)'}</span></Label>
-            <Textarea rows={3} value={draft.brief} placeholder={isBriefKind ? 'Going with the garden concept — see the moodboard for tone…' : isTaskKind ? 'e.g. Pull the top five competitors’ last 30 days of posts and note what is working.' : 'Hook in the first 2s, use the b-roll from cam B, end on the offer…'}
-              onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
-          </div>
         </div>
         {showFiles && (
           <div className="grid gap-1.5">
-            <Label>Files <span className="text-secondary-13 font-normal text-muted-foreground">{isTaskKind ? '(anything the task needs — docs, decks, references; as many as you like)' : '(footage for the editor — or use the folder link for full shoots)'}</span></Label>
+            <Label>Files <span className="text-secondary-13 font-normal text-muted-foreground">{isTaskKind ? '(docs, decks, references)' : '(footage — or use the folder link)'}</span></Label>
             {/* the drop zone is the path; the button is the same path for a
                 thumb. Rows underneath say what is happening to each file. */}
             <div
@@ -946,7 +712,7 @@ export default function NewItemDialog({
                   : 'border-border hover:border-foreground/25'
               }`}>
               <p className="text-body-15 font-medium">{assetBusy ? 'Uploading…' : 'Choose files, or drag them here'}</p>
-              <p className="text-[12px] text-muted-foreground">Any size — they go straight to our storage. You can skip this and add files later.</p>
+              <p className="text-[12px] text-muted-foreground">Any size. You can add files later.</p>
             </div>
             {draft.raw_assets.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
