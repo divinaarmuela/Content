@@ -19,8 +19,8 @@ import { NewCardDialog } from '../board/BoardDialogs'
 /**
  * THE EDITOR PAGE: your cards, from draft to the client.
  *
- * One board, three columns — Draft, Internal check, With client — holding
- * only the cards assigned to the person looking. A card is one deliverable
+ * One board, all five columns — Draft to Posted — holding only the cards
+ * assigned to the person looking, so they see their work all the way out. A card is one deliverable
  * with one link; hand it on for checking from the card itself. A card that
  * came back carries what to change, in the manager's words.
  *

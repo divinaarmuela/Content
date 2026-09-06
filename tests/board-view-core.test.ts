@@ -210,7 +210,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor, { isAsset: asset }).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    expect(pageColumns('editor', editor, rows)).toEqual(['draft', 'internal_check', 'with_client'])
+    expect(pageColumns('editor', editor, rows)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
@@ -223,8 +223,8 @@ describe('what each page shows', () => {
     // otherwise be on no page they can open
     expect(pageCards('scheduler', rows, scheduler, { isAsset: asset }).map(c => c.id)).toEqual(['c', 'd', 't'])
     // …and Draft appears on their board while that task sits there
-    expect(pageColumns('scheduler', scheduler, rows)).toEqual(['draft', 'ready_to_post', 'posted'])
-    expect(pageColumns('scheduler', scheduler, [])).toEqual(['ready_to_post', 'posted'])
+    expect(pageColumns('scheduler', scheduler, rows)).toEqual(BOARD_COLUMNS.map(c => c.key))
+    expect(pageColumns('scheduler', scheduler, [])).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
   it('a tagged question counts as assignment', () => {

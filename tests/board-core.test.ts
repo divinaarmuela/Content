@@ -60,11 +60,11 @@ describe('the five columns', () => {
 })
 
 describe('columnsForRole — the same board, a different lens', () => {
-  it('an editor sees Draft through With client', () => {
-    expect(columnsForRole('editor')).toEqual(['draft', 'internal_check', 'with_client'])
+  it('an editor sees all five — their work, end to end', () => {
+    expect(columnsForRole('editor')).toEqual(KEYS)
   })
-  it('a scheduler sees Ready to post and Posted', () => {
-    expect(columnsForRole('scheduler')).toEqual(['ready_to_post', 'posted'])
+  it('a scheduler sees all five — what is coming, too', () => {
+    expect(columnsForRole('scheduler')).toEqual(KEYS)
   })
   it('account managers and super admins see all five', () => {
     expect(columnsForRole('account_manager')).toEqual(KEYS)
@@ -97,10 +97,10 @@ describe('groupByColumn', () => {
     expect(g[2].cards).toEqual([])
     expect(g[4].cards.map(c => c.id)).toEqual(['b'])
   })
-  it('limits itself to the columns a role sees', () => {
-    const g = groupByColumn(cards, columnsForRole('scheduler'))
-    expect(g.map(x => x.column.key)).toEqual(['ready_to_post', 'posted'])
-    expect(g[1].cards.map(c => c.id)).toEqual(['b'])
+  it('limits itself to the columns it is given (the portal asks for one)', () => {
+    const g = groupByColumn(cards, columnsForRole('client'))
+    expect(g.map(x => x.column.key)).toEqual(['with_client'])
+    expect(g[0].cards).toEqual([])
   })
 })
 

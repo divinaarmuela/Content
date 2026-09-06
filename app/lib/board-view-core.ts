@@ -274,22 +274,16 @@ export function pageCards<T extends BoardViewCard>(
 }
 
 /**
- * Which columns THIS page draws: the role's own, plus any column holding a
- * card assigned to the viewer that would otherwise have nowhere to be — a
- * task handed to a scheduler sits in Draft, so Draft appears on their page
- * while it does. The Editor page never grows Ready to post or Posted; an
- * editor's work ends when the client says yes.
+ * Which columns THIS page draws: all five, on every page. The pages differ
+ * in WHICH CARDS they hold (pageCards), never in which stages they show —
+ * the owner's rule is "all pages should have the columns in draft, client
+ * review etc", so a person always sees where their work is, end to end.
  */
 export function pageColumns(
   page: BoardPage, viewer: BoardViewer, cards: readonly BoardViewCard[] = [],
 ): BoardColumnKey[] {
-  const order = BOARD_COLUMNS.map(c => c.key)
-  if (page === 'production') return order
-  const base = new Set<BoardColumnKey>(page === 'editor' ? columnsForRole('editor') : columnsForRole('scheduler'))
-  if (page === 'scheduler') {
-    for (const c of cards) if (isAssignedTo(c, viewer.id)) base.add(columnOf(c.status))
-  }
-  return order.filter(k => base.has(k))
+  void page; void viewer; void cards
+  return columnsForRole('super_admin')
 }
 
 /**

@@ -92,15 +92,17 @@ export function statusesIn(column: BoardColumnKey): readonly ItemStatus[] {
 /**
  * Which columns a ROLE is shown.
  *
- * An editor's world ends when the client has it; a scheduler's begins when
- * the client has said yes; managers see the whole board. A client's portal
- * is the With-client column and nothing else — the rest of the funnel is
- * how the agency works, not what the client is asked to look at.
+ * Every team role sees all five — the owner's rule is "all pages should have
+ * the columns", so an editor watches their card go on to the client and out
+ * the door, and a scheduler sees what is coming before it is ready. What a
+ * role may MOVE is still the transition rules' business (canMoveTo). A
+ * client's portal is the With-client column and nothing else — the rest of
+ * the funnel is how the agency works, not what the client is asked to look at.
  */
 export function columnsForRole(role: Role | null): BoardColumnKey[] {
   switch (role) {
-    case 'editor': return ['draft', 'internal_check', 'with_client']
-    case 'scheduler': return ['ready_to_post', 'posted']
+    case 'editor':
+    case 'scheduler':
     case 'account_manager':
     case 'super_admin': return BOARD_COLUMNS.map(c => c.key)
     case 'client': return ['with_client']

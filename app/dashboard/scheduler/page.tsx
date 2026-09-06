@@ -15,9 +15,10 @@ import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 
 /**
- * THE SCHEDULER PAGE: Ready to post, and Posted.
+ * THE SCHEDULER PAGE: the posting queue, on the whole board.
  *
- * Two columns of the one board. A Ready-to-post card is booked in from the
+ * All five columns of the one board, so what is coming is visible before it
+ * is ready. A Ready-to-post card is booked in from the
  * card — a channel and a time — and marked posted the same way. The Schedule
  * page (the posting calendar) is one pill away in the header.
  *
