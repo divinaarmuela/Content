@@ -41,19 +41,19 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Your items sit in the Drafting column. Ones with no owner say anyone can take them — press "Take this" to make one yours.',
+      body: 'Every card assigned to you is on your board, in three columns: Draft, Internal check and With client. One card is one thing to make.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
-      title: 'Attach it, then send it for review',
-      body: 'Open an item, add the file or a link, then press Send for review. An account manager checks it next.',
+      title: 'Add the link, then hand it on',
+      body: 'Paste the Google Drive or Dropbox link on the card, then press "Submit for review" on the card. An account manager checks it next.',
       href: '/dashboard/editor',
-      linkLabel: 'Open my first item',
+      linkLabel: 'Open my board',
     },
     {
       title: 'Watch for changes',
-      body: 'If something comes back as "Being revised", the note explaining why is on that item’s page.',
+      body: 'A card that comes back shows what to change, in the account manager’s words, right on the card.',
       href: '/dashboard/notifications',
       linkLabel: 'See what came back',
     },
@@ -65,15 +65,15 @@ const SCHEDULER: GettingStartedPanel = {
   steps: [
     {
       title: 'Only signed-off work reaches you',
-      body: 'Everything in this queue has already been approved by the client. Nothing here still needs their opinion.',
+      body: 'Everything in Ready to post has already been approved by the client. Nothing here still needs their opinion.',
       href: '/dashboard/scheduler',
-      linkLabel: 'See the queue',
+      linkLabel: 'See the board',
     },
     {
-      title: 'Take it, then set the date',
-      body: 'Press "Take this", open the item, add a platform and a posting time. Times are in the audience’s timezone, not yours.',
+      title: 'Book it in from the card',
+      body: 'Press "Book it in" on a card, pick the channel and the posting time. Times are in the audience’s timezone, not yours.',
       href: '/dashboard/scheduler',
-      linkLabel: 'Open my first item',
+      linkLabel: 'Open my board',
     },
     {
       title: 'Scheduled is not published',

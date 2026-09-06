@@ -18,8 +18,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Camera, CalendarDays, ChevronDown, ChevronUp, FileText, ListChecks, MoreHorizontal, Plus, Search, Trash2,
+  Camera, CalendarDays, ChevronDown, ChevronUp, FileText, Kanban, Link2, ListChecks, MoreHorizontal, Plus, Search, Trash2,
 } from 'lucide-react'
+import { pageColumns } from '../../lib/board-view-core'
+import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { NewCardDialog } from '../board/BoardDialogs'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import { type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
@@ -101,7 +104,11 @@ function credits(i: { created_by?: string | null; approved_by?: string | null })
 const SCOPE_KEY = 'md-production-scope'
 const VIEW_KEY = 'md-production-view'
 const RANGE_KEY = 'md-production-cal-range'
-const VIEWS = ['board', 'calendar'] as const
+/** List is the shoots, plans and tasks in their own columns; Board is the
+ *  five-column work board every page shares; Calendar is the same rows by
+ *  date. A remembered "board" from before this change opens the work board,
+ *  which is the view the owner asked for. */
+const VIEWS = ['list', 'board', 'calendar'] as const
 const RANGES = ['month', 'week'] as const
 
 /** What FILLS an empty column, in plain words — not just "nothing here". */
@@ -194,8 +201,14 @@ export default function ProductionPage() {
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // the board and the calendar are two readings of the same page, and which
   // one you were on is worth remembering between visits
-  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'board', 'view')
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'list', 'view')
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
+  // the work board: the column and the lens named in the address, today's
+  // date (read after mount — the page prerenders), and the new-card dialog
+  const boardParams = useBoardParams()
+  const [today, setToday] = useState<string | null>(null)
+  useEffect(() => { setToday(todayKey()) }, [])
+  const [newCardOpen, setNewCardOpen] = useState(false)
 
   /**
    * THE PAGE, LIVE.
@@ -318,6 +331,20 @@ export default function ProductionPage() {
   const matches = (clientId: string, title: string) =>
     (clientFilter === 'all' || clientId === clientFilter)
     && (!search || title.toLowerCase().includes(search.toLowerCase()))
+
+  /** the work board's cards: every card this person may see, bar the shoot
+   *  plans (those are shoots, and live on the list), through the same client
+   *  and search filters as the list */
+  const boardCards = useMemo(() => {
+    const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
+    return rows.filter(c => (clientFilter === 'all' || c.client_id === clientFilter)
+      && (!search || c.title.toLowerCase().includes(search.toLowerCase())))
+  }, [live.items, clientFilter, search])
+  const boardColumns = useMemo(() => (viewer ? pageColumns('production', viewer) : []), [viewer])
+  /** id → name for everyone on the team, from the rows already on the wire */
+  const teamNames = useMemo(
+    () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
+    [live.tables.team.rows])
 
   const visibleShoots = (shoots ?? []).filter(s => matches(s.client_id, s.title))
   const batchById = useMemo(
@@ -698,6 +725,15 @@ export default function ProductionPage() {
                   A shoot plan is the concept and shot list for a filming day. Making it sets up the shoot too.
                 </p>
                 {canPlan && (
+                  <DropdownMenuItem className="min-h-11 items-start" onClick={() => setNewCardOpen(true)}>
+                    <Link2 className="mt-0.5 h-4 w-4" />
+                    <span className="flex flex-col">
+                      New card
+                      <span className="text-[13px] text-muted-foreground">one thing to make, with a Drive or Dropbox link</span>
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {canPlan && (
                   <DropdownMenuItem className="min-h-11 items-start" onClick={() => setBriefOpen(true)}>
                     <FileText className="mt-0.5 h-4 w-4" />
                     <span className="flex flex-col">
@@ -733,7 +769,8 @@ export default function ProductionPage() {
             value={view}
             onChange={setView}
             options={[
-              { value: 'board', label: 'Board', icon: ListChecks },
+              { value: 'list', label: 'List', icon: ListChecks },
+              { value: 'board', label: 'Board', icon: Kanban },
               { value: 'calendar', label: 'Calendar', icon: CalendarDays },
             ]}
           />
@@ -764,7 +801,26 @@ export default function ProductionPage() {
         </div>
       )}
 
-      {view === 'calendar' ? (
+      {view === 'board' ? (
+        !viewer || live.loading || today === null ? (
+          <div className="flex gap-3.5 overflow-x-hidden">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[220px] flex-1 rounded-card" />)}
+          </div>
+        ) : (
+          <Board
+            cards={boardCards}
+            viewer={viewer}
+            columns={boardColumns}
+            names={teamNames}
+            kinds={live.tables.workKinds.rows}
+            today={today}
+            initialColumn={boardParams.column}
+            show={boardParams.show}
+            onClearShow={boardParams.clearShow}
+            ariaLabel="Every card, by stage"
+          />
+        )
+      ) : view === 'calendar' ? (
         <WorkCalendar
           events={calendar}
           viewer={viewer}
@@ -892,6 +948,21 @@ export default function ProductionPage() {
 
       {/* the side drawer: this board's cards open it via the comment button */}
       <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
+
+      {/* a CARD: one deliverable, one client, one link — the link-first work
+          the three pages track */}
+      {viewer && (
+        <NewCardDialog
+          open={newCardOpen}
+          onOpenChange={setNewCardOpen}
+          clients={clients.map(c => ({ id: c.id, name: c.name }))}
+          kinds={live.tables.workKinds.rows}
+          team={team}
+          viewer={{ ...viewer, name: me?.name }}
+          defaultClientId={clientFilter}
+          onCreated={() => { if (view !== 'board') setView('board') }}
+        />
+      )}
 
       {/* the SHOOT PLAN — the reviewable plan that rides the item pipeline.
           presetKind locks the kind: without it the dialog filters it out. */}

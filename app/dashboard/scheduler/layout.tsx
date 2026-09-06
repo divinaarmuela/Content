@@ -2,23 +2,26 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, ListChecks } from 'lucide-react'
+import { CalendarDays, Kanban, Send } from 'lucide-react'
 import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
+import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 
 /**
  * Scheduler shell: the views are real CHILD ROUTES, not tab state —
- * /dashboard/scheduler (queue) and /scheduler/calendar. A refresh keeps you on
- * the view you were on, the URL is shareable, and the back button means
- * something. Availability and Proposals live on Production now: booking a
- * shoot is pre-production work, not posting work.
+ * /dashboard/scheduler (the board) and /scheduler/calendar. A refresh keeps
+ * you on the view you were on, the URL is shareable, and the back button
+ * means something. The Schedule page — the posting calendar under Social —
+ * sits beside them as a link, because it is the other half of a scheduler's
+ * day. Availability and Proposals live on Production: booking a shoot is
+ * pre-production work, not posting work.
  */
 const VIEWS = [
   {
     href: '/dashboard/scheduler',
-    label: 'Queue',
-    icon: ListChecks,
-    blurb: 'Signed-off items waiting for a posting time. Take one, open it, set the platform and the time.',
+    label: 'Board',
+    icon: Kanban,
+    blurb: 'Ready to post, and posted. Book a card in from the card.',
   },
   {
     href: '/dashboard/scheduler/calendar',
@@ -31,6 +34,10 @@ const VIEWS = [
 export default function SchedulerLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname()
   const active = VIEWS.find(v => v.href === path) ?? VIEWS[0]
+  const pill = (isActive: boolean) =>
+    `inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
+      isActive ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+    }`
 
   return (
     <div className="flex flex-col gap-4">
@@ -45,20 +52,16 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
               const Icon = v.icon
               const isActive = v.href === active.href
               return (
-                <Link
-                  key={v.href}
-                  href={v.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
-                    isActive
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
+                <Link key={v.href} href={v.href} aria-current={isActive ? 'page' : undefined} className={pill(isActive)}>
                   <Icon className="h-4 w-4" strokeWidth={1.8} /> {v.label}
                 </Link>
               )
             })}
+            {/* the posting calendar with the composer — the page a scheduler
+                books real posts on, one pill away rather than a sidebar hunt */}
+            <Link href={SCHEDULE_PAGE} className={pill(false)}>
+              <Send className="h-4 w-4" strokeWidth={1.8} /> Schedule
+            </Link>
           </nav>
 
           {/* posting is decided here, so starting one belongs here — the same

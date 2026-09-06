@@ -30,6 +30,7 @@ import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
+import { overviewTiles, type BoardViewCard } from '../lib/board-view-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
@@ -729,6 +730,43 @@ export default function OverviewPage() {
   const role = data?.role
   const zone = viewerTz || me?.timezone || DEFAULT_TZ
   const todayKey = now ? dayKeyInZone(now, zone) : null
+
+  /** which clients have a channel connected — only a scheduler's tiles ask */
+  const [connectedClientIds, setConnectedClientIds] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (viewer?.role !== 'scheduler') return
+    let cancelled = false
+    fetch('/api/social/accounts', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { accounts: [] }))
+      .then((json: { accounts?: { client_id: string | null; active: boolean }[] }) => {
+        if (cancelled) return
+        setConnectedClientIds(new Set((json.accounts ?? []).filter(a => a.active && a.client_id).map(a => a.client_id as string)))
+      })
+      .catch(() => { /* the tile then counts every ready card as waiting */ })
+    return () => { cancelled = true }
+  }, [viewer?.role])
+
+  /**
+   * "WHAT IS ON ME TODAY" — one tile per question, per role, every tile a
+   * link into the cards it counts (`overviewTiles`, pure and tested). Drawn
+   * from the same live rows as everything else on the page.
+   */
+  const tiles = useMemo(() => {
+    if (!viewer || live.loading || !todayKey) return null
+    const cards = (live.items as unknown as BoardViewCard[])
+      .filter(c => ((c as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+    const postingToday = new Set(
+      entryRows.filter(e => e.scheduled_at && dayKeyInZone(e.scheduled_at, zone) === todayKey).map(e => e.item_id))
+    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    const clientCount = scoped === null
+      ? live.tables.clients.rows.length
+      : live.tables.clients.rows.filter(c => scoped.includes(c.id)).length
+    const weekAgo = Date.now() - 7 * 86_400_000
+    const leadsWeek = leadRows.filter(l => new Date(l.created_at).getTime() >= weekAgo).length
+    return overviewTiles({
+      viewer, cards, today: todayKey, postingToday, connectedClientIds, clientCount, leadsWeek, mayLeads,
+    })
+  }, [viewer, live.loading, live.items, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
   /* MiniCalendar reads a Date with the BROWSER's own calendar. This hands it
      one whose local year/month/day are the viewer zone's today, so the filled
      cell and the markers can never disagree about which day it is. */
@@ -876,105 +914,23 @@ export default function OverviewPage() {
             </div>
           )}
 
-          {/* ---- editor ---- */}
-          {!loading && role === 'editor' && data?.editor && (
+          {/* ---- what is on me today: one tile per question, per role ----
+              editor: assigned, due, came back · scheduler: ready, going out
+              today, waiting on an account · account manager: their clients,
+              what needs their decision, what is with clients · super admin:
+              the agency at a glance, plus Leads. Every tile links into the
+              cards it counts — a number is never shown without a way to act. */}
+          {!loading && tiles && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <TintCard tone="amber" title="Needs your action"
-                action={{ label: 'Editor', href: '/dashboard/editor' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.editor.due_soon_count ?? data.editor.due_soon.length} label="due this week" />
-                  <Stat value={data.editor.revisions_needed} label="being revised" />
-                </div>
-              </TintCard>
-              <TintCard tone="blue" title="Going out this week">
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.pipeline.scheduled ?? 0} label="scheduled" />
-                  <Stat value={data.pipeline.published ?? 0} label="published" />
-                  <Stat value={data.pipeline.approved_for_scheduling ?? 0} label="need a posting date" />
-                </div>
-              </TintCard>
-              <TintCard tone="green" title="Ready for review"
-                action={{ label: 'Editor', href: '/dashboard/editor' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.editor.in_internal_review} label="with the account manager" />
-                  <Stat value={data.editor.my_items} label="my items" />
-                </div>
-              </TintCard>
-              <TintCard tone="paper" title="Nobody has taken these"
-                action={{ label: 'Editor', href: '/dashboard/editor' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.editor.unassigned_count ?? data.editor.unassigned?.length ?? 0}
-                    label="nobody has taken" />
-                </div>
-              </TintCard>
-            </div>
-          )}
-
-          {/* ---- scheduler ---- */}
-          {role === 'scheduler' && data?.scheduler && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TintCard tone="amber" title="Needs your action"
-                action={{ label: 'Queue', href: '/dashboard/scheduler' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.scheduler.to_schedule} label="need a posting date" />
-                </div>
-              </TintCard>
-              <TintCard tone="blue" title="Going out this week"
-                action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.scheduler.upcoming_count ?? data.scheduler.upcoming.length} label="going out · 7 days" />
-                  <Stat value={data.scheduler.published_week} label="published · 7 days" />
-                  <Stat value={data.pipeline.scheduled ?? 0} label="in the calendar" />
-                </div>
-              </TintCard>
-            </div>
-          )}
-
-          {/* ---- account manager / super admin ---- */}
-          {data?.manager && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TintCard tone="amber" title="Needs your action"
-                action={{ label: 'Editor', href: '/dashboard/editor' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.manager.awaiting_internal_review} label="waiting on you" />
-                  <Stat value={data.manager.revisions_open} label="being revised" />
-                  {data.manager.unassigned_count !== undefined && (
-                    <Stat value={data.manager.unassigned_count} label="nobody has taken" />
-                  )}
-                </div>
-              </TintCard>
-              <TintCard tone="blue" title="Going out this week"
-                action={{ label: 'Scheduler', href: '/dashboard/scheduler' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.pipeline.scheduled ?? 0} label="scheduled" />
-                  <Stat value={data.pipeline.published ?? 0} label="published" />
-                  <Stat value={data.pipeline.approved_for_scheduling ?? 0} label="need a posting date" />
-                </div>
-              </TintCard>
-              <TintCard tone="green" title="Ready for review"
-                action={{ label: 'Editor', href: '/dashboard/editor' }}>
-                <div className="flex flex-wrap gap-7">
-                  <Stat value={data.manager.awaiting_client} label="with client" />
-                  <Stat value={data.manager.my_tasks_count ?? data.manager.my_tasks?.length ?? 0} label="my items" />
-                </div>
-              </TintCard>
-              {data.manager.latest_leads ? (
-                <TintCard tone="paper" title="Leads · 7 days"
-                  action={{ label: 'Leads', href: '/dashboard/leads' }}>
+              {tiles.map(t => (
+                <TintCard key={t.key} tone={t.tone} title={t.title}
+                  action={{ label: t.actionLabel, href: t.href }}
+                  className={t.stats.length > 3 ? 'sm:col-span-2' : undefined}>
                   <div className="flex flex-wrap gap-7">
-                    <Stat value={data.manager.leads_week ?? 0} label="new leads" />
-                    <Stat value={data.manager.clients} label="clients" />
-                    <Stat value={`${data.manager.leads_total ?? 0}+`} label="leads all up" />
+                    {t.stats.map(s => <Stat key={s.label} value={s.value} label={s.label} />)}
                   </div>
                 </TintCard>
-              ) : (
-                <TintCard tone="paper" title="Your clients"
-                  action={{ label: 'Clients', href: '/dashboard/clients' }}>
-                  <div className="flex flex-wrap gap-7">
-                    <Stat value={data.manager.clients} label="you look after" />
-                  </div>
-                </TintCard>
-              )}
+              ))}
             </div>
           )}
 
