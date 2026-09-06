@@ -158,6 +158,18 @@ Every tile is a link into the card or column it counts. Counts are never shown w
 way to act on them.
 
 
+## The portal opens on the board
+
+Owner: "also by default make the board show on the portal".
+
+- The client's portal opens on a **board of their work**, in their own brand: the same five
+  columns, read as a client would read them, so they can see at a glance what is being made,
+  what is with them, and what has gone out.
+- The card they can act on carries the link and the tap to approve. Cards in other columns
+  are there to be seen, not touched.
+- No status jargon on the client's side: the columns are named for what they mean to them.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
