@@ -46,6 +46,8 @@ export default clerkMiddleware(async (auth, req) => {
     // and a fetch POST cannot follow a cross-host redirect — so its API must
     // answer wherever the portal page is. Token-authed, no Clerk cookie needed.
     const isPortalApi = req.nextUrl.pathname.startsWith('/api/portal')
+      // the client's board asks for Instagram videos from the public host too
+      || req.nextUrl.pathname.startsWith('/api/instagram-video')
     if (host && host !== APP_HOST && !isLocal && !isPortalApi) {
       const url = new URL(req.url)
       url.host = APP_HOST
@@ -111,6 +113,10 @@ export const config = {
     '/api/inbox/:path*',
     '/api/intake-templates/:path*',
     '/api/ingest/:path*',
+    // token-authed for the portal, requireRole for the team — auth() needs
+    // the middleware to have run either way
+    '/api/instagram-video',
+    '/api/instagram-video/:path*',
     '/api/leads/:path*',
     '/api/portal/:path*',
     '/api/overview/:path*',
