@@ -36,6 +36,9 @@ const call = async (url: string) => {
 
 const BROKEN = readFileSync(join(__dirname, 'fixtures/instagram-embed-broken.html'), 'utf8')
 const CAPTIONED = readFileSync(join(__dirname, 'fixtures/instagram-embed-captioned.html'), 'utf8')
+const PIN_VIDEO = readFileSync(join(__dirname, 'fixtures/pinterest-pin-video.html'), 'utf8')
+const PIN_IMAGE = readFileSync(join(__dirname, 'fixtures/pinterest-pin-image.html'), 'utf8')
+const PIN_OEMBED = readFileSync(join(__dirname, 'fixtures/pinterest-oembed.json'), 'utf8')
 
 const html = (body: string) => new Response(body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -175,6 +178,103 @@ describe('link-preview route (replayed providers)', () => {
     expect(body.preview?.canonical).toBe('https://www.tiktok.com/@_/video/7290074173500706079')
     expect(body.preview?.provider).toBe('TikTok')
   })
+
+  // ── Pinterest: the chain recorded 2026-09-06 ──
+  const PIN = 'https://www.pinterest.com/pin/424605071145308382/'
+  const MP4 = 'https://v1.pinimg.com/videos/iht/expMp4/73/7c/64/737c64f1ec9401ae9d71c55877e9a129_720w.mp4'
+  /** what Pinterest's hosts answered: `www.` 302s to the country host for
+   *  both the oEmbed and the page; the page is the fixture given */
+  const pinterestAnswers = (page: string, oembed: Response = new Response(PIN_OEMBED, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })) =>
+    (url: string): Response => {
+      if (url.startsWith('https://www.pinterest.com/oembed.json?')) return redirect(url.replace('https://www.', 'https://au.'), 302)
+      if (url.startsWith('https://au.pinterest.com/oembed.json?')) return oembed
+      if (url === PIN) return redirect('https://au.pinterest.com/pin/424605071145308382/', 302)
+      if (url === 'https://au.pinterest.com/pin/424605071145308382/') return html(page)
+      throw new Error(`unexpected fetch ${url}`)
+    }
+
+  it('a video pin: oEmbed then the page, each followed to the country host, and the card gets the mp4, the picture, the words and the pinner', async () => {
+    answer = pinterestAnswers(PIN_VIDEO)
+    const { status, body } = await call(PIN)
+    expect(status).toBe(200)
+    expect(calls).toEqual([
+      expect.stringContaining('https://www.pinterest.com/oembed.json?format=json&url='),
+      expect.stringContaining('https://au.pinterest.com/oembed.json?format=json&url='),
+      PIN,
+      'https://au.pinterest.com/pin/424605071145308382/',
+    ])
+    expect(body.preview).toMatchObject({
+      provider: 'Pinterest',
+      media: 'video',
+      video: MP4,
+      thumb: 'https://i.pinimg.com/736x/94/cc/c9/94ccc9ea5a579a414c731ca63c4dabfe.jpg',
+      author: '@pinterest',
+    })
+    expect(String(body.preview?.title)).toMatch(/^🦕🧊 Dino-mite/)
+    // the pasted link IS the pin's own URL, so there is nothing to resolve
+    expect(body.preview?.canonical).toBeUndefined()
+  })
+
+  it('an image pin is a still with its picture and title, and no film', async () => {
+    answer = pinterestAnswers(PIN_IMAGE)
+    const { body } = await call(PIN)
+    expect(body.preview).toMatchObject({ provider: 'Pinterest', media: 'image', title: 'Good idea in the school holidays', author: '@pinterest' })
+    expect(body.preview?.video).toBeUndefined()
+    expect(body.preview?.thumb).toContain('/736x/')
+  })
+
+  it('a pin on a country host is asked about by its id on www., and the card stores the pin\'s own URL', async () => {
+    answer = pinterestAnswers(PIN_IMAGE)
+    const { body } = await call('https://au.pinterest.com/pin/424605071145308382/?utm_source=share')
+    expect(calls.every(c => !c.includes('utm_source'))).toBe(true)
+    expect(body.preview?.canonical).toBe(PIN)
+  })
+
+  it('a pin.it share link: followed on Pinterest hosts only, the id read off the /sent/ hop, and never the page that hop bounces to', async () => {
+    const base = pinterestAnswers(PIN_VIDEO)
+    answer = url => {
+      // the real chain, recorded 2026-09-06 (this pin id swapped for the fixture's)
+      if (url === 'https://pin.it/39YYRhN0f') return redirect('https://api.pinterest.com/url_shortener/39YYRhN0f/redirect/', 308)
+      if (url === 'https://api.pinterest.com/url_shortener/39YYRhN0f/redirect/') {
+        return redirect('https://www.pinterest.com/pin/424605071145308382/sent/?invite_code=80139d28e8a34cb38c105de2e84ac671&sender=762164074346835038&sfo=1', 302)
+      }
+      return base(url)
+    }
+    const { body } = await call('https://pin.it/39YYRhN0f')
+    expect(calls.some(c => c.includes('/sent/'))).toBe(false)
+    expect(calls.slice(0, 2)).toEqual(['https://pin.it/39YYRhN0f', 'https://api.pinterest.com/url_shortener/39YYRhN0f/redirect/'])
+    expect(body.preview).toMatchObject({ provider: 'Pinterest', media: 'video', video: MP4, canonical: PIN })
+  })
+
+  it('a share link whose chain leaves Pinterest is dropped there — no id, no canonical, and never the metadata service', async () => {
+    answer = url => {
+      if (url === 'https://pin.it/ZZevil') return redirect('https://169.254.169.254/latest/meta-data/', 308)
+      if (url === 'https://pin.it/ZZaway') return redirect('https://evil.example/pin/424605071145308382/', 308)
+      if (url.startsWith('https://evil.example/')) return html('<html><head><title>not pinterest</title></head></html>')
+      throw new Error(`unexpected fetch ${url}`)
+    }
+    for (const u of ['https://pin.it/ZZevil', 'https://pin.it/ZZaway']) {
+      calls.length = 0
+      const { status, body } = await call(u)
+      expect(status).toBe(200)
+      expect(calls.some(c => c.includes('169.254'))).toBe(false)
+      expect(calls.some(c => c.includes('pinterest.com/oembed'))).toBe(false)
+      expect(body.preview?.canonical).toBeUndefined()
+      expect(body.preview?.video).toBeUndefined()
+    }
+  })
+
+  it('a pin Pinterest will not tell us about is not a failure: the card keeps the Pinterest mark and the link', async () => {
+    answer = pinterestAnswers(
+      '<html><head><title>Pinterest</title></head><body>nothing for a robot</body></html>',
+      json({ error: 'Url was not found: ' + PIN }, 400),
+    )
+    const { status, body } = await call(PIN)
+    expect(status).toBe(200)
+    expect(body.preview).toBeNull()
+    expect(body.provider).toBe('Pinterest')
+    expect(body.reason).toBe('no_preview')
+  })
 })
 
 // ── the real thing ──────────────────────────────────────────────────────────
@@ -184,6 +284,9 @@ describe.runIf(process.env.LIVE === '1')('link-preview route (live providers)', 
     'https://www.instagram.com/p/Dbqg-OzRmcw/',
     'https://www.instagram.com/p/Da7nMMNS2PY/',
     'https://vm.tiktok.com/ZMrRs9oPp/',
+    'https://www.pinterest.com/pin/424605071145308382/',
+    'https://www.pinterest.com/pin/424605071145374273/',
+    'https://pin.it/39YYRhN0f',
   ]
   for (const link of LINKS) {
     it(`resolves ${link}`, async () => {

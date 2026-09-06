@@ -186,7 +186,7 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo', 'board'] as const
 export const MOCKUP_PLATFORMS = [
   'ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin',
-  'youtube', 'yt_short', 'tiktok', 'facebook',
+  'youtube', 'yt_short', 'tiktok', 'facebook', 'pinterest',
 ] as const
 export const CANVAS_NOTE_COLORS = [
   'paper', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'ink',
@@ -237,6 +237,9 @@ export type CanvasCard = {
   embeddable?: false
   /** the account the post belongs to, when the provider said ("@handle") */
   author?: string
+  /** a plain mp4 of the post on the provider's CDN (a Pinterest video pin)
+   *  — played in place like one of our own files */
+  video?: string
   /** what the team says about a picture, a clip or a link — written under
    *  the media on the card, shown the same way on the client portal */
   caption?: string
@@ -267,14 +270,17 @@ export type LinkPreviewFields = {
   canonical?: string
   embeddable?: false
   author?: string
+  video?: string
 }
 
 /** The preview fields out of an untrusted record. The thumbnail is drawn as
- *  an <img src>, so it goes through the same https-only gate the card's own
- *  url does — a preview is not a reason to relax it. */
+ *  an <img src> and the video as a <video src>, so both go through the same
+ *  https-only gate the card's own url does — a preview is not a reason to
+ *  relax it. */
 export function sanitisePreviewFields(r: Record<string, unknown>): LinkPreviewFields {
   return {
     ...(String(r.thumb ?? '').startsWith('https://') ? { thumb: String(r.thumb).slice(0, 2000) } : {}),
+    ...(String(r.video ?? '').startsWith('https://') ? { video: String(r.video).slice(0, 2000) } : {}),
     ...(r.title ? { title: String(r.title).slice(0, 200) } : {}),
     ...(r.provider ? { provider: String(r.provider).slice(0, 40) } : {}),
     ...(['video', 'image', 'page'].includes(String(r.media ?? ''))
@@ -305,6 +311,8 @@ export function mockupPlatformFor(url: string): NonNullable<CanvasCard['platform
     case 'YouTube': return youtubeId(url) ? (/\/shorts\//.test(path) ? 'yt_short' : 'youtube') : null
     case 'LinkedIn': return 'linkedin'
     case 'Facebook': return 'facebook'
+    // a pin, or a pin.it share code that the route resolves to one
+    case 'Pinterest': return 'pinterest'
     default: return null
   }
 }

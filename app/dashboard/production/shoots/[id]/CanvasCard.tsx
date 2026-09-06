@@ -3,14 +3,14 @@
 import React from 'react'
 import {
   Bookmark, Forward, Globe, Heart, ImagePlus, MessageCircle, MoreHorizontal,
-  Music2, Pin, Play, Send, ThumbsUp, Volume2, VolumeX,
+  Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
 import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
-  instagramPlayHint, soundCommand, YOUTUBE_LISTEN,
+  instagramPlayHint, playableFileFor, soundCommand, YOUTUBE_LISTEN,
 } from '../../../../lib/board-autoplay-core'
 import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
 import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
@@ -56,6 +56,7 @@ const MARK_PATH: Record<string, string> = {
   LinkedIn: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z',
   X: 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z',
   Vimeo: 'M23.977 6.416c-.105 2.338-1.739 5.543-4.894 9.609-3.268 4.247-6.026 6.37-8.29 6.37-1.409 0-2.578-1.294-3.553-3.881L5.322 11.4C4.603 8.816 3.834 7.522 3.01 7.522c-.179 0-.806.378-1.881 1.132L0 7.197a315.065 315.065 0 0 0 3.501-3.128C5.08 2.701 6.266 1.984 7.055 1.91c1.867-.18 3.016 1.1 3.447 3.838.465 2.953.789 4.789.971 5.507.539 2.45 1.131 3.674 1.776 3.674.502 0 1.256-.796 2.265-2.385 1.004-1.589 1.54-2.797 1.612-3.628.144-1.371-.395-2.061-1.614-2.061-.574 0-1.167.121-1.777.391 1.186-3.868 3.434-5.757 6.762-5.637 2.473.06 3.628 1.664 3.493 4.797l-.013.01z',
+  Pinterest: 'M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z',
 }
 
 /** A platform's mark. Instagram is strokes (a rounded square, a lens, a
@@ -79,7 +80,6 @@ export function PlatformMark({ provider, className = 'h-3.5 w-3.5' }: { provider
       </svg>
     )
   }
-  if (provider === 'Pinterest') return <Pin className={className} aria-hidden />
   return provider ? <Globe className={className} aria-hidden /> : <Link2 className={className} aria-hidden />
 }
 
@@ -434,10 +434,11 @@ function CanvasCardInner({
       <span className={`flex shrink-0 items-center justify-center rounded-full font-semibold ${cls}`}>{initial}</span>
     )
     // the post's own media in the frame: its picture; the clip playing by
-    // itself where the platform allows (TikTok, YouTube, Vimeo, our files);
-    // Instagram's picture, and Instagram's own frame behind one tap
+    // itself where the platform allows (TikTok, YouTube, Vimeo, our files,
+    // a Pinterest video pin's own mp4); Instagram's picture, and
+    // Instagram's own frame behind one tap
     const igFrame = playing && autoKind === 'instagram' && post ? instagramEmbedUrlFor(post.url ?? '') : null
-    const isFilm = Boolean(post?.url && isPlayableFile(post.url))
+    const film = post ? playableFileFor(post) : null
     const img = post ? (
       <div ref={frameRef} className="absolute inset-0 bg-black">
         {post.thumb && (
@@ -445,8 +446,8 @@ function CanvasCardInner({
           <img src={post.thumb} alt={post.title ?? 'post'} loading="lazy" decoding="async" draggable={false}
             className="absolute inset-0 h-full w-full select-none object-cover" />
         )}
-        {isFilm && (
-          <video ref={videoRef} src={auto.load ? post.url : undefined} muted loop playsInline
+        {film && (
+          <video ref={videoRef} src={auto.load ? film : undefined} muted loop playsInline
             preload={auto.load ? 'metadata' : 'none'}
             className="absolute inset-0 h-full w-full select-none object-cover" style={{ pointerEvents: 'none' }} />
         )}
@@ -457,7 +458,7 @@ function CanvasCardInner({
           <iframe src={igFrame} title={post.title || 'Instagram post'} allow="autoplay; encrypted-media"
             className="absolute inset-0 h-full w-full border-0 bg-black" />
         ) : autoKind === 'instagram' ? null : autoFrame}
-        {!post.thumb && !isFilm && !autoSrc && !igFrame && (
+        {!post.thumb && !film && !autoSrc && !igFrame && (
           <div className="absolute inset-0 flex items-center justify-center text-white/60">
             <PlatformMark provider={post.provider} className="h-8 w-8" />
           </div>
@@ -607,6 +608,34 @@ function CanvasCardInner({
             <span className="flex items-center gap-1 text-[12px]"><MessageCircle className="h-3 w-3" /> Comment</span>
             <span className="flex items-center gap-1 text-[12px]">
               {fb ? <Forward className="h-3 w-3" /> : <Send className="h-3 w-3" />} Share
+            </span>
+          </div>
+        </div>
+      )
+    }
+
+    if (platform === 'pinterest') {
+      // a pin as Pinterest's closeup shows it: a tall 2:3 picture (or the
+      // pin's own clip, moving), the Save button, the title under it, then
+      // the pinner's row
+      return (
+        <div className="overflow-hidden rounded-card border border-border bg-surface shadow-lg shadow-foreground/10" style={{ width: card.w }}>
+          <div className="relative bg-foreground/[0.06]" style={{ aspectRatio: '2 / 3' }}>
+            {img}
+            <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-accent-red px-2.5 py-1 text-[11px] font-semibold text-white shadow">
+              Save
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5 px-2.5 py-2">
+            {editing ? captionEditor('text-[12px] font-semibold leading-snug text-foreground') : (
+              <span className="line-clamp-2 text-[12px] font-semibold leading-snug text-foreground">
+                {caption || card.name || 'Pin title'}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {avatar('h-5 w-5 bg-foreground/[0.08] text-[8px] text-muted-foreground')}
+              <span className="truncate">{shown}</span>
+              <span className="ml-auto flex shrink-0 items-center gap-1.5">{mark}<MoreHorizontal className="h-3.5 w-3.5" /></span>
             </span>
           </div>
         </div>
@@ -765,6 +794,10 @@ function CanvasCardInner({
   // only to someone who can put the file on the board (`onUpdate` is the
   // canvas's word for that; the portal never passes one)
   const playHint = instagramPlayHint(card, Boolean(onUpdate))
+  // a post whose provider hands out a plain mp4 (a Pinterest video pin) is
+  // a <video>, played the way our own files are: silently by itself while
+  // it is on screen, with sound and controls in place behind one tap
+  const film = card.kind === 'link' && card.video ? playableFileFor(card) : null
 
   /** The strip under the media: the platform's mark and name, the account
    *  when known, the post's own words in one clipped line, the plain line
@@ -832,9 +865,11 @@ function CanvasCardInner({
   const faceAspect = autoKind === 'instagram' ? 'aspect-[5/9]'
     : autoKind === 'embed'
       ? (card.provider === 'TikTok' || /\/shorts\//.test(card.url ?? '') ? 'aspect-[9/16]' : 'aspect-video')
+      // a pin is tall — 2:3 is Pinterest's own tile
+      : card.provider === 'Pinterest' ? 'aspect-[2/3]'
       : card.media === 'video' ? 'aspect-[4/5]' : 'aspect-video'
 
-  if (card.thumb || autoKind === 'embed' || autoKind === 'instagram') {
+  if (card.thumb || film || autoKind === 'embed' || autoKind === 'instagram') {
     return (
       <div
         className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${BOX}`}
@@ -855,6 +890,24 @@ function CanvasCardInner({
               className="absolute inset-0 h-full w-full object-cover"
             />
           )}
+          {film && (
+            // the pin's own clip over its picture: silent and looping by
+            // itself; the real player, with sound, once tapped — the same
+            // element, so nothing resizes under the pointer
+            <video
+              ref={videoRef}
+              src={playing || auto.load ? film : undefined}
+              poster={card.thumb}
+              controls={playing}
+              autoPlay={playing}
+              muted={!playing && !soundOn}
+              loop={!playing}
+              playsInline
+              preload={playing || auto.load ? 'metadata' : 'none'}
+              className="absolute inset-0 h-full w-full select-none bg-black object-cover"
+              style={{ pointerEvents: playing ? 'auto' : 'none' }}
+            />
+          )}
           {autoFrame}
           {/* a badge that plays where we can, and opens the post where we
               cannot — never one that does nothing. A clip already moving
@@ -862,10 +915,10 @@ function CanvasCardInner({
               its frame is the face and the play button on it is theirs. */}
           {auto.play
             ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} />
-            : autoKind === 'instagram'
+            : autoKind === 'instagram' || playing
               ? null
               : (card.media === 'video' || embed) && (
-                  embed
+                  embed || film
                     ? <PlayBadge onPlay={onPlay} label={card.title ?? 'post'} />
                     : <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">

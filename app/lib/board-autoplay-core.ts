@@ -154,16 +154,26 @@ export function instagramEmbedUrlFor(url: string): string | null {
   return `https://www.instagram.com/${shape}/${m[2]}/embed/`
 }
 
+/** The file a card would play as a `<video>`: its own URL when that is a
+ *  video file, else the provider's mp4 the preview found (a Pinterest
+ *  video pin), else nothing. */
+export function playableFileFor(card: { url?: string; video?: string }): string | null {
+  if (card.url && isPlayableFile(card.url)) return card.url
+  if (card.video && isPlayableFile(card.video)) return card.video
+  return null
+}
+
 /** Which player this card would be. A file we host (or any direct video
- *  URL) is a `<video>`; YouTube, TikTok and Vimeo are frames that run by
- *  themselves; an Instagram post is a frame that waits for one tap;
- *  everything else is `none` and keeps today's behaviour. */
+ *  URL, including a provider's own mp4) is a `<video>`; YouTube, TikTok and
+ *  Vimeo are frames that run by themselves; an Instagram post is a frame
+ *  that waits for one tap; everything else is `none` and keeps today's
+ *  behaviour. */
 export function autoplayKindFor(card: {
-  kind?: string; url?: string; media?: string; canonical?: string; embeddable?: false
+  kind?: string; url?: string; media?: string; canonical?: string; embeddable?: false; video?: string
 }): AutoplayKind {
   const url = card.url ?? ''
   if (!url) return 'none'
-  if (isPlayableFile(url)) return 'file'
+  if (playableFileFor(card)) return 'file'
   if (card.kind !== 'link') return 'none'
   if (autoplayEmbedUrlFor(url, card.canonical)) return 'embed'
   // a post Instagram itself said cannot be framed is a still, never a frame

@@ -44,6 +44,7 @@ const MOCKUP_MENU: { group: string; items: { pf: NonNullable<CanvasCard['platfor
   { group: 'TikTok', items: [{ pf: 'tiktok', label: 'Video', w: 200 }] },
   { group: 'LinkedIn', items: [{ pf: 'linkedin', label: 'Post', w: 280 }] },
   { group: 'Facebook', items: [{ pf: 'facebook', label: 'Post', w: 280 }] },
+  { group: 'Pinterest', items: [{ pf: 'pinterest', label: 'Pin', w: 236 }] },
 ]
 
 /**
@@ -499,7 +500,10 @@ export default function BriefCanvas({
       case 'link': return 72
       case 'mockup':
         return platform === 'ig_story' || platform === 'ig_reel' || platform === 'yt_short' || platform === 'tiktok'
-          ? Math.round(w * 16 / 9) : platform === 'youtube' ? Math.round(w * 9 / 16) + 56 : w + 96
+          ? Math.round(w * 16 / 9)
+          : platform === 'youtube' ? Math.round(w * 9 / 16) + 56
+          : platform === 'pinterest' ? Math.round(w * 3 / 2) + 64
+          : w + 96
       default: return 100
     }
   }
