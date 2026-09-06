@@ -32,23 +32,40 @@ export async function portalActor(clientId: string, clientName: string): Promise
   return created as unknown as TeamUser
 }
 
-/** A client spoke — their managers hear it, never the editor. */
+/**
+ * A client spoke — their managers hear it, never the editor.
+ *
+ * `alsoUserIds` widens the audience by name: the person who CREATED the
+ * thing the client is talking about (a shoot's owner) hears it too, whatever
+ * their role, because the client's answer is really for them. Each person is
+ * told once — a manager who also created the shoot gets one email, not two —
+ * and the client's own portal identity is never in the list.
+ */
 export async function notifyManagersOfComment(opts: {
   clientId: string
   speaker: string
   subjectTitle: string
   body: string
   dashboardPath: string
+  alsoUserIds?: (string | null | undefined)[]
 }) {
+  type Person = { id: string; email: string; role: string; active_status: boolean }
   const links = await table<TeamUserClient>('team_user_clients')
     .list({ by: { client_id: opts.clientId } })
   const joined = await attachOne(links, 'team_user_id', 'team_users',
     ['id', 'email', 'name', 'role', 'active_status'])
   const managers = joined
-    .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null)
-    .filter((u): u is { id: string; email: string; role: string; active_status: boolean } =>
+    .map(r => r.team_users as unknown as Person | null)
+    .filter((u): u is Person =>
       !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
-  for (const m of managers) {
+  const extraIds = [...new Set((opts.alsoUserIds ?? []).filter((id): id is string => !!id))]
+    .filter(id => !managers.some(m => m.id === id))
+  const extras: Person[] = []
+  for (const id of extraIds) {
+    const u = await table<TeamUserRow>('team_users').get(id) as unknown as Person | null
+    if (u && u.active_status && u.role !== 'client' && u.email) extras.push(u)
+  }
+  for (const m of [...managers, ...extras]) {
     await notify({
       actorName: opts.speaker,
       actorEmail: 'portal+client@mdmmarketing.com.au', // forces no-reply From, never a name-derived alias

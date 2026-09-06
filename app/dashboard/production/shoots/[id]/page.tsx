@@ -26,6 +26,7 @@ import {
 import { useProductionLive } from '../../useProductionLive'
 import { BATCH_STATUS_STYLE } from '../../shoot-ui'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
+import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
 import LocationSearch from './LocationSearch'
 import PlanReviewCard from './PlanReviewCard'
@@ -657,23 +658,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       }}
                     />
                     Visible on the client portal
-                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing.</span>
-                  </label>
-                  <label className={`flex items-center gap-2 text-secondary-13 text-muted-foreground ${batch.shared_with_client ? '' : 'opacity-50'}`}>
-                    <Switch
-                      // nothing reaches the portal while the plan itself is off —
-                      // showing a lit board toggle then reads as "still shared"
-                      checked={batch.shared_with_client ? (batch.share_board ?? true) : false}
-                      disabled={!batch.shared_with_client}
-                      onCheckedChange={async v => {
-                        const ok = await patch('share_board', v)
-                        if (ok) toast.success(v ? 'Moodboard is visible to the client' : 'Moodboard hidden — the client sees the plan only')
-                      }}
-                    />
-                    <span>
-                      Also show the moodboard
-                      <span className="block text-[12px] text-muted-foreground">The images-and-notes board below. Off means the client sees just the written plan.</span>
-                    </span>
+                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing. The board below goes with it, open, and the client can comment on any card of it.</span>
                   </label>
                 </>
               ) : (
@@ -701,7 +686,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
 
-          <BriefComments batchId={batch.id} />
+          <BriefComments batchId={batch.id} cards={canvasCards} />
         </div>
       </div>
 
@@ -728,27 +713,31 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             {(batch.canvas_cards ?? []).length === 1 ? '1 card' : `${(batch.canvas_cards ?? []).length} cards`}
           </span>
         </div>
-        <BriefCanvas
-          cards={canvasCards}
-          references={canvasRefs}
-          canEdit={canEdit}
-          clientName={batch.clients?.name}
-          onOp={async (op: CanvasOp) => {
-            const res = await fetch(`/api/production/batches/${id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ canvas_op: op }),
-            })
-            if (!res.ok) {
-              toast.error('Could not save the board')
-              void load()
-              return false
-            }
-            const json = await res.json()
-            setBatch(b => (b ? { ...b, canvas_cards: json.canvas_cards } : b))
-            return true
-          }}
-        />
+        {/* every card wears its comment count; picking one opens the thread
+            the client sees on the same card of their portal */}
+        <BriefBoardComments batchId={batch.id} cards={canvasCards}>
+          <BriefCanvas
+            cards={canvasCards}
+            references={canvasRefs}
+            canEdit={canEdit}
+            clientName={batch.clients?.name}
+            onOp={async (op: CanvasOp) => {
+              const res = await fetch(`/api/production/batches/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ canvas_op: op }),
+              })
+              if (!res.ok) {
+                toast.error('Could not save the board')
+                void load()
+                return false
+              }
+              const json = await res.json()
+              setBatch(b => (b ? { ...b, canvas_cards: json.canvas_cards } : b))
+              return true
+            }}
+          />
+        </BriefBoardComments>
       </div>
 
       {/* ── the booking ceremony ── */}

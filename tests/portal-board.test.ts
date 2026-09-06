@@ -127,6 +127,8 @@ describe('one shoot is one card, all the way through', () => {
     expect(shootCards(d)[0].comments).toEqual([{
       id: 'bc-1', created_at: '2026-09-03T00:00:00.000Z', body: 'Plan is up — have a look',
       author_name: 'Priya Patel', from_team: true,
+      // the shoot's general thread — not pinned to a card of the board
+      card_id: null,
     }])
   })
 })

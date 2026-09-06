@@ -6,11 +6,15 @@ import { announceItemChange, announceBatchChange } from '../../../lib/production
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 import { NOT_WITH_YOU, portalActions } from '../../../lib/portal-core'
 import type { ItemStatus } from '../../../lib/workflow-core'
+import { sanitiseCanvasCards } from '../../../lib/batch-brief-core'
+import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../lib/canvas-comments-core'
 
 /**
- * A comment from a portal child page — item or shoot thread. Token-bearer
- * auth like /api/portal/act; the comment persists in the same thread the
- * team reads, and the client's managers are notified (never the editor).
+ * A comment from the portal — on a piece, on a shoot, or pinned to ONE card
+ * of the shoot's planning board (`card_id`). Token-bearer auth like
+ * /api/portal/act; the comment persists in the same thread the team reads,
+ * and the client's managers AND the person who created the shoot are told
+ * (never the editor, never the client).
  */
 export async function POST(req: Request) {
   return withRequestCache(async () => {
@@ -67,9 +71,18 @@ export async function POST(req: Request) {
       if (!batch || !batch.shared_with_client) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
+      // pinned to a card of the board: only a card the client can actually
+      // see on it — an id that is not on the board is not a card
+      const cardId = body.card_id == null ? null : String(body.card_id).slice(0, 80)
+      const card = cardId ? findCanvasCard(sanitiseCanvasCards(batch.canvas_cards), cardId) : null
+      if (cardId && !card) {
+        return NextResponse.json({ error: 'That card is not on the board any more.' }, { status: 404 })
+      }
+      const cardLabel = card ? canvasCardLabel(card) : null
       try {
         await table('batch_comments').insert({
           batch_id: batch.id, author_id: actor.id, body: signed, resolved: false,
+          card_id: card ? card.id : null,
         })
       } catch {
         // the thread could not be written — say so rather than pretending the
@@ -81,9 +94,11 @@ export async function POST(req: Request) {
         entityType: 'batch', entityId: batch.id,
         action: 'comment_added', detail: 'client (portal)',
       })
+      // the manager, and whoever created the shoot — the board is theirs
       await notifyManagersOfComment({
-        clientId: client.id, speaker, subjectTitle: batch.title, body: text,
-        dashboardPath: `/dashboard/production/shoots/${batch.id}`,
+        clientId: client.id, speaker, subjectTitle: commentSubject(batch.title, cardLabel), body: text,
+        dashboardPath: shootCommentPath(batch.id, card?.id),
+        alsoUserIds: [batch.owner_id],
       }).catch(e => console.error('portal comment notify error:', e))
       announceBatchChange({ batch_id: batch.id, client_id: client.id, status: 'brief', kind: 'updated' })
       return NextResponse.json({ ok: true })

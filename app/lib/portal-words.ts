@@ -119,14 +119,14 @@ export function amClause(amName?: string | null): string {
   return n ? `${n}, your account manager,` : 'your account manager'
 }
 
-/** What approving actually causes — stated before the click, not after. */
-export const approveConsequence = (amName?: string | null) =>
-  `Approving sends it to scheduling — ${amClause(amName)} will book the posting time.`
+/** What approving actually causes — stated before the tap, in plain words. */
+export const approveConsequence = () =>
+  'Approving tells the team it’s good to go. No note needed.'
 
 export const approvePlanConsequence =
   'Approving confirms the shoot plan — we’ll lock in the date.'
 
-export const APPROVED_TOAST = 'Approved — it’s off to scheduling.'
+export const APPROVED_TOAST = 'Approved — thank you.'
 export const PLAN_APPROVED_TOAST = 'Plan approved — thank you.'
 export const changesSentToast = (amName?: string | null) => `Sent to ${amPhrase(amName)}.`
 
@@ -189,23 +189,6 @@ export const PLAN_STATE_LINE: Record<Exclude<PlanState, null>, string> = {
   date_confirmed: 'Approved ✓ — the date is confirmed.',
 }
 
-/**
- * A plan can be approved AND come with something to say — "yes, and please
- * start after nine". The client has just typed that note and pressed a button;
- * the card has to show back that BOTH things happened, or the note looks like
- * it went nowhere.
- *
- * Only the freshly approved state says it. A confirmed date is a bigger fact
- * about their diary than a note they wrote a week ago, so it keeps its own line.
- */
-export const PLAN_APPROVED_WITH_NOTE_LINE = 'Approved ✓ — with your note'
-
-export function planStateLine(state: Exclude<PlanState, null>, withNote = false): string {
-  return withNote && state === 'approved' ? PLAN_APPROVED_WITH_NOTE_LINE : PLAN_STATE_LINE[state]
+export function planStateLine(state: Exclude<PlanState, null>): string {
+  return PLAN_STATE_LINE[state]
 }
-
-/** Approving a plan while saying something — the quiet third move on the card,
- *  and what the box invites them to write in it. A shoot is a day in their
- *  diary, so the question is about the day. */
-export const APPROVE_PLAN_WITH_NOTE = 'Approve with a note'
-export const PLAN_NOTE_PLACEHOLDER = 'Anything we should know before the day?'

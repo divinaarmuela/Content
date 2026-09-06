@@ -8,6 +8,9 @@ import { CheckCircle2, CircleDashed, Send } from 'lucide-react'
 import { useProductionLive, type ProductionChange } from '../../useProductionLive'
 import MentionBox from '../../../MentionBox'
 import { extractMentions, type Mentionable } from '../../../../lib/mention-core'
+import type { CanvasCard } from '../../../../lib/batch-brief-core'
+import { canvasCardLabel, findCanvasCard, onCardLine } from '../../../../lib/canvas-comments-core'
+import { OPEN_CARD_EVENT } from './BriefBoardComments'
 
 type Row = {
   id: string
@@ -16,6 +19,8 @@ type Row = {
   author_id?: string | null
   assigned_to?: string | null
   resolved?: boolean
+  /** pinned to one card of the planning board */
+  card_id?: string | null
   team_users: { name: string | null; role: string | null } | null
 }
 
@@ -31,7 +36,11 @@ const when = (iso: string) =>
  * "Waiting on you" until someone ticks it done. The client sees the words,
  * never the tag.
  */
-export default function BriefComments({ batchId }: { batchId: string }) {
+export default function BriefComments({ batchId, cards = [] }: {
+  batchId: string
+  /** the planning board, so a comment pinned to a card can say which */
+  cards?: CanvasCard[]
+}) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [viewerId, setViewerId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -141,6 +150,14 @@ export default function BriefComments({ batchId }: { batchId: string }) {
                       </span>
                     )}
                     <span className="text-muted-foreground">{when(r.created_at)}</span>
+                    {r.card_id && (
+                      // opens that card's thread beside the board (BriefBoardComments listens)
+                      <button type="button"
+                        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_CARD_EVENT, { detail: r.card_id }))}
+                        className="rounded bg-tint-amber px-1.5 py-px text-[11px] italic text-foreground underline-offset-2 hover:underline">
+                        {onCardLine(canvasCardLabel(findCanvasCard(cards, r.card_id)))}
+                      </button>
+                    )}
                     {r.assigned_to && !r.resolved && (
                       <span className="rounded-full bg-tint-amber px-2.5 py-1.5 text-chip-12 font-medium text-foreground">
                         {forMe ? 'Waiting on you' : `Waiting on ${nameOf(r.assigned_to) ?? 'someone'}`}

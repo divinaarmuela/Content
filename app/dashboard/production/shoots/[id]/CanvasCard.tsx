@@ -12,6 +12,8 @@ import { autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, instagramEmbedUrl
 import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
 import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
 import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
+// canvas comments — see the marked block at the bottom of this file
+import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 export const NOTE_COLORS: Record<string, string> = {
@@ -663,4 +665,18 @@ function CanvasCardInner({
   )
 }
 
-export const CanvasCardView = React.memo(CanvasCardInner)
+// ── canvas comments (portal + shoot page) — the ONE hook into this file ──
+// The badge in the card's corner reads a context the page around the canvas
+// provides (app/components/canvas/CanvasComments.tsx); with no provider it
+// renders nothing, so every other place the canvas is drawn is unchanged.
+// It rides in a fragment beside the card, absolutely positioned against the
+// canvas's own `[data-cid]` wrapper, so no card kind's markup is touched.
+export const CanvasCardView = React.memo(function CanvasCardView(props: Parameters<typeof CanvasCardInner>[0]) {
+  return (
+    <>
+      <CanvasCardInner {...props} />
+      <CanvasCommentBadge cardId={props.card.id} />
+    </>
+  )
+})
+// ── end canvas comments ──

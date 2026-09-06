@@ -6,9 +6,10 @@ import { getPortalShootDetail } from '../../../../lib/portal-thread'
 import { getPortalDataByToken } from '../../../../lib/portal-data'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
+import PortalLive from '../../../../components/portal/PortalLive'
 import { PortalCardView } from '../../../../components/portal/PortalBoard'
+import ShootBoard from '../../../../components/portal/ShootBoard'
 import CommentThread from '../../../../components/portal/CommentThread'
-import BriefCanvas from '../../../../dashboard/production/shoots/[id]/BriefCanvas'
 
 export const metadata: Metadata = {
   title: 'Your content — MD Media',
@@ -17,20 +18,27 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 /**
- * One shoot, on its own page: the same card as on the board (the plan, the
- * PDF, the one tap to approve), the planning board when it was shared, and
- * the shoot's comment thread. No popups.
+ * One shoot, on its own page — the full-screen view of what the portal
+ * already shows under the shoot: the same card (the plan, the PDF, the one
+ * tap to approve), the planning board open with a thread on every card, and
+ * the shoot's own conversation. No popups. Kept current live.
  */
-export default async function PortalShootPage({ params }: { params: Promise<{ token: string; id: string }> }) {
+export default async function PortalShootPage({ params, searchParams }: {
+  params: Promise<{ token: string; id: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { token: raw, id } = await params
-  const [data, portal] = await Promise.all([getPortalShootDetail(raw, id), getPortalDataByToken(decodeURIComponent(raw).split('--').pop() ?? raw)])
-  if (!data || !portal) notFound()
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
+  const [data, portal] = await Promise.all([getPortalShootDetail(raw, id), getPortalDataByToken(token)])
+  if (!data || !portal) notFound()
   const card = portal.cards.find(c => c.kind === 'shoot' && c.id === id)
   if (!card) notFound()
+  const sp = (await searchParams) ?? {}
+  const initialCard = typeof sp.card === 'string' ? sp.card : null
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
+      <PortalLive clientId={portal.client.id} />
       <div
         className="bg-background text-foreground"
         style={{
@@ -45,29 +53,30 @@ export default async function PortalShootPage({ params }: { params: Promise<{ to
         }}
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-          <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-5 pr-14 sm:px-10">
+          <div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-5 pr-14 sm:px-10">
             <Link href={`/portal/${token}`} className="inline-flex min-h-11 items-center gap-2 text-[14px] font-semibold">
-              ← Your board
+              ← {portal.client.name}
             </Link>
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-8 pb-24 sm:px-10 sm:pb-16">
-          <PortalCardView card={card} amName={portal.am_name} surface={{ token }} />
+        <main className="portal-legible mx-auto flex w-full max-w-[1400px] flex-col gap-8 px-5 py-8 pb-24 sm:px-10 sm:pb-16">
+          <PortalCardView card={card} amName={portal.am_name} surface={{ token }} className="max-w-3xl" />
 
           {data.shoot.canvas_cards.length > 0 && (
-            <section className="flex flex-col gap-3">
-              <h2 className="text-[17px] font-semibold">{data.shoot.board_name || 'The planning board'}</h2>
-              {/* the canvas reads `.dark` from <html>, where PortalShell puts
-                  the choice, so it follows the page */}
-              <div className="overflow-hidden rounded-inner border border-border">
-                <BriefCanvas cards={data.shoot.canvas_cards} references={[]} canEdit={false}
-                  clientName={data.client.name} onOp={async () => false} />
-              </div>
-            </section>
+            <ShootBoard
+              shootId={data.shoot.id}
+              boardName={data.shoot.board_name}
+              cards={data.shoot.canvas_cards}
+              comments={data.comments}
+              surface={{ token }}
+              clientName={data.client.name}
+              amName={data.am_name}
+              initialCardId={initialCard}
+            />
           )}
 
-          <div className="portal-legible">
+          <div className="max-w-3xl">
             <CommentThread token={token} kind="shoot" id={data.shoot.id} comments={data.comments} />
           </div>
         </main>

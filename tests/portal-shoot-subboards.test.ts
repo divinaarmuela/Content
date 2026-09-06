@@ -66,20 +66,38 @@ describe('the client’s view of boards inside the shoot board', () => {
     expect(boardTrail(d.shoot.canvas_cards, 'day2').map(c => c.name)).toEqual(['Shoot brief', 'Concepts', 'Day two'])
   })
 
-  it('a board the team switched off is empty for the client, tiles included', async () => {
+  it('the board goes with the plan: an old `share_board: false` row still shows its board', async () => {
+    // the owner's rule — "the Milanote board is shown by default" — and there
+    // is no longer a switch to hide it. Rows written while the switch existed
+    // still parse; the flag simply no longer hides anything.
     seed(false)
     const d = (await getPortalShootDetail(TOKEN, 'b-1'))!
-    expect(d.shoot.canvas_cards).toEqual([])
+    expect(d.shoot.canvas_cards.map(c => c.id)).toEqual(expect.arrayContaining(['concepts', 'c1', 'day2', 'd1']))
+  })
+
+  it('…and a row that never had the flag shows it too', async () => {
+    seed(null)
+    const d = (await getPortalShootDetail(TOKEN, 'b-1'))!
+    expect(d.shoot.canvas_cards.length).toBeGreaterThan(0)
   })
 })
 
 describe('the portal page is read-only, by construction', () => {
+  // the board is drawn by ONE component on the portal — under the shoot on
+  // the main page and full-screen on the shoot's own page — and that is the
+  // only place the portal touches the canvas
+  const board = readFileSync('app/components/portal/ShootBoard.tsx', 'utf8')
+  const main = readFileSync('app/components/portal/PortalSectionsView.tsx', 'utf8')
   const page = readFileSync('app/portal/[token]/shoot/[id]/page.tsx', 'utf8')
   const canvas = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
 
   it('renders the same canvas with editing off and a save that always refuses', () => {
-    expect(page).toMatch(/<BriefCanvas[^>]*canEdit=\{false\}/)
-    expect(page).toMatch(/onOp=\{async \(\) => false\}/)
+    expect(board).toMatch(/<BriefCanvas[^>]*canEdit=\{false\}/)
+    expect(board).toMatch(/onOp=\{async \(\) => false\}/)
+    expect(main).toMatch(/<ShootBoard/)
+    expect(page).toMatch(/<ShootBoard/)
+    expect(main).not.toMatch(/<BriefCanvas/)
+    expect(page).not.toMatch(/<BriefCanvas/)
   })
 
   it('every way to add, rename, move or delete on the canvas is behind the edit gate', () => {

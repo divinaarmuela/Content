@@ -12,6 +12,7 @@ import { accountManagerName, type PortalItem, type PortalShoot } from './portal-
 import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
+import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -25,6 +26,10 @@ export type PortalComment = {
   body: string
   author_name: string
   from_team: boolean
+  /** the planning-board card this is pinned to; null = the general thread */
+  card_id?: string | null
+  /** that card, in a person's words */
+  card_label?: string | null
 }
 
 export type PortalItemDetail = {
@@ -53,7 +58,7 @@ export async function resolvePortalClient(rawToken: string) {
 type AuthorRow = { name: string | null; role: string | null } | null
 
 const toComment = (clientName: string) => (c: {
-  id: string; created_at: string; body: string; team_users: AuthorRow
+  id: string; created_at: string; body: string; card_id?: string | null; team_users: AuthorRow
 }): PortalComment => {
   const role = c.team_users?.role ?? 'client'
   const fromTeam = role !== 'client'
@@ -65,6 +70,7 @@ const toComment = (clientName: string) => (c: {
     // see their own company name; team authors keep their real name
     author_name: fromTeam ? (c.team_users?.name ?? 'MD Media') : clientName,
     from_team: fromTeam,
+    card_id: c.card_id ?? null,
   }
 }
 
@@ -175,6 +181,10 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
   ])
   const brief = (briefRows as unknown as { id: string; status: string; work_kinds: { slug?: string } | null }[])
     .find(r => (r.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief')
+  // the board goes with the plan (the owner's rule): a shared shoot shows its
+  // board, whatever the old `share_board` flag on the row says
+  const canvasCards = sanitiseCanvasCards(b.canvas_cards)
+  const asComment = toComment(client.name)
 
   return {
     client: { id: client.id, name: client.name },
@@ -189,14 +199,18 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       board_name: b.board_name ?? null,
       planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
       shot_list: sanitiseShotList(b.shot_list),
-      canvas_cards: (b.share_board ?? true) ? sanitiseCanvasCards(b.canvas_cards) : [],
+      canvas_cards: canvasCards,
       details_shared: true, // this page only exists for shared shoots
       awaiting_decision: brief?.status === 'client_review' ? { item_id: brief.id } : null,
       plan_state: planState(brief?.status, b.status as string, true),
       brief_item_id: brief?.id ?? null,
     },
     comments: (comments as unknown as {
-      id: string; created_at: string; body: string; team_users: AuthorRow
-    }[]).map(toComment(client.name)),
+      id: string; created_at: string; body: string; card_id?: string | null; team_users: AuthorRow
+    }[]).map(r => {
+      const c = asComment(r)
+      if (c.card_id) c.card_label = canvasCardLabel(findCanvasCard(canvasCards, c.card_id))
+      return c
+    }),
   }
 }

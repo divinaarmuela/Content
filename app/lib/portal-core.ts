@@ -206,6 +206,12 @@ export type PortalCardComment = {
   body: string
   author_name: string
   from_team: boolean
+  /** the card on the shoot's planning board this is pinned to — null is the
+   *  shoot's (or the piece's) general thread */
+  card_id?: string | null
+  /** that card in a person's words ("Hero reel image"); set by the server
+   *  from the board, so the client never has to work it out */
+  card_label?: string | null
 }
 
 /**
@@ -215,7 +221,7 @@ export type PortalCardComment = {
  */
 export function toPortalComment(clientName: string) {
   return (c: {
-    id: string; created_at: string; body: string
+    id: string; created_at: string; body: string; card_id?: string | null
     team_users?: { name?: string | null; role?: string | null } | null
   }): PortalCardComment => {
     const role = c.team_users?.role ?? 'client'
@@ -226,6 +232,7 @@ export function toPortalComment(clientName: string) {
       body: c.body,
       author_name: fromTeam ? (c.team_users?.name ?? 'MD Media') : clientName,
       from_team: fromTeam,
+      card_id: c.card_id ?? null,
     }
   }
 }
@@ -249,6 +256,64 @@ export function columnCounts<T extends { column: PortalColumnKey }>(cards: T[]):
   const out = { making: 0, checking: 0, your_review: 0, approved: 0, posted: 0 }
   for (const c of cards) out[c.column] += 1
   return out
+}
+
+// ── the four sections of the page ───────────────────────────────────────────
+
+export type PortalSectionKey = 'review' | 'production' | 'approved' | 'published'
+
+export type PortalSection<T> = {
+  key: PortalSectionKey
+  /** the heading, in the client's words — the same four words as the hero counters */
+  title: string
+  /** what an empty section says instead of nothing */
+  empty: string
+  cards: T[]
+}
+
+/**
+ * The page reads top to bottom in the order a client cares: what needs THEM,
+ * then what the team is making, then what is approved and booked, then what
+ * is live. The five columns fold into those four:
+ *   Needs your review     = with the client for a decision
+ *   In production         = being made, being checked, and "we have your notes"
+ *   Approved & scheduled  = approved, and booked in
+ *   Published             = live (and a wrapped shoot)
+ * A shoot card follows the same rule through its column, so a plan waiting
+ * on the client counts as needing their review.
+ */
+export function portalSections<T extends { column: PortalColumnKey; actions: PortalActions }>(cards: T[]): PortalSection<T>[] {
+  const review = cards.filter(c => c.column === 'your_review' && c.actions.approve)
+  const production = cards.filter(c => c.column === 'making' || c.column === 'checking' || (c.column === 'your_review' && !c.actions.approve))
+  const approved = cards.filter(c => c.column === 'approved')
+  const published = cards.filter(c => c.column === 'posted')
+  return [
+    { key: 'review', title: 'Needs your review', empty: 'Nothing is waiting on you right now.', cards: review },
+    { key: 'production', title: 'In production', empty: 'Nothing in production right now.', cards: production },
+    { key: 'approved', title: 'Approved & scheduled', empty: 'Nothing approved yet.', cards: approved },
+    { key: 'published', title: 'Published', empty: 'Published posts appear here with live links.', cards: published },
+  ]
+}
+
+/** The four hero counters — the same four words, the same four piles. */
+export function sectionCounts<T extends { column: PortalColumnKey; actions: PortalActions }>(cards: T[]): Record<PortalSectionKey, number> {
+  const out = { review: 0, production: 0, approved: 0, published: 0 } as Record<PortalSectionKey, number>
+  for (const s of portalSections(cards)) out[s.key] = s.cards.length
+  return out
+}
+
+/**
+ * The four numbers on the hero — and on the section headings, which are the
+ * SAME four words, so a client counting "02" finds the section that says it.
+ * Pieces count in their section; shoots live in their own section, so they
+ * count only where it matters: a plan waiting on the client is a thing
+ * waiting on the client, and "Needs your review 00" over a plan asking to
+ * be approved would be the page contradicting itself.
+ */
+export function heroCounts<T extends { kind: 'work' | 'shoot'; column: PortalColumnKey; actions: PortalActions }>(cards: T[]): Record<PortalSectionKey, number> {
+  const counts = sectionCounts(cards.filter(c => c.kind === 'work'))
+  counts.review += cards.filter(c => c.kind === 'shoot' && c.actions.approve).length
+  return counts
 }
 
 /** How many cards are actually waiting on the client — the number the page
