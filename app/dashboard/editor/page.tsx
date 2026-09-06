@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
 import { pageCards, pageColumns, type BoardViewer } from '../../lib/board-view-core'
-import { isAsset } from '../../lib/work-pages-core'
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
@@ -20,9 +19,10 @@ import { NewCardDialog } from '../board/BoardDialogs'
  * THE EDITOR PAGE: your cards, from draft to the client.
  *
  * One board, all five columns — Draft to Posted — holding only the cards
- * assigned to the person looking, so they see their work all the way out. A card is one deliverable
- * with one link; hand it on for checking from the card itself. A card that
- * came back carries what to change, in the manager's words.
+ * assigned to the person looking, so they see their work all the way out.
+ * A card is one deliverable: what needs doing and one link. Hand it on for
+ * checking from the card itself ("Ready for checking"). A card that came
+ * back carries what to change, in the manager's words.
  *
  * An account manager looking in sees every card still being made. The rows
  * are live; every move is the ordinary transition route.
@@ -49,7 +49,7 @@ export default function EditorPage() {
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return pageCards('editor', rows, viewer, { isAsset: c => isAsset(c) })
+    return pageCards('editor', rows, viewer)
   }, [live.items, viewer])
 
   const columns = useMemo(() => (viewer ? pageColumns('editor', viewer, cards) : []), [viewer, cards])
@@ -61,7 +61,9 @@ export default function EditorPage() {
     <div className="flex flex-col gap-4">
       <PageTitle
         title="Editor"
-        summary={isManager ? 'Everything still being made, from draft to the client.' : 'Your cards, from draft to the client.'}
+        summary={isManager
+          ? 'Everything still being made, Draft to With client. Check the work at its link, then send it on or send it back.'
+          : 'Your cards, Draft to Posted. Each one says what needs doing and where the work lives — add the link, then press Ready for checking.'}
         actions={viewer && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">

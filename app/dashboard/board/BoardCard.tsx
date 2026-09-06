@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ExternalLink, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,13 +19,19 @@ import { cardTone, kindTone } from '../ui/tone'
 /**
  * ONE CARD ON THE BOARD.
  *
- * Client, title, kind, the link with its label, who holds it, when it is
- * due — one line each, no paragraphs. One control, labelled with what it
- * does; anything else sits behind "More", including the keyboard's way of
- * moving the card between columns. The whole card opens the item page.
+ * Client, title, kind, the link with its label, what needs doing, who holds
+ * it, when it is due — one line each. What needs doing is clamped to two
+ * lines with a "Read all" control when there is more; the whole card opens
+ * the item page too. One control, labelled with what it does; anything else
+ * sits behind "More", including the keyboard's way of moving the card
+ * between columns. A card with no link says so — "No link yet" — to anyone
+ * who cannot add one.
  *
  * Presentation only: the board decides what each press does.
  */
+
+/** the brief fits two lines below roughly this many characters */
+const BRIEF_FOLD = 110
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onAction, onMove, onLink, onKind, canDelete, onDelete,
 }: {
@@ -45,6 +52,8 @@ export function BoardCard({
   onDelete?: (card: BoardViewCard) => void
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
+  const [briefOpen, setBriefOpen] = useState(false)
+  const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
   const { primary, more } = cardActions(card, viewer)
   const targets = moveTargets(card, viewer)
   const column = columnOf(card.status)
@@ -76,6 +85,14 @@ export function BoardCard({
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
       </>}
       note={<>
+        {lines.brief && (
+          <span
+            className={`mb-1 block whitespace-pre-line text-foreground [[data-tone=ink]_&]:text-cream ${briefOpen ? '' : 'line-clamp-2'}`}
+            title={briefOpen ? undefined : lines.brief}
+          >
+            {lines.brief}
+          </span>
+        )}
         <span>{lines.assignee} · {lines.version}</span>
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>
@@ -97,7 +114,19 @@ export function BoardCard({
             className="h-11 rounded-full border-dashed border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
             Add link
           </Button>
-        ) : null}
+        ) : (
+          <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-border px-3.5 text-[13px] font-semibold text-muted-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:text-cream/70">
+            No link yet
+          </span>
+        )}
+
+        {briefFolds && (
+          <Button variant="outline" aria-expanded={briefOpen}
+            onClick={e => { e.preventDefault(); setBriefOpen(o => !o) }}
+            className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            {briefOpen ? 'Less' : 'Read all'}
+          </Button>
+        )}
 
         {primary && (
           <Button disabled={busy}

@@ -32,6 +32,8 @@ export type BoardViewCard = {
   work_kinds?: { name: string; slug?: string; color?: string } | null
   link_url?: string | null
   link_kind?: string | null
+  /** what needs doing — the requirement, in the manager's words */
+  brief?: string | null
   owner_id: string | null
   scheduler_ids?: unknown
   due_date: string | null
@@ -70,6 +72,8 @@ export type CardLines = {
   kind: string | null
   /** where the work lives, with the label the chip wears */
   link: { url: string; label: string } | null
+  /** what needs doing, as plain text — null when nobody has said */
+  brief: string | null
   /** who is holding it: a name, "You", or "Nobody yet" */
   assignee: string
   assigneeId: string | null
@@ -113,6 +117,7 @@ export function cardLines(
     title: card.title,
     kind: card.work_kinds?.name ?? null,
     link: card.link_url ? { url: card.link_url, label: linkLabel(card.link_kind) } : null,
+    brief: card.brief?.trim() ? card.brief.trim() : null,
     assignee,
     assigneeId: card.owner_id ?? null,
     due,
@@ -126,19 +131,28 @@ export function cardLines(
 /**
  * The one thing a person can DO to a card from the board.
  *
- * `transition` is a plain move through the funnel; the three others are the
- * same moves with the extra the route needs — what to change, a platform and
- * a time, a live link — asked for on the card rather than on another page.
+ * `transition` is a plain move through the funnel — one tap, nothing asked.
+ * `send_back` is the same move with the one extra the route needs: what to
+ * change, asked for on the card rather than on another page.
+ *
+ * THE CARD NEVER ASKS ANYONE TO POST. A card is a link and what needs doing;
+ * the scheduler takes those and does the posting on the Schedule page (or
+ * wherever they post). Back on the board the card just moves — Ready to post
+ * → Posted — with no channel, no time and no live link asked for. Real
+ * posting lives in `/dashboard/social/schedule` and `/api/social/publish`.
  */
 export type CardAction =
   | { kind: 'transition'; to: ItemStatus; label: string }
   | { kind: 'send_back'; to: 'revision_required'; label: string }
-  | { kind: 'book'; to: 'scheduled'; label: string }
-  | { kind: 'publish'; to: 'published'; label: string }
 
 export const SEND_BACK_LABEL = 'Send back for changes'
-export const BOOK_LABEL = 'Book it in'
-export const PUBLISH_LABEL = 'Mark posted'
+/** the editor hands a card on: the machine says "Submit for review", the
+ *  card says what happens next in the team's own word for the column */
+export const READY_FOR_CHECK_LABEL = 'Ready for checking'
+/** the scheduler has booked the post in, wherever they post */
+export const BOOKED_LABEL = 'Booked in'
+/** the post has gone out */
+export const POSTED_LABEL = 'Posted'
 
 const isManagerHat = (hats: readonly Role[]) =>
   hats.includes('account_manager') || hats.includes('super_admin')
@@ -151,8 +165,11 @@ export function actionFor(to: ItemStatus, label: string, hats: readonly Role[]):
   if ((to === 'revision_required' || to === 'client_changes_requested') && isManagerHat(hats)) {
     return { kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL }
   }
-  if (to === 'scheduled') return { kind: 'book', to, label: BOOK_LABEL }
-  if (to === 'published') return { kind: 'publish', to, label: PUBLISH_LABEL }
+  // the machine's words are "Submit for review" / "Mark scheduled" / "Mark
+  // published"; on the card each move is said as the fact it records
+  if (to === 'internal_review') return { kind: 'transition', to, label: READY_FOR_CHECK_LABEL }
+  if (to === 'scheduled') return { kind: 'transition', to, label: BOOKED_LABEL }
+  if (to === 'published') return { kind: 'transition', to, label: POSTED_LABEL }
   return { kind: 'transition', to, label }
 }
 
@@ -246,31 +263,23 @@ export function isAssignedTo(card: BoardViewCard, viewerId: string): boolean {
 /**
  * THE CARDS A PAGE SHOWS — and nobody is left with work they cannot see.
  *
- * Production is every card the person may see. Editor is the cards assigned
- * to the viewer (an editor's whole world) — or, for a manager looking in,
- * everything still being made. Scheduler is the posting queue: Ready to post
- * and Posted. But an internal task can be handed to a scheduler, and the
- * Scheduler page is now the only page they have, so anything assigned to
- * them rides along whatever column it is in. The same rule holds for an
- * editor: assigned means shown, whatever the kind.
- *
- * `isAsset` says which cards are content (a shoot plan and a research task
- * are not posts, so they never fill the posting queue on their own).
+ * Production is every card the person may see. Scheduler is the same set:
+ * all five columns are drawn there, so the scheduler sees the flow coming —
+ * every card for the clients they hold, not only the queue — and the columns
+ * say what is ready. Editor is the cards assigned to the viewer (an editor's
+ * whole world) — or, for a manager looking in, everything still being made.
+ * Assigned means shown, whatever the kind.
  */
 export function pageCards<T extends BoardViewCard>(
   page: BoardPage, cards: readonly T[], viewer: BoardViewer,
-  opts: { isAsset?: (c: T) => boolean } = {},
 ): T[] {
-  const isAsset = opts.isAsset ?? (() => true)
   const mine = (c: T) => isAssignedTo(c, viewer.id)
-  if (page === 'production') return [...cards]
   if (page === 'editor') {
     if (viewer.role === 'editor') return cards.filter(mine)
     // a manager on the Editor page sees the making, not the posting
     return cards.filter(c => mine(c) || (columnOf(c.status) !== 'ready_to_post' && columnOf(c.status) !== 'posted'))
   }
-  const queue = (c: T) => isAsset(c) && (columnOf(c.status) === 'ready_to_post' || columnOf(c.status) === 'posted')
-  return cards.filter(c => queue(c) || mine(c))
+  return [...cards]
 }
 
 /**

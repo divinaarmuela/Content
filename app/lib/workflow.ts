@@ -601,12 +601,22 @@ export async function performTransition(
       throw new AuthzError('Add a new version with the revisions first.', 400)
     }
   }
-  if (!system && check.rule.requires === 'schedule_entry' && !isBriefTask) {
+  // A LINK CARD MOVES ON THE SCHEDULER'S WORD.
+  //
+  // Since the board reset a card is one deliverable with one pasted link and
+  // what needs doing. The scheduler takes the link, posts it where they post
+  // (the Schedule page, or the platform itself), and moves the card — Ready
+  // to post → Posted. The card never asks for a channel, a time or a live
+  // link, so the two evidence checks below apply only to the older media
+  // cards, whose posting is recorded in `schedule_entries`.
+  const linkCard = typeof (item as { link_url?: string | null }).link_url === 'string'
+    && !!(item as { link_url?: string | null }).link_url
+  if (!system && !linkCard && check.rule.requires === 'schedule_entry' && !isBriefTask) {
     const count = await table<ScheduleEntry>('schedule_entries')
       .count({ by: { item_id: item.id }, where: r => r.scheduled_at != null })
     if (!count) throw new AuthzError('Add at least one platform with a date/time before marking scheduled', 400)
   }
-  if (!system && check.rule.requires === 'live_url') {
+  if (!system && !linkCard && check.rule.requires === 'live_url') {
     // a platform is "published" once it has a live link OR was marked posted
     // in-app (publish_status flips to 'published' either way) — Stories have
     // no link, so requiring a URL would strand them

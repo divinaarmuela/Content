@@ -41,13 +41,13 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card assigned to you is on your board, in three columns: Draft, Internal check and With client. One card is one thing to make.',
+      body: 'Every card assigned to you is on your board, in five columns from Draft to Posted. One card is one thing to make: it shows what needs doing and the link to the work.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
       title: 'Add the link, then hand it on',
-      body: 'Paste the Google Drive or Dropbox link on the card, then press "Submit for review" on the card. An account manager checks it next.',
+      body: 'Paste the Google Drive or Dropbox link on the card, then press "Ready for checking". An account manager checks it next.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
@@ -64,20 +64,20 @@ const SCHEDULER: GettingStartedPanel = {
   heading: HEADING,
   steps: [
     {
-      title: 'Only signed-off work reaches you',
-      body: 'Everything in Ready to post has already been approved by the client. Nothing here still needs their opinion.',
+      title: 'See what is coming',
+      body: 'Every card for your clients is on the board, from Draft to Posted. Only the Ready to post column has been signed off — nothing else is yours to post yet.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },
     {
-      title: 'Book it in from the card',
-      body: 'Press "Book it in" on a card, pick the channel and the posting time. Times are in the audience’s timezone, not yours.',
-      href: '/dashboard/scheduler',
-      linkLabel: 'Open my board',
+      title: 'Take the link, post it, move the card',
+      body: 'Each card shows what needs doing and the link to the work. Post it on the Schedule page, then press "Booked in" on the card — and "Posted" once it is live.',
+      href: '/dashboard/social/schedule',
+      linkLabel: 'Open the Schedule page',
     },
     {
-      title: 'Scheduled is not published',
-      body: 'Scheduled means a date is set. Published means it is actually live. The calendar shows both.',
+      title: 'Booked in is not posted',
+      body: 'Booked in means it has a time. Posted means it is actually live. The posting calendar shows both.',
       href: '/dashboard/scheduler/calendar',
       linkLabel: 'Open the posting calendar',
     },
@@ -113,20 +113,20 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
   heading: 'The Editor board, for reviewers',
   steps: [
     {
-      title: 'Your column is "Ready for review"',
-      body: 'Anything there is waiting on you. Open it, watch the cut, then approve it or ask for changes with a note.',
+      title: 'Your column is "Internal check"',
+      body: 'Anything there is waiting on you. Open the link, check the work, then send it to the client — or send it back with what needs changing, right on the card.',
       href: '/dashboard/editor',
       linkLabel: 'See what is waiting',
     },
     {
       title: 'Nobody on it? Give it to someone',
-      body: 'Cards with no owner show "Take this" and "Assign…". Assign hands it to a named editor and emails them the job.',
+      body: 'A card with nobody on it says "Nobody yet". Open it to hand it to a named editor, who is emailed the job.',
       href: '/dashboard/editor',
-      linkLabel: 'Find unassigned items',
+      linkLabel: 'Find unassigned cards',
     },
     {
-      title: 'Approved means "needs a posting date"',
-      body: 'Once you approve, the item leaves this board for the Scheduler. Nothing is live until a scheduler sets a time.',
+      title: 'Signed off means "ready to post"',
+      body: 'Once the client has signed off, the card moves to Ready to post and off this board for you. The Scheduler page shows it from there until it is live.',
       href: '/dashboard/scheduler',
       linkLabel: 'Open the Scheduler',
     },
