@@ -349,3 +349,64 @@ describe('deleting a shoot keeps the work that came out of it', () => {
     expect(v.allowed).toBe(true)
   })
 })
+
+describe('canvas card sizes — resize any card both ways, and smaller', () => {
+  it('an old card without h comes through unchanged: height follows content', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const [c] = sanitiseCanvasCards([{ id: 'n', kind: 'note', x: 0, y: 0, w: 208, z: 1, text: 'old' }])
+    expect(c.w).toBe(208)
+    expect('h' in c).toBe(false)
+  })
+
+  it('h survives sanitise, and applyCanvasOp keeps it on the way to the client portal', async () => {
+    const { sanitiseCanvasCards, applyCanvasOp } = await import('../app/lib/batch-brief-core')
+    const [c] = sanitiseCanvasCards([{ id: 'n', kind: 'note', x: 0, y: 0, w: 300, h: 180.4, z: 1, text: 't' }])
+    expect(c).toMatchObject({ w: 300, h: 180 })
+    const merged = applyCanvasOp([{ id: 'n', kind: 'note', x: 0, y: 0, w: 208, z: 1, text: 't' }], {
+      upsert: [{ id: 'n', kind: 'note', x: 0, y: 0, w: 260, h: '140', z: 1, text: 't' }],
+    })
+    expect(merged[0]).toMatchObject({ w: 260, h: 140 })
+  })
+
+  it('clamps per kind: nothing collapses to nothing, and nothing is absurdly big', async () => {
+    const { clampCardSize } = await import('../app/lib/batch-brief-core')
+    expect(clampCardSize('note', 10, 5)).toEqual({ w: 160, h: 80 })
+    expect(clampCardSize('todo', 10, 5)).toEqual({ w: 160, h: 80 })
+    expect(clampCardSize('image', 10, 5)).toEqual({ w: 120, h: 90 })
+    expect(clampCardSize('link', 10, 5)).toEqual({ w: 120, h: 90 })
+    expect(clampCardSize('board', 10, 5)).toEqual({ w: 140, h: 140 })
+    expect(clampCardSize('note', 99999, 99999)).toEqual({ w: 1200, h: 2400 })
+    // a rubbish height is a card that follows its content, not a crash
+    expect(clampCardSize('note', 300, NaN)).toEqual({ w: 300 })
+    expect(clampCardSize('note', 300, 0)).toEqual({ w: 300 })
+    expect(clampCardSize('note', 300, null)).toEqual({ w: 300 })
+  })
+
+  it('a heading, a mockup and an arrow are width-only — a height is dropped', async () => {
+    const { clampCardSize, sanitiseCanvasCards, cardTakesHeight } = await import('../app/lib/batch-brief-core')
+    expect(clampCardSize('label', 300, 200)).toEqual({ w: 300 })
+    expect(clampCardSize('mockup', 300, 200)).toEqual({ w: 300 })
+    expect(cardTakesHeight('label')).toBe(false)
+    expect(cardTakesHeight('note')).toBe(true)
+    const [m] = sanitiseCanvasCards([{ id: 'm', kind: 'mockup', platform: 'ig_post', x: 0, y: 0, w: 280, h: 500, z: 0 }])
+    expect('h' in m).toBe(false)
+  })
+
+  it('a corner pull moves both axes and clamps at the minimum', async () => {
+    const { resizeCard } = await import('../app/lib/batch-brief-core')
+    expect(resizeCard('note', { w: 240, h: 200 }, 60, -50)).toEqual({ w: 300, h: 150 })
+    expect(resizeCard('note', { w: 240, h: 200 }, -500, -500)).toEqual({ w: 160, h: 80 })
+    // a heading only ever changes width
+    expect(resizeCard('label', { w: 240, h: 30 }, 60, 100)).toEqual({ w: 300 })
+  })
+
+  it('Shift keeps the shape: the height follows the width at the starting ratio', async () => {
+    const { resizeCard } = await import('../app/lib/batch-brief-core')
+    expect(resizeCard('image', { w: 200, h: 100 }, 100, 0, true)).toEqual({ w: 300, h: 150 })
+    // the vertical pull is ignored under Shift — the width leads
+    expect(resizeCard('image', { w: 200, h: 100 }, 100, 999, true)).toEqual({ w: 300, h: 150 })
+    // when the height clamp bites, the width follows it back so the ratio holds
+    expect(resizeCard('image', { w: 200, h: 100 }, -100, 0, true)).toEqual({ w: 180, h: 90 })
+    expect(resizeCard('image', { w: 400, h: 100 }, -300, 0, true)).toEqual({ w: 360, h: 90 })
+  })
+})

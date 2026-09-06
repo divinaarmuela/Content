@@ -201,6 +201,11 @@ export type CanvasCard = {
   x: number
   y: number
   w: number
+  /** the height the person dragged the card to. Absent = the card is as
+   *  tall as what is in it, which is how every board drawn before this
+   *  field existed still renders. Some kinds never carry one (a heading is
+   *  its text; a mockup is its platform's frame; an arrow has no box). */
+  h?: number
   z: number
   text?: string
   url?: string
@@ -236,6 +241,72 @@ export type CanvasCard = {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 
+/* ── card sizes: what the corner handle may do to each kind ── */
+
+export type CardSizeLimits = { minW: number; maxW: number; minH: number | null; maxH: number }
+
+/** Per-kind minimums so nothing collapses to nothing, and generous maximums.
+ *  `minH: null` means the kind has no height of its own — it is width-only
+ *  and `h` is dropped on the way in. */
+export const CANVAS_SIZE_LIMITS: Record<CanvasCard['kind'], CardSizeLimits> = {
+  note:   { minW: 160, maxW: 1200, minH: 80,  maxH: 2400 },
+  todo:   { minW: 160, maxW: 1200, minH: 80,  maxH: 2400 },
+  image:  { minW: 120, maxW: 1200, minH: 90,  maxH: 2400 },
+  link:   { minW: 120, maxW: 1200, minH: 90,  maxH: 2400 },
+  board:  { minW: 140, maxW: 1200, minH: 140, maxH: 2400 },
+  // a heading is as tall as its text; a mockup is its platform's frame,
+  // which follows the width; an arrow is two endpoints, not a box
+  label:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+  mockup: { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+  arrow:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+}
+
+/** Does this kind remember a height at all? */
+export function cardTakesHeight(kind: CanvasCard['kind']): boolean {
+  return CANVAS_SIZE_LIMITS[kind].minH !== null
+}
+
+/** Clamp a size into its kind's box. A height on a width-only kind, or a
+ *  height that is not a number, comes back as `undefined` (= follow content). */
+export function clampCardSize(
+  kind: CanvasCard['kind'], w: number, h?: number | null,
+): { w: number; h?: number } {
+  const lim = CANVAS_SIZE_LIMITS[kind]
+  const cw = clamp(Math.round(Number(w)) || 240, lim.minW, lim.maxW)
+  if (lim.minH === null || h === undefined || h === null) return { w: cw }
+  const n = Math.round(Number(h))
+  if (!Number.isFinite(n) || n <= 0) return { w: cw }
+  return { w: cw, h: clamp(n, lim.minH, lim.maxH) }
+}
+
+/** One step of a corner drag, in world pixels. `start` is the box at
+ *  pointerdown — the height MEASURED from the DOM when the card had none
+ *  of its own — and `lockAspect` (Shift) keeps start's shape: the width
+ *  leads and the height follows it, so a picture stays the picture. */
+export function resizeCard(
+  kind: CanvasCard['kind'],
+  start: { w: number; h: number },
+  dx: number, dy: number,
+  lockAspect = false,
+): { w: number; h?: number } {
+  const lim = CANVAS_SIZE_LIMITS[kind]
+  if (lim.minH === null) return clampCardSize(kind, start.w + dx)
+  if (lockAspect && start.w > 0 && start.h > 0) {
+    const ratio = start.h / start.w
+    // the width is clamped first, then the height derived from it, then
+    // clamped again — if the height clamp bites, the width follows it back
+    let w = clamp(Math.round(start.w + dx), lim.minW, lim.maxW)
+    let h = clamp(Math.round(w * ratio), lim.minH, lim.maxH)
+    if (Math.round(w * ratio) !== h) w = clamp(Math.round(h / ratio), lim.minW, lim.maxW)
+    return { w, h }
+  }
+  // a pull past zero is a card at its minimum, not a card without a height
+  return {
+    w: clamp(Math.round(start.w + dx), lim.minW, lim.maxW),
+    h: clamp(Math.round(start.h + dy), lim.minH, lim.maxH),
+  }
+}
+
 export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
   if (!Array.isArray(raw)) return []
   // hard input bound before any per-item work — a giant payload can't OOM us
@@ -264,7 +335,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       kind: kind as CanvasCard['kind'],
       x: clamp(Math.round(x), -CANVAS_BOUND, CANVAS_BOUND),
       y: clamp(Math.round(y), -CANVAS_BOUND, CANVAS_BOUND),
-      w: clamp(Math.round(Number(r.w)) || 240, 120, 1200),
+      ...clampCardSize(kind as CanvasCard['kind'], Number(r.w), typeof r.h === 'number' || typeof r.h === 'string' ? Number(r.h) : undefined),
       z: clamp(Math.round(Number(r.z)) || 0, 0, 1_000_000),
       ...(kind === 'note' || kind === 'label'
         ? { text: String(r.text ?? '').slice(0, kind === 'label' ? 120 : 4000) }

@@ -17,7 +17,7 @@ import { uploadMedia } from '../../../uploadMedia'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
 import {
-  CANVAS_NOTE_COLORS, seedCardsFromReferences,
+  CANVAS_NOTE_COLORS, cardTakesHeight, resizeCard, seedCardsFromReferences,
   type CanvasCard, type ReferenceMedia,
 } from '../../../../lib/batch-brief-core'
 import {
@@ -233,6 +233,16 @@ export default function BriefCanvas({
   useGesture(
     {
       onWheel: ({ event, delta: [dx, dy] }) => {
+        // a note or list that scrolls inside its own box scrolls first; the
+        // board only pans under the wheel once there is nothing left to scroll
+        if (!event.ctrlKey && !event.metaKey) {
+          const box = (event.target as HTMLElement).closest?.('[data-scroll]') as HTMLElement | null
+          if (box && box.scrollHeight > box.clientHeight + 1) {
+            const atTop = box.scrollTop <= 0 && dy < 0
+            const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 1 && dy > 0
+            if (!atTop && !atEnd) return
+          }
+        }
         event.preventDefault()
         const cam = camRef.current
         if (event.ctrlKey || event.metaKey) {
@@ -304,11 +314,23 @@ export default function BriefCanvas({
     ends: { line: SVGLineElement; end: 'from' | 'to' }[]
     raf: number; nx: number; ny: number
   } | null>(null)
-  /* ── corner resize: width only — height follows content ── */
+  /* ── corner resize: both axes. `oh` is the height MEASURED at pointerdown
+   *  (a card without an h of its own is as tall as its content), so a drag
+   *  starts from what the person sees. `hadH` remembers whether the card
+   *  owned a height before, so a purely sideways drag on a content-tall
+   *  card leaves it content-tall rather than freezing it. ── */
   const resizeState = useRef<{
-    id: string; startX: number; ow: number; live: number
+    id: string; startX: number; startY: number; ow: number; oh: number; hadH: boolean
+    live: number; liveH: number | undefined
     el: HTMLElement | null; raf: number
   } | null>(null)
+  /** write the live size to the card's box — one place, so paint, re-render
+   *  and abort all agree on what "the size" is */
+  const paintResize = (el: HTMLElement | null, w: number, h: number | undefined) => {
+    if (!el) return
+    el.style.width = `${w}px`
+    el.style.height = h === undefined ? '' : `${h}px`
+  }
   /* ── Milanote-style line drag: pull from a card's dot onto another card ── */
   const lineDrag = useRef<{ from: string } | null>(null)
   const draftLineRef = useRef<SVGLineElement>(null)
@@ -381,7 +403,7 @@ export default function BriefCanvas({
     d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
     d.el.style.zIndex = '9999'
     const r = resizeState.current
-    if (r?.el) r.el.style.width = `${r.live}px`
+    if (r?.el) paintResize(r.el, r.live, r.liveH)
   })
 
   const onCardPointerMove = (e: React.PointerEvent, card: CanvasCard) => {
@@ -416,7 +438,7 @@ export default function BriefCanvas({
     if (r) {
       resizeState.current = null
       if (r.raf) cancelAnimationFrame(r.raf)
-      if (r.el) r.el.style.width = `${r.ow}px`
+      paintResize(r.el, r.ow, r.hadH ? r.oh : undefined)
     }
     if (d || r) { interactingRef.current = false; forceRender(n => n + 1) }
   }, [])
@@ -940,32 +962,55 @@ export default function BriefCanvas({
                 />
               )}
               {selected === card.id && !viewOnly && !editing && card.kind !== 'label' && card.kind !== 'arrow' && (
+                // the corner handle: a small dot to look at, a 44px square to
+                // grab. It resizes both ways (Shift keeps a picture's shape)
+                // and stops the pointer here, so it never starts a card move
+                // or a canvas pan
                 <div
-                  className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-accent-blue shadow"
+                  role="presentation"
+                  aria-label="Resize"
+                  title={cardTakesHeight(card.kind) ? 'Drag to resize · hold Shift to keep the shape' : 'Drag to resize'}
+                  className={`absolute -bottom-[22px] -right-[22px] flex h-11 w-11 touch-none items-center justify-center ${
+                    cardTakesHeight(card.kind) ? 'cursor-nwse-resize' : 'cursor-ew-resize'
+                  }`}
                   onPointerDown={e => {
                     e.stopPropagation()
+                    e.preventDefault()
                     interactingRef.current = true
                     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                    // the width lives on the card's own box (the positioned
+                    // the size lives on the card's own box (the positioned
                     // wrapper is zero-width), so grab it once to write to
                     const box = (e.currentTarget.parentElement?.firstElementChild ?? null) as HTMLElement | null
-                    resizeState.current = { id: card.id, startX: e.clientX, ow: card.w, live: card.w, el: box, raf: 0 }
+                    const oh = card.h ?? box?.offsetHeight ?? 0
+                    resizeState.current = {
+                      id: card.id, startX: e.clientX, startY: e.clientY,
+                      ow: card.w, oh, hadH: card.h !== undefined,
+                      live: card.w, liveH: card.h, el: box, raf: 0,
+                    }
                   }}
                   onPointerMove={e => {
                     const r = resizeState.current
                     if (!r || r.id !== card.id) return
-                    const w = Math.min(1200, Math.max(120, Math.round(r.ow + (e.clientX - r.startX) / camRef.current.s)))
-                    if (w === r.live) return
-                    r.live = w
-                    // width straight to the DOM, one write per frame: routing
+                    const s = camRef.current.s
+                    const dx = (e.clientX - r.startX) / s
+                    const dy = (e.clientY - r.startY) / s
+                    const next = resizeCard(card.kind, { w: r.ow, h: r.oh }, dx, dy, e.shiftKey)
+                    // a sideways-only pull on a content-tall card keeps it
+                    // content-tall: the height is only claimed once it moves
+                    const h = cardTakesHeight(card.kind) && (r.hadH || Math.abs(dy) >= 3 || e.shiftKey)
+                      ? next.h : undefined
+                    if (next.w === r.live && h === r.liveH) return
+                    r.live = next.w
+                    r.liveH = h
+                    // size straight to the DOM, one write per frame: routing
                     // it through React re-rendered every card on the board on
-                    // every pixel of the drag, which is what made it crawl
+                    // every pixel, which is what made it crawl
                     if (!r.raf) {
                       r.raf = requestAnimationFrame(() => {
                         const cur = resizeState.current
                         if (!cur) return
                         cur.raf = 0
-                        if (cur.el) cur.el.style.width = `${cur.live}px`
+                        paintResize(cur.el, cur.live, cur.liveH)
                       })
                     }
                   }}
@@ -975,9 +1020,17 @@ export default function BriefCanvas({
                     if (r.raf) cancelAnimationFrame(r.raf)
                     resizeState.current = null
                     interactingRef.current = false
-                    if (r.live !== r.ow) { upsertLocal({ ...card, w: r.live }); persist([{ ...card, w: r.live }]) }
+                    paintResize(r.el, r.live, r.liveH)
+                    if (r.live !== r.ow || r.liveH !== card.h) {
+                      const { h: _drop, ...rest } = card
+                      void _drop
+                      const next: CanvasCard = { ...rest, w: r.live, ...(r.liveH !== undefined ? { h: r.liveH } : {}) }
+                      upsertLocal(next); persist([next])
+                    }
                   }}
-                />
+                >
+                  <span aria-hidden className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-accent-blue shadow dark:border-background" />
+                </div>
               )}
             </div>
           ))}

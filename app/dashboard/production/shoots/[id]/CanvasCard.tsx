@@ -27,6 +27,13 @@ export const NOTE_COLORS: Record<string, string> = {
   ink: 'bg-foreground border-border',
 }
 
+/** The card's box. Width is always the person's; height only when they
+ *  dragged one (`h`), otherwise the card is as tall as what is in it. A
+ *  card with a height is a flex column that hides its overflow, and each
+ *  kind decides what inside it grows, wraps or scrolls to fit. */
+const boxStyle = (card: Card): React.CSSProperties => ({ width: card.w, ...(card.h ? { height: card.h } : {}) })
+const boxClass = (card: Card) => (card.h ? 'flex flex-col overflow-hidden' : '')
+
 /** One card on the board. Memoised per card object — a drag re-renders one
  *  card, not two hundred. Position is applied by the parent via transform. */
 /** The badge that turns a still into a player. Its own component because the
@@ -124,8 +131,8 @@ function CanvasCardInner({
     return (
       <div
         data-kind="board"
-        className={`group flex select-none flex-col items-center justify-center gap-2 rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
-        style={{ width: card.w }}
+        className={`group flex select-none flex-col items-center justify-center gap-2 overflow-hidden rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
+        style={boxStyle(card)}
       >
         <div className="flex h-14 w-14 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10">
           <Icon className="h-7 w-7" />
@@ -148,22 +155,22 @@ function CanvasCardInner({
     const items = card.items ?? []
     const done = items.filter(t => t.done).length
     return (
-      <div className="w-full rounded-inner border border-border bg-surface p-3 shadow-sm" style={{ width: card.w }}>
-        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+      <div className={`w-full rounded-inner border border-border bg-surface p-3 shadow-sm ${boxClass(card)}`} style={boxStyle(card)}>
+        <div className="mb-1.5 flex shrink-0 items-baseline justify-between gap-2">
           <span className="text-[12px] font-semibold text-foreground">{card.name || 'To-do'}</span>
           {items.length > 0 && (
             <span className="font-mono text-[12px] tabular-nums text-muted-foreground">{done}/{items.length}</span>
           )}
         </div>
-        <div className="flex flex-col gap-1">
+        <div data-scroll className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           {items.length === 0 && (
             <span className="text-[12px] text-muted-foreground">Nothing to do yet.</span>
           )}
           {items.map(t => (
-            <label key={t.id} className="group/row flex items-center gap-1.5"
+            <label key={t.id} className="group/row flex items-start gap-1.5"
               onPointerDown={e => e.stopPropagation()}>
               <input type="checkbox" checked={t.done} disabled={!onUpdate}
-                className="h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
+                className="mt-[3px] h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
                 onChange={e => onUpdate?.({ ...card, items: items.map(x => x.id === t.id ? { ...x, done: e.target.checked } : x) })} />
               {onUpdate ? (
                 <input key={`${t.id}:${t.text}`} defaultValue={t.text}
@@ -177,14 +184,14 @@ function CanvasCardInner({
                   }}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() } }} />
               ) : (
-                <span className={`text-[12px] ${t.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{t.text}</span>
+                <span className={`min-w-0 break-words text-[12px] ${t.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{t.text}</span>
               )}
             </label>
           ))}
         </div>
         {onUpdate && items.length < 30 && (
           <button type="button"
-            className="mt-1.5 text-[12px] text-muted-foreground hover:text-foreground"
+            className="mt-1.5 shrink-0 self-start text-[12px] text-muted-foreground hover:text-foreground"
             onPointerDown={e => e.stopPropagation()}
             onClick={e => {
               e.stopPropagation()
@@ -225,13 +232,13 @@ function CanvasCardInner({
     // 'ink' is dark in both themes — its text must not follow the theme
     const inkText = card.color === 'ink' ? 'text-background' : 'text-foreground'
     return (
-      <div className={`rounded-inner border p-3 shadow-sm ${palette} ${selected ? '' : ''}`} style={{ width: card.w }}>
+      <div className={`rounded-inner border p-3 shadow-sm ${palette} ${boxClass(card)}`} style={boxStyle(card)}>
         {editing ? (
           <textarea
             autoFocus
             defaultValue={card.text ?? ''}
             rows={Math.max(3, (card.text ?? '').split('\n').length)}
-            className={`w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground ${inkText}`}
+            className={`w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground ${inkText} ${card.h ? 'min-h-0 flex-1' : ''}`}
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
@@ -240,7 +247,7 @@ function CanvasCardInner({
             onPointerDown={e => e.stopPropagation()}
           />
         ) : (
-          <p className={`whitespace-pre-wrap break-words text-[13px] leading-relaxed ${inkText}`}>
+          <p data-scroll className={`whitespace-pre-wrap break-words text-[13px] leading-relaxed ${inkText} ${card.h ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
             {card.text || <span className="text-muted-foreground">Write it down…</span>}
           </p>
         )}
@@ -476,9 +483,9 @@ function CanvasCardInner({
     // board full of clips still opens for free.
     const isFilm = isPlayableFile(card.url ?? '')
     return (
-      <div className="overflow-hidden rounded-inner border border-border bg-surface shadow-sm" style={{ width: card.w }}>
+      <div className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${boxClass(card)}`} style={boxStyle(card)}>
         {isFilm ? (
-          <div className="relative" ref={frameRef}>
+          <div className={`relative ${card.h ? 'min-h-0 flex-1' : ''}`} ref={frameRef}>
             <video
               ref={videoRef}
               src={playing || auto.load ? card.url : undefined}
@@ -490,7 +497,9 @@ function CanvasCardInner({
               loop={!playing}
               playsInline
               preload={playing || auto.load ? 'metadata' : 'none'}
-              className="w-full select-none bg-black"
+              // in a box of the person's own height the clip fills it and
+              // is cropped, never squashed — the face stays sharp
+              className={`w-full select-none bg-black ${card.h ? 'h-full object-cover' : ''}`}
               style={{ pointerEvents: playing ? 'auto' : 'none' }}
             />
             {!playing && (auto.play
@@ -500,10 +509,10 @@ function CanvasCardInner({
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
-            draggable={false} className="w-full select-none" />
+            draggable={false} className={`w-full select-none ${card.h ? 'min-h-0 flex-1 object-cover' : ''}`} />
         )}
         {card.name && (
-          <p className="truncate px-2 py-1 text-[12px] text-muted-foreground">{card.name}</p>
+          <p className="shrink-0 truncate px-2 py-1 text-[12px] text-muted-foreground">{card.name}</p>
         )}
       </div>
     )
@@ -528,8 +537,8 @@ function CanvasCardInner({
   if (playing && embed) {
     return (
       <div
-        className="overflow-hidden rounded-inner border-2 border-accent-blue/25 bg-black shadow-lg"
-        style={{ width: card.w }}
+        className={`overflow-hidden rounded-inner border-2 border-accent-blue/25 bg-black shadow-lg ${boxClass(card)}`}
+        style={boxStyle(card)}
       >
         <iframe
           src={embed}
@@ -540,7 +549,8 @@ function CanvasCardInner({
           // YouTube is 16:9. Guessing one shape for all three crops two of
           // them, so the frame follows the platform.
           className={`w-full border-0 bg-black ${
-            card.provider === 'YouTube' || card.provider === 'Vimeo' ? 'aspect-video'
+            card.h ? 'min-h-0 flex-1'
+              : card.provider === 'YouTube' || card.provider === 'Vimeo' ? 'aspect-video'
               : card.provider === 'TikTok' ? 'aspect-[9/16]'
               : 'aspect-[4/5]'
           }`}
@@ -568,10 +578,12 @@ function CanvasCardInner({
   if (card.thumb || autoKind === 'embed' || autoKind === 'instagram') {
     return (
       <div
-        className="overflow-hidden rounded-inner border border-border bg-surface shadow-sm"
-        style={{ width: card.w }}
+        className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${boxClass(card)}`}
+        style={boxStyle(card)}
       >
-        <div className={`relative bg-foreground/[0.06] ${faceAspect}`} ref={frameRef}>
+        {/* with a height of its own the face takes what the caption leaves;
+            without one it keeps the platform's shape */}
+        <div className={`relative bg-foreground/[0.06] ${card.h ? 'min-h-0 flex-1' : faceAspect}`} ref={frameRef}>
           {card.thumb && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -621,7 +633,7 @@ function CanvasCardInner({
             </span>
           )}
         </div>
-        <div className="p-2">
+        <div className="shrink-0 p-2">
           <span className="block truncate text-[12px] font-medium text-foreground">
             {heading}
           </span>
@@ -632,7 +644,7 @@ function CanvasCardInner({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-inner border border-border bg-surface p-3 shadow-sm" style={{ width: card.w }}>
+    <div className="flex items-center gap-2 overflow-hidden rounded-inner border border-border bg-surface p-3 shadow-sm" style={boxStyle(card)}>
       <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-medium text-foreground">
