@@ -99,8 +99,11 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     const ORPHANS: Record<string, string> = {
       '/dashboard/calendar': '/dashboard/calendar',
       '/dashboard/tracker': '/dashboard/production',
+      // the canvas is a view of the work, so it answers to Production's access
+      '/dashboard/boards': '/dashboard/production',
     }
     if (ORPHANS[path]) return ORPHANS[path]
+    if (path.startsWith('/dashboard/boards/')) return '/dashboard/production'
     // NOT the social children: they inherit Social's permission by resolving
     // to it through the prefix rule below, which is exactly what we want.
     const all = [...NAV_MAIN, ...NAV_TOOLS]

@@ -16,6 +16,9 @@ export type TableName =
   | 'assistant_prefs'
   | 'batch_comments'
   | 'batches'
+  | 'board_comments'
+  | 'board_items'
+  | 'boards'
   | 'booking_availability'
   | 'booking_blackouts'
   | 'booking_resources'
@@ -245,6 +248,52 @@ export interface Batch {
   month: number | null
   year: number | null
   owner_id: string | null
+}
+
+export interface BoardComment {
+  id: string
+  board_id: string
+  item_id: string
+  author_id: string | null
+  author_name: string
+  author_role: string
+  body: string
+  created_at: string
+  resolved_at: string | null
+}
+
+export interface BoardItem {
+  id: string
+  board_id: string
+  kind: string
+  x: number
+  y: number
+  w: number
+  h: number
+  z: number
+  colour: string | null
+  text: string | null
+  url: string | null
+  label: string | null
+  child_board_id: string | null
+  column_title: string | null
+  parent_item_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Board {
+  id: string
+  client_id: string
+  parent_board_id: string | null
+  item_id: string | null
+  name: string
+  icon: string
+  colour: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface BookingAvailability {
@@ -1078,6 +1127,9 @@ export const TABLE_COLUMNS = {
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
   batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id'],
+  board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
+  board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
+  boards: ['id', 'client_id', 'parent_board_id', 'item_id', 'name', 'icon', 'colour', 'created_by', 'created_at', 'updated_at'],
   booking_availability: ['id', 'resource_id', 'weekday', 'start_min', 'end_min'],
   booking_blackouts: ['id', 'resource_id', 'day', 'reason'],
   booking_resources: ['id', 'created_at', 'label', 'email', 'timezone', 'active', 'space_id'],
@@ -1151,6 +1203,9 @@ export const NULLABLE_COLUMNS = {
   assistant_prefs: [],
   batch_comments: ['author_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id'],
+  board_comments: ['author_id', 'resolved_at'],
+  board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],
+  boards: ['parent_board_id', 'item_id', 'created_by'],
   booking_availability: [],
   booking_blackouts: ['reason'],
   booking_resources: ['email', 'space_id'],
@@ -1231,6 +1286,9 @@ export const JSON_COLUMNS = {
   assistant_prefs: [],
   batch_comments: [],
   batches: ['shot_list', 'planned_deliverables', 'reference_media', 'canvas_cards'],
+  board_comments: [],
+  board_items: [],
+  boards: [],
   booking_availability: [],
   booking_blackouts: [],
   booking_resources: [],
@@ -1310,6 +1368,9 @@ export const JSON_ARRAY_COLUMNS = {
   assistant_prefs: [],
   batch_comments: [],
   batches: ['shot_list', 'planned_deliverables', 'reference_media', 'canvas_cards'],
+  board_comments: [],
+  board_items: [],
+  boards: [],
   booking_availability: [],
   booking_blackouts: [],
   booking_resources: [],
@@ -1369,7 +1430,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

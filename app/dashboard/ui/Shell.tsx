@@ -103,6 +103,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
   '/dashboard/files':         'Files',
+  '/dashboard/boards':        'Boards',
   '/dashboard/audience':      'Audience',
   '/dashboard/social':        'Social channels',
   '/dashboard/social/schedule': 'Schedule',
