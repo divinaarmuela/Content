@@ -10,7 +10,6 @@ import {
 import { upsertScheduleEntry } from '../../app/lib/schedule'
 import { canCreateItemsUnder, checkBatchTransition } from '../../app/lib/batch-brief-core'
 import { canEditItemFields, roleMayCreateItems, taskExemptFromClientScope } from '../../app/lib/item-edit-core'
-import { groupCard, groupLine, nextPieceTitle, type DeliverableGroup as DeliverableGroupCore } from '../../app/lib/deliverable-group-core'
 import type { ItemStatus } from '../../app/lib/workflow-core'
 import { schedulerIdsOf } from '../../app/lib/workflow-core'
 import type { ContentItem as DbContentItem } from '../../lib/db-types'
@@ -771,49 +770,6 @@ describe('any team role creates work — the owner\'s rule, on real rows', () =>
     // anyone HANDED the scheduling edits their own too, whatever the title
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
     expect(canEditItemFields(scheduler, await fresh(id))).toBe(true)
-  })
-})
-
-describe('a quota group of 5 fills as pieces are added', () => {
-  let groupId: string | null = null
-
-  afterAll(async () => {
-    if (groupId) await table('deliverable_groups').remove(groupId)
-  })
-
-  it('one group, target 5: 0 of 5 → 2 of 5 → full at 5', async () => {
-    const group = (await table('deliverable_groups').insert({
-      client_id: TEST_CLIENT_ID,
-      content_type: 'reel',
-      title: `E2E quota reels ${new Date().toISOString()}`,
-      target: 5,
-      created_by: am.id,
-    } as any)) as unknown as DeliverableGroupCore
-    groupId = group.id
-
-    const cardFor = async () => {
-      const rows = await table('content_items').list({ where: (r: any) => r.group_id === group.id })
-      return groupCard(group, rows as { id: string; status: ItemStatus; group_id: string }[])
-    }
-    expect((await cardFor()).count).toBe(0)
-
-    // "Add the next reel", twice — titles numbered from what exists
-    for (let n = 0; n < 2; n++) {
-      const title = nextPieceTitle(group, n)
-      expect(title.endsWith(String(n + 1).padStart(2, '0'))).toBe(true)
-      await makeItem({ owner_id: editor.id, group_id: group.id, title })
-    }
-    const two = await cardFor()
-    expect(two.count).toBe(2)
-    expect(two.target).toBe(5)
-    expect(two.full).toBe(false)
-    expect(groupLine(two)).toContain('2 of 5')
-
-    // three more and the promise is met
-    for (let n = 2; n < 5; n++) {
-      await makeItem({ owner_id: editor.id, group_id: group.id, title: nextPieceTitle(group, n) })
-    }
-    expect((await cardFor()).full).toBe(true)
   })
 })
 

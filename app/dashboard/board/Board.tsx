@@ -38,8 +38,9 @@ export type BoardCardRow = BoardViewCard & {
   work_kinds?: { name: string; slug?: string; color?: string } | null
 }
 
-/** What is NOT in a column, in the column's own words. */
-const EMPTY: Record<BoardColumnKey, string> = {
+/** What is NOT in a column, in the column's own words. Exported so the
+ *  Production list, which draws the same five columns, says the same. */
+export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   draft: 'Nothing being made.',
   internal_check: 'Nothing waiting on a check.',
   with_client: 'Nothing with a client.',
@@ -209,7 +210,7 @@ export function Board({
         ))}
         {inLane.length === 0 && (
           <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
-            {dragging && active ? `Drop here — ${moveTargets(dragging, viewer).find(t => t.column === key)?.action.label ?? ''}` : EMPTY[key]}
+            {dragging && active ? `Drop here — ${moveTargets(dragging, viewer).find(t => t.column === key)?.action.label ?? ''}` : COLUMN_EMPTY[key]}
           </div>
         )}
       </div>
@@ -218,7 +219,7 @@ export function Board({
       key,
       title: column.label,
       count: inLane.length,
-      empty: EMPTY[key],
+      empty: COLUMN_EMPTY[key],
       cards: [],
       replace: zone,
       hint: <span className="sr-only">{column.meaning}</span>,
