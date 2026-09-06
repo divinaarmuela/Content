@@ -10,7 +10,7 @@ import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
-  soundCommand, YOUTUBE_LISTEN,
+  instagramPlayHint, soundCommand, YOUTUBE_LISTEN,
 } from '../../../../lib/board-autoplay-core'
 import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
 import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
@@ -761,10 +761,15 @@ function CanvasCardInner({
   // Instagram embed that answers "this post may have been removed" is not a
   // face, it is an error message wearing our card. Such a card is a still.
   const embed = card.embeddable === false ? null : embedUrlFor(card.url ?? '', card.canonical)
+  // an Instagram video will not play here, and the card says what will —
+  // only to someone who can put the file on the board (`onUpdate` is the
+  // canvas's word for that; the portal never passes one)
+  const playHint = instagramPlayHint(card, Boolean(onUpdate))
 
   /** The strip under the media: the platform's mark and name, the account
-   *  when known, the post's own words in one clipped line, and the team's
-   *  caption. Never the hostname when the platform has a name. */
+   *  when known, the post's own words in one clipped line, the plain line
+   *  about an Instagram video, and the team's caption. Never the hostname
+   *  when the platform has a name. */
   const strip = (
     <div className="shrink-0 border-t border-border/60">
       <div className="min-w-0 px-2 pt-1.5">
@@ -774,6 +779,11 @@ function CanvasCardInner({
           {card.author && <span className="truncate text-muted-foreground">· {card.author}</span>}
         </span>
         {postTitle && <span className="block truncate text-[12px] text-muted-foreground">{postTitle}</span>}
+        {playHint && (
+          <span className="block whitespace-normal break-words pt-0.5 text-[12px] leading-snug text-muted-foreground">
+            {playHint}
+          </span>
+        )}
       </div>
       {(saveCaption || card.caption) && (
         <div data-scroll className="max-h-32 overflow-y-auto px-2 pb-1.5 pt-1">

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   AutoplayArbiter, MAX_AUTOPLAY, autoplayEmbedUrlFor, autoplayKindFor, centreDistance, decideAutoplay,
-  framePlayerOf, instagramEmbedUrlFor, isNear, pickPlayers, soundCommand, YOUTUBE_LISTEN,
+  framePlayerOf, INSTAGRAM_PLAY_HINT, instagramEmbedUrlFor, instagramPlayHint, isNear, pickPlayers,
+  soundCommand, YOUTUBE_LISTEN,
 } from '../app/lib/board-autoplay-core'
 import { embedUrlFor, isSafePreviewUrl } from '../app/lib/link-preview-core'
 
@@ -313,5 +314,33 @@ describe('sound in place — the same player, told to unmute', () => {
     expect(autoplayKindFor({ kind: 'link', url: 'https://www.instagram.com/reel/Cabc123/' })).toBe('instagram')
     // and a mock-up with no post is not a player at all
     expect(autoplayKindFor({ kind: 'mockup' })).toBe('none')
+  })
+})
+
+describe('the line under an Instagram video that says how to make it play', () => {
+  const reel = { kind: 'link', url: 'https://www.instagram.com/reel/C1a2B3c4D5e/', provider: 'Instagram', media: 'video' }
+
+  it('shows for an Instagram video when the viewer can edit', () => {
+    expect(instagramPlayHint(reel, true)).toBe(INSTAGRAM_PLAY_HINT)
+    expect(INSTAGRAM_PLAY_HINT).toBe("Instagram won't play here — drop the video file on the board to play it.")
+    // a /p/ post the preview said is a video counts; so does a reel URL
+    // whose preview never came back (no media field at all)
+    expect(instagramPlayHint({ ...reel, url: 'https://www.instagram.com/p/C1a2B3c4D5e/' }, true)).toBe(INSTAGRAM_PLAY_HINT)
+    expect(instagramPlayHint({ kind: 'link', url: 'https://instagram.com/reels/C1a2B3c4D5e/' }, true)).toBe(INSTAGRAM_PLAY_HINT)
+  })
+
+  it('never for an image post', () => {
+    expect(instagramPlayHint({ ...reel, url: 'https://www.instagram.com/p/C1a2B3c4D5e/', media: 'image' }, true)).toBeNull()
+    expect(instagramPlayHint({ kind: 'link', url: 'https://www.instagram.com/p/C1a2B3c4D5e/', provider: 'Instagram' }, true)).toBeNull()
+  })
+
+  it('never when the viewer cannot edit (a viewer, the client portal)', () => {
+    expect(instagramPlayHint(reel, false)).toBeNull()
+  })
+
+  it('never for another platform, a mock-up, or a bad URL', () => {
+    expect(instagramPlayHint({ kind: 'link', url: 'https://www.tiktok.com/@a/video/7412345678901234567', media: 'video' }, true)).toBeNull()
+    expect(instagramPlayHint({ ...reel, kind: 'mockup' }, true)).toBeNull()
+    expect(instagramPlayHint({ kind: 'link', url: 'not a url', provider: 'Instagram', media: 'video' }, true)).toBeNull()
   })
 })

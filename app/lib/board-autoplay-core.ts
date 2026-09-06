@@ -173,6 +173,28 @@ export function autoplayKindFor(card: {
   return 'none'
 }
 
+/** What the card says under an Instagram video, in the team's own words.
+ *  Instagram's embed will not play a video on the board — its play button
+ *  shows "Watch on Instagram" and leaves — and every link-fixer proxy is
+ *  gone (checked 2026-09-06), so the honest line is the one that says what
+ *  DOES work. Only for a video (a reel URL, or a post the preview said is
+ *  a video), only for someone who can put a file on the board — a viewer
+ *  and the client portal (`canEdit` false) get nothing, because the line
+ *  asks them to do something they cannot. Never for an image post. */
+export const INSTAGRAM_PLAY_HINT = "Instagram won't play here — drop the video file on the board to play it."
+export function instagramPlayHint(
+  card: { kind?: string; url?: string; media?: string; provider?: string },
+  canEdit: boolean,
+): string | null {
+  if (!canEdit || card.kind !== 'link') return null
+  let u: URL
+  try { u = new URL(card.url ?? '') } catch { return null }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '')
+  if (card.provider !== 'Instagram' && !host.endsWith('instagram.com')) return null
+  const reel = /^\/(reel|reels)\//.test(u.pathname)
+  return card.media === 'video' || reel ? INSTAGRAM_PLAY_HINT : null
+}
+
 /** One card, as the arbiter sees it: is it on screen, and how far is its
  *  middle from the middle of the screen. */
 export type Candidate = {
