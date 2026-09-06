@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { Client, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow } from '@/lib/db-types'
+import type {
+  Batch, Client, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow, WorkKind,
+} from '@/lib/db-types'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
+import type { ItemStatus } from '../../../lib/workflow-core'
+import { NOT_WITH_YOU, planDecidable, portalActions } from '../../../lib/portal-core'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceItemChange } from '../../../lib/production-live'
 import { actOnPostingApproval } from '../../../lib/posting-approval'
@@ -98,6 +102,30 @@ export async function POST(req: Request) {
     const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
     const speaker = authorName ? `${authorName} · ${client.name}` : client.name
     const actor = await portalActor(client.id, client.name)
+
+    // THE CARD DECIDES WHAT IT OFFERS, AND SO DOES THIS ROUTE — from the same
+    // rule. A card that is not with the client cannot be approved by guessing
+    // its id, and a draft nobody has checked has no thread for them yet. The
+    // state machine would refuse the move anyway; this says why, in the
+    // client's words, before it gets there.
+    const offered = portalActions(item.status as ItemStatus)
+    if ((action === 'approve' && !offered.approve)
+      || (action === 'request_changes' && !offered.askForChange)
+      || (action === 'comment' && !offered.comment)) {
+      return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+    }
+    // …and a shoot PLAN can only be decided on when the shoot was actually
+    // shared with them: the brief item may sit at client_review while the
+    // manager has not yet chosen to show the plan. Same rule as the card.
+    if ((action === 'approve' || action === 'request_changes') && item.work_kind_id && item.batch_id) {
+      const kind = await table<WorkKind>('work_kinds').get(item.work_kind_id).catch(() => null)
+      if (kind?.slug === 'shoot_brief') {
+        const batch = await table<Batch>('batches').get(item.batch_id).catch(() => null)
+        if (!planDecidable(batch?.shared_with_client === true, item.status)) {
+          return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+        }
+      }
+    }
 
     if (action === 'comment' && !comment) {
       return NextResponse.json({ error: 'Write a comment first' }, { status: 400 })

@@ -45,8 +45,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <Header theme={theme} onFlip={flip} />
         {/* portal-legible: the same sub-12px type floor the share-link portal
             gets below the desktop breakpoint — this page renders the same
-            PortalSections/ShootSection components. See app/globals.css. */}
-        <main className="portal-legible mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+            PortalBoard / PortalSections components. See app/globals.css.
+            Wide, because the board is five columns. */}
+        <main className="portal-legible mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">{children}</main>
         <footer className="portal-legible mx-auto max-w-4xl px-4 pb-8 sm:px-6">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
             MD Media · get seen · get known · get booked
