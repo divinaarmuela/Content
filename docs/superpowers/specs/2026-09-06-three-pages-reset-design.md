@@ -82,6 +82,35 @@ Enforced server-side, as today; the nav simply stops showing what a role cannot 
   single box.
 - No second screen, no status jargon, no more than one sentence per card.
 
+## The client's words go to the person who has to act on them
+
+Owner: "make sure AM can see the client comments only and then if needs changes can send
+back to the person assigned, send them what needs changing".
+
+- A client's comment on a card is shown to the **account manager**, not broadcast to the
+  whole team — the client is talking to their manager, not to the room.
+- The card then carries one action for the manager: **Send back for changes**, which asks
+  what needs changing (the client's own words are pre-filled and editable), and sends it to
+  **the person the card is assigned to**, by bell and email, with the card moving to
+  Internal check.
+- The assignee sees exactly what to change on their own card, in the manager's words. They
+  never have to read the client's thread to work out what was meant.
+- Editors and schedulers do not see client comments at all.
+
+## The board is a Milanote-style canvas
+
+Owner: "milanote board feature needs to be exactly like milanote, can create subpages by
+adding a button" (reference: a Milanote board with nested pages).
+
+- The board is a **free canvas**, not only columns: cards can be placed, moved and grouped,
+  with the five status columns as the default arrangement.
+- A card can open a **sub-page**: a board of its own, made with one button, for the notes,
+  references and links that belong to that piece of work. This is the ONE place nesting is
+  wanted — a workspace behind a card, not sub-cards on the board.
+- Sub-pages hold notes, links and images. They are not deliverables and never appear in a
+  column or in the portal.
+
+
 ## Not in this change
 
 - The Schedule page and its posting rules (built and live).
