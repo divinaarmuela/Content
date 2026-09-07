@@ -384,17 +384,14 @@ const laneOfColumn = (key: BoardColumnKey): PageLane => ({
  * stage chip because it always holds more than one stage.
  */
 export function pageLanes(page: BoardPage): PageLane[] {
-  switch (page) {
-    case 'editor': return [
-      laneOfColumn('draft'), laneOfColumn('internal_check'), laneOfColumn('with_client'),
-      { key: 'done', label: 'Done', columns: ['ready_to_post', 'posted'], folded: true, empty: LANE_EMPTY.done },
-    ]
-    case 'scheduler': return [
-      { key: 'coming_up', label: 'Coming up', columns: ['draft', 'internal_check', 'with_client'], folded: true, empty: LANE_EMPTY.coming_up },
-      laneOfColumn('ready_to_post'), laneOfColumn('posted'),
-    ]
-    default: return BOARD_COLUMNS.map(c => laneOfColumn(c.key))
-  }
+  // FIVE COLUMNS ON EVERY PAGE — the owner's standing rule, and the spec's.
+  // Work needs an internal check and the client's word whoever is looking at
+  // it, so no page hides those stages: an editor watches their card go to the
+  // client and out the door, a scheduler sees what is coming before it is
+  // ready. What differs per page is WHICH CARDS are shown (pageCards) and
+  // which button each role gets, never which stages exist.
+  void page
+  return BOARD_COLUMNS.map(c => laneOfColumn(c.key))
 }
 
 /** The lane a column sits in on this page — how a `?column=` link lands. */

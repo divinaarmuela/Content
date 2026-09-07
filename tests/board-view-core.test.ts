@@ -239,8 +239,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    // three full lanes, then Done folded
-    expect(pageLanes('editor').map(l => l.key)).toEqual(['draft', 'internal_check', 'with_client', 'done'])
+    expect(pageLanes('editor').map(l => l.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
@@ -253,8 +252,7 @@ describe('what each page shows', () => {
     // say what is ready
     expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(pageCards('production', rows, manager).map(c => c.id))
     expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
-    // …Coming up folded, then two full lanes
-    expect(pageLanes('scheduler').map(l => l.key)).toEqual(['coming_up', 'ready_to_post', 'posted'])
+    expect(pageLanes('scheduler').map(l => l.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
   it('a tagged question counts as assignment', () => {
@@ -274,48 +272,26 @@ describe('the lanes each page arranges the five columns into', () => {
     expect(lanes.map(l => l.label)).toEqual(BOARD_COLUMNS.map(c => c.label))
   })
 
-  it('Editor gives room to Draft, Internal check and With client, and folds the rest into Done', () => {
-    const lanes = pageLanes('editor')
-    expect(lanes.map(l => ({ key: l.key, columns: l.columns, folded: l.folded }))).toEqual([
-      { key: 'draft', columns: ['draft'], folded: false },
-      { key: 'internal_check', columns: ['internal_check'], folded: false },
-      { key: 'with_client', columns: ['with_client'], folded: false },
-      { key: 'done', columns: ['ready_to_post', 'posted'], folded: true },
-    ])
-    expect(lanes[3].label).toBe('Done')
-    expect(lanes[3].empty).toBe('Nothing done yet.')
-  })
-
-  it('Scheduler folds Draft, Internal check and With client into Coming up, then Ready to post and Posted', () => {
-    const lanes = pageLanes('scheduler')
-    expect(lanes.map(l => ({ key: l.key, columns: l.columns, folded: l.folded }))).toEqual([
-      { key: 'coming_up', columns: ['draft', 'internal_check', 'with_client'], folded: true },
-      { key: 'ready_to_post', columns: ['ready_to_post'], folded: false },
-      { key: 'posted', columns: ['posted'], folded: false },
-    ])
-    expect(lanes[0].label).toBe('Coming up')
-    expect(lanes[0].empty).toBe('Nothing coming up.')
-  })
-
-  it('on every page the five columns are all there, once each, in board order', () => {
-    for (const page of PAGES) {
-      const flat = pageLanes(page).flatMap(l => l.columns)
-      expect(flat, page).toEqual(BOARD_COLUMNS.map(c => c.key))
-      for (const l of pageLanes(page)) {
-        expect(l.label).not.toMatch(/_/)
-        expect(l.empty).toMatch(/^Nothing /)
-        expect(l.folded).toBe(l.columns.length > 1)
-      }
+  it('every page has the same five lanes — one column each, none folded', () => {
+    // the owner's standing rule: work needs an internal check and the client's
+    // word whoever is looking, so no page hides a stage. What differs is which
+    // CARDS are shown and which button each role gets.
+    const keys = BOARD_COLUMNS.map(c => c.key)
+    for (const page of ['production', 'editor', 'scheduler'] as const) {
+      const lanes = pageLanes(page)
+      expect(lanes.map(l => l.key)).toEqual(keys)
+      expect(lanes.every(l => l.columns.length === 1)).toBe(true)
+      expect(lanes.every(l => !l.folded)).toBe(true)
     }
   })
 
   it('a column deep link lands on the lane it sits in', () => {
     expect(laneOf('production', 'posted')).toBe('posted')
-    expect(laneOf('editor', 'posted')).toBe('done')
-    expect(laneOf('editor', 'ready_to_post')).toBe('done')
+    expect(laneOf('editor', 'posted')).toBe('posted')
+    expect(laneOf('editor', 'ready_to_post')).toBe('ready_to_post')
     expect(laneOf('editor', 'draft')).toBe('draft')
-    expect(laneOf('scheduler', 'draft')).toBe('coming_up')
-    expect(laneOf('scheduler', 'with_client')).toBe('coming_up')
+    expect(laneOf('scheduler', 'draft')).toBe('draft')
+    expect(laneOf('scheduler', 'with_client')).toBe('with_client')
     expect(laneOf('scheduler', 'ready_to_post')).toBe('ready_to_post')
   })
 
@@ -335,23 +311,27 @@ describe('the lanes each page arranges the five columns into', () => {
       card({ id: 'f', status: 'client_review' }),
     ]
 
-    it('a folded lane holds every card from every column inside it, in input order', () => {
+    it('every card lands in its own column lane, in input order', () => {
       const g = groupByLane(pageLanes('editor'), rows)
-      expect(g.map(x => x.lane.key)).toEqual(['draft', 'internal_check', 'with_client', 'done'])
-      expect(g[0].cards.map(c => c.id)).toEqual(['a'])
-      expect(g[1].cards.map(c => c.id)).toEqual(['c'])
-      expect(g[2].cards.map(c => c.id)).toEqual(['f'])
-      expect(g[3].cards.map(c => c.id)).toEqual(['b', 'd', 'e'])
+      expect(g.map(x => x.lane.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
+      const byKey = new Map(g.map(x => [x.lane.key, x.cards.map(c => c.id)]))
+      for (const row of rows) {
+        expect(byKey.get(columnOf(row.status))).toContain(row.id)
+      }
+    })
 
-      const s = groupByLane(pageLanes('scheduler'), rows)
-      expect(s.map(x => x.lane.key)).toEqual(['coming_up', 'ready_to_post', 'posted'])
-      expect(s[0].cards.map(c => c.id)).toEqual(['a', 'c', 'f'])
-      expect(s[1].cards.map(c => c.id)).toEqual(['d'])
-      expect(s[2].cards.map(c => c.id)).toEqual(['b', 'e'])
+    it('a lane made of several columns still holds them all, in input order', () => {
+      // no page folds today, but the grouping supports it — pinned so a future
+      // folded lane cannot quietly lose a card
+      const folded = [{ key: 'done' as never, label: 'Done',
+        columns: ['ready_to_post', 'posted'] as never, folded: true, empty: 'Nothing done yet.' }]
+      const g = groupByLane(folded as never, rows)
+      expect(g[0].cards.map(c => c.id)).toEqual(
+        rows.filter(r => ['ready_to_post', 'posted'].includes(columnOf(r.status))).map(r => r.id))
     })
 
     it('lists every lane, empty ones included, and never loses a card', () => {
-      expect(groupByLane(pageLanes('scheduler'), []).map(x => x.cards)).toEqual([[], [], []])
+      expect(groupByLane(pageLanes('scheduler'), []).map(x => x.cards)).toEqual(BOARD_COLUMNS.map(() => []))
       for (const page of PAGES) {
         const total = groupByLane(pageLanes(page), rows).reduce((n, x) => n + x.cards.length, 0)
         expect(total, page).toBe(rows.length)
@@ -367,33 +347,27 @@ describe('the lanes each page arranges the five columns into', () => {
       expect(d).toEqual({ ok: true, lane: 'internal_check', column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
     })
 
-    it('a folded lane is entered at the FIRST stage inside it the rules allow', () => {
-      // a scheduler dropping a ready card on Posted (the only stage they reach)
-      const d = dropOnLane(card({ status: 'approved_for_scheduling' }), lane('editor', 'done'), scheduler)
-      expect(d).toEqual({ ok: true, lane: 'done', column: 'posted', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
-      // a manager dropping a checked card that needs no client on Done lands
-      // on Ready to post — the first column in the lane — not Posted
-      const free = dropOnLane(card({ status: 'internal_review', client_approval_required: false }), lane('editor', 'done'), manager)
+    it('a drop lands on the stage the rules allow, whoever drops it', () => {
+      const d = dropOnLane(card({ status: 'approved_for_scheduling' }), lane('editor', 'posted'), scheduler)
+      expect(d).toEqual({ ok: true, lane: 'posted', column: 'posted', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
+      const free = dropOnLane(card({ status: 'internal_review', client_approval_required: false }), lane('editor', 'ready_to_post'), manager)
       expect(free.ok && free.column).toBe('ready_to_post')
       expect(free.ok && free.action.to).toBe('approved_for_scheduling')
-      // a manager dropping a client card on Coming up is sending it back —
-      // Internal check is the first stage in the lane they may reach
-      const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'coming_up'), manager)
+      const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'internal_check'), manager)
       expect(back.ok && back.column).toBe('internal_check')
-      expect(back.ok && back.action.kind).toBe('send_back')
     })
 
-    it('a folded lane with no way in refuses in plain words', () => {
+    it('a lane with no way in refuses in plain words', () => {
       // an editor cannot move a draft past the manager
-      const d = dropOnLane(card(), lane('editor', 'done'), editor)
+      const d = dropOnLane(card(), lane('editor', 'posted'), editor)
       expect(d.ok).toBe(false)
       if (!d.ok) expect(d.reason).toMatch(/may not|Nothing moves/)
       // a card that needs the client says so
-      const needs = dropOnLane(card({ status: 'internal_review' }), lane('editor', 'done'), manager)
+      const needs = dropOnLane(card({ status: 'internal_review' }), lane('editor', 'ready_to_post'), manager)
       expect(needs).toEqual({ ok: false, reason: NEEDS_CLIENT_REASON })
       // a card already in the lane, with nowhere else inside it, says so
-      const same = dropOnLane(card({ status: 'published' }), lane('editor', 'done'), scheduler)
-      expect(same).toEqual({ ok: false, reason: 'Already in Done' })
+      const same = dropOnLane(card({ status: 'published' }), lane('editor', 'posted'), scheduler)
+      expect(same).toEqual({ ok: false, reason: 'Already in Posted' })
       expect(dropOnLane(card(), lane('editor', 'draft'), editor)).toEqual({ ok: false, reason: 'Already in Draft' })
     })
 
