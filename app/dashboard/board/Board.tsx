@@ -11,6 +11,9 @@ import {
   type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
+import { useTable } from '@/lib/db-client'
+import type { PostAnalytic } from '@/lib/db-types'
+import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
@@ -134,6 +137,21 @@ export function Board({
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
   const canEdit = useCallback((c: BoardCardRow) => isManager || isAssignedTo(c, viewer.id), [isManager, viewer.id])
 
+  /** how each posted card did — "42 interactions · +12 followers" — live off
+   *  the per-post cache, so the line moves when the sweep writes */
+  const hasPosted = useMemo(() => cards.some(c => c.status === 'published'), [cards])
+  const { rows: analyticRows } = useTable<PostAnalytic>('post_analytics', { enabled: hasPosted })
+  const statsByItem = useMemo(() => {
+    const out = new Map<string, string>()
+    const sorted = [...analyticRows].sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? ''))
+    for (const r of sorted) {
+      if (!r.item_id || out.has(r.item_id)) continue
+      const line = boardLine(readPerformance(r.performance))
+      if (line) out.set(r.item_id, line)
+    }
+    return out
+  }, [analyticRows])
+
   const shown = useMemo(
     () => applyShow(cards, show ?? null, { viewer, today, postingToday, connectedClientIds }),
     [cards, show, viewer, today, postingToday, connectedClientIds],
@@ -246,6 +264,7 @@ export function Board({
                 // a person never sees a button the server would refuse
                 canDelete={isManager}
                 onDelete={setDeleteFor}
+                stats={statsByItem.get(c.id) ?? null}
               />
             )}
           </div>

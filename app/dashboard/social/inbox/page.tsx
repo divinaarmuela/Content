@@ -283,6 +283,23 @@ export default function InboxPage() {
     }
   }
 
+  /**
+   * `?post=<provider post id>` — a card's "Reply in Inbox" lands on that
+   * post's thread. Opened once, when the list first arrives; a post the list
+   * does not carry (no comments yet) leaves the page on its plain list.
+   */
+  const openedFromUrl = useRef(false)
+  useEffect(() => {
+    if (openedFromUrl.current || !posts) return
+    openedFromUrl.current = true
+    let wanted: string | null = null
+    try { wanted = new URLSearchParams(window.location.search).get('post') } catch { /* no address */ }
+    if (!wanted) return
+    const hit = posts.find(p => p.id === wanted)
+    if (hit) { setTab('comments'); void openPost(hit) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts])
+
   const act = async (action: string, comment: Comment, message?: string, url?: string) => {
     if (!active) return
     setBusy(comment.id + action)

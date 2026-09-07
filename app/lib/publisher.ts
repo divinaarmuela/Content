@@ -37,6 +37,8 @@ export interface Publisher {
   listPosts(params?: { limit?: number }): Promise<unknown>
   /** Per-post analytics, including posts published outside this dashboard. */
   postAnalytics(postId?: string): Promise<unknown>
+  /** One post's numbers day by day since it went up (needs the Analytics add-on). */
+  postTimeline(postId: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
   listComments(): Promise<unknown>
   /** DM inbox: conversations across connected accounts. */
@@ -635,6 +637,12 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/analytics${postId ? `?postId=${encodeURIComponent(postId)}` : ''}`)
   }
 
+  /** `{ postId, timeline: [{ date, platform, impressions, likes, … }] }` — one
+   *  row per day per platform since publishing. */
+  postTimeline(postId: string) {
+    return this.getJson(`/analytics/post-timeline?postId=${encodeURIComponent(postId)}`)
+  }
+
   /** Presign → PUT → return the public URL.
    *
    *  The provider does not accept arbitrary public URLs, so assets held in
@@ -796,6 +804,7 @@ class UnconfiguredPublisher implements Publisher {
   async followerStats() { return null }
   async listPosts() { return null }
   async postAnalytics() { return null }
+  async postTimeline() { return null }
   async listComments() { return null }
   async listConversations() { return null }
   async conversationMessages() { return null }

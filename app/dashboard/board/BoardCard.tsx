@@ -80,7 +80,7 @@ export function CompactCard({ card, today, onOpen }: {
   )
 }
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete,
+  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete, stats,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -99,6 +99,8 @@ export function BoardCard({
   /** may this person delete the card — a manager, matching the route */
   canDelete?: boolean
   onDelete?: (card: BoardViewCard) => void
+  /** in Posted: "42 interactions · +12 followers" — how the live post did */
+  stats?: string | null
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const [briefOpen, setBriefOpen] = useState(false)
@@ -143,6 +145,9 @@ export function BoardCard({
           </span>
         )}
         <span>{lines.assignee} · {lines.version}</span>
+        {stats && card.status === 'published' && (
+          <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{stats}</span>
+        )}
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>
         )}
