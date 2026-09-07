@@ -99,11 +99,26 @@ module.exports = {
           '50%': { transform: 'rotate(180deg) scale(1.1)' },
           '100%': { transform: 'rotate(360deg) scale(0.85)' },
         },
+        // a sheet sliding in from the right edge, and back out
+        'sheet-in-right': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'sheet-out-right': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'fade-in': { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        'fade-out': { '0%': { opacity: '1' }, '100%': { opacity: '0' } },
       },
       animation: {
         'lama-marquee': 'lama-marquee 40s linear infinite',
         shimmer: 'shimmer 2s linear infinite',
         spark: 'spark 2.4s ease-in-out infinite',
+        'sheet-in-right': 'sheet-in-right 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+        'sheet-out-right': 'sheet-out-right 180ms ease-in',
+        'fade-in': 'fade-in 180ms ease-out',
+        'fade-out': 'fade-out 150ms ease-in',
       },
     },
   },

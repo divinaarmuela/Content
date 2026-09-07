@@ -12,7 +12,8 @@ import { join } from 'node:path'
  * dead code again.
  */
 
-const CARD_PAGE = join(process.cwd(), 'app', 'dashboard', 'production', '[id]', 'page.tsx')
+// the card's body — the page route is a thin wrapper around CardDetail
+const CARD_PAGE = join(process.cwd(), 'app', 'dashboard', 'production', '[id]', 'CardDetail.tsx')
 const DASHBOARD = join(process.cwd(), 'app', 'dashboard')
 
 /** The code, without the prose about the code. */

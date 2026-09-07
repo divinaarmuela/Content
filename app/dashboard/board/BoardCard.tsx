@@ -21,8 +21,9 @@ import { cardTone, kindTone } from '../ui/tone'
  *
  * Client, title, kind, the link with its label, what needs doing, who holds
  * it, when it is due — one line each. What needs doing is clamped to two
- * lines with a "Read all" control when there is more; the whole card opens
- * the item page too. One control, labelled with what it does; anything else
+ * lines with a "Read all" control when there is more; the whole card OPENS
+ * the card beside the board (`onOpen`) — it never navigates away, so the
+ * board stays where it was. One control, labelled with what it does; anything else
  * sits behind "More", including the keyboard's way of moving the card
  * between columns. A card with no link says so — "No link yet" — to anyone
  * who cannot add one.
@@ -33,7 +34,7 @@ import { cardTone, kindTone } from '../ui/tone'
 /** the brief fits two lines below roughly this many characters */
 const BRIEF_FOLD = 110
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onAction, onMove, onLink, onKind, canDelete, onDelete,
+  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -43,6 +44,8 @@ export function BoardCard({
   busy?: boolean
   /** may this person set the link or the kind — the holder or a manager */
   canEdit: boolean
+  /** a press on the card itself — the board opens it beside itself */
+  onOpen: (card: BoardViewCard) => void
   onAction: (card: BoardViewCard, action: CardAction) => void
   onMove: (card: BoardViewCard, action: CardAction) => void
   onLink: (card: BoardViewCard) => void
@@ -74,7 +77,7 @@ export function BoardCard({
 
   return (
     <WorkCard
-      href={`/dashboard/production/${card.id}`}
+      onOpen={() => onOpen(card)}
       client={lines.client}
       title={lines.title}
       tone={tone}

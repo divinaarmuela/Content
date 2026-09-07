@@ -14,6 +14,7 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
 import { useTeamMembers } from '../production/workHooks'
 
@@ -39,6 +40,8 @@ export default function SchedulerPage() {
   // columns say what each card is
   const live = useWorkRows(viewer, { schedulerPostFilter: false })
   const { column, show, clearShow } = useBoardParams()
+  // the card that is open beside the board, named in the address
+  const sheet = useCardSheet()
   // any team role makes work — the owner's rule; a scheduler's odd task
   // (trend research, a caption pass) is a card like any other
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
@@ -118,6 +121,7 @@ export default function SchedulerPage() {
           names={names}
           kinds={live.tables.workKinds.rows}
           today={today}
+          onOpen={c => sheet.open(c.id)}
           initialColumn={column}
           show={show}
           onClearShow={clearShow}
@@ -126,6 +130,8 @@ export default function SchedulerPage() {
           ariaLabel="Every card, by stage"
         />
       )}
+      {/* the card, beside the board — the board stays live behind it */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} />
       {viewer && (
         <NewCardDialog
           open={newOpen}
