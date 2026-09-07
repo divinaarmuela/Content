@@ -263,6 +263,9 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           <span className="text-[16px] font-semibold leading-[1.25]">{card.title}</span>
         )}
         <p className={cn('text-[14px]', muted)}>{line}</p>
+        {card.caption && (
+          <p className={cn('whitespace-pre-line text-[14px] leading-[1.45]', muted)}>{card.caption}</p>
+        )}
         {card.shoot?.location && (
           <p className={cn('flex items-center gap-1.5 text-[13px]', muted)}>
             <MapPin className="h-3.5 w-3.5 shrink-0" /> {card.shoot.location}

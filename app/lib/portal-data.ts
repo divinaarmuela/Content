@@ -122,8 +122,12 @@ export type PortalCard = {
   /** the item id, or the shoot's batch id */
   id: string
   title: string
-  /** "Reel", "Image", "Shoot" — or null when there is no plain word for it */
+  /** the kind of work in the team's own word ("Reel", "Menu carousel"), the
+   *  old format word as a fallback — or null when there is no plain word for it */
   word: string | null
+  /** the post's caption, once the team has written one — shown to the client
+   *  under the title, since it is what will go out with the work */
+  caption: string | null
   column: PortalColumnKey
   tone: PortalCardTone | undefined
   /** the one sentence under the title */
@@ -265,7 +269,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const [itemRows, commitmentRow, brandRow, shootRows, amRes, intake] = await Promise.all([
     table<ContentItem>('content_items')
       .list({ by: { client_id: clientId }, orderBy: [['updated_at', 'desc']], limit: 300 })
-      .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media'])),
+      .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media', 'name'])),
     table<MonthlyCommitment>('monthly_commitments')
       .list({ by: { client_id: clientId }, where: r => r.month === month && r.year === year, limit: 1 })
       .then(r => r[0] ?? null),
@@ -534,7 +538,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // the link the team pasted on the card (`link_url`, labelled by its
     // stored `link_kind`) wins; the item's old Drive mirror field and the
     // latest version's Drive link are fallbacks for cards made before it
-    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null }
+    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null; caption?: string | null; work_kinds?: { name?: string | null } | null }
     const pasted = facing ? row.link_url || null : null
     const url = facing ? (pasted || row.drive_url || p.drive_url || null) : null
     const kind = pasted ? row.link_kind ?? null : null
@@ -542,7 +546,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       kind: 'work',
       id: p.id,
       title: p.title,
-      word: kindWord(p.content_type),
+      word: row.work_kinds?.name?.trim() || kindWord(p.content_type),
+      caption: facing && typeof row.caption === 'string' && row.caption.trim() ? row.caption.trim() : null,
       column: portalColumnFor(p.status),
       tone: portalCardTone(p.status),
       line: cardLine(p.status, { postedWhen, progress: p.progress_line }),
@@ -576,6 +581,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     return {
       kind: 'shoot',
       id: b.id,
+      caption: null,
       title: b.title,
       word: 'Shoot',
       column: standing.column,
