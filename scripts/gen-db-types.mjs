@@ -403,6 +403,19 @@ const GHOST_COLUMNS = {
     ['change_note', col('string', true)],
     ['change_note_by', col('string', true)],
     ['change_note_at', col('string', true)],
+    //   content_items.asked_ids / asked_at — WHO WAS ACTUALLY ASKED, and
+    //     when. Whose turn it is used to be worked out from status + role
+    //     alone, so a card in Internal check said "your turn" to every
+    //     manager on that client and sat on all their Overviews until the
+    //     status moved. Asking somebody is assigning them: the ids of the
+    //     people asked go on the card (a reviewer picked on a transition, or
+    //     the person a card was handed to), and while they are set THEY are
+    //     the queue — nobody else sees the card as waiting on them
+    //     (app/lib/asked-core.ts). Cleared in the same write as any
+    //     transition, send-back or handover, so the moment one of them acts
+    //     it leaves everybody's Overview, including the people who did not.
+    ['asked_ids', col('unknown', true, true, true)],
+    ['asked_at', col('string', true)],
   ],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],

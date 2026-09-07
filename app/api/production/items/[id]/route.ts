@@ -11,6 +11,7 @@ import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-acc
 import { logActivity, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
 import { canEditItemFields } from '../../../../lib/item-edit-core'
+import { askedPatch, NOBODY_ASKED } from '../../../../lib/asked-core'
 import { stateAfterPostEdit } from '../../../../lib/posting-approval-core'
 import { readPostingApproval } from '../../../../lib/posting-approval'
 import { loadPostingContext } from '../../../../lib/production-publish'
@@ -219,6 +220,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
       }
       patch.assigned_by = user.id
+      // HANDING A CARD TO SOMEBODY IS ASKING THEM. They become the queue for
+      // it — the Overview counts it for them and for nobody else — in the
+      // same write that moves the card to them. An ordinary change of Who is
+      // not an ask, so it clears whatever ask was standing: the question
+      // somebody was holding is no longer theirs to answer.
+      Object.assign(patch, handOver ? askedPatch([String(patch.owner_id)]) : NOBODY_ASKED)
     }
     if ('work_kind_id' in patch && patch.work_kind_id) {
       const kind = await table('work_kinds').get(String(patch.work_kind_id))
@@ -251,7 +258,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await logActivity({
       actor: user, clientId: data.client_id,
       entityType: 'content_item', entityId: id,
-      action: 'updated', detail: Object.keys(patch).join(', '),
+      // the ask is bookkeeping, not an edit somebody made — the History
+      // names the fields a person changed, in their own words
+      action: 'updated',
+      detail: Object.keys(patch).filter(k => k !== 'asked_ids' && k !== 'asked_at').join(', '),
     })
     // the History has to say WHY the approval vanished — a chip that flips
     // from "Approved to post" to "Waiting on approval" with no line about it

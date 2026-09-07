@@ -5,6 +5,9 @@
  * these rules; nothing else in the codebase decides what moves where.
  */
 import { roleSatisfies, type Role } from './identity-core'
+// who was actually ASKED for the next thing on this card, when anybody was.
+// asked-core imports nothing from here, so there is no cycle.
+import { askedIdsOf, type AskedItem } from './asked-core'
 
 export const ITEM_STATUSES = [
   'draft_uploaded', 'internal_review', 'revision_required', 'revision_complete',
@@ -185,7 +188,7 @@ export const STATUS_TURN: Record<ItemStatus, Role | null> = {
 }
 
 /** The fields of an item that decide which hats a viewer wears on it. */
-export type ActingItem = { owner_id?: string | null; scheduler_ids?: unknown }
+export type ActingItem = { owner_id?: string | null; scheduler_ids?: unknown } & AskedItem
 
 /** scheduler_ids as it is meant: a list of user ids. Anything else is none. */
 export function schedulerIdsOf(item: { scheduler_ids?: unknown }): string[] {
@@ -375,7 +378,12 @@ export function whoseTurn(
   turns: Record<ItemStatus, Role | null> = STATUS_TURN,
 ): { hat: Role | null; mine: boolean; unassigned: boolean } {
   const hat = turns[status]
+  // SOMEBODY WAS ASKED. Then it is their turn and nobody else's — including
+  // the other managers on the client, who would otherwise all be told the
+  // card is waiting on them. With nobody asked, the role rule below stands.
+  const asked = askedIdsOf(item)
   const mine = hat === null ? false
+    : asked.length > 0 ? asked.includes(viewer.id)
     : viewer.role === 'super_admin'
       ? hat === 'account_manager'
         || (hat === 'editor' && item.owner_id === viewer.id)

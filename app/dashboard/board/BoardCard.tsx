@@ -153,7 +153,9 @@ export function BoardCard({
             {lines.brief}
           </span>
         )}
-        <span>{lines.assignee} · {lines.version}</span>
+        {/* who holds it, and — beside it, never instead of it — who was
+            actually asked for the next thing on it */}
+        <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>
         {stats && card.status === 'published' && (
           statsHref ? (
             // above the card's own overlay, so the line is a real link rather

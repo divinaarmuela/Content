@@ -62,6 +62,7 @@ import {
   actingRoles, availableTransitionsAs, presentTransitions, schedulerIdsOf, whoseTurn,
   CLIENT_LABELS, SCHEDULER_STATUSES, STATUS_LABELS, STATUS_MEANING, STATUS_TURN, type ItemStatus,
 } from '../../../lib/workflow-core'
+import { askedWords } from '../../../lib/asked-core'
 import {
   availableBriefTaskTransitionsAs, itemStatusLabel, SHOOT_BRIEF_SLUG,
   BRIEF_STATUS_MEANING, BRIEF_STATUS_TURN,
@@ -142,6 +143,9 @@ type Detail = {
   client_timezone?: string | null
   owner_id: string | null
   assigned_by?: string | null
+  /** who was ASKED for the next thing on this card, when anybody was */
+  asked_ids?: unknown
+  asked_at?: string | null
   scheduler_ids?: string[] | null
   viewer_id?: string
   content_type: string; status: ItemStatus; status_label?: string
@@ -632,6 +636,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     brief: detail.brief ?? null,
     owner_id: detail.owner_id ?? null,
     scheduler_ids: detail.scheduler_ids,
+    asked_ids: detail.asked_ids,
+    asked_at: detail.asked_at ?? null,
     due_date: detail.due_date,
     current_version_number: detail.current_version_number,
     change_note: detail.change_note ?? null,
@@ -1240,6 +1246,14 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
 
   if (inSheet) {
     const ownerName = detail.owner_id === detail.viewer_id ? 'You' : detail.owner_name ?? null
+    /** "With Divina to check" — who was actually asked, beside who holds it.
+     *  Null unless somebody was asked in particular, and then it is those
+     *  people's queue and nobody else's. */
+    const askedLine = askedWords(
+      { asked_ids: detail.asked_ids, status: detail.status },
+      new Map(editors.map(e => [e.id, e.id === viewer.id ? 'you' : (e.name || e.email)])),
+      turns,
+    )
     const factRow = (label: string, value: React.ReactNode) => (
       <div className="flex min-h-11 items-center gap-3 py-1">
         <span className="w-24 shrink-0 text-secondary-13 text-muted-foreground">{label}</span>
@@ -1435,6 +1449,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
               )}
               {isTeam && canClaimEditor(workItem, viewer) && <ClaimButton itemId={id} hat="editor" onDone={load} />}
             </>)}
+            {/* who was ASKED — beside Who, never instead of it */}
+            {askedLine && factRow('Waiting on', <span>{askedLine}</span>)}
             {factRow('Due date', canEditDue ? (
               <Input
                 type="date"

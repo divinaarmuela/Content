@@ -35,6 +35,7 @@ import {
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
 import { handoverSubject, tidyNote } from './hand-over-core'
+import { askedPatch, NOBODY_ASKED } from './asked-core'
 // pure, no I/O — the one question "does this client sign every post off"
 import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
@@ -687,9 +688,18 @@ export async function performTransition(
   if (!before || before.status !== from) {
     throw new AuthzError('This item was just updated by someone else — refresh and try again', 409)
   }
+  // WHO IS BEING ASKED, recorded in the same write as the move.
+  //
+  // Picking reviewers used to narrow the email and nothing else, so the card
+  // still read "your turn" to every manager on the client. The ids go on the
+  // card, and a move with nobody picked CLEARS them — which is the whole
+  // point: whoever acts, acts for everybody who was asked, and the card
+  // leaves all of their Overviews at once. One write, so it can never be
+  // left half-done.
+  const asked = askedPatch(opts?.reviewerIds ?? null)
   let updated: ContentItemRow | null
   try {
-    updated = await table<ContentItemRow>('content_items').update(item.id, { status: to })
+    updated = await table<ContentItemRow>('content_items').update(item.id, { status: to, ...asked })
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)
   }

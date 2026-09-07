@@ -21,6 +21,8 @@ import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, type BoardColumnKey,
 } from './board-core'
 import { linkLabel, versionWord } from './card-link-core'
+import { askedWords, waitingOnViewer } from './asked-core'
+import { STATUS_TURN } from './workflow-core'
 import type { Role } from './identity-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
@@ -46,6 +48,11 @@ export type BoardViewCard = {
   client_approval_required?: boolean
   /** somebody tagged the viewer here and it is not answered */
   my_open_task?: boolean
+  /** the people ASKED for the next thing on this card, when anybody was
+   *  (`asked-core`). While it is set they are the queue — the Overview and
+   *  the "your turn" treatment count the card for them and nobody else. */
+  asked_ids?: unknown
+  asked_at?: string | null
   /** when the row last changed — every status move bumps it */
   updated_at?: string | null
   /** when the status last changed, on rows that record it separately */
@@ -94,6 +101,9 @@ export type CardLines = {
   stage: string
   /** the manager's words on a card that came back — null otherwise */
   changeNote: string | null
+  /** "With Divina to check" — who was actually asked, beside who holds it.
+   *  Null when nobody was asked in particular. */
+  asked: string | null
 }
 
 /** The lines on a card, one each. */
@@ -132,6 +142,12 @@ export function cardLines(
     version: versionWord(card.current_version_number),
     stage: STATUS_LABELS[card.status],
     changeNote: cameBack && card.change_note?.trim() ? card.change_note.trim() : null,
+    // "With you to check" rather than your own name back at you
+    asked: askedWords(
+      card,
+      opts.viewerId ? new Map(names).set(opts.viewerId, 'you') : names,
+      STATUS_TURN,
+    ),
   }
 }
 
@@ -491,7 +507,12 @@ export function matchesShow(card: BoardViewCard, show: ShowFilter, ctx: ShowCont
       return !!key && key <= ctx.today && columnOf(card.status) !== 'posted'
     }
     case 'back': return CAME_BACK_STATUSES.includes(card.status)
-    case 'decide': return DECIDE_STATUSES.includes(card.status)
+    // "Needs your decision" means YOURS. When somebody was asked in
+    // particular, the card is on their list and on nobody else's; with
+    // nobody asked, every manager on the client is still the audience, as
+    // before (`waitingOnViewer`).
+    case 'decide':
+      return DECIDE_STATUSES.includes(card.status) && waitingOnViewer(card, ctx.viewer.id)
     case 'today': return ctx.postingToday?.has(card.id) ?? false
     case 'account':
       return card.status === 'approved_for_scheduling'
@@ -578,7 +599,12 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
       {
         key: 'ready', title: 'Ready to post', tone: 'green',
         href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Scheduler',
-        stats: [{ value: inColumn('ready_to_post'), label: 'to book in' }],
+        // a post somebody was asked to book in is theirs to book in; with
+        // nobody asked, the column is still the whole queue
+        stats: [{
+          value: count(cards, c => columnOf(c.status) === 'ready_to_post' && waitingOnViewer(c, viewer.id)),
+          label: 'to book in',
+        }],
       },
       {
         key: 'today', title: 'Going out today', tone: 'blue',

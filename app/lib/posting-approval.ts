@@ -11,6 +11,7 @@ import { announceItemChange } from './production-live'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { formatWithZone, safeZone, zoneAbbrev, zoneLabel } from './timezone-core'
 import { platformLabel } from './posting-card-core'
+import { NOBODY_ASKED } from './asked-core'
 import {
   maySendPostApproval, mayApprovePost, nextApprovalState, parseApprovalState,
   type ApprovalAction, type PostingApprovalState,
@@ -240,6 +241,14 @@ export async function actOnPostingApproval(
     patch.posting_approval_note = null
     patch.posting_client_required = false
   }
+
+  // ANSWERING ends the ask, for everybody who was asked. Approving, asking
+  // for changes and taking the gate back are all answers, so they clear
+  // `asked_ids` in the SAME write that records them — the card leaves every
+  // Overview at once, including those of the people who were asked and did
+  // not act. Sending FOR approval is the question, not the answer, so it
+  // leaves the ask alone.
+  if (input.action !== 'send') Object.assign(patch, NOBODY_ASKED)
 
   // the state is re-read immediately before the write, and only a row still
   // sitting where this actor saw it is answered: two people answering at once

@@ -71,9 +71,12 @@ export function shapeItemDetail(
     // — and the raw status, which status_label exists to translate
     const {
       owner_id: _o, assigned_by: _a, scheduler_ids: _s, status: _st,
+      // who inside the agency was asked to look at it is an internal fact,
+      // like who edits and who schedules
+      asked_ids: _ai, asked_at: _aat,
       ...clientSafe
     } = itemPublic as Record<string, unknown>
-    void _o; void _a; void _s; void _st
+    void _o; void _a; void _s; void _st; void _ai; void _aat
     return {
       ...clientSafe,
       status_label: CLIENT_LABELS[status],

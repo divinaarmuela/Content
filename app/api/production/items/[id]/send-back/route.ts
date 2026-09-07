@@ -10,6 +10,7 @@ import { announceItemChange } from '../../../../../lib/production-live'
 import { canReadClientComments } from '../../../../../lib/comment-access-core'
 import { actingRoles, STATUS_LABELS, type ItemStatus } from '../../../../../lib/workflow-core'
 import { canMoveTo, columnOf } from '../../../../../lib/board-core'
+import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -92,6 +93,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const now = new Date().toISOString()
     await table<ContentItem>('content_items').update(id, {
       change_note: note, change_note_by: user.id, change_note_at: now,
+      // whoever was asked to look at this has been answered — by this send
+      // back. It leaves their Overviews in the same write as the words
+      // landing on the card, not in a second round trip that could fail.
+      ...NOBODY_ASKED,
     })
 
     // the words in the card's own thread, tagged to the assignee so they sit
