@@ -521,7 +521,10 @@ export default function NewPostDialog({
       <div
         ref={card}
         tabIndex={-1}
-        className="flex w-full max-w-[720px] flex-col rounded-card bg-surface shadow-xl outline-none"
+        // never taller than the screen: the channel options can make it so,
+        // and a centred panel taller than the viewport has a top nobody can
+        // scroll to — so the panel scrolls inside itself instead
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[720px] flex-col overflow-y-auto overscroll-contain rounded-card bg-surface shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)]"
       >
         {/* ── header ── */}
         <div className="flex flex-wrap items-center gap-2.5 border-b border-border p-3.5">
