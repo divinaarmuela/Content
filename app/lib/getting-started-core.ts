@@ -41,7 +41,7 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card assigned to you is on your board, in five columns from Draft to Posted. One card is one thing to make: it shows what needs doing and the link to the work.',
+      body: 'Every card assigned to you is on your board: Draft, Internal check and With client, with what is done folded into one narrow lane at the end. One card is one thing to make: it shows what needs doing and the link to the work.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
@@ -65,7 +65,7 @@ const SCHEDULER: GettingStartedPanel = {
   steps: [
     {
       title: 'See what is coming',
-      body: 'Every card for your clients is on the board, from Draft to Posted. Only the Ready to post column has been signed off — nothing else is yours to post yet.',
+      body: 'Every card for your clients is on the board: Ready to post and Posted have the room, and what is still being made is folded into "Coming up" on the left. Only Ready to post has been signed off — nothing else is yours to post yet.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },

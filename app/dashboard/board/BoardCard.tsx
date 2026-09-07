@@ -33,6 +33,52 @@ import { cardTone, kindTone } from '../ui/tone'
 
 /** the brief fits two lines below roughly this many characters */
 const BRIEF_FOLD = 110
+
+/**
+ * ONE CARD IN A FOLDED LANE — one line: the title, the client, the stage.
+ *
+ * A folded lane holds the stages this person does not work, so the card
+ * carries no button: pressing it opens the card beside the board, where
+ * every action lives. The stage chip is always on, because a folded lane
+ * always holds more than one stage. Same tint as the full card, so a card
+ * that needs attention is still obvious at a glance.
+ */
+export function CompactCard({ card, today, onOpen }: {
+  card: BoardViewCard
+  today: string
+  onOpen: (card: BoardViewCard) => void
+}) {
+  const lines = cardLines(card, { today })
+  const tone = cardTone({
+    status: card.status,
+    due: card.due_date,
+    changesRequested: card.status === 'client_changes_requested',
+    today,
+  })
+  const TINT: Record<NonNullable<typeof tone>, string> = {
+    amber: 'bg-tint-amber', blue: 'bg-tint-blue', green: 'bg-tint-green', red: 'bg-tint-red',
+    paper: 'bg-paper', ink: 'bg-ink text-cream',
+  }
+  return (
+    <button
+      type="button"
+      data-tone={tone ?? 'surface'}
+      onClick={() => onOpen(card)}
+      title={`${lines.title} — ${lines.client}`}
+      className={`flex min-h-11 w-full items-center gap-2 rounded-inner px-3 py-2 text-left transition-shadow hover:shadow-[0_2px_12px_rgba(11,11,11,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        tone ? TINT[tone] : 'border border-border bg-surface text-foreground'
+      }`}
+    >
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[13px] font-semibold leading-tight">{lines.title}</span>
+        <span className={`truncate text-[11px] font-semibold uppercase tracking-[0.02em] ${tone === 'ink' ? 'text-cream/60' : 'text-muted-foreground'}`}>
+          {lines.client}
+        </span>
+      </span>
+      <Chip tone={tone ? 'surface' : 'muted'} className="shrink-0">{lines.stage}</Chip>
+    </button>
+  )
+}
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete,
 }: {

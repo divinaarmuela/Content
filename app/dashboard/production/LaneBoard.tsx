@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useIsMobile } from '../useIsMobile'
 import UiLane from '../ui/Lane'
 
@@ -15,10 +16,20 @@ export type Lane = {
   hint?: ReactNode
   /** for a tail column: something to show instead of the cards */
   replace?: ReactNode
+  /** a quiet line under the cards — where the things not shown here went */
+  footer?: ReactNode
+  /**
+   * a FOLDED lane: several stages the viewer does not work, kept in one
+   * narrow strip (~200px) with a muted heading. It collapses to a 44px rail
+   * carrying the count; the board owns the choice (`collapsed`, `onToggle`).
+   */
+  folded?: boolean
+  collapsed?: boolean
+  onToggle?: () => void
 }
 
 /**
- * The columns of a board — five side by side on a desk, ONE at a time on a
+ * The columns of a board — side by side on a desk, ONE at a time on a
  * phone, with a picker to swap between them.
  *
  * Five `min-w-44` lanes inside `overflow-x-auto` was ~900px of sideways
@@ -27,8 +38,11 @@ export type Lane = {
  * names are the navigation: each pill carries its count, the one with the
  * viewer's work opens first, and every pill is a 44px target.
  *
+ * A folded lane takes little room on a desk and can be shut to a rail; on a
+ * phone it is simply one more pill, because there is nothing to fold.
+ *
  * Presentation only — every rule about which card is in which lane belongs
- * to the page and to work-pages-core.
+ * to the page and to board-view-core.
  */
 export function LaneBoard({ lanes, initialLane, ariaLabel }: {
   lanes: Lane[]
@@ -56,18 +70,54 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
           {lane.empty}
         </div>
       )}
+      {lane.footer}
     </>
   )
 
-  const column = (lane: Lane, grow: boolean) =>
-    mobile ? (
-      <div key={lane.key} className="flex w-full flex-col gap-2.5">{stack(lane)}</div>
-    ) : (
+  /** a folded lane shut to a rail: the chevron opens it, the count stays */
+  const rail = (lane: Lane, index: number) => {
+    const Icon = index === 0 ? ChevronRight : ChevronLeft
+    return (
+      <button
+        key={lane.key}
+        type="button"
+        aria-expanded={false}
+        aria-label={`Show ${lane.title} — ${lane.count} ${lane.count === 1 ? 'card' : 'cards'}`}
+        title={`Show ${lane.title}`}
+        onClick={lane.onToggle}
+        className="flex w-11 min-w-11 shrink-0 flex-col items-center gap-2 self-stretch rounded-inner border border-dashed border-border bg-surface py-2 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+      >
+        <Icon className="h-4 w-4" strokeWidth={1.8} />
+        <span className="rounded-full bg-foreground/[0.06] px-2 py-[2px] text-[12px] font-bold tabular-nums">{lane.count}</span>
+        <span className="mt-1 text-[12px] font-semibold uppercase tracking-[0.04em] [writing-mode:vertical-rl]">{lane.title}</span>
+      </button>
+    )
+  }
+
+  const column = (lane: Lane, index: number) => {
+    if (mobile) return <div key={lane.key} className="flex w-full flex-col gap-2.5">{stack(lane)}</div>
+    if (lane.folded && lane.collapsed) return rail(lane, index)
+    const Icon = index === 0 ? ChevronLeft : ChevronRight
+    const control = lane.folded && lane.onToggle ? (
+      <button
+        type="button"
+        aria-expanded
+        aria-label={`Hide ${lane.title}`}
+        title={`Hide ${lane.title}`}
+        onClick={lane.onToggle}
+        className="-mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+      >
+        <Icon className="h-4 w-4" strokeWidth={1.8} />
+      </button>
+    ) : undefined
+    return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
-        className={grow ? 'min-w-[220px]' : ''}>
+        muted={lane.folded} control={control}
+        className={lane.folded ? 'w-[200px] min-w-[200px] flex-none' : 'min-w-[220px]'}>
         {stack(lane)}
       </UiLane>
     )
+  }
 
   if (mobile) {
     const lane = lanes.find(l => l.key === current) ?? lanes[0]
@@ -99,7 +149,7 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
             {lane.hint}
           </div>
         )}
-        {lane && column(lane, false)}
+        {lane && column(lane, 0)}
       </div>
     )
   }
@@ -107,7 +157,7 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
   return (
     <div className="w-full overflow-x-auto">
       <div className="flex gap-3.5 pb-3">
-        {lanes.map(l => column(l, true))}
+        {lanes.map((l, i) => column(l, i))}
       </div>
     </div>
   )

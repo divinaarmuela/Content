@@ -4,8 +4,9 @@
  * The three work pages and the Overview all draw the same card and the same
  * five columns (`board-core`). This is the pure half of drawing them: the
  * lines on a card, the one control it carries for this viewer, the status a
- * drop lands on, the filters the Overview's tiles link into, and the tiles
- * themselves. No I/O, no React — the pages hand rows in and markup out.
+ * drop lands on, the LANES each page arranges the columns into, the filters
+ * the Overview's tiles link into, and the tiles themselves. No I/O, no React
+ * — the pages hand rows in and markup out.
  *
  * Nothing here decides what is LEGAL. Every offer comes from `workflow-core`
  * through `board-core`, exactly as the buttons on the item page do; this file
@@ -17,7 +18,7 @@ import {
   type ItemStatus,
 } from './workflow-core'
 import {
-  BOARD_COLUMNS, canMoveTo, columnOf, columnsForRole, type BoardColumnKey,
+  BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, type BoardColumnKey,
 } from './board-core'
 import { linkLabel, versionWord } from './card-link-core'
 import type { Role } from './identity-core'
@@ -43,6 +44,10 @@ export type BoardViewCard = {
   client_approval_required?: boolean
   /** somebody tagged the viewer here and it is not answered */
   my_open_task?: boolean
+  /** when the row last changed — every status move bumps it */
+  updated_at?: string | null
+  /** when the status last changed, on rows that record it separately */
+  status_changed_at?: string | null
 }
 
 export type BoardViewer = { id: string; role: Role }
@@ -260,39 +265,184 @@ export function isAssignedTo(card: BoardViewCard, viewerId: string): boolean {
   return ids.includes(viewerId)
 }
 
-/**
- * THE CARDS A PAGE SHOWS — and nobody is left with work they cannot see.
- *
- * Production is every card the person may see. Scheduler is the same set:
- * all five columns are drawn there, so the scheduler sees the flow coming —
- * every card for the clients they hold, not only the queue — and the columns
- * say what is ready. Editor is the cards assigned to the viewer (an editor's
- * whole world) — or, for a manager looking in, everything still being made.
- * Assigned means shown, whatever the kind.
- */
-export function pageCards<T extends BoardViewCard>(
-  page: BoardPage, cards: readonly T[], viewer: BoardViewer,
-): T[] {
-  const mine = (c: T) => isAssignedTo(c, viewer.id)
-  if (page === 'editor') {
-    if (viewer.role === 'editor') return cards.filter(mine)
-    // a manager on the Editor page sees the making, not the posting
-    return cards.filter(c => mine(c) || (columnOf(c.status) !== 'ready_to_post' && columnOf(c.status) !== 'posted'))
-  }
-  return [...cards]
+/** How long a posted card stays on the board, in days. */
+export const POSTED_DAYS = 14
+
+/** `YYYY-MM-DD` shifted by `days` — no clock, no zone. */
+function shiftDay(key: string, days: number): string {
+  const m = key.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return key
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days)).toISOString().slice(0, 10)
 }
 
 /**
- * Which columns THIS page draws: all five, on every page. The pages differ
- * in WHICH CARDS they hold (pageCards), never in which stages they show —
- * the owner's rule is "all pages should have the columns in draft, client
- * review etc", so a person always sees where their work is, end to end.
+ * Is this card still board work — not posted, or posted within the last
+ * `days`?
+ *
+ * A board is what is happening now, not the archive: a card that went out a
+ * month ago is still a record — on the client's page, on its own page by
+ * link, in search — but it leaves Posted so the column says what went out
+ * lately. The moment counted is the status change when the row records one,
+ * else the row's last update (every move bumps it). A posted card with no
+ * timestamp at all stays: nothing is hidden on a guess.
  */
-export function pageColumns(
-  page: BoardPage, viewer: BoardViewer, cards: readonly BoardViewCard[] = [],
-): BoardColumnKey[] {
-  void page; void viewer; void cards
-  return columnsForRole('super_admin')
+export function recentlyPosted(
+  card: Pick<BoardViewCard, 'status' | 'updated_at' | 'status_changed_at'>, today: string, days = POSTED_DAYS,
+): boolean {
+  if (columnOf(card.status) !== 'posted') return true
+  const stamp = card.status_changed_at ?? card.updated_at
+  const day = typeof stamp === 'string' ? stamp.slice(0, 10) : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return true
+  return day >= shiftDay(today, -days)
+}
+
+/**
+ * THE CARDS A PAGE SHOWS — and nobody is left with work they cannot see.
+ *
+ * Production is every card the person may see. Scheduler is the same set —
+ * the whole flow, so the scheduler sees what is coming — and its lanes say
+ * what is ready. Editor is the cards assigned to the viewer (an editor's
+ * whole world) — or, for a manager looking in, everything still being made.
+ * Assigned means shown, whatever the kind.
+ *
+ * On every page, Posted keeps only what went out in the last `POSTED_DAYS`
+ * (`recentlyPosted`); older posts are records, not board work. Pass `today`
+ * to apply the cut — nothing here reads a clock, so without a date nothing
+ * is cut.
+ */
+export function pageCards<T extends BoardViewCard>(
+  page: BoardPage, cards: readonly T[], viewer: BoardViewer, today?: string | null,
+): T[] {
+  const mine = (c: T) => isAssignedTo(c, viewer.id)
+  const fresh = (c: T) => !today || recentlyPosted(c, today)
+  if (page === 'editor') {
+    if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))
+    // a manager on the Editor page sees the making, not the posting
+    return cards.filter(c => fresh(c)
+      && (mine(c) || (columnOf(c.status) !== 'ready_to_post' && columnOf(c.status) !== 'posted')))
+  }
+  return cards.filter(fresh)
+}
+
+/** A lane is one column, or several columns folded into one narrow strip. */
+export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up'
+
+/** What is NOT in a lane, in the lane's own words. */
+export const LANE_EMPTY: Record<PageLaneKey, string> = {
+  draft: 'Nothing being made.',
+  internal_check: 'Nothing waiting on a check.',
+  with_client: 'Nothing with a client.',
+  ready_to_post: 'Nothing ready to post.',
+  posted: 'Nothing booked in or posted.',
+  done: 'Nothing done yet.',
+  coming_up: 'Nothing coming up.',
+}
+
+/** The five columns' own empty sentences — the Production list draws them too. */
+export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
+  draft: LANE_EMPTY.draft,
+  internal_check: LANE_EMPTY.internal_check,
+  with_client: LANE_EMPTY.with_client,
+  ready_to_post: LANE_EMPTY.ready_to_post,
+  posted: LANE_EMPTY.posted,
+}
+
+/** The line under Posted: where the cards that left the board went. */
+export const OLDER_POSTS_NOTE = "Older posts are on the client's page."
+
+export type PageLane = {
+  key: PageLaneKey
+  /** what the lane is called on screen */
+  label: string
+  /** the columns inside, in board order */
+  columns: BoardColumnKey[]
+  /** a folded lane is narrow, its cards compact, and it collapses to a rail */
+  folded: boolean
+  /** what is NOT here, in the lane's own words */
+  empty: string
+}
+
+const laneOfColumn = (key: BoardColumnKey): PageLane => ({
+  key, label: boardColumn(key).label, columns: [key], folded: false, empty: LANE_EMPTY[key],
+})
+
+/**
+ * HOW EACH PAGE ARRANGES THE FIVE COLUMNS.
+ *
+ * The five stages are one board — the same card is in the same column on
+ * every screen — but a page gives room to the stages its person works and
+ * FOLDS the rest into one narrow lane, rather than drawing three columns
+ * that sit empty for them:
+ *
+ * - Production: all five, one lane each.
+ * - Editor: Draft · Internal check · With client, then "Done" — every card
+ *   in Ready to post or Posted, folded.
+ * - Scheduler: "Coming up" — every card in Draft, Internal check or With
+ *   client, folded — then Ready to post · Posted.
+ *
+ * A folded lane is a real drop target (`dropOnLane`), and its cards wear the
+ * stage chip because it always holds more than one stage.
+ */
+export function pageLanes(page: BoardPage): PageLane[] {
+  switch (page) {
+    case 'editor': return [
+      laneOfColumn('draft'), laneOfColumn('internal_check'), laneOfColumn('with_client'),
+      { key: 'done', label: 'Done', columns: ['ready_to_post', 'posted'], folded: true, empty: LANE_EMPTY.done },
+    ]
+    case 'scheduler': return [
+      { key: 'coming_up', label: 'Coming up', columns: ['draft', 'internal_check', 'with_client'], folded: true, empty: LANE_EMPTY.coming_up },
+      laneOfColumn('ready_to_post'), laneOfColumn('posted'),
+    ]
+    default: return BOARD_COLUMNS.map(c => laneOfColumn(c.key))
+  }
+}
+
+/** The lane a column sits in on this page — how a `?column=` link lands. */
+export function laneOf(page: BoardPage, column: BoardColumnKey): PageLaneKey {
+  return pageLanes(page).find(l => l.columns.includes(column))!.key
+}
+
+/** Group cards by lane, every lane present (empty arrays included), in
+ *  board order. Input order within a lane is preserved. */
+export function groupByLane<T extends { status: ItemStatus }>(
+  lanes: readonly PageLane[], cards: readonly T[],
+): { lane: PageLane; cards: T[] }[] {
+  const buckets = new Map<PageLaneKey, T[]>(lanes.map(l => [l.key, []]))
+  const laneByColumn = new Map<BoardColumnKey, PageLaneKey>(
+    lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
+  for (const card of cards) {
+    const key = laneByColumn.get(columnOf(card.status))
+    if (key) buckets.get(key)!.push(card)
+  }
+  return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))
+}
+
+export type LaneDropDecision =
+  | { ok: true; action: CardAction; column: BoardColumnKey; lane: PageLaneKey }
+  | { ok: false; reason: string }
+
+/**
+ * What a drop onto a LANE does. A one-column lane is that column's drop. A
+ * folded lane means "move to the FIRST stage inside it the rules allow", in
+ * board order — the same `dropAction` the columns use, tried in turn. When
+ * none is allowed the refusal is plain words: "Already in Done" when the
+ * card sits in the lane already (dropping it where it is), else the first
+ * column's own reason.
+ */
+export function dropOnLane(card: BoardViewCard, lane: PageLane, viewer: BoardViewer): LaneDropDecision {
+  let reason: string | null = null
+  for (const column of lane.columns) {
+    const d = dropAction(card, column, viewer)
+    if (d.ok) return { ok: true, action: d.action, column, lane: lane.key }
+    if (reason === null) reason = d.reason
+  }
+  if (lane.columns.includes(columnOf(card.status))) return { ok: false, reason: `Already in ${lane.label}` }
+  return { ok: false, reason: reason ?? `Already in ${lane.label}` }
+}
+
+/** The lanes on this page a drag may land on right now. */
+export function reachableLanes(page: BoardPage, card: BoardViewCard, viewer: BoardViewer): PageLaneKey[] {
+  return pageLanes(page).filter(l => dropOnLane(card, l, viewer).ok).map(l => l.key)
 }
 
 /**

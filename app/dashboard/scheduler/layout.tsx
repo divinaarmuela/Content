@@ -21,7 +21,7 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Board',
     icon: Kanban,
-    blurb: 'Every card, Draft to Posted — what needs doing and the link. Post it on the Schedule page, then mark the card Booked in, then Posted.',
+    blurb: 'Ready to post and Posted, with what is coming folded in on the left — what needs doing and the link. Post it on the Schedule page, then mark the card Booked in, then Posted.',
   },
   {
     href: '/dashboard/scheduler/calendar',

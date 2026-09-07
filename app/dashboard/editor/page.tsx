@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
-import { pageCards, pageColumns, type BoardViewer } from '../../lib/board-view-core'
+import { pageCards, type BoardViewer } from '../../lib/board-view-core'
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
@@ -19,9 +19,12 @@ import { NewCardDialog } from '../board/BoardDialogs'
 /**
  * THE EDITOR PAGE: your cards, from draft to the client.
  *
- * One board, all five columns — Draft to Posted — holding only the cards
- * assigned to the person looking, so they see their work all the way out.
- * A card is one deliverable: what needs doing and one link. Hand it on for
+ * One board, holding only the cards assigned to the person looking. The
+ * three stages they work — Draft, Internal check, With client — get full
+ * lanes; everything past them (Ready to post, Posted) is folded into one
+ * narrow "Done" lane, so they still see their work go out the door without
+ * two columns sitting empty. A card is one deliverable: what needs doing
+ * and one link. Hand it on for
  * checking from the card itself ("Ready for checking"). A card that came
  * back carries what to change, in the manager's words.
  *
@@ -52,10 +55,9 @@ export default function EditorPage() {
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return pageCards('editor', rows, viewer)
-  }, [live.items, viewer])
+    return pageCards('editor', rows, viewer, today)
+  }, [live.items, viewer, today])
 
-  const columns = useMemo(() => (viewer ? pageColumns('editor', viewer, cards) : []), [viewer, cards])
   const ready = viewer !== null && !live.loading && today !== null
 
   if (noAccount) return <AccountUnavailable />
@@ -65,8 +67,8 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? 'Everything still being made, Draft to With client. Check the work at its link, then send it on or send it back.'
-          : 'Your cards, Draft to Posted. Each one says what needs doing and where the work lives — add the link, then press Ready for checking.'}
+          ? 'Everything still being made, Draft to With client, with what is done folded in at the end. Check the work at its link, then send it on or send it back.'
+          : 'Your cards: Draft, Internal check and With client, with what is done folded in at the end. Each one says what needs doing and where the work lives — add the link, then press Ready for checking.'}
         actions={viewer && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
@@ -85,7 +87,7 @@ export default function EditorPage() {
         <Board
           cards={cards}
           viewer={viewer}
-          columns={columns}
+          page="editor"
           names={names}
           kinds={live.tables.workKinds.rows}
           today={today}
