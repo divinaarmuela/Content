@@ -8,7 +8,7 @@ import {
   clockPillLabel, joinClock, splitClock, to12, to24,
   HOURS_12, MINUTE_STEPS, type ClockValue, type Meridiem,
 } from '@/app/lib/schedule-compose-core'
-import { dayKeyInZone, zoneLabel } from '@/app/lib/timezone-core'
+import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
 
 /**
  * WHEN THE POST GOES OUT.
@@ -52,6 +52,12 @@ export default function TimePicker({
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
+  // the zone this browser is in — a scheduler overseas sees the client's
+  // time AND their own, so nobody converts in their head
+  const [mine, setMine] = useState<string | null>(null)
+  useEffect(() => {
+    try { setMine(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { setMine(null) }
+  }, [])
 
   // a panel that will not close is a panel that covers the thing you wanted
   useEffect(() => {
@@ -171,8 +177,13 @@ export default function TimePicker({
 
           <p className="pt-2 text-[12px] text-muted-foreground">
             {/* the sentence that stops the whole class of "it went out at 4am"
-                surprises: this is the CLIENT's clock, not yours */}
+                surprises: this is the CLIENT's clock, not yours — and for a
+                scheduler working from another country, what that is on
+                THEIR clock, so nobody does the sum in their head */}
             Times are {zoneLabel(tz)} — the client&rsquo;s time.
+            {value && mine && mine !== tz && (
+              <> That&rsquo;s {formatInZone(value, mine, 'short')} your time ({zoneLabel(mine)}).</>
+            )}
           </p>
         </div>
       )}
