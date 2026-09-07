@@ -17,6 +17,7 @@ import {
   type LastStatusChange, type PlanState,
 } from './portal-words'
 import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
+import { portalPerformance, readPerformance, type PortalPerformance } from './post-performance-core'
 import {
   monthTotals, typeTotals,
   type MonthTotals, type PostMetrics, type TypeTotals,
@@ -79,6 +80,9 @@ export type PortalItemMetrics = PostMetrics & {
   /** the live post, when the platform has assigned a URL */
   post_url: string | null
   published_at: string | null
+  /** how it did, in the client's slice: interactions, followers since, the
+   *  sparkline's points. Null until the platform has counted. */
+  performance: PortalPerformance | null
 }
 
 export type PortalShoot = {
@@ -396,6 +400,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
           synced_at: a.synced_at,
           post_url: a.platform_post_url,
           published_at: a.published_at,
+          performance: portalPerformance(readPerformance(a.performance)),
         }
         : null,
     }

@@ -18,6 +18,7 @@ import { shapeItemDetail } from '../../../lib/production-access-core'
 import { dismissUpload, enqueueJobAssets } from '../../uploadQueue'
 import { UploadOverall, UploadRows, useUploadGroup } from '../../UploadRows'
 import BrandCard from '../BrandCard'
+import HowItDid from './HowItDid'
 import { RawFileRow, SlideThumb } from '../../../components/media/ItemMedia'
 import ExportWarnings, {
   exportWarningsFor, type ExportWarning,
@@ -1388,6 +1389,11 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             </div>
           )}
 
+          {/* 2b — HOW IT DID. Only a posted piece has an answer. */}
+          {isTeam && isAsset && detail.status === 'published' && (
+            <HowItDid itemId={detail.id} platformHint={detail.platform_targets?.[0] ?? detail.schedule[0]?.platform ?? null} compact />
+          )}
+
           {/* 3 — THE FACTS. One line each, label left, value right. */}
           <div className="flex flex-col divide-y divide-border rounded-inner border border-border px-3">
             {factRow('Assignee', <>
@@ -1654,6 +1660,12 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* 2b — HOW IT DID. The owner's question about every posted piece:
+          did anyone interact, and did the account gain followers since. */}
+      {isTeam && isAsset && detail.status === 'published' && (
+        <HowItDid itemId={detail.id} platformHint={detail.platform_targets?.[0] ?? detail.schedule[0]?.platform ?? null} />
       )}
 
       {/* 3 — THE WORK. A plan's is its page; everything else is ONE link. */}

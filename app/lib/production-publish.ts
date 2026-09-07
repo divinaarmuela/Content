@@ -19,6 +19,7 @@ import { publishBlockReason } from './posting-approval-core'
 import { postingApprovalStateOf } from './posting-approval'
 import { analyticsForItems } from './post-analytics'
 import type { PostMetrics } from './post-analytics-core'
+import { readPerformance, type PostPerformance } from './post-performance-core'
 import type { TeamUser } from './authz'
 
 /**
@@ -211,6 +212,8 @@ export type PostItemMetrics = PostMetrics & {
    *  the card says so, because "where did this figure come from" is a fair
    *  question about a post the app never published */
   source?: string | null
+  /** the "How it did" summary the card draws; null until the sweep has run */
+  performance?: PostPerformance | null
 }
 
 /**
@@ -246,6 +249,7 @@ export async function loadPostingContext(
         engagement_rate: a.engagement_rate,
         sync_status: a.sync_status, synced_at: a.synced_at, post_url: a.platform_post_url,
         source: a.source ?? null,
+        performance: readPerformance(a.performance),
       }
       : null,
     accounts: accounts.map(a => ({

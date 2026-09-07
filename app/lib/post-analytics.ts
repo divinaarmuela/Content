@@ -7,6 +7,10 @@ import {
   isStale, shapePostAnalytics,
   type PostAnalyticsRow,
 } from './post-analytics-core'
+import {
+  accountIdsOf, buildPerformance, nextPostAfter, shapeComments, shapeFollowerStats,
+  shapeTimeline, type FollowerStats, type PostedJob,
+} from './post-performance-core'
 
 /**
  * The per-post numbers, fetched, cached and back-filled.
@@ -34,11 +38,77 @@ import {
 /** A published job, as the refresh needs it. */
 type PublishedJob = {
   id: string
+  client_id?: string | null
   content_item_id: string | null
   provider_post_id: string
   permalink: string | null
   published_at: string | null
   targets: unknown
+}
+
+/**
+ * What a sweep already knows, so one post's refresh does not ask again.
+ *
+ * Follower stats are per ACCOUNT, refreshed by the provider once a day, and
+ * the same answer serves every post in a sweep; the list of published jobs
+ * is what decides which post came next. Both are optional — a lone refresh
+ * (the webhook's) fetches them itself.
+ */
+export type RefreshContext = {
+  followers?: FollowerStats | null
+  jobs?: PublishedJob[]
+}
+
+/** The provider's follower series, remembered for a while.
+ *
+ *  The counts change once a day, so asking on every post in a two-hundred
+ *  post sweep — or on every webhook — is two hundred identical answers. A
+ *  short memory serves them all from one call and forgets itself before the
+ *  next daily count could land. */
+let followerMemo: { at: number; stats: FollowerStats } | null = null
+const FOLLOWER_MEMO_MS = 10 * 60_000
+
+export async function loadFollowerStats(fresh = false): Promise<FollowerStats | null> {
+  if (!fresh && followerMemo && Date.now() - followerMemo.at < FOLLOWER_MEMO_MS) return followerMemo.stats
+  const raw = await getPublisher().followerStats().catch(() => null)
+  if (!raw) return followerMemo?.stats ?? null
+  const stats = shapeFollowerStats(raw)
+  followerMemo = { at: Date.now(), stats }
+  return stats
+}
+
+/** for tests: forget the remembered follower series */
+export function forgetFollowerStats(): void { followerMemo = null }
+
+/** The published jobs that could be "the next post" after this one. */
+async function siblingJobs(job: PublishedJob): Promise<PublishedJob[]> {
+  if (!job.client_id) return []
+  try {
+    const rows = await table<PublishJob>('publish_jobs').list({
+      by: { client_id: job.client_id },
+      where: j => ['published', 'duplicate'].includes(j.status) && j.published_at != null,
+    })
+    return rows as unknown as PublishedJob[]
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The follower series for the account this post went to.
+ *
+ * A post fanned out to several accounts reads the one on the platform the
+ * numbers came from; a job with no account on it (an old row) has no series
+ * and the card says nothing about followers rather than guessing.
+ */
+function seriesFor(job: PublishedJob, platform: string | null, stats: FollowerStats | null) {
+  if (!stats) return null
+  const targets = Array.isArray(job.targets) ? job.targets as { platform?: unknown; accountId?: unknown }[] : []
+  const onPlatform = platform
+    ? targets.find(t => String(t?.platform ?? '').toLowerCase() === platform.toLowerCase())
+    : undefined
+  const id = String(onPlatform?.accountId ?? accountIdsOf(job.targets)[0] ?? '')
+  return id ? stats.series.get(id) ?? null : null
 }
 
 export type RefreshResult = {
@@ -64,21 +134,49 @@ function platformsOf(targets: unknown): string[] {
  * Returns whether a row was written and whether a link was newly captured, so
  * the cron can report something an operator can read.
  */
-export async function refreshOnePost(job: PublishedJob): Promise<{ updated: boolean; linked: boolean }> {
-  const raw = await getPublisher().postAnalytics(job.provider_post_id).catch(() => null)
-  const shaped = shapePostAnalytics(job.provider_post_id, raw)
+export async function refreshOnePost(
+  job: PublishedJob,
+  ctx: RefreshContext = {},
+): Promise<{ updated: boolean; linked: boolean }> {
+  const publisher = getPublisher()
+  const id = job.provider_post_id
+  // the four reads behind "How it did", together, each allowed to fail alone:
+  // the totals are the row; the rest decorate it
+  const [raw, timelineRaw, commentsRaw, followers] = await Promise.all([
+    publisher.postAnalytics(id).catch(() => null),
+    publisher.postTimeline(id).catch(() => null),
+    publisher.postComments(id).catch(() => null),
+    ctx.followers !== undefined ? Promise.resolve(ctx.followers) : loadFollowerStats().catch(() => null),
+  ])
+  const shaped = shapePostAnalytics(id, raw)
   if (!shaped) return { updated: false, linked: false }
 
   const { raw: body, ...row } = shaped
+  const publishedAt = row.published_at ?? job.published_at ?? null
+  const siblings = ctx.jobs ?? await siblingJobs(job)
+  const performance = buildPerformance({
+    metrics: row,
+    platform: row.platform ?? platformsOf(job.targets)[0] ?? null,
+    postedAt: publishedAt,
+    nextPostAt: nextPostAfter(
+      { id: job.id, published_at: publishedAt, targets: job.targets },
+      siblings as PostedJob[],
+    ),
+    timeline: shapeTimeline(timelineRaw),
+    followers: seriesFor(job, row.platform, followers),
+    comments: shapeComments(commentsRaw),
+    providerPostId: id,
+  })
   try {
     await table('post_analytics').upsert({
       ...row,
       raw: body,
+      performance,
       item_id: job.content_item_id,
       publish_job_id: job.id,
       // the provider's own publish time wins; ours is the fallback for a post it
       // has forgotten the timestamp of
-      published_at: row.published_at ?? job.published_at ?? null,
+      published_at: publishedAt,
     }, { onConflict: 'provider_post_id' })
   } catch (e) {
     console.error('could not cache post analytics', job.provider_post_id,
@@ -193,9 +291,11 @@ export async function refreshRecentPostAnalytics(days = 90, limit = 200): Promis
   const out: RefreshResult = {
     scanned: rows.length, updated: 0, linked: 0, externalMatched: 0, externalRefreshed: 0,
   }
+  // once for the whole sweep: the follower series is per account, per day
+  const ctx: RefreshContext = { followers: await loadFollowerStats().catch(() => null), jobs: rows }
   for (const job of rows) {
     try {
-      const r = await refreshOnePost(job)
+      const r = await refreshOnePost(job, ctx)
       if (r.updated) out.updated++
       if (r.linked) out.linked++
     } catch (e) {
@@ -275,11 +375,13 @@ export function refreshStaleAnalyticsInBackground(clientId: string, budgetMs = 2
         where: r => ids.has(r.provider_post_id),
       })
       const syncedAt = new Map(cached.map(r => [r.provider_post_id, r.synced_at]))
+      const stale = rows.filter(job => isStale(syncedAt.get(job.provider_post_id)))
+      if (stale.length === 0) return
+      const ctx: RefreshContext = { followers: await loadFollowerStats().catch(() => null), jobs: rows }
 
-      for (const job of rows) {
+      for (const job of stale) {
         if (Date.now() > deadline) return
-        if (!isStale(syncedAt.get(job.provider_post_id))) continue
-        await refreshOnePost(job)
+        await refreshOnePost(job, ctx)
       }
     } catch (e) {
       console.error('portal analytics refresh failed', clientId, e)

@@ -44,6 +44,9 @@ export type PostAnalyticsRow = PostMetrics & {
    * which is what every row written before the migration was.
    */
   source?: string | null
+  /** the "How it did" summary — `PostPerformance` from post-performance-core,
+   *  read back through `readPerformance`. Absent on rows from before it. */
+  performance?: unknown
 }
 
 /** Were these numbers found by matching a hand-posted link? */

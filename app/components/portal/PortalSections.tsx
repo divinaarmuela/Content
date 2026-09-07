@@ -6,6 +6,8 @@ import { amPhrase } from '../../lib/portal-words'
 import {
   METRICS_PENDING_LINE, compactCount, metricCells, metricsPending, updatedAgo,
 } from '../../lib/post-analytics-core'
+import { portalFollowersLine } from '../../lib/post-performance-core'
+import Sparkline from '../Sparkline'
 
 /**
  * The client portal's small shared pieces — a section heading, a published
@@ -61,9 +63,20 @@ export function PostMetricsRow({ item }: { item: PortalItem }) {
       </p>
     )
   }
+  const perf = m?.performance ?? null
+  const followers = portalFollowersLine(perf?.followers ?? null)
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        {/* the one number the client asked for first: did anyone interact */}
+        {perf && perf.interactions !== null && (
+          <span className="flex items-baseline gap-1">
+            <span className="font-mono text-xs tabular-nums">{compactCount(perf.interactions)}</span>
+            <span className="font-mono text-[9px] uppercase tracking-wider opacity-45">
+              {perf.interactions === 1 ? 'interaction' : 'interactions'}
+            </span>
+          </span>
+        )}
         {cells.map(c => (
           <span key={c.key} className="flex items-baseline gap-1">
             <span className="font-mono text-xs tabular-nums">{compactCount(c.value)}</span>
@@ -71,6 +84,19 @@ export function PostMetricsRow({ item }: { item: PortalItem }) {
           </span>
         ))}
       </div>
+      {/* how the account moved, and how the post grew: one line, one graph */}
+      {(followers || (perf && perf.spark.length > 1)) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {perf && perf.spark.length > 1 && (
+            <span style={{ color: 'var(--p-accent, currentColor)' }}>
+              <Sparkline points={perf.spark} width={96} height={22} label="Interactions, day by day" />
+            </span>
+          )}
+          {followers && (
+            <span className="font-mono text-[10px] uppercase tracking-wider">{followers}</span>
+          )}
+        </div>
+      )}
       {/* a figure with no age on it invites the reader to think it is live */}
       {m?.synced_at && (
         <span className="font-mono text-[9px] uppercase tracking-wider opacity-35" suppressHydrationWarning>
