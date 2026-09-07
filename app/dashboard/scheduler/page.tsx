@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Plus } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
 import type { ScheduleEntry } from '@/lib/db-types'
 import { pageCards, pageColumns, type BoardViewer } from '../../lib/board-view-core'
@@ -12,6 +14,8 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { NewCardDialog } from '../board/BoardDialogs'
+import { useTeamMembers } from '../production/workHooks'
 
 /**
  * THE SCHEDULER PAGE: links and what needs doing, on the whole board.
@@ -35,6 +39,11 @@ export default function SchedulerPage() {
   // columns say what each card is
   const live = useWorkRows(viewer, { schedulerPostFilter: false })
   const { column, show, clearShow } = useBoardParams()
+  // any team role makes work — the owner's rule; a scheduler's odd task
+  // (trend research, a caption pass) is a card like any other
+  const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
+  const team = useTeamMembers(isManager)
+  const [newOpen, setNewOpen] = useState(false)
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
 
@@ -87,6 +96,14 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {viewer && (
+        <div className="flex justify-end">
+          <Button onClick={() => setNewOpen(true)}
+            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
+            <Plus className="h-4 w-4" /> New card
+          </Button>
+        </div>
+      )}
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
 
       {!ready ? (
@@ -107,6 +124,16 @@ export default function SchedulerPage() {
           postingToday={postingToday}
           connectedClientIds={connectedClientIds}
           ariaLabel="Every card, by stage"
+        />
+      )}
+      {viewer && (
+        <NewCardDialog
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          clients={live.clients.map(c => ({ id: c.id, name: c.name }))}
+          kinds={live.tables.workKinds.rows}
+          team={team}
+          viewer={{ ...viewer, name: me?.name }}
         />
       )}
     </div>
