@@ -982,6 +982,28 @@ export const APPROVAL_LINE: Record<SocialPostStatus, string> = {
   cancelled: 'Cancelled',
 }
 
+/**
+ * The one button that hands the post to the people who answer for it.
+ *
+ * "Review", not "approval": what is being sent is the POST — the pictures,
+ * the words, the hour — as the preview shows it, and the person receiving it
+ * may say yes or ask for a change. It is offered to everybody: somebody who
+ * could post straight out still gets it under the arrow, because wanting a
+ * second pair of eyes is not the same as needing permission.
+ */
+export const SEND_FOR_REVIEW = 'Send for review'
+
+/**
+ * What a person is told once it has gone — who has it, and what happens next.
+ * No mechanism, no state name: two facts and a promise.
+ */
+export function sentForReviewLine(clientName: string | null | undefined): string {
+  const who = String(clientName ?? '').trim()
+  return who
+    ? `Sent to the account manager and ${who}. You will be told when they answer.`
+    : 'Sent to the account manager. You will be told when they answer.'
+}
+
 export type FooterActionKey = 'send' | 'draft' | 'direct' | 'schedule' | 'now' | 'none'
 
 export type FooterAction = { key: FooterActionKey; label: string }
@@ -991,7 +1013,7 @@ export type FooterAction = { key: FooterActionKey; label: string }
  *
  * The split button, exactly as the owner ruled it:
  *
- *  before approval  → "Send for approval", with "Save as draft" in the menu,
+ *  before approval  → "Send for review", with "Save as draft" in the menu,
  *                     and "Schedule without approval" ONLY for somebody who
  *                     could have approved it (the client's account manager, a
  *                     super admin). A scheduler never sees an option they
@@ -1004,7 +1026,7 @@ export type FooterAction = { key: FooterActionKey; label: string }
  * for the two roles it was always asking to answer their own question: an
  * account manager on the client, or a super admin, gets "Schedule" (or "Post
  * now" when the time they picked is now) as the ONE press, and
- * "Send for approval" moves under the arrow for the times they do want the
+ * "Send for review" moves under the arrow for the times they do want the
  * client to see it first. Nobody else's window changes, and a client who
  * signs every post off (`clientSignsOff`) puts everyone back on the full flow.
  *
@@ -1037,7 +1059,7 @@ export function footerActions(input: {
   }
 
   const send: FooterAction = {
-    key: 'send', label: status === 'pending' ? 'Send again' : 'Send for approval',
+    key: 'send', label: status === 'pending' ? 'Send again' : SEND_FOR_REVIEW,
   }
   if (straightOut) {
     return {

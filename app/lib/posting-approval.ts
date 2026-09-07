@@ -300,9 +300,14 @@ export async function actOnPostingApproval(
           bodyHtml: renderEmail(
             `Approve this post: ${title}`,
             previewHtml(item, facts) +
-            `<p>Open the item to approve it or ask for changes — nothing goes out until someone does.</p>`,
-            'Review the post',
-            `${DASHBOARD_URL}/dashboard/production/${item.id}`,
+            `<p>Open it to see the post exactly as each channel will show it, then approve it `
+            + `or ask for a change — nothing goes out until somebody does.</p>`,
+            'See the post',
+            // straight to the composer, which is where the frames and the two
+            // answers are; an email that lands somebody on a page with no
+            // picture on it is an email that asks them to go looking
+            `${DASHBOARD_URL}/dashboard/social/schedule`
+              + `?client=${encodeURIComponent(item.client_id)}&item=${encodeURIComponent(item.id)}`,
           ),
         })
       }

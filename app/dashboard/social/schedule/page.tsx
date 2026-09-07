@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Images, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -70,7 +70,19 @@ export default function SchedulePage() {
   const viewer: ScopeViewer | null = useMemo(
     () => (me ? { id: me.id, role: me.role } : null), [me])
 
-  const [clientId, setClientId] = useState<string | null>(null)
+  /**
+   * ARRIVING FROM A LINK — the bell, or the "approve this post" email.
+   *
+   * `?client=…&item=…` opens this page on that client with the composer
+   * already on that piece, which is where the preview and the two answers
+   * are. Read ONCE, lazily, as the initial state rather than in an effect:
+   * the "client you had last time" effect below would otherwise race it and
+   * land the reviewer on somebody else's week.
+   */
+  const [clientId, setClientId] = useState<string | null>(
+    () => (typeof window === 'undefined'
+      ? null
+      : new URLSearchParams(window.location.search).get('client')) || null)
   const [channel, setChannel] = useState<string | null>(null)
   const [view, setView] = usePersistedChoice<ScheduleViewName>(VIEW_KEY, VIEWS, 'Week', 'view')
   /** any day in the week (or month) on screen, as a 'YYYY-MM-DD' key */
@@ -104,6 +116,22 @@ export default function SchedulePage() {
    * meant is carried into the chooser and on into the composer.
    */
   const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
+
+  /** …and the piece that link named, opened once the page knows about it */
+  const arrivedOn = useRef<string | null>(
+    typeof window === 'undefined'
+      ? null
+      : new URLSearchParams(window.location.search).get('item'))
+  useEffect(() => {
+    const itemId = arrivedOn.current
+    if (!itemId) return
+    // wait until the client's own pieces are here — opening on a piece the
+    // page has not loaded yet is a window with nothing in it
+    if (!data.posts.some(p => p.item_id === itemId)
+      && !data.media.some(m => m.itemId === itemId)) return
+    arrivedOn.current = null
+    setComposing({ itemId, postId: null, at: null })
+  }, [data.posts, data.media])
 
   /**
    * A POST THAT WAS A FILE ON SOMEBODY'S LAPTOP A SECOND AGO.
@@ -856,6 +884,7 @@ export default function SchedulePage() {
           role={me?.role ?? null}
           clientSignsOff={data.clientSignsOff}
           locations={locations}
+          clientName={(data.client as { name?: string | null } | null)?.name ?? null}
           onClose={() => { setComposing(null); setPending(null) }}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
           onEditMedia={setEditing}

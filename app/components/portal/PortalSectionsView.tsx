@@ -7,6 +7,7 @@ import { PortalCardView, type Surface } from './PortalBoard'
 import ShootBoard from './ShootBoard'
 import { SectionHeading } from './PortalSections'
 import PortalFollowersView from './PortalFollowers'
+import PortalPostApprovals from './PortalPostApproval'
 
 /**
  * THE PORTAL, TOP TO BOTTOM — the layout the owner asked back for.
@@ -68,6 +69,11 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
 
   return (
     <div className="flex flex-col gap-12 sm:gap-16">
+      {/* the finished POST — the pictures, the words and the hour, as each
+          network will show them. It sits ABOVE the work review because it is
+          the last thing anybody is waiting on before it goes out. */}
+      <PortalPostApprovals items={data.post_approvals} surface={surface} accent={accent} />
+
       {grid('review')}
 
       {shoots.length > 0 && (
