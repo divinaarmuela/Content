@@ -42,7 +42,8 @@ describe('the three pages hand the board their page, and the board makes the lan
     const lanes = code(read('app/dashboard/production/LaneBoard.tsx'))
     // every lane the same width — never a fixed narrow one beside stretching neighbours
     expect(lanes).not.toMatch(/flex-none/)
-    expect(lanes).toMatch(/className="min-w-\[240px\]"/)
+    // five lanes + gaps must fit a laptop's board width
+    expect(lanes).toMatch(/className="min-w-\[200px\]"/)
     expect(lanes).toMatch(/muted=\{lane\.folded\}/)
     // the rail read as a broken sliver on the page: it is gone, and with it
     // the sideways title and the collapse toggle

@@ -80,7 +80,10 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
         muted={lane.folded}
-        className="min-w-[240px]">
+        // 200, not 240: five lanes and their gaps have to fit a LAPTOP once
+        // the sidebar is taken out (~1,100px of board on a 1280 screen), or
+        // the fifth column is cut off and nobody scrolls sideways to find it
+        className="min-w-[200px]">
         {stack(lane)}
       </UiLane>
     )
