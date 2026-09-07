@@ -74,12 +74,13 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
   const column = (lane: Lane, index: number) => {
     void index
     if (mobile) return <div key={lane.key} className="flex w-full flex-col gap-2.5">{stack(lane)}</div>
-    // a folded lane is simply a quieter, narrower column — never a rail with
-    // its name written sideways, which read as a broken sliver on the page
+    // every lane is the same width — a fixed narrow one beside stretching
+    // neighbours read as a squashed sliver. A folded lane is quieter (muted
+    // header, compact cards); it is not smaller.
     return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
         muted={lane.folded}
-        className={lane.folded ? 'w-[240px] min-w-[240px] flex-none' : 'min-w-[240px]'}>
+        className="min-w-[240px]">
         {stack(lane)}
       </UiLane>
     )

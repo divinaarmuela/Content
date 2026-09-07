@@ -38,9 +38,11 @@ describe('the three pages hand the board their page, and the board makes the lan
     expect(board).toMatch(/holdsPosted \? \(\s*<p[^>]*>\{OLDER_POSTS_NOTE\}<\/p>/)
   })
 
-  it('a folded lane is a quieter, narrower column — never a rail with sideways words', () => {
+  it('a folded lane is quieter, not narrower — no rail, no sideways words', () => {
     const lanes = code(read('app/dashboard/production/LaneBoard.tsx'))
-    expect(lanes).toMatch(/w-\[240px\] min-w-\[240px\] flex-none/)
+    // every lane the same width — never a fixed narrow one beside stretching neighbours
+    expect(lanes).not.toMatch(/flex-none/)
+    expect(lanes).toMatch(/className="min-w-\[240px\]"/)
     expect(lanes).toMatch(/muted=\{lane\.folded\}/)
     // the rail read as a broken sliver on the page: it is gone, and with it
     // the sideways title and the collapse toggle
