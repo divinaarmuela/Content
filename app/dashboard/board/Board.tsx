@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../../lib/board-core'
 import {
-  SHOW_LABELS, applyShow, dropAction, isAssignedTo, isShowFilter, moveTargets,
-  type BoardViewCard, type BoardViewer, type CardAction, type ShowFilter,
+  COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
+  laneOf, pageLanes, reachableLanes,
+  type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
-import { BoardCard } from './BoardCard'
+import { BoardCard, CompactCard } from './BoardCard'
 import {
   DeleteDialog, KindDialog, LinkDialog, SendBackDialog, type KindRow,
 } from './BoardDialogs'
@@ -19,11 +20,15 @@ import {
 /**
  * THE ONE BOARD, on all three pages.
  *
- * Five columns as lanes (or fewer — the page says which), the restyle's
- * cards, drag between columns. Every drop asks `dropAction` — the same rules
- * as the buttons — and a refused drop snaps back with the machine's plain
- * reason. The keyboard's way is the card's own "Move to…" menu, which offers
- * exactly the columns a drag could reach.
+ * The five columns arranged into the page's LANES (`pageLanes`): Production
+ * draws all five; Editor and Scheduler give room to the stages that person
+ * works and fold the rest into one narrow lane — "Done" on Editor, "Coming
+ * up" on Scheduler — drawn compact, collapsible to a rail, the choice
+ * remembered per page. The restyle's cards; drag between lanes. Every drop
+ * asks `dropOnLane` — the same rules as the buttons, a folded lane entered
+ * at the first stage inside it the rules allow — and a refused drop snaps
+ * back with the machine's plain reason. The keyboard's way is the card's own
+ * "Move to…" menu, which offers exactly the columns a drag could reach.
  *
  * The board owns the few dialogs a card can open and the fetches they make.
  * The rows come from the page's live listeners, so nothing here reloads:
@@ -38,15 +43,13 @@ export type BoardCardRow = BoardViewCard & {
   work_kinds?: { name: string; slug?: string; color?: string } | null
 }
 
-/** What is NOT in a column, in the column's own words. Exported so the
- *  Production list, which draws the same five columns, says the same. */
-export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
-  draft: 'Nothing being made.',
-  internal_check: 'Nothing waiting on a check.',
-  with_client: 'Nothing with a client.',
-  ready_to_post: 'Nothing ready to post.',
-  posted: 'Nothing booked in or posted.',
-}
+/** The columns' empty sentences, defined with the lanes in board-view-core;
+ *  re-exported so the Production list, which draws the same five columns,
+ *  says the same. */
+export { COLUMN_EMPTY }
+
+/** where a page remembers that its folded lane is shut */
+const FOLD_KEY = (page: BoardPage) => `mdm:board:${page}:folded-shut`
 
 /**
  * The column and the lens named in the address — `?column=with_client`,
@@ -77,18 +80,19 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 }
 
 export function Board({
-  cards, viewer, columns, names, kinds, today, onOpen, initialColumn, show, onClearShow,
+  cards, viewer, page, names, kinds, today, onOpen, initialColumn, show, onClearShow,
   postingToday, connectedClientIds, ariaLabel,
 }: {
   cards: BoardCardRow[]
   viewer: BoardViewer
-  columns: BoardColumnKey[]
+  /** which page this is — it decides the lanes (`pageLanes`) */
+  page: BoardPage
   names: Map<string, string>
   kinds: readonly KindRow[]
   today: string
   /** a press on a card — the page opens it beside the board (`CardSheet`) */
   onOpen: (card: BoardCardRow) => void
-  /** the column to open on a phone */
+  /** the column to open on a phone — mapped to the lane it sits in here */
   initialColumn?: BoardColumnKey | null
   /** the Overview's lens, if the person came through one */
   show?: ShowFilter | null
@@ -100,7 +104,7 @@ export function Board({
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [dragging, setDragging] = useState<BoardCardRow | null>(null)
-  const [over, setOver] = useState<BoardColumnKey | null>(null)
+  const [over, setOver] = useState<PageLaneKey | null>(null)
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
@@ -115,6 +119,18 @@ export function Board({
     onOpen(row ?? (card as BoardCardRow))
   }, [cards, onOpen])
 
+  /** the folded lane, shut to a rail or open — remembered per page */
+  const [foldShut, setFoldShut] = useState(false)
+  useEffect(() => {
+    try { setFoldShut(localStorage.getItem(FOLD_KEY(page)) === '1') } catch { /* open by default */ }
+  }, [page])
+  const toggleFold = useCallback(() => {
+    setFoldShut(shut => {
+      try { localStorage.setItem(FOLD_KEY(page), shut ? '0' : '1') } catch { /* the choice lasts the session */ }
+      return !shut
+    })
+  }, [page])
+
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
   const canEdit = useCallback((c: BoardCardRow) => isManager || isAssignedTo(c, viewer.id), [isManager, viewer.id])
 
@@ -123,10 +139,13 @@ export function Board({
     [cards, show, viewer, today, postingToday, connectedClientIds],
   )
 
-  /** the columns a drag may land on right now */
+  const laneLayout = useMemo(() => pageLanes(page), [page])
+  const grouped = useMemo(() => groupByLane(laneLayout, shown), [laneLayout, shown])
+
+  /** the lanes a drag may land on right now */
   const reachable = useMemo(
-    () => (dragging ? new Set(moveTargets(dragging, viewer).map(t => t.column)) : new Set<BoardColumnKey>()),
-    [dragging, viewer],
+    () => new Set<PageLaneKey>(dragging ? reachableLanes(page, dragging, viewer) : []),
+    [dragging, page, viewer],
   )
 
   /** one move through the ordinary transition route */
@@ -158,25 +177,27 @@ export function Board({
     }
   }, [transition])
 
-  const drop = (column: BoardColumnKey) => {
+  const drop = (laneKey: PageLaneKey) => {
     const card = dragging
     setDragging(null)
     setOver(null)
     if (!card) return
-    const d = dropAction(card, column, viewer)
+    const lane = laneLayout.find(l => l.key === laneKey)
+    if (!lane) return
+    const d = dropOnLane(card, lane, viewer)
     // a refused move snaps back: nothing changed, and the reason is said
     if (!d.ok) { toast.error(d.reason); return }
     act(card, d.action)
   }
 
-  const lanes: Lane[] = columns.map(key => {
-    const column = BOARD_COLUMNS.find(c => c.key === key)!
-    const inLane = shown.filter(c => columnOf(c.status) === key)
+  const lanes: Lane[] = grouped.map(({ lane, cards: inLane }) => {
+    const key = lane.key
     const active = dragging !== null && reachable.has(key)
+    const dropLabel = dragging && active ? dropOnLane(dragging, lane, viewer) : null
     const zone = (
       <div
         role="list"
-        aria-label={`${column.label} — drop a card here to move it`}
+        aria-label={`${lane.label} — drop a card here to move it`}
         onDragOver={e => { if (dragging) { e.preventDefault(); if (over !== key) setOver(key) } }}
         onDragLeave={() => { if (over === key) setOver(null) }}
         onDrop={e => { e.preventDefault(); drop(key) }}
@@ -205,40 +226,55 @@ export function Board({
             }}
             className={dragging?.id === c.id ? 'opacity-50' : ''}
           >
-            <BoardCard
-              card={c}
-              viewer={viewer}
-              names={names}
-              today={today}
-              busy={busyId === c.id}
-              canEdit={canEdit(c)}
-              onOpen={open}
-              onAction={act}
-              onMove={act}
-              onLink={setLinkFor}
-              onKind={setKindFor}
-              // the DELETE route is manager-only, so the menu entry is too —
-              // a person never sees a button the server would refuse
-              canDelete={isManager}
-              onDelete={setDeleteFor}
-            />
+            {lane.folded ? (
+              // compact: title, client, stage — open the card to act on it
+              <CompactCard card={c} today={today} onOpen={open} />
+            ) : (
+              <BoardCard
+                card={c}
+                viewer={viewer}
+                names={names}
+                today={today}
+                busy={busyId === c.id}
+                canEdit={canEdit(c)}
+                onOpen={open}
+                onAction={act}
+                onMove={act}
+                onLink={setLinkFor}
+                onKind={setKindFor}
+                // the DELETE route is manager-only, so the menu entry is too —
+                // a person never sees a button the server would refuse
+                canDelete={isManager}
+                onDelete={setDeleteFor}
+              />
+            )}
           </div>
         ))}
         {inLane.length === 0 && (
           <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
-            {dragging && active ? `Drop here — ${moveTargets(dragging, viewer).find(t => t.column === key)?.action.label ?? ''}` : COLUMN_EMPTY[key]}
+            {dropLabel?.ok ? `Drop here — ${dropLabel.action.label}` : lane.empty}
           </div>
         )}
       </div>
     )
+    // Posted keeps the last two weeks; the rest are records on the client's page
+    const holdsPosted = lane.columns.includes('posted')
     return {
       key,
-      title: column.label,
+      title: lane.label,
       count: inLane.length,
-      empty: COLUMN_EMPTY[key],
+      empty: lane.empty,
       cards: [],
       replace: zone,
-      hint: <span className="sr-only">{column.meaning}</span>,
+      footer: holdsPosted ? (
+        <p className="px-1 pt-1 text-[12px] text-muted-foreground">{OLDER_POSTS_NOTE}</p>
+      ) : undefined,
+      hint: lane.columns.length === 1
+        ? <span className="sr-only">{BOARD_COLUMNS.find(c => c.key === lane.columns[0])?.meaning}</span>
+        : <span className="sr-only">{lane.columns.map(c => BOARD_COLUMNS.find(b => b.key === c)?.label).join(', ')}</span>,
+      folded: lane.folded,
+      collapsed: lane.folded ? foldShut : undefined,
+      onToggle: lane.folded ? toggleFold : undefined,
     }
   })
 
@@ -256,7 +292,11 @@ export function Board({
         </div>
       )}
 
-      <LaneBoard lanes={lanes} initialLane={initialColumn ?? undefined} ariaLabel={ariaLabel} />
+      <LaneBoard
+        lanes={lanes}
+        initialLane={initialColumn ? laneOf(page, initialColumn) : undefined}
+        ariaLabel={ariaLabel}
+      />
 
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
       <KindDialog card={kindFor} kinds={kinds} onClose={() => setKindFor(null)} />

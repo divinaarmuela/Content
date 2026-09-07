@@ -94,7 +94,9 @@ export function statusesIn(column: BoardColumnKey): readonly ItemStatus[] {
  *
  * Every team role sees all five — the owner's rule is "all pages should have
  * the columns", so an editor watches their card go on to the client and out
- * the door, and a scheduler sees what is coming before it is ready. What a
+ * the door, and a scheduler sees what is coming before it is ready. How a
+ * PAGE arranges them — the stages that person works given room, the rest
+ * folded into one narrow lane — is `pageLanes` in board-view-core. What a
  * role may MOVE is still the transition rules' business (canMoveTo). A
  * client's portal is the With-client column and nothing else — the rest of
  * the funnel is how the agency works, not what the client is asked to look at.

@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
 import type { ScheduleEntry } from '@/lib/db-types'
-import { pageCards, pageColumns, type BoardViewer } from '../../lib/board-view-core'
+import { pageCards, type BoardViewer } from '../../lib/board-view-core'
 import { dayKeyInZone, DEFAULT_TZ } from '../../lib/timezone-core'
 import { useWorkRows } from '../useLiveWork'
 import { useRole } from '../useRole'
@@ -21,9 +21,12 @@ import { useTeamMembers } from '../production/workHooks'
 /**
  * THE SCHEDULER PAGE: links and what needs doing, on the whole board.
  *
- * All five columns of the one board, every content card for the clients
- * the person holds, so what is coming is visible before it is ready. Each
- * card carries the link to the work and what needs doing. The scheduler
+ * Every content card for the clients the person holds, on the one board.
+ * The two stages a scheduler works — Ready to post, Posted — get full
+ * lanes; everything before them (Draft, Internal check, With client) is
+ * folded into one narrow "Coming up" lane, so what is coming is visible
+ * before it is ready without three columns sitting empty. Each card
+ * carries the link to the work and what needs doing. The scheduler
  * takes those and posts on the Schedule page — one pill away in the header
  * — or wherever they post; back here the card just moves, Ready to post →
  * Posted. The card never asks for a channel, a time or a live link.
@@ -90,9 +93,8 @@ export default function SchedulerPage() {
     // the same cards Production shows, minus shoot briefs — those are plans
     // for a shoot, not something to post
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return pageCards('scheduler', rows, viewer)
-  }, [live.items, viewer])
-  const columns = useMemo(() => (viewer ? pageColumns('scheduler', viewer, cards) : []), [viewer, cards])
+    return pageCards('scheduler', rows, viewer, today)
+  }, [live.items, viewer, today])
   const ready = viewer !== null && !live.loading && today !== null
 
   if (noAccount) return <AccountUnavailable />
@@ -117,7 +119,7 @@ export default function SchedulerPage() {
         <Board
           cards={cards}
           viewer={viewer}
-          columns={columns}
+          page="scheduler"
           names={names}
           kinds={live.tables.workKinds.rows}
           today={today}

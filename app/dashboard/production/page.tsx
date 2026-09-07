@@ -21,7 +21,7 @@ import {
   Camera, CalendarDays, ChevronDown, FileText, Kanban, Link2, ListChecks, MoreHorizontal, Plus, Search, Trash2,
 } from 'lucide-react'
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../../lib/board-core'
-import { pageColumns } from '../../lib/board-view-core'
+import { pageCards } from '../../lib/board-view-core'
 import { Board, COLUMN_EMPTY, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
@@ -314,13 +314,13 @@ export default function ProductionPage() {
 
   /** the work board's cards: every card this person may see, bar the shoot
    *  plans (those are shoots, and live on the list), through the same client
-   *  and search filters as the list */
+   *  and search filters as the list — and Posted keeps the last two weeks */
   const boardCards = useMemo(() => {
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return rows.filter(c => (clientFilter === 'all' || c.client_id === clientFilter)
+    const scoped = viewer ? pageCards('production', rows, viewer, today) : rows
+    return scoped.filter(c => (clientFilter === 'all' || c.client_id === clientFilter)
       && (!search || c.title.toLowerCase().includes(search.toLowerCase())))
-  }, [live.items, clientFilter, search])
-  const boardColumns = useMemo(() => (viewer ? pageColumns('production', viewer) : []), [viewer])
+  }, [live.items, viewer, today, clientFilter, search])
   /** id → name for everyone on the team, from the rows already on the wire */
   const teamNames = useMemo(
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
@@ -668,7 +668,7 @@ export default function ProductionPage() {
           <Board
             cards={boardCards}
             viewer={viewer}
-            columns={boardColumns}
+            page="production"
             names={teamNames}
             kinds={live.tables.workKinds.rows}
             today={today}
