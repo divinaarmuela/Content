@@ -25,8 +25,11 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus } from 'lucide-react'
+import { ChevronDown, Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ComposeDialog from '../social/ComposeDialog'
 import { NotSetUp } from '../NotSetUp'
@@ -40,7 +43,13 @@ type Account = {
   provider_account_id: string; username: string | null; name: string | null; active: boolean
 }
 
+/** The board page owns the New card dialog (it has the clients, kinds and
+ *  team already loaded); the header owns the button. One asks, the other
+ *  answers — so the page keeps ONE button instead of growing a second. */
+export const NEW_CARD_EVENT = 'mdm:new-card'
+
 export default function NewPostButton() {
+  const onNewCard = () => window.dispatchEvent(new CustomEvent(NEW_CARD_EVENT))
   const { can, loading: roleLoading } = useRole()
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
@@ -96,13 +105,32 @@ export default function NewPostButton() {
 
   return (
     <>
-      <Button
-        className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60"
-        onClick={start} disabled={loading}>
-        {loading
-          ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening…</>
-          : <><Plus className="h-4 w-4" /> New post</>}
-      </Button>
+      {/* ONE button, two things it can make: something that goes out now or
+          at a time, and a piece of work to track. Two buttons side by side
+          made people choose before they knew the difference. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60"
+            disabled={loading}>
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening…</>
+              : <><Plus className="h-4 w-4" /> New <ChevronDown className="h-4 w-4" /></>}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuItem className="min-h-11 flex-col items-start gap-0.5" onClick={start}>
+            <span className="font-semibold">New post</span>
+            <span className="text-[12px] text-muted-foreground">Goes out on a channel, now or at a time.</span>
+          </DropdownMenuItem>
+          {onNewCard && (
+            <DropdownMenuItem className="min-h-11 flex-col items-start gap-0.5" onClick={onNewCard}>
+              <span className="font-semibold">New card</span>
+              <span className="text-[12px] text-muted-foreground">A piece of work to track on the board.</span>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* the provider is off for this workspace — say so once, properly,
           instead of opening a composer with nowhere to send anything */}

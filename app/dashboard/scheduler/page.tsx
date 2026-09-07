@@ -14,6 +14,7 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { NEW_CARD_EVENT } from './NewPostButton'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
 import { useTeamMembers } from '../production/workHooks'
@@ -50,6 +51,12 @@ export default function SchedulerPage() {
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   const team = useTeamMembers(isManager)
   const [newOpen, setNewOpen] = useState(false)
+  // the header's New menu asks; this page answers, so there is one button
+  useEffect(() => {
+    const open = () => setNewOpen(true)
+    window.addEventListener(NEW_CARD_EVENT, open)
+    return () => window.removeEventListener(NEW_CARD_EVENT, open)
+  }, [])
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
 
@@ -101,17 +108,6 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {viewer && (
-        // New post (the header) makes something that goes out; this makes a
-        // piece of WORK to track. Quieter than New post and beside the board
-        // it belongs to, not competing with it in the header.
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => setNewOpen(true)}
-            className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold">
-            <Plus className="h-4 w-4" /> New card
-          </Button>
-        </div>
-      )}
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
 
       {!ready ? (
