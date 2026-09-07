@@ -53,8 +53,6 @@ export type BoardCardRow = BoardViewCard & {
  *  says the same. */
 export { COLUMN_EMPTY }
 
-/** where a page remembers that its folded lane is shut */
-const FOLD_KEY = (page: BoardPage) => `mdm:board:${page}:folded-shut`
 
 /**
  * The column and the lens named in the address — `?column=with_client`,
@@ -125,17 +123,6 @@ export function Board({
   }, [cards, onOpen])
 
   /** the folded lane, shut to a rail or open — remembered per page */
-  const [foldShut, setFoldShut] = useState(false)
-  useEffect(() => {
-    try { setFoldShut(localStorage.getItem(FOLD_KEY(page)) === '1') } catch { /* open by default */ }
-  }, [page])
-  const toggleFold = useCallback(() => {
-    setFoldShut(shut => {
-      try { localStorage.setItem(FOLD_KEY(page), shut ? '0' : '1') } catch { /* the choice lasts the session */ }
-      return !shut
-    })
-  }, [page])
-
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
   const canEdit = useCallback((c: BoardCardRow) => isManager || isAssignedTo(c, viewer.id), [isManager, viewer.id])
 
@@ -308,8 +295,6 @@ export function Board({
         ? <span className="sr-only">{BOARD_COLUMNS.find(c => c.key === lane.columns[0])?.meaning}</span>
         : <span className="sr-only">{lane.columns.map(c => BOARD_COLUMNS.find(b => b.key === c)?.label).join(', ')}</span>,
       folded: lane.folded,
-      collapsed: lane.folded ? foldShut : undefined,
-      onToggle: lane.folded ? toggleFold : undefined,
     }
   })
 

@@ -267,7 +267,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   const [sendBackOpen, setSendBackOpen] = useState(false)
 
   // type-to-confirm for deletion — a destructive click must be deliberate
-  const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   // the people who can carry this job: every active, non-client team member.
@@ -1148,7 +1147,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   /** 9 — the one thing that cannot be undone: the confirm, typed */
   const deleteDialog = canManage ? (
     <AlertDialog open={deleteOpen}
-      onOpenChange={o => { setDeleteOpen(o); if (!o) setDeleteConfirm('') }}>
+      onOpenChange={setDeleteOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{detail.title}”?</AlertDialogTitle>
@@ -1157,15 +1156,10 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             for everyone, including the client&rsquo;s portal. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="grid gap-1.5">
-          <Label className="text-secondary-13">Type <span className="font-mono font-semibold">delete</span> to confirm</Label>
-          <Input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="delete" autoComplete="off" />
-        </div>
         <AlertDialogFooter>
           <AlertDialogCancel className="min-h-11">Keep it</AlertDialogCancel>
           <AlertDialogAction
             className="min-h-11 bg-accent-red hover:bg-accent-red/90"
-            disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
             onClick={async () => {
               const res = await fetch(`/api/production/items/${id}`, { method: 'DELETE' })
               if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
@@ -1324,7 +1318,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="min-h-11 text-accent-red focus:text-accent-red"
-                        onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
+                        onClick={() => setDeleteOpen(true)}>
                         <Trash2 className="h-4 w-4" /> Delete this card
                       </DropdownMenuItem>
                     </>
@@ -1900,7 +1894,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             Its link, files, comments and history go with it — for everyone, including the client.
           </p>
           <Button variant="outline" size="sm" className="min-h-11 w-fit text-accent-red hover:text-foreground md:min-h-8"
-            onClick={() => { setDeleteConfirm(''); setDeleteOpen(true) }}>
+            onClick={() => setDeleteOpen(true)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete card
           </Button>
         </CollapsibleCard>
