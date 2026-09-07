@@ -522,3 +522,17 @@ describe('each role\'s Overview', () => {
     }
   })
 })
+
+describe('a post made on the Schedule page is not production work', () => {
+  const viewer = { id: 'u1', role: 'account_manager' as const }
+  const rows = [
+    { id: 'work', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1' },
+    { id: 'adhoc', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1', adhoc_post: true },
+  ]
+  it('keeps its card but stays off every board', () => {
+    for (const page of ['production', 'editor', 'scheduler'] as const) {
+      const ids = pageCards(page, rows, viewer).map(c => c.id)
+      expect(ids, page).toEqual(['work'])
+    }
+  })
+})

@@ -25,6 +25,8 @@ import type { Role } from './identity-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
 export type BoardViewCard = {
+  /** true when the card exists only to hold a post made on the Schedule page */
+  adhoc_post?: boolean | null
   id: string
   title: string
   status: ItemStatus
@@ -314,7 +316,11 @@ export function pageCards<T extends BoardViewCard>(
   page: BoardPage, cards: readonly T[], viewer: BoardViewer, today?: string | null,
 ): T[] {
   const mine = (c: T) => isAssignedTo(c, viewer.id)
-  const fresh = (c: T) => !today || recentlyPosted(c, today)
+  // media uploaded straight onto the Schedule page to be posted is a POST,
+  // not production work — it keeps its card for the file and the numbers,
+  // and stays off all three boards
+  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
+  const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
     if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))
     // a manager on the Editor page sees the making, not the posting

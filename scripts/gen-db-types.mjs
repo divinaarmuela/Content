@@ -393,6 +393,11 @@ const GHOST_COLUMNS = {
   //     Editors and schedulers never see the client's own thread; this is
   //     the manager's words, on the card, for the person assigned to it.
   content_items: [
+    //   content_items.adhoc_post — media uploaded straight onto the Schedule
+    //     page to be posted. It still needs a card to hold the file, the
+    //     versions and the numbers afterwards, but it is NOT production work,
+    //     so it never appears on the Production, Editor or Scheduler boards.
+    ['adhoc_post', col('boolean', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

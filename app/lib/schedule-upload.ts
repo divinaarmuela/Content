@@ -186,6 +186,10 @@ async function createBackingItem(
     // when the uploader could NOT have approved it does the client's word
     // still stand in the way.
     client_approval_required: !(await mayPostStraightOut(user, { client_id: clientId } as ContentItem)),
+    // a post made on the Schedule page is a POST, not production work: it
+    // keeps its card (the file, the versions, the numbers afterwards) but
+    // never appears on the Production, Editor or Scheduler boards
+    adhoc_post: true,
     status: 'draft_uploaded',
     current_version_number: 0,
   } as unknown as ContentItem)
