@@ -171,7 +171,7 @@ function assertCompose(user: TeamUser, item: ContentItem): void {
  * approvals for them when the post goes out. Every state the post passes
  * through is the ordinary one.
  */
-async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<boolean> {
+export async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<boolean> {
   return mayPostWithoutApproval(
     actingRoles({ id: user.id, role: user.role }, item),
     await clientSignsOff(item.client_id),

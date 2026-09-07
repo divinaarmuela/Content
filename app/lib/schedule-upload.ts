@@ -4,6 +4,7 @@ import { table } from '@/lib/db'
 import type { AssetVersion, Client, ContentItem } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { announceItemChange } from './production-live'
+import { mayPostStraightOut } from './social-schedule'
 import { onItemsCreated } from './gdrive-hooks'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { previewVideos } from './stream'
@@ -178,7 +179,13 @@ async function createBackingItem(
     raw_assets_url: null,
     brief: null,
     raw_assets: [],
-    client_approval_required: true,
+    // media uploaded straight onto the Schedule page is not a piece of
+    // production work waiting on anyone: the person uploading it is posting
+    // it. Whoever may post straight out (a manager, a super admin, and a
+    // scheduler for a client who does not sign off) owns it outright; only
+    // when the uploader could NOT have approved it does the client's word
+    // still stand in the way.
+    client_approval_required: !(await mayPostStraightOut(user, { client_id: clientId } as ContentItem)),
     status: 'draft_uploaded',
     current_version_number: 0,
   } as unknown as ContentItem)
