@@ -59,7 +59,7 @@ the only tone with a border — white on cream has nothing else to separate it
 from the canvas.
 
 ```tsx
-<TintCard tone="blue" title="Going out this week" action={{ label: 'Schedule', href: '/dashboard/social/schedule?view=board' }}>
+<TintCard tone="blue" title="Going out this week" action={{ label: 'Scheduler', href: '/dashboard/scheduler' }}>
   <div className="flex gap-7">
     <Stat value={6} label="scheduled" />
     <Stat value={2} label="ready to schedule" />
@@ -155,6 +155,6 @@ a link. An empty day says so in plain words rather than showing nothing.
 ```tsx
 <Timeline items={[
   { time: '09:00', title: 'Studio shoot — Pure Allure', detail: 'Room A · 2 hours', tone: 'amber' },
-  { time: '12:00', title: 'Post goes live — Sui Kitchen', detail: 'Instagram reel', tone: 'blue', href: '/dashboard/social/schedule' },
+  { time: '12:00', title: 'Post goes live — Sui Kitchen', detail: 'Instagram reel', tone: 'blue', href: '/dashboard/scheduler' },
 ]} />
 ```

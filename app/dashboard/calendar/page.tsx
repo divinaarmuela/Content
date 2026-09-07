@@ -1,9 +1,8 @@
-import { permanentRedirect } from 'next/navigation'
-import { scheduleViewHref } from '../../lib/schedule-page-core'
+import { redirect } from 'next/navigation'
 
-/** "Calendar" meant three different things. This one is the posting calendar,
- *  which is the Schedule page's Calendar view — kept as a permanent redirect
- *  so existing links and bookmarks still land on it. */
+/** The calendar is now a view inside the scheduler — the same data at a
+ *  different zoom level. Kept as a redirect so existing links and bookmarks
+ *  still land somewhere sensible. */
 export default function CalendarPage() {
-  permanentRedirect(scheduleViewHref('calendar'))
+  redirect('/dashboard/scheduler/calendar')
 }

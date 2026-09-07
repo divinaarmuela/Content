@@ -28,7 +28,7 @@ export default function TintCard({
 }: {
   tone?: TintTone
   title: string
-  /** the one link out of this card, e.g. { label: 'Schedule', href: '/dashboard/social/schedule' } */
+  /** the one link out of this card, e.g. { label: 'Scheduler', href: '/dashboard/scheduler' } */
   action?: { label: string; href: string }
   children?: React.ReactNode
   className?: string

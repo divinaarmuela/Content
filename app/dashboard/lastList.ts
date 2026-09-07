@@ -5,7 +5,7 @@
  *
  * The item detail page's "Back" used to be derived from the item's STATUS:
  * open a task from Production, approve it, and the arrow silently became
- * "← Schedule" and took you to a page the task never appears on. A status is
+ * "← Scheduler" and took you to a page the task never appears on. A status is
  * a fact about the work; it is not a fact about your browsing.
  *
  * So the dashboard remembers the last LIST page you were on (a board, a queue,
@@ -20,12 +20,13 @@ const KEY = 'md-last-list'
 const LISTS: { href: string; label: string }[] = [
   { href: '/dashboard/production', label: 'Production' },
   { href: '/dashboard/editor', label: 'Editor' },
-  { href: '/dashboard/social/schedule', label: 'Schedule' },
+  { href: '/dashboard/scheduler/calendar', label: 'Calendar' },
+  { href: '/dashboard/scheduler', label: 'Scheduler' },
   { href: '/dashboard', label: 'Overview' },
 ]
 
-/** Is this path one of the lists — and which? An exact match: the Schedule
- *  page's three views are one list, told apart by `?view=`, not by path. */
+/** Is this path one of the lists — and which? Longest match first, so
+ *  /dashboard/scheduler/calendar is the calendar and not the queue. */
 export function listFor(path: string): { href: string; label: string } | null {
   return LISTS.find(l => path === l.href) ?? null
 }

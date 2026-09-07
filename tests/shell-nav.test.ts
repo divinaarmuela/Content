@@ -77,7 +77,7 @@ describe('resolveNav by role', () => {
     expect(list).not.toContain('/dashboard/audience')
     expect(list).toContain('/dashboard/clients')
     expect(list).toContain('/dashboard/reports')
-    for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/social']) {
+    for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/social']) {
       expect(list, h).toContain(h)
     }
   })
@@ -91,12 +91,11 @@ describe('resolveNav by role', () => {
     ].sort())
   })
 
-  it('gives a scheduler the Schedule and nothing beside it — drawn without Social', () => {
-    // the Scheduler page folded into the Schedule, so the scheduler's own
-    // entry IS the Social child rather than a second sidebar line
+  it('gives a scheduler Scheduler and Schedule — and Schedule is drawn without Social', () => {
     expect(seen('scheduler').sort()).toEqual([
       '/dashboard',
       '/dashboard/notifications',
+      '/dashboard/scheduler',
       '/dashboard/settings',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')

@@ -30,7 +30,7 @@ const DETAIL = 'app/dashboard/production/[id]/CardDetail.tsx'
 const PAGES = [
   'app/dashboard/production/page.tsx',
   'app/dashboard/editor/page.tsx',
-  'app/dashboard/social/schedule/BoardView.tsx',
+  'app/dashboard/scheduler/page.tsx',
 ]
 
 describe('a board card opens the sheet instead of navigating', () => {
@@ -68,10 +68,7 @@ describe('the three boards host the sheet, and the address carries the card', ()
   for (const page of PAGES) {
     it(`${page} opens cards in CardSheet`, () => {
       const src = code(read(page))
-      // the Schedule page's Board view sits a level deeper than the other
-      // two, so the depth of the hop is not what is being pinned — that it
-      // is the ONE CardSheet is
-      expect(src).toMatch(/from '(\.\.\/)+board\/CardSheet'/)
+      expect(src).toContain("from '../board/CardSheet'")
       expect(src).toContain('useCardSheet()')
       expect(src).toMatch(/onOpen=\{c => sheet\.open\(c\.id\)\}/)
       expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} \/>/)

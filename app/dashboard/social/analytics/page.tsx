@@ -14,7 +14,6 @@ import { LoadFailed } from '../../NotSetUp'
 import EmptyState from '../../EmptyState'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { zoneAbbrev, zoneLabel } from '@/app/lib/timezone-core'
-import { scheduleViewHref } from '@/app/lib/schedule-page-core'
 import PageTitle from '../../ui/PageTitle'
 
 type Account = {
@@ -329,7 +328,7 @@ export default function SocialAnalyticsPage() {
               title="Nothing published yet"
               body="Posts rank here by impressions once they have gone live from a connected account. Anything scheduled shows up the day after it posts."
               actionLabel="Open the posting calendar"
-              actionHref={scheduleViewHref('calendar')}
+              actionHref="/dashboard/scheduler/calendar"
               className="border-0"
             />
           ) : (

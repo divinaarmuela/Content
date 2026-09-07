@@ -195,10 +195,6 @@ const STATUS_TINT: Record<string, string> = {
  *  hiccuping, which is not a reason to navigate anyone away from their work. */
 class UnreadableItem extends Error {}
 
-/** Where a signed-off card lives now: the Schedule page's Board view. The old
- *  `/dashboard/scheduler` is a permanent redirect onto it. */
-const SCHEDULE_BOARD = '/dashboard/social/schedule?view=board'
-
 /** Job titles as people say them, for the pickers. */
 const ROLE_WORD: Record<string, string> = {
   super_admin: 'Super admin',
@@ -697,9 +693,9 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
       case 'approved_for_scheduling':
         return isBrief ? { text: 'Plan approved — book the date on the shoot page', href: detail.batch?.id ? `/dashboard/production/shoots/${detail.batch.id}` : board }
           : isInternal ? { text: 'Approved — this one is done', href: board }
-          : { text: 'Approved — it is under Ready to post on the Schedule board', href: SCHEDULE_BOARD }
-      case 'scheduled': return isBrief ? { text: 'Shoot booked', href: board } : { text: 'Booked in', href: SCHEDULE_BOARD }
-      case 'published': return { text: 'Posted', href: SCHEDULE_BOARD }
+          : { text: 'Approved — it is under Ready to post on the Scheduler', href: '/dashboard/scheduler' }
+      case 'scheduled': return isBrief ? { text: 'Shoot booked', href: board } : { text: 'Booked in', href: '/dashboard/scheduler' }
+      case 'published': return { text: 'Posted', href: '/dashboard/scheduler' }
       default: return { text: label, href: board }
     }
   }

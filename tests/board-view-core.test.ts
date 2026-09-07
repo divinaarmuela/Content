@@ -456,7 +456,7 @@ describe('the Overview\'s lenses', () => {
   it('a board address carries the view, the column and the lens', () => {
     expect(boardHref('production', { column: 'with_client' })).toBe('/dashboard/production?view=board&column=with_client')
     expect(boardHref('editor', { show: 'due' })).toBe('/dashboard/editor?show=due')
-    expect(boardHref('scheduler')).toBe('/dashboard/social/schedule?view=board')
+    expect(boardHref('scheduler')).toBe('/dashboard/scheduler')
   })
 })
 
@@ -488,7 +488,7 @@ describe('each role\'s Overview', () => {
     })
     expect(tiles.map(t => t.key)).toEqual(['ready', 'today', 'account'])
     expect(tiles[0].stats[0].value).toBe(1)
-    expect(tiles[0].href).toBe('/dashboard/social/schedule?view=board&column=ready_to_post')
+    expect(tiles[0].href).toBe('/dashboard/scheduler?column=ready_to_post')
     expect(tiles[1].stats[0].value).toBe(1)
     expect(tiles[2].stats[0].value).toBe(1)          // e — client c9 has no channel
   })

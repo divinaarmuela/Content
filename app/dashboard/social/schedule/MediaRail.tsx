@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, Plus, Star } from 'lucide-react'
+import { Plus, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import { Thumb } from './tiles'
@@ -71,14 +70,10 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, waitingHref, loading, role, postWithoutApproval, onNew, onPick, onApprove,
+  media, waiting, loading, role, postWithoutApproval, onNew, onPick, onApprove,
 }: {
   media: RailMedia[]
   waiting: number
-  /** where the count goes: the Schedule page's Approvals view, for this
-   *  client. The number and the list are the one function (`approvalRows`),
-   *  so the chip can never promise something the list does not hold. */
-  waitingHref: string
   loading: boolean
   /** the viewer's role — an account manager or a super admin may sign a piece
    *  off without the client from here */
@@ -276,15 +271,9 @@ export default function MediaRail({
         also drop a file straight onto the calendar.
       </p>
 
-      {/* Not a badge — a way in. Everything sitting with a person is one
-          list, on this page's Approvals view, and this is the door to it. */}
-      <Link
-        href={waitingHref}
-        className="flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
-      >
+      <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
         Waiting for approval · {waiting}
-        <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-      </Link>
+      </div>
     </div>
   )
 }

@@ -913,10 +913,8 @@ from?" and files the folder under `_No shoot`.
 
 - One board became three, each answering one question. **Editor**
   (`/dashboard/editor`) holds content items still in the making — everything
-  before "scheduled". The **Schedule** page's Board view
-  (`/dashboard/social/schedule?view=board`, once its own page at
-  `/dashboard/scheduler`, now a permanent redirect) holds signed-off items
-  waiting for a posting time. **Production** (`/dashboard/production`)
+  before "scheduled". **Scheduler** (`/dashboard/scheduler`) holds signed-off
+  items waiting for a posting time. **Production** (`/dashboard/production`)
   holds shoot briefs; a brief never appears on the Scheduler at all, and its
   end state is "Shoot booked", not "Published".
 - **Scope pills** — Mine / Unassigned / All (`work-pages-core.ts`). Managers

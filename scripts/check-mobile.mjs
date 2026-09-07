@@ -52,7 +52,7 @@ const APP = process.env.MOBILE_CHECK_APP ?? 'https://app.mdmmarketing.com.au'
 /** the three work pages a first-day hire lives on */
 const DASHBOARD_URLS = [
   `${APP}/dashboard/editor`,
-  `${APP}/dashboard/social/schedule?view=board`,
+  `${APP}/dashboard/scheduler`,
   `${APP}/dashboard/production`,
 ]
 const CHECK_DASHBOARD = process.env.MOBILE_CHECK_DASHBOARD === '1'

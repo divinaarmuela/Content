@@ -227,8 +227,7 @@ describe('backLinkFor — back goes where you came from', () => {
   })
   it('a signed-off content item goes back to the scheduler queue', () => {
     for (const status of SCHEDULER_STATUSES) {
-      expect(backLinkFor({ status }))
-        .toEqual({ href: '/dashboard/social/schedule?view=board', label: 'Schedule' })
+      expect(backLinkFor({ status })).toEqual({ href: '/dashboard/scheduler', label: 'Scheduler' })
     }
   })
   it('everything else goes back to the editor board', () => {
