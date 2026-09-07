@@ -315,13 +315,14 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState('')
   const [link, setLink] = useState('')
+  const [brief, setBrief] = useState('')
   const [due, setDue] = useState('')
   const [owner, setOwner] = useState(viewer.id)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!open) return
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
-    setTitle(''); setKind(''); setLink(''); setDue(''); setOwner(viewer.id)
+    setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
   }, [open, defaultClientId, clients, viewer.id])
 
   const linkCheck = linkKindOf(link)
@@ -339,6 +340,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           title: title.trim(),
           work_kind_id: kindRow.id,
           owner_id: owner || null,
+          ...(brief.trim() ? { brief: brief.trim() } : {}),
           ...(due ? { due_date: due } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
@@ -385,6 +387,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-title">Title</Label>
             <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Spring reel 2" className={field} autoFocus />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-brief">What needs doing</Label>
+            <Textarea id="new-brief" rows={3} value={brief} onChange={e => setBrief(e.target.value)}
+              placeholder="What the person making this needs to know — it goes to them."
+              className="rounded-[20px] border-border bg-surface px-4 py-3" />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-kind">Kind of work</Label>
