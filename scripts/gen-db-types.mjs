@@ -335,13 +335,36 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['resolved_at', col('string', true)],
   ],
+  // inbox_touches — one row per person per account who has appeared in the
+  //   Inbox: the author of a comment we loaded, or the other half of a DM
+  //   thread. The Inbox reads LIVE from the publisher and stores nothing, so
+  //   the People table had nothing to join "did they also reach out?" against.
+  //   This is that note and nothing more: a handle, a name, which kind of
+  //   contact, and when they were last seen. No message text, no comment
+  //   body, no ids belonging to the provider's own inbox beyond the thread
+  //   the person can be opened by. Written only from what a request had
+  //   already fetched for its own reasons — nothing here fetches. Id is
+  //   `<provider account id>:<encodeKey(handle lower-case)>`.
+  inbox_touches: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],       // the provider's account id
+    ['client_id', col('string', true)],
+    ['username', col('string', false)],         // as written, lower-cased for the key only
+    ['name', col('string', true)],
+    ['kind', col('string', false)],             // comment | message | both
+    ['first_at', col('string', false)],
+    ['last_at', col('string', false)],
+    ['conversation_id', col('string', true)],   // the DM thread, when it was one
+    ['post_id', col('string', true)],           // the provider post, when it was a comment
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

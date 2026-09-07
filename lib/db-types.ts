@@ -44,6 +44,7 @@ export type TableName =
   | 'encode_jobs'
   | 'follower_snapshots'
   | 'followers'
+  | 'inbox_touches'
   | 'instagram_videos'
   | 'intake_files'
   | 'intake_forms'
@@ -692,6 +693,20 @@ export interface Follower {
   updated_at: string
 }
 
+export interface InboxTouch {
+  id: string
+  account_id: string
+  client_id: string | null
+  username: string
+  name: string | null
+  kind: string
+  first_at: string
+  last_at: string
+  conversation_id: string | null
+  post_id: string | null
+  updated_at: string
+}
+
 export interface InstagramVideo {
   id: string
   video: string | null
@@ -1228,6 +1243,7 @@ export const TABLE_COLUMNS = {
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
   follower_snapshots: ['id', 'account_id', 'client_id', 'platform', 'mode', 'trigger', 'day', 'taken_at', 'count', 'seen', 'requests', 'limit', 'cursor', 'user_pk', 'seeded', 'source', 'cost_note', 'status', 'error', 'created_at', 'updated_at'],
   followers: ['id', 'account_id', 'client_id', 'pk', 'username', 'full_name', 'profile_pic', 'is_private', 'is_verified', 'first_seen_at', 'last_seen_at', 'gone_at', 'position_last', 'updated_at'],
+  inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
   instagram_videos: ['id', 'video', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
@@ -1307,6 +1323,7 @@ export const NULLABLE_COLUMNS = {
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
   follower_snapshots: ['count', 'cursor', 'user_pk', 'cost_note', 'error'],
   followers: ['full_name', 'profile_pic', 'first_seen_at', 'gone_at', 'position_last'],
+  inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
   instagram_videos: ['video', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
   intake_files: [],
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
@@ -1393,6 +1410,7 @@ export const JSON_COLUMNS = {
   encode_jobs: [],
   follower_snapshots: [],
   followers: [],
+  inbox_touches: [],
   instagram_videos: [],
   intake_files: [],
   intake_forms: ['definition', 'answers'],
@@ -1478,6 +1496,7 @@ export const JSON_ARRAY_COLUMNS = {
   encode_jobs: [],
   follower_snapshots: [],
   followers: [],
+  inbox_touches: [],
   instagram_videos: [],
   intake_files: [],
   intake_forms: [],
@@ -1515,7 +1534,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

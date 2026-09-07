@@ -20,6 +20,7 @@ const SCREENS = [
   'app/dashboard/board/Board.tsx',
   'app/dashboard/social/posts/[id]/PostView.tsx',
   'app/portal/[token]/post/[id]/page.tsx',
+  'app/dashboard/social/analytics/People.tsx',
 ]
 const WIRE = [
   'app/api/social/accounts/[id]/followers/route.ts',
@@ -28,6 +29,8 @@ const WIRE = [
   'app/api/social/followed-from-post/route.ts',
   'app/lib/portal-followers.ts',
   'app/lib/portal-post.ts',
+  'app/api/social/people/route.ts',
+  'app/lib/people-analytics.ts',
 ]
 
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8')

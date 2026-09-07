@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
+import { noteConversations } from '@/app/lib/inbox-people'
 
 /**
  * Connecting an account imports its whole DM history as thread stubs, but
@@ -48,7 +49,11 @@ export async function GET(req: Request) {
         .filter(a => a.connected_at)
         .map(a => [a.provider_account_id, new Date(a.connected_at).getTime()]),
     )
-    return NextResponse.json({ conversations: sinceConnection(conversations, connectedAt) })
+    const visible = sinceConnection(conversations, connectedAt)
+    // a note of who was in it, so the People table can answer "did they also
+    // reach out?" — the Inbox itself stores nothing. Nothing extra is fetched.
+    await noteConversations(visible)
+    return NextResponse.json({ conversations: visible })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

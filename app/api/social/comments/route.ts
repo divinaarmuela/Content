@@ -1,14 +1,24 @@
 import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
+import { noteComments } from '@/app/lib/inbox-people'
 
-/** Comments on one post. */
+/**
+ * Comments on one post.
+ *
+ * `accountId` is optional and only used to note who has been in the Inbox
+ * (see `inbox-people.ts`) — the comments themselves are the same either way,
+ * and nothing extra is fetched to write that note.
+ */
 export async function GET(req: Request) {
   try {
     await requireRole('scheduler')
-    const postId = new URL(req.url).searchParams.get('postId')
+    const params = new URL(req.url).searchParams
+    const postId = params.get('postId')
     if (!postId) return NextResponse.json({ error: 'postId is required' }, { status: 400 })
-    return NextResponse.json({ comments: await getPublisher().postComments(postId) })
+    const comments = await getPublisher().postComments(postId)
+    await noteComments(comments, { accountId: params.get('accountId'), postId })
+    return NextResponse.json({ comments })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

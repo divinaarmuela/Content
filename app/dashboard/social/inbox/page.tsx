@@ -125,10 +125,18 @@ export default function InboxPage() {
   // one account, or every account — an account page links here pre-scoped
   const [acct, setAcct] = useState<string>('all')
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
+  // one person, when the People table sent us here — `?who=<handle>`
+  const [who, setWho] = useState<string | null>(null)
 
   useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get('account')
+    const params = new URLSearchParams(window.location.search)
+    const wanted = params.get('account')
     if (wanted) { setAcct(wanted); setTab('messages') }
+    // `?who=<handle>` — the People table sends somebody here to see what this
+    // person actually said. The conversation list is narrowed to them, with a
+    // way back to everybody.
+    const person = params.get('who')
+    if (person) { setWho(person.replace(/^@/, '')); setTab('messages') }
     void (async () => {
       try {
         const res = await fetch('/api/social/accounts')
@@ -271,7 +279,8 @@ export default function InboxPage() {
   const openPost = async (p: PostRow) => {
     setActive(p); setComments(null); setReplyTo(null); setDmTo(null)
     try {
-      const res = await fetch(`/api/social/comments?postId=${encodeURIComponent(p.id)}`)
+      const res = await fetch(
+        `/api/social/comments?postId=${encodeURIComponent(p.id)}&accountId=${encodeURIComponent(p.accountId ?? '')}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load comments')
       const raw = json.comments
@@ -336,8 +345,14 @@ export default function InboxPage() {
     }
   }
 
+  const isWho = (c: Conversation) => {
+    if (!who) return true
+    const needle = who.toLowerCase()
+    return [c.participantUsername, c.participant?.username, c.participantName, c.participant?.name]
+      .some(v => typeof v === 'string' && v.toLowerCase().replace(/^@/, '') === needle)
+  }
   const visibleConvos = convos === null ? null
-    : acct === 'all' ? convos : convos.filter(c => c.accountId === acct)
+    : (acct === 'all' ? convos : convos.filter(c => c.accountId === acct)).filter(isWho)
   const visiblePosts = posts === null ? null
     : acct === 'all' ? posts : posts.filter(p => p.accountId === acct)
   const acctLabel = (a: SocialAccount) => a.username ? `@${a.username}` : a.name ?? a.platform
@@ -396,6 +411,17 @@ export default function InboxPage() {
           </div>
         </>}
       />
+
+      {who && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-tint-blue px-4 py-2.5">
+          <p className="text-body-15">
+            Showing <span className="font-medium">@{who}</span> only.
+            {tab === 'messages' && visibleConvos?.length === 0 &&
+              ' They have no direct message thread here — they may have commented instead.'}
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => setWho(null)}>Show everyone</Button>
+        </div>
+      )}
 
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
