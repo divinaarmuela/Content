@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DayPicker } from 'react-day-picker'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -55,6 +56,32 @@ export default function TimePicker({
   // the zone this browser is in — a scheduler overseas sees the client's
   // time AND their own, so nobody converts in their head
   const [mine, setMine] = useState<string | null>(null)
+  /* The composer scrolls inside itself, and an absolutely-placed panel is
+   * CLIPPED by a scrolling ancestor — the calendar was being cut off halfway
+   * down the window. So the panel is rendered to the body and placed from the
+   * button's own position, above the button when there is no room below. */
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!open) { setAt(null); return }
+    const place = () => {
+      const el = box.current?.querySelector('button')
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const PANEL = 380
+      const below = window.innerHeight - r.bottom
+      setAt({
+        left: Math.min(Math.max(8, r.left), window.innerWidth - 316),
+        top: below > PANEL ? r.bottom + 6 : Math.max(8, r.top - PANEL - 6),
+      })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open])
   useEffect(() => {
     try { setMine(Intl.DateTimeFormat().resolvedOptions().timeZone || null) } catch { setMine(null) }
   }, [])
@@ -63,7 +90,9 @@ export default function TimePicker({
   useEffect(() => {
     if (!open) return
     const away = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      const inPanel = t instanceof Element && t.closest('[data-time-panel]')
+      if (box.current && !box.current.contains(t) && !inPanel) setOpen(false)
     }
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', away)
@@ -101,10 +130,12 @@ export default function TimePicker({
         <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
       </button>
 
-      {open && (
+      {open && at && createPortal(
         // bg-popover, not bg-surface: a panel that floats has to sit ABOVE the
         // card behind it in dark mode or it disappears into it
-        <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[300px] rounded-inner border border-border bg-popover p-3 shadow-lg">
+        <div data-time-panel
+          style={{ left: at.left, top: at.top }}
+          className="fixed z-[70] w-[300px] rounded-inner border border-border bg-popover p-3 shadow-lg">
           <DayPicker
             mode="single"
             selected={dayOf(current.dayKey)}
@@ -186,7 +217,7 @@ export default function TimePicker({
             )}
           </p>
         </div>
-      )}
+        , document.body)}
     </div>
   )
 }
