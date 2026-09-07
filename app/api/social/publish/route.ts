@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { PublishJob } from '@/lib/db-types'
+import type { PublishJob, SocialPost } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { mayPublish } from '../../../lib/identity-core'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
@@ -135,6 +135,26 @@ export async function GET(req: Request) {
       orderBy: [['created_at', 'desc']],
       limit: Math.min(Number(url.searchParams.get('limit') ?? 40), 200),
     })
+    // WHICH COMPOSITION EACH JOB CAME FROM, so the row can offer the post's
+    // own page. The job does not carry the link — the post carries the job's
+    // id — so it is read back the way `jobsForPost` reads it, from the post's
+    // own list. A job made outside the composer (the ad-hoc door) simply has
+    // no post, and the row shows no link rather than a wrong one.
+    const jobIds = new Set(rows.map(j => j.id))
+    const compositions = await table<SocialPost>('social_posts')
+      .list({
+        where: p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
+          .some(id => jobIds.has(String(id ?? ''))),
+      })
+      .catch(() => [] as SocialPost[])
+    const postByJob = new Map<string, string>()
+    for (const p of compositions) {
+      for (const id of Array.isArray(p.publish_job_ids) ? p.publish_job_ids : []) {
+        const key = String(id ?? '')
+        if (key && !postByJob.has(key)) postByJob.set(key, p.id)
+      }
+    }
+
     // the columns the old select named. timezone, media and updated_at ride
     // along: the activity page prints the booked time in the CLIENT's zone,
     // shows a thumbnail, and needs updated_at to tell "sending now" from
@@ -146,6 +166,7 @@ export async function GET(req: Request) {
       provider_post_id: j.provider_post_id, permalink: j.permalink,
       error: j.error, attempts: j.attempts,
       created_at: j.created_at, updated_at: j.updated_at, published_at: j.published_at,
+      post_id: postByJob.get(j.id) ?? null,
     }))
     return NextResponse.json({ jobs })
   } catch (e) {

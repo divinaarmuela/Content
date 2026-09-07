@@ -715,6 +715,70 @@ export function groupOptions(options: readonly MoreOption[] | null | undefined):
   return groups
 }
 
+/* ── naming an extra AFTER the post has gone out ────────────────────────── */
+
+/**
+ * WHAT ONE EXTRA IS CALLED, for a screen that reads a post BACK.
+ *
+ * The composer names every setting once, in `OPTION_SPECS` above, and that is
+ * the only place a name for one may come from. A page that reads the stored
+ * `per_channel` blob and turns `firstComment` into words by pulling the key
+ * apart is inventing vocabulary the composer never used — the two then drift,
+ * and the person who ticked "Allow duets" reads "Allow Duet" somewhere else
+ * and wonders whether they are the same setting. They are; there is one name
+ * for it, and it is the row's own label.
+ *
+ * A handful of fields have no row because the window edits them elsewhere: a
+ * channel's own caption, its own pictures, the post type, the cover the image
+ * editor saved. Those are named here, beside the specs, rather than in a page.
+ * Anything with neither answers `null`, and a screen draws nothing — silence
+ * is better than a database key on a page.
+ *
+ * `platform` matters for the one field two networks share: `title` is "Video
+ * title" on YouTube and "Reel title" on Facebook.
+ */
+const EXTRAS_WITHOUT_A_ROW: Partial<Record<keyof ChannelExtras, string>> = {
+  caption: 'Its own caption',
+  kind: 'Post type',
+  slides: 'Its own pictures',
+  videoCoverImageUrl: 'Cover picture',
+  photoCoverIndex: 'Which picture is the cover',
+}
+
+function specFor(field: keyof ChannelExtras, platform?: string | null): OptionSpec | undefined {
+  const on = String(platform ?? '').toLowerCase()
+  const specs = OPTION_SPECS.filter(s => s.field === field)
+  return specs.find(s => (s.on as string[]).includes(on)) ?? specs[0]
+}
+
+export function extraLabel(field: keyof ChannelExtras, platform?: string | null): string | null {
+  return specFor(field, platform)?.label ?? EXTRAS_WITHOUT_A_ROW[field] ?? null
+}
+
+/**
+ * What one extra's VALUE says, in the words the composer offered.
+ *
+ * A select's stored value is the network's own code — `SS_PERFORMANCE`, a
+ * YouTube category number — and the composer already holds the sentence
+ * somebody picked, so that sentence is what is read back. A tick box reads
+ * Yes or No; a list reads as its words; everything else is what was typed.
+ */
+export function extraValueWords(
+  field: keyof ChannelExtras,
+  value: unknown,
+  platform?: string | null,
+): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (Array.isArray(value)) {
+    const words = value.map(v => String(v ?? '').trim()).filter(Boolean)
+    return words.length > 0 ? words.join(', ') : null
+  }
+  const text = String(value).trim()
+  if (!text) return null
+  return specFor(field, platform)?.choices?.find(c => c.value === text)?.label ?? text
+}
+
 /* ── the places a client tags posts at ──────────────────────────────────── */
 
 /**

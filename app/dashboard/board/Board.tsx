@@ -12,9 +12,10 @@ import {
 } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
 import { useTable } from '@/lib/db-client'
-import type { PostAnalytic } from '@/lib/db-types'
+import type { PostAnalytic, SocialPost } from '@/lib/db-types'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { readInteractors, withFromThisPost } from '../../lib/followers-core'
+import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
@@ -154,6 +155,18 @@ export function Board({
     return out
   }, [analyticRows])
 
+  /** …and where that line GOES: the post's own page. A card that carried
+   *  several posts links to the one that actually went out last. */
+  const { rows: postRows } = useTable<SocialPost>('social_posts', { enabled: hasPosted })
+  const postByItem = useMemo(() => {
+    const out = new Map<string, string>()
+    const sent = [...postRows]
+      .filter(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length : 0) > 0)
+      .sort((a, b) => (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))
+    for (const p of sent) if (p.item_id && !out.has(p.item_id)) out.set(p.item_id, p.id)
+    return out
+  }, [postRows])
+
   const shown = useMemo(
     () => applyShow(cards, show ?? null, { viewer, today, postingToday, connectedClientIds }),
     [cards, show, viewer, today, postingToday, connectedClientIds],
@@ -267,6 +280,7 @@ export function Board({
                 canDelete={isManager}
                 onDelete={setDeleteFor}
                 stats={statsByItem.get(c.id) ?? null}
+                statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
               />
             )}
           </div>

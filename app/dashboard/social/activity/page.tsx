@@ -18,6 +18,7 @@ import {
   attentionLine, isKnownPlatform, jobWords, looksStuck, platformsNamedIn,
   sortForAttention, type PublishJob, type Tone,
 } from '../../../lib/publish-activity-core'
+import { postPageHref } from '../../../lib/post-page-core'
 import { formatWithZone } from '../../../lib/timezone-core'
 import PageTitle from '../../ui/PageTitle'
 
@@ -205,6 +206,11 @@ export default function PublishActivityPage() {
                           <a href={job.permalink} target="_blank" rel="noreferrer noopener">
                             <ExternalLink className="h-3.5 w-3.5" /> Open the post
                           </a>
+                        </Button>
+                      )}
+                      {job.post_id && (
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={postPageHref(job.post_id)}>See the full post</Link>
                         </Button>
                       )}
                       {job.content_item_id && (

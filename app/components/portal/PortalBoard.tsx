@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import Chip from '../../dashboard/ui/Chip'
 import type { PortalCard } from '../../lib/portal-data'
 import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
+import { portalPostHref } from '../../lib/post-page-core'
 import { onCardLine } from '../../lib/canvas-comments-core'
 import {
   APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, approveConsequence, changesSentToast,
@@ -273,6 +274,14 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         )}
         {card.status === 'published' && card.metrics && (
           <div className={ink ? 'text-cream' : ''}><PostMetricsRow item={{ metrics: card.metrics } as never} /></div>
+        )}
+        {card.status === 'published' && token && card.post_id && (
+          <Link
+            href={portalPostHref(token, card.post_id)}
+            className="inline-flex min-h-11 items-center text-[14px] font-semibold underline-offset-4 hover:underline"
+          >
+            How this post did
+          </Link>
         )}
 
         {/* where the work lives */}

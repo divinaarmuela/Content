@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ExternalLink, MessageCircle } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
-import type { PostAnalytic } from '@/lib/db-types'
+import type { PostAnalytic, SocialPost } from '@/lib/db-types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Sparkline from '../../../components/Sparkline'
@@ -16,6 +16,7 @@ import {
 } from '../../../lib/post-performance-core'
 import type { PostPerformanceResponse } from '../../../api/social/post-performance/route'
 import { fromThisPostLine, readInteractors, type FollowedFromPost } from '../../../lib/followers-core'
+import { postPageHref } from '../../../lib/post-page-core'
 
 /**
  * HOW IT DID — the section on a posted card.
@@ -46,6 +47,16 @@ export default function HowItDid({ itemId, platformHint, compact = false }: {
     const sorted = [...rows].sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? ''))
     return sorted[0] ?? null
   }, [rows])
+
+  /** the composition this card was posted from — it has a page of its own,
+   *  and a card with several posts links to each of them */
+  const { rows: postRows } = useTable<SocialPost>('social_posts', { by: byItem })
+  const sentPosts = useMemo(
+    () => [...postRows]
+      .filter(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length : 0) > 0)
+      .sort((a, b) => (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? '')),
+    [postRows],
+  )
 
   const [asked, setAsked] = useState<PostPerformanceResponse | null>(null)
   useEffect(() => {
@@ -90,6 +101,15 @@ export default function HowItDid({ itemId, platformHint, compact = false }: {
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-secondary-13 text-muted-foreground">
+        {sentPosts.map((p, i) => (
+          <Link
+            key={p.id}
+            href={postPageHref(p.id)}
+            className="inline-flex min-h-11 items-center font-medium text-foreground underline-offset-4 hover:underline md:min-h-0"
+          >
+            {sentPosts.length > 1 ? `See the full post ${i + 1}` : 'See the full post'}
+          </Link>
+        ))}
         {syncedAt && <Ago iso={syncedAt} />}
         {postUrl && (
           <a href={postUrl} target="_blank" rel="noreferrer noopener"

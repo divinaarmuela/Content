@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { ExternalLink, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -81,6 +82,7 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete, stats,
+  statsHref,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -101,6 +103,10 @@ export function BoardCard({
   onDelete?: (card: BoardViewCard) => void
   /** in Posted: "42 interactions · +12 followers" — how the live post did */
   stats?: string | null
+  /** the post's own page, when the card was posted from a composition. The
+   *  stats line becomes the link to it: the numbers are what somebody wants
+   *  more of, so they are where the way to more of them lives. */
+  statsHref?: string | null
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const [briefOpen, setBriefOpen] = useState(false)
@@ -146,7 +152,19 @@ export function BoardCard({
         )}
         <span>{lines.assignee} · {lines.version}</span>
         {stats && card.status === 'published' && (
-          <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{stats}</span>
+          statsHref ? (
+            // above the card's own overlay, so the line is a real link rather
+            // than one more place that opens the card
+            <Link
+              href={statsHref}
+              onClick={e => e.stopPropagation()}
+              className="relative z-10 mt-1 inline-flex min-h-11 items-center font-medium text-foreground underline-offset-4 hover:underline [[data-tone=ink]_&]:text-cream"
+            >
+              {stats}
+            </Link>
+          ) : (
+            <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{stats}</span>
+          )
         )}
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>

@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, Batch, BatchComment, Client, ContentItem, IntakeForm, ItemComment,
-  MonthlyCommitment, ScheduleEntry, TeamUserClient, WorkflowActivity,
+  MonthlyCommitment, ScheduleEntry, SocialPost, TeamUserClient, WorkflowActivity,
 } from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
@@ -149,6 +149,9 @@ export type PortalCard = {
   posted_when: string | null
   /** the live post, once there is one */
   live_url: string | null
+  /** the post's own page on the portal, once it has gone out — the numbers,
+   *  the words and the people, in one place. Null on anything not posted. */
+  post_id: string | null
   metrics: PortalItemMetrics | null
   actions: PortalActions
   /** the item the approve / ask-for-a-change acts on: the piece itself, or a shoot's brief */
@@ -333,7 +336,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const backIds = items
     .filter(i => (i.status as ItemStatus) === 'internal_review')
     .map(i => i.id)
-  const [versionRows, scheduleRows, analyticsByItem, activityRows] = await Promise.all([
+  const [versionRows, scheduleRows, analyticsByItem, activityRows, postRows] = await Promise.all([
     ids.length
       ? table<AssetVersion>('asset_versions')
           .list({ where: r => ids.includes(r.item_id), orderBy: [['version_number', 'desc']] })
@@ -354,7 +357,22 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
           limit: 500,
         })
       : Promise.resolve([] as WorkflowActivity[]),
+    // the compositions behind these pieces — each one that actually went out
+    // has a page of its own, and the client's Published card links to it
+    ids.length
+      ? table<SocialPost>('social_posts')
+          .list({ where: r => ids.includes(r.item_id) })
+          .catch(() => [] as SocialPost[])
+      : Promise.resolve([] as SocialPost[]),
   ])
+
+  /** the post that went out for each piece — the newest, when there were two */
+  const postByItem = new Map<string, string>()
+  for (const p of [...postRows].sort((a, b) =>
+    (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))) {
+    const sent = Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length > 0 : false
+    if (sent && p.item_id && !postByItem.has(p.item_id)) postByItem.set(p.item_id, p.id)
+  }
 
   // latest version per item (rows are ordered desc — first wins)
   const latestByItem = new Map<string, { file_url: string; files?: unknown; drive_url: string }>()
@@ -571,6 +589,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       updated_at: p.updated_at,
       posted_when: postedWhen,
       live_url: live,
+      post_id: p.status === 'published' ? postByItem.get(p.id) ?? null : null,
       metrics: p.metrics,
       actions: portalActions(p.status),
       act_item_id: p.id,
@@ -607,6 +626,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       updated_at: (b as { updated_at?: string }).updated_at ?? b.created_at ?? '',
       posted_when: null,
       live_url: null,
+      post_id: null,
       metrics: null,
       actions: standing.actions,
       // the decision acts on the plan's brief item — the same item the

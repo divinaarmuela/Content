@@ -18,6 +18,8 @@ const SCREENS = [
   'app/components/portal/PortalFollowers.tsx',
   'app/dashboard/production/[id]/HowItDid.tsx',
   'app/dashboard/board/Board.tsx',
+  'app/dashboard/social/posts/[id]/PostView.tsx',
+  'app/portal/[token]/post/[id]/page.tsx',
 ]
 const WIRE = [
   'app/api/social/accounts/[id]/followers/route.ts',
@@ -25,6 +27,7 @@ const WIRE = [
   'app/api/clients/[id]/followers/route.ts',
   'app/api/social/followed-from-post/route.ts',
   'app/lib/portal-followers.ts',
+  'app/lib/portal-post.ts',
 ]
 
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8')
