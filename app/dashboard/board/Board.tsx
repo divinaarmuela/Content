@@ -288,7 +288,9 @@ export function Board({
       empty: lane.empty,
       cards: [],
       replace: zone,
-      footer: holdsPosted ? (
+      // only worth saying when there IS something here and older ones are
+      // elsewhere; under an empty column it reads as an excuse
+      footer: holdsPosted && inLane.length > 0 ? (
         <p className="px-1 pt-1 text-[12px] text-muted-foreground">{OLDER_POSTS_NOTE}</p>
       ) : undefined,
       hint: lane.columns.length === 1

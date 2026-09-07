@@ -35,7 +35,7 @@ describe('the three pages hand the board their page, and the board makes the lan
     // a folded lane's cards are compact; a full lane's are the real card
     expect(board).toMatch(/lane\.folded \? \(\s*<CompactCard/)
     // the footer under Posted
-    expect(board).toMatch(/holdsPosted \? \(\s*<p[^>]*>\{OLDER_POSTS_NOTE\}<\/p>/)
+    expect(board).toMatch(/holdsPosted && inLane\.length > 0 \? \(\s*<p[^>]*>\{OLDER_POSTS_NOTE\}<\/p>/)
   })
 
   it('a folded lane is quieter, not narrower — no rail, no sideways words', () => {

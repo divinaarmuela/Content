@@ -102,9 +102,12 @@ export default function SchedulerPage() {
   return (
     <div className="flex flex-col gap-4">
       {viewer && (
+        // New post (the header) makes something that goes out; this makes a
+        // piece of WORK to track. Quieter than New post and beside the board
+        // it belongs to, not competing with it in the header.
         <div className="flex justify-end">
-          <Button onClick={() => setNewOpen(true)}
-            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
+          <Button variant="outline" onClick={() => setNewOpen(true)}
+            className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold">
             <Plus className="h-4 w-4" /> New card
           </Button>
         </div>
