@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Kanban, Send } from 'lucide-react'
+import { Kanban, Send } from 'lucide-react'
 import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
@@ -22,12 +22,6 @@ const VIEWS = [
     label: 'Board',
     icon: Kanban,
     blurb: 'Every card, Draft to Posted — what needs doing and where the work lives. Post it on the Schedule page, then mark the card Booked in, then Posted.',
-  },
-  {
-    href: '/dashboard/scheduler/calendar',
-    label: 'Posting calendar',
-    icon: CalendarDays,
-    blurb: 'Every post on the day it goes out, and whether it actually did.',
   },
 ]
 
