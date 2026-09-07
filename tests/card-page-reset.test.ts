@@ -17,7 +17,9 @@ import {
  */
 
 const root = join(__dirname, '..')
-const PAGE = 'app/dashboard/production/[id]/page.tsx'
+/** the card's body — the page is a thin wrapper around it (see below) */
+const PAGE = 'app/dashboard/production/[id]/CardDetail.tsx'
+const ROUTE = 'app/dashboard/production/[id]/page.tsx'
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 
 /** the code, without the prose about the code */
@@ -26,6 +28,17 @@ const code = (text: string) => text
   .split('\n')
   .filter(l => !/^\s*\/\//.test(l))
   .join('\n')
+
+describe('the card page is CardDetail, and nothing else', () => {
+  it('the route reads the id and renders CardDetail in its page layout', () => {
+    const src = code(read(ROUTE))
+    expect(src).toMatch(/import CardDetail from '\.\/CardDetail'/)
+    expect(src).toMatch(/<CardDetail id=\{id\} layout="page" \/>/)
+    // nothing of the card is drawn here — no hooks, no fetch, no JSX of its own
+    expect(src).not.toContain('useRow(')
+    expect(src).not.toContain('fetch(')
+  })
+})
 
 describe('the card page shows the one link', () => {
   const src = code(read(PAGE))

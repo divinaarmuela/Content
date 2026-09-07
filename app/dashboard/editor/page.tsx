@@ -13,6 +13,7 @@ import { AccountUnavailable } from '../production/shoot-ui'
 import { useTeamMembers } from '../production/workHooks'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
 
 /**
@@ -35,6 +36,8 @@ export default function EditorPage() {
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   const team = useTeamMembers(isManager)
   const { column, show, clearShow } = useBoardParams()
+  // the card that is open beside the board, named in the address
+  const sheet = useCardSheet()
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)
@@ -86,12 +89,16 @@ export default function EditorPage() {
           names={names}
           kinds={live.tables.workKinds.rows}
           today={today}
+          onOpen={c => sheet.open(c.id)}
           initialColumn={column}
           show={show}
           onClearShow={clearShow}
           ariaLabel="Your cards, by stage"
         />
       )}
+
+      {/* the card, beside the board — the board stays live behind it */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} />
 
       {viewer && (
         <NewCardDialog

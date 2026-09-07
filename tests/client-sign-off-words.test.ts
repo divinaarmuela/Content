@@ -22,7 +22,8 @@ import { NOT_CLIENT_APPROVED, WITH_THE_CLIENT_NOW } from '@/app/lib/social-sched
 const root = join(__dirname, '..')
 const read = (p: string) => readFileSync(join(root, p), 'utf8')
 
-const ITEM_PAGE = 'app/dashboard/production/[id]/page.tsx'
+// the card's body — the page route is a thin wrapper around CardDetail
+const ITEM_PAGE = 'app/dashboard/production/[id]/CardDetail.tsx'
 const COMPOSER = 'app/dashboard/social/schedule/NewPostDialog.tsx'
 const RAIL = 'app/dashboard/social/schedule/MediaRail.tsx'
 const PICKER = 'app/dashboard/social/schedule/NewPostSources.tsx'

@@ -49,7 +49,7 @@ function avatarColor(p: Person) {
 }
 
 export default function WorkCard({
-  client, title, thumb, chips, people = [], tone, href, className, actions, note,
+  client, title, thumb, chips, people = [], tone, href, onOpen, className, actions, note,
 }: {
   /** the client's name — shown small and upper case above the title */
   client: string
@@ -62,7 +62,12 @@ export default function WorkCard({
   people?: Person[]
   /** tints the whole card — use it for the one state that needs attention */
   tone?: WorkTone
-  href: string
+  /** where the card goes — omit it and give `onOpen` for a card that opens
+   *  in place (the side panel) instead of navigating */
+  href?: string
+  /** the whole card is a button that opens something beside the board —
+   *  Enter and Space work as they would on any button */
+  onOpen?: () => void
   className?: string
   /**
    * the card's own CONTROLS — buttons, nothing else. Given at all, even empty,
@@ -134,15 +139,36 @@ export default function WorkCard({
     return (
       <div data-tone={tone ?? 'surface'} className={cn('relative', face)}>
         {/* the whole card is still the target — the buttons simply sit on top */}
-        <Link href={href} aria-label={title} className="absolute inset-0 rounded-inner" />
+        {onOpen ? (
+          <button type="button" aria-label={title} onClick={onOpen}
+            className="absolute inset-0 rounded-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        ) : (
+          <Link href={href ?? '#'} aria-label={title} className="absolute inset-0 rounded-inner" />
+        )}
         {body}
         <div className="relative z-10 flex flex-wrap items-center gap-1.5 empty:hidden">{actions}</div>
       </div>
     )
   }
 
+  if (onOpen) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={title}
+        data-tone={tone ?? 'surface'}
+        onClick={onOpen}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+        className={cn('cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', face)}
+      >
+        {body}
+      </div>
+    )
+  }
+
   return (
-    <Link href={href} data-tone={tone ?? 'surface'} className={face}>
+    <Link href={href ?? '#'} data-tone={tone ?? 'surface'} className={face}>
       {body}
     </Link>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
@@ -77,7 +77,7 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 }
 
 export function Board({
-  cards, viewer, columns, names, kinds, today, initialColumn, show, onClearShow,
+  cards, viewer, columns, names, kinds, today, onOpen, initialColumn, show, onClearShow,
   postingToday, connectedClientIds, ariaLabel,
 }: {
   cards: BoardCardRow[]
@@ -86,6 +86,8 @@ export function Board({
   names: Map<string, string>
   kinds: readonly KindRow[]
   today: string
+  /** a press on a card — the page opens it beside the board (`CardSheet`) */
+  onOpen: (card: BoardCardRow) => void
   /** the column to open on a phone */
   initialColumn?: BoardColumnKey | null
   /** the Overview's lens, if the person came through one */
@@ -103,6 +105,15 @@ export function Board({
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
   const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
+  /** a drag is not a press: browsers do not fire click after a drop, but a
+   *  drag that ends where it began can — so a card that was just dragged
+   *  stays shut until the next tick */
+  const justDragged = useRef(false)
+  const open = useCallback((card: BoardViewCard) => {
+    if (justDragged.current) return
+    const row = cards.find(c => c.id === card.id)
+    onOpen(row ?? (card as BoardCardRow))
+  }, [cards, onOpen])
 
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
   const canEdit = useCallback((c: BoardCardRow) => isManager || isAssignedTo(c, viewer.id), [isManager, viewer.id])
@@ -185,9 +196,13 @@ export function Board({
             onDragStart={e => {
               e.dataTransfer.effectAllowed = 'move'
               e.dataTransfer.setData('text/plain', c.id)
+              justDragged.current = true
               setDragging(c)
             }}
-            onDragEnd={() => { setDragging(null); setOver(null) }}
+            onDragEnd={() => {
+              setDragging(null); setOver(null)
+              setTimeout(() => { justDragged.current = false }, 0)
+            }}
             className={dragging?.id === c.id ? 'opacity-50' : ''}
           >
             <BoardCard
@@ -197,6 +212,7 @@ export function Board({
               today={today}
               busy={busyId === c.id}
               canEdit={canEdit(c)}
+              onOpen={open}
               onAction={act}
               onMove={act}
               onLink={setLinkFor}

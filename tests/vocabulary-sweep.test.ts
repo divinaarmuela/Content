@@ -292,7 +292,8 @@ describe('the columns say the status words, and the claim says one thing', () =>
       'app/dashboard/editor/page.tsx',
       'app/dashboard/scheduler/page.tsx',
       'app/dashboard/production/page.tsx',
-      'app/dashboard/production/[id]/page.tsx',
+      // the card page's body — the route is a thin wrapper around it
+      'app/dashboard/production/[id]/CardDetail.tsx',
     ]) {
       const src = readFileSync(join(process.cwd(), rel), 'utf8')
       expect(src, `${rel} has no Getting started panel`).toMatch(/<GettingStarted /)

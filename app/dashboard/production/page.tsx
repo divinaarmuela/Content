@@ -23,6 +23,7 @@ import {
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../../lib/board-core'
 import { pageColumns } from '../../lib/board-view-core'
 import { Board, COLUMN_EMPTY, useBoardParams, type BoardCardRow } from '../board/Board'
+import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import { type ItemStatus } from '../../lib/workflow-core'
@@ -184,6 +185,8 @@ export default function ProductionPage() {
   // the work board: the column and the lens named in the address, today's
   // date (read after mount — the page prerenders), and the new-card dialog
   const boardParams = useBoardParams()
+  // the card that is open beside the board or the list, named in the address
+  const sheet = useCardSheet()
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newCardOpen, setNewCardOpen] = useState(false)
@@ -464,7 +467,8 @@ export default function ProductionPage() {
     return (
       <WorkCard
         key={t.id}
-        href={`/dashboard/production/${t.id}`}
+        // a task opens beside the list, the way a board card does
+        onOpen={() => sheet.open(t.id)}
         client={t.clients?.name ?? '—'}
         title={t.title}
         tone={muted ? undefined : cardTone({ status: t.status, due: t.due_date })}
@@ -668,6 +672,7 @@ export default function ProductionPage() {
             names={teamNames}
             kinds={live.tables.workKinds.rows}
             today={today}
+            onOpen={c => sheet.open(c.id)}
             initialColumn={boardParams.column}
             show={boardParams.show}
             onClearShow={boardParams.clearShow}
@@ -802,6 +807,9 @@ export default function ProductionPage() {
 
       {/* the side drawer: this board's cards open it via the comment button */}
       <CommentsDrawer target={commentsDrawer.target} onClose={commentsDrawer.close} />
+
+      {/* the card, beside the board or the list — both stay live behind it */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} />
 
       {/* a CARD: one deliverable, one client, one link — the link-first work
           the three pages track */}
