@@ -238,7 +238,7 @@ describe('"brief" is retired — the word is "shoot plan"', () => {
   const hits: Hit[] = []
   for (const file of FILES) {
     const rel = relative(process.cwd(), file).split(sep).join('/')
-    if (!/app\/dashboard\/(editor|scheduler|production)\//.test(rel)) continue
+    if (!/app\/dashboard\/(editor|production)\/|app\/dashboard\/social\/schedule\//.test(rel)) continue
     const flat = stripComments(readFileSync(file, 'utf8'))
     // every quoted string literal on the pages that reads as COPY: it has a
     // space in it, or is the bare word itself. Paths ("…/batch-brief-core"),
@@ -290,7 +290,8 @@ describe('the columns say the status words, and the claim says one thing', () =>
   it('every work page and the item page carry a Getting started panel', () => {
     for (const rel of [
       'app/dashboard/editor/page.tsx',
-      'app/dashboard/scheduler/page.tsx',
+      // the Scheduler page folded into the Schedule page's Board view
+      'app/dashboard/social/schedule/BoardView.tsx',
       'app/dashboard/production/page.tsx',
       // the card page's body — the route is a thin wrapper around it
       'app/dashboard/production/[id]/CardDetail.tsx',
@@ -307,14 +308,14 @@ describe('the columns say the status words, and the claim says one thing', () =>
     const jsxText = />[^<{}\n]*\b(ad-hoc|adhoc|reconcile)\b[^<{}\n]*</i
     const stringLit = /["'][^"'\n]*\b(ad-hoc|adhoc|reconcile)\b[^"'\n]*["']/i
     const hits = [...sweep(jsxText), ...sweep(stringLit)]
-      .filter(h => /app\/dashboard\/(editor|scheduler|production)\//.test(h.file))
+      .filter(h => /app\/dashboard\/(editor|production)\/|app\/dashboard\/social\/schedule\//.test(h.file))
       .filter(h => !/^(import|\/\/|\*|\/\*)/.test(h.text))
     expect(hits, `developer words on screen:\n${show(hits)}`).toEqual([])
   })
 
   it('nothing on the work pages is hover-only', () => {
     const sites = sweep(/opacity-0 group-hover:opacity-100/)
-      .filter(h => /app\/dashboard\/(editor|scheduler|production)\//.test(h.file))
+      .filter(h => /app\/dashboard\/(editor|production)\/|app\/dashboard\/social\/schedule\//.test(h.file))
     expect(sites, `hover-only controls:\n${show(sites)}`).toEqual([])
   })
 })
@@ -322,13 +323,18 @@ describe('the columns say the status words, and the claim says one thing', () =>
 describe('the overview sends people to the right page', () => {
   const overview = readFileSync(join(APP, 'dashboard', 'page.tsx'), 'utf8')
 
-  it('board links go to Editor and Scheduler, never to the old combined board', () => {
+  it('board links go to Editor and the Schedule, never to the old combined board', () => {
     // a bare '/dashboard/production' from the overview would be the one board
     // again; Production is reached from the sidebar, and item deep links
     // (/dashboard/production/<id>) are the detail page, not a board
     expect(overview).not.toMatch(/['"`]\/dashboard\/production['"`]/)
     expect(overview).toContain('/dashboard/editor')
-    expect(overview).toContain('/dashboard/scheduler')
+    // the scheduler's board is the Schedule page's Board view now, reached
+    // through boardHref; the posting calendar through scheduleViewHref
+    expect(overview).toContain("boardHref('scheduler'")
+    expect(overview).toContain("scheduleViewHref('calendar')")
+    // and never the folded page's own address
+    expect(overview).not.toContain('/dashboard/scheduler')
   })
 
   it('Production is still reachable — from the sidebar, as the shoots page', () => {

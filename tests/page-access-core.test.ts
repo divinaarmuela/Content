@@ -57,7 +57,7 @@ const NAV = [
   { href: '/dashboard/leads' },
   { href: '/dashboard/production' },
   { href: '/dashboard/editor' },
-  { href: '/dashboard/scheduler' },
+  { href: '/dashboard/social/schedule' },
   { href: '/dashboard/settings' },
 ]
 
@@ -74,7 +74,7 @@ describe('defaultAllows — one page per role', () => {
     expect(defaultAllows('editor', '/dashboard')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/editor')).toBe(true)
     for (const href of [
-      '/dashboard/production', '/dashboard/scheduler', '/dashboard/files',
+      '/dashboard/production', '/dashboard/files',
       '/dashboard/leads', '/dashboard/clients', '/dashboard/calendar', '/dashboard/social',
       SCHEDULE_PAGE,
     ]) {
@@ -82,10 +82,12 @@ describe('defaultAllows — one page per role', () => {
     }
   })
 
-  it('keeps a scheduler on Scheduler and Schedule', () => {
+  it('keeps a scheduler on the Schedule page — the calendar, the board and the approvals', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
+    // the Scheduler page is gone: a permanent redirect is not a page anybody
+    // holds, and nobody lost anything — SCHEDULE_PAGE is the whole job now
+    expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(false)
     for (const href of [
       '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
       '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',
@@ -108,6 +110,11 @@ describe('defaultAllows — one page per role', () => {
   it('gives super admins every page except the grant-only ones — Leads included', () => {
     for (const { href } of GRANTABLE_PAGES) {
       if (GRANT_ONLY_PAGES.has(href)) continue
+      // the Schedule is a Social CHILD: a super admin reaches it through
+      // Social (canSeePage, below), which is also what makes muting Social
+      // mute all of it. It is listed as grantable so it can be handed to
+      // somebody who has neither by default.
+      if (href === SCHEDULE_PAGE) continue
       expect(defaultAllows('super_admin', href)).toBe(true)
     }
     expect(defaultAllows('super_admin', '/dashboard/leads')).toBe(true)
@@ -121,9 +128,11 @@ describe('defaultAllows — one page per role', () => {
     for (const href of excluded) expect(defaultAllows('account_manager', href)).toBe(false)
     for (const { href } of GRANTABLE_PAGES) {
       if (excluded.includes(href) || GRANT_ONLY_PAGES.has(href)) continue
+      // …reached through Social, like every other Social child
+      if (href === SCHEDULE_PAGE) continue
       expect(defaultAllows('account_manager', href)).toBe(true)
     }
-    for (const href of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', SCHEDULE_PAGE]) {
+    for (const href of ['/dashboard/production', '/dashboard/editor', SCHEDULE_PAGE]) {
       expect(canSeePage('account_manager', href, []), href).toBe(true)
     }
     // and a grant can still open them for a specific person
@@ -174,7 +183,7 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 
   it('cannot take away what the ladder already gave', () => {
     expect(canSeePage('editor', '/dashboard/editor', [])).toBe(true)
-    expect(canSeePage('scheduler', '/dashboard/scheduler', [])).toBe(true)
+    expect(canSeePage('scheduler', SCHEDULE_PAGE, [])).toBe(true)
     expect(canSeePage('account_manager', '/dashboard/clients', [])).toBe(true)
   })
 

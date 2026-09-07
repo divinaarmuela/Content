@@ -20,7 +20,7 @@ const DASHBOARD = join(process.cwd(), 'app', 'dashboard')
 
 /** A page under one of these renders inside a layout that ALWAYS draws a
  *  PageTitle, so the page itself must not draw a second one. */
-const LAYOUTS_THAT_TITLE_EVERYTHING = ['clients/[id]', 'scheduler', 'settings']
+const LAYOUTS_THAT_TITLE_EVERYTHING = ['clients/[id]', 'settings']
 
 /**
  * `production/layout.tsx` draws a PageTitle for Availability and Proposals
@@ -52,8 +52,11 @@ function pages(dir: string, found: string[] = []): string[] {
 
 const key = (file: string) => relative(DASHBOARD, file).replace(/\\/g, '/')
 
-/** A page that only calls `redirect()` never renders anything to put a title on. */
-const isRedirectOnly = (src: string) => src.includes('redirect(') && !src.includes('return (')
+/** A page that only redirects never renders anything to put a title on —
+ *  `redirect()` or `permanentRedirect()`, which is what the folded Scheduler
+ *  addresses use. */
+const isRedirectOnly = (src: string) =>
+  /(?:permanentRedirect|redirect)\(/.test(src) && !src.includes('return (')
 
 const hasHeading = (src: string) => src.includes('PageTitle') || src.includes('<h1')
 

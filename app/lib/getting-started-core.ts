@@ -65,21 +65,21 @@ const SCHEDULER: GettingStartedPanel = {
   steps: [
     {
       title: 'See what is coming',
-      body: 'Every card for your clients is on the board: Ready to post and Posted have the room, and what is still being made is folded into "Coming up" on the left. Only Ready to post has been signed off — nothing else is yours to post yet.',
-      href: '/dashboard/scheduler',
+      body: 'Every card for your clients is on the Schedule page’s Board view, Draft to Posted. Only Ready to post has been signed off — nothing else is yours to post yet.',
+      href: '/dashboard/social/schedule?view=board',
       linkLabel: 'See the board',
     },
     {
       title: 'Take the link, post it, move the card',
-      body: 'Each card shows what needs doing and the link to the work. Post it on the Schedule page, then press "Booked in" on the card — and "Posted" once it is live.',
-      href: '/dashboard/social/schedule',
-      linkLabel: 'Open the Schedule page',
+      body: 'Each card shows what needs doing and the link to the work. Post it on the Calendar view, then press "Booked in" on the card — and "Posted" once it is live.',
+      href: '/dashboard/social/schedule?view=calendar',
+      linkLabel: 'Open the calendar',
     },
     {
-      title: 'Booked in is not posted',
-      body: 'Booked in means it has a time. Posted means it is actually live. The posting calendar shows both.',
-      href: '/dashboard/scheduler/calendar',
-      linkLabel: 'Open the posting calendar',
+      title: 'Everything waiting on somebody is in one place',
+      body: 'Approvals lists posts sent for sign-off and work sitting with the client. Booked in means a post has a time; Posted means it is actually live.',
+      href: '/dashboard/social/schedule?view=approvals',
+      linkLabel: 'See what is waiting',
     },
   ],
 }
@@ -126,9 +126,9 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
     },
     {
       title: 'Signed off means "ready to post"',
-      body: 'Once the client has signed off, the card moves to Ready to post and off this board for you. The Scheduler page shows it from there until it is live.',
-      href: '/dashboard/scheduler',
-      linkLabel: 'Open the Scheduler',
+      body: 'Once the client has signed off, the card moves to Ready to post and off this board for you. The Schedule page shows it from there until it is live.',
+      href: '/dashboard/social/schedule?view=board',
+      linkLabel: 'Open the Schedule',
     },
   ],
 }

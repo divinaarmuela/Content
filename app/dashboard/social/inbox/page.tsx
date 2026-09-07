@@ -19,6 +19,7 @@ import PlatformIcon from '../PlatformIcon'
 import ConfirmAction from '../../ConfirmAction'
 import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
+import { scheduleViewHref } from '@/app/lib/schedule-page-core'
 
 /**
  * Master/detail on a phone.
@@ -518,7 +519,7 @@ export default function InboxPage() {
                   : 'Nothing has been commented on for this account yet. Switch to “All accounts” to see every post.'}
                 actionLabel={acct === 'all' ? 'Open the posting calendar' : 'Show all accounts'}
                 onAction={acct === 'all' ? undefined : () => changeAccount('all')}
-                actionHref={acct === 'all' ? '/dashboard/scheduler/calendar' : undefined}
+                actionHref={acct === 'all' ? scheduleViewHref('calendar') : undefined}
                 className="border-0"
               />
             ) : (
