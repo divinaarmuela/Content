@@ -26,6 +26,8 @@ import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
 import { awaitsClientPostApproval } from './posting-approval-core'
 import { portalIntakeForms, type PortalIntakeForm } from './intake-portal-core'
+import { loadPortalFollowers } from './portal-followers'
+import type { PortalFollowers } from './followers-core'
 import {
   brandLogoUrl, cardLine, isClientFacing, kindWord, linkFor, portalActions, portalCardTone,
   portalColumnFor, shootDayLabel, shootStanding, toPortalComment,
@@ -218,6 +220,10 @@ export type PortalData = {
    *  "show on the client portal" — most recent first. Empty for nearly every
    *  client, and an empty list means the portal shows NO intake tab at all. */
   intake: PortalIntakeForm[]
+  /** the client's followers — only when their manager switched "Show
+   *  followers to the client" on; null otherwise, and the portal shows
+   *  no Followers section at all */
+  followers?: PortalFollowers | null
 }
 
 /**
@@ -270,7 +276,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const tz = safeZone(clientRow.timezone as string | null)
   const { month, year } = monthInZone(now, tz) ?? { month: now.getMonth() + 1, year: now.getFullYear() }
 
-  const [itemRows, commitmentRow, brandRow, shootRows, amRes, intake] = await Promise.all([
+  const [itemRows, commitmentRow, brandRow, shootRows, amRes, intake, followers] = await Promise.all([
     table<ContentItem>('content_items')
       .list({ by: { client_id: clientId }, orderBy: [['updated_at', 'desc']], limit: 300 })
       .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media', 'name'])),
@@ -293,6 +299,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     accountManagerName(clientId),
     // the toggled-on intake forms — its own tolerant read (see loadPortalIntake)
     loadPortalIntake(clientId),
+    // who follows — only when switched on for this client; its own tolerant read
+    loadPortalFollowers(clientId),
   ])
   type KindRow = { slug?: string | null; uses_media?: boolean | null } | null
   // a shoot BRIEF is internal planning work riding the item pipeline — the
@@ -659,6 +667,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     published_by_type: typeTotals(publishedRows, now, tz),
     shoots,
     intake,
+    followers,
   }
 }
 

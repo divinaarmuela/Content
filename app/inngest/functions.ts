@@ -644,6 +644,114 @@ export const encodeSweep = inngest.createFunction(
   }))
 )
 
+/**
+ * WHO FOLLOWS — the morning look at every client Instagram account.
+ *
+ * Instagram tells nobody when somebody followed; it only hands the list back
+ * newest first. So every morning (Melbourne) each public client account's
+ * NEWEST N are read — one or two provider requests — and whoever was not
+ * there before joined. On the client's chosen day (Monday, or the 1st) the
+ * WHOLE list is read instead, capped, and that is the only look that may
+ * say somebody LEFT. One event per account, so a slow or broken account
+ * costs nobody else their morning.
+ *
+ * The dedupe key is account + mode + day — the same string the snapshot row
+ * is claimed on (app/lib/followers.ts), so a manual "Refresh now" landing on
+ * the same morning collapses into it at BOTH layers.
+ *
+ * (CLAUDE.md trap 5b: a NEW Inngest function does nothing until the app is
+ * re-synced. `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`.)
+ */
+export const followersDaily = inngest.createFunction(
+  {
+    id: 'followers-daily',
+    name: 'Followers: the morning look',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 0 6 * * *' }],
+    retries: 1,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => withRequestCache(async () => {
+    // first, who liked and commented on this week's posts — read once a day
+    // for a post's first week, a handful of requests each, and never retried
+    // on a paid failure (its own step, so it never re-runs the dispatch)
+    const interactors = await step.run('read-post-interactors', async () => {
+      const { readDueInteractors } = await import('../lib/post-interactors')
+      return readDueInteractors(new Date())
+    })
+    const due = await step.run('who-is-due', async () => {
+      const { accountsDueToday } = await import('../lib/followers')
+      return accountsDueToday(new Date())
+    })
+    if (due.length === 0) return { interactors, skipped: 'nothing due — not switched on, or no public Instagram accounts' }
+    await step.sendEvent(
+      'dispatch-looks',
+      due.map(d => ({
+        name: 'app/followers.snapshot.requested',
+        data: { accountId: d.accountId, mode: d.mode, trigger: 'scheduled' as const, dedupe: `${d.accountId}:${d.mode}:${d.day}` },
+      }))
+    )
+    return { interactors, dispatched: due.length }
+  })
+)
+
+/**
+ * One look at one account, a page at a time.
+ *
+ * `begin` claims the snapshot row and reads the profile (a private account
+ * is settled right there); then `pages-N` steps each read up to forty pages
+ * and write what they saw, until the list ends or the cap is reached. The
+ * row carries the cursor, so a step that dies resumes from the row — and a
+ * look that somehow outlives its step budget is settled `failed` rather than
+ * left `running` for ever.
+ *
+ * `retries: 0` ON PURPOSE. The provider bills every completed response,
+ * failures included, so a step that failed on a paid answer must not be
+ * asked again automatically; the morning cron is the retry, tomorrow.
+ */
+export const followersSnapshot = inngest.createFunction(
+  {
+    id: 'followers-snapshot',
+    name: 'Followers: one account',
+    triggers: [{ event: 'app/followers.snapshot.requested' }],
+    retries: 0,
+    concurrency: { limit: 2 },
+    idempotency: 'event.data.dedupe',
+  },
+  async ({ event, step }) => withRequestCache(async () => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const accountId = String(data.accountId ?? '')
+    const mode = data.mode === 'full' ? 'full' as const : 'top' as const
+    const trigger = data.trigger === 'manual' ? 'manual' as const : 'scheduled' as const
+    if (!accountId) return { skipped: 'no accountId' }
+
+    const begun = await step.run('begin', async () => {
+      const { beginSnapshot } = await import('../lib/followers')
+      return beginSnapshot({ accountId, mode, trigger })
+    })
+    if (begun.status !== 'running') return begun
+
+    const { MAX_STEPS } = await import('../lib/followers')
+    for (let i = 0; i < MAX_STEPS; i++) {
+      const r = await step.run(`pages-${i}`, async () => {
+        const { advanceSnapshot } = await import('../lib/followers')
+        return advanceSnapshot(begun.id)
+      })
+      if (r.done) {
+        // …and with the followers fresh, who followed from which post
+        const cross = await step.run('cross-with-posts', async () => {
+          const { crossFollowersWithPosts } = await import('../lib/post-interactors')
+          return crossFollowersWithPosts(accountId)
+        })
+        return { id: begun.id, ...r, cross }
+      }
+    }
+    return step.run('settle', async () => {
+      const { failSnapshot } = await import('../lib/followers')
+      return failSnapshot(begun.id, 'too long')
+    })
+  })
+)
+
 export const functions = [
   dueReminders,
   driveMirrorFile,
@@ -661,4 +769,6 @@ export const functions = [
   mediaEncode,
   mediaEncodeFinished,
   encodeSweep,
+  followersDaily,
+  followersSnapshot,
 ]

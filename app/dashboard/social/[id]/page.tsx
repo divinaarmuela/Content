@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink,
-  KeyRound, MessageSquare, RefreshCw, XCircle,
+  KeyRound, MessageSquare, RefreshCw, Users, XCircle,
 } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 import PageTitle from '../../ui/PageTitle'
@@ -223,6 +223,14 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
             >
               <MessageSquare className="h-3.5 w-3.5" /> Inbox
             </Link>
+            {account.platform === 'instagram' && (
+              <Link
+                href={`/dashboard/social/${account.id}/followers`}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-body-15 transition-colors hover:bg-foreground/[0.04]"
+              >
+                <Users className="h-3.5 w-3.5" /> Followers
+              </Link>
+            )}
           </div>
         </CardContent>
       </Card>

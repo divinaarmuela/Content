@@ -690,7 +690,7 @@ export async function syncSocialAccounts(clientId: string, profileId: string): P
   if (accounts.length === 0) return 0
 
   for (const a of accounts) {
-    await table<SocialAccount>('social_accounts').upsert({
+    const row = await table<SocialAccount>('social_accounts').upsert({
       client_id: clientId,
       platform: a.platform,
       provider_account_id: a.providerAccountId,
@@ -703,6 +703,24 @@ export async function syncSocialAccounts(clientId: string, profileId: string): P
       active: true,
       last_synced_at: new Date().toISOString(),
     }, { onConflict: 'provider_account_id' })
+    // "when we connect an account, that's where the scraper should start
+    // collecting": an Instagram account that has never been looked at gets
+    // its baseline — the whole list — now, not at the next 06:00. Once, by
+    // the snapshot claim; nothing for anyone to press; best-effort.
+    if (a.platform === 'instagram' && a.username) await firstFollowerLook(row.id).catch(() => undefined)
   }
   return accounts.length
+}
+
+async function firstFollowerLook(accountId: string): Promise<void> {
+  const { followersEnabled, snapshotsOf } = await import('./followers')
+  if (!followersEnabled()) return
+  if ((await snapshotsOf(accountId)).length > 0) return
+  const { dayKey, snapshotId } = await import('./followers-core')
+  const { inngest } = await import('../inngest/client')
+  const day = dayKey(new Date())
+  await inngest.send({
+    name: 'app/followers.snapshot.requested',
+    data: { accountId, mode: 'full' as const, trigger: 'scheduled' as const, dedupe: snapshotId(accountId, 'full', day) },
+  })
 }

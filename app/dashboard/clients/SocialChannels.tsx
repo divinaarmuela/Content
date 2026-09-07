@@ -290,6 +290,15 @@ export default function SocialChannels(
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
                 </Link>
+                {a.platform === 'instagram' && (
+                  <Link
+                    href={`/dashboard/social/${a.id}/followers`}
+                    className="inline-flex min-h-11 items-center rounded-full px-3 text-secondary-13 text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+                    title="Who follows this account"
+                  >
+                    Followers
+                  </Link>
+                )}
                 <Button
                   variant="ghost" size="sm"
                   onClick={() => setConfirm(a)}

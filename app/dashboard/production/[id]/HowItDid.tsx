@@ -15,6 +15,7 @@ import {
   type PostPerformance,
 } from '../../../lib/post-performance-core'
 import type { PostPerformanceResponse } from '../../../api/social/post-performance/route'
+import { fromThisPostLine, readInteractors, type FollowedFromPost } from '../../../lib/followers-core'
 
 /**
  * HOW IT DID — the section on a posted card.
@@ -81,7 +82,7 @@ export default function HowItDid({ itemId, platformHint, compact = false }: {
               : noNumbersLine(platform)}
         </p>
       ) : (
-        <Numbers p={performance} compact={compact} />
+        <Numbers p={performance} compact={compact} followed={readInteractors(row?.interactors)?.followed ?? []} />
       )}
 
       {performance && performance.comments.length > 0 && (
@@ -118,7 +119,7 @@ export default function HowItDid({ itemId, platformHint, compact = false }: {
   )
 }
 
-function Numbers({ p, compact }: { p: PostPerformance; compact: boolean }) {
+function Numbers({ p, compact, followed }: { p: PostPerformance; compact: boolean; followed: FollowedFromPost[] }) {
   const total = p.interactions.total
   const followers = shownFollowers(p)
   const fLine = followersLine(followers)
@@ -155,6 +156,7 @@ function Numbers({ p, compact }: { p: PostPerformance; compact: boolean }) {
               </span>
             </p>
             {fNote && <p className="text-secondary-13 text-muted-foreground">{fNote}</p>}
+            <FollowedFromThisPost followed={followed} />
           </div>
         ) : (
           <p className="text-secondary-13 text-muted-foreground">
@@ -174,6 +176,43 @@ function Numbers({ p, compact }: { p: PostPerformance; compact: boolean }) {
         </figure>
       )}
     </div>
+  )
+}
+
+/**
+ * "7 of them liked or commented on this post" — the people who followed on
+ * or after the day this went up AND liked or commented on it. Faces in a
+ * row, like the assignee avatars; a tap opens the names. Nothing when the
+ * cross is empty: the sentence is only said when it is true.
+ */
+function FollowedFromThisPost({ followed }: { followed: FollowedFromPost[] }) {
+  const line = fromThisPostLine(followed)
+  if (!line) return null
+  const faces = followed.slice(0, 8)
+  return (
+    <details className="group mt-1">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-body-15 text-foreground [&::-webkit-details-marker]:hidden">
+        <span className="flex -space-x-2" aria-hidden>
+          {faces.map(f => f.profile_pic ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={f.username} src={f.profile_pic} alt="" className="h-7 w-7 rounded-full border-2 border-surface object-cover" loading="lazy" />
+          ) : (
+            <span key={f.username} className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-foreground/[0.08] text-[11px] font-semibold">
+              {f.username.slice(0, 1).toUpperCase()}
+            </span>
+          ))}
+        </span>
+        <span className="font-medium underline-offset-4 group-open:underline">{line}</span>
+      </summary>
+      <ul className="mt-2 flex flex-col gap-1">
+        {followed.map(f => (
+          <li key={f.username} className="flex min-h-11 items-center gap-2 text-body-15">
+            <span className="font-medium">{f.full_name || f.username}</span>
+            <span className="font-mono text-secondary-13 text-muted-foreground">@{f.username} · {f.how}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 

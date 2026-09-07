@@ -222,6 +222,61 @@ const GHOST_TABLES = {
     ['last_error', col('string', true)],
     ['updated_at', col('string', false)],
   ],
+  // follower_snapshots — one LOOK at an Instagram account's follower list
+  //   (app/lib/followers-core.ts). Two kinds: a daily 'top' look that reads
+  //   only the newest N (Instagram hands the list back newest-first, so the
+  //   newest N is where every new follower is) and a 'full' look, weekly or
+  //   monthly, that reads the whole list (capped) and is the only look that
+  //   may say somebody LEFT. The row id is `<account_id>:<mode>:<bucket>`
+  //   and is CLAIMED, so one account is looked at once per day (once per
+  //   hour for a "Refresh now"). `requests` is what the look cost in
+  //   provider calls; `cost_note` is that as money, for the super admin.
+  follower_snapshots: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['platform', col('string', false)],
+    ['mode', col('string', false)],          // top | full
+    ['trigger', col('string', false)],       // scheduled | manual
+    ['day', col('string', false)],           // Melbourne calendar day
+    ['taken_at', col('string', false)],
+    ['count', col('number', true)],          // the account's follower count, as the source reported it
+    ['seen', col('number', false)],          // followers read so far
+    ['requests', col('number', false)],
+    ['limit', col('number', false)],
+    ['cursor', col('string', true)],         // where the next page starts; null = the list is exhausted
+    ['user_pk', col('string', true)],
+    ['seeded', col('boolean', false)],       // an earlier look had finished, so a stranger today is NEW
+    ['source', col('string', false)],
+    ['cost_note', col('string', true)],
+    ['status', col('string', false)],        // running | done | private | failed
+    ['error', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  // followers — one row per person following one of a client's Instagram
+  //   accounts, id `<account_id>:<pk>` (the platform's numeric id, so a
+  //   rename is a rename and not a leave-and-join). `first_seen_at` is the
+  //   day we first saw them — the join date as far as anyone can know it;
+  //   null means they were already there when watching began. `gone_at` is
+  //   the day a full look found them missing; it is cleared if they come
+  //   back. `position_last` is where the last look found them (0 = newest).
+  followers: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['pk', col('string', false)],
+    ['username', col('string', false)],
+    ['full_name', col('string', true)],
+    ['profile_pic', col('string', true)],
+    ['is_private', col('boolean', false)],
+    ['is_verified', col('boolean', false)],
+    ['first_seen_at', col('string', true)],
+    ['last_seen_at', col('string', false)],
+    ['gone_at', col('string', true)],
+    ['position_last', col('number', true)],
+    ['updated_at', col('string', false)],
+  ],
   boards: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
@@ -286,7 +341,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
@@ -317,6 +372,15 @@ for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_
 //     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
+  //   post_analytics.interactors — WHO liked and commented on the live post,
+  //     by handle (app/lib/followers-core.ts, `Interactors`), read once a day
+  //     for the post's first week, and the cross with the account's new
+  //     followers: `followed` = the people who followed on or after the post
+  //     went up AND liked or commented on it — "followed from this post".
+  //     Lives on the post's row beside `performance` so the board and the
+  //     card read it off the same live subscription. Null until the first
+  //     read; a post older than a week is never read again.
+  post_analytics: [['interactors', col('unknown', true, true)]],
   //   content_items.link_url / link_kind — A CARD CARRIES A LINK (the three
   //     pages reset, 6 Sep 2026). Where the work lives: a Google Drive or
   //     Dropbox URL somebody pasted, labelled by host ('drive' | 'dropbox' |
@@ -355,6 +419,14 @@ const GHOST_COLUMNS = {
     //     the app added "helpfully" is a change to someone else's filing that
     //     nobody asked for and nothing undoes.
     ['drive_folder_origin', col('string', true)],
+    //   clients.followers_on_portal / followers_daily_top /
+    //     followers_full_cadence — the "who follows" feature's three
+    //     per-client choices (app/lib/followers-core.ts). All nullable:
+    //     absent means off the portal, the newest 100 every morning, and a
+    //     full read of the list once a month.
+    ['followers_on_portal', col('boolean', true)],
+    ['followers_daily_top', col('number', true)],
+    ['followers_full_cadence', col('string', true)],
   ],
   //   drive_connection.root_* — WHERE the filing cabinet is.
   //     The app can only see folders it made itself (the drive.file scope), so

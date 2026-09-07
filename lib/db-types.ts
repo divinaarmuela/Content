@@ -42,6 +42,8 @@ export type TableName =
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
+  | 'follower_snapshots'
+  | 'followers'
   | 'instagram_videos'
   | 'intake_files'
   | 'intake_forms'
@@ -474,6 +476,9 @@ export interface Client {
   client_approval_required: boolean | null
   drive_folder_id: string | null
   drive_folder_origin: string | null
+  followers_on_portal: boolean | null
+  followers_daily_top: number | null
+  followers_full_cadence: string | null
 }
 
 export interface ContentApplication {
@@ -640,6 +645,47 @@ export interface EncodeJob {
   video_kbps: number | null
   error: string | null
   created_at: string
+  updated_at: string
+}
+
+export interface FollowerSnapshot {
+  id: string
+  account_id: string
+  client_id: string
+  platform: string
+  mode: string
+  trigger: string
+  day: string
+  taken_at: string
+  count: number | null
+  seen: number
+  requests: number
+  limit: number
+  cursor: string | null
+  user_pk: string | null
+  seeded: boolean
+  source: string
+  cost_note: string | null
+  status: string
+  error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Follower {
+  id: string
+  account_id: string
+  client_id: string
+  pk: string
+  username: string
+  full_name: string | null
+  profile_pic: string | null
+  is_private: boolean
+  is_verified: boolean
+  first_seen_at: string | null
+  last_seen_at: string
+  gone_at: string | null
+  position_last: number | null
   updated_at: string
 }
 
@@ -829,6 +875,7 @@ export interface PostAnalytic {
   raw: unknown
   source: string | null
   performance: unknown | null
+  interactors: unknown | null
 }
 
 export interface Project {
@@ -1166,7 +1213,7 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at'],
@@ -1176,6 +1223,8 @@ export const TABLE_COLUMNS = {
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
+  follower_snapshots: ['id', 'account_id', 'client_id', 'platform', 'mode', 'trigger', 'day', 'taken_at', 'count', 'seen', 'requests', 'limit', 'cursor', 'user_pk', 'seeded', 'source', 'cost_note', 'status', 'error', 'created_at', 'updated_at'],
+  followers: ['id', 'account_id', 'client_id', 'pk', 'username', 'full_name', 'profile_pic', 'is_private', 'is_verified', 'first_seen_at', 'last_seen_at', 'gone_at', 'position_last', 'updated_at'],
   instagram_videos: ['id', 'video', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
@@ -1188,7 +1237,7 @@ export const TABLE_COLUMNS = {
   monthly_updates: ['id', 'created_at', 'client_id', 'month', 'year', 'definition', 'token', 'status', 'answers', 'notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'title', 'created_by'],
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
   notification_log: ['id', 'created_at', 'dedupe_key', 'event_type', 'recipient_id', 'recipient_email', 'subject', 'body_html', 'entity_type', 'entity_id', 'channel', 'status', 'sent_at', 'error', 'retry_count', 'read_at', 'claimed_at'],
-  post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance'],
+  post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'id', 'created_at', 'updated_at', 'client_id', 'slug', 'name', 'industry', 'tag', 'services', 'description', 'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach', 'outcome', 'sort_order', 'published'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
   publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at'],
@@ -1243,7 +1292,7 @@ export const NULLABLE_COLUMNS = {
   client_contacts: [],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['group_id', 'drive_folder_id', 'drive_url', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at'],
@@ -1253,6 +1302,8 @@ export const NULLABLE_COLUMNS = {
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
+  follower_snapshots: ['count', 'cursor', 'user_pk', 'cost_note', 'error'],
+  followers: ['full_name', 'profile_pic', 'first_seen_at', 'gone_at', 'position_last'],
   instagram_videos: ['video', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
   intake_files: [],
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
@@ -1265,7 +1316,7 @@ export const NULLABLE_COLUMNS = {
   monthly_updates: ['notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by'],
   newsletter_subscribers: [],
   notification_log: ['recipient_id', 'entity_type', 'entity_id', 'sent_at', 'error', 'read_at', 'claimed_at'],
-  post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance'],
+  post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'client_id', 'result'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
   publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at'],
@@ -1337,6 +1388,8 @@ export const JSON_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  follower_snapshots: [],
+  followers: [],
   instagram_videos: [],
   intake_files: [],
   intake_forms: ['definition', 'answers'],
@@ -1349,7 +1402,7 @@ export const JSON_COLUMNS = {
   monthly_updates: ['definition', 'answers'],
   newsletter_subscribers: [],
   notification_log: [],
-  post_analytics: ['raw', 'performance'],
+  post_analytics: ['raw', 'performance', 'interactors'],
   projects: [],
   provider_webhooks: ['events'],
   publish_jobs: ['media', 'targets'],
@@ -1420,6 +1473,8 @@ export const JSON_ARRAY_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  follower_snapshots: [],
+  followers: [],
   instagram_videos: [],
   intake_files: [],
   intake_forms: [],
@@ -1457,7 +1512,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

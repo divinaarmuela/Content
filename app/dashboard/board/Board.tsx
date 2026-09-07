@@ -14,6 +14,7 @@ import { friendlyError } from '../../lib/support-core'
 import { useTable } from '@/lib/db-client'
 import type { PostAnalytic } from '@/lib/db-types'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
+import { readInteractors, withFromThisPost } from '../../lib/followers-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
@@ -146,7 +147,8 @@ export function Board({
     const sorted = [...analyticRows].sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? ''))
     for (const r of sorted) {
       if (!r.item_id || out.has(r.item_id)) continue
-      const line = boardLine(readPerformance(r.performance))
+      // …plus who followed from this post, off the same row
+      const line = withFromThisPost(boardLine(readPerformance(r.performance)), readInteractors(r.interactors)?.followed)
       if (line) out.set(r.item_id, line)
     }
     return out

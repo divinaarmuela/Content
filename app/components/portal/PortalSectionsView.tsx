@@ -6,6 +6,7 @@ import { pickPortalTheme } from '../../lib/portal-theme'
 import { PortalCardView, type Surface } from './PortalBoard'
 import ShootBoard from './ShootBoard'
 import { SectionHeading } from './PortalSections'
+import PortalFollowersView from './PortalFollowers'
 
 /**
  * THE PORTAL, TOP TO BOTTOM — the layout the owner asked back for.
@@ -98,6 +99,8 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
       {grid('production')}
       {grid('approved')}
       {grid('published')}
+      {/* the client's followers — only when their manager switched it on */}
+      {data.followers && <PortalFollowersView data={data.followers} />}
     </div>
   )
 }

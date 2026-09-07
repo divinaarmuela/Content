@@ -1,0 +1,148 @@
+{
+  "recorded_at": "2026-09-07",
+  "note": "HikerAPI responses observed live (nasa, a public account), trimmed to the fields the app reads and a few items each; picture URLs shortened.",
+  "profile": {
+    "pk": 528817151,
+    "username": "nasa",
+    "full_name": "NASA",
+    "is_private": false,
+    "is_verified": true,
+    "follower_count": 104399056,
+    "profile_pic_url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-19/29090066_159271188110124_1152068159029641216_n.jpg?trimmed"
+  },
+  "followers_chunk": [
+    [
+      {
+        "pk": "30822275979",
+        "id": "30822275979",
+        "username": "astro.sed",
+        "full_name": "AstroSED",
+        "profile_pic_url": "https://scontent-bos5-1.cdninstagram.com/v/t51.82787-19/797903900_18101523689027980_7292010754552660842_n.jpg?trimmed",
+        "is_private": false,
+        "is_verified": false
+      },
+      {
+        "pk": "37902108035",
+        "id": "37902108035",
+        "username": "tao000164",
+        "full_name": "Tao",
+        "profile_pic_url": "https://scontent-bos5-1.cdninstagram.com/v/t51.82787-19/793027908_18092699978260036_6980751907267616671_n.jpg?trimmed",
+        "is_private": false,
+        "is_verified": false
+      },
+      {
+        "pk": "68191704872",
+        "id": "68191704872",
+        "username": "th.mt7_",
+        "full_name": "🦖",
+        "profile_pic_url": "https://scontent-bos5-1.cdninstagram.com/v/t51.82787-19/727321309_17934587715272873_6104565647275937506_n.jpg?trimmed",
+        "is_private": true,
+        "is_verified": false
+      },
+      {
+        "pk": "31268184702",
+        "id": "31268184702",
+        "username": "zenith._ymir",
+        "full_name": "𓆩𝑅𝑒𝑖𝟶𝟸𝟿𓆪✵ ༘",
+        "profile_pic_url": "https://scontent-bos5-1.cdninstagram.com/v/t51.82787-19/791778313_18099544112040703_5375993318313967042_n.jpg?trimmed",
+        "is_private": false,
+        "is_verified": false
+      }
+    ],
+    null
+  ],
+  "media": {
+    "pk": "3967213292204992434",
+    "id": "3967213292204992434_528817151",
+    "code": "DcOX3hWFiey",
+    "taken_at": "2026-08-19T14:11:47Z",
+    "like_count": 549985,
+    "comment_count": 4082
+  },
+  "likers": [
+    {
+      "pk": "14705588107",
+      "id": "14705588107",
+      "username": "ankit_yadav_2946",
+      "full_name": "Ankit Yadav",
+      "profile_pic_url": "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-19/696513336_18134318158492108_2362135627433738947_n.jpg?trimmed",
+      "is_private": true,
+      "is_verified": false
+    },
+    {
+      "pk": "64688461980",
+      "id": "64688461980",
+      "username": "sohamjaybhaye7406",
+      "full_name": "🦚  𝑺 ᴏ ʜ ᴀ 𝑴..🦥",
+      "profile_pic_url": "https://scontent-dfw6-1.cdninstagram.com/v/t51.82787-19/786213692_17965556457157981_2555824761313086284_n.jpg?trimmed",
+      "is_private": false,
+      "is_verified": false
+    },
+    {
+      "pk": "66771724012",
+      "id": "66771724012",
+      "username": "lliammarryme",
+      "full_name": "Mrs. Sim",
+      "profile_pic_url": "https://scontent-dfw6-1.cdninstagram.com/v/t51.82787-19/686180234_17938630470228013_2679033046308443716_n.jpg?trimmed",
+      "is_private": true,
+      "is_verified": false
+    },
+    {
+      "pk": "50448703243",
+      "id": "50448703243",
+      "username": "ahiristic",
+      "full_name": "Belgian चूरमा",
+      "profile_pic_url": "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-19/587206010_18043878455687244_7317403053691976500_n.jpg?trimmed",
+      "is_private": true,
+      "is_verified": false
+    }
+  ],
+  "comments_chunk": [
+    [
+      {
+        "pk": "18088724384647690",
+        "text": "Three telescopes, three completely different views of the un",
+        "user": {
+          "pk": "47457549910",
+          "id": "47457549910",
+          "username": "synthiqfuture",
+          "full_name": "Synthiq Future",
+          "profile_pic_url": "https://scontent-iad6-1.cdninstagram.com/v/t51.82787-19/754046675_18054149120581911_6780384379722830492_n.jpg?trimmed",
+          "is_private": false,
+          "is_verified": false
+        },
+        "created_at_utc": "2026-08-19T14:23:47Z"
+      },
+      {
+        "pk": "17979728991110710",
+        "text": "Image description: The Tarantula Nebula—vibrant and colorful",
+        "user": {
+          "pk": "528817151",
+          "id": "528817151",
+          "username": "nasa",
+          "full_name": "NASA",
+          "profile_pic_url": "https://scontent-iad3-1.cdninstagram.com/v/t51.2885-19/29090066_159271188110124_1152068159029641216_n.jpg?trimmed",
+          "is_private": false,
+          "is_verified": true
+        },
+        "created_at_utc": "2026-08-19T14:11:50Z"
+      },
+      {
+        "pk": "18100397798347184",
+        "text": "",
+        "user": {
+          "pk": "5942783044",
+          "id": "5942783044",
+          "username": "vegan_madhu_26",
+          "full_name": "vegan Devote Of Krishn🪷🦚❤️‍🩹",
+          "profile_pic_url": "https://scontent-iad6-1.cdninstagram.com/v/t51.82787-19/588410192_18388663774199045_4958214217375978544_n.jpg?trimmed",
+          "is_private": false,
+          "is_verified": false
+        },
+        "created_at_utc": "2026-08-19T14:15:17Z"
+      }
+    ],
+    "IntcImNhY2hlZF9jb21tZW50c19jdXJzb3JcIjpcIjE3OTc5NzI4OTkxMTEwNzEwXCIsXCJiaWZpbHRlcl90b2tlblwiOlwiR2dZWWdRRUFaOVJKdzc2ZFB3Q3dVUkJGTjA1QUFLaEQwbG03S2tBQUxqVDJkNW1JUUFCQXB2M1BKTjhfQU90Tmg3UXpoejhBRjJnQWdDbGJRQUFLQ21OWG1VTkFBSW1RUEZBY1prQUE3SEFqRTBsY1FBQkNNcGdMVTdvX0FQSmpINlFqVWtBQTEtOFlBWkpTUUFBc1o0VUdTcWdfQVAyQzB6dXhRVUFBMnJYaVJzQmVRQUFBXCJ9Ig==",
+    null
+  ]
+}

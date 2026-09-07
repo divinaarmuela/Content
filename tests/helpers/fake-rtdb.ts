@@ -112,14 +112,25 @@ export function installFakeRtdb(seed: Json = {}) {
 
     if (method === 'GET') {
       const orderBy = url.searchParams.get('orderBy'), equalTo = url.searchParams.get('equalTo')
-      if (orderBy) {
+      const startAt = url.searchParams.get('startAt'), endAt = url.searchParams.get('endAt')
+      // `orderBy="$key"` is the one ordering the real database serves with no
+      // index at all — a key range (`startAt`/`endAt` on the key itself) is
+      // how a prefix like `<account>:` is read without an .indexOn
+      const byKey = orderBy !== null && JSON.parse(orderBy) === '$key'
+      if (orderBy && !byKey) {
         const col = JSON.parse(orderBy)
         if (!INDEXED_COLUMNS.has(col)) {
           return respond({ error: `Index not defined, add ".indexOn": "${col}", for the path "/${segs.join('/')}" to your security rules for better performance` }, 400)
         }
       }
       let node = structuredClone(getAt(tree, segs))
-      if (orderBy && equalTo !== null && node && typeof node === 'object') {
+      if (byKey && node && typeof node === 'object' && (startAt !== null || endAt !== null)) {
+        const lo = startAt !== null ? String(JSON.parse(startAt)) : null
+        const hi = endAt !== null ? String(JSON.parse(endAt)) : null
+        node = Object.fromEntries(Object.entries(node).filter(([k]) => (lo === null || k >= lo) && (hi === null || k <= hi)))
+        if (!Object.keys(node).length) node = null
+      }
+      if (orderBy && !byKey && equalTo !== null && node && typeof node === 'object') {
         const col = JSON.parse(orderBy), val = JSON.parse(equalTo)
         node = Object.fromEntries(Object.entries(node).filter(([, r]: any) => r?.[col] === val))
         if (!Object.keys(node).length) node = null

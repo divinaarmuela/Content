@@ -3,6 +3,7 @@ import { useParams } from 'next/navigation'
 import SocialChannels from '../../SocialChannels'
 import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
+import FollowerSettings from '../../FollowerSettings'
 import { useRole } from '../../../useRole'
 
 export default function ClientSocialPage() {
@@ -21,6 +22,8 @@ export default function ClientSocialPage() {
           because it is the same kind of thing — a setting about this client's
           accounts that the composer then just uses. */}
       <InstagramLocations clientId={id} />
+      {/* Who follows: on the portal or not, and how often the list is read. */}
+      <FollowerSettings clientId={id} mayEdit={can('account_manager')} />
     </div>
   )
 }
