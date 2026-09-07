@@ -114,11 +114,15 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'scheduler' && u.active_status })
     case 'assigned_schedulers': {
-      // only the people this item was explicitly handed to — never the whole
-      // scheduling team. No handoff yet → nobody.
+      // the people this card was handed to — or, when nobody was (the card
+      // page no longer hands posting out; the card simply reaches Ready to
+      // post), every active scheduler, so the queue is never silent
       const ids = (Array.isArray(item.scheduler_ids) ? item.scheduler_ids : [])
         .filter((x): x is string => typeof x === 'string').slice(0, 20)
-      if (ids.length === 0) return []
+      if (ids.length === 0) {
+        return table<TeamUserRow>('team_users')
+          .list({ where: u => u.role === 'scheduler' && u.active_status })
+      }
       return table<TeamUserRow>('team_users')
         .list({ where: u => ids.includes(u.id) && u.active_status })
     }
