@@ -1,13 +1,12 @@
 'use client'
 
 /**
- * Start a post from the Scheduler.
+ * Start a post, from anywhere on the Schedule page.
  *
- * The Scheduler is where posting is decided, and until now the only way to
- * make a post was to leave it: over to Social, find the client, open the
- * composer there. Every ad-hoc post — the reactive one, the story that has to
- * go out this afternoon — meant navigating away from the queue you were
- * working, and coming back to find your place again.
+ * The header's one button, on all three views. Posting is decided here, and
+ * until this existed the only way to make an off-plan post — the reactive
+ * one, the story that has to go out this afternoon — was to leave the page
+ * you were working and come back to find your place again.
  *
  * The composer itself is the one on the Social page, not a second one. A
  * second composer is a second set of platform rules to keep in step, and they
@@ -31,11 +30,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import ComposeDialog from '../social/ComposeDialog'
-import { NotSetUp } from '../NotSetUp'
-import { useRole } from '../useRole'
-import { notifyProductionChange } from '../production/useProductionLive'
-import { friendlyError } from '../../lib/support-core'
+import ComposeDialog from '../ComposeDialog'
+import { NotSetUp } from '../../NotSetUp'
+import { useRole } from '../../useRole'
+import { notifyProductionChange } from '../../production/useProductionLive'
+import { friendlyError } from '../../../lib/support-core'
 
 type Client = { id: string; name: string; status?: string | null }
 type Account = {
@@ -43,13 +42,21 @@ type Account = {
   provider_account_id: string; username: string | null; name: string | null; active: boolean
 }
 
-/** The board page owns the New card dialog (it has the clients, kinds and
+/** The board VIEW owns the New card dialog (it has the clients, kinds and
  *  team already loaded); the header owns the button. One asks, the other
- *  answers — so the page keeps ONE button instead of growing a second. */
+ *  answers — so the page keeps ONE button instead of growing a second.
+ *
+ *  On the Calendar and Approvals views nothing is listening, so "New card"
+ *  hands the page over to the board first and the dialog opens there — the
+ *  card has to land on the board either way. */
 export const NEW_CARD_EVENT = 'mdm:new-card'
 
-export default function NewPostButton() {
-  const onNewCard = () => window.dispatchEvent(new CustomEvent(NEW_CARD_EVENT))
+export default function NewPostButton({ onNewCard }: {
+  /** the page's own answer to "New card": show the board, then ask it to
+   *  open the dialog. Left out, the ask is broadcast where it stands. */
+  onNewCard?: () => void
+}) {
+  const newCard = onNewCard ?? (() => window.dispatchEvent(new CustomEvent(NEW_CARD_EVENT)))
   const { can, loading: roleLoading } = useRole()
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
@@ -93,7 +100,7 @@ export default function NewPostButton() {
     } catch (e) {
       const raw = e instanceof Error ? e.message : ''
       // never put a developer string on screen — support-core decides
-      toast.error(friendlyError(raw, 'Scheduler'))
+      toast.error(friendlyError(raw, 'Schedule'))
     } finally {
       setLoading(false)
     }
@@ -123,12 +130,10 @@ export default function NewPostButton() {
             <span className="font-semibold">New post</span>
             <span className="text-[12px] text-muted-foreground">Goes out on a channel, now or at a time.</span>
           </DropdownMenuItem>
-          {onNewCard && (
-            <DropdownMenuItem className="min-h-11 flex-col items-start gap-0.5" onClick={onNewCard}>
-              <span className="font-semibold">New card</span>
-              <span className="text-[12px] text-muted-foreground">A piece of work to track on the board.</span>
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem className="min-h-11 flex-col items-start gap-0.5" onClick={newCard}>
+            <span className="font-semibold">New card</span>
+            <span className="text-[12px] text-muted-foreground">A piece of work to track on the board.</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

@@ -504,17 +504,25 @@ export function applyShow<T extends BoardViewCard>(cards: readonly T[], show: Sh
   return cards.filter(c => matchesShow(c, show, ctx))
 }
 
-/** The address of a board, opened on a column or through a filter. */
+/**
+ * The address of a board, opened on a column or through a filter.
+ *
+ * Production and Editor are pages of their own. The scheduler's board is not:
+ * it is the Schedule page's Board view (`/dashboard/social/schedule?view=board`),
+ * because two entries for one job was exactly the confusion this replaced.
+ * `/dashboard/scheduler` still answers — as a permanent redirect here.
+ */
 export function boardHref(
   page: 'production' | 'editor' | 'scheduler',
   opts: { column?: BoardColumnKey; show?: ShowFilter } = {},
 ): string {
   const params = new URLSearchParams()
-  if (page === 'production') params.set('view', 'board')
+  if (page === 'production' || page === 'scheduler') params.set('view', 'board')
   if (opts.column) params.set('column', opts.column)
   if (opts.show) params.set('show', opts.show)
   const q = params.toString()
-  return `/dashboard/${page}${q ? `?${q}` : ''}`
+  const base = page === 'scheduler' ? '/dashboard/social/schedule' : `/dashboard/${page}`
+  return `${base}${q ? `?${q}` : ''}`
 }
 
 /** One tile on the Overview: a title, a tone, some numbers, one link. */
@@ -577,7 +585,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     return [
       {
         key: 'ready', title: 'Ready to post', tone: 'green',
-        href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Scheduler',
+        href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Schedule',
         stats: [{ value: inColumn('ready_to_post'), label: 'to book in' }],
       },
       {

@@ -42,8 +42,10 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/production', label: 'Production' },
   { href: '/dashboard/editor', label: 'Editor' },
   { href: '/dashboard/bookings', label: 'Bookings' },
-  { href: '/dashboard/scheduler', label: 'Scheduler' },
-  { href: '/dashboard/calendar', label: 'Calendar' },
+  // the Schedule page — the calendar, the board and everything waiting on
+  // somebody. It is a child of Social in the nav, but it is the one Social
+  // page a scheduler holds on its own, so it is grantable by itself.
+  { href: '/dashboard/social/schedule', label: 'Schedule' },
   { href: '/dashboard/activity', label: 'Asana activity' },
   { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/team', label: 'Team' },
@@ -94,7 +96,7 @@ const PERSONAL_PAGES = ['/dashboard', '/dashboard/notifications', '/dashboard/se
  * role now sees the one page that is their job and nothing beside it:
  *
  *   editor          → Editor
- *   scheduler       → Scheduler, Schedule
+ *   scheduler       → Schedule (the calendar, the board and the approvals)
  *   account_manager → their clients' pages (everything but business
  *                     development: Leads and Audience stay grantable)
  *   super_admin     → everything, plus Leads
@@ -120,7 +122,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
   if (role === 'scheduler') {
-    return [...PERSONAL_PAGES, '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
+    return [...PERSONAL_PAGES, SCHEDULE_PAGE].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable

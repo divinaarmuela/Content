@@ -31,6 +31,7 @@ import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
 import { boardHref, overviewTiles, type BoardViewCard } from '../lib/board-view-core'
+import { scheduleViewHref } from '../lib/schedule-page-core'
 import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -1016,7 +1017,7 @@ export default function OverviewPage() {
                 <ItemRows items={data.scheduler.queue} todayKey={todayKey}
                   empty="Nothing waiting — a card lands here the moment it is signed off." />
               </Section>
-              <Section title="Going out next" action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
+              <Section title="Going out next" action={{ label: 'Calendar', href: scheduleViewHref('calendar') }}>
                 {data.scheduler.upcoming.length === 0 ? (
                   <p className="rounded-inner border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
                     Nothing scheduled for the next 7 days.

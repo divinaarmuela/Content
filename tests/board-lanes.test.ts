@@ -17,7 +17,7 @@ describe('the three pages hand the board their page, and the board makes the lan
   it.each([
     ['app/dashboard/production/page.tsx', 'production'],
     ['app/dashboard/editor/page.tsx', 'editor'],
-    ['app/dashboard/scheduler/page.tsx', 'scheduler'],
+    ['app/dashboard/social/schedule/BoardView.tsx', 'scheduler'],
   ])('%s says page="%s" and passes no column list', (rel, page) => {
     const src = code(read(rel))
     expect(src).toContain(`page="${page}"`)

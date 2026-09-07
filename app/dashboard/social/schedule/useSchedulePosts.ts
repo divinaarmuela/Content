@@ -40,6 +40,7 @@ import {
   accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
+import { approvalCount, type ApprovalItem } from '@/app/lib/schedule-page-core'
 
 /** A post as the calendar draws it: the row, its media, and the status, tone
  *  and networks the core gives it once the item and the jobs are read too. */
@@ -122,10 +123,6 @@ export type RailMedia = {
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 
-/** The statuses that mean the work is sitting with someone for approval —
- *  the rail's footer count. */
-const WAITING_STATUSES = ['client_review', 'internal_review']
-
 export type ScheduleData = {
   /** the clients this person may pick between, by name */
   clients: Client[]
@@ -140,7 +137,8 @@ export type ScheduleData = {
   clientSignsOff: boolean
   /** …and so this viewer may post with no approval step in the way */
   postWithoutApproval: boolean
-  /** how many pieces are still with someone for approval */
+  /** how many things are waiting on a person for this client — posts sent
+   *  for sign-off, work with the client, work waiting on a check */
   waiting: number
   loading: boolean
   error: string | null
@@ -317,9 +315,12 @@ export function useSchedulePosts(
         Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
   }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff])
 
+  /** How many pieces are sitting with a person — the rail's footer, counted
+   *  by the SAME function the Approvals view lists with (`approvalRows`), so
+   *  the chip's number is always the length of what the link opens. */
   const waiting = useMemo(
-    () => scopedItems.filter(i => WAITING_STATUSES.includes(String(i.status))).length,
-    [scopedItems])
+    () => approvalCount(scopedItems as unknown as ApprovalItem[], { clientId }),
+    [scopedItems, clientId])
 
   // The page waits only on what the tiles are made of. Versions and accounts
   // decorate the rail and the badges; a missing one leaves a card plain

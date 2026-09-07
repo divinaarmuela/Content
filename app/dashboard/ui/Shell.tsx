@@ -45,11 +45,11 @@ export const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
-  // one board became three pages, each answering one question: which shoots
-  // am I planning, what is mine to edit, what is mine to post
+  // one board became two pages plus the Schedule, each answering one
+  // question: which shoots am I planning, what is mine to edit, and — under
+  // Social — what is going out and what is waiting on somebody
   { href: '/dashboard/production', label: 'Production',       icon: Camera },
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
-  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
 ]
@@ -92,7 +92,7 @@ export const NAV_TOOLS: NavItem[] = [
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/files', '/dashboard/audience'] },
-  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
+  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },
 ]
@@ -117,10 +117,9 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/bookings':      'Bookings',
   '/dashboard/production/availability': 'Availability',
   '/dashboard/production/proposals': 'Proposals',
-  '/dashboard/scheduler':     'Scheduler',
-  // "Calendar" meant three different things; each one now says which
-  '/dashboard/scheduler/calendar': 'Posting calendar',
-  '/dashboard/calendar':      'Posting calendar',
+  // "Calendar" meant three different things and the Scheduler page was a
+  // second door onto the Schedule. Both are permanent redirects now, so they
+  // have no title: nothing of theirs is ever drawn.
   '/dashboard/activity':      'Asana activity',
   '/dashboard/reports':       'Reports',
   '/dashboard/team':          'Team',
