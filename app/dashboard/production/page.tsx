@@ -231,6 +231,8 @@ export default function ProductionPage() {
   }, [liveError])
 
   const [toDelete, setToDelete] = useState<Shoot | null>(null)
+  /** a CARD row's delete — the shoot's own dialog covers a shoot plan */
+  const [cardToDelete, setCardToDelete] = useState<BriefTask | null>(null)
   const [delBusy, setDelBusy] = useState(false)
 
   const remove = async () => {
@@ -411,6 +413,30 @@ export default function ProductionPage() {
     ) : null
   )
 
+  /** The overflow menu every row carries: one item, Delete, for a manager.
+   *  A shoot plan and its shoot are one job, so deleting the plan opens the
+   *  shoot's own dialog (which says what happens to its cards); a card row
+   *  deletes the card. Never hover-only — on a tablet that is no control. */
+  const rowMenu = (label: string, onDelete: () => void) => (
+    <div className="absolute right-2 top-2 z-10">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-11 w-11 rounded-full text-muted-foreground"
+            aria-label={`More for ${label}`}
+            onClick={e => { e.preventDefault(); e.stopPropagation() }}>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem className="text-accent-red"
+            onClick={e => { e.preventDefault(); onDelete() }}>
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+
   /** A shoot plan's card — the shoot date and state chip ride it, because the
    *  plan and its shoot are one job on one card now. */
   const briefCard = (b: BriefTask, column: BoardColumnKey) => {
@@ -418,11 +444,11 @@ export default function ProductionPage() {
     const state = shoot ? shownShootState(shoot) : null
     const when = shoot?.shoot_date ?? b.due_date
     return (
-      /* the whole card opens the plan on its SHOOT page — plan and shoot are
-         one page now. Falls back to the item page for the rare brief with no
-         shoot behind it (never a dead link). */
+      <div key={b.id} className="relative">
+      {/* the whole card opens the plan on its SHOOT page — plan and shoot are
+          one page now. Falls back to the item page for the rare brief with no
+          shoot behind it (never a dead link). */}
       <WorkCard
-        key={b.id}
         href={b.batch_id ? `/dashboard/production/shoots/${b.batch_id}` : `/dashboard/production/${b.id}`}
         client={b.clients?.name ?? '—'}
         title={b.title}
@@ -459,14 +485,16 @@ export default function ProductionPage() {
           {!b.owner_id && assignMenu(b.id)}
         </>}
       />
+      {isManager && shoot && rowMenu(b.title, () => setToDelete(shoot))}
+      </div>
     )
   }
 
   const taskCard = (t: BriefTask, muted = false) => {
     const assignment = viewer ? editorAssignment(t, viewer) : 'other'
     return (
+      <div key={t.id} className="relative">
       <WorkCard
-        key={t.id}
         // a task opens beside the list, the way a board card does
         onOpen={() => sheet.open(t.id)}
         client={t.clients?.name ?? '—'}
@@ -506,6 +534,8 @@ export default function ProductionPage() {
           )}
         </>}
       />
+      {isManager && rowMenu(t.title, () => setCardToDelete(t))}
+      </div>
     )
   }
 
@@ -836,6 +866,36 @@ export default function ProductionPage() {
         briefedBatchIds={[...briefByBatch.keys()]}
         team={team}
       />
+
+      {/* a card row's own delete — the same words the card page uses */}
+      <AlertDialog open={!!cardToDelete} onOpenChange={o => !o && setCardToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &ldquo;{cardToDelete?.title}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The card and everything on it — the link, files, comments and history — is
+              removed for everyone, including the client&rsquo;s portal. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Keep it</AlertDialogCancel>
+            <AlertDialogAction className="min-h-11 bg-accent-red hover:bg-accent-red/90"
+              onClick={async () => {
+                const card = cardToDelete
+                if (!card) return
+                const res = await fetch(`/api/production/items/${card.id}`, { method: 'DELETE' })
+                if (!res.ok) {
+                  toast.error((await res.json().catch(() => ({}))).error ?? 'Could not delete it')
+                  return
+                }
+                toast.success('Card deleted')
+                setCardToDelete(null)
+              }}>
+              Delete card
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!toDelete} onOpenChange={o => !delBusy && !o && setToDelete(null)}>
         <AlertDialogContent>
