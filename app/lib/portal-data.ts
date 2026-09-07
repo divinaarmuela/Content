@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, Batch, BatchComment, Client, ContentItem, IntakeForm, ItemComment,
-  MonthlyCommitment, ScheduleEntry, SocialPost, TeamUserClient, WorkflowActivity,
+  MonthlyCommitment, ScheduleEntry, SocialAccount, SocialPost, TeamUserClient, WorkflowActivity,
 } from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
@@ -25,6 +25,9 @@ import {
 import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
 import { awaitsClientPostApproval } from './posting-approval-core'
+import { normaliseSlides } from './version-files-core'
+import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
+import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
 import { portalIntakeForms, type PortalIntakeForm } from './intake-portal-core'
 import { loadPortalFollowers } from './portal-followers'
 import type { PortalFollowers } from './followers-core'
@@ -68,6 +71,15 @@ export type PortalItem = {
   /** the post text, exactly as it will publish — carried ONLY on a card that
    *  is asking the client to approve the final post; absent everywhere else */
   caption?: string | null
+  /**
+   * The post as EACH NETWORK will show it — the same frames the team sees in
+   * the composer, stripped for a client by `forClient`.
+   *
+   * Carried ONLY on a card asking the client to approve the final post, and
+   * it holds no account id, no refusal and no internal note: see
+   * `CLIENT_PREVIEW_FIELDS`, which the tests read alongside this.
+   */
+  preview?: ClientPreview[]
   /** how the live post is doing, once the platform has counted it. Null on
    *  anything not published, and on a post whose numbers have not arrived. */
   metrics: PortalItemMetrics | null
@@ -368,10 +380,14 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 
   /** the post that went out for each piece — the newest, when there were two */
   const postByItem = new Map<string, string>()
+  /** …and the newest COMPOSITION, gone out or not: what the client is being
+   *  asked to look at is a post that has not gone anywhere yet */
+  const compositionByItem = new Map<string, SocialPost>()
   for (const p of [...postRows].sort((a, b) =>
     (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))) {
     const sent = Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length > 0 : false
     if (sent && p.item_id && !postByItem.has(p.item_id)) postByItem.set(p.item_id, p.id)
+    if (p.item_id && !compositionByItem.has(p.item_id)) compositionByItem.set(p.item_id, p)
   }
 
   // latest version per item (rows are ordered desc — first wins)
@@ -501,9 +517,63 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       }
     } catch { /* the gate is not set up on this database — the pile stays empty */ }
   }
+  /**
+   * THE POST, AS THE CLIENT WILL SEE IT ON EACH NETWORK.
+   *
+   * Read on its own, tolerantly, and only for the handful of pieces actually
+   * waiting on the client: a portal that cannot read the channels is a portal
+   * with no picture frames, never a portal that will not load. The frames
+   * themselves are `buildPostPreview` — the composer's own function — put
+   * through `clientPreviews`, which is the ONLY way a preview leaves the
+   * building and is what drops the account ids and the refusals.
+   */
+  const previewByItem = new Map<string, ClientPreview[]>()
+  if (captionByAwaiting.size > 0) {
+    try {
+      const accounts = await table<SocialAccount>('social_accounts')
+        .list({ by: { client_id: clientId } })
+      for (const itemId of captionByAwaiting.keys()) {
+        const composed = compositionByItem.get(itemId)
+        if (!composed) continue
+        const perChannel = readPerChannel(composed.per_channel)
+        const channelIds = Array.isArray(composed.channels) ? composed.channels.map(String) : []
+        const built = buildPostPreview({
+          caption: String(composed.caption ?? ''),
+          media: normaliseSlides(composed.slides)
+            .map(sl => ({ url: sl.url, type: sl.type, name: sl.name })),
+          channels: channelIds.flatMap(id => {
+            const account = accounts.find(a => a.id === id)
+            if (!account) return []
+            const extras = perChannel[id]
+            return [{
+              id: account.id,
+              platform: String(account.platform),
+              handle: account.username,
+              name: account.name,
+              avatarUrl: account.avatar_url,
+              options: optionsFromExtras(extras),
+              media: extras?.slides?.length
+                ? extras.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name }))
+                : null,
+              // a place is shown to a client BY NAME or not at all, and the
+              // portal has no list of the client's saved places to look one
+              // up in — so no place is shown here rather than a page id
+              placeName: null,
+            }]
+          }),
+        })
+        if (built.networks.length > 0) previewByItem.set(itemId, clientPreviews(built))
+      }
+    } catch { /* the channels are unreadable — the cards go out without frames */ }
+  }
+
   const post_approvals: PortalItem[] = items
     .filter(i => captionByAwaiting.has(i.id))
-    .map(i => ({ ...toPortal(i), caption: captionByAwaiting.get(i.id) ?? null }))
+    .map(i => ({
+      ...toPortal(i),
+      caption: captionByAwaiting.get(i.id) ?? null,
+      ...(previewByItem.has(i.id) ? { preview: previewByItem.get(i.id) } : {}),
+    }))
 
   const published = bucket(['published'])
   // published_at comes from the POST, not the item: an item's updated_at moves

@@ -5,6 +5,7 @@ import {
   readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
   to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
   CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
+  SEND_FOR_REVIEW, sentForReviewLine,
 } from '@/app/lib/schedule-compose-core'
 import { isPageId, kindTakesLocation, toPlatformData } from '@/app/lib/publish-core'
 import { SOCIAL_POST_STATUSES } from '@/app/lib/social-schedule-core'
@@ -366,7 +367,7 @@ describe('the button at the bottom offers only what this person may do', () => {
 
   it('a scheduler is never offered "Schedule without approval"', () => {
     const { primary, menu } = footerActions({ status: 'draft', ...scheduler })
-    expect(primary.label).toBe('Send for approval')
+    expect(primary.label).toBe(SEND_FOR_REVIEW)
     expect(menu.map(m => m.key)).toEqual(['draft'])
   })
 
@@ -375,7 +376,7 @@ describe('the button at the bottom offers only what this person may do', () => {
     expect(primary).toEqual({ key: 'direct', label: 'Schedule' })
     // asking is still there, one press away, for when they want it
     expect(menu.map(m => m.key)).toEqual(['send', 'draft'])
-    expect(menu[0].label).toBe('Send for approval')
+    expect(menu[0].label).toBe(SEND_FOR_REVIEW)
   })
 
   it('…and "Post now" when the time they picked is now', () => {
@@ -385,7 +386,7 @@ describe('the button at the bottom offers only what this person may do', () => {
 
   it('a client who signs every post off puts the manager back on the full flow', () => {
     const { primary, menu } = footerActions({ status: 'draft', ...manager, clientSignsOff: true })
-    expect(primary.label).toBe('Send for approval')
+    expect(primary.label).toBe(SEND_FOR_REVIEW)
     // the old shape, unchanged: asking first, with the short cut under the arrow
     expect(menu.map(m => m.key)).toEqual(['draft', 'direct'])
     expect(menu[1].label).toBe('Schedule without approval')
@@ -393,7 +394,7 @@ describe('the button at the bottom offers only what this person may do', () => {
 
   it('a scheduler on that client sees exactly what they saw before', () => {
     const { primary, menu } = footerActions({ status: 'draft', ...scheduler, clientSignsOff: true })
-    expect(primary.label).toBe('Send for approval')
+    expect(primary.label).toBe(SEND_FOR_REVIEW)
     expect(menu.map(m => m.key)).toEqual(['draft'])
   })
 

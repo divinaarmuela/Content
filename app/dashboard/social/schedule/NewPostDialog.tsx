@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
-  ChevronDown, Clock, MapPin, Plus, Trash2, Wand2, X, Zap,
+  Check, ChevronDown, Clock, Eye, MapPin, Pencil, Plus, Trash2, Wand2, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
   APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions, isPostingNow,
   initialComposer, moreOptionsFor, optionsFromExtras, readPerChannel, PAGE_ID_HELP,
+  sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
@@ -19,6 +20,10 @@ import {
   autoKindFor, availableKinds, isOrganizationUrn, isPageId, isPlatform, networkName,
   TIKTOK_CONSENT_LINE, type PostKind,
 } from '@/app/lib/publish-core'
+import {
+  buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO,
+} from '@/app/lib/post-preview-core'
+import PostPreviewPane from '@/app/components/social/PostPreview'
 import type { ChannelOptions } from '@/app/lib/publisher'
 import { mayPublish as roleMayPublish, type Role } from '@/app/lib/identity-core'
 import { friendlyError } from '@/app/lib/support-core'
@@ -113,7 +118,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 }
 
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, clientSignsOff, locations,
+  target, tz, accounts, suggested, role, clientSignsOff, locations, clientName,
   onClose, onOpenPost, onEditMedia,
 }: {
   target: ComposerTarget
@@ -126,6 +131,8 @@ export default function NewPostDialog({
   clientSignsOff: boolean
   /** the places this client tags posts at, saved on the client's Social page */
   locations: SavedLocation[]
+  /** whose post this is — named in the sentence that says who was told */
+  clientName?: string | null
   onClose: () => void
   /** the draft became real — the page keeps its id so the live row can be
    *  handed back in */
@@ -150,6 +157,18 @@ export default function NewPostDialog({
    */
   const [chosenSlide, setChosenSlide] = useState(0)
   const [note, setNote] = useState<string | null>(null)
+  /**
+   * WRITING IT, OR LOOKING AT IT.
+   *
+   * The preview is not a copy of the post — it is the SAME state, read a
+   * second way — so the pane can be swapped without anything being saved,
+   * carried or synchronised. On a phone the right-hand column is the whole
+   * width, so the same two buttons give the preview the whole screen.
+   */
+  const [pane, setPane] = useState<'write' | 'preview'>('write')
+  /** the reviewer's box, when this person is being asked to decide */
+  const [changeNote, setChangeNote] = useState('')
+  const [asking, setAsking] = useState(false)
   /** a question that has to be answered before something is thrown away */
   const [confirm, setConfirm] = useState<'close' | 'delete' | null>(null)
   const card = useRef<HTMLDivElement>(null)
@@ -180,6 +199,23 @@ export default function NewPostDialog({
       },
     })
   }, [post?.id, post])
+
+  /**
+   * A PERSON BEING ASKED TO DECIDE LOOKS AT THE POST FIRST.
+   *
+   * Somebody who opened this window because a post is waiting on THEM has no
+   * business landing on a caption box: the question is "does this look
+   * right", and the answer is the frame. Once only — they may switch to the
+   * fields and must not be dragged back by a live row arriving.
+   */
+  const landed = useRef(false)
+  useEffect(() => {
+    if (landed.current || !post?.id) return
+    landed.current = true
+    if (post.live_status === 'pending' && (role === 'account_manager' || role === 'super_admin')) {
+      setPane('preview')
+    }
+  }, [post?.id, post?.live_status, role])
 
   /* ── closing, and not losing anything on the way ─────────────────────── */
 
@@ -261,6 +297,40 @@ export default function NewPostDialog({
     state.slides, state.caption, state.scheduledFor, state.perChannel,
     chosen, target.contentType,
   ])
+
+  /**
+   * THE POST AS EACH NETWORK WILL SHOW IT.
+   *
+   * Built from the SAME `state` the Schedule button sends — `state.slides`,
+   * `state.caption`, `state.perChannel` and the chosen accounts — never from
+   * a copy kept beside it. There is nothing to keep in step, so nothing can
+   * fall out of step: change a word and the frame changes with it.
+   *
+   * The refusals on each tab are `publish-core`'s own, through
+   * `buildPostPreview` — the same sentences the footer is already showing,
+   * marked against the network they belong to.
+   */
+  const preview = useMemo(() => buildPostPreview({
+    caption: state.caption,
+    media: state.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name })),
+    channels: chosen.map(a => {
+      const extras = state.perChannel[a.id]
+      const options = optionsFromExtras(extras)
+      const place = locations.find(l => l.pageId === String(options.locationId ?? ''))
+      return {
+        id: a.id,
+        platform: String(a.platform),
+        handle: a.username ?? null,
+        name: a.name ?? null,
+        avatarUrl: a.avatar_url,
+        options,
+        media: extras?.slides?.length
+          ? extras.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name }))
+          : null,
+        placeName: place?.name ?? null,
+      }
+    }),
+  }), [state.slides, state.caption, state.perChannel, chosen, locations])
 
   const approvedUrls = useMemo(
     () => new Set(target.approved.map(s => s.url)), [target.approved])
@@ -423,13 +493,19 @@ export default function NewPostDialog({
         const res = await fetch(`/api/social/schedule/${id}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: what === 'direct' ? 'direct' : 'approval' }),
+          body: JSON.stringify({
+            mode: what === 'direct' ? 'direct' : 'approval',
+            // a client who signs every post off is one of the people this
+            // review is FOR — the same flag the item page sends, so the
+            // portal shows it in their "waiting on you" pile
+            ...(what === 'send' ? { client_too: clientSignsOff } : {}),
+          }),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new ComposeProblem(json)
         setNote(what === 'direct'
           ? 'Approved by you and booked in with the channel.'
-          : 'Sent. The people who approve posts have been told.')
+          : sentForReviewLine(clientSignsOff ? (clientName || 'the client') : null))
         return
       }
       if (what === 'now') {
@@ -445,6 +521,41 @@ export default function NewPostDialog({
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new ComposeProblem(json)
       setNote('Booked in with the channel.')
+    } catch (e) {
+      setProblems(problemsOf(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * THE ANSWER, from the person being asked.
+   *
+   * The SAME route the item page uses (`posting-approval`), the same state
+   * machine, the same emails: this window is a second door onto one gate, not
+   * a second gate. The pill above the button is live, so a yes given here
+   * changes it without a refresh — and so does a yes given anywhere else.
+   */
+  const decide = async (action: 'approve' | 'request_changes') => {
+    const words = changeNote.trim()
+    if (action === 'request_changes' && !words) {
+      setProblems(['Say what should change — a short note is enough.'])
+      return
+    }
+    setBusy(true); setProblems([]); setNote(null)
+    try {
+      const res = await fetch(`/api/production/items/${target.itemId}/posting-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...(words ? { note: words } : {}) }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new ComposeProblem(json)
+      setChangeNote('')
+      setAsking(false)
+      setNote(action === 'approve'
+        ? 'Approved. Whoever built this post has been told, and it can be booked in now.'
+        : 'Sent back with your note. Whoever built this post has been told.')
     } catch (e) {
       setProblems(problemsOf(e))
     } finally {
@@ -732,6 +843,39 @@ export default function NewPostDialog({
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3.5">
+            {/* Write it, or look at it. Two buttons, one state — the preview
+                is the same post read a second way, so nothing is carried
+                between them. On a phone this column is the whole width, so
+                "Preview" gives the frame the whole screen. */}
+            <div className="flex gap-1.5 rounded-full border border-border p-1" role="tablist" aria-label="Write or preview">
+              {([['write', 'Write it', Pencil], ['preview', 'Preview', Eye]] as const).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={pane === key}
+                  onClick={() => setPane(key)}
+                  className={cn(
+                    'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13px] font-semibold',
+                    pane === key ? 'bg-foreground text-background' : 'hover:bg-muted',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {pane === 'preview' && (
+              <PostPreviewPane
+                previews={preview.networks}
+                intro={PREVIEW_INTRO}
+                empty="Pick a channel above and the post will appear here as that network will show it."
+              />
+            )}
+
+            {pane === 'write' && (
+            <>
             <label className="flex flex-col gap-1.5 rounded-inner border border-border p-3">
               <span className="text-[12px] font-semibold text-muted-foreground">Caption</span>
               <textarea
@@ -796,6 +940,8 @@ export default function NewPostDialog({
                 ))}
               </div>
             )}
+            </>
+            )}
           </div>
         </div>
 
@@ -839,6 +985,64 @@ export default function NewPostDialog({
                 {confirm === 'close' ? 'Close and lose them' : 'Take it off'}
               </button>
             </span>
+          </div>
+        )}
+
+        {/* ── the answer, when this post is waiting on the person reading it ──
+             The same gate as the item page, the same route, the same emails:
+             one question, answered wherever it was found. */}
+        {status === 'pending' && mayApprove && (
+          <div className="mx-3.5 mt-3.5 flex flex-col gap-2.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-3">
+            <p className="text-[13px] font-semibold">
+              This post is waiting on you. Look at it above, then say yes or say what to change.
+            </p>
+            {asking ? (
+              <>
+                <textarea
+                  value={changeNote}
+                  onChange={e => setChangeNote(e.target.value)}
+                  rows={3}
+                  placeholder="What should change?"
+                  className="w-full resize-y rounded-inner border border-border bg-surface p-2.5 text-[13px] outline-none"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void decide('request_changes')}
+                    className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
+                  >
+                    Send it back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAsking(false); setChangeNote('') }}
+                    className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+                  >
+                    Never mind
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void decide('approve')}
+                  className="flex min-h-11 items-center gap-2 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
+                >
+                  <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAsking(true)}
+                  className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+                >
+                  Ask for a change
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -925,9 +1129,10 @@ export default function NewPostDialog({
   )
 }
 
-const KIND_WORD: Record<PostKind, string> = {
-  feed: 'Feed post', reel: 'Reel', story: 'Story', carousel: 'Carousel',
-}
+/** One spelling of every post type, from the preview table — so the header
+ *  menu and the preview frame cannot end up calling the same thing two
+ *  different names. */
+const KIND_WORD = POST_KIND_WORD
 
 /** A server refusal that carried a whole list of things to fix. */
 class ComposeProblem extends Error {

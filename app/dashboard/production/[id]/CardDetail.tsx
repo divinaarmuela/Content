@@ -1619,10 +1619,17 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
-                {/* posting is the Schedule page's job — one tap to get there */}
+                {/* posting is the Schedule page's job — one tap to get there.
+                    The link carries the piece, so somebody who came here to
+                    ANSWER a post lands on it with the picture in front of
+                    them rather than on a week they have to search. */}
                 {canOpenSchedule && (
                   <Button size="sm" variant="ghost" className="ml-auto min-h-11 md:min-h-8" asChild>
-                    <Link href="/dashboard/social/schedule">Open in Schedule <ExternalLink className="h-3.5 w-3.5" /></Link>
+                    <Link
+                      href={`/dashboard/social/schedule?client=${encodeURIComponent(detail.client_id)}&item=${encodeURIComponent(detail.id)}`}
+                    >
+                      Open in Schedule <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
                   </Button>
                 )}
               </div>
